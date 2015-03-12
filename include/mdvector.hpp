@@ -2,9 +2,10 @@
 #define mdvector_hpp
 
 /*! mdvector.hpp 
- * \brief Template class for multidimension vector implementation.
+ * \brief Template class for multidimensional vector implementation.
  *
  * \author Josh Romero, Stanford University
+ *
  */
 
 #include <array>
@@ -79,14 +80,14 @@ template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1)
 {
   assert(ndims == 2);
-  return values[idx0 * strides[0] + dim1];
+  return values[idx0 * strides[0] + idx1];
 }
 
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2)
 {
   assert(ndims == 3);
-  return values[(idx0 * strides[0] + dim1)*strides[1] + idx2];
+  return values[(idx0 * strides[0] + idx) * strides[1] + idx2];
 }
 
 template <typename T>
@@ -94,7 +95,7 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
     unsigned int idx3)
 {
   assert(ndims == 4);
-  return values[((idx0 * strides[0] + dim1) * strides[1] + idx2) * strides[3] + idx3];
+  return values[((idx0 * strides[0] + idx1) * strides[1] + idx2) * strides[3] + idx3];
 }
 
 template <typename T>
