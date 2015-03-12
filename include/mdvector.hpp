@@ -10,7 +10,6 @@
 
 #include <array>
 #include <cassert>
-#include <iostream>
 #include <vector>
 
 template <typename T>
@@ -27,6 +26,9 @@ class mdvector
     mdvector();
     mdvector(std::vector<unsigned int> dims, unsigned int padding = 0);
 
+    //! Setup operator
+    void assign(std::vector<unsigned int> dims, unsigned int padding = 0);
+
     //! Method to return vector shape
     std::array<unsigned int,4> shape(void);
 
@@ -40,8 +42,21 @@ class mdvector
 
     //! Assignment
     mdvector<T>& operator= (const mdvector<T> &vec);
-              
+
 };
+
+template <typename T>
+mdvector<T>::mdvector(){};
+
+template <typename T>
+void mdvector<T>::assign(std::vector<unsigned int> dims, unsigned int padding)
+{
+  mdvector<T> vec(dims, padding);
+  this->ndims = vec.ndims;
+  this->values = vec.values;
+  this->dims = vec.dims;
+  this->strides = vec.strides;
+}
 
 template <typename T>
 mdvector<T>::mdvector(std::vector<unsigned int> dims, unsigned int padding)
@@ -87,7 +102,7 @@ template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2)
 {
   assert(ndims == 3);
-  return values[(idx0 * strides[0] + idx) * strides[1] + idx2];
+  return values[(idx0 * strides[0] + idx1) * strides[1] + idx2];
 }
 
 template <typename T>
@@ -103,7 +118,7 @@ mdvector<T>&  mdvector<T>::operator= (const mdvector<T> &vec)
 {
   this->values = vec.values;
   this->dims = vec.dims;
-  this->strides = vec.values;
+  this->strides = vec.strides;
 }
 
 #endif /* mdvector_hpp */
