@@ -1,0 +1,7 @@
+zeFR: A high order FR solver for CFD
+
+Notes:
+- Want high level solver class that can be simply instantiated: s1 = FRSolver(p,inputfile)
+- Want element class structure as follows: parent element, children quads and hexs, subchildren everything else... (depending on if collapsed edge results pan out)
+- Not sure on interface structure. Maybe HiFiLES like with pointers? Maybe a copy to a global array structure (as in FR2D) will be better suited to GPUs? Either way, should contain enough information for easy use (element IDs, global flux point IDs, etc.)
+- For parallel architecture, can do similar type defs as in FR2D that passes solution information and doubles up Riemann solves. For this code though, will want to organize interface structure so that MPI interfaces can be looped over separately to allow for asynchronous communication during computatation over interior and boundary faces.
