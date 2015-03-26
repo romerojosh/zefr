@@ -1,0 +1,47 @@
+#ifndef input_hpp
+#define input_hpp
+
+#include <fstream>
+#include <stdexcept>
+#include <string>
+
+#include "macros.hpp"
+
+struct InputStruct
+{
+  unsigned int order;
+  std::string equation, flux_type;
+};
+
+InputStruct read_input_file(std::string inputfile);
+
+template <typename T>
+void read_param(std::ifstream &f, std::string name, T &var)
+{
+  if (f.is_open())
+  {
+    std::string param;
+
+    f.clear();
+    f.seekg(0, f.beg);
+
+    while (f >> param)
+    {
+      if (param == name)
+      {
+        f >> var;
+        return;
+      }
+    }
+
+    //throw std::runtime_error("Input parameter " + name + " not found!");
+    ThrowException("Input parameter " + name + " not found!");
+  }
+  else
+  {
+    //throw std::runtime_error("Input file not open for reading!");
+    ThrowException("Input file not open for reading!");
+  }
+}
+
+#endif /* input_hpp */

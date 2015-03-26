@@ -62,7 +62,7 @@ mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, unsigned int padd
 {
   ndims = (int)dims.size();
   
-  assert(ndims < 4);
+  assert(ndims <= 4);
   
   unsigned int nvals = 1;
   unsigned int i = 0;
@@ -104,14 +104,14 @@ template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) 
 {
   assert(ndims == 2);
-  return values[idx0 * strides[0] + idx1];
+  return values[idx0 * strides[1] + idx1];
 }
 
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
 {
   assert(ndims == 3);
-  return values[(idx0 * strides[0] + idx1) * strides[1] + idx2];
+  return values[(idx0 * strides[1] + idx1) * strides[2] + idx2];
 }
 
 template <typename T>
@@ -119,7 +119,7 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
     unsigned int idx3) 
 {
   assert(ndims == 4);
-  return values[((idx0 * strides[0] + idx1) * strides[1] + idx2) * strides[3] + idx3];
+  return values[((idx0 * strides[1] + idx1) * strides[2] + idx2) * strides[3] + idx3];
 }
 
 template <typename T>
@@ -139,7 +139,7 @@ std::ostream& operator<<(std::ostream &os, const mdvector<T> &vec)
   for (unsigned int i = 0; i < vec.dims[0]; i++)
   {
     for (unsigned int j = 0; j < vec.dims[1]; j++)
-      os << vec.values[i*vec.strides[0] + j] << ' ';
+      os << vec.values[i*vec.strides[1] + j] << ' ';
 
     os << std::endl;
   }
