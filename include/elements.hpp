@@ -8,7 +8,7 @@
 
 class Elements
 {
-  private:
+  protected:
     const InputStruct *input = NULL;
     std::string ele_type;
     unsigned int order, shape_order;
@@ -21,11 +21,12 @@ class Elements
     mdvector<double> F_spts, F_fpts;
     mdvector<double> dU_spts, dF_spts, divF_spts;
     mdvector<double> loc_spts, loc_fpts, loc_nodes;
+    std::vector<double> loc_spts_1D, loc_nodes_1D;
 
-    void set_locs();
+    virtual void set_locs() = 0;
 
     void initialize_U();
-    void setup_FR();
+    virtual void setup_FR() = 0;
 
     void extrapolate_U();
     /* Note: Going to create ele2fpt and slot structure like FR2D. gfpt=-1 means no comm. */
@@ -49,8 +50,6 @@ class Elements
     void compute_divF();
 
   public:
-    Elements(unsigned int nEles, std::string ele_type, unsigned int shape_order, 
-             const InputStruct *input, unsigned int P = -1);
     void setup();
     void FR_cycle();
     const mdvector<double>& get_divF() const; 
