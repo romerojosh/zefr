@@ -34,6 +34,7 @@ class Elements
 
     virtual void set_locs() = 0;
     virtual void set_transforms() = 0;
+    virtual void set_normals() = 0;
 
     void initialize_U();
     virtual void setup_FR() = 0;

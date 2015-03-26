@@ -1,0 +1,4 @@
+order     2
+flux_type rusanov
+equation AdvDiff    (AdvDiff, Euler, or NS)
+spt_type Legendre

@@ -93,24 +93,24 @@ void Quads::set_locs()
           loc_fpts(fpt,0) = loc_spts_1D[j];
           loc_fpts(fpt,1) = -1.0; 
           idx_fpts(fpt,0) = j;
-          idx_fpts(fpt,1) = 0; break;
+          idx_fpts(fpt,1) = -1; break;
 
         case 1: /* Right edge */
           loc_fpts(fpt,0) = 1.0; 
           loc_fpts(fpt,1) = loc_spts_1D[j];
-          idx_fpts(fpt,0) = nSpts1D-1; 
+          idx_fpts(fpt,0) = nSpts1D; 
           idx_fpts(fpt,1) = j; break;
 
         case 2: /* Upper edge */
           loc_fpts(fpt,0) = loc_spts_1D[nSpts1D-j-1];
           loc_fpts(fpt,1) = 1.0;
           idx_fpts(fpt,0) = nSpts1D-j-1;
-          idx_fpts(fpt,1) = nSpts1D-1; break;
+          idx_fpts(fpt,1) = nSpts1D; break;
 
         case 3: /* Left edge */
           loc_fpts(fpt,0) = -1.0; 
           loc_fpts(fpt,1) = loc_spts_1D[nSpts1D-j-1];
-          idx_fpts(fpt,0) = 0; 
+          idx_fpts(fpt,0) = -1; 
           idx_fpts(fpt,1) = nSpts1D-j-1; break;
       }
 
@@ -173,6 +173,10 @@ void Quads::set_transforms()
     }
   }
 
+}
+
+void Quads::set_normals()
+{
   /* Allocate memory for normals */
   tnorm.assign({nFpts,nDims});
   norm.assign({nFpts,nDims});
@@ -202,7 +206,6 @@ void Quads::set_transforms()
 
   }
 
-
 }
 
 void Quads::setup_FR()
@@ -217,9 +220,10 @@ void Quads::setup_FR()
   {
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
-      /* Compute indices for Lagrange polynomial evaluation */
-      unsigned int i = (spt + nSpts1D) % nSpts1D;
-      unsigned int j = spt/(order+1);
+      /* Get indices for Lagrange polynomial evaluation */
+      unsigned int i = idx_spts(spt,0);
+      unsigned int j = idx_spts(spt,1);
+
 
       oppE(fpt,spt) = Lagrange(loc_spts_1D, i, loc_fpts(fpt,0)) * 
                       Lagrange(loc_spts_1D, j, loc_fpts(fpt,1));
@@ -238,10 +242,10 @@ void Quads::setup_FR()
     {
       for (unsigned int jspt = 0; jspt < nSpts; jspt++)
       {
-        /* Compute indices for Lagrange polynomial evaluation (shifted due to inclusion of
+        /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
          * boundary points for DFR) */
-        unsigned int i = (jspt + nSpts1D) % nSpts1D + 1;
-        unsigned int j = jspt/(order+1) + 1;
+        unsigned int i = idx_spts(jspt,0) + 1;
+        unsigned int j = idx_spts(jspt,1) + 1;
 
         if (dim == 0)
         {
@@ -265,26 +269,10 @@ void Quads::setup_FR()
     {
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        unsigned int i, j;
-
-        switch(fpt/nFptsPerFace)
-        {
-          case 0: /* Bottom edge*/
-            i = fpt + 1;
-            j = 0; break;
-
-          case 1: /* Right edge*/
-            i = nFptsPerFace + 1;
-            j = (fpt + nSpts1D) % nSpts1D + 1; break;
-
-          case 2: /* Top edge*/
-            i = 3*nFptsPerFace - fpt; 
-            j = nFptsPerFace + 1; break;
-
-          case 3: /* Left edge*/
-            i = 0;
-            j = 4*nFptsPerFace - fpt; break; 
-        }
+        /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
+         * boundary points for DFR) */
+        unsigned int i = idx_fpts(fpt,0) + 1;
+        unsigned int j = idx_fpts(fpt,1) + 1;
 
         if (dim == 0)
         {
