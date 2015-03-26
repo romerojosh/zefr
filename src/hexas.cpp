@@ -11,7 +11,6 @@ Hexas::Hexas(unsigned int nEles, unsigned int shape_order,
                    const InputStruct *input, unsigned int order)
 {
   this->nEles = nEles;  
-  this->ele_type = ele_type;  
   this->input = input;  
   this->shape_order = shape_order;  
 

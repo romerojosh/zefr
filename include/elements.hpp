@@ -10,20 +10,30 @@ class Elements
 {
   protected:
     const InputStruct *input = NULL;
-    std::string ele_type;
+    /* Geometric Parameters */
     unsigned int order, shape_order;
     unsigned int nEles, nDims, nVars;
     unsigned int nSpts, nFpts, nFptsPerFace, nSpts1D;
     unsigned int nFaces, nNodes;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
+
+    mdvector<double> loc_spts, loc_fpts, loc_nodes;
+    mdvector<double> idx_spts, idx_fpts, idx_nodes;
+    std::vector<double> loc_spts_1D, loc_nodes_1D;
+    mdvector<double> tnorm, norm;
+    mdvector<double> dshape_spts, dshape_fpts;
+    mdvector<double> jaco_spts, jaco_det_spts;
+    mdvector<double> jaco_fpts, jaco_det_fpts;
+
+    /* Solution structures */
     mdvector<double> oppE, oppD, oppD_fpts;
     mdvector<double> U_spts, U_fpts;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> dU_spts, dF_spts, divF_spts;
-    mdvector<double> loc_spts, loc_fpts, loc_nodes;
-    std::vector<double> loc_spts_1D, loc_nodes_1D;
+
 
     virtual void set_locs() = 0;
+    virtual void set_transforms() = 0;
 
     void initialize_U();
     virtual void setup_FR() = 0;

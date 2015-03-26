@@ -10,6 +10,7 @@ class Quads: public Elements
 {
   private:
     void set_locs();
+    void set_transforms();
     void setup_FR();
 
   public:
