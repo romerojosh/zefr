@@ -10,8 +10,12 @@
 void Elements::setup()
 {
   set_locs();
-  initialize_U();
+  set_shape();
+  set_transforms();
+  set_normals();
   setup_FR();
+
+  initialize_U();
 }
 
 void Elements::initialize_U()

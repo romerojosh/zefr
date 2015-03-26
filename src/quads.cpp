@@ -160,19 +160,86 @@ void Quads::set_locs()
 
 }
 
-void Quads::set_transforms()
+void Quads::set_shape()
 {
-  /* Allocate memory for shape function derivatives */
+  /* Allocate memory for shape function and related derivatives */
+  shape_spts.assign({nSpts, nNodes});
+  shape_fpts.assign({nFpts, nNodes});
   dshape_spts.assign({nDims, nSpts, nNodes});
   dshape_fpts.assign({nDims, nFpts, nNodes});
 
+  /* Shape functions at solution and flux points */
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {
     for (unsigned int node = 0; node < nNodes; node++)
     {
+      unsigned int i = idx_nodes(node,0);
+      unsigned int j = idx_nodes(node,1);
+
+      shape_spts(spt,node) = Lagrange(loc_nodes_1D, i, loc_spts(spt,0)) *
+                             Lagrange(loc_nodes_1D, j, loc_spts(spt,1));
     }
   }
 
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    for (unsigned int node = 0; node < nNodes; node++)
+    {
+      unsigned int i = idx_nodes(node,0);
+      unsigned int j = idx_nodes(node,1);
+
+      shape_fpts(fpt,node) = Lagrange(loc_nodes_1D, i, loc_fpts(fpt,0)) *
+                             Lagrange(loc_nodes_1D, j, loc_fpts(fpt,1));
+    }
+  }
+
+  /* Shape function derivatives at solution and flux points */
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    for (unsigned int node = 0; node < nNodes; node++)
+    {
+      unsigned int i = idx_nodes(node,0);
+      unsigned int j = idx_nodes(node,1);
+
+      dshape_spts(0,spt,node) = Lagrange_d1(loc_nodes_1D, i, loc_spts(spt,0))*
+                                Lagrange(loc_nodes_1D, j, loc_spts(spt,1));
+      dshape_spts(1,spt,node) = Lagrange(loc_nodes_1D, i, loc_spts(spt,0)) *
+                                Lagrange_d1(loc_nodes_1D, j, loc_spts(spt,1));
+                                  
+    }
+  }
+
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    for (unsigned int node = 0; node < nNodes; node++)
+    {
+      unsigned int i = idx_nodes(node,0);
+      unsigned int j = idx_nodes(node,1);
+
+      dshape_fpts(0,fpt,node) = Lagrange_d1(loc_nodes_1D, i, loc_fpts(fpt,0)) *
+                                Lagrange(loc_nodes_1D, j, loc_fpts(fpt,1));
+      dshape_fpts(1,fpt,node) = Lagrange(loc_nodes_1D, i, loc_fpts(fpt,0)) *
+                                Lagrange_d1(loc_nodes_1D, j, loc_fpts(fpt,1));
+                                  
+    }
+  }
+
+ 
+  /* Helper printing block... 
+  for (unsigned int i = 0; i<nFpts; i++)
+  {
+    for (unsigned int j = 0; j<nNodes; j++)
+    {
+      std::cout << dshape_fpts(1,i,j) << " " ;
+    }
+    std::cout << std::endl;
+  }
+  */
+
+}
+
+void Quads::set_transforms()
+{
 }
 
 void Quads::set_normals()

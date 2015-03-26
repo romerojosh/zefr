@@ -21,6 +21,7 @@ class Elements
     mdvector<double> idx_spts, idx_fpts, idx_nodes;
     std::vector<double> loc_spts_1D, loc_nodes_1D;
     mdvector<double> tnorm, norm;
+    mdvector<double> shape_spts, shape_fpts;
     mdvector<double> dshape_spts, dshape_fpts;
     mdvector<double> jaco_spts, jaco_det_spts;
     mdvector<double> jaco_fpts, jaco_det_fpts;
@@ -33,6 +34,7 @@ class Elements
 
 
     virtual void set_locs() = 0;
+    virtual void set_shape() = 0;
     virtual void set_transforms() = 0;
     virtual void set_normals() = 0;
 
