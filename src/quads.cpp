@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iostream>
 #include <string>
 
@@ -49,6 +50,19 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   {
     ThrowException("Equation not recognized: " + input->equation);
   }
+
+  /* For debugging, setup reference linear quad element */
+  nd2gnd.assign({1, nNodes});
+
+  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1;
+  nd2gnd(0,2) = 2; nd2gnd(0,3) = 3;
+
+  coord_nodes.assign({nNodes, nDims});
+  coord_nodes(0,0) = 0.5; coord_nodes(0,1) = 0.5;
+  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.5;
+  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
+  coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 1.0;
+
 
 }
 
@@ -223,30 +237,68 @@ void Quads::set_shape()
                                   
     }
   }
-
- 
-  /* Helper printing block... 
-  for (unsigned int i = 0; i<nFpts; i++)
-  {
-    for (unsigned int j = 0; j<nNodes; j++)
-    {
-      std::cout << dshape_fpts(1,i,j) << " " ;
-    }
-    std::cout << std::endl;
-  }
-  */
-
 }
 
 void Quads::set_transforms()
 {
+  /* Allocate memory for jacobian matrices and determinant */
+  jaco_spts.assign({nEles, nSpts, nDims, nDims});
+  jaco_fpts.assign({nEles, nFpts, nDims, nDims});
+  jaco_det_spts.assign({nEles, nSpts});
+
+  /* Set jacobian matrix and determinant at solution points */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int dimX = 0; dimX < nDims; dimX++)
+      {
+        for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+        {
+          for (unsigned int node = 0; node < nNodes; node++)
+          {
+            unsigned int gnd = nd2gnd(ele, node);
+            jaco_spts(ele,spt,dimX,dimXi) += coord_nodes(gnd,dimX) * dshape_spts(dimXi,spt,node); 
+          }
+        }
+      }
+
+      jaco_det_spts(ele,spt) = jaco_spts(ele,spt,0,0) * jaco_spts(ele,spt,1,1) -
+                               jaco_spts(ele,spt,0,1) * jaco_spts(ele,spt,1,0); 
+
+      if (jaco_det_spts(ele,spt) < 0.)
+        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
+
+    }
+  }
+
+  /* Set jacobian matrix at flux points (do not need the Jacobian) */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      for (unsigned int dimX = 0; dimX < nDims; dimX++)
+      {
+        for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+        {
+          for (unsigned int node = 0; node < nNodes; node++)
+          {
+            unsigned int gnd = nd2gnd(ele, node);
+            jaco_fpts(ele,fpt,dimX,dimXi) += coord_nodes(gnd,dimX) * dshape_fpts(dimXi,fpt,node); 
+          }
+        }
+      }
+    }
+  }
+
 }
 
 void Quads::set_normals()
 {
   /* Allocate memory for normals */
   tnorm.assign({nFpts,nDims});
-  norm.assign({nFpts,nDims});
+  norm.assign({nEles,nFpts,nDims});
+  dA.assign({nEles,nFpts});
 
 
   /* Setup parent-space (transformed) normals at flux points */
@@ -256,22 +308,39 @@ void Quads::set_normals()
     {
       case 0: /* Bottom edge */
         tnorm(fpt,0) = 0.0;
-        tnorm(fpt,1) = -1.0;
+        tnorm(fpt,1) = -1.0; break;
 
       case 1: /* Right edge */
         tnorm(fpt,0) = 1.0;
-        tnorm(fpt,1) = 0.0;
+        tnorm(fpt,1) = 0.0; break;
 
       case 2: /* Top edge */
         tnorm(fpt,0) = 0.0;
-        tnorm(fpt,1) = 1.0;
+        tnorm(fpt,1) = 1.0; break;
 
       case 3: /* Left edge */
         tnorm(fpt,0) = -1.0;
-        tnorm(fpt,1) = 0.0;
+        tnorm(fpt,1) = 0.0; break;
     }
 
   }
+
+  /* Use transform to obtain physical normals at flux points */
+  /* Note: Should just send this info directly to the faces */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      norm(ele,fpt,0) = jaco_fpts(ele,fpt,1,1) * tnorm(fpt,0) - jaco_fpts(ele,fpt,1,0) * tnorm(fpt,1);
+      norm(ele,fpt,1) = -jaco_fpts(ele,fpt,0,1) * tnorm(fpt,0) + jaco_fpts(ele,fpt,0,0) * tnorm(fpt,1);
+
+      dA(ele,fpt) = std::sqrt(norm(ele,fpt,0)*norm(ele,fpt,0) + norm(ele,fpt,1)*norm(ele,fpt,1));
+
+      norm(ele,fpt,0) /= dA(ele,fpt);
+      norm(ele,fpt,1) /= dA(ele,fpt);
+    }
+  }
+
 
 }
 

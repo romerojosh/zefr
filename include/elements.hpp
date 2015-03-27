@@ -15,12 +15,14 @@ class Elements
     unsigned int nEles, nDims, nVars;
     unsigned int nSpts, nFpts, nFptsPerFace, nSpts1D;
     unsigned int nFaces, nNodes;
+    mdvector<int> nd2gnd;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
+    mdvector<double> coord_nodes, coord_spts, coord_fpts;
 
     mdvector<double> loc_spts, loc_fpts, loc_nodes;
     mdvector<double> idx_spts, idx_fpts, idx_nodes;
     std::vector<double> loc_spts_1D, loc_nodes_1D;
-    mdvector<double> tnorm, norm;
+    mdvector<double> tnorm, norm, dA;
     mdvector<double> shape_spts, shape_fpts;
     mdvector<double> dshape_spts, dshape_fpts;
     mdvector<double> jaco_spts, jaco_det_spts;
