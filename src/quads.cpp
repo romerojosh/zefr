@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 
+#include "faces.hpp"
 #include "mdvector.hpp"
 #include "macros.hpp"
 #include "points.hpp"
@@ -52,7 +53,13 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   }
 
   /* For debugging, setup reference linear quad element */
-  nd2gnd.assign({1, nNodes});
+  nd2gnd.assign({nEles, nNodes});
+  fpt2gfpt.assign({nEles, nFpts});
+  fpt2gfpt_slot.assign({nEles, nFpts},0);
+
+  for (unsigned int ele = 0; ele < nEles; ele++)
+    for(unsigned int fpt = 0; fpt < nFpts; fpt++)
+      fpt2gfpt(ele,fpt) = fpt;
 
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1;
   nd2gnd(0,2) = 2; nd2gnd(0,3) = 3;
@@ -243,7 +250,6 @@ void Quads::set_transforms()
 {
   /* Allocate memory for jacobian matrices and determinant */
   jaco_spts.assign({nEles, nSpts, nDims, nDims});
-  jaco_fpts.assign({nEles, nFpts, nDims, nDims});
   jaco_det_spts.assign({nEles, nSpts});
 
   /* Set jacobian matrix and determinant at solution points */
@@ -272,7 +278,7 @@ void Quads::set_transforms()
     }
   }
 
-  /* Set jacobian matrix at flux points (do not need the Jacobian) */
+  /* Set jacobian matrix at face flux points (do not need the determinant) */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -284,7 +290,10 @@ void Quads::set_transforms()
           for (unsigned int node = 0; node < nNodes; node++)
           {
             unsigned int gnd = nd2gnd(ele, node);
-            jaco_fpts(ele,fpt,dimX,dimXi) += coord_nodes(gnd,dimX) * dshape_fpts(dimXi,fpt,node); 
+            unsigned int gfpt = fpt2gfpt(ele,fpt);
+            unsigned int slot = fpt2gfpt_slot(ele,fpt);
+
+            faces->jaco(gfpt, dimX, dimXi, slot);
           }
         }
       }
@@ -297,9 +306,6 @@ void Quads::set_normals()
 {
   /* Allocate memory for normals */
   tnorm.assign({nFpts,nDims});
-  norm.assign({nEles,nFpts,nDims});
-  dA.assign({nEles,nFpts});
-
 
   /* Setup parent-space (transformed) normals at flux points */
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -325,22 +331,34 @@ void Quads::set_normals()
 
   }
 
-  /* Use transform to obtain physical normals at flux points */
-  /* Note: Should just send this info directly to the faces */
+  /* Use transform to obtain physical normals at face flux points */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      norm(ele,fpt,0) = jaco_fpts(ele,fpt,1,1) * tnorm(fpt,0) - jaco_fpts(ele,fpt,1,0) * tnorm(fpt,1);
-      norm(ele,fpt,1) = -jaco_fpts(ele,fpt,0,1) * tnorm(fpt,0) + jaco_fpts(ele,fpt,0,0) * tnorm(fpt,1);
+      unsigned int gfpt = fpt2gfpt(ele,fpt);
+      unsigned int slot = fpt2gfpt_slot(ele,fpt);
 
-      dA(ele,fpt) = std::sqrt(norm(ele,fpt,0)*norm(ele,fpt,0) + norm(ele,fpt,1)*norm(ele,fpt,1));
+      faces->norm(0,gfpt,slot) = faces->jaco(gfpt,1,1,slot) * tnorm(fpt,0) - 
+                                 faces->jaco(gfpt,1,0,slot) * tnorm(fpt,1);
+      faces->norm(1,gfpt,slot) = -faces->jaco(gfpt,0,1,slot) * tnorm(fpt,0) + 
+                                 faces->jaco(gfpt,0,0,slot) * tnorm(fpt,1);
 
-      norm(ele,fpt,0) /= dA(ele,fpt);
-      norm(ele,fpt,1) /= dA(ele,fpt);
+      faces->dA[gfpt] = std::sqrt(faces->norm(0,gfpt,slot)*faces->norm(0,gfpt,slot) + 
+                        faces->norm(1,gfpt,slot)*faces->norm(1,gfpt,slot));
+
+      faces->norm(0,gfpt,slot) /= faces->dA[gfpt];
+      faces->norm(1,gfpt,slot) /= faces->dA[gfpt];
+
+      switch(fpt/nFptsPerFace)
+      {
+        case (0,3):
+          faces->outnorm(gfpt,slot) = -1;
+        case (1,2):
+          faces->outnorm(gfpt,slot) = 1;
+      }
     }
   }
-
 
 }
 

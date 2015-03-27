@@ -46,8 +46,17 @@ std::vector<double> Gauss_Legendre_pts(unsigned int P)
 
 std::vector<double> Shape_pts(unsigned int P)
 {
-  std::vector<double> pts(P+1,0.0);
-  switch (P)
+  std::vector<double> nodes(P+1,0.0);
+
+  double dx = 2.0/(double)P;
+
+  nodes[0] = -1.0;
+  for (unsigned int i = 1; i < P; i++)
+    nodes[i] = nodes[i-1] + dx;
+
+  nodes[P] = 1.0;
+
+  /*switch (P)
   {
     case 1:
       pts = {-1.0, 1.0}; break;
@@ -61,8 +70,9 @@ std::vector<double> Shape_pts(unsigned int P)
     default:
       throw std::runtime_error("Shape_pts supports up to cubic edges only!");
   }
+  */
 
-  return pts; 
+  return nodes; 
 }
 
 #endif /* points_hpp */
