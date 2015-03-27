@@ -9,7 +9,7 @@ int main()
 {
   auto input = read_input_file("input.txt");
 
-  Quads eles(1,  4 , &input);
+  Quads eles(1,  1, &input);
   Faces faces(8, &input);
 
   eles.associate_faces(&faces);

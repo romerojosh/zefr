@@ -16,7 +16,7 @@ class Elements
     /* Geometric Parameters */
     unsigned int order, shape_order;
     unsigned int nEles, nDims, nVars;
-    unsigned int nSpts, nFpts, nFptsPerFace, nSpts1D;
+    unsigned int nSpts, nFpts, nSpts1D;
     unsigned int nFaces, nNodes;
     mdvector<int> nd2gnd;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;

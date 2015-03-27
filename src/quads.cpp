@@ -19,25 +19,23 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   /* Generic quadrilateral geometry */
   nDims = 2;
   nFaces = 4;
-  nNodes = 4 * shape_order;
+  nNodes = (shape_order+1)*(shape_order+1);
   
   /* If order argument is not provided, use order in input file */
   if (order == -1)
   {
     nSpts = (input->order+1)*(input->order+1);
     nSpts1D = input->order+1;
-    nFptsPerFace = input->order+1;
     this->order = input->order;
   }
   else
   {
     nSpts = (order+1)*(order+1);
     nSpts1D = order+1;
-    nFptsPerFace = order+1;
     this->order = order;
   }
 
-  nFpts = nFptsPerFace * nFaces;
+  nFpts = nSpts1D * nFaces;
   
   if (input->equation == "AdvDiff")
   {
@@ -52,7 +50,7 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
     ThrowException("Equation not recognized: " + input->equation);
   }
 
-  /* For debugging, setup reference linear quad element */
+  /* For debugging, setup reference quad element */
   nd2gnd.assign({nEles, nNodes});
   fpt2gfpt.assign({nEles, nFpts});
   fpt2gfpt_slot.assign({nEles, nFpts},0);
@@ -61,15 +59,57 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
     for(unsigned int fpt = 0; fpt < nFpts; fpt++)
       fpt2gfpt(ele,fpt) = fpt;
 
-  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1;
-  nd2gnd(0,2) = 2; nd2gnd(0,3) = 3;
-
   coord_nodes.assign({nNodes, nDims});
-  coord_nodes(0,0) = 0.5; coord_nodes(0,1) = 0.5;
-  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.5;
-  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
-  coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 1.0;
 
+  /*
+  // Bilinear Quad
+  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
+  nd2gnd(0,2) = 3; nd2gnd(0,3) = 2; 
+
+  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
+  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
+  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
+  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
+  */
+
+  // Bilinear Quad to Triangle
+  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
+  nd2gnd(0,2) = 2; nd2gnd(0,3) = 2; 
+
+  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
+  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
+  coord_nodes(2,0) = 0.0; coord_nodes(2,1) = 1.0;
+  
+  /*
+  // Biquadratic Quad
+  nd2gnd(0,0) = 0; nd2gnd(0,1) = 4; nd2gnd(0,2) = 1;
+  nd2gnd(0,3) = 7; nd2gnd(0,4) = 8; nd2gnd(0,5) = 5;
+  nd2gnd(0,6) = 3; nd2gnd(0,7) = 6; nd2gnd(0,8) = 2;
+
+  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
+  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
+  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
+  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
+  coord_nodes(4,0) = 0.5; coord_nodes(4,1) = 0.0;
+  coord_nodes(5,0) = 1.0; coord_nodes(5,1) = 0.5;
+  coord_nodes(6,0) = 0.5; coord_nodes(6,1) = 1.0;
+  coord_nodes(7,0) = 0.0; coord_nodes(7,1) = 0.5;
+  coord_nodes(8,0) = 0.5; coord_nodes(8,1) = 0.5;
+  */
+
+  /*
+  // Biquadratic Quad to Triangle
+  nd2gnd(0,0) = 0; nd2gnd(0,1) = 3; nd2gnd(0,2) = 1;
+  nd2gnd(0,3) = 5; nd2gnd(0,4) = 4; nd2gnd(0,5) = 4;
+  nd2gnd(0,6) = 2; nd2gnd(0,7) = 2; nd2gnd(0,8) = 2;
+
+  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
+  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
+  coord_nodes(2,0) = 0.0; coord_nodes(2,1) = 1.0;
+  coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 0.0;
+  coord_nodes(4,0) = 0.5; coord_nodes(4,1) = 0.5;
+  coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 0.5;
+  */
 
 }
 
@@ -106,7 +146,7 @@ void Quads::set_locs()
   unsigned int fpt = 0;
   for (unsigned int i = 0; i < nFaces; i++)
   {
-    for (unsigned int j = 0; j < nFptsPerFace; j++)
+    for (unsigned int j = 0; j < nSpts1D; j++)
     {
       switch(i)
       {
@@ -177,6 +217,20 @@ void Quads::set_locs()
       node++;
     }
     node --;
+  }
+  
+  /* Testing different node ordering. Not sure I need it */
+  node = 0;
+  for (unsigned int i = 0; i < shape_order+1; i++)
+  {
+    for (unsigned int j = 0; j < shape_order+1; j++)
+    {
+      loc_nodes(node,0) = loc_nodes_1D[j];
+      loc_nodes(node,1) = loc_nodes_1D[i];
+      idx_nodes(node,0) = j;
+      idx_nodes(node,1) = i;
+      node++;
+    }
   }
 
 }
@@ -293,7 +347,7 @@ void Quads::set_transforms()
             unsigned int gfpt = fpt2gfpt(ele,fpt);
             unsigned int slot = fpt2gfpt_slot(ele,fpt);
 
-            faces->jaco(gfpt, dimX, dimXi, slot);
+            faces->jaco(gfpt, dimX, dimXi, slot) += coord_nodes(gnd,dimX) * dshape_fpts(dimXi, fpt, node);
           }
         }
       }
@@ -310,7 +364,7 @@ void Quads::set_normals()
   /* Setup parent-space (transformed) normals at flux points */
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
-    switch(fpt/nFptsPerFace)
+    switch(fpt/nSpts1D)
     {
       case 0: /* Bottom edge */
         tnorm(fpt,0) = 0.0;
@@ -337,6 +391,11 @@ void Quads::set_normals()
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       unsigned int gfpt = fpt2gfpt(ele,fpt);
+
+      /* Check if flux point is on ghost edge */
+      if (gfpt == -1) 
+        continue;
+
       unsigned int slot = fpt2gfpt_slot(ele,fpt);
 
       faces->norm(0,gfpt,slot) = faces->jaco(gfpt,1,1,slot) * tnorm(fpt,0) - 
@@ -350,7 +409,9 @@ void Quads::set_normals()
       faces->norm(0,gfpt,slot) /= faces->dA[gfpt];
       faces->norm(1,gfpt,slot) /= faces->dA[gfpt];
 
-      switch(fpt/nFptsPerFace)
+      std::cout << gfpt << " " << faces->norm(0,gfpt,slot) << " " << faces->norm(1,gfpt,slot) << std::endl;
+
+      switch(fpt/nSpts1D)
       {
         case (0,3):
           faces->outnorm(gfpt,slot) = -1;
@@ -378,7 +439,6 @@ void Quads::setup_FR()
       unsigned int i = idx_spts(spt,0);
       unsigned int j = idx_spts(spt,1);
 
-
       oppE(fpt,spt) = Lagrange(loc_spts_1D, i, loc_fpts(fpt,0)) * 
                       Lagrange(loc_spts_1D, j, loc_fpts(fpt,1));
     }
@@ -404,13 +464,12 @@ void Quads::setup_FR()
         if (dim == 0)
         {
             oppD(dim,ispt,jspt) = Lagrange_d1(loc_DFR_1D, i, loc_spts(ispt,0)) *
-                              Lagrange(loc_DFR_1D, j, loc_spts(ispt,1));
+                                  Lagrange(loc_DFR_1D, j, loc_spts(ispt,1));
         }
         else
         {
             oppD(dim,ispt,jspt) = Lagrange(loc_DFR_1D, i, loc_spts(ispt,0)) *
-                              Lagrange_d1(loc_DFR_1D, j, loc_spts(ispt,1));
-
+                                  Lagrange_d1(loc_DFR_1D, j, loc_spts(ispt,1));
         }
       }
     }
@@ -437,7 +496,6 @@ void Quads::setup_FR()
         {
             oppD_fpts(dim,spt,fpt) = Lagrange(loc_DFR_1D, i, loc_spts(spt,0)) *
                               Lagrange_d1(loc_DFR_1D, j, loc_spts(spt,1));
-
         }
       }
     }
