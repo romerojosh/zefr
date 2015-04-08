@@ -8,6 +8,7 @@
 #include "points.hpp"
 #include "polynomials.hpp"
 #include "quads.hpp"
+#include "shape.hpp"
 
 Quads::Quads(unsigned int nEles, unsigned int shape_order,
                    const InputStruct *input, unsigned int order)
@@ -63,6 +64,7 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes.assign({nNodes, nDims});
 
  
+  /*
   // Bilinear Quad
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
   nd2gnd(0,2) = 2; nd2gnd(0,3) = 3; 
@@ -72,6 +74,7 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
   coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
 
+  */
   /*
   // Bilinear Quad to Triangle
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
@@ -113,36 +116,33 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 0.5;
   */
 
-  
-  /*
+  /*  
   //8-node Serendipity Quad
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
   nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 5;
   nd2gnd(0,6) = 6; nd2gnd(0,7) = 7; 
 
   coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
-  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
-  coord_nodes(4,0) = 0.5; coord_nodes(4,1) = 0.0;
-  coord_nodes(5,0) = 1.0; coord_nodes(5,1) = 0.5;
-  coord_nodes(6,0) = 0.5; coord_nodes(6,1) = 1.0;
+  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.0;
+  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 0.0;
+  coord_nodes(3,0) = 1.0; coord_nodes(3,1) = 0.5;
+  coord_nodes(4,0) = 1.0; coord_nodes(4,1) = 1.0;
+  coord_nodes(5,0) = 0.5; coord_nodes(5,1) = 1.0;
+  coord_nodes(6,0) = 0.0; coord_nodes(6,1) = 1.0;
   coord_nodes(7,0) = 0.0; coord_nodes(7,1) = 0.5;
   */
 
-  /*
   // 8-node Serendipity Quad to Triangle
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
   nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 4;
   nd2gnd(0,6) = 4; nd2gnd(0,7) = 5; 
 
   coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.0;
+  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.2;
   coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 0.0;
   coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 0.5;
   coord_nodes(4,0) = 0.0; coord_nodes(4,1) = 1.0;
   coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 0.5;
-  */
   
 }
 
@@ -151,15 +151,12 @@ void Quads::set_locs()
   /* Allocate memory for point location structures */
   loc_spts.assign({nSpts,nDims}); idx_spts.assign({nSpts,nDims});
   loc_fpts.assign({nFpts,nDims}); idx_fpts.assign({nFpts, nDims});
-  loc_nodes.assign({nNodes,nDims}); idx_nodes.assign({nNodes, nDims});
 
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
      loc_spts_1D = Gauss_Legendre_pts(order+1); 
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
-
-  loc_nodes_1D = Shape_pts(shape_order); 
 
   /* Setup solution point locations */
   unsigned int spt = 0;
@@ -211,121 +208,6 @@ void Quads::set_locs()
       fpt++;
     }
   }
-
-  /* Setup shape point (node) locations */
-  unsigned int node = 0;
-  for (unsigned int i = 0; i < nFaces; i++)
-  {
-    for (unsigned int j = 0; j < shape_order + 1; j++)
-    {
-      if (node >= nNodes) break;
-
-      switch(i)
-      {
-        case 0: /* Bottom edge */
-          loc_nodes(node,0) = loc_nodes_1D[j];
-          loc_nodes(node,1) = -1.0;
-          idx_nodes(node,0) = j;
-          idx_nodes(node,1) = 0; break;
-
-        case 1: /* Right edge */
-          loc_nodes(node,0) = 1.0; 
-          loc_nodes(node,1) = loc_nodes_1D[j];
-          idx_nodes(node,0) = shape_order; 
-          idx_nodes(node,1) = j; break;
-
-        case 2: /* Upper edge */
-          loc_nodes(node,0) = loc_nodes_1D[shape_order-j];
-          loc_nodes(node,1) = 1.0;
-          idx_nodes(node,0) = shape_order-j;
-          idx_nodes(node,1) = shape_order; break;
-
-        case 3: /* Left edge */
-          loc_nodes(node,0) = -1.0; 
-          loc_nodes(node,1) = loc_nodes_1D[shape_order-j];
-          idx_nodes(node,0) = 0; 
-          idx_nodes(node,1) = shape_order-j; break;
-      }
-
-      node++;
-    }
-    node --;
-  }
-  
-  /* Alternate node ordering for Lagrange Elements*/
-  node = 0;
-  for (unsigned int i = 0; i < shape_order+1; i++)
-  {
-    for (unsigned int j = 0; j < shape_order+1; j++)
-    {
-      loc_nodes(node,0) = loc_nodes_1D[j];
-      loc_nodes(node,1) = loc_nodes_1D[i];
-      idx_nodes(node,0) = j;
-      idx_nodes(node,1) = i;
-
-      if (i!=0 && i!=shape_order && j!=0 && j!=shape_order)
-        continue;
-
-      node++;
-    }
-  }
-
-  /* Hardcoded node ordering (easy mode) */
-  /* Bilinear Quad
-   * 3 ----- 2
-   * |       |
-   * |       |
-   * 0 ----- 1
-  */
-  if (shape_order == 1)
-  {
-    loc_nodes(0,0) = loc_nodes_1D[0]; loc_nodes(0,1) = loc_nodes_1D[0];
-    loc_nodes(1,0) = loc_nodes_1D[1]; loc_nodes(1,1) = loc_nodes_1D[0];
-    loc_nodes(2,0) = loc_nodes_1D[1]; loc_nodes(2,1) = loc_nodes_1D[1];
-    loc_nodes(3,0) = loc_nodes_1D[0]; loc_nodes(3,1) = loc_nodes_1D[1];
-
-    idx_nodes(0,0) = 0; idx_nodes(0,1) = 0;
-    idx_nodes(1,0) = 1; idx_nodes(1,1) = 0;
-    idx_nodes(2,0) = 1; idx_nodes(2,1) = 1;
-    idx_nodes(3,0) = 0; idx_nodes(3,1) = 1;
-  }
-
-  /* 8-node Serendipity Quad
-   * 3 --6-- 2
-   * |       |
-   * 7       5
-   * |       |
-   * 0 --4-- 1
-  */
-
-  else if (shape_order == 2)
-  {
-    loc_nodes(0,0) = loc_nodes_1D[0]; loc_nodes(0,1) = loc_nodes_1D[0];
-    loc_nodes(1,0) = loc_nodes_1D[2]; loc_nodes(1,1) = loc_nodes_1D[0];
-    loc_nodes(2,0) = loc_nodes_1D[2]; loc_nodes(2,1) = loc_nodes_1D[2];
-    loc_nodes(3,0) = loc_nodes_1D[0]; loc_nodes(3,1) = loc_nodes_1D[2];
-    loc_nodes(4,0) = loc_nodes_1D[1]; loc_nodes(4,1) = loc_nodes_1D[0];
-    loc_nodes(5,0) = loc_nodes_1D[2]; loc_nodes(5,1) = loc_nodes_1D[1];
-    loc_nodes(6,0) = loc_nodes_1D[1]; loc_nodes(6,1) = loc_nodes_1D[2];
-    loc_nodes(7,0) = loc_nodes_1D[0]; loc_nodes(7,1) = loc_nodes_1D[1];
-
-    idx_nodes(0,0) = 0; idx_nodes(0,1) = 0;
-    idx_nodes(1,0) = 2; idx_nodes(1,1) = 0;
-    idx_nodes(2,0) = 2; idx_nodes(2,1) = 2;
-    idx_nodes(3,0) = 0; idx_nodes(3,1) = 2;
-    idx_nodes(4,0) = 1; idx_nodes(4,1) = 0;
-    idx_nodes(5,0) = 2; idx_nodes(5,1) = 1;
-    idx_nodes(6,0) = 1; idx_nodes(6,1) = 2;
-    idx_nodes(7,0) = 0; idx_nodes(7,1) = 1;
-  }
-
-  else
-  {
-    ThrowException("shape_order not implemented yet!");
-  }
-  
-  std::cout << loc_nodes << std::endl;
-
 }
 
 void Quads::set_shape()
@@ -341,49 +223,17 @@ void Quads::set_shape()
   {
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      unsigned int i = idx_nodes(node,0);
-      unsigned int j = idx_nodes(node,1);
-
-      if (j == 0 || j == shape_order)
-        shape_spts(spt,node) *= Lagrange(loc_nodes_1D, i, loc_spts(spt,0));
-      else
-        shape_spts(spt,node) *= Lagrange({-1,1}, i/shape_order, loc_spts(spt,0));
-
-      if (i == 0 || i == shape_order)
-        shape_spts(spt,node) *= Lagrange(loc_nodes_1D, j, loc_spts(spt,1));
-      else
-        shape_spts(spt,node) *= Lagrange({-1,1}, j/shape_order, loc_spts(spt,1));
-
-      /*
-      shape_spts(spt,node) = Lagrange(loc_nodes_1D, i, loc_spts(spt,0)) *
-                             Lagrange(loc_nodes_1D, j, loc_spts(spt,1));
-      */
+      shape_spts(spt,node) = calc_shape_quad(shape_order, node, 
+        loc_spts(spt,0),loc_spts(spt,1));
     }
   }
-
-  std::cout << shape_spts << std::endl;
 
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      unsigned int i = idx_nodes(node,0);
-      unsigned int j = idx_nodes(node,1);
-
-      if (j == 0 || j == shape_order)
-        shape_fpts(fpt,node) *= Lagrange(loc_nodes_1D, i, loc_fpts(fpt,0));
-      else
-        shape_fpts(fpt,node) *= Lagrange({-1,1}, i/shape_order, loc_fpts(fpt,0));
-
-      if (i == 0 || i == shape_order)
-        shape_fpts(fpt,node) *= Lagrange(loc_nodes_1D, j, loc_fpts(fpt,1));
-      else
-        shape_fpts(fpt,node) *= Lagrange({-1,1}, j/shape_order, loc_fpts(fpt,1));
-
-      /*
-      shape_fpts(fpt,node) = Lagrange(loc_nodes_1D, i, loc_fpts(fpt,0)) *
-                             Lagrange(loc_nodes_1D, j, loc_fpts(fpt,1));
-      */
+      shape_fpts(fpt,node) = calc_shape_quad(shape_order, node, 
+        loc_fpts(fpt,0),loc_fpts(fpt,1));
     }
   }
 
@@ -392,38 +242,10 @@ void Quads::set_shape()
   {
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      unsigned int i = idx_nodes(node,0);
-      unsigned int j = idx_nodes(node,1);
-
-      if (j == 0 || j == shape_order)
-      {
-        dshape_spts(0,spt,node) *= Lagrange_d1(loc_nodes_1D, i, loc_spts(spt,0));
-        dshape_spts(1,spt,node) *= Lagrange(loc_nodes_1D, i, loc_spts(spt,0));
-      }
-      else
-      {
-        dshape_spts(0,spt,node) *= Lagrange_d1({-1,1}, i/shape_order, loc_spts(spt,0));
-        dshape_spts(1,spt,node) *= Lagrange({-1,1}, i/shape_order, loc_spts(spt,0));
-      }
-
-      if (i == 0 || i == shape_order)
-      {
-        dshape_spts(0,spt,node) *= Lagrange(loc_nodes_1D, j, loc_spts(spt,1));
-        dshape_spts(1,spt,node) *= Lagrange_d1(loc_nodes_1D, j, loc_spts(spt,1));
-      }
-      else
-      {
-        dshape_spts(0,spt,node) *= Lagrange({-1,1}, j/shape_order, loc_spts(spt,1));
-        dshape_spts(1,spt,node) *= Lagrange_d1({-1,1}, j/shape_order, loc_spts(spt,1));
-      }
-
-      /*
-      dshape_spts(0,spt,node) = Lagrange_d1(loc_nodes_1D, i, loc_spts(spt,0))*
-                                Lagrange(loc_nodes_1D, j, loc_spts(spt,1));
-      dshape_spts(1,spt,node) = Lagrange(loc_nodes_1D, i, loc_spts(spt,0)) *
-                                Lagrange_d1(loc_nodes_1D, j, loc_spts(spt,1));
-      */
-                                  
+      dshape_spts(0,spt,node) = calc_dshape_quad(shape_order, node, 
+        loc_spts(spt,0), loc_spts(spt,1), 0);
+      dshape_spts(1,spt,node) = calc_dshape_quad(shape_order, node, 
+        loc_spts(spt,0), loc_spts(spt,1), 1);
     }
   }
 
@@ -431,39 +253,10 @@ void Quads::set_shape()
   {
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      unsigned int i = idx_nodes(node,0);
-      unsigned int j = idx_nodes(node,1);
-
-      if (j == 0 || j == shape_order)
-      {
-        dshape_fpts(0,fpt,node) *= Lagrange_d1(loc_nodes_1D, i, loc_fpts(fpt,0));
-        dshape_fpts(1,fpt,node) *= Lagrange(loc_nodes_1D, i, loc_fpts(fpt,0));
-      }
-      else
-      {
-        dshape_fpts(0,fpt,node) *= Lagrange_d1({-1,1}, i/shape_order, loc_fpts(fpt,0));
-        dshape_fpts(1,fpt,node) *= Lagrange({-1,1}, i/shape_order, loc_fpts(fpt,0));
-      }
-
-      if (i == 0 || i == shape_order)
-      {
-        dshape_fpts(0,fpt,node) *= Lagrange(loc_nodes_1D, j, loc_fpts(fpt,1));
-        dshape_fpts(1,fpt,node) *= Lagrange_d1(loc_nodes_1D, j, loc_fpts(fpt,1));
-      }
-      else
-      {
-        dshape_fpts(0,fpt,node) *= Lagrange({-1,1}, j/shape_order, loc_fpts(fpt,1));
-        dshape_fpts(1,fpt,node) *= Lagrange_d1({-1,1}, j/shape_order, loc_fpts(fpt,1));
-      }
-
-
-      /*
-      dshape_fpts(0,fpt,node) = Lagrange_d1(loc_nodes_1D, i, loc_fpts(fpt,0)) *
-                                Lagrange(loc_nodes_1D, j, loc_fpts(fpt,1));
-      dshape_fpts(1,fpt,node) = Lagrange(loc_nodes_1D, i, loc_fpts(fpt,0)) *
-                                Lagrange_d1(loc_nodes_1D, j, loc_fpts(fpt,1));
-      */
-                                  
+      dshape_fpts(0,fpt,node) = calc_dshape_quad(shape_order, node, 
+        loc_fpts(fpt,0), loc_fpts(fpt,1), 0);
+      dshape_fpts(1,fpt,node) = calc_dshape_quad(shape_order, node, 
+        loc_fpts(fpt,0), loc_fpts(fpt,1), 1);
     }
   }
 }
@@ -496,8 +289,8 @@ void Quads::set_transforms()
 
 
       std::cout << jaco_det_spts(ele,spt) << std::endl;
-      //if (jaco_det_spts(ele,spt) < 0.)
-      //  ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
+      if (jaco_det_spts(ele,spt) < 0.)
+        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
 
     }
   }
