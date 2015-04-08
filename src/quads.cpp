@@ -63,7 +63,6 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes.assign({nNodes, nDims});
 
  
-  /*
   // Bilinear Quad
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
   nd2gnd(0,2) = 2; nd2gnd(0,3) = 3; 
@@ -72,7 +71,6 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
   coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
   coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
-  */
 
   /*
   // Bilinear Quad to Triangle
@@ -116,19 +114,21 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   */
 
   
+  /*
   //8-node Serendipity Quad
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
   nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 5;
   nd2gnd(0,6) = 6; nd2gnd(0,7) = 7; 
 
   coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 0.0;
-  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 0.5;
-  coord_nodes(4,0) = 1.0; coord_nodes(4,1) = 0.5;
-  coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 1.0;
+  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
+  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
+  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
+  coord_nodes(4,0) = 0.5; coord_nodes(4,1) = 0.0;
+  coord_nodes(5,0) = 1.0; coord_nodes(5,1) = 0.5;
   coord_nodes(6,0) = 0.5; coord_nodes(6,1) = 1.0;
-  coord_nodes(7,0) = 1.0; coord_nodes(7,1) = 1.0;
+  coord_nodes(7,0) = 0.0; coord_nodes(7,1) = 0.5;
+  */
 
   /*
   // 8-node Serendipity Quad to Triangle
@@ -269,8 +269,62 @@ void Quads::set_locs()
       node++;
     }
   }
-  std::cout << loc_nodes << std::endl;
+
+  /* Hardcoded node ordering (easy mode) */
+  /* Bilinear Quad
+   * 3 ----- 2
+   * |       |
+   * |       |
+   * 0 ----- 1
+  */
+  if (shape_order == 1)
+  {
+    loc_nodes(0,0) = loc_nodes_1D[0]; loc_nodes(0,1) = loc_nodes_1D[0];
+    loc_nodes(1,0) = loc_nodes_1D[1]; loc_nodes(1,1) = loc_nodes_1D[0];
+    loc_nodes(2,0) = loc_nodes_1D[1]; loc_nodes(2,1) = loc_nodes_1D[1];
+    loc_nodes(3,0) = loc_nodes_1D[0]; loc_nodes(3,1) = loc_nodes_1D[1];
+
+    idx_nodes(0,0) = 0; idx_nodes(0,1) = 0;
+    idx_nodes(1,0) = 1; idx_nodes(1,1) = 0;
+    idx_nodes(2,0) = 1; idx_nodes(2,1) = 1;
+    idx_nodes(3,0) = 0; idx_nodes(3,1) = 1;
+  }
+
+  /* 8-node Serendipity Quad
+   * 3 --6-- 2
+   * |       |
+   * 7       5
+   * |       |
+   * 0 --4-- 1
+  */
+
+  else if (shape_order == 2)
+  {
+    loc_nodes(0,0) = loc_nodes_1D[0]; loc_nodes(0,1) = loc_nodes_1D[0];
+    loc_nodes(1,0) = loc_nodes_1D[2]; loc_nodes(1,1) = loc_nodes_1D[0];
+    loc_nodes(2,0) = loc_nodes_1D[2]; loc_nodes(2,1) = loc_nodes_1D[2];
+    loc_nodes(3,0) = loc_nodes_1D[0]; loc_nodes(3,1) = loc_nodes_1D[2];
+    loc_nodes(4,0) = loc_nodes_1D[1]; loc_nodes(4,1) = loc_nodes_1D[0];
+    loc_nodes(5,0) = loc_nodes_1D[2]; loc_nodes(5,1) = loc_nodes_1D[1];
+    loc_nodes(6,0) = loc_nodes_1D[1]; loc_nodes(6,1) = loc_nodes_1D[2];
+    loc_nodes(7,0) = loc_nodes_1D[0]; loc_nodes(7,1) = loc_nodes_1D[1];
+
+    idx_nodes(0,0) = 0; idx_nodes(0,1) = 0;
+    idx_nodes(1,0) = 2; idx_nodes(1,1) = 0;
+    idx_nodes(2,0) = 2; idx_nodes(2,1) = 2;
+    idx_nodes(3,0) = 0; idx_nodes(3,1) = 2;
+    idx_nodes(4,0) = 1; idx_nodes(4,1) = 0;
+    idx_nodes(5,0) = 2; idx_nodes(5,1) = 1;
+    idx_nodes(6,0) = 1; idx_nodes(6,1) = 2;
+    idx_nodes(7,0) = 0; idx_nodes(7,1) = 1;
+  }
+
+  else
+  {
+    ThrowException("shape_order not implemented yet!");
+  }
   
+  std::cout << loc_nodes << std::endl;
 
 }
 
@@ -306,6 +360,8 @@ void Quads::set_shape()
       */
     }
   }
+
+  std::cout << shape_spts << std::endl;
 
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
