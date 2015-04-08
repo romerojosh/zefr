@@ -116,7 +116,6 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   */
 
   
-  /*
   //8-node Serendipity Quad
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
   nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 5;
@@ -125,13 +124,13 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
   coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.0;
   coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 0.0;
-  coord_nodes(3,0) = 1.0; coord_nodes(3,1) = 0.5;
-  coord_nodes(4,0) = 1.0; coord_nodes(4,1) = 1.0;
-  coord_nodes(5,0) = 0.5; coord_nodes(5,1) = 1.0;
-  coord_nodes(6,0) = 0.0; coord_nodes(6,1) = 1.0;
-  coord_nodes(7,0) = 0.0; coord_nodes(7,1) = 0.5;
-  */
+  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 0.5;
+  coord_nodes(4,0) = 1.0; coord_nodes(4,1) = 0.5;
+  coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 1.0;
+  coord_nodes(6,0) = 0.5; coord_nodes(6,1) = 1.0;
+  coord_nodes(7,0) = 1.0; coord_nodes(7,1) = 1.0;
 
+  /*
   // 8-node Serendipity Quad to Triangle
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
   nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 4;
@@ -143,6 +142,7 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 0.5;
   coord_nodes(4,0) = 0.0; coord_nodes(4,1) = 1.0;
   coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 0.5;
+  */
   
 }
 
@@ -253,7 +253,6 @@ void Quads::set_locs()
   }
   
   /* Alternate node ordering for Lagrange Elements*/
-  /*
   node = 0;
   for (unsigned int i = 0; i < shape_order+1; i++)
   {
@@ -263,10 +262,14 @@ void Quads::set_locs()
       loc_nodes(node,1) = loc_nodes_1D[i];
       idx_nodes(node,0) = j;
       idx_nodes(node,1) = i;
+
+      if (i!=0 && i!=shape_order && j!=0 && j!=shape_order)
+        continue;
+
       node++;
     }
   }
-  */
+  std::cout << loc_nodes << std::endl;
   
 
 }
@@ -436,8 +439,9 @@ void Quads::set_transforms()
                                jaco_spts(ele,spt,0,1) * jaco_spts(ele,spt,1,0); 
 
 
-      if (jaco_det_spts(ele,spt) < 0.)
-        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
+      std::cout << jaco_det_spts(ele,spt) << std::endl;
+      //if (jaco_det_spts(ele,spt) < 0.)
+      //  ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
 
     }
   }
