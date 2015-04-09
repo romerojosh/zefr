@@ -47,16 +47,13 @@ class Elements
     virtual void set_shape() = 0;
     virtual void set_transforms() = 0;
     virtual void set_normals() = 0;
-
     virtual void setup_FR() = 0;
+
+    virtual void set_coords() = 0;
 
   public:
     void associate_faces(std::shared_ptr<Faces> faces);
     void setup();
-    void FR_cycle();
-    const mdvector<double>& get_divF() const; 
-    const mdvector<double>& get_U() const;
-    
 
 };
 

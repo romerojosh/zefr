@@ -465,3 +465,41 @@ void Quads::setup_FR()
   }
 }
 
+void Quads::set_coords()
+{
+  /* Allocate memory for physical coordinates */
+  coord_spts.assign({nDims, nSpts, nEles});
+  coord_fpts.assign({nDims, nFpts, nEles});
+
+  /* Setup physical coordinates at solution points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int node = 0; node < nNodes; node++)
+        {
+          unsigned int gnd = nd2gnd(ele, node);
+          coord_spts(dim, spt, ele) += coord_nodes(gnd,dim) * shape_spts(spt, node);
+        }
+      }
+    }
+  }
+  
+  /* Setup physical coordinates at flux points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int node = 0; node < nNodes; node++)
+        {
+          unsigned int gnd = nd2gnd(ele, node);
+          coord_fpts(dim, fpt, ele) += coord_nodes(gnd,dim) * shape_fpts(fpt, node);
+        }
+      }
+    }
+  }
+}

@@ -17,6 +17,7 @@ class Quads: public Elements
     void set_transforms();
     void set_normals();
     void setup_FR();
+    void set_coords();
 
   public:
     Quads(unsigned int nEles, unsigned int shape_order, const InputStruct *input, 

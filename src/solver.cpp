@@ -55,6 +55,9 @@ void FRSolver::initialize_U()
 
   /* Initialize solution */
   // TODO: Fill in with actual logic. */
+  for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      std::cout << ele << " " << spt << " " << eles->coord_spts(0,spt,ele) << " " << eles->coord_spts(1,spt,ele) << std::endl;
 }
 
 void FRSolver::extrapolate_U()
