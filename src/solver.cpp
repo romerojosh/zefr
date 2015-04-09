@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "elements.hpp"
+#include "faces.hpp"
 #include "quads.hpp"
 #include "input.hpp"
 #include "solver.hpp"
@@ -28,10 +29,15 @@ void FRSolver::setup()
   eles->setup();
 
   initialize_U();
+}
 
+void FRSolver::compute_residual()
+{
   extrapolate_U();
 
   U_to_faces();
+  eles->compute_Fconv();
+  faces->compute_Fconv();
   // TODO: Calls on faces to compute common flux
   F_from_faces();
 
@@ -42,11 +48,12 @@ void FRSolver::initialize_U()
 {
   /* Allocate memory for solution data structures */
   /* Solution and Flux Variables */
-  eles->U_spts.assign({eles->nVars, eles->nSpts, eles->nEles},1);
+  eles->U_spts.assign({eles->nVars, eles->nSpts, eles->nEles});
   eles->U_fpts.assign({eles->nVars, eles->nFpts, eles->nEles});
 
   eles->F_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
   eles->F_fpts.assign({eles->nDims, eles->nVars, eles->nFpts, eles->nEles});
+  eles->commF.assign({eles->nVars, eles->nFpts, eles->nEles});
 
   eles->dU_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
   eles->dF_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
@@ -106,22 +113,19 @@ void FRSolver::U_to_faces()
 
 void FRSolver::F_from_faces()
 {
-  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  for (unsigned int n = 0; n < eles->nVars; n++) 
   {
-    for (unsigned int n = 0; n < eles->nVars; n++) 
+    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
     {
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          unsigned int gfpt = eles->fpt2gfpt(ele,fpt);
-          /* Check if flux point is on ghost edge */
-          if (gfpt == -1)
-            continue;
-          unsigned int slot = eles->fpt2gfpt_slot(ele,fpt);
+        unsigned int gfpt = eles->fpt2gfpt(ele,fpt);
+        /* Check if flux point is on ghost edge */
+        if (gfpt == -1)
+          continue;
+        unsigned int slot = eles->fpt2gfpt_slot(ele,fpt);
 
-          eles->F_fpts(dim, n, fpt, ele) = faces->Fcomm(dim, n, gfpt, slot);
-        }
+        eles->commF(n, fpt, ele) = faces->Fcomm(n, gfpt, slot);
       }
     }
   }
@@ -130,7 +134,7 @@ void FRSolver::F_from_faces()
   {
     for (unsigned int j = 0; j < eles->nEles; j++)
     {
-      std::cout << eles->F_fpts(0,0,i,j);
+      std::cout << eles->commF(0,i,j);
     }
     std::cout << std::endl;
   }
@@ -158,7 +162,7 @@ void FRSolver::compute_dF()
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       auto &A = eles->oppD_fpts(dim,0,0);
-      auto &B = eles->F_fpts(dim, n,0,0);
+      auto &B = eles->commF(n,0,0);
       auto &C = eles->dF_spts(dim,n,0,0);
 
       cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles,

@@ -1,10 +1,7 @@
 #include <cblas.h>
 #include <iostream>
 
-#include "faces.hpp"
-#include "quads.hpp"
 #include "input.hpp"
-#include "mdvector.hpp"
 #include "solver.hpp"
 
 int main()
@@ -13,6 +10,7 @@ int main()
 
   FRSolver solver(&input);
   solver.setup();
+  solver.compute_residual();
 
 
 

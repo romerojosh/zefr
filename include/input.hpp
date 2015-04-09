@@ -11,6 +11,7 @@ struct InputStruct
 {
   unsigned int order;
   std::string equation, flux_type, spt_type;
+  double AdvDiff_Ax, AdvDiff_Ay;
 };
 
 InputStruct read_input_file(std::string inputfile);

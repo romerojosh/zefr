@@ -40,6 +40,7 @@ class Elements
     mdvector<double> oppE, oppD, oppD_fpts;
     mdvector<double> U_spts, U_fpts;
     mdvector<double> F_spts, F_fpts;
+    mdvector<double> commF;
     mdvector<double> dU_spts, dF_spts, divF_spts;
 
 
@@ -54,6 +55,7 @@ class Elements
   public:
     void associate_faces(std::shared_ptr<Faces> faces);
     void setup();
+    virtual void compute_Fconv() = 0;
 
 };
 

@@ -15,6 +15,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "equation", input.equation);
   read_param(f, "flux_type", input.flux_type);
   read_param(f, "spt_type", input.spt_type);
+  read_param(f, "AdvDiff_Ax", input.AdvDiff_Ax);
+  read_param(f, "AdvDiff_Ay", input.AdvDiff_Ay);
+
+  f.close();
 
   return input;
 }

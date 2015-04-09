@@ -46,6 +46,7 @@ class FRSolver
   public:
     FRSolver(const InputStruct *input, unsigned int order = -1);
     void setup();
+    void compute_residual();
 
 };
 

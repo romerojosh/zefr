@@ -2,3 +2,5 @@ order     1
 flux_type rusanov
 equation AdvDiff    (AdvDiff, Euler, or NS)
 spt_type Legendre
+AdvDiff_Ax 1
+AdvDiff_Ay 1

@@ -22,6 +22,7 @@ class Quads: public Elements
   public:
     Quads(unsigned int nEles, unsigned int shape_order, const InputStruct *input, 
           unsigned int order = -1);
+    void compute_Fconv();
 
 };
 

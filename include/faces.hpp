@@ -20,8 +20,8 @@ class Faces
     unsigned int nFpts, nDims, nVars;
 
     void apply_bcs();
-    void compute_Fconv();
-    void compute_Fvisc();
+    //void compute_Fconv();
+    //void compute_Fvisc();
     void rusanov_flux();
 
   protected:
@@ -35,6 +35,7 @@ class Faces
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U();
     void compute_common_F();
+    void compute_Fconv();
 
     
 };

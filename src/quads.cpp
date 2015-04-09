@@ -463,6 +463,16 @@ void Quads::setup_FR()
       }
     }
   }
+
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      std::cout << oppD_fpts(0,spt,fpt) << " ";
+    }
+    std::cout << std::endl;
+  }
+
 }
 
 void Quads::set_coords()
@@ -501,5 +511,27 @@ void Quads::set_coords()
         }
       }
     }
+  }
+}
+
+void Quads::compute_Fconv()
+{
+  if (input->equation == "AdvDiff")
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          F_spts(0, n, spt, ele) = input->AdvDiff_Ax * U_spts(n, spt, ele);
+          F_spts(1, n, spt, ele) = input->AdvDiff_Ay * U_spts(n, spt, ele);
+        }
+      }
+    }
+  }
+  else if (input->equation == "EulerNS")
+  {
+    ThrowException("Euler flux not implemented yet!");
   }
 }
