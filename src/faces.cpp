@@ -12,7 +12,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   U.assign({nVars, nFpts, 2});
   dU.assign({nDims, nVars, nFpts, 2});
   F.assign({nDims, nVars, nFpts, 2});
-  Fcomm.assign({nVars, nFpts, 2});
+  Fcomm.assign({nDims, nVars, nFpts, 2});
 
   /* Allocate memory for geometry structures */
   norm.assign({nDims, nFpts, 2});

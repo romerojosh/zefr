@@ -39,7 +39,7 @@ class mdvector
     std::array<unsigned int,4> shape(void) const;
 
     //! Method to return starting data pointer
-    const T* data();
+    T* data();
 
     //! Overloaded methods to access data
     T& operator()(unsigned int idx0, unsigned int idx1);
@@ -95,7 +95,7 @@ std::array<unsigned int,4> mdvector<T>::shape(void) const
 }
 
 template <typename T>
-const T* mdvector<T>::data(void)
+T* mdvector<T>::data(void)
 {
   return values.data();
 }

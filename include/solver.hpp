@@ -1,9 +1,26 @@
 #ifndef solver_hpp
 #define solver_hpp
 
-class FRsolver
+#include <memory>
+
+#include "input.hpp"
+#include "elements.hpp"
+#include "faces.hpp"
+
+class Elements;
+class FRSolver
 {
   private:
+    const InputStruct *input = NULL;
+    unsigned int order;
+    //Quads *eles;
+    //Elements *eles = NULL;
+    //Faces *faces = NULL;
+    std::shared_ptr<Elements> eles;
+    std::shared_ptr<Faces> faces;
+
+    void initialize_U();
+
     void extrapolate_U();
     /* Note: Going to create ele2fpt and slot structure like FR2D. gfpt=-1 means no comm. */
     void U_to_faces();
@@ -27,7 +44,9 @@ class FRsolver
 
 
   public:
+    FRSolver(const InputStruct *input, unsigned int order = -1);
+    void setup();
 
-}
+};
 
 #endif /* solver_hpp */

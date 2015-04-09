@@ -5,9 +5,12 @@
 
 #include "elements.hpp"
 #include "input.hpp"
+#include "solver.hpp"
 
+//class FRSolver;
 class Quads: public Elements 
 {
+  //friend class FRSolver;
   private:
     void set_locs();
     void set_shape();

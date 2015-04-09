@@ -1,17 +1,22 @@
 #ifndef elements_hpp
 #define elements_hpp
 
+#include <memory>
 #include <string>
 
 #include "faces.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
+//#include "solver.hpp"
 
+class FRSolver;
 class Elements
 {
+  friend class FRSolver;
   protected:
     const InputStruct *input = NULL;
-    Faces *faces = NULL;
+    //Faces *faces = NULL;
+    std::shared_ptr<Faces> faces;
 
     /* Geometric Parameters */
     unsigned int order, shape_order;
@@ -43,11 +48,10 @@ class Elements
     virtual void set_transforms() = 0;
     virtual void set_normals() = 0;
 
-    void initialize_U();
     virtual void setup_FR() = 0;
 
   public:
-    void associate_faces(Faces *faces);
+    void associate_faces(std::shared_ptr<Faces> faces);
     void setup();
     void FR_cycle();
     const mdvector<double>& get_divF() const; 

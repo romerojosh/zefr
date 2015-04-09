@@ -64,7 +64,6 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes.assign({nNodes, nDims});
 
  
-  /*
   // Bilinear Quad
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
   nd2gnd(0,2) = 2; nd2gnd(0,3) = 3; 
@@ -74,7 +73,6 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
   coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
 
-  */
   /*
   // Bilinear Quad to Triangle
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
@@ -132,17 +130,19 @@ Quads::Quads(unsigned int nEles, unsigned int shape_order,
   coord_nodes(7,0) = 0.0; coord_nodes(7,1) = 0.5;
   */
 
+  /*
   // 8-node Serendipity Quad to Triangle
   nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
   nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 4;
   nd2gnd(0,6) = 4; nd2gnd(0,7) = 5; 
 
   coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.2;
+  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.0;
   coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 0.0;
   coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 0.5;
   coord_nodes(4,0) = 0.0; coord_nodes(4,1) = 1.0;
   coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 0.5;
+  */
   
 }
 

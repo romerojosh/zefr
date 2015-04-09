@@ -8,9 +8,11 @@
 #include "mdvector.hpp"
 
 //class Elements;
-
+class FRSolver;
+class Quads;
 class Faces 
 {
+  friend class FRSolver;
   friend class Quads;
 
   private:
@@ -31,10 +33,6 @@ class Faces
   public:
     Faces(unsigned int nFpts, const InputStruct *input);
     void setup(unsigned int nDims, unsigned int nVars);
-    void set_face_U(unsigned int val, unsigned int gfpt, unsigned int var, 
-                    unsigned int slot);
-    void set_face_dU(unsigned int val, unsigned int gfpt, unsigned int var, 
-                    unsigned int slot);
     void compute_common_U();
     void compute_common_F();
 
