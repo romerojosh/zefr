@@ -2,6 +2,6 @@ libs = -L /usr/local/Cellar/openblas/0.2.13/lib -lcblas
 inc = -I /usr/local/Cellar/openblas/0.2.13/include 
 
 test:
-	g++ test.cpp src/input.cpp src/faces.cpp src/elements.cpp src/quads.cpp src/points.cpp src/polynomials.cpp src/solver.cpp src/shape.cpp -I include $(inc) $(libs) -std=c++11 -o test
+	g++ test.cpp src/input.cpp src/geometry.cpp src/faces.cpp src/elements.cpp src/quads.cpp src/points.cpp src/polynomials.cpp src/solver.cpp src/shape.cpp -I include $(inc) $(libs) -std=c++11 -o test
 clean:
 	rm test

@@ -3,15 +3,17 @@
 
 #include <memory>
 
-#include "input.hpp"
 #include "elements.hpp"
 #include "faces.hpp"
+#include "geometry.hpp"
+#include "input.hpp"
 
 class Elements;
 class FRSolver
 {
   private:
     const InputStruct *input = NULL;
+    GeoStruct geo;
     unsigned int order;
     //Quads *eles;
     //Elements *eles = NULL;

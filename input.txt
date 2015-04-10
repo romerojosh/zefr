@@ -1,3 +1,4 @@
+meshfile QuadBox_3x3.msh
 order     1
 flux_type rusanov
 equation AdvDiff    (AdvDiff, Euler, or NS)

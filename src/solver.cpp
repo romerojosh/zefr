@@ -4,6 +4,7 @@
 
 #include "elements.hpp"
 #include "faces.hpp"
+#include "geometry.hpp"
 #include "quads.hpp"
 #include "input.hpp"
 #include "solver.hpp"
@@ -19,8 +20,8 @@ FRSolver::FRSolver(const InputStruct *input, unsigned int order)
 
 void FRSolver::setup()
 {
-  
   // TODO: Need to process geometry here 
+  geo = process_mesh(input->meshfile, order);
 
   eles = std::make_shared<Quads>(1, 1, input, order);
   faces = std::make_shared<Faces>(8, input);
@@ -38,6 +39,7 @@ void FRSolver::compute_residual()
   U_to_faces();
   eles->compute_Fconv();
   faces->compute_Fconv();
+  faces->compute_common_F();
   // TODO: Calls on faces to compute common flux
   F_from_faces();
 

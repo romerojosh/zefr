@@ -42,6 +42,11 @@ void Faces::compute_Fconv()
   }
 }
 
+void Faces::compute_common_F()
+{
+  rusanov_flux();
+
+}
 void Faces::rusanov_flux()
 {
   std::vector<double> FL(nVars,0.0);
