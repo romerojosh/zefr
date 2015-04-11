@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "geometry.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
 
@@ -17,12 +18,14 @@ class Faces
 
   private:
     const InputStruct *input = NULL;
+    const GeoStruct *geo = NULL;
     unsigned int nFpts, nDims, nVars;
 
     void apply_bcs();
     //void compute_Fconv();
     //void compute_Fvisc();
     void rusanov_flux();
+    void transform_flux();
 
   protected:
     mdvector<double> U, dU, F, Fcomm;
@@ -31,7 +34,7 @@ class Faces
     std::vector<double> dA;
 
   public:
-    Faces(unsigned int nFpts, const InputStruct *input);
+    Faces(const GeoStruct *geo, const InputStruct *input);
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U();
     void compute_common_F();

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "faces.hpp"
+#include "geometry.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
 //#include "solver.hpp"
@@ -15,6 +16,7 @@ class Elements
   friend class FRSolver;
   protected:
     const InputStruct *input = NULL;
+    GeoStruct *geo = NULL;
     //Faces *faces = NULL;
     std::shared_ptr<Faces> faces;
 
@@ -23,9 +25,9 @@ class Elements
     unsigned int nEles, nDims, nVars;
     unsigned int nSpts, nFpts, nSpts1D;
     unsigned int nFaces, nNodes;
-    mdvector<int> nd2gnd;
-    mdvector<int> fpt2gfpt, fpt2gfpt_slot;
-    mdvector<double> coord_nodes, coord_spts, coord_fpts;
+    //mdvector<int> nd2gnd;
+    //mdvector<int> fpt2gfpt, fpt2gfpt_slot;
+    //mdvector<double> coord_nodes, coord_spts, coord_fpts;
 
     mdvector<double> loc_spts, loc_fpts, loc_nodes;
     mdvector<double> idx_spts, idx_fpts, idx_nodes;
@@ -56,6 +58,7 @@ class Elements
     void associate_faces(std::shared_ptr<Faces> faces);
     void setup();
     virtual void compute_Fconv() = 0;
+    virtual void transform_flux() = 0;
 
 };
 

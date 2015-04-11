@@ -47,7 +47,7 @@ class mdvector
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
 
     //! Assignment
-    void operator= (const mdvector<T> &vec);
+    //mdvector<T>& operator= (const mdvector<T> &vec);
     
     //! Utility function for print
     friend std::ostream& operator<<<>(std::ostream &os, const mdvector<T> &vec);
@@ -122,13 +122,17 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
   return values[((idx0 * strides[1] + idx1) * strides[2] + idx2) * strides[3] + idx3];
 }
 
+/*
 template <typename T>
-void  mdvector<T>::operator= (const mdvector<T> &vec)
+mdvector<T>&  mdvector<T>::operator= (const mdvector<T> &vec)
 {
   this->values = vec.values;
   this->dims = vec.dims;
   this->strides = vec.strides;
+
+  return *this;
 }
+*/
 
 template<typename T>
 std::ostream& operator<<(std::ostream &os, const mdvector<T> &vec)

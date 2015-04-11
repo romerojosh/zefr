@@ -10,7 +10,10 @@ int main()
 
   FRSolver solver(&input);
   solver.setup();
-  solver.compute_residual();
+  //solver.compute_residual();
+  solver.update();
+  solver.update();
+  solver.update();
 
 
 

@@ -1,5 +1,7 @@
 meshfile QuadBox_3x3.msh
-order     1
+order     0
+dt_scheme Euler
+dt	  0.1
 flux_type rusanov
 equation AdvDiff    (AdvDiff, Euler, or NS)
 spt_type Legendre

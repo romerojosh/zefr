@@ -15,13 +15,16 @@ class FRSolver
     const InputStruct *input = NULL;
     GeoStruct geo;
     unsigned int order;
-    //Quads *eles;
-    //Elements *eles = NULL;
-    //Faces *faces = NULL;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
 
+    unsigned int nStages;
+    std::vector<double> rk_alpha, rk_beta;
+    mdvector<double> divF;
+    mdvector<double> U_ini;
+
     void initialize_U();
+    void setup_update();
 
     void extrapolate_U();
     /* Note: Going to create ele2fpt and slot structure like FR2D. gfpt=-1 means no comm. */
@@ -42,13 +45,14 @@ class FRSolver
     void F_from_faces();
 
     void compute_dF();
-    void compute_divF();
+    void compute_divF(unsigned int stage);
 
 
   public:
     FRSolver(const InputStruct *input, unsigned int order = -1);
     void setup();
-    void compute_residual();
+    void compute_residual(unsigned int stage);
+    void update();
 
 };
 
