@@ -1,4 +1,5 @@
 #include <cblas.h>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -95,8 +96,6 @@ void FRSolver::setup_output()
     ThrowException("3D not implemented yet!");
   }
 
-  std::cout << geo.ppt_connect << std::endl;
-
 }
 
 void FRSolver::compute_residual(unsigned int stage)
@@ -139,10 +138,16 @@ void FRSolver::initialize_U()
   {
     for (unsigned int spt = 0; spt < eles->nSpts; spt++)
     {
-      if (ele == 4)
-      {
-        eles->U_spts(0,spt,ele) = 1.0;
-      }
+      double x = geo.coord_spts(0,spt,ele);
+      double y = geo.coord_spts(1,spt,ele);
+
+      eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
+
+     // if (ele == 4)
+     // {
+     //   eles->U_spts(0,spt,ele) = 1.0;
+     // }
+     
     }
   }
 }
@@ -212,6 +217,7 @@ void FRSolver::F_from_faces()
     }
   }
 
+  /*
   std::cout << "commF" << std::endl;
   for (unsigned int i = 0; i < eles->nFpts; i++)
   {
@@ -221,6 +227,7 @@ void FRSolver::F_from_faces()
     }
     std::cout << std::endl;
   }
+  */
 }
 
 void FRSolver::compute_dF()
@@ -253,6 +260,7 @@ void FRSolver::compute_dF()
     }
   }
 
+  /*
   std::cout << "dF" << std::endl;
   for (unsigned int i = 0; i < eles->nSpts; i++)
   {
@@ -271,6 +279,7 @@ void FRSolver::compute_dF()
     }
     std::cout << std::endl;
   }
+  */
  
 }
 
@@ -297,6 +306,7 @@ void FRSolver::compute_divF(unsigned int stage)
           divF(stage, n, spt, ele) /= eles->jaco_det_spts(ele, spt);
           //eles->divF_spts(n,spt,ele) += eles->dF_spts(dim,n,spt,ele);
 
+  /*
   std::cout << "divF" << std::endl;
   for (unsigned int i = 0; i < eles->nSpts; i++)
   {
@@ -306,6 +316,7 @@ void FRSolver::compute_divF(unsigned int stage)
     }
     std::cout << std::endl;
   }
+  */
  
 }
 
@@ -327,7 +338,6 @@ void FRSolver::update()
   compute_residual(nStages-1);
   eles->U_spts = U_ini;
 
-  std::cout << nStages << std::endl;
   for (unsigned int stage = 0; stage < nStages; stage++)
   {
     for (unsigned int n = 0; n < eles->nVars; n++)

@@ -1,11 +1,11 @@
 nDims    2
 meshfile cart_adv.msh
-order     2
+order     0
 dt_scheme Euler
 dt	  0.01
+n_steps 10
 flux_type rusanov
 equation AdvDiff    (AdvDiff, Euler, or NS)
 spt_type Legendre
-AdvDiff_Ax 1
+AdvDiff_Ax 0
 AdvDiff_Ay 1
-plot_res   2

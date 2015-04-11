@@ -102,11 +102,18 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     if (geo.nDims == 2)
     {
       if (val == 2 || val == 3)
-        geo.nEles++;
+      {
+        geo.nEles++; 
+        geo.shape_order = 1; geo.nNodesPerEle = 4;
+      }
       else if (val == 1)
+      {
         geo.nBnds++;
+      }
       else
+      {
         ThrowException("Inconsistent Element/Face type detected!");
+      }
     }
     else if (geo.nDims == 3)
     {
@@ -116,7 +123,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
   }
 
   f.seekg(pos);
-
 
   geo.nd2gnd.assign({geo.nEles, geo.nNodesPerEle});
 

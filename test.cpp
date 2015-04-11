@@ -1,5 +1,7 @@
 #include <cblas.h>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 #include "input.hpp"
 #include "solver.hpp"
@@ -11,10 +13,14 @@ int main()
   FRSolver solver(&input);
   solver.setup();
   //solver.compute_residual();
-  for (unsigned int n = 0; n<5 ; n++)
+  for (unsigned int n = 0; n<input.n_steps ; n++)
+  {
     solver.update();
+    std::stringstream ss;
+    ss << "test" << n << ".vtk";
+    solver.write_solution(ss.str());
+  }
 
-  solver.write_solution("test.vtk");
 
 
 
