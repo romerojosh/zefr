@@ -13,12 +13,19 @@ int main()
   FRSolver solver(&input);
   solver.setup();
   //solver.compute_residual();
-  for (unsigned int n = 0; n<input.n_steps ; n++)
+  std::stringstream ss;
+  ss << "data" << 0 << ".vtk";
+  solver.write_solution(ss.str());
+  for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
+    std::cout << n << std::endl;
     solver.update();
-    std::stringstream ss;
-    ss << "test" << n << ".vtk";
-    solver.write_solution(ss.str());
+    if (n%10 == 0)
+    {
+      std::stringstream ss;
+      ss << "data" << n << ".vtk";
+      solver.write_solution(ss.str());
+    }
   }
 
 

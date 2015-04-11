@@ -355,6 +355,11 @@ void Quads::set_transforms()
           {
             unsigned int gnd = geo->nd2gnd(ele, node);
             unsigned int gfpt = geo->fpt2gfpt(ele,fpt);
+
+            /* Skip fpts on ghost edges */
+            if (gfpt == -1)
+              continue;
+
             unsigned int slot = geo->fpt2gfpt_slot(ele,fpt);
 
             faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(gnd,dimX) * dshape_fpts(dimXi, fpt, node);
@@ -641,11 +646,23 @@ void Quads::transform_flux()
       {
         double Ftemp = F_spts(0, n, spt, ele);
 
-        F_spts(0, n, spt, ele) = F_spts(0, n, spt, ele) * jaco_spts(ele, spt, 2, 2) -
-                                 F_spts(1, n, spt, ele) * jaco_spts(ele, spt, 1, 2);
-        F_spts(1, n, spt, ele) = F_spts(1, n, spt, ele) * jaco_spts(ele, spt, 1, 1) -
-                                 Ftemp * jaco_spts(ele, spt, 1, 1);
+        F_spts(0, n, spt, ele) = F_spts(0, n, spt, ele) * jaco_spts(ele, spt, 1, 1) -
+                                 F_spts(1, n, spt, ele) * jaco_spts(ele, spt, 0, 1);
+        F_spts(1, n, spt, ele) = F_spts(1, n, spt, ele) * jaco_spts(ele, spt, 0, 0) -
+                                 Ftemp * jaco_spts(ele, spt, 1, 0);
       }
     }
   }
+
+  /*
+  std::cout << "tflux" << std::endl;
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    for (unsigned int j = 0; j < nEles; j++)
+    {
+      std::cout << F_spts(0,0,i,j) << " ";
+    }
+    std::cout << std::endl;
+  }
+  */
 }

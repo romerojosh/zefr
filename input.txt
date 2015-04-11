@@ -1,11 +1,11 @@
 nDims    2
-meshfile cart_adv.msh
-order     0
+meshfile QuadBox_3x3.msh
+order     4
 dt_scheme Euler
 dt	  0.01
-n_steps 10
+n_steps 100
 flux_type rusanov
 equation AdvDiff    (AdvDiff, Euler, or NS)
 spt_type Legendre
-AdvDiff_Ax 0
+AdvDiff_Ax 1
 AdvDiff_Ay 1

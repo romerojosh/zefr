@@ -143,10 +143,12 @@ void FRSolver::initialize_U()
 
       eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
 
-     // if (ele == 4)
-     // {
-     //   eles->U_spts(0,spt,ele) = 1.0;
-     // }
+      /*
+      if (ele == 4)
+      {
+        eles->U_spts(0,spt,ele) = 1.0;
+      }
+      */
      
     }
   }
@@ -161,15 +163,17 @@ void FRSolver::extrapolate_U()
     auto &C = eles->U_fpts(n,0,0);
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nFpts, eles->nEles,
-        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 1.0, &C, eles->nEles);
+        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
   }
 
- /* 
+ 
+  /*
+  std::cout << "Uext" << std::endl;
   for (unsigned int i = 0; i < eles->nFpts; i++)
   {
     for (unsigned int j = 0; j < eles->nEles; j++)
     {
-      std::cout << eles->U_fpts(0,i,j);
+      std::cout << eles->U_fpts(0,i,j) << " ";
     }
     std::cout << std::endl;
   }
@@ -242,7 +246,7 @@ void FRSolver::compute_dF()
       auto &C = eles->dF_spts(dim,n,0,0);
 
       cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles,
-          eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 1.0, &C, eles->nEles);
+          eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
     }
   }
 
@@ -280,12 +284,12 @@ void FRSolver::compute_dF()
     std::cout << std::endl;
   }
   */
+  
  
 }
 
 void FRSolver::compute_divF(unsigned int stage)
 {
-  eles->divF_spts.assign({eles->nVars, eles->nSpts, eles->nEles});
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       for (unsigned int ele =0; ele < eles->nEles; ele++)
@@ -339,14 +343,23 @@ void FRSolver::update()
   eles->U_spts = U_ini;
 
   for (unsigned int stage = 0; stage < nStages; stage++)
-  {
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
           eles->U_spts(n, spt, ele) -=  rk_beta[stage] * input->dt * divF(stage, n, spt, ele);
-        }
+
+  /*
+  std::cout << "U" << std::endl;
+  for (unsigned int i = 0; i < eles->nSpts; i++)
+  {
+    for (unsigned int j = 0; j < eles->nEles; j++)
+    {
+      std::cout << eles->U_spts(0,i,j) << " ";
+    }
+    std::cout << std::endl;
   }
+  */
+ 
 }
 
 void FRSolver::write_solution(std::string outputfile)
@@ -420,7 +433,7 @@ void FRSolver::write_solution(std::string outputfile)
     auto &C = eles->U_ppts(n,0,0);
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, eles->nEles,
-        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 1.0, &C, eles->nEles);
+        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
   }
   if (input->equation == "AdvDiff")
   {
