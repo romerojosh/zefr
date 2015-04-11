@@ -52,6 +52,10 @@ void FRSolver::setup_update()
     rk_alpha = {0.5, 0.5, 1.0};
     rk_beta = {1./6., 1./3., 1./3., 1./6.};
   }
+  else
+  {
+    ThrowException("dt_scheme not recognized!");
+  }
 
   divF.assign({nStages, eles->nVars, eles->nSpts, eles->nEles});
 

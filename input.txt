@@ -1,7 +1,7 @@
 nDims    2
-meshfile QuadBox_3x3.msh
-order     4
-dt_scheme Euler
+meshfile TriBox_5x5.msh
+order     3
+dt_scheme RK44
 dt	  0.01
 n_steps 100
 flux_type rusanov
