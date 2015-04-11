@@ -1,4 +1,4 @@
-libs = -L /usr/local/Cellar/openblas/0.2.13/lib -lcblas
+libs = -L /usr/local/Cellar/openblas/0.2.13/lib -lblas
 inc = -I /usr/local/Cellar/openblas/0.2.13/include 
 
 test:

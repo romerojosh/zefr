@@ -22,5 +22,6 @@ void Elements::setup()
   set_transforms();
   set_normals();
   setup_FR();
+  setup_plot();
   set_coords();
 }

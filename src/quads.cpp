@@ -39,6 +39,7 @@ Quads::Quads(GeoStruct *geo, const InputStruct *input, unsigned int order)
   }
 
   nFpts = nSpts1D * nFaces;
+  nPpts = (nSpts1D+2)*(nSpts1D+2);
   
   if (input->equation == "AdvDiff")
   {
@@ -154,6 +155,7 @@ void Quads::set_locs()
   /* Allocate memory for point location structures */
   loc_spts.assign({nSpts,nDims}); idx_spts.assign({nSpts,nDims});
   loc_fpts.assign({nFpts,nDims}); idx_fpts.assign({nFpts, nDims});
+  loc_ppts.assign({nPpts,nDims}); idx_ppts.assign({nPpts,nDims});
 
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
@@ -211,6 +213,25 @@ void Quads::set_locs()
       fpt++;
     }
   }
+  
+  /* Setup plot point locations */
+  auto loc_ppts_1D = loc_spts_1D;
+  loc_ppts_1D.insert(loc_ppts_1D.begin(), -1.0);
+  loc_ppts_1D.insert(loc_ppts_1D.end(), 1.0);
+
+  unsigned int ppt = 0;
+  for (unsigned int i = 0; i < nSpts1D+2; i++)
+  {
+    for (unsigned int j = 0; j < nSpts1D+2; j++)
+    {
+      loc_ppts(ppt,0) = loc_ppts_1D[j];
+      loc_ppts(ppt,1) = loc_ppts_1D[i];
+      idx_ppts(ppt,0) = j;
+      idx_ppts(ppt,1) = i;
+      ppt++;
+    }
+  }
+
 }
 
 void Quads::set_shape()
@@ -218,8 +239,10 @@ void Quads::set_shape()
   /* Allocate memory for shape function and related derivatives */
   shape_spts.assign({nSpts, nNodes},1);
   shape_fpts.assign({nFpts, nNodes},1);
+  shape_ppts.assign({nPpts, nNodes},1);
   dshape_spts.assign({nDims, nSpts, nNodes},1);
   dshape_fpts.assign({nDims, nFpts, nNodes},1);
+  dshape_ppts.assign({nDims, nPpts, nNodes},1);
 
   /* Shape functions at solution and flux points */
   for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -239,6 +262,7 @@ void Quads::set_shape()
         loc_fpts(fpt,0),loc_fpts(fpt,1));
     }
   }
+
 
   /* Shape function derivatives at solution and flux points */
   for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -262,12 +286,34 @@ void Quads::set_shape()
         loc_fpts(fpt,0), loc_fpts(fpt,1), 1);
     }
   }
+
+  /* Shape function and derivatives at plot points */
+  for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+  {
+    for (unsigned int node = 0; node < nNodes; node++)
+    {
+      shape_ppts(ppt,node) = calc_shape_quad(shape_order, node, 
+        loc_ppts(ppt,0),loc_ppts(ppt,1));
+    }
+  }
+
+  for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+  {
+    for (unsigned int node = 0; node < nNodes; node++)
+    {
+      dshape_ppts(0,ppt,node) = calc_dshape_quad(shape_order, node, 
+        loc_ppts(ppt,0), loc_ppts(ppt,1), 0);
+      dshape_ppts(1,ppt,node) = calc_dshape_quad(shape_order, node, 
+        loc_ppts(ppt,0), loc_ppts(ppt,1), 1);
+    }
+  }
 }
 
 void Quads::set_transforms()
 {
   /* Allocate memory for jacobian matrices and determinant */
   jaco_spts.assign({nEles, nSpts, nDims, nDims});
+  jaco_ppts.assign({nEles, nPpts, nDims, nDims});
   jaco_det_spts.assign({nEles, nSpts});
 
   /* Set jacobian matrix and determinant at solution points */
@@ -318,6 +364,24 @@ void Quads::set_transforms()
     }
   }
 
+  /* Set jacobian matrix and determinant at plot points (do not need the determinant) */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+    {
+      for (unsigned int dimX = 0; dimX < nDims; dimX++)
+      {
+        for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+        {
+          for (unsigned int node = 0; node < nNodes; node++)
+          {
+            unsigned int gnd = geo->nd2gnd(ele, node);
+            jaco_ppts(ele,ppt,dimX,dimXi) += geo->coord_nodes(gnd,dimX) * dshape_ppts(dimXi,ppt,node); 
+          }
+        }
+      }
+    }
+  }
 }
 
 void Quads::set_normals()
@@ -467,11 +531,34 @@ void Quads::setup_FR()
 
 }
 
+void Quads::setup_plot()
+{
+  /* Allocate memory for plot point interpolation operator */
+  oppE_plot.assign({nPpts, nSpts});
+
+  /* Setup spt to ppt extrapolation operator (oppE_plot) */
+  for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      /* Get indices for Lagrange polynomial evaluation */
+      unsigned int i = idx_spts(spt,0);
+      unsigned int j = idx_spts(spt,1);
+
+      oppE_plot(ppt,spt) = Lagrange(loc_spts_1D, i, loc_ppts(ppt,0)) * 
+                      Lagrange(loc_spts_1D, j, loc_ppts(ppt,1));
+    }
+  }
+
+
+}
+
 void Quads::set_coords()
 {
   /* Allocate memory for physical coordinates */
   geo->coord_spts.assign({nDims, nSpts, nEles});
   geo->coord_fpts.assign({nDims, nFpts, nEles});
+  geo->coord_ppts.assign({nDims, nPpts, nEles});
 
   /* Setup physical coordinates at solution points */
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -500,6 +587,22 @@ void Quads::set_coords()
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
           geo->coord_fpts(dim, fpt, ele) += geo->coord_nodes(gnd,dim) * shape_fpts(fpt, node);
+        }
+      }
+    }
+  }
+
+  /* Setup physical coordinates at plot points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int node = 0; node < nNodes; node++)
+        {
+          unsigned int gnd = geo->nd2gnd(ele, node);
+          geo->coord_ppts(dim, ppt, ele) += geo->coord_nodes(gnd,dim) * shape_ppts(ppt, node);
         }
       }
     }

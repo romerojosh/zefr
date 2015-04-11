@@ -11,5 +11,6 @@ Notes:
 
 Ideas:
 - Can look into reducing operator dimensions since most will be multiplied by zero in collapsed edge elements. May add unneeded complexity, but might not.
+- In same vein, if solver is restricted to tensor product, can use smaller operators for each dimension. Requires reordering flux points.
 - Might want to use manual memory management over vectors to reduce size of mdvector objects.
 - Can generalize printing function for more dimensions (should wrap in debug ifdef too!)

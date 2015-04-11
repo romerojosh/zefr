@@ -11,9 +11,10 @@
 #include "macros.hpp"
 #include "mdvector.hpp"
 
-GeoStruct process_mesh(std::string meshfile, unsigned int order)
+GeoStruct process_mesh(std::string meshfile, unsigned int order, unsigned int nDims)
 {
   GeoStruct geo;
+  geo.nDims = nDims;
 
   load_mesh_data(meshfile, geo);
 
@@ -28,9 +29,9 @@ void load_mesh_data(std::string meshfile, GeoStruct &geo)
   std::ifstream f(meshfile);
   std::string param;
 
+  /*
   while (f >> param)
   {
-    /* First, jump to element connectivity to determine dimensionality */
     if (param == "$Elements")
     {
       unsigned int val;
@@ -46,10 +47,11 @@ void load_mesh_data(std::string meshfile, GeoStruct &geo)
       }
     }
   }
+*/
 
   /* Return to begining of file */
-  f.clear();
-  f.seekg(0, f.beg);
+  //f.clear();
+  //f.seekg(0, f.beg);
 
   /* Process file information */
   while (f >> param)
@@ -118,7 +120,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
   geo.nd2gnd.assign({geo.nEles, geo.nNodesPerEle});
 
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  unsigned int ele = 0;
+  for (unsigned int n = 0; n < nElesBnds; n++)
   {
     unsigned int vint, ele_type;
     f >> vint >> ele_type;
@@ -128,13 +131,17 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
     switch(ele_type)
     {
+      case 1:
+        f >> vint >> vint;
+        break;
       case 2: /* 3-node Triangle */
         f >> geo.nd2gnd(ele,0) >> geo.nd2gnd(ele,1) >> geo.nd2gnd(ele,2);
-        geo.nd2gnd(ele,3) = geo.nd2gnd(ele,2); break;
+        geo.nd2gnd(ele,3) = geo.nd2gnd(ele,2); 
+        ele++; break;
 
       case 3: /* 4-node Quadrilateral */
         f >> geo.nd2gnd(ele,0) >> geo.nd2gnd(ele,1) >> geo.nd2gnd(ele,2) >> geo.nd2gnd(ele,3);
-        break;
+        ele++; break;
       default:
         ThrowException("Unrecognized element type detected!"); break;
     }

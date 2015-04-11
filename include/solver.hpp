@@ -2,6 +2,7 @@
 #define solver_hpp
 
 #include <memory>
+#include <string>
 
 #include "elements.hpp"
 #include "faces.hpp"
@@ -25,6 +26,7 @@ class FRSolver
 
     void initialize_U();
     void setup_update();
+    void setup_output();
 
     void extrapolate_U();
     /* Note: Going to create ele2fpt and slot structure like FR2D. gfpt=-1 means no comm. */
@@ -53,6 +55,7 @@ class FRSolver
     void setup();
     void compute_residual(unsigned int stage);
     void update();
+    void write_solution(std::string outputfile);
 
 };
 

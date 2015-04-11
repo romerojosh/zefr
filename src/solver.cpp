@@ -1,4 +1,5 @@
 #include <cblas.h>
+#include <fstream>
 #include <iostream>
 #include <memory>
 
@@ -22,7 +23,7 @@ FRSolver::FRSolver(const InputStruct *input, unsigned int order)
 void FRSolver::setup()
 {
   // TODO: Need to process geometry here 
-  geo = process_mesh(input->meshfile, order);
+  geo = process_mesh(input->meshfile, order, input->nDims);
 
   eles = std::make_shared<Quads>(&geo, input, order);
   faces = std::make_shared<Faces>(&geo, input);
@@ -32,6 +33,7 @@ void FRSolver::setup()
 
   initialize_U();
   setup_update();
+  setup_output();
 }
 
 void FRSolver::setup_update()
@@ -51,6 +53,49 @@ void FRSolver::setup_update()
   }
 
   divF.assign({nStages, eles->nVars, eles->nSpts, eles->nEles});
+
+}
+
+void FRSolver::setup_output()
+{
+  if (eles->nDims == 2)
+  {
+    unsigned int nSubelements1D = eles->nSpts1D+1;
+    eles->nSubelements = nSubelements1D * nSubelements1D;
+    eles->nNodesPerSubelement = 4;
+
+    /* Allocate memory for local plot point connectivity and solution at plot points */
+    geo.ppt_connect.assign({eles->nSubelements, 4});
+    eles->U_ppts.assign({eles->nVars, eles->nPpts, eles->nEles});
+
+    /* Setup plot "subelement" connectivity */
+    std::vector<unsigned int> nd(4,0);
+
+    unsigned int ele = 0;
+    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+
+    for (unsigned int i = 0; i < nSubelements1D; i++)
+    {
+      for (unsigned int j = 0; j < nSubelements1D; j++)
+    {
+        for (unsigned int node = 0; node < 4; node ++)
+        {
+          geo.ppt_connect(ele,node) = nd[node] + j;
+        }
+
+        ele++;
+      }
+
+      for (unsigned int node = 0; node < 4; node ++)
+        nd[node] += nSubelements1D + 1;
+    }
+  }
+  else
+  {
+    ThrowException("3D not implemented yet!");
+  }
+
+  std::cout << geo.ppt_connect << std::endl;
 
 }
 
@@ -77,6 +122,7 @@ void FRSolver::initialize_U()
   /* Solution and Flux Variables */
   eles->U_spts.assign({eles->nVars, eles->nSpts, eles->nEles});
   eles->U_fpts.assign({eles->nVars, eles->nFpts, eles->nEles});
+  eles->U_ppts.assign({eles->nVars, eles->nPpts, eles->nEles});
 
   eles->F_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
   eles->F_fpts.assign({eles->nDims, eles->nVars, eles->nFpts, eles->nEles});
@@ -272,7 +318,7 @@ void FRSolver::update()
   {
     compute_residual(stage);
     for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int spt = 0; n < eles->nSpts; spt++)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
           eles->U_spts(n, spt, ele) = U_ini(n, spt, ele) - rk_alpha[stage] * input->dt * divF(stage, n, spt, ele);
   }
@@ -293,3 +339,95 @@ void FRSolver::update()
   }
 }
 
+void FRSolver::write_solution(std::string outputfile)
+{
+  /* Write solution to file in .vtk format */
+  std::ofstream f(outputfile);
+
+  /* Write header */
+  f << "# vtk DataFile Version 3.0" << std::endl;
+  f << "vtk output" << std::endl;
+  f << "ASCII" << std::endl;
+  f << "DATASET UNSTRUCTURED_GRID" << std::endl;
+  f << std::endl;
+  
+  /* Write plot point coordinates */
+  f << "POINTS " << eles->nPpts*eles->nEles << " double" << std::endl;
+  if (eles->nDims == 2)
+  {
+    // TODO: Change order of ppt structures for better looping 
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(0, ppt, ele) << " ";
+        f << geo.coord_ppts(1, ppt, ele) << " ";
+        f << 0.0 << std::endl;
+      }
+    }
+  }
+  else
+  {
+    ThrowException("3D not implemented!");
+  }
+  f << std::endl;
+
+  /* Write cell information */
+  unsigned int nCells = eles->nSubelements * eles->nEles;
+  f << "CELLS " << nCells << " " << (1+eles->nNodesPerSubelement)*nCells << std::endl;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      f << eles->nNodesPerSubelement << " "; 
+      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      {
+        f << geo.ppt_connect(subele,i) + ele*eles->nPpts << " ";
+      }
+      f << std::endl;
+    }
+  }
+  f << std::endl;
+
+  f << "CELL_TYPES " << nCells << std::endl;
+  if (eles->nDims == 2)
+  {
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 9 << std::endl;
+  }
+  else
+  {
+    ThrowException("3D not implemented!");
+  }
+  f << std::endl;
+
+  /* Write solution information */
+  /* Extrapolate solution to plot points */
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    auto &A = eles->oppE_plot(0,0);
+    auto &B = eles->U_spts(n,0,0);
+    auto &C = eles->U_ppts(n,0,0);
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, eles->nEles,
+        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 1.0, &C, eles->nEles);
+  }
+  if (input->equation == "AdvDiff")
+  {
+    f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
+    f << "SCALARS U double 1" << std::endl;
+    f << "LOOKUP_TABLE default" << std::endl;
+    
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << eles->U_ppts(0,ppt,ele) << " ";
+      }
+      f << std::endl;
+    }
+
+  }
+
+
+}

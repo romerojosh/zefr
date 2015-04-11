@@ -11,9 +11,10 @@ int main()
   FRSolver solver(&input);
   solver.setup();
   //solver.compute_residual();
-  solver.update();
-  solver.update();
-  solver.update();
+  for (unsigned int n = 0; n<5 ; n++)
+    solver.update();
+
+  solver.write_solution("test.vtk");
 
 
 

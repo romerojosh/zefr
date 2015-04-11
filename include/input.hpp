@@ -9,7 +9,7 @@
 
 struct InputStruct
 {
-  unsigned int order;
+  unsigned int order, nDims;
   std::string meshfile, equation, flux_type, spt_type, dt_scheme;
   double AdvDiff_Ax, AdvDiff_Ay, dt;
 };

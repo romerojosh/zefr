@@ -11,6 +11,7 @@ InputStruct read_input_file(std::string inputfile)
 
   InputStruct input;
 
+  read_param(f, "nDims", input.nDims);
   read_param(f, "meshfile", input.meshfile);
   read_param(f, "order", input.order);
   read_param(f, "dt_scheme", input.dt_scheme);
