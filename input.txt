@@ -1,9 +1,10 @@
 nDims    2
-meshfile TriBox_5x5.msh
-order     3
+meshfile cart_adv.msh
+order     4
 dt_scheme RK44
-dt	  0.01
-n_steps 100
+dt	  0.005
+n_steps 2000
+write_freq  100
 flux_type rusanov
 equation AdvDiff    (AdvDiff, Euler, or NS)
 spt_type Legendre

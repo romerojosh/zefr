@@ -107,6 +107,7 @@ void FRSolver::compute_residual(unsigned int stage)
   extrapolate_U();
 
   U_to_faces();
+  faces->apply_bcs();
 
   eles->compute_Fconv();
   faces->compute_Fconv();
@@ -366,7 +367,7 @@ void FRSolver::update()
  
 }
 
-void FRSolver::write_solution(std::string outputfile)
+void FRSolver::write_solution(std::string outputfile, unsigned int nIter)
 {
   /* Write solution to file in .vtk format */
   std::ofstream f(outputfile);
@@ -376,6 +377,14 @@ void FRSolver::write_solution(std::string outputfile)
   f << "vtk output" << std::endl;
   f << "ASCII" << std::endl;
   f << "DATASET UNSTRUCTURED_GRID" << std::endl;
+  f << std::endl;
+
+  /* Write field data */
+  f << "FIELD FieldData 2" << std::endl;
+  f << "TIME 1 1 double" << std::endl;
+  f << nIter * input->dt << std::endl;
+  f << "CYCLE 1 1 int" << std::endl;
+  f << nIter << std::endl;
   f << std::endl;
   
   /* Write plot point coordinates */

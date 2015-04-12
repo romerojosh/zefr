@@ -3,7 +3,7 @@
 #include "geometry.hpp"
 #include "input.hpp"
 
-Faces::Faces(const GeoStruct *geo, const InputStruct *input)
+Faces::Faces(GeoStruct *geo, const InputStruct *input)
 {
   this->input = input;
   this->geo = geo;
@@ -26,6 +26,28 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   outnorm.assign({nFpts,2});
   dA.assign(nFpts,0.0);
   jaco.assign({nFpts, nDims, nDims , 2});
+}
+
+void Faces::apply_bcs()
+{
+  /* Loop over boundary flux points */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    unsigned int i = 0;
+    for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
+    {
+      unsigned int bnd_id = geo->gfpt2bnd[i];
+
+      /* Apply specified boundary condition */
+      if (bnd_id == 1) /* Periodic */
+      {
+        unsigned int per_fpt = geo->per_fpt_pairs[fpt];
+        U(n, fpt, 1) = U(n, per_fpt, 0);
+      }
+
+      i++;
+    }
+  } 
 }
 
 void Faces::compute_Fconv()

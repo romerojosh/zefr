@@ -18,7 +18,7 @@ class Faces
 
   private:
     const InputStruct *input = NULL;
-    const GeoStruct *geo = NULL;
+    GeoStruct *geo = NULL;
     unsigned int nFpts, nDims, nVars;
 
     void apply_bcs();
@@ -34,7 +34,7 @@ class Faces
     std::vector<double> dA;
 
   public:
-    Faces(const GeoStruct *geo, const InputStruct *input);
+    Faces(GeoStruct *geo, const InputStruct *input);
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U();
     void compute_common_F();

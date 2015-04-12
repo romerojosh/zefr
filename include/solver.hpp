@@ -55,7 +55,7 @@ class FRSolver
     void setup();
     void compute_residual(unsigned int stage);
     void update();
-    void write_solution(std::string outputfile);
+    void write_solution(std::string outputfile, unsigned int nIter);
 
 };
 

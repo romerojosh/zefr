@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -27,6 +28,10 @@ GeoStruct process_mesh(std::string meshfile, unsigned int order, unsigned int nD
 void load_mesh_data(std::string meshfile, GeoStruct &geo)
 {
   std::ifstream f(meshfile);
+
+  if (!f.is_open())
+    ThrowException("Could not open specified mesh file!");
+
   std::string param;
 
   /*
@@ -90,7 +95,8 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     /* Check boundary tag and set appropriate index */
     if (bnd_id == "\"PERIODIC\"")
     {
-      geo.bnd_ids[n] = 1;
+      geo.bnd_ids[val] = 1;
+      geo.per_bnd_flag = true;
     }
     else if (bnd_id == "\"FLUID\"")
     {
@@ -227,6 +233,8 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
           std::getline(f,line); continue; break;
       }
 
+      face[0]--; face[1]--;
+
       /* Sort for consistency and add to map*/
       std::sort(face.begin(), face.end());
       geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
@@ -236,6 +244,84 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
   {
     ThrowException("3D not implemented yet!");
   }
+
+  if (geo.per_bnd_flag)
+    couple_periodic_bnds(geo);
+}
+
+void couple_periodic_bnds(GeoStruct &geo)
+{
+  /* Loop over boundary faces */
+  if (geo.nDims == 2)
+  {
+    for (auto &bnd_face : geo.bnd_faces)
+    {
+      unsigned int bnd_id = bnd_face.second;
+      auto face = bnd_face.first;
+      
+      /* Check if face is periodic */
+      if (bnd_id == 1)
+      {
+        /* Get face node coordinates */
+        double x0, x1, y0, y1;
+        x0 = geo.coord_nodes(face[0], 0);
+        y0 = geo.coord_nodes(face[0], 1);
+        x1 = geo.coord_nodes(face[1], 0);
+        y1 = geo.coord_nodes(face[1], 1);
+
+        if (std::abs(y0-y1) < 1e-6) /* Horizontal face */
+        {
+          /* Search for face to couple */
+          for(auto &bnd_face2 : geo.bnd_faces)
+          {
+            auto face2 = bnd_face2.first;
+            if (face2 == face)
+              continue;
+
+            double x2, x3;
+            x2 = geo.coord_nodes(face2[0], 0);
+            x3 = geo.coord_nodes(face2[1], 0);
+
+            if ((std::abs(x2-x0) < 1e-6 && std::abs(x3-x1) < 1e-6) || (std::abs(x2-x1) < 1e-6 && std::abs(x3-x0) < 1e-6))
+            {
+              geo.per_bnd_pairs[face] = face2;
+            }
+          }
+        }
+        else if (std::abs(x0-x1) < 1e-6) /* Vertical face */
+        {
+          /* Search for face to couple */
+          for(auto &bnd_face2 : geo.bnd_faces)
+          {
+            auto face2 = bnd_face2.first;
+            if (face2 == face)
+              continue;
+
+            double y2, y3;
+            y2 = geo.coord_nodes(face2[0], 1);
+            y3 = geo.coord_nodes(face2[1], 1);
+
+            if ((std::abs(y2-y0) < 1e-6 && std::abs(y3-y1) < 1e-6) || (std::abs(y2-y1) < 1e-6 && std::abs(y3-y0) < 1e-6))
+            {
+              geo.per_bnd_pairs[face] = face2;
+            }
+          }
+        }
+      }
+    }
+
+  }
+  else
+  {
+    ThrowException("3D not implemented yet!");
+  }
+
+  /*
+  for (auto &pair : geo.per_bnd_pairs)
+  {
+    std::cout << pair.first[0] << " " << pair.first[1] << " -> " << pair.second[0] << " " << pair.second[1] << std::endl;
+  }
+  */
 }
 
 void setup_global_fpts(GeoStruct &geo, unsigned int order)
@@ -245,6 +331,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
   {
     unsigned int nFptsPerFace = order + 1;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> face_fpts;
+    std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
     std::vector<std::vector<int>> ele2fpts(geo.nEles);
     std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
 
@@ -266,7 +353,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         if (face[0] == face[1])
           continue;
 
-        /* Check if face is not on boundary and not previously encountered*/
+        /* Check if face is not on boundary and not previously encountered */
         if (!unique_faces.count(face) && !geo.bnd_faces.count(face))
           geo.nGfpts_int += nFptsPerFace;
 
@@ -274,7 +361,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       }
     }
 
-    /* Initialize global flux point index */
+    /* Initialize global flux point indicies */
     unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;
 
     /* Begin loop through faces */
@@ -298,13 +385,19 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         std::vector<unsigned int> fpts(nFptsPerFace,0);
         if(!face_fpts.count(face))
         {
+          /* Check if face is on boundary */
           if (geo.bnd_faces.count(face))
           {
+            unsigned int bnd_id = geo.bnd_faces[face];
             for (auto &fpt : fpts)
             {
+              geo.gfpt2bnd.push_back(bnd_id);
               fpt = gfpt_bnd;
               gfpt_bnd++;
             }
+
+            bndface2fpts[face] = fpts;
+            
           }
           else
           {
@@ -335,6 +428,22 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       }
     }
 
+    /* Pair up periodic flux points if needed */ 
+    if (geo.per_bnd_flag)
+    {
+      for (auto &bnd_face1 : bndface2fpts)
+      {
+        auto face1 = bnd_face1.first;
+        auto fpts1 = bnd_face1.second;
+
+        auto face2 = geo.per_bnd_pairs[face1];
+        auto fpts2 = bndface2fpts[face2];
+
+        for (unsigned int i = 0; i < nFptsPerFace; i++)
+          geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
+      } 
+    }
+
     /* Populate data structures */
     geo.nGfpts = (gfpt + gfpt_bnd);
     geo.fpt2gfpt.assign({geo.nEles, 4*nFptsPerFace});
@@ -356,3 +465,4 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
 
 }
+
