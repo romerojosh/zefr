@@ -225,8 +225,8 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       switch (ele_type)
       {
         case 1: /* 2-node line */
-          f >> bnd_id;
-          f >> vint >> vint;
+          f >> vint;
+          f >> bnd_id >> vint;
           f >> face[0] >> face[1]; break;
 
         default:
@@ -317,6 +317,7 @@ void couple_periodic_bnds(GeoStruct &geo)
   }
 
   /*
+  std::cout << "per_bnd_pairs" << std::endl;
   for (auto &pair : geo.per_bnd_pairs)
   {
     std::cout << pair.first[0] << " " << pair.first[1] << " -> " << pair.second[0] << " " << pair.second[1] << std::endl;
@@ -440,7 +441,9 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         auto fpts2 = bndface2fpts[face2];
 
         for (unsigned int i = 0; i < nFptsPerFace; i++)
+        {
           geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
+        }
       } 
     }
 
