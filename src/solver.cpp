@@ -108,9 +108,21 @@ void FRSolver::compute_residual(unsigned int stage)
 
   U_to_faces();
   faces->apply_bcs();
-
   eles->compute_Fconv();
   faces->compute_Fconv();
+
+  /*
+  if (input->viscous)
+  {
+    faces->compute_common_U();
+    compute_dU();
+    dU_to_faces();
+    faces->apply_bcs_dU();
+    eles->compute_Fvisc();
+    faces->compute_Fvisc();
+  }
+  */
+
   faces->compute_common_F();
   F_from_faces();
 
@@ -197,7 +209,13 @@ void FRSolver::U_to_faces()
         int gfpt = geo.fpt2gfpt(ele,fpt);
         /* Check if flux point is on ghost edge */
         if (gfpt == -1)
+        {
+          /*
+          if (input->viscous) // if viscous, put extrapolated solution into commU
+            eles->commU(n, fpt, ele) = eles->U_fpts(n, fpt, ele)
           continue;
+          */
+        }
         int slot = geo.fpt2gfpt_slot(ele,fpt);
 
         faces->U(n, gfpt, slot) = eles->U_fpts(n, fpt, ele);

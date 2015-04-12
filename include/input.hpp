@@ -9,9 +9,9 @@
 
 struct InputStruct
 {
-  unsigned int order, nDims, n_steps, write_freq;
+  unsigned int order, nDims, n_steps, write_freq, viscous;
   std::string meshfile, equation, flux_type, spt_type, dt_scheme;
-  double AdvDiff_Ax, AdvDiff_Ay, dt;
+  double AdvDiff_Ax, AdvDiff_Ay, AdvDiff_D, dt;
 };
 
 InputStruct read_input_file(std::string inputfile);
