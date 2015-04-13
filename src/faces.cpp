@@ -165,6 +165,8 @@ void Faces::rusanov_flux()
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
 
+  double k = input->rus_k;
+
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     /* Initialize FL, FR */
@@ -192,7 +194,6 @@ void Faces::rusanov_flux()
     waveSp += input->AdvDiff_Ay * norm(1,fpt,0);
 
     /* Compute common normal flux */
-    double k = 0.0;
     for (unsigned int n = 0; n < nVars; n++)
     {
       Fcomm(n, fpt, 0) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp)*(1.0-k) * (WR[n]-WL[n]);
@@ -224,8 +225,8 @@ void Faces::LDG_flux()
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
    
-  double beta = 0.5;
-  double tau = 0.5;
+  double beta = input->ldg_b;
+  double tau = input->ldg_tau;
 
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
@@ -249,17 +250,16 @@ void Faces::LDG_flux()
     }
 
     /* Compute common normal flux */
-    double k = 0.0;
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(n, fpt, 0) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) - beta * (FL[n] - FR[n]))
+      Fcomm(n, fpt, 0) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) + beta * (FL[n] - FR[n]))
                           * outnorm(fpt,0); 
-      Fcomm(n, fpt, 1) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) - beta * (FL[n] - FR[n]))
+      Fcomm(n, fpt, 1) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) + beta * (FL[n] - FR[n]))
                           * -outnorm(fpt,1); 
 
       /* Correct for positive parent space sign convention */
-      Fcomm(n, fpt, 0) *= outnorm(fpt,0);
-      Fcomm(n, fpt, 1) *= -outnorm(fpt,1);
+      //Fcomm(n, fpt, 0) *= outnorm(fpt,0);
+      //Fcomm(n, fpt, 1) *= -outnorm(fpt,1);
     }
   }
 }

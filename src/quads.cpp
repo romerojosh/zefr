@@ -647,8 +647,8 @@ void Quads::compute_Fvisc()
         for (unsigned int ele = 0; ele < nEles; ele++)
         {
           /* Can just add viscous flux to existing convective flux */
-          F_spts(0, n, spt, ele) += input->AdvDiff_D * dU_spts(0, n, spt, ele);
-          F_spts(1, n, spt, ele) += input->AdvDiff_D * dU_spts(1, n, spt, ele);
+          F_spts(0, n, spt, ele) += -input->AdvDiff_D * dU_spts(0, n, spt, ele);
+          F_spts(1, n, spt, ele) += -input->AdvDiff_D * dU_spts(1, n, spt, ele);
         }
       }
     }

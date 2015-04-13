@@ -23,7 +23,6 @@ FRSolver::FRSolver(const InputStruct *input, unsigned int order)
 
 void FRSolver::setup()
 {
-  // TODO: Need to process geometry here 
   geo = process_mesh(input->meshfile, order, input->nDims);
 
   eles = std::make_shared<Quads>(&geo, input, order);
@@ -162,10 +161,12 @@ void FRSolver::initialize_U()
 
       eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
 
-     // if (ele == 4)
-     // {
-     //   eles->U_spts(0,spt,ele) = 1.0;
-     // }
+      /*
+      if (ele == 4)
+      {
+        eles->U_spts(0,spt,ele) = 1.0;
+      }
+      */
      
     }
   }

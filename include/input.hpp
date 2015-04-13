@@ -11,6 +11,7 @@ struct InputStruct
 {
   unsigned int order, nDims, n_steps, write_freq, viscous;
   std::string meshfile, equation, flux_type, spt_type, dt_scheme;
+  double rus_k, ldg_b, ldg_tau; 
   double AdvDiff_Ax, AdvDiff_Ay, AdvDiff_D, dt;
 };
 
