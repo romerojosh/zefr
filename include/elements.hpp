@@ -45,8 +45,9 @@ class Elements
     mdvector<double> oppE_plot;
     mdvector<double> U_spts, U_fpts, U_ppts;
     mdvector<double> F_spts, F_fpts;
-    mdvector<double> commF;
-    mdvector<double> dU_spts, dF_spts, divF_spts;
+    mdvector<double> Fconv_spts, Fvisc_spts;
+    mdvector<double> Fcomm, Ucomm;
+    mdvector<double> dU_spts, dU_fpts, dF_spts, divF_spts;
 
 
     virtual void set_locs() = 0;
@@ -62,6 +63,7 @@ class Elements
     void associate_faces(std::shared_ptr<Faces> faces);
     void setup();
     virtual void compute_Fconv() = 0;
+    virtual void compute_Fvisc() = 0;
     virtual void transform_flux() = 0;
 
 };

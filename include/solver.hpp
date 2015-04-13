@@ -35,6 +35,7 @@ class FRSolver
     /* Viscous Stuff */
     void U_from_faces();
     void compute_dU();
+    void extrapolate_dU();
     void dU_to_faces();
 
     /* Note: These will be additive, Fvisc will use F_spts += */

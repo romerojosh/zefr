@@ -18,8 +18,10 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Allocate memory for solution structures */
   U.assign({nVars, nFpts, 2});
   dU.assign({nDims, nVars, nFpts, 2});
-  F.assign({nDims, nVars, nFpts, 2});
+  Fconv.assign({nDims, nVars, nFpts, 2});
+  Fvisc.assign({nDims, nVars, nFpts, 2});
   Fcomm.assign({nVars, nFpts, 2});
+  Ucomm.assign({nVars, nFpts, 2});
 
   /* Allocate memory for geometry structures */
   norm.assign({nDims, nFpts, 2});
@@ -50,6 +52,32 @@ void Faces::apply_bcs()
   } 
 }
 
+void Faces::apply_bcs_dU()
+{
+  /* Apply periodic boundaries to solution derivative */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      unsigned int i = 0;
+      for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
+      {
+        unsigned int bnd_id = geo->gfpt2bnd[i];
+
+        /* Apply specified boundary condition */
+        if (bnd_id == 1) /* Periodic */
+        {
+          unsigned int per_fpt = geo->per_fpt_pairs[fpt];
+          dU(dim, n, fpt, 1) = dU(dim, n, per_fpt, 0);
+        }
+
+        i++;
+      }
+    }
+  }
+}
+
+
 void Faces::compute_Fconv()
 {  
   if (input->equation == "AdvDiff")
@@ -58,11 +86,11 @@ void Faces::compute_Fconv()
     {
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        F(0, n, fpt, 0) = input->AdvDiff_Ax * U(n, fpt, 0);
-        F(1, n, fpt, 0) = input->AdvDiff_Ay * U(n, fpt, 0);
+        Fconv(0, n, fpt, 0) = input->AdvDiff_Ax * U(n, fpt, 0);
+        Fconv(1, n, fpt, 0) = input->AdvDiff_Ay * U(n, fpt, 0);
 
-        F(0, n, fpt, 1) = input->AdvDiff_Ax * U(n, fpt, 1);
-        F(1, n, fpt, 1) = input->AdvDiff_Ay * U(n, fpt, 1);
+        Fconv(0, n, fpt, 1) = input->AdvDiff_Ax * U(n, fpt, 1);
+        Fconv(1, n, fpt, 1) = input->AdvDiff_Ay * U(n, fpt, 1);
 
       }
     }
@@ -75,12 +103,61 @@ void Faces::compute_Fconv()
 
 }
 
+void Faces::compute_Fvisc()
+{  
+  if (input->equation == "AdvDiff")
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      {
+        Fvisc(0, n, fpt, 0) = -input->AdvDiff_D * dU(0, n, fpt, 0);
+        Fvisc(1, n, fpt, 0) = -input->AdvDiff_D * dU(1, n, fpt, 0);
+
+        Fvisc(0, n, fpt, 1) = -input->AdvDiff_D * dU(0, n, fpt, 1);
+        Fvisc(1, n, fpt, 1) = -input->AdvDiff_D * dU(1, n, fpt, 1);
+
+      }
+    }
+  }
+  else if (input->equation == "EulerNS")
+  {
+    ThrowException("NS flux not implemented yet!");
+  }
+}
+
 void Faces::compute_common_F()
 {
   rusanov_flux();
 
+  if (input->viscous)
+    LDG_flux();
+
   transform_flux();
 }
+
+void Faces::compute_common_U()
+{
+  
+  double beta = 0.5; 
+
+  /* Compute common solution using first stage of LDG flux */
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    /* Get left and right state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      double UL = U(n, fpt, 0); double UR = U(n, fpt, 1);
+
+      Ucomm(n, fpt, 0) = 0.5*(UL + UR) - beta*(UL - UR);
+      Ucomm(n, fpt, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+      //std::cout << Ucomm(n, fpt, 0) << " " <<Ucomm(n, fpt, 1) << std::endl;
+    }
+
+  }
+
+}
+
 void Faces::rusanov_flux()
 {
   std::vector<double> FL(nVars);
@@ -98,8 +175,8 @@ void Faces::rusanov_flux()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        FL[n] += F(dim, n, fpt, 0) * norm(dim, fpt, 0);
-        FR[n] += F(dim, n, fpt, 1) * norm(dim, fpt, 0);
+        FL[n] += Fconv(dim, n, fpt, 0) * norm(dim, fpt, 0);
+        FR[n] += Fconv(dim, n, fpt, 1) * norm(dim, fpt, 0);
       }
     }
 
@@ -139,3 +216,52 @@ void Faces::transform_flux()
     }
   }
 }
+
+void Faces::LDG_flux()
+{
+  std::vector<double> FL(nVars);
+  std::vector<double> FR(nVars);
+  std::vector<double> WL(nVars);
+  std::vector<double> WR(nVars);
+   
+  double beta = 0.5;
+  double tau = 0.5;
+
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    /* Initialize FL, FR */
+    FL.assign(nVars,0.0); FR.assign(nVars,0.0);
+
+    /* Get interface-normal flux components  (from L to R)*/
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        FL[n] += Fvisc(dim, n, fpt, 0) * norm(dim, fpt, 0);
+        FR[n] += Fvisc(dim, n, fpt, 1) * norm(dim, fpt, 0);
+      }
+    }
+
+    /* Get left and right state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      WL[n] = U(n, fpt, 0); WR[n] = U(n, fpt, 1);
+    }
+
+    /* Compute common normal flux */
+    double k = 0.0;
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm(n, fpt, 0) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) - beta * (FL[n] - FR[n]))
+                          * outnorm(fpt,0); 
+      Fcomm(n, fpt, 1) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) - beta * (FL[n] - FR[n]))
+                          * -outnorm(fpt,1); 
+
+      /* Correct for positive parent space sign convention */
+      Fcomm(n, fpt, 0) *= outnorm(fpt,0);
+      Fcomm(n, fpt, 1) *= -outnorm(fpt,1);
+    }
+  }
+}
+
+

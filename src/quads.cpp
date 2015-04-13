@@ -636,6 +636,29 @@ void Quads::compute_Fconv()
   }
 }
 
+void Quads::compute_Fvisc()
+{
+  if (input->equation == "AdvDiff")
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          /* Can just add viscous flux to existing convective flux */
+          F_spts(0, n, spt, ele) += input->AdvDiff_D * dU_spts(0, n, spt, ele);
+          F_spts(1, n, spt, ele) += input->AdvDiff_D * dU_spts(1, n, spt, ele);
+        }
+      }
+    }
+  }
+  else if (input->equation == "EulerNS")
+  {
+    ThrowException("NS flux not implemented yet!");
+  }
+
+}
 void Quads::transform_flux()
 {
   for (unsigned int n = 0; n < nVars; n++)

@@ -1,14 +1,14 @@
 nDims    2
 meshfile wild_quad_adv.msh
-order     3
-dt_scheme RK44
+order     2
+dt_scheme RK44 
 dt	  0.001
-n_steps 0
+n_steps 1000
 write_freq  100
 flux_type rusanov
 equation AdvDiff    (AdvDiff, Euler, or NS)
-viscous  1
+viscous  0
 spt_type Legendre
-AdvDiff_Ax 1
-AdvDiff_Ay 1
+AdvDiff_Ax -1
+AdvDiff_Ay -1
 AdvDiff_D 0.01

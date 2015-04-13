@@ -22,13 +22,15 @@ class Faces
     unsigned int nFpts, nDims, nVars;
 
     void apply_bcs();
+    void apply_bcs_dU();
     //void compute_Fconv();
     //void compute_Fvisc();
     void rusanov_flux();
+    void LDG_flux();
     void transform_flux();
 
   protected:
-    mdvector<double> U, dU, F, Fcomm;
+    mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Ucomm;
     mdvector<double> norm, jaco;
     mdvector<int> outnorm;
     std::vector<double> dA;
@@ -39,6 +41,7 @@ class Faces
     void compute_common_U();
     void compute_common_F();
     void compute_Fconv();
+    void compute_Fvisc();
 
     
 };

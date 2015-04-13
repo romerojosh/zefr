@@ -111,22 +111,22 @@ void FRSolver::compute_residual(unsigned int stage)
   eles->compute_Fconv();
   faces->compute_Fconv();
 
-  /*
   if (input->viscous)
   {
     faces->compute_common_U();
+    U_from_faces(); 
     compute_dU();
+    extrapolate_dU();
     dU_to_faces();
     faces->apply_bcs_dU();
-    eles->compute_Fvisc();
+    eles->compute_Fvisc(); /* Note: probably need to scale Fvisc by jacobian before sum */
     faces->compute_Fvisc();
   }
-  */
 
   faces->compute_common_F();
+  eles->transform_flux();
   F_from_faces();
 
-  eles->transform_flux();
 
   compute_dF();
   compute_divF(stage);
@@ -138,13 +138,15 @@ void FRSolver::initialize_U()
   /* Solution and Flux Variables */
   eles->U_spts.assign({eles->nVars, eles->nSpts, eles->nEles});
   eles->U_fpts.assign({eles->nVars, eles->nFpts, eles->nEles});
+  eles->Ucomm.assign({eles->nVars, eles->nFpts, eles->nEles});
   eles->U_ppts.assign({eles->nVars, eles->nPpts, eles->nEles});
 
   eles->F_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
   eles->F_fpts.assign({eles->nDims, eles->nVars, eles->nFpts, eles->nEles});
-  eles->commF.assign({eles->nVars, eles->nFpts, eles->nEles});
+  eles->Fcomm.assign({eles->nVars, eles->nFpts, eles->nEles});
 
   eles->dU_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
+  eles->dU_fpts.assign({eles->nDims, eles->nVars, eles->nFpts, eles->nEles});
   eles->dF_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
 
   eles->divF_spts.assign({eles->nVars, eles->nSpts, eles->nEles});
@@ -160,12 +162,10 @@ void FRSolver::initialize_U()
 
       eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
 
-      /*
-      if (ele == 4)
-      {
-        eles->U_spts(0,spt,ele) = 1.0;
-      }
-      */
+     // if (ele == 4)
+     // {
+     //   eles->U_spts(0,spt,ele) = 1.0;
+     // }
      
     }
   }
@@ -183,7 +183,6 @@ void FRSolver::extrapolate_U()
         eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
   }
 
- 
   /*
   std::cout << "Uext" << std::endl;
   for (unsigned int i = 0; i < eles->nFpts; i++)
@@ -210,16 +209,179 @@ void FRSolver::U_to_faces()
         /* Check if flux point is on ghost edge */
         if (gfpt == -1)
         {
-          /*
           if (input->viscous) // if viscous, put extrapolated solution into commU
-            eles->commU(n, fpt, ele) = eles->U_fpts(n, fpt, ele)
+            eles->Ucomm(n, fpt, ele) = eles->U_fpts(n, fpt, ele);
           continue;
-          */
         }
         int slot = geo.fpt2gfpt_slot(ele,fpt);
 
         faces->U(n, gfpt, slot) = eles->U_fpts(n, fpt, ele);
         //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
+      }
+    }
+  }
+}
+
+void FRSolver::U_from_faces()
+{  
+  for (unsigned int n = 0; n < eles->nVars; n++) 
+  {
+    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        int gfpt = geo.fpt2gfpt(ele,fpt);
+        /* Check if flux point is on ghost edge */
+        if (gfpt == -1)
+          continue;
+        int slot = geo.fpt2gfpt_slot(ele,fpt);
+
+        eles->Ucomm(n, fpt, ele) = faces->Ucomm(n, gfpt, slot);
+      }
+    }
+  }
+
+  /*
+  std::cout << "Ucomm" << std::endl;
+  for (unsigned int i = 0; i < eles->nFpts; i++)
+  {
+    for (unsigned int j = 0; j < eles->nEles; j++)
+    {
+      std::cout << eles->Ucomm(0,i,j) << " ";
+    }
+    std::cout << std::endl;
+  }
+  */
+
+}
+
+void FRSolver::compute_dU()
+{
+  /* Compute contribution to derivative from solution at solution points */
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      auto &A = eles->oppD(dim,0,0);
+      auto &B = eles->U_spts(n,0,0);
+      auto &C = eles->dU_spts(dim,n,0,0);
+
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles,
+          eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
+    }
+  }
+
+  /* Compute contribution to derivative from common solution at flux points */
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      auto &A = eles->oppD_fpts(dim,0,0);
+      auto &B = eles->Ucomm(n,0,0);
+      auto &C = eles->dU_spts(dim,n,0,0);
+
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles,
+          eles->nFpts, 1.0, &A, eles->nFpts, &B, eles->nEles, 1.0, &C, eles->nEles);
+    }
+  }
+
+  /* Transform dU back to physical space */
+  if (eles->nDims == 2)
+  {
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          double dUtemp = eles->dU_spts(0, n, spt, ele);
+          
+          eles->dU_spts(0, n, spt, ele) = eles->dU_spts(0, n, spt, ele) * eles->jaco_spts(ele, spt, 1, 1)-
+                                    eles->dU_spts(1, n, spt, ele) * eles->jaco_spts(ele, spt, 1, 0); 
+          eles->dU_spts(1, n, spt, ele) = -dUtemp * eles->jaco_spts(ele, spt, 0, 1) +
+                                    eles->dU_spts(1, n, spt, ele) * eles->jaco_spts(ele, spt, 0, 0); 
+
+          eles->dU_spts(0, n, spt, ele) /= eles->jaco_det_spts(ele,spt);
+          eles->dU_spts(1, n, spt, ele) /= eles->jaco_det_spts(ele,spt);
+        }
+      }
+    }
+  }
+
+  /*
+  std::cout << "dU" << std::endl;
+  for (unsigned int i = 0; i < eles->nSpts; i++)
+  {
+    for (unsigned int j = 0; j < eles->nEles; j++)
+    {
+      std::cout << eles->dU_spts(0,0,i,j) << " ";
+    }
+    std::cout << std::endl;
+  }
+
+  for (unsigned int i = 0; i < eles->nSpts; i++)
+  {
+    for (unsigned int j = 0; j < eles->nEles; j++)
+    {
+      std::cout << eles->dU_spts(1,0,i,j) << " ";
+    }
+    std::cout << std::endl;
+  }
+  */
+
+}
+
+void FRSolver::extrapolate_dU()
+{
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      auto &A = eles->oppE(0,0);
+      auto &B = eles->dU_spts(dim, n,0,0);
+      auto &C = eles->dU_fpts(dim, n,0,0);
+
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nFpts, eles->nEles,
+          eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
+    }
+  }
+
+ /* 
+  std::cout << "dUext" << std::endl;
+
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    for (unsigned int i = 0; i < eles->nFpts; i++)
+    {
+      for (unsigned int j = 0; j < eles->nEles; j++)
+      {
+        std::cout << eles->dU_fpts(dim, 0,i,j) << " ";
+      }
+      std::cout << std::endl;
+    }
+  }
+*/ 
+}
+
+void FRSolver::dU_to_faces()
+{
+  for (unsigned int dim = 0; dim < eles->nDims; dim++) 
+  {
+    for (unsigned int n = 0; n < eles->nVars; n++) 
+    {
+      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          int gfpt = geo.fpt2gfpt(ele,fpt);
+          /* Check if flux point is on ghost edge */
+          if (gfpt == -1)
+            continue;
+          int slot = geo.fpt2gfpt_slot(ele,fpt);
+
+          faces->dU(dim, n, gfpt, slot) = eles->dU_fpts(dim, n, fpt, ele);
+          //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
+        }
       }
     }
   }
@@ -233,24 +395,24 @@ void FRSolver::F_from_faces()
     {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        unsigned int gfpt = geo.fpt2gfpt(ele,fpt);
+        int gfpt = geo.fpt2gfpt(ele,fpt);
         /* Check if flux point is on ghost edge */
         if (gfpt == -1)
           continue;
-        unsigned int slot = geo.fpt2gfpt_slot(ele,fpt);
+        int slot = geo.fpt2gfpt_slot(ele,fpt);
 
-        eles->commF(n, fpt, ele) = faces->Fcomm(n, gfpt, slot);
+        eles->Fcomm(n, fpt, ele) = faces->Fcomm(n, gfpt, slot);
       }
     }
   }
 
   /*
-  std::cout << "commF" << std::endl;
+  std::cout << "Fcomm" << std::endl;
   for (unsigned int i = 0; i < eles->nFpts; i++)
   {
     for (unsigned int j = 0; j < eles->nEles; j++)
     {
-      std::cout << eles->commF(0,i,j) << " ";
+      std::cout << eles->Fcomm(0,i,j) << " ";
     }
     std::cout << std::endl;
   }
@@ -279,7 +441,7 @@ void FRSolver::compute_dF()
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       auto &A = eles->oppD_fpts(dim,0,0);
-      auto &B = eles->commF(n,0,0);
+      auto &B = eles->Fcomm(n,0,0);
       auto &C = eles->dF_spts(dim,n,0,0);
 
       cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles,
