@@ -23,16 +23,23 @@ FRSolver::FRSolver(const InputStruct *input, unsigned int order)
 
 void FRSolver::setup()
 {
+  std::cout << "Reading mesh: " << input->meshfile << std::endl;
   geo = process_mesh(input->meshfile, order, input->nDims);
 
+  std::cout << "Setting up elements and faces..." << std::endl;
   eles = std::make_shared<Quads>(&geo, input, order);
   faces = std::make_shared<Faces>(&geo, input);
 
   eles->associate_faces(faces);
   eles->setup();
 
+  std::cout << "Initializing solution..." << std::endl;
   initialize_U();
+
+  std::cout << "Setting up timestepping..." << std::endl;
   setup_update();
+
+  std::cout << "Setting up output..." << std::endl;
   setup_output();
 }
 
@@ -118,7 +125,7 @@ void FRSolver::compute_residual(unsigned int stage)
     extrapolate_dU();
     dU_to_faces();
     faces->apply_bcs_dU();
-    eles->compute_Fvisc(); /* Note: probably need to scale Fvisc by jacobian before sum */
+    eles->compute_Fvisc();
     faces->compute_Fvisc();
   }
 
@@ -159,7 +166,12 @@ void FRSolver::initialize_U()
       double x = geo.coord_spts(0,spt,ele);
       double y = geo.coord_spts(1,spt,ele);
 
+      //x -=0.5;
+      //y -=0.5;
       eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
+      //x +=1.;
+      //y +=1.;
+      //eles->U_spts(0,spt,ele) += std::exp(-20. * (x*x + y*y));
 
       /*
       if (ele == 4)
@@ -210,7 +222,7 @@ void FRSolver::U_to_faces()
         /* Check if flux point is on ghost edge */
         if (gfpt == -1)
         {
-          if (input->viscous) // if viscous, put extrapolated solution into commU
+          if (input->viscous) // if viscous, put extrapolated solution into Ucomm
             eles->Ucomm(n, fpt, ele) = eles->U_fpts(n, fpt, ele);
           continue;
         }
@@ -645,6 +657,10 @@ void FRSolver::write_solution(std::string outputfile, unsigned int nIter)
     }
 
   }
+}
 
-
+void FRSolver::report(unsigned int nIter)
+{
+  // TODO: Fill in with useful vitals
+  std::cout << nIter << std::endl;
 }

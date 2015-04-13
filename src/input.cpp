@@ -23,8 +23,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "dt", input.dt);
 
   read_param(f, "write_freq", input.write_freq);
+  read_param(f, "report_freq", input.report_freq);
 
-  read_param(f, "flux_type", input.flux_type);
+  read_param(f, "fconv_type", input.fconv_type);
+  read_param(f, "fvisc_type", input.fvisc_type);
   read_param(f, "rus_k", input.rus_k);
   read_param(f, "ldg_b", input.ldg_b);
   read_param(f, "ldg_tau", input.ldg_tau);

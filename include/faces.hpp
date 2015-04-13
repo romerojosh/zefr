@@ -27,6 +27,7 @@ class Faces
     //void compute_Fvisc();
     void rusanov_flux();
     void LDG_flux();
+    void central_flux();
     void transform_flux();
 
   protected:

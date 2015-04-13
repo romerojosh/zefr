@@ -128,10 +128,20 @@ void Faces::compute_Fvisc()
 
 void Faces::compute_common_F()
 {
-  rusanov_flux();
+  if (input->fconv_type == "Rusanov")
+    rusanov_flux();
+  else
+    ThrowException("Numerical convective flux type not recognized!");
 
   if (input->viscous)
-    LDG_flux();
+  {
+    if (input->fvisc_type == "LDG")
+      LDG_flux();
+    else if (input->fvisc_type == "Central")
+      central_flux();
+    else
+      ThrowException("Numerical viscous flux type not recognized!");
+  }
 
   transform_flux();
 }
@@ -141,19 +151,45 @@ void Faces::compute_common_U()
   
   double beta = 0.5; 
 
-  /* Compute common solution using first stage of LDG flux */
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  /* Compute common solution */
+  if (input->fvisc_type == "LDG")
   {
-    /* Get left and right state variables */
-    for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      double UL = U(n, fpt, 0); double UR = U(n, fpt, 1);
+      /* Get left and right state variables */
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double UL = U(n, fpt, 0); double UR = U(n, fpt, 1);
 
-      Ucomm(n, fpt, 0) = 0.5*(UL + UR) - beta*(UL - UR);
-      Ucomm(n, fpt, 1) = 0.5*(UL + UR) - beta*(UL - UR);
-      //std::cout << Ucomm(n, fpt, 0) << " " <<Ucomm(n, fpt, 1) << std::endl;
+        Ucomm(n, fpt, 0) = 0.5*(UL + UR) - beta*(UL - UR);
+        Ucomm(n, fpt, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+
+        /* Trying pure central */
+        Ucomm(n, fpt, 0) = 0.5*(UL + UR);
+        Ucomm(n, fpt, 1) = 0.5*(UL + UR);
+      }
+
     }
+  }
 
+  else if (input->fvisc_type == "Central")
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      /* Get left and right state variables */
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double UL = U(n, fpt, 0); double UR = U(n, fpt, 1);
+
+        Ucomm(n, fpt, 0) = 0.5*(UL + UR);
+        Ucomm(n, fpt, 1) = 0.5*(UL + UR);
+      }
+
+    }
+  }
+  else
+  {
+    ThrowException("Numerical viscous flux type not recognized!");
   }
 
 }
@@ -249,19 +285,54 @@ void Faces::LDG_flux()
       WL[n] = U(n, fpt, 0); WR[n] = U(n, fpt, 1);
     }
 
-    /* Compute common normal flux */
+    /* Compute common normal viscous flux and accumulate */
     for (unsigned int n = 0; n < nVars; n++)
     {
       Fcomm(n, fpt, 0) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) + beta * (FL[n] - FR[n]))
                           * outnorm(fpt,0); 
       Fcomm(n, fpt, 1) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) + beta * (FL[n] - FR[n]))
                           * -outnorm(fpt,1); 
-
-      /* Correct for positive parent space sign convention */
-      //Fcomm(n, fpt, 0) *= outnorm(fpt,0);
-      //Fcomm(n, fpt, 1) *= -outnorm(fpt,1);
+      
     }
   }
 }
+
+void Faces::central_flux()
+{
+  std::vector<double> FL(nVars);
+  std::vector<double> FR(nVars);
+  std::vector<double> WL(nVars);
+  std::vector<double> WR(nVars);
+   
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    /* Initialize FL, FR */
+    FL.assign(nVars,0.0); FR.assign(nVars,0.0);
+
+    /* Get interface-normal flux components  (from L to R)*/
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        FL[n] += Fvisc(dim, n, fpt, 0) * norm(dim, fpt, 0);
+        FR[n] += Fvisc(dim, n, fpt, 1) * norm(dim, fpt, 0);
+      }
+    }
+
+    /* Get left and right state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      WL[n] = U(n, fpt, 0); WR[n] = U(n, fpt, 1);
+    }
+
+    /* Compute common normal viscous flux and accumulate */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm(n, fpt, 0) += (0.5 * (FL[n]+FR[n])) * outnorm(fpt,0); 
+      Fcomm(n, fpt, 1) += (0.5 * (FL[n]+FR[n])) * -outnorm(fpt,1); 
+    }
+  }
+}
+
 
 
