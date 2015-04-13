@@ -1,15 +1,15 @@
 # Geometry:
 nDims    2
-meshfile TriBox_5x5.msh
+meshfile meshes/wild_mixed_adv.msh
 
 # Solver:
 order     3
 equation AdvDiff    (AdvDiff, EulerNS)
-viscous  1
+viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 8000
+n_steps 15000
 dt_scheme RK44      (Euler, RK44)
 dt	  0.0001
 
@@ -26,6 +26,6 @@ ldg_tau    0.5
 
 # Equation Specific Parameters:
 # Advection-Diffusion
-AdvDiff_Ax 2
-AdvDiff_Ay 2
+AdvDiff_Ax 1
+AdvDiff_Ay 1
 AdvDiff_D 0.1
