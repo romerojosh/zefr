@@ -46,6 +46,10 @@ void Faces::apply_bcs()
         unsigned int per_fpt = geo->per_fpt_pairs[fpt];
         U(n, fpt, 1) = U(n, per_fpt, 0);
       }
+      else if (bnd_id == 2) /* Farfield */
+      {
+        U(n, fpt, 1) = 0.; // Hardcode for sine case
+      }
 
       i++;
     }
@@ -149,7 +153,7 @@ void Faces::compute_common_F()
 void Faces::compute_common_U()
 {
   
-  double beta = 0.5; 
+  double beta = input->ldg_b;
 
   /* Compute common solution */
   if (input->fvisc_type == "LDG")
@@ -157,21 +161,20 @@ void Faces::compute_common_U()
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       /* Get left and right state variables */
+      // TODO: Verify that this is the correct formula. Seem different than papers...
       for (unsigned int n = 0; n < nVars; n++)
       {
         double UL = U(n, fpt, 0); double UR = U(n, fpt, 1);
 
-        Ucomm(n, fpt, 0) = 0.5*(UL + UR) - beta*(UL - UR);
-        Ucomm(n, fpt, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+         Ucomm(n, fpt, 0) = 0.5*(UL + UR) - beta*(UL - UR);
+         Ucomm(n, fpt, 1) = 0.5*(UL + UR) - beta*(UL - UR);
 
-        /* Trying pure central */
-        Ucomm(n, fpt, 0) = 0.5*(UL + UR);
-        Ucomm(n, fpt, 1) = 0.5*(UL + UR);
       }
 
     }
   }
 
+  // TODO: Can potentially remove central treatment since LDG recovers.
   else if (input->fvisc_type == "Central")
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -261,11 +264,14 @@ void Faces::LDG_flux()
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
    
-  double beta = input->ldg_b;
   double tau = input->ldg_tau;
+  double beta = input->ldg_b;
+
+  mdvector<double> Fcomm_temp({nDims,nVars});
 
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
+
     /* Initialize FL, FR */
     FL.assign(nVars,0.0); FR.assign(nVars,0.0);
 
@@ -288,12 +294,22 @@ void Faces::LDG_flux()
     /* Compute common normal viscous flux and accumulate */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(n, fpt, 0) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) + beta * (FL[n] - FR[n]))
-                          * outnorm(fpt,0); 
-      Fcomm(n, fpt, 1) += (0.5 * (FL[n]+FR[n]) + tau * (WL[n] - WR[n]) + beta * (FL[n] - FR[n]))
-                          * -outnorm(fpt,1); 
-      
+      Fcomm_temp(0,n) += 0.5*(Fvisc(0,n,fpt,0) + Fvisc(0,n,fpt,1)) + tau * norm(0,fpt,0)* (WL[n]
+          - WR[n]) + beta * norm(0, fpt, 0)* (FL[n] - FR[n]);
+      Fcomm_temp(1,n) += 0.5*(Fvisc(1,n,fpt,0) + Fvisc(1,n,fpt,1)) + tau * norm(1,fpt,0)* (WL[n]
+          - WR[n]) + beta * norm(1, fpt, 0)* (FL[n] - FR[n]);
     }
+
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        Fcomm(n, fpt, 0) += (Fcomm_temp(dim, n) * norm(dim, fpt, 0)) * outnorm(fpt,0);
+        Fcomm(n, fpt, 1) += (Fcomm_temp(dim, n) * norm(dim, fpt, 0)) * -outnorm(fpt,1);
+      }
+    }
+
+    Fcomm_temp.fill(0);
   }
 }
 

@@ -8,6 +8,7 @@
  *
  */
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <iostream>
@@ -34,6 +35,9 @@ class mdvector
 
     //! Setup operator
     void assign(std::vector<unsigned int> dims, T value = 0, unsigned int padding = 0);
+
+    //! Fill operator
+    void fill(T value);
 
     //! Method to return vector shape
     std::array<unsigned int,4> shape(void) const;
@@ -86,6 +90,12 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, unsigned int p
   this->values = vec.values;
   this->dims = vec.dims;
   this->strides = vec.strides;
+}
+
+template <typename T>
+void mdvector<T>::fill(T value)
+{
+  std::fill(values.begin(), values.end(), value);
 }
 
 template <typename T>

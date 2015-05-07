@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <cblas.h>
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <memory>
 
 #include "elements.hpp"
@@ -57,6 +59,12 @@ void FRSolver::setup_update()
     nStages = 4;
     rk_alpha = {0.5, 0.5, 1.0};
     rk_beta = {1./6., 1./3., 1./3., 1./6.};
+  }
+  else if (input->dt_scheme == "RK54")
+  {
+    nStages = 5;
+    rk_alpha = {-0.417890474499852, -1.192151694642677, -1.697784692471528, -1.514183444257156};
+    rk_beta = {0.149659021999229, 0.379210312999627, 0.822955029386982, 0.699450455949122, 0.153057247968152};
   }
   else
   {
@@ -159,28 +167,27 @@ void FRSolver::initialize_U()
 
   /* Initialize solution */
   // TODO: Fill in with actual logic. */
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  if (input->equation == "AdvDiff")
   {
-    for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      double x = geo.coord_spts(0,spt,ele);
-      double y = geo.coord_spts(1,spt,ele);
-
-      //x -=0.5;
-      //y -=0.5;
-      eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
-      //x +=1.;
-      //y +=1.;
-      //eles->U_spts(0,spt,ele) += std::exp(-20. * (x*x + y*y));
-
-      /*
-      if (ele == 4)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-        eles->U_spts(0,spt,ele) = 1.0;
+        double x = geo.coord_spts(0,spt,ele);
+        double y = geo.coord_spts(1,spt,ele);
+
+        if (input->ic_type == 0)
+          eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
+        else if (input->ic_type == 1)
+          eles->U_spts(0,spt,ele) = std::sin(M_PI*x)*sin(M_PI*y);
+        else
+          ThrowException("ic_type not recognized!");
       }
-      */
-     
     }
+  }
+  else
+  {
+    ThrowException("Solution initialization not recognized!");
   }
 }
 
@@ -662,5 +669,6 @@ void FRSolver::write_solution(std::string outputfile, unsigned int nIter)
 void FRSolver::report(unsigned int nIter)
 {
   // TODO: Fill in with useful vitals
-  std::cout << nIter << std::endl;
+  double max_res = *std::max_element(&divF(nStages-1, 0, 0, 0), &divF(nStages-1, eles->nVars-1, eles->nSpts-1, eles->nEles-1));
+  std::cout << nIter << " " << std::scientific <<  max_res << std::endl;
 }

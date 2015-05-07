@@ -98,6 +98,10 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
       geo.bnd_ids[val] = 1;
       geo.per_bnd_flag = true;
     }
+    else if (bnd_id == "\"FARFIELD\"")
+    {
+      geo.bnd_ids[val] = 2;
+    }
     else if (bnd_id == "\"FLUID\"")
     {
     }
