@@ -23,26 +23,26 @@ class Elements
     /* Geometric Parameters */
     unsigned int order, shape_order;
     unsigned int nEles, nDims, nVars;
-    unsigned int nSpts, nFpts, nSpts1D, nPpts;
+    unsigned int nSpts, nFpts, nSpts1D, nPpts, nGqpts;
     unsigned int nFaces, nNodes;
     unsigned int nSubelements, nNodesPerSubelement;
     //mdvector<int> nd2gnd;
     //mdvector<int> fpt2gfpt, fpt2gfpt_slot;
     //mdvector<double> coord_nodes, coord_spts, coord_fpts;
 
-    mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes;
-    mdvector<double> idx_spts, idx_fpts, idx_ppts, idx_nodes;
-    std::vector<double> loc_spts_1D, loc_nodes_1D;
+    mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes, loc_gqpts;
+    mdvector<double> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_gqpts;
+    std::vector<double> loc_spts_1D, loc_nodes_1D, loc_gqpts_1D;
     mdvector<double> tnorm; //, norm, dA;
-    mdvector<double> shape_spts, shape_fpts, shape_ppts;
-    mdvector<double> dshape_spts, dshape_fpts, dshape_ppts;
+    mdvector<double> shape_spts, shape_fpts, shape_ppts, shape_gqpts;
+    mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_gqpts;
     mdvector<double> jaco_spts, jaco_det_spts;
-    mdvector<double> jaco_ppts;
+    mdvector<double> jaco_ppts, jaco_gqpts, jaco_det_gqpts;
     //mdvector<double> jaco_fpts;
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts;
-    mdvector<double> oppE_plot;
+    mdvector<double> oppE_plot, oppE_gq;
     mdvector<double> U_spts, U_fpts, U_ppts;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fconv_spts, Fvisc_spts;
@@ -55,7 +55,7 @@ class Elements
     virtual void set_transforms() = 0;
     virtual void set_normals() = 0;
     virtual void setup_FR() = 0;
-    virtual void setup_plot() = 0;
+    virtual void setup_aux() = 0;
 
     virtual void set_coords() = 0;
 

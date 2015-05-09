@@ -18,7 +18,7 @@ class Quads: public Elements
     void set_transforms();
     void set_normals();
     void setup_FR();
-    void setup_plot();
+    void setup_aux();
     void set_coords();
 
   public:
