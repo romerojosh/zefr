@@ -745,6 +745,6 @@ void FRSolver::compute_l2_error()
 
   std::cout << "l2_error: ";
   for (auto &val : l2_error)
-    std::cout << std::scientific << std::setprecision(12) << val << " ";
+    std::cout << std::scientific << std::setprecision(12) << std::sqrt(val) << " ";
   std::cout << std::endl;
 }
