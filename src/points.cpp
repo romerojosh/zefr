@@ -37,6 +37,18 @@ std::vector<double> Gauss_Legendre_pts(unsigned int P)
                 (1./3.)*std::sqrt(5.-2.*std::sqrt(10./7.)), 
                 (1./3.)*std::sqrt(5.+2.*std::sqrt(10./7.))}; break;
 
+    case 10:
+      zeros = {-0.973906528517172, 
+               -0.865063366688985, 
+               -0.679409568299024, 
+               -0.433895394129247, 
+               -0.148874338981631, 
+               0.148874338981631,
+               0.433895394129247, 
+               0.679409568299024, 
+               0.865063366688985, 
+               0.973906528517172}; break;
+
     default:
       ThrowException("Gauss_Legendre_pts supports P up to 5!");
     
@@ -72,6 +84,17 @@ std::vector<double> Gauss_Legendre_weights(unsigned int n)
                  128./225.,
                  1./900. * (322 - 13. * std::sqrt(70.)),
                  1./900. * (322 + 13. * std::sqrt(70.))}; break;
+    case 10:
+      weights = {0.066671344308688, 
+                 0.149451349150581,
+                 0.219086362515982,
+                 0.269266719309996, 
+                 0.295524224714753, 
+                 0.295524224714753, 
+                 0.269266719309996, 
+                 0.219086362515982, 
+                 0.149451349150581,
+                 0.066671344308688}; break;
 
     default:
       ThrowException("Gauss_Legendre_weights supports up to 5 points!");

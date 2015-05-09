@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile meshes/QuadBox_20x20.msh
+meshfile meshes/sines_tri_32x32_pat.msh
 
 # Solver:
 order     2
@@ -9,15 +9,15 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 10000
+n_steps 40000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt	  0.0001
+dt	  0.000025
 
 # Reporting:
 output_prefix data
 write_freq  1000
 report_freq  100
-nQpts1D     5
+nQpts1D     10
 
 # Riemann Solver:
 fconv_type Rusanov
