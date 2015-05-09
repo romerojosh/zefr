@@ -1,5 +1,7 @@
 #include <cmath>
 
+#include <omp.h>
+
 #include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
@@ -35,6 +37,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 void Faces::apply_bcs()
 {
   /* Loop over boundary flux points */
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < nVars; n++)
   {
     //unsigned int i = 0;
@@ -61,6 +64,7 @@ void Faces::apply_bcs()
 void Faces::apply_bcs_dU()
 {
   /* Apply periodic boundaries to solution derivative */
+#pragma omp parallel for collapse(3)
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int n = 0; n < nVars; n++)
@@ -88,6 +92,7 @@ void Faces::compute_Fconv()
 {  
   if (input->equation == "AdvDiff")
   {
+#pragma omp parallel for collapse(2)
     for (unsigned int n = 0; n < nVars; n++)
     {
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -113,6 +118,7 @@ void Faces::compute_Fvisc()
 {  
   if (input->equation == "AdvDiff")
   {
+#pragma omp parallel for collapse(2)
     for (unsigned int n = 0; n < nVars; n++)
     {
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -160,6 +166,7 @@ void Faces::compute_common_U()
   /* Compute common solution */
   if (input->fvisc_type == "LDG")
   {
+#pragma omp parallel for collapse(2)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       /* Get left and right state variables */
@@ -179,6 +186,7 @@ void Faces::compute_common_U()
   // TODO: Can potentially remove central treatment since LDG recovers.
   else if (input->fvisc_type == "Central")
   {
+#pragma omp parallel for collapse(2)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       /* Get left and right state variables */
@@ -201,13 +209,15 @@ void Faces::compute_common_U()
 
 void Faces::rusanov_flux()
 {
+
+  double k = input->rus_k;
+
   std::vector<double> FL(nVars);
   std::vector<double> FR(nVars);
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
 
-  double k = input->rus_k;
-
+#pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     /* Initialize FL, FR */
@@ -271,6 +281,7 @@ void Faces::LDG_flux()
 
   mdvector<double> Fcomm_temp({nDims,nVars});
 
+#pragma omp parallel for firstprivate(FL, FR, WL, WR, Fcomm_temp, tau, beta)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
 
@@ -322,6 +333,7 @@ void Faces::central_flux()
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
    
+#pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     /* Initialize FL, FR */

@@ -1,10 +1,12 @@
 #include <algorithm>
-#include <cblas.h>
 #include <cmath>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <memory>
+
+#include <cblas.h>
+#include <omp.h>
 
 #include "elements.hpp"
 #include "faces.hpp"
@@ -225,6 +227,7 @@ void FRSolver::extrapolate_U()
 
 void FRSolver::U_to_faces()
 {
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
@@ -250,6 +253,7 @@ void FRSolver::U_to_faces()
 
 void FRSolver::U_from_faces()
 {  
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
@@ -314,6 +318,7 @@ void FRSolver::compute_dU()
   /* Transform dU back to physical space */
   if (eles->nDims == 2)
   {
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
@@ -391,6 +396,7 @@ void FRSolver::extrapolate_dU()
 
 void FRSolver::dU_to_faces()
 {
+#pragma omp parallel for collapse(4)
   for (unsigned int dim = 0; dim < eles->nDims; dim++) 
   {
     for (unsigned int n = 0; n < eles->nVars; n++) 
@@ -415,6 +421,7 @@ void FRSolver::dU_to_faces()
 
 void FRSolver::F_from_faces()
 {
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
@@ -501,6 +508,7 @@ void FRSolver::compute_dF()
 
 void FRSolver::compute_divF(unsigned int stage)
 {
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       for (unsigned int ele =0; ele < eles->nEles; ele++)
@@ -508,6 +516,7 @@ void FRSolver::compute_divF(unsigned int stage)
         //eles->divF_spts(n,spt,ele) = eles->dF_spts(0,n,spt,ele);
 
   for (unsigned int dim = 1; dim < eles->nDims; dim ++)
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         for (unsigned int ele =0; ele < eles->nEles; ele++)
@@ -515,6 +524,7 @@ void FRSolver::compute_divF(unsigned int stage)
           //eles->divF_spts(n,spt,ele) += eles->dF_spts(dim,n,spt,ele);
           //
   for (unsigned int dim = 1; dim < eles->nDims; dim ++)
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         for (unsigned int ele =0; ele < eles->nEles; ele++)
@@ -543,6 +553,7 @@ void FRSolver::update()
   for (unsigned int stage = 0; stage < (nStages-1); stage++)
   {
     compute_residual(stage);
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -554,6 +565,7 @@ void FRSolver::update()
   eles->U_spts = U_ini;
 
   for (unsigned int stage = 0; stage < nStages; stage++)
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
