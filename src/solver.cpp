@@ -8,6 +8,7 @@
 
 #include "elements.hpp"
 #include "faces.hpp"
+#include "funcs.hpp"
 #include "geometry.hpp"
 #include "quads.hpp"
 #include "input.hpp"
@@ -154,6 +155,7 @@ void FRSolver::initialize_U()
   eles->U_fpts.assign({eles->nVars, eles->nFpts, eles->nEles});
   eles->Ucomm.assign({eles->nVars, eles->nFpts, eles->nEles});
   eles->U_ppts.assign({eles->nVars, eles->nPpts, eles->nEles});
+  eles->U_qpts.assign({eles->nVars, eles->nQpts, eles->nEles});
 
   eles->F_spts.assign({eles->nDims, eles->nVars, eles->nSpts, eles->nEles});
   eles->F_fpts.assign({eles->nDims, eles->nVars, eles->nFpts, eles->nEles});
@@ -176,12 +178,16 @@ void FRSolver::initialize_U()
         double x = geo.coord_spts(0,spt,ele);
         double y = geo.coord_spts(1,spt,ele);
 
+        /*
         if (input->ic_type == 0)
           eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
         else if (input->ic_type == 1)
           eles->U_spts(0,spt,ele) = std::sin(M_PI*x)*sin(M_PI*y);
         else
           ThrowException("ic_type not recognized!");
+        */
+
+        eles->U_spts(0,spt,ele) = compute_U_true(x, y, 0, 0, input);
       }
     }
   }
@@ -564,11 +570,19 @@ void FRSolver::update()
     std::cout << std::endl;
   }
   */
+
+  flow_time += input->dt;
  
 }
 
-void FRSolver::write_solution(std::string outputfile, unsigned int nIter)
+void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 {
+  std::stringstream ss;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter << ".vtk";
+
+  auto outputfile = ss.str();
+  std::cout << "Writing " << outputfile << std::endl;
+
   /* Write solution to file in .vtk format */
   std::ofstream f(outputfile);
 
@@ -648,6 +662,7 @@ void FRSolver::write_solution(std::string outputfile, unsigned int nIter)
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, eles->nEles,
         eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
   }
+
   if (input->equation == "AdvDiff")
   {
     f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
@@ -666,9 +681,70 @@ void FRSolver::write_solution(std::string outputfile, unsigned int nIter)
   }
 }
 
-void FRSolver::report(unsigned int nIter)
+void FRSolver::report_max_residuals()
 {
-  // TODO: Fill in with useful vitals
-  double max_res = *std::max_element(&divF(nStages-1, 0, 0, 0), &divF(nStages-1, eles->nVars-1, eles->nSpts-1, eles->nEles-1));
-  std::cout << nIter << " " << std::scientific <<  max_res << std::endl;
+  std::vector<double> max_res(eles->nVars,0.0);
+
+  for (unsigned int n = 0; n < eles->nVars; n++)
+    max_res[n] = *std::max_element(&divF(nStages-1, n, 0, 0), &divF(nStages-1, n, eles->nSpts-1, eles->nEles-1));
+
+  for (auto &val : max_res)
+    std::cout << std::scientific << val << " ";
+
+  std::cout << std::endl;
+}
+
+void FRSolver::compute_l2_error()
+{
+  /* Extrapolate solution to quadrature points */
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    auto &A = eles->oppE_qpts(0,0);
+    auto &B = eles->U_spts(n,0,0);
+    auto &C = eles->U_qpts(n,0,0);
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, eles->nEles,
+        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
+  }
+
+
+  std::vector<double> l2_error(eles->nVars,0.0);
+
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int qpt = 0; qpt < eles->nQpts; qpt++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+
+        double U_true, weight;
+
+        if (eles->nDims == 2)
+        {
+          /* Compute true solution */
+          U_true = compute_U_true(geo.coord_qpts(0, qpt, ele), geo.coord_qpts(1, qpt, ele) , 
+                                  flow_time, n, input);
+
+          /* Get quadrature point index and weight */
+          unsigned int i = eles->idx_qpts(qpt,0);
+          unsigned int j = eles->idx_qpts(qpt,1);
+          weight = eles->weights_qpts[i] * eles->weights_qpts[j];
+        }
+        else if (eles->nDims == 3)
+        {
+          ThrowException("Under construction!");
+        }
+
+        /* Compute error */
+        double error = U_true - eles->U_qpts(n,qpt,ele);
+
+        l2_error[n] += weight * eles->jaco_det_qpts(ele, qpt) * error * error; 
+      }
+    }
+  }
+
+  std::cout << "l2_error: ";
+  for (auto &val : l2_error)
+    std::cout << std::scientific << std::setprecision(12) << val << " ";
+  std::cout << std::endl;
 }

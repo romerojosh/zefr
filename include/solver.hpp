@@ -16,6 +16,7 @@ class FRSolver
     const InputStruct *input = NULL;
     GeoStruct geo;
     unsigned int order;
+    double flow_time = 0.;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
 
@@ -56,8 +57,9 @@ class FRSolver
     void setup();
     void compute_residual(unsigned int stage);
     void update();
-    void write_solution(std::string outputfile, unsigned int nIter);
-    void report(unsigned int nIter);
+    void write_solution(std::string prefix, unsigned int nIter);
+    void report_max_residuals();
+    void compute_l2_error();
 
 };
 

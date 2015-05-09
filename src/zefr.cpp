@@ -24,27 +24,25 @@ int main(int argc, char* argv[])
   FRSolver solver(&input);
   solver.setup();
 
-  std::stringstream ss;
-  ss << "data_" << std::setw(7) << std::setfill('0') << 0 << ".vtk";
-  std::cout << "Writing " << ss.str() << std::endl;
-  solver.write_solution(ss.str(),0);
+  solver.write_solution(input.output_prefix,0);
 
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
 
     if (n%input.report_freq == 0 || n == input.n_steps)
-      solver.report(n);
+    {
+      std::cout << n << " ";
+      solver.report_max_residuals();
+    }
 
     if (n%input.write_freq == 0 || n == input.n_steps)
     {
-      std::cout << n << std::endl;
-      std::stringstream ss;
-      ss << "data_" << std::setw(7) << std::setfill('0') << n << ".vtk";
-      std::cout << "Writing " << ss.str() << std::endl;
-      solver.write_solution(ss.str(),n);
+      solver.write_solution(input.output_prefix,n);
     }
   }
+
+  solver.compute_l2_error();
 
   return 0;
 }

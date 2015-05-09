@@ -21,7 +21,7 @@ struct GeoStruct
     std::unordered_map<unsigned int, unsigned int> per_fpt_pairs;
     mdvector<unsigned int> nd2gnd, ppt_connect;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
-    mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts;
+    mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
 };
 
 GeoStruct process_mesh(std::string meshfile, unsigned int order, unsigned int nDims);

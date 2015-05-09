@@ -38,12 +38,13 @@ class Elements
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
+    std::vector<double> weights_qpts;
     //mdvector<double> jaco_fpts;
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts;
     mdvector<double> oppE_ppts, oppE_qpts;
-    mdvector<double> U_spts, U_fpts, U_ppts;
+    mdvector<double> U_spts, U_fpts, U_ppts, U_qpts;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fconv_spts, Fvisc_spts;
     mdvector<double> Fcomm, Ucomm;

@@ -140,8 +140,9 @@ void Quads::set_locs()
     }
   }
 
-  /* Setup gauss quadrature point locations */
+  /* Setup gauss quadrature point locations and weights */
   loc_qpts_1D = Gauss_Legendre_pts(input->nQpts1D); 
+  weights_qpts = Gauss_Legendre_weights(input->nQpts1D);
 
   /* Setup quadrature point locations */
   unsigned int qpt = 0;
@@ -326,8 +327,8 @@ void Quads::set_transforms()
         }
       }
 
-      jaco_det_qpts(ele,qpt) = jaco_qpts(ele,qpt,0,0) * jaco_spts(ele,qpt,1,1) -
-                               jaco_qpts(ele,qpt,0,1) * jaco_spts(ele,qpt,1,0); 
+      jaco_det_qpts(ele,qpt) = jaco_qpts(ele,qpt,0,0) * jaco_qpts(ele,qpt,1,1) -
+                               jaco_qpts(ele,qpt,0,1) * jaco_qpts(ele,qpt,1,0); 
 
 
       if (jaco_det_qpts(ele,qpt) < 0.)
@@ -528,6 +529,7 @@ void Quads::set_coords()
   geo->coord_spts.assign({nDims, nSpts, nEles});
   geo->coord_fpts.assign({nDims, nFpts, nEles});
   geo->coord_ppts.assign({nDims, nPpts, nEles});
+  geo->coord_qpts.assign({nDims, nQpts, nEles});
 
   /* Setup physical coordinates at solution points */
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -576,6 +578,23 @@ void Quads::set_coords()
       }
     }
   }
+
+  /* Setup physical coordinates at quadrature points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int node = 0; node < nNodes; node++)
+        {
+          unsigned int gnd = geo->nd2gnd(ele, node);
+          geo->coord_qpts(dim, qpt, ele) += geo->coord_nodes(gnd,dim) * shape_qpts(qpt, node);
+        }
+      }
+    }
+  }
+
 }
 
 void Quads::compute_Fconv()
