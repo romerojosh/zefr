@@ -1,8 +1,10 @@
-#include <cblas.h>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 
+#include <cblas.h>
+ 
 #include "input.hpp"
 #include "solver.hpp"
 
@@ -26,6 +28,7 @@ int main(int argc, char* argv[])
 
   solver.write_solution(input.output_prefix,0);
 
+  auto t1 = std::chrono::high_resolution_clock::now();
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
@@ -41,8 +44,12 @@ int main(int argc, char* argv[])
       solver.write_solution(input.output_prefix,n);
     }
   }
+  auto t2 = std::chrono::high_resolution_clock::now();
 
   solver.compute_l2_error();
+ 
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
+  std::cout << "Elapsed time: " << elapsed_time.count() << " s" << std::endl;
 
   return 0;
 }

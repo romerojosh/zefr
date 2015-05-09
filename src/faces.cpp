@@ -1,7 +1,9 @@
 #include <cmath>
+
 #include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
+
 
 Faces::Faces(GeoStruct *geo, const InputStruct *input)
 {
@@ -35,10 +37,10 @@ void Faces::apply_bcs()
   /* Loop over boundary flux points */
   for (unsigned int n = 0; n < nVars; n++)
   {
-    unsigned int i = 0;
+    //unsigned int i = 0;
     for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
     {
-      unsigned int bnd_id = geo->gfpt2bnd[i];
+      unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
 
       /* Apply specified boundary condition */
       if (bnd_id == 1) /* Periodic */
@@ -51,7 +53,7 @@ void Faces::apply_bcs()
         U(n, fpt, 1) = 0.; // Hardcode for sine case
       }
 
-      i++;
+      //i++;
     }
   } 
 }
@@ -63,10 +65,10 @@ void Faces::apply_bcs_dU()
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      unsigned int i = 0;
+      //unsigned int i = 0;
       for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
       {
-        unsigned int bnd_id = geo->gfpt2bnd[i];
+        unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
 
         /* Apply specified boundary condition */
         if (bnd_id == 1) /* Periodic */
@@ -75,7 +77,7 @@ void Faces::apply_bcs_dU()
           dU(dim, n, fpt, 1) = dU(dim, n, per_fpt, 0);
         }
 
-        i++;
+        //i++;
       }
     }
   }
