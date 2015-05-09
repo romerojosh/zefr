@@ -17,7 +17,7 @@ Quads::Quads(GeoStruct *geo, const InputStruct *input, unsigned int order)
   this->input = input;  
   this->shape_order = geo->shape_order;  
   this->nEles = geo->nEles;  
-  this->nGqpts = input->nGqpts1D * input->nGqpts1D;
+  this->nQpts = input->nQpts1D * input->nQpts1D;
 
   /* Generic quadrilateral geometry */
   nDims = 2;
@@ -54,100 +54,6 @@ Quads::Quads(GeoStruct *geo, const InputStruct *input, unsigned int order)
   {
     ThrowException("Equation not recognized: " + input->equation);
   }
-
-  /* For debugging, setup reference quad element */
-  /*
-  nd2gnd.assign({nEles, nNodes});
-  fpt2gfpt.assign({nEles, nFpts});
-  fpt2gfpt_slot.assign({nEles, nFpts},0);
-
-  for (unsigned int ele = 0; ele < nEles; ele++)
-    for(unsigned int fpt = 0; fpt < nFpts; fpt++)
-      fpt2gfpt(ele,fpt) = fpt;
-
-  coord_nodes.assign({nNodes, nDims});
-
- 
-  // Bilinear Quad
-  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
-  nd2gnd(0,2) = 2; nd2gnd(0,3) = 3; 
-
-  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
-  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
-  */
-
-  /*
-  // Bilinear Quad to Triangle
-  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; 
-  nd2gnd(0,2) = 2; nd2gnd(0,3) = 2; 
-
-  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 0.0; coord_nodes(2,1) = 1.0;
-  */
-  
-  /*
-  // Biquadratic Quad
-  nd2gnd(0,0) = 0; nd2gnd(0,1) = 4; nd2gnd(0,2) = 1;
-  nd2gnd(0,3) = 7; nd2gnd(0,4) = 8; nd2gnd(0,5) = 5;
-  nd2gnd(0,6) = 3; nd2gnd(0,7) = 6; nd2gnd(0,8) = 2;
-
-  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 1.0;
-  coord_nodes(3,0) = 0.0; coord_nodes(3,1) = 1.0;
-  coord_nodes(4,0) = 0.5; coord_nodes(4,1) = 0.0;
-  coord_nodes(5,0) = 1.0; coord_nodes(5,1) = 0.5;
-  coord_nodes(6,0) = 0.5; coord_nodes(6,1) = 1.0;
-  coord_nodes(7,0) = 0.0; coord_nodes(7,1) = 0.5;
-  coord_nodes(8,0) = 0.5; coord_nodes(8,1) = 0.5;
-  */
-
-  /*
-  // Biquadratic Quad to Triangle
-  nd2gnd(0,0) = 0; nd2gnd(0,1) = 3; nd2gnd(0,2) = 1;
-  nd2gnd(0,3) = 5; nd2gnd(0,4) = 4; nd2gnd(0,5) = 4;
-  nd2gnd(0,6) = 2; nd2gnd(0,7) = 2; nd2gnd(0,8) = 2;
-
-  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 1.0; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 0.0; coord_nodes(2,1) = 1.0;
-  coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 0.0;
-  coord_nodes(4,0) = 0.5; coord_nodes(4,1) = 0.5;
-  coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 0.5;
-  */
-
-  /*  
-  //8-node Serendipity Quad
-  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
-  nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 5;
-  nd2gnd(0,6) = 6; nd2gnd(0,7) = 7; 
-
-  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 0.0;
-  coord_nodes(3,0) = 1.0; coord_nodes(3,1) = 0.5;
-  coord_nodes(4,0) = 1.0; coord_nodes(4,1) = 1.0;
-  coord_nodes(5,0) = 0.5; coord_nodes(5,1) = 1.0;
-  coord_nodes(6,0) = 0.0; coord_nodes(6,1) = 1.0;
-  coord_nodes(7,0) = 0.0; coord_nodes(7,1) = 0.5;
-  */
-
-  /*
-  // 8-node Serendipity Quad to Triangle
-  nd2gnd(0,0) = 0; nd2gnd(0,1) = 1; nd2gnd(0,2) = 2;
-  nd2gnd(0,3) = 3; nd2gnd(0,4) = 4; nd2gnd(0,5) = 4;
-  nd2gnd(0,6) = 4; nd2gnd(0,7) = 5; 
-
-  coord_nodes(0,0) = 0.0; coord_nodes(0,1) = 0.0;
-  coord_nodes(1,0) = 0.5; coord_nodes(1,1) = 0.0;
-  coord_nodes(2,0) = 1.0; coord_nodes(2,1) = 0.0;
-  coord_nodes(3,0) = 0.5; coord_nodes(3,1) = 0.5;
-  coord_nodes(4,0) = 0.0; coord_nodes(4,1) = 1.0;
-  coord_nodes(5,0) = 0.0; coord_nodes(5,1) = 0.5;
-  */
   
 }
 
@@ -157,7 +63,7 @@ void Quads::set_locs()
   loc_spts.assign({nSpts,nDims}); idx_spts.assign({nSpts,nDims});
   loc_fpts.assign({nFpts,nDims}); idx_fpts.assign({nFpts, nDims});
   loc_ppts.assign({nPpts,nDims}); idx_ppts.assign({nPpts,nDims});
-  loc_gqpts.assign({nGqpts,nDims}); idx_gqpts.assign({nGqpts,nDims});
+  loc_qpts.assign({nQpts,nDims}); idx_qpts.assign({nQpts,nDims});
 
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
@@ -235,19 +141,19 @@ void Quads::set_locs()
   }
 
   /* Setup gauss quadrature point locations */
-  loc_gqpts_1D = Gauss_Legendre_pts(input->nGqpts1D); 
+  loc_qpts_1D = Gauss_Legendre_pts(input->nQpts1D); 
 
   /* Setup quadrature point locations */
-  unsigned int gqpt = 0;
-  for (unsigned int i = 0; i < input->nGqpts1D; i++)
+  unsigned int qpt = 0;
+  for (unsigned int i = 0; i < input->nQpts1D; i++)
   {
-    for (unsigned int j = 0; j < input->nGqpts1D; j++)
+    for (unsigned int j = 0; j < input->nQpts1D; j++)
     {
-      loc_gqpts(gqpt,0) = loc_gqpts_1D[j];
-      loc_gqpts(gqpt,1) = loc_gqpts_1D[i];
-      idx_gqpts(gqpt,0) = j;
-      idx_gqpts(gqpt,1) = i;
-      gqpt++;
+      loc_qpts(qpt,0) = loc_qpts_1D[j];
+      loc_qpts(qpt,1) = loc_qpts_1D[i];
+      idx_qpts(qpt,0) = j;
+      idx_qpts(qpt,1) = i;
+      qpt++;
     }
   }
 
@@ -259,11 +165,11 @@ void Quads::set_shape()
   shape_spts.assign({nSpts, nNodes},1);
   shape_fpts.assign({nFpts, nNodes},1);
   shape_ppts.assign({nPpts, nNodes},1);
-  shape_gqpts.assign({nGqpts, nNodes},1);
+  shape_qpts.assign({nQpts, nNodes},1);
   dshape_spts.assign({nDims, nSpts, nNodes},1);
   dshape_fpts.assign({nDims, nFpts, nNodes},1);
   dshape_ppts.assign({nDims, nPpts, nNodes},1);
-  dshape_gqpts.assign({nDims, nGqpts, nNodes},1);
+  dshape_qpts.assign({nDims, nQpts, nNodes},1);
 
   /* Shape functions and derivatives at solution points */
   for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -308,16 +214,16 @@ void Quads::set_shape()
   }
   
   /* Shape function and derivatives at quadrature points */
-  for (unsigned int gqpt = 0; gqpt < nGqpts; gqpt++)
+  for (unsigned int qpt = 0; qpt < nQpts; qpt++)
   {
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_gqpts(gqpt,node) = calc_shape_quad(shape_order, node, 
-        loc_gqpts(gqpt,0),loc_gqpts(gqpt,1));
-      dshape_gqpts(0,gqpt,node) = calc_dshape_quad(shape_order, node, 
-        loc_gqpts(gqpt,0), loc_gqpts(gqpt,1), 0);
-      dshape_gqpts(1,gqpt,node) = calc_dshape_quad(shape_order, node, 
-        loc_gqpts(gqpt,0), loc_gqpts(gqpt,1), 1);
+      shape_qpts(qpt,node) = calc_shape_quad(shape_order, node, 
+        loc_qpts(qpt,0),loc_qpts(qpt,1));
+      dshape_qpts(0,qpt,node) = calc_dshape_quad(shape_order, node, 
+        loc_qpts(qpt,0), loc_qpts(qpt,1), 0);
+      dshape_qpts(1,qpt,node) = calc_dshape_quad(shape_order, node, 
+        loc_qpts(qpt,0), loc_qpts(qpt,1), 1);
     }
   }
 }
@@ -327,9 +233,9 @@ void Quads::set_transforms()
   /* Allocate memory for jacobian matrices and determinant */
   jaco_spts.assign({nEles, nSpts, nDims, nDims});
   jaco_ppts.assign({nEles, nPpts, nDims, nDims});
-  jaco_gqpts.assign({nEles, nGqpts, nDims, nDims});
+  jaco_qpts.assign({nEles, nQpts, nDims, nDims});
   jaco_det_spts.assign({nEles, nSpts});
-  jaco_det_gqpts.assign({nEles, nGqpts});
+  jaco_det_qpts.assign({nEles, nQpts});
 
   /* Set jacobian matrix and determinant at solution points */
   for (unsigned int ele = 0; ele < nEles; ele++)
@@ -406,7 +312,7 @@ void Quads::set_transforms()
   /* Set jacobian matrix and determinant at quadrature points */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
-    for (unsigned int gqpt = 0; gqpt < nGqpts; gqpt++)
+    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
     {
       for (unsigned int dimX = 0; dimX < nDims; dimX++)
       {
@@ -415,17 +321,17 @@ void Quads::set_transforms()
           for (unsigned int node = 0; node < nNodes; node++)
           {
             unsigned int gnd = geo->nd2gnd(ele, node);
-            jaco_gqpts(ele,gqpt,dimX,dimXi) += geo->coord_nodes(gnd,dimX) * dshape_gqpts(dimXi,gqpt,node); 
+            jaco_qpts(ele,qpt,dimX,dimXi) += geo->coord_nodes(gnd,dimX) * dshape_qpts(dimXi,qpt,node); 
           }
         }
       }
 
-      jaco_det_gqpts(ele,gqpt) = jaco_gqpts(ele,gqpt,0,0) * jaco_spts(ele,gqpt,1,1) -
-                               jaco_gqpts(ele,gqpt,0,1) * jaco_spts(ele,gqpt,1,0); 
+      jaco_det_qpts(ele,qpt) = jaco_qpts(ele,qpt,0,0) * jaco_spts(ele,qpt,1,1) -
+                               jaco_qpts(ele,qpt,0,1) * jaco_spts(ele,qpt,1,0); 
 
 
-      if (jaco_det_gqpts(ele,gqpt) < 0.)
-        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " gqpt:" + std::to_string(gqpt));
+      if (jaco_det_qpts(ele,qpt) < 0.)
+        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " qpt:" + std::to_string(qpt));
 
     }
   }
@@ -582,10 +488,10 @@ void Quads::setup_FR()
 void Quads::setup_aux()
 {
   /* Allocate memory for plot point and quadrature point interpolation operator */
-  oppE_plot.assign({nPpts, nSpts});
-  oppE_gq.assign({nGqpts, nSpts});
+  oppE_ppts.assign({nPpts, nSpts});
+  oppE_qpts.assign({nQpts, nSpts});
 
-  /* Setup spt to ppt extrapolation operator (oppE_plot) */
+  /* Setup spt to ppt extrapolation operator (oppE_ppts) */
   for (unsigned int ppt = 0; ppt < nPpts; ppt++)
   {
     for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -594,13 +500,13 @@ void Quads::setup_aux()
       unsigned int i = idx_spts(spt,0);
       unsigned int j = idx_spts(spt,1);
 
-      oppE_plot(ppt,spt) = Lagrange(loc_spts_1D, i, loc_ppts(ppt,0)) * 
+      oppE_ppts(ppt,spt) = Lagrange(loc_spts_1D, i, loc_ppts(ppt,0)) * 
                       Lagrange(loc_spts_1D, j, loc_ppts(ppt,1));
     }
   }
 
-  /* Setup spt to gqpt extrapolation operator (oppE_gq) */
-  for (unsigned int gqpt = 0; gqpt < nGqpts; gqpt++)
+  /* Setup spt to qpt extrapolation operator (oppE_qpts) */
+  for (unsigned int qpt = 0; qpt < nQpts; qpt++)
   {
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
@@ -608,8 +514,8 @@ void Quads::setup_aux()
       unsigned int i = idx_spts(spt,0);
       unsigned int j = idx_spts(spt,1);
 
-      oppE_plot(gqpt,spt) = Lagrange(loc_spts_1D, i, loc_gqpts(gqpt,0)) * 
-                      Lagrange(loc_spts_1D, j, loc_gqpts(gqpt,1));
+      oppE_qpts(qpt,spt) = Lagrange(loc_spts_1D, i, loc_qpts(qpt,0)) * 
+                      Lagrange(loc_spts_1D, j, loc_qpts(qpt,1));
     }
   }
 

@@ -9,7 +9,7 @@
 
 struct InputStruct
 {
-  unsigned int ic_type, nDims, nGqpts1D, n_steps, order, report_freq, viscous, write_freq;
+  unsigned int ic_type, nDims, nQpts1D, n_steps, order, report_freq, viscous, write_freq;
   std::string meshfile, equation, spt_type, dt_scheme;
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
@@ -23,7 +23,6 @@ void read_param(std::ifstream &f, std::string name, T &var)
 {
   if (!f.is_open())
   {
-    //throw std::runtime_error("Input file not open for reading!");
     ThrowException("Input file not open for reading!");
   }
 

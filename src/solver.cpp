@@ -641,7 +641,7 @@ void FRSolver::write_solution(std::string outputfile, unsigned int nIter)
   /* Extrapolate solution to plot points */
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    auto &A = eles->oppE_plot(0,0);
+    auto &A = eles->oppE_ppts(0,0);
     auto &B = eles->U_spts(n,0,0);
     auto &C = eles->U_ppts(n,0,0);
 
