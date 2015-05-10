@@ -407,20 +407,24 @@ void Quads::set_normals()
 void Quads::setup_FR()
 {
   /* Allocate memory for FR operators */
-  oppE.assign({nFpts, nSpts});
+  //oppE.assign({nFpts, nSpts});
+  //oppD.assign({nDims, nSpts, nSpts});
+  //oppD_fpts.assign({nDims, nSpts, nFpts});
+  
+  oppE.assign({nSpts, nFpts});
   oppD.assign({nDims, nSpts, nSpts});
-  oppD_fpts.assign({nDims, nSpts, nFpts});
+  oppD_fpts.assign({nDims, nFpts, nSpts});
 
   /* Setup spt to fpt extrapolation operator (oppE) */
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       /* Get indices for Lagrange polynomial evaluation */
       unsigned int i = idx_spts(spt,0);
       unsigned int j = idx_spts(spt,1);
 
-      oppE(fpt,spt) = Lagrange(loc_spts_1D, i, loc_fpts(fpt,0)) * 
+      oppE(spt,fpt) = Lagrange(loc_spts_1D, i, loc_fpts(fpt,0)) * 
                       Lagrange(loc_spts_1D, j, loc_fpts(fpt,1));
     }
   }
@@ -459,9 +463,9 @@ void Quads::setup_FR()
   /* Setup differentiation operator (oppD_fpts) for flux points (DFR Specific)*/
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      for (unsigned int spt = 0; spt < nSpts; spt++)
       {
         /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
          * boundary points for DFR) */
@@ -470,12 +474,12 @@ void Quads::setup_FR()
 
         if (dim == 0)
         {
-            oppD_fpts(dim,spt,fpt) = Lagrange_d1(loc_DFR_1D, i, loc_spts(spt,0)) *
+            oppD_fpts(dim,fpt,spt) = Lagrange_d1(loc_DFR_1D, i, loc_spts(spt,0)) *
                               Lagrange(loc_DFR_1D, j, loc_spts(spt,1));
         }
         else
         {
-            oppD_fpts(dim,spt,fpt) = Lagrange(loc_DFR_1D, i, loc_spts(spt,0)) *
+            oppD_fpts(dim,fpt,spt) = Lagrange(loc_DFR_1D, i, loc_spts(spt,0)) *
                               Lagrange_d1(loc_DFR_1D, j, loc_spts(spt,1));
         }
       }
@@ -487,33 +491,35 @@ void Quads::setup_FR()
 void Quads::setup_aux()
 {
   /* Allocate memory for plot point and quadrature point interpolation operator */
-  oppE_ppts.assign({nPpts, nSpts});
-  oppE_qpts.assign({nQpts, nSpts});
+  //oppE_ppts.assign({nPpts, nSpts});
+  //oppE_qpts.assign({nQpts, nSpts});
+  oppE_ppts.assign({nSpts, nPpts});
+  oppE_qpts.assign({nSpts, nQpts});
 
   /* Setup spt to ppt extrapolation operator (oppE_ppts) */
-  for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
     {
       /* Get indices for Lagrange polynomial evaluation */
       unsigned int i = idx_spts(spt,0);
       unsigned int j = idx_spts(spt,1);
 
-      oppE_ppts(ppt,spt) = Lagrange(loc_spts_1D, i, loc_ppts(ppt,0)) * 
+      oppE_ppts(spt,ppt) = Lagrange(loc_spts_1D, i, loc_ppts(ppt,0)) * 
                       Lagrange(loc_spts_1D, j, loc_ppts(ppt,1));
     }
   }
 
   /* Setup spt to qpt extrapolation operator (oppE_qpts) */
-  for (unsigned int qpt = 0; qpt < nQpts; qpt++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
     {
       /* Get indices for Lagrange polynomial evaluation */
       unsigned int i = idx_spts(spt,0);
       unsigned int j = idx_spts(spt,1);
 
-      oppE_qpts(qpt,spt) = Lagrange(loc_spts_1D, i, loc_qpts(qpt,0)) * 
+      oppE_qpts(spt,qpt) = Lagrange(loc_spts_1D, i, loc_qpts(qpt,0)) * 
                       Lagrange(loc_spts_1D, j, loc_qpts(qpt,1));
     }
   }
@@ -524,22 +530,26 @@ void Quads::setup_aux()
 void Quads::set_coords()
 {
   /* Allocate memory for physical coordinates */
-  geo->coord_spts.assign({nDims, nSpts, nEles});
-  geo->coord_fpts.assign({nDims, nFpts, nEles});
-  geo->coord_ppts.assign({nDims, nPpts, nEles});
-  geo->coord_qpts.assign({nDims, nQpts, nEles});
+  //geo->coord_spts.assign({nDims, nSpts, nEles});
+  //geo->coord_fpts.assign({nDims, nFpts, nEles});
+  //geo->coord_ppts.assign({nDims, nPpts, nEles});
+  //geo->coord_qpts.assign({nDims, nQpts, nEles});
+  geo->coord_spts.assign({nDims, nEles, nSpts});
+  geo->coord_fpts.assign({nDims, nEles, nFpts});
+  geo->coord_ppts.assign({nDims, nEles, nPpts});
+  geo->coord_qpts.assign({nDims, nEles, nQpts});
 
   /* Setup physical coordinates at solution points */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
     {
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int spt = 0; spt < nSpts; spt++)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_spts(dim, spt, ele) += geo->coord_nodes(gnd,dim) * shape_spts(spt, node);
+          geo->coord_spts(dim, ele, spt) += geo->coord_nodes(gnd,dim) * shape_spts(spt, node);
         }
       }
     }
@@ -548,14 +558,14 @@ void Quads::set_coords()
   /* Setup physical coordinates at flux points */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
     {
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_fpts(dim, fpt, ele) += geo->coord_nodes(gnd,dim) * shape_fpts(fpt, node);
+          geo->coord_fpts(dim, ele, fpt) += geo->coord_nodes(gnd,dim) * shape_fpts(fpt, node);
         }
       }
     }
@@ -564,14 +574,14 @@ void Quads::set_coords()
   /* Setup physical coordinates at plot points */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
     {
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int ppt = 0; ppt < nPpts; ppt++)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_ppts(dim, ppt, ele) += geo->coord_nodes(gnd,dim) * shape_ppts(ppt, node);
+          geo->coord_ppts(dim, ele, ppt) += geo->coord_nodes(gnd,dim) * shape_ppts(ppt, node);
         }
       }
     }
@@ -580,14 +590,14 @@ void Quads::set_coords()
   /* Setup physical coordinates at quadrature points */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
     {
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int qpt = 0; qpt < nQpts; qpt++)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_qpts(dim, qpt, ele) += geo->coord_nodes(gnd,dim) * shape_qpts(qpt, node);
+          geo->coord_qpts(dim, ele, qpt) += geo->coord_nodes(gnd,dim) * shape_qpts(qpt, node);
         }
       }
     }
@@ -601,12 +611,12 @@ void Quads::compute_Fconv()
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int spt = 0; spt < nSpts; spt++)
         {
-          F_spts(0, n, spt, ele) = input->AdvDiff_Ax * U_spts(n, spt, ele);
-          F_spts(1, n, spt, ele) = input->AdvDiff_Ay * U_spts(n, spt, ele);
+          F_spts(0, n, ele, spt) = input->AdvDiff_Ax * U_spts(n, ele, spt);
+          F_spts(1, n, ele, spt) = input->AdvDiff_Ay * U_spts(n, ele, spt);
         }
       }
     }
@@ -623,13 +633,13 @@ void Quads::compute_Fvisc()
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int spt = 0; spt < nSpts; spt++)
         {
           /* Can just add viscous flux to existing convective flux */
-          F_spts(0, n, spt, ele) += -input->AdvDiff_D * dU_spts(0, n, spt, ele);
-          F_spts(1, n, spt, ele) += -input->AdvDiff_D * dU_spts(1, n, spt, ele);
+          F_spts(0, n, ele, spt) += -input->AdvDiff_D * dU_spts(0, n, ele, spt);
+          F_spts(1, n, ele, spt) += -input->AdvDiff_D * dU_spts(1, n, ele, spt);
         }
       }
     }
@@ -644,15 +654,15 @@ void Quads::transform_flux()
 {
   for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
     {
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        double Ftemp = F_spts(0, n, spt, ele);
+        double Ftemp = F_spts(0, n, ele, spt);
 
-        F_spts(0, n, spt, ele) = F_spts(0, n, spt, ele) * jaco_spts(ele, spt, 1, 1) -
-                                 F_spts(1, n, spt, ele) * jaco_spts(ele, spt, 0, 1);
-        F_spts(1, n, spt, ele) = F_spts(1, n, spt, ele) * jaco_spts(ele, spt, 0, 0) -
+        F_spts(0, n, ele, spt) = F_spts(0, n, ele, spt) * jaco_spts(ele, spt, 1, 1) -
+                                 F_spts(1, n, ele, spt) * jaco_spts(ele, spt, 0, 1);
+        F_spts(1, n, ele, spt) = F_spts(1, n, ele, spt) * jaco_spts(ele, spt, 0, 0) -
                                  Ftemp * jaco_spts(ele, spt, 1, 0);
       }
     }
