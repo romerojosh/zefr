@@ -31,7 +31,7 @@ class Elements
     //mdvector<double> coord_nodes, coord_spts, coord_fpts;
 
     mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes, loc_qpts;
-    mdvector<double> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;
+    mdvector<unsigned int> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;
     std::vector<double> loc_spts_1D, loc_nodes_1D, loc_qpts_1D;
     mdvector<double> tnorm; //, norm, dA;
     mdvector<double> shape_spts, shape_fpts, shape_ppts, shape_qpts;

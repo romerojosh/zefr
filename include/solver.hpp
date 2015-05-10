@@ -15,7 +15,7 @@ class FRSolver
   private:
     const InputStruct *input = NULL;
     GeoStruct geo;
-    unsigned int order;
+    int order;
     double flow_time = 0.;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
@@ -53,7 +53,7 @@ class FRSolver
 
 
   public:
-    FRSolver(const InputStruct *input, unsigned int order = -1);
+    FRSolver(const InputStruct *input, int order = -1);
     void setup();
     void compute_residual(unsigned int stage);
     void update();

@@ -11,7 +11,7 @@
 #include "quads.hpp"
 #include "shape.hpp"
 
-Quads::Quads(GeoStruct *geo, const InputStruct *input, unsigned int order)
+Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
 {
   this->geo = geo;
   this->input = input;  
@@ -277,7 +277,7 @@ void Quads::set_transforms()
           for (unsigned int node = 0; node < nNodes; node++)
           {
             unsigned int gnd = geo->nd2gnd(ele, node);
-            unsigned int gfpt = geo->fpt2gfpt(ele,fpt);
+            int gfpt = geo->fpt2gfpt(ele,fpt);
 
             /* Skip fpts on ghost edges */
             if (gfpt == -1)
@@ -373,7 +373,7 @@ void Quads::set_normals()
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      unsigned int gfpt = geo->fpt2gfpt(ele,fpt);
+      int gfpt = geo->fpt2gfpt(ele,fpt);
 
       /* Check if flux point is on ghost edge */
       if (gfpt == -1) 
@@ -392,11 +392,9 @@ void Quads::set_normals()
       faces->norm(0,gfpt,slot) /= faces->dA[gfpt];
       faces->norm(1,gfpt,slot) /= faces->dA[gfpt];
 
-      //std::cout << faces->norm(0,gfpt, slot) <<" " <<faces->norm(1,gfpt,slot)<<std::endl;
+      unsigned int face_idx = fpt/nSpts1D;
 
-      unsigned int faceidx = fpt/nSpts1D;
-
-      if(fpt/nSpts1D == 0 || fpt/nSpts1D == 3)
+      if(face_idx == 0 || face_idx == 3)
         faces->outnorm(gfpt,slot) = -1; 
       else 
         faces->outnorm(gfpt,slot) = 1; 

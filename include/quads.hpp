@@ -23,7 +23,7 @@ class Quads: public Elements
 
   public:
     Quads(GeoStruct *geo, const InputStruct *input, 
-          unsigned int order = -1);
+          int order = -1);
     void compute_Fconv();
     void compute_Fvisc();
     void transform_flux();

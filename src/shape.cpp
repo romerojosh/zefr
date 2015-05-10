@@ -3,12 +3,13 @@
 double calc_shape_quad(unsigned int shape_order, unsigned int idx,
                        double xi, double eta)
 {
-  double val;
+  double val = 0.0;
 
   /* Bilinear quadrilateral/4-node Serendipity */
   if (shape_order == 1)
   {
-    double i, j;
+    unsigned int i = 0;
+    unsigned int j = 0;
 
     switch(idx)
     {
@@ -22,7 +23,7 @@ double calc_shape_quad(unsigned int shape_order, unsigned int idx,
         i = 0; j = 1; break;
     }
 
-    val = Lagrange({-1,1}, i, xi) * Lagrange({-1,1}, j, eta);
+    val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta);
   }
 
   /* 8-node Serendipity Element */
@@ -55,12 +56,13 @@ double calc_shape_quad(unsigned int shape_order, unsigned int idx,
 double calc_dshape_quad(unsigned int shape_order, unsigned int idx,
                         double xi, double eta, unsigned int dim)
 {
-  double val;
+  double val = 0.0;
 
   /* Bilinear quadrilateral/4-node Serendipity */
   if (shape_order == 1)
   {
-    double i, j;
+    unsigned int i = 0;
+    unsigned int j = 0;
 
     switch(idx)
     {

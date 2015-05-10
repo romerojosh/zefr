@@ -17,7 +17,7 @@
 #include "mdvector.hpp"
 #include "solver.hpp"
 
-FRSolver::FRSolver(const InputStruct *input, unsigned int order)
+FRSolver::FRSolver(const InputStruct *input, int order)
 {
   this->input = input;
   if (order == -1)
@@ -729,7 +729,8 @@ void FRSolver::compute_l2_error()
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
 
-        double U_true, weight;
+        double U_true = 0.0;
+        double weight = 0.0;
 
         if (eles->nDims == 2)
         {

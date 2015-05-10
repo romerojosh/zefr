@@ -2,8 +2,6 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-
-#include <cblas.h>
  
 #include "input.hpp"
 #include "solver.hpp"

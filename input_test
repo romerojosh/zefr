@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile meshes/sines_tri_32x32_pat.msh
+meshfile meshes/TriBox_5x5.msh
 
 # Solver:
 order     2
@@ -9,13 +9,13 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 3000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt	  0.000025
+dt	  0.00001
 
 # Reporting:
 output_prefix data
-write_freq  1000
+write_freq  500
 report_freq 100
 nQpts1D     10
 
@@ -24,7 +24,7 @@ fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
 ldg_b      0.0
-ldg_tau    .0
+ldg_tau    0.0
 
 # Equation Specific Parameters:
 ic_type = 1 (0 = gaussian, 1 = sines)
