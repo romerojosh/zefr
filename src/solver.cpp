@@ -88,7 +88,6 @@ void FRSolver::setup_output()
 
     /* Allocate memory for local plot point connectivity and solution at plot points */
     geo.ppt_connect.assign({eles->nSubelements, 4});
-    eles->U_ppts.assign({eles->nVars, eles->nEles, eles->nPpts});
 
     /* Setup plot "subelement" connectivity */
     std::vector<unsigned int> nd(4,0);
@@ -201,17 +200,12 @@ void FRSolver::initialize_U()
 
 void FRSolver::extrapolate_U()
 {
-  //for (unsigned int n = 0; n < eles->nVars; n++)
-  //{
-    auto &A = eles->U_spts(0,0,0);
-    auto &B = eles->oppE(0,0);
-    auto &C = eles->U_fpts(0,0,0);
+  auto &A = eles->U_spts(0,0,0);
+  auto &B = eles->oppE(0,0);
+  auto &C = eles->U_fpts(0,0,0);
 
-    //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nFpts, eles->nEles,
-    //    eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nFpts,
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nFpts,
         eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nFpts, 0.0, &C, eles->nFpts);
-  //}
 
   /*
   std::cout << "Uext" << std::endl;
@@ -292,29 +286,23 @@ void FRSolver::compute_dU()
   /* Compute contribution to derivative from solution at solution points */
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    //for (unsigned int n = 0; n < eles->nVars; n++)
-    //{
-      auto &A = eles->U_spts(0,0,0);
-      auto &B = eles->oppD(dim,0,0);
-      auto &C = eles->dU_spts(dim,0,0,0);
+    auto &A = eles->U_spts(0,0,0);
+    auto &B = eles->oppD(dim,0,0);
+    auto &C = eles->dU_spts(dim,0,0,0);
 
-      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
           eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
-    //}
   }
 
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    //for (unsigned int n = 0; n < eles->nVars; n++)
-    //{
-      auto &A = eles->Ucomm(0,0,0);
-      auto &B = eles->oppD_fpts(dim,0,0);
-      auto &C = eles->dU_spts(dim,0,0,0);
+    auto &A = eles->Ucomm(0,0,0);
+    auto &B = eles->oppD_fpts(dim,0,0);
+    auto &C = eles->dU_spts(dim,0,0,0);
 
-      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
           eles->nFpts, 1.0, &A, eles->nFpts, &B, eles->nSpts, 1.0, &C, eles->nSpts);
-    //}
   }
 
   /* Transform dU back to physical space */
@@ -368,17 +356,12 @@ void FRSolver::extrapolate_dU()
 {
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    //for (unsigned int n = 0; n < eles->nVars; n++)
-    //{
-      auto &A = eles->dU_spts(dim,0,0,0);
-      auto &B = eles->oppE(0,0);
-      auto &C = eles->dU_fpts(dim,0,0,0);
+    auto &A = eles->dU_spts(dim,0,0,0);
+    auto &B = eles->oppE(0,0);
+    auto &C = eles->dU_fpts(dim,0,0,0);
 
-      //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nFpts, eles->nEles,
-      //    eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
-      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nFpts,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nFpts,
           eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nFpts, 0.0, &C, eles->nFpts);
-    //}
   }
 
  /* 
@@ -461,33 +444,23 @@ void FRSolver::compute_dF()
   /* Compute contribution to derivative from flux at solution points */
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    //for (unsigned int n = 0; n < eles->nVars; n++)
-    //{
-      auto &A = eles->F_spts(dim, 0,0,0);
-      auto &B = eles->oppD(dim,0,0);
-      auto &C = eles->dF_spts(dim,0,0,0);
+    auto &A = eles->F_spts(dim, 0,0,0);
+    auto &B = eles->oppD(dim,0,0);
+    auto &C = eles->dF_spts(dim,0,0,0);
 
-      //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles,
-      //    eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nEles, 0.0, &C, eles->nEles);
-      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
           eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
-    //}
   }
 
   /* Compute contribution to derivative from common flux at flux points */
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    //for (unsigned int n = 0; n < eles->nVars; n++)
-    //{
-      auto &A = eles->Fcomm(0,0,0);
-      auto &B = eles->oppD_fpts(dim,0,0);
-      auto &C = eles->dF_spts(dim,0,0,0);
+    auto &A = eles->Fcomm(0,0,0);
+    auto &B = eles->oppD_fpts(dim,0,0);
+    auto &C = eles->dF_spts(dim,0,0,0);
 
-      //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles,
-      //    eles->nFpts, 1.0, &A, eles->nFpts, &B, eles->nEles, 1.0, &C, eles->nEles);
-      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
-          eles->nFpts, 1.0, &A, eles->nFpts, &B, eles->nSpts, 1.0, &C, eles->nSpts);
-    //}
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nSpts,
+        eles->nFpts, 1.0, &A, eles->nFpts, &B, eles->nSpts, 1.0, &C, eles->nSpts);
   }
 
   /*
@@ -673,15 +646,12 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 
   /* Write solution information */
   /* Extrapolate solution to plot points */
-  //for (unsigned int n = 0; n < eles->nVars; n++)
-  //{
-    auto &A = eles->U_spts(0,0,0);
-    auto &B = eles->oppE_ppts(0,0);
-    auto &C = eles->U_ppts(0,0,0);
+  auto &A = eles->U_spts(0,0,0);
+  auto &B = eles->oppE_ppts(0,0);
+  auto &C = eles->U_ppts(0,0,0);
 
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nPpts,
-        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nPpts, 0.0, &C, eles->nPpts);
-  //}
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nPpts,
+      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nPpts, 0.0, &C, eles->nPpts);
 
   if (input->equation == "AdvDiff")
   {
@@ -697,7 +667,6 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
       }
       f << std::endl;
     }
-
   }
 }
 
@@ -717,15 +686,12 @@ void FRSolver::report_max_residuals()
 void FRSolver::compute_l2_error()
 {
   /* Extrapolate solution to quadrature points */
-  //for (unsigned int n = 0; n < eles->nVars; n++)
-  //{
-    auto &A = eles->U_spts(0,0,0);
-    auto &B = eles->oppE_qpts(0,0);
-    auto &C = eles->U_qpts(0,0,0);
+  auto &A = eles->U_spts(0,0,0);
+  auto &B = eles->oppE_qpts(0,0);
+  auto &C = eles->U_qpts(0,0,0);
 
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nQpts,
-        eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nQpts, 0.0, &C, eles->nQpts);
-  //}
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nQpts,
+      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nQpts, 0.0, &C, eles->nQpts);
 
 
   std::vector<double> l2_error(eles->nVars,0.0);
@@ -743,8 +709,8 @@ void FRSolver::compute_l2_error()
         if (eles->nDims == 2)
         {
           /* Compute true solution */
-          U_true = compute_U_true(geo.coord_qpts(0, ele, qpt), geo.coord_qpts(1, ele, qpt) , 
-                                  flow_time, n, input);
+          U_true = compute_U_true(geo.coord_qpts(0, ele, qpt), geo.coord_qpts(1, ele, qpt), 
+              flow_time, n, input);
 
           /* Get quadrature point index and weight */
           unsigned int i = eles->idx_qpts(qpt,0);

@@ -366,7 +366,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       }
     }
 
-    /* Initialize global flux point indicies */
+    /* Initialize global flux point indicies (to place boundary fpts at end of global fpt data structure) */
     unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;
 
     /* Begin loop through faces */
@@ -452,7 +452,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     }
 
     /* Populate data structures */
-    geo.nGfpts = (gfpt + gfpt_bnd);
+    geo.nGfpts = gfpt_bnd;
     geo.fpt2gfpt.assign({geo.nEles, 4*nFptsPerFace});
     geo.fpt2gfpt_slot.assign({geo.nEles, 4*nFptsPerFace});
 

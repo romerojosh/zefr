@@ -44,6 +44,7 @@ void Faces::apply_bcs()
     for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
     {
       unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
+      //unsigned int bnd_id = geo->gfpt2bnd[i];
 
       /* Apply specified boundary condition */
       if (bnd_id == 1) /* Periodic */
