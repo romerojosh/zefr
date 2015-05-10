@@ -437,9 +437,9 @@ void Quads::setup_FR()
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    for (unsigned int ispt = 0; ispt < nSpts; ispt++)
+    for (unsigned int jspt = 0; jspt < nSpts; jspt++)
     {
-      for (unsigned int jspt = 0; jspt < nSpts; jspt++)
+      for (unsigned int ispt = 0; ispt < nSpts; ispt++)
       {
         /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
          * boundary points for DFR) */
@@ -448,12 +448,12 @@ void Quads::setup_FR()
 
         if (dim == 0)
         {
-            oppD(dim,ispt,jspt) = Lagrange_d1(loc_DFR_1D, i, loc_spts(ispt,0)) *
+            oppD(dim,jspt,ispt) = Lagrange_d1(loc_DFR_1D, i, loc_spts(ispt,0)) *
                                   Lagrange(loc_DFR_1D, j, loc_spts(ispt,1));
         }
         else
         {
-            oppD(dim,ispt,jspt) = Lagrange(loc_DFR_1D, i, loc_spts(ispt,0)) *
+            oppD(dim,jspt,ispt) = Lagrange(loc_DFR_1D, i, loc_spts(ispt,0)) *
                                   Lagrange_d1(loc_DFR_1D, j, loc_spts(ispt,1));
         }
       }

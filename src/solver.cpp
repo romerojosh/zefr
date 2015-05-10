@@ -88,7 +88,7 @@ void FRSolver::setup_output()
 
     /* Allocate memory for local plot point connectivity and solution at plot points */
     geo.ppt_connect.assign({eles->nSubelements, 4});
-    eles->U_ppts.assign({eles->nVars, eles->nPpts, eles->nEles});
+    eles->U_ppts.assign({eles->nVars, eles->nEles, eles->nPpts});
 
     /* Setup plot "subelement" connectivity */
     std::vector<unsigned int> nd(4,0);
@@ -626,9 +626,9 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   if (eles->nDims == 2)
   {
     // TODO: Change order of ppt structures for better looping 
-    for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(0, ele, ppt) << " ";
         f << geo.coord_ppts(1, ele, ppt) << " ";
