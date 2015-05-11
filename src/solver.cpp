@@ -715,13 +715,28 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   f << std::endl;
 
   /* Write solution information */
-  /* Extrapolate solution to plot points */
-  auto &A = eles->U_spts(0,0,0);
-  auto &B = eles->oppE_ppts(0,0);
-  auto &C = eles->U_ppts(0,0,0);
+ #pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nPpts,
-      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nPpts, 0.0, &C, eles->nPpts);
+    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += eles->nEles % (block_size);
+
+   /* Extrapolate solution to plot points */
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      auto &A = eles->U_spts(n,start_idx,0);
+      auto &B = eles->oppE_ppts(0,0);
+      auto &C = eles->U_ppts(n,start_idx,0);
+
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, block_size, eles->nPpts,
+          eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nPpts, 0.0, &C, eles->nPpts);
+    }
+  }
 
   if (input->equation == "AdvDiff")
   {
@@ -755,13 +770,29 @@ void FRSolver::report_max_residuals()
 
 void FRSolver::compute_l2_error()
 {
-  /* Extrapolate solution to quadrature points */
-  auto &A = eles->U_spts(0,0,0);
-  auto &B = eles->oppE_qpts(0,0);
-  auto &C = eles->U_qpts(0,0,0);
+#pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, eles->nVars * eles->nEles, eles->nQpts,
-      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nQpts, 0.0, &C, eles->nQpts);
+    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += eles->nEles % (block_size);
+
+
+    /* Extrapolate solution to quadrature points */
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      auto &A = eles->U_spts(n,start_idx,0);
+      auto &B = eles->oppE_qpts(0,0);
+      auto &C = eles->U_qpts(n,start_idx,0);
+
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, block_size, eles->nQpts,
+          eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nQpts, 0.0, &C, eles->nQpts);
+    }
+  }
 
 
   std::vector<double> l2_error(eles->nVars,0.0);
