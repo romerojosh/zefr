@@ -1,5 +1,5 @@
-CXX = g++
-#CXX = g++-4.9
+#CXX = g++
+CXX = g++-4.9
 flags = -O3 -Wall -Wextra -Wconversion -fopenmp
 #libs = -L /usr/local/Cellar/openblas/0.2.13/lib -lopenblas
 #inc = -I /usr/local/Cellar/openblas/0.2.13/include 

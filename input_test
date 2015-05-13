@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile meshes/QuadBox_20x20.msh
+meshfile meshes/QuadBox_32x32.msh
 
 # Solver:
 order     2
@@ -9,13 +9,13 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 3000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt	  0.00001
+dt	  0.000002
 
 # Reporting:
 output_prefix data
-write_freq  500
+write_freq  1000
 report_freq 100
 nQpts1D     10
 

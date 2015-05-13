@@ -609,6 +609,7 @@ void Quads::compute_Fconv()
 {
   if (input->equation == "AdvDiff")
   {
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < nVars; n++)
     {
       for (unsigned int ele = 0; ele < nEles; ele++)
@@ -631,6 +632,7 @@ void Quads::compute_Fvisc()
 {
   if (input->equation == "AdvDiff")
   {
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < nVars; n++)
     {
       for (unsigned int ele = 0; ele < nEles; ele++)
@@ -652,6 +654,7 @@ void Quads::compute_Fvisc()
 }
 void Quads::transform_flux()
 {
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < nVars; n++)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
