@@ -1,6 +1,7 @@
 #ifndef input_hpp
 #define input_hpp
 
+#include <array>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -13,7 +14,8 @@ struct InputStruct
   std::string output_prefix, meshfile, equation, spt_type, dt_scheme;
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
-  double AdvDiff_Ax, AdvDiff_Ay, AdvDiff_D, dt;
+  double AdvDiff_D, dt;
+  std::array<double, 3> AdvDiff_A;
 };
 
 InputStruct read_input_file(std::string inputfile);

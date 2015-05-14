@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "faces.hpp"
 #include "geometry.hpp"
@@ -17,7 +18,6 @@ class Elements
   protected:
     const InputStruct *input = NULL;
     GeoStruct *geo = NULL;
-    //Faces *faces = NULL;
     std::shared_ptr<Faces> faces;
 
     /* Geometric Parameters */
@@ -26,20 +26,16 @@ class Elements
     unsigned int nSpts, nFpts, nSpts1D, nPpts, nQpts;
     unsigned int nFaces, nNodes;
     unsigned int nSubelements, nNodesPerSubelement;
-    //mdvector<int> nd2gnd;
-    //mdvector<int> fpt2gfpt, fpt2gfpt_slot;
-    //mdvector<double> coord_nodes, coord_spts, coord_fpts;
 
     mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes, loc_qpts;
     mdvector<unsigned int> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;
-    std::vector<double> loc_spts_1D, loc_nodes_1D, loc_qpts_1D;
-    mdvector<double> tnorm; //, norm, dA;
+    std::vector<double> loc_spts_1D, loc_nodes_1D, loc_qpts_1D, loc_DFR_1D;
+    mdvector<double> tnorm; 
     mdvector<double> shape_spts, shape_fpts, shape_ppts, shape_qpts;
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
     std::vector<double> weights_qpts;
-    //mdvector<double> jaco_fpts;
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts;
@@ -51,20 +47,31 @@ class Elements
     mdvector<double> dU_spts, dU_fpts, dF_spts, divF_spts;
 
 
+    void set_coords();
+    void set_shape();
+    void setup_FR();
+    void setup_aux();
+
     virtual void set_locs() = 0;
-    virtual void set_shape() = 0;
     virtual void set_transforms() = 0;
     virtual void set_normals() = 0;
-    virtual void setup_FR() = 0;
-    virtual void setup_aux() = 0;
+    virtual double calc_shape(unsigned int shape_order, unsigned int idx,
+                            std::vector<double> &loc) = 0;
+    virtual double calc_d_shape(unsigned int shape_order, unsigned int idx,
+                            std::vector<double> &loc, unsigned int dim) = 0;
 
-    virtual void set_coords() = 0;
+    virtual double calc_nodal_basis(unsigned int spt, std::vector<double> &loc) = 0;
+    virtual double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
+                                   unsigned int dim) = 0;
+    virtual double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
+                                   unsigned int dim) = 0;
+
 
   public:
     void associate_faces(std::shared_ptr<Faces> faces);
     void setup();
-    virtual void compute_Fconv() = 0;
-    virtual void compute_Fvisc() = 0;
+    void compute_Fconv();
+    void compute_Fvisc();
     virtual void transform_flux() = 0;
 
 };

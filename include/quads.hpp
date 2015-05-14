@@ -2,30 +2,35 @@
 #define quads_hpp
 
 #include <string>
+#include <vector>
 
 #include "elements.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
 #include "solver.hpp"
 
-//class FRSolver;
 class Quads: public Elements 
 {
-  //friend class FRSolver;
   private:
     void set_locs();
-    void set_shape();
     void set_transforms();
     void set_normals();
-    void setup_FR();
-    void setup_aux();
-    void set_coords();
+
+    double calc_shape(unsigned int shape_order, unsigned int idx,
+                      std::vector<double> &loc);
+
+    double calc_d_shape(unsigned int shape_order, unsigned int idx,
+                       std::vector<double> &loc, unsigned int dim);
+
+    double calc_nodal_basis(unsigned int spt, std::vector<double> &loc);
+    double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
+                                   unsigned int dim);
+    double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
+                                   unsigned int dim);
 
   public:
     Quads(GeoStruct *geo, const InputStruct *input, 
           int order = -1);
-    void compute_Fconv();
-    void compute_Fvisc();
     void transform_flux();
 
 };

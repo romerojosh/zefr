@@ -36,8 +36,8 @@ InputStruct read_input_file(std::string inputfile)
 
   read_param(f, "ic_type", input.ic_type);
 
-  read_param(f, "AdvDiff_Ax", input.AdvDiff_Ax);
-  read_param(f, "AdvDiff_Ay", input.AdvDiff_Ay);
+  read_param(f, "AdvDiff_Ax", input.AdvDiff_A[0]);
+  read_param(f, "AdvDiff_Ay", input.AdvDiff_A[1]);
   read_param(f, "AdvDiff_D", input.AdvDiff_D);
 
   f.close();

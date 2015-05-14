@@ -71,6 +71,10 @@ void Quads::set_locs()
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
+  loc_DFR_1D = loc_spts_1D;
+  loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
+  loc_DFR_1D.insert(loc_DFR_1D.end(), 1.0);
+
   /* Setup solution point locations */
   unsigned int spt = 0;
   for (unsigned int i = 0; i < nSpts1D; i++)
@@ -160,74 +164,6 @@ void Quads::set_locs()
 
 }
 
-void Quads::set_shape()
-{
-  /* Allocate memory for shape function and related derivatives */
-  shape_spts.assign({nSpts, nNodes},1);
-  shape_fpts.assign({nFpts, nNodes},1);
-  shape_ppts.assign({nPpts, nNodes},1);
-  shape_qpts.assign({nQpts, nNodes},1);
-  dshape_spts.assign({nDims, nSpts, nNodes},1);
-  dshape_fpts.assign({nDims, nFpts, nNodes},1);
-  dshape_ppts.assign({nDims, nPpts, nNodes},1);
-  dshape_qpts.assign({nDims, nQpts, nNodes},1);
-
-  /* Shape functions and derivatives at solution points */
-  for (unsigned int spt = 0; spt < nSpts; spt++)
-  {
-    for (unsigned int node = 0; node < nNodes; node++)
-    {
-      shape_spts(spt,node) = calc_shape_quad(shape_order, node, 
-        loc_spts(spt,0),loc_spts(spt,1));
-      dshape_spts(0,spt,node) = calc_dshape_quad(shape_order, node, 
-        loc_spts(spt,0), loc_spts(spt,1), 0);
-      dshape_spts(1,spt,node) = calc_dshape_quad(shape_order, node, 
-        loc_spts(spt,0), loc_spts(spt,1), 1);
-    }
-  }
-
-  /* Shape functions and derivatives at flux points */
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-  {
-    for (unsigned int node = 0; node < nNodes; node++)
-    {
-      shape_fpts(fpt,node) = calc_shape_quad(shape_order, node, 
-        loc_fpts(fpt,0),loc_fpts(fpt,1));
-      dshape_fpts(0,fpt,node) = calc_dshape_quad(shape_order, node, 
-        loc_fpts(fpt,0), loc_fpts(fpt,1), 0);
-      dshape_fpts(1,fpt,node) = calc_dshape_quad(shape_order, node, 
-        loc_fpts(fpt,0), loc_fpts(fpt,1), 1);
-    }
-  }
-
-    /* Shape function and derivatives at plot points */
-  for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-  {
-    for (unsigned int node = 0; node < nNodes; node++)
-    {
-      shape_ppts(ppt,node) = calc_shape_quad(shape_order, node, 
-        loc_ppts(ppt,0),loc_ppts(ppt,1));
-      dshape_ppts(0,ppt,node) = calc_dshape_quad(shape_order, node, 
-        loc_ppts(ppt,0), loc_ppts(ppt,1), 0);
-      dshape_ppts(1,ppt,node) = calc_dshape_quad(shape_order, node, 
-        loc_ppts(ppt,0), loc_ppts(ppt,1), 1);
-    }
-  }
-  
-  /* Shape function and derivatives at quadrature points */
-  for (unsigned int qpt = 0; qpt < nQpts; qpt++)
-  {
-    for (unsigned int node = 0; node < nNodes; node++)
-    {
-      shape_qpts(qpt,node) = calc_shape_quad(shape_order, node, 
-        loc_qpts(qpt,0),loc_qpts(qpt,1));
-      dshape_qpts(0,qpt,node) = calc_dshape_quad(shape_order, node, 
-        loc_qpts(qpt,0), loc_qpts(qpt,1), 0);
-      dshape_qpts(1,qpt,node) = calc_dshape_quad(shape_order, node, 
-        loc_qpts(qpt,0), loc_qpts(qpt,1), 1);
-    }
-  }
-}
 
 void Quads::set_transforms()
 {
@@ -404,254 +340,63 @@ void Quads::set_normals()
 
 }
 
-void Quads::setup_FR()
+double Quads::calc_nodal_basis(unsigned int spt, std::vector<double> &loc)
 {
-  /* Allocate memory for FR operators */
-  //oppE.assign({nFpts, nSpts});
-  //oppD.assign({nDims, nSpts, nSpts});
-  //oppD_fpts.assign({nDims, nSpts, nFpts});
-  
-  oppE.assign({nSpts, nFpts});
-  oppD.assign({nDims, nSpts, nSpts});
-  oppD_fpts.assign({nDims, nFpts, nSpts});
+  /* Get indices for Lagrange polynomial evaluation */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
 
-  /* Setup spt to fpt extrapolation operator (oppE) */
-  for (unsigned int spt = 0; spt < nSpts; spt++)
+  double val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
+
+  return val;
+}
+
+double Quads::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, unsigned int dim)
+{
+  /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
+   * boundary points for DFR) */
+  unsigned int i = idx_spts(spt,0) + 1;
+  unsigned int j = idx_spts(spt,1) + 1;
+
+  double val = 0.0;
+
+  if (dim == 0)
   {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-    {
-      /* Get indices for Lagrange polynomial evaluation */
-      unsigned int i = idx_spts(spt,0);
-      unsigned int j = idx_spts(spt,1);
-
-      oppE(spt,fpt) = Lagrange(loc_spts_1D, i, loc_fpts(fpt,0)) * 
-                      Lagrange(loc_spts_1D, j, loc_fpts(fpt,1));
-    }
+      val = Lagrange_d1(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]);
+  }
+  else
+  {
+      val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange_d1(loc_DFR_1D, j, loc[1]);
   }
 
-  /* Setup differentiation operator (oppD) for solution points */
-  /* Note: Can set up for standard FR eventually. Trying to keep things simple.. */
-  auto loc_DFR_1D = loc_spts_1D;
-  loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
-  loc_DFR_1D.insert(loc_DFR_1D.end(), 1.0);
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int jspt = 0; jspt < nSpts; jspt++)
-    {
-      for (unsigned int ispt = 0; ispt < nSpts; ispt++)
-      {
-        /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
-         * boundary points for DFR) */
-        unsigned int i = idx_spts(jspt,0) + 1;
-        unsigned int j = idx_spts(jspt,1) + 1;
-
-        if (dim == 0)
-        {
-            oppD(dim,jspt,ispt) = Lagrange_d1(loc_DFR_1D, i, loc_spts(ispt,0)) *
-                                  Lagrange(loc_DFR_1D, j, loc_spts(ispt,1));
-        }
-        else
-        {
-            oppD(dim,jspt,ispt) = Lagrange(loc_DFR_1D, i, loc_spts(ispt,0)) *
-                                  Lagrange_d1(loc_DFR_1D, j, loc_spts(ispt,1));
-        }
-      }
-    }
-  }
-
-  /* Setup differentiation operator (oppD_fpts) for flux points (DFR Specific)*/
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-    {
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
-         * boundary points for DFR) */
-        unsigned int i = idx_fpts(fpt,0) + 1;
-        unsigned int j = idx_fpts(fpt,1) + 1;
-
-        if (dim == 0)
-        {
-            oppD_fpts(dim,fpt,spt) = Lagrange_d1(loc_DFR_1D, i, loc_spts(spt,0)) *
-                              Lagrange(loc_DFR_1D, j, loc_spts(spt,1));
-        }
-        else
-        {
-            oppD_fpts(dim,fpt,spt) = Lagrange(loc_DFR_1D, i, loc_spts(spt,0)) *
-                              Lagrange_d1(loc_DFR_1D, j, loc_spts(spt,1));
-        }
-      }
-    }
-  }
+  return val;
 
 }
 
-void Quads::setup_aux()
+double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, unsigned int dim)
 {
-  /* Allocate memory for plot point and quadrature point interpolation operator */
-  //oppE_ppts.assign({nPpts, nSpts});
-  //oppE_qpts.assign({nQpts, nSpts});
-  oppE_ppts.assign({nSpts, nPpts});
-  oppE_qpts.assign({nSpts, nQpts});
+  /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
+   * boundary points for DFR) */
+  unsigned int i = idx_fpts(fpt,0) + 1;
+  unsigned int j = idx_fpts(fpt,1) + 1;
 
-  /* Setup spt to ppt extrapolation operator (oppE_ppts) */
-  for (unsigned int spt = 0; spt < nSpts; spt++)
+  double val = 0.0;
+
+  if (dim == 0)
   {
-    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-    {
-      /* Get indices for Lagrange polynomial evaluation */
-      unsigned int i = idx_spts(spt,0);
-      unsigned int j = idx_spts(spt,1);
-
-      oppE_ppts(spt,ppt) = Lagrange(loc_spts_1D, i, loc_ppts(ppt,0)) * 
-                      Lagrange(loc_spts_1D, j, loc_ppts(ppt,1));
-    }
+      val = Lagrange_d1(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]);
+  }
+  else
+  {
+      val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange_d1(loc_DFR_1D, j, loc[1]);
   }
 
-  /* Setup spt to qpt extrapolation operator (oppE_qpts) */
-  for (unsigned int spt = 0; spt < nSpts; spt++)
-  {
-    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
-    {
-      /* Get indices for Lagrange polynomial evaluation */
-      unsigned int i = idx_spts(spt,0);
-      unsigned int j = idx_spts(spt,1);
-
-      oppE_qpts(spt,qpt) = Lagrange(loc_spts_1D, i, loc_qpts(qpt,0)) * 
-                      Lagrange(loc_spts_1D, j, loc_qpts(qpt,1));
-    }
-  }
-
+  return val;
 
 }
 
-void Quads::set_coords()
-{
-  /* Allocate memory for physical coordinates */
-  //geo->coord_spts.assign({nDims, nSpts, nEles});
-  //geo->coord_fpts.assign({nDims, nFpts, nEles});
-  //geo->coord_ppts.assign({nDims, nPpts, nEles});
-  //geo->coord_qpts.assign({nDims, nQpts, nEles});
-  geo->coord_spts.assign({nDims, nEles, nSpts});
-  geo->coord_fpts.assign({nDims, nEles, nFpts});
-  geo->coord_ppts.assign({nDims, nEles, nPpts});
-  geo->coord_qpts.assign({nDims, nEles, nQpts});
 
-  /* Setup physical coordinates at solution points */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int ele = 0; ele < nEles; ele++)
-    {
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_spts(dim, ele, spt) += geo->coord_nodes(gnd,dim) * shape_spts(spt, node);
-        }
-      }
-    }
-  }
-  
-  /* Setup physical coordinates at flux points */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int ele = 0; ele < nEles; ele++)
-    {
-      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_fpts(dim, ele, fpt) += geo->coord_nodes(gnd,dim) * shape_fpts(fpt, node);
-        }
-      }
-    }
-  }
 
-  /* Setup physical coordinates at plot points */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int ele = 0; ele < nEles; ele++)
-    {
-      for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_ppts(dim, ele, ppt) += geo->coord_nodes(gnd,dim) * shape_ppts(ppt, node);
-        }
-      }
-    }
-  }
-
-  /* Setup physical coordinates at quadrature points */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int ele = 0; ele < nEles; ele++)
-    {
-      for (unsigned int qpt = 0; qpt < nQpts; qpt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_qpts(dim, ele, qpt) += geo->coord_nodes(gnd,dim) * shape_qpts(qpt, node);
-        }
-      }
-    }
-  }
-
-}
-
-void Quads::compute_Fconv()
-{
-  if (input->equation == "AdvDiff")
-  {
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          F_spts(0, n, ele, spt) = input->AdvDiff_Ax * U_spts(n, ele, spt);
-          F_spts(1, n, ele, spt) = input->AdvDiff_Ay * U_spts(n, ele, spt);
-        }
-      }
-    }
-  }
-  else if (input->equation == "EulerNS")
-  {
-    ThrowException("Euler flux not implemented yet!");
-  }
-}
-
-void Quads::compute_Fvisc()
-{
-  if (input->equation == "AdvDiff")
-  {
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          /* Can just add viscous flux to existing convective flux */
-          F_spts(0, n, ele, spt) += -input->AdvDiff_D * dU_spts(0, n, ele, spt);
-          F_spts(1, n, ele, spt) += -input->AdvDiff_D * dU_spts(1, n, ele, spt);
-        }
-      }
-    }
-  }
-  else if (input->equation == "EulerNS")
-  {
-    ThrowException("NS flux not implemented yet!");
-  }
-
-}
 void Quads::transform_flux()
 {
 #pragma omp parallel for collapse(3)
@@ -670,7 +415,148 @@ void Quads::transform_flux()
       }
     }
   }
+}
 
+double Quads::calc_shape(unsigned int shape_order, unsigned int idx, 
+                         std::vector<double> &loc)
+{
+  double val = 0.0;
+  double xi = loc[0]; 
+  double eta = loc[1];
+
+  /* Bilinear quadrilateral/4-node Serendipity */
+  if (shape_order == 1)
+  {
+    unsigned int i = 0;
+    unsigned int j = 0;
+
+    switch(idx)
+    {
+      case 0:
+        i = 0; j = 0; break;
+      case 1:
+        i = 1; j = 0; break;
+      case 2:
+        i = 1; j = 1; break;
+      case 3:
+        i = 0; j = 1; break;
+    }
+
+    val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta);
+  }
+
+  /* 8-node Serendipity Element */
+  if (shape_order == 2)
+  {
+    switch(idx)
+    {
+      case 0:
+        val = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi); break;
+      case 1:
+        val = 0.5*(1.-xi)*(1.+xi)*(1.-eta); break;
+      case 2:
+        val = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi); break;
+      case 3:
+        val = 0.5*(1.+xi)*(1.+eta)*(1.-eta); break;
+      case 4:
+        val = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi); break;
+      case 5:
+        val = 0.5*(1.-xi)*(1.+xi)*(1.+eta); break;
+      case 6:
+        val = -0.25*(1.-xi)*(1.+eta)*(1.-eta+xi); break;
+      case 7:
+        val = 0.5*(1.-xi)*(1.+eta)*(1.-eta); break;
+    }
+  }
+
+  return val;
+}
+
+double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
+                          std::vector<double> &loc, unsigned int dim)
+{
+  double val = 0.0;
+  double xi = loc[0];
+  double eta = loc[1];
+
+  /* Bilinear quadrilateral/4-node Serendipity */
+  if (shape_order == 1)
+  {
+    unsigned int i = 0;
+    unsigned int j = 0;
+
+    switch(idx)
+    {
+      case 0:
+        i = 0; j = 0; break;
+      case 1:
+        i = 1; j = 0; break;
+      case 2:
+        i = 1; j = 1; break;
+      case 3:
+        i = 0; j = 1; break;
+    }
+
+    if (dim == 0)
+      val = Lagrange_d1({-1,1}, i, xi) * Lagrange({-1,1}, j, eta);
+    else
+      val = Lagrange({-1,1}, i, xi) * Lagrange_d1({-1,1}, j, eta);
+  }
+
+  /* 8-node Serendipity Element */
+  else if (shape_order == 2)
+  {
+    if (dim == 0)
+    {
+      switch(idx)
+      {
+        case 0:
+          val = -0.25*(-1.+eta)*(2.*xi+eta); break;
+        case 1:
+          val = xi*(-1.+eta); break;
+        case 2:
+          val = 0.25*(-1.+eta)*(eta - 2.*xi); break;
+        case 3:
+          val = -0.5*(1+eta)*(-1.+eta); break;
+        case 4:
+          val = 0.25*(1.+eta)*(2.*xi+eta); break;
+        case 5:
+          val = -xi*(1.+eta); break;
+        case 6:
+          val = -0.25*(1.+eta)*(eta-2.*xi); break;
+        case 7:
+          val = 0.5*(1+eta)*(-1.+eta); break;
+      }
+    }
+
+    else if (dim == 1)
+    {
+      switch(idx)
+      {
+        case 0:
+          val = -0.25*(-1.+xi)*(2.*eta+xi); break;
+        case 1:
+          val = 0.5*(1.+xi)*(-1.+xi); break;
+        case 2:
+          val = 0.25*(1.+xi)*(2.*eta - xi); break;
+        case 3:
+          val = -eta*(1.+xi); break;
+        case 4:
+          val = 0.25*(1.+xi)*(2.*eta+xi); break;
+        case 5:
+          val = -0.5*(1.+xi)*(-1.+xi); break;
+        case 6:
+          val = -0.25*(-1.+xi)*(2.*eta-xi); break;
+        case 7:
+          val = eta*(-1.+xi); break;
+      }
+    }
+
+  }
+
+  return val;
+
+}
   /*
   std::cout << "tflux" << std::endl;
   for (unsigned int i = 0; i < nSpts; i++)
@@ -682,4 +568,4 @@ void Quads::transform_flux()
     std::cout << std::endl;
   }
   */
-}
+

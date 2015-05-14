@@ -93,17 +93,18 @@ void Faces::compute_Fconv()
 {  
   if (input->equation == "AdvDiff")
   {
-#pragma omp parallel for collapse(2)
-    for (unsigned int n = 0; n < nVars; n++)
+#pragma omp parallel for collapse(3)
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      for (unsigned int n = 0; n < nVars; n++)
       {
-        Fconv(0, n, fpt, 0) = input->AdvDiff_Ax * U(n, fpt, 0);
-        Fconv(1, n, fpt, 0) = input->AdvDiff_Ay * U(n, fpt, 0);
+        for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        {
+          Fconv(dim, n, fpt, 0) = input->AdvDiff_A[dim] * U(n, fpt, dim);
 
-        Fconv(0, n, fpt, 1) = input->AdvDiff_Ax * U(n, fpt, 1);
-        Fconv(1, n, fpt, 1) = input->AdvDiff_Ay * U(n, fpt, 1);
+          Fconv(dim, n, fpt, 1) = input->AdvDiff_A[dim] * U(n, fpt, dim);
 
+        }
       }
     }
   }
@@ -119,17 +120,18 @@ void Faces::compute_Fvisc()
 {  
   if (input->equation == "AdvDiff")
   {
-#pragma omp parallel for collapse(2)
-    for (unsigned int n = 0; n < nVars; n++)
+#pragma omp parallel for collapse(3)
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      for (unsigned int n = 0; n < nVars; n++)
       {
-        Fvisc(0, n, fpt, 0) = -input->AdvDiff_D * dU(0, n, fpt, 0);
-        Fvisc(1, n, fpt, 0) = -input->AdvDiff_D * dU(1, n, fpt, 0);
+        for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        {
+          Fvisc(dim, n, fpt, 0) = -input->AdvDiff_D * dU(dim, n, fpt, 0);
 
-        Fvisc(0, n, fpt, 1) = -input->AdvDiff_D * dU(0, n, fpt, 1);
-        Fvisc(1, n, fpt, 1) = -input->AdvDiff_D * dU(1, n, fpt, 1);
+          Fvisc(dim, n, fpt, 1) = -input->AdvDiff_D * dU(dim, n, fpt, 1);
 
+        }
       }
     }
   }
@@ -242,8 +244,9 @@ void Faces::rusanov_flux()
 
     /* Get numerical wavespeed */
     // TODO: Add generic wavespeed calculation */
-    double waveSp = input->AdvDiff_Ax * norm(0,fpt,0);
-    waveSp += input->AdvDiff_Ay * norm(1,fpt,0);
+    double waveSp = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      waveSp += input->AdvDiff_A[dim] * norm(dim, fpt, 0);
 
     /* Compute common normal flux */
     for (unsigned int n = 0; n < nVars; n++)
