@@ -49,7 +49,7 @@ void Faces::apply_bcs()
 
       for (unsigned int n = 0; n < nVars; n++)
       {
-        U(1, n, fpt) = U(0, per_fpt, n);
+        U(1, n, fpt) = U(0, n, per_fpt);
       }
     }
     else if (bnd_id == 2) /* Farfield */
@@ -75,7 +75,7 @@ void Faces::apply_bcs_dU()
         for (unsigned int n = 0; n < nVars; n++)
         {
             unsigned int per_fpt = geo->per_fpt_pairs[fpt];
-            dU(1, n, dim, fpt) = dU(0, per_fpt, n, dim);
+            dU(1, n, dim, fpt) = dU(0, n, dim, per_fpt);
         }
 
       }

@@ -256,7 +256,7 @@ void FRSolver::U_to_faces()
         }
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-        faces->U(slot, gfpt, n) = eles->U_fpts(fpt, ele, n);
+        faces->U(slot, n, gfpt) = eles->U_fpts(fpt, ele, n);
         //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
       }
     }
@@ -278,7 +278,7 @@ void FRSolver::U_from_faces()
           continue;
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-        eles->Ucomm(fpt, ele, n) = faces->Ucomm(slot, gfpt, n);
+        eles->Ucomm(fpt, ele, n) = faces->Ucomm(slot, n, gfpt);
       }
     }
   }
@@ -452,7 +452,7 @@ void FRSolver::dU_to_faces()
             continue;
           int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-          faces->dU(slot, gfpt, n, dim) = eles->dU_fpts(fpt, ele, n, dim);
+          faces->dU(slot, n, dim, gfpt) = eles->dU_fpts(fpt, ele, n, dim);
           //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
         }
       }
@@ -475,7 +475,7 @@ void FRSolver::F_from_faces()
           continue;
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-        eles->Fcomm(fpt, ele, n) = faces->Fcomm(slot, gfpt, n);
+        eles->Fcomm(fpt, ele, n) = faces->Fcomm(slot, n, gfpt);
       }
     }
   }
