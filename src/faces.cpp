@@ -263,6 +263,7 @@ void Faces::rusanov_flux()
 
 void Faces::transform_flux()
 {
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < nVars; n++)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)

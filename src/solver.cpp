@@ -799,6 +799,7 @@ void FRSolver::compute_l2_error()
 
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
+#pragma omp for collapse (2)
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       for (unsigned int qpt = 0; qpt < eles->nQpts; qpt++)
