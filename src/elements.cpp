@@ -29,14 +29,14 @@ void Elements::setup()
 void Elements::set_shape()
 {
   /* Allocate memory for shape function and related derivatives */
-  shape_spts.assign({nSpts, nNodes},1);
-  shape_fpts.assign({nFpts, nNodes},1);
-  shape_ppts.assign({nPpts, nNodes},1);
-  shape_qpts.assign({nQpts, nNodes},1);
-  dshape_spts.assign({nDims, nSpts, nNodes},1);
-  dshape_fpts.assign({nDims, nFpts, nNodes},1);
-  dshape_ppts.assign({nDims, nPpts, nNodes},1);
-  dshape_qpts.assign({nDims, nQpts, nNodes},1);
+  shape_spts.assign({nNodes, nSpts},1);
+  shape_fpts.assign({nNodes, nFpts},1);
+  shape_ppts.assign({nNodes, nPpts},1);
+  shape_qpts.assign({nNodes, nQpts},1);
+  dshape_spts.assign({nNodes, nSpts, nDims},1);
+  dshape_fpts.assign({nNodes, nFpts, nDims},1);
+  dshape_ppts.assign({nNodes, nPpts, nDims},1);
+  dshape_qpts.assign({nNodes, nQpts, nDims},1);
 
 
   std::vector<double> loc(nDims,0.0);
@@ -49,10 +49,10 @@ void Elements::set_shape()
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_spts(spt,node) = calc_shape(shape_order, node, loc);
+      shape_spts(node,spt) = calc_shape(shape_order, node, loc);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_spts(dim,spt,node) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_spts(node,spt,dim) = calc_d_shape(shape_order, node, loc, dim);
     }
   }
 
@@ -64,10 +64,10 @@ void Elements::set_shape()
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_fpts(fpt,node) = calc_shape(shape_order, node, loc);
+      shape_fpts(node, fpt) = calc_shape(shape_order, node, loc);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_fpts(dim,fpt,node) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_fpts(node, fpt, dim) = calc_d_shape(shape_order, node, loc, dim);
     }
   }
 
@@ -79,10 +79,10 @@ void Elements::set_shape()
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_ppts(ppt,node) = calc_shape(shape_order, node, loc);
+      shape_ppts(node,ppt) = calc_shape(shape_order, node, loc);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_ppts(dim,ppt,node) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_ppts(node,ppt,dim) = calc_d_shape(shape_order, node, loc, dim);
     }
   }
   
@@ -94,10 +94,10 @@ void Elements::set_shape()
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_qpts(qpt,node) = calc_shape(shape_order, node, loc);
+      shape_qpts(node,qpt) = calc_shape(shape_order, node, loc);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_qpts(dim,qpt,node) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_qpts(node,qpt,dim) = calc_d_shape(shape_order, node, loc, dim);
     }
   }
 }
@@ -105,10 +105,10 @@ void Elements::set_shape()
 void Elements::set_coords()
 {
   /* Allocate memory for physical coordinates */
-  geo->coord_spts.assign({nDims, nEles, nSpts});
-  geo->coord_fpts.assign({nDims, nEles, nFpts});
-  geo->coord_ppts.assign({nDims, nEles, nPpts});
-  geo->coord_qpts.assign({nDims, nEles, nQpts});
+  geo->coord_spts.assign({nSpts, nEles, nDims});
+  geo->coord_fpts.assign({nFpts, nEles, nDims});
+  geo->coord_ppts.assign({nPpts, nEles, nDims});
+  geo->coord_qpts.assign({nQpts, nEles, nDims});
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
@@ -121,7 +121,7 @@ void Elements::set_coords()
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_spts(dim, ele, spt) += geo->coord_nodes(gnd,dim) * shape_spts(spt, node);
+          geo->coord_spts(spt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_spts(node, spt);
         }
       }
   
@@ -131,7 +131,7 @@ void Elements::set_coords()
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_fpts(dim, ele, fpt) += geo->coord_nodes(gnd,dim) * shape_fpts(fpt, node);
+          geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
         }
       }
 
@@ -141,7 +141,7 @@ void Elements::set_coords()
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_ppts(dim, ele, ppt) += geo->coord_nodes(gnd,dim) * shape_ppts(ppt, node);
+          geo->coord_ppts(ppt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_ppts(node, ppt);
         }
       }
 
@@ -151,7 +151,7 @@ void Elements::set_coords()
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->nd2gnd(ele, node);
-          geo->coord_qpts(dim, ele, qpt) += geo->coord_nodes(gnd,dim) * shape_qpts(qpt, node);
+          geo->coord_qpts(qpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_qpts(node, qpt);
         }
       }
 
@@ -162,9 +162,9 @@ void Elements::set_coords()
 void Elements::setup_FR()
 {
   /* Allocate memory for FR operators */
-  oppE.assign({nSpts, nFpts});
-  oppD.assign({nDims, nSpts, nSpts});
-  oppD_fpts.assign({nDims, nFpts, nSpts});
+  oppE.assign({nFpts, nSpts});
+  oppD.assign({nSpts, nSpts, nDims});
+  oppD_fpts.assign({nSpts, nFpts, nDims});
 
   std::vector<double> loc(nDims, 0.0);
   /* Setup spt to fpt extrapolation operator (oppE) */
@@ -175,7 +175,7 @@ void Elements::setup_FR()
       loc[0] = loc_fpts(fpt,0);
       loc[1] = loc_fpts(fpt,1);
 
-      oppE(spt,fpt) = calc_nodal_basis(spt, loc);
+      oppE(fpt,spt) = calc_nodal_basis(spt, loc);
     }
   }
 
@@ -190,7 +190,7 @@ void Elements::setup_FR()
         loc[0] = loc_spts(ispt,0);
         loc[1] = loc_spts(ispt,1);
 
-        oppD(dim,jspt,ispt) = calc_d_nodal_basis_spts(jspt, loc, dim);
+        oppD(ispt,jspt,dim) = calc_d_nodal_basis_spts(jspt, loc, dim);
       }
     }
   }
@@ -204,7 +204,7 @@ void Elements::setup_FR()
       {
         loc[0] = loc_spts(spt,0);
         loc[1] = loc_spts(spt,1);
-        oppD_fpts(dim,fpt,spt) = calc_d_nodal_basis_fpts(fpt, loc, dim);
+        oppD_fpts(spt,fpt,dim) = calc_d_nodal_basis_fpts(fpt, loc, dim);
       }
     }
   }
@@ -214,8 +214,8 @@ void Elements::setup_FR()
 void Elements::setup_aux()
 {
   /* Allocate memory for plot point and quadrature point interpolation operator */
-  oppE_ppts.assign({nSpts, nPpts});
-  oppE_qpts.assign({nSpts, nQpts});
+  oppE_ppts.assign({nPpts, nSpts});
+  oppE_qpts.assign({nQpts, nSpts});
 
   std::vector<double> loc(nDims, 0.0);
 
@@ -227,7 +227,7 @@ void Elements::setup_aux()
       loc[0] = loc_ppts(ppt,0);
       loc[1] = loc_ppts(ppt,1);
 
-      oppE_ppts(spt,ppt) = calc_nodal_basis(spt, loc);
+      oppE_ppts(ppt, spt) = calc_nodal_basis(spt, loc);
     }
   }
 
@@ -239,7 +239,7 @@ void Elements::setup_aux()
       loc[0] = loc_qpts(qpt,0);
       loc[1] = loc_qpts(qpt,1);
 
-      oppE_qpts(spt,qpt) = calc_nodal_basis(spt, loc);
+      oppE_qpts(qpt,spt) = calc_nodal_basis(spt, loc);
     }
   }
 
@@ -258,7 +258,7 @@ void Elements::compute_Fconv()
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
-            F_spts(dim, n, ele, spt) = input->AdvDiff_A[dim] * U_spts(n, ele, spt);
+            F_spts(spt, ele, n, dim) = input->AdvDiff_A[dim] * U_spts(spt, ele, n);
           }
         }
       }
@@ -286,7 +286,7 @@ void Elements::compute_Fvisc()
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
             /* Can just add viscous flux to existing convective flux */
-            F_spts(dim, n, ele, spt) += -input->AdvDiff_D * dU_spts(dim, n, ele, spt);
+            F_spts(spt, ele, n, dim) += -input->AdvDiff_D * dU_spts(spt, ele, n, dim);
           }
         }
       }

@@ -10,7 +10,7 @@ spt_type Legendre
 
 # Timestepping:
 n_steps 1000
-dt_scheme RK44      (Euler, RK44, RK54)
+dt_scheme Euler      (Euler, RK44, RK54)
 dt	  0.000002
 
 # Reporting:
