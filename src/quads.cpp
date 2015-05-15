@@ -317,16 +317,16 @@ void Quads::set_normals()
 
       unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
-      faces->norm(slot,gfpt,0) = faces->jaco(slot,1,1,gfpt) * tnorm(fpt,0) - 
+      faces->norm(slot, 0, gfpt) = faces->jaco(slot,1,1,gfpt) * tnorm(fpt,0) - 
                                  faces->jaco(slot,1,0,gfpt) * tnorm(fpt,1);
-      faces->norm(slot,gfpt,1) = -faces->jaco(slot,0,1,gfpt) * tnorm(fpt,0) + 
+      faces->norm(slot,1, gfpt) = -faces->jaco(slot,0,1,gfpt) * tnorm(fpt,0) + 
                                  faces->jaco(slot,0,0,gfpt) * tnorm(fpt,1);
 
       faces->dA[gfpt] = std::sqrt(faces->norm(slot,gfpt,0)*faces->norm(slot,gfpt,0) + 
                         faces->norm(slot,gfpt,1)*faces->norm(slot,gfpt,1));
 
-      faces->norm(slot,gfpt,0) /= faces->dA[gfpt];
-      faces->norm(slot,gfpt,1) /= faces->dA[gfpt];
+      faces->norm(slot, 0, gfpt) /= faces->dA[gfpt];
+      faces->norm(slot, 1, gfpt) /= faces->dA[gfpt];
 
       unsigned int face_idx = fpt/nSpts1D;
 
