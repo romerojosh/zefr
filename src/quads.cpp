@@ -185,7 +185,7 @@ void Quads::set_transforms()
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(ele, node);
+            unsigned int gnd = geo->nd2gnd(node,ele);
             jaco_spts(dimX, dimXi, spt, ele) += geo->coord_nodes(gnd,dimX) * dshape_spts(node, spt, dimXi); 
           }
         }
@@ -212,14 +212,14 @@ void Quads::set_transforms()
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(ele, node);
-            int gfpt = geo->fpt2gfpt(ele,fpt);
+            unsigned int gnd = geo->nd2gnd(node,ele);
+            int gfpt = geo->fpt2gfpt(fpt,ele);
 
             /* Skip fpts on ghost edges */
             if (gfpt == -1)
               continue;
 
-            unsigned int slot = geo->fpt2gfpt_slot(ele,fpt);
+            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
             faces->jaco(slot, dimX, dimXi, gfpt) += geo->coord_nodes(gnd,dimX) * dshape_fpts(node, fpt, dimXi);
           }
@@ -239,7 +239,7 @@ void Quads::set_transforms()
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(ele, node);
+            unsigned int gnd = geo->nd2gnd(node,ele);
             jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(gnd,dimX) * dshape_ppts(node, ppt, dimXi); 
           }
         }
@@ -257,7 +257,7 @@ void Quads::set_transforms()
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(ele, node);
+            unsigned int gnd = geo->nd2gnd(node, ele);
             jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(gnd,dimX) * dshape_qpts(node,qpt,dimXi); 
           }
         }
@@ -309,13 +309,13 @@ void Quads::set_normals()
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      int gfpt = geo->fpt2gfpt(ele,fpt);
+      int gfpt = geo->fpt2gfpt(fpt,ele);
 
       /* Check if flux point is on ghost edge */
       if (gfpt == -1) 
         continue;
 
-      unsigned int slot = geo->fpt2gfpt_slot(ele,fpt);
+      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
       faces->norm(slot,gfpt,0) = faces->jaco(slot,1,1,gfpt) * tnorm(fpt,0) - 
                                  faces->jaco(slot,1,0,gfpt) * tnorm(fpt,1);

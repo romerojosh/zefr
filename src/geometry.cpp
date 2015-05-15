@@ -168,7 +168,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
   f.seekg(pos);
 
   /* Allocate memory for element connectivity */
-  geo.nd2gnd.assign({geo.nEles, geo.nNodesPerEle});
+  geo.nd2gnd.assign({geo.nNodesPerEle, geo.nEles});
 
   /* Read element connectivity (skip boundaries in this loop) */
   unsigned int ele = 0;
@@ -188,12 +188,12 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           f >> vint >> vint;
           break;
         case 2: /* 3-node Triangle */
-          f >> geo.nd2gnd(ele,0) >> geo.nd2gnd(ele,1) >> geo.nd2gnd(ele,2);
-          geo.nd2gnd(ele,3) = geo.nd2gnd(ele,2); 
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
+          geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele); 
           ele++; break;
 
         case 3: /* 4-node Quadrilateral */
-          f >> geo.nd2gnd(ele,0) >> geo.nd2gnd(ele,1) >> geo.nd2gnd(ele,2) >> geo.nd2gnd(ele,3);
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
           ele++; break;
         default:
           ThrowException("Unrecognized element type detected!"); break;
@@ -207,7 +207,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
-      geo.nd2gnd(ele,n)--;
+      geo.nd2gnd(n,ele)--;
 
   /* Rewind file */
   f.seekg(pos);
@@ -350,8 +350,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     {
       for (unsigned int n = 0; n < 4; n++)
       {
-        face[0] = geo.nd2gnd(ele,n);
-        face[1] = geo.nd2gnd(ele,(n+1)%4);
+        face[0] = geo.nd2gnd(n,ele);
+        face[1] = geo.nd2gnd((n+1)%4,ele);
         std::sort(face.begin(), face.end());
 
         /* Check if face is collapsed */
@@ -378,8 +378,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       for (unsigned int n = 0; n < 4; n++)
       {
         /* Get face nodes and sort for consistency */
-        face[0] = geo.nd2gnd(ele,n);
-        face[1] = geo.nd2gnd(ele,(n+1)%4);
+        face[0] = geo.nd2gnd(n,ele);
+        face[1] = geo.nd2gnd((n+1)%4,ele);
         std::sort(face.begin(), face.end());
 
         /* Check if face is collapsed */
@@ -453,15 +453,15 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     /* Populate data structures */
     geo.nGfpts = gfpt_bnd;
-    geo.fpt2gfpt.assign({geo.nEles, 4*nFptsPerFace});
-    geo.fpt2gfpt_slot.assign({geo.nEles, 4*nFptsPerFace});
+    geo.fpt2gfpt.assign({4*nFptsPerFace, geo.nEles});
+    geo.fpt2gfpt_slot.assign({4*nFptsPerFace, geo.nEles});
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
     {
       for (unsigned int fpt = 0; fpt < 4*nFptsPerFace; fpt++)
       {
-        geo.fpt2gfpt(ele,fpt) = ele2fpts[ele][fpt];
-        geo.fpt2gfpt_slot(ele,fpt) = ele2fpts_slot[ele][fpt];
+        geo.fpt2gfpt(fpt,ele) = ele2fpts[ele][fpt];
+        geo.fpt2gfpt_slot(fpt,ele) = ele2fpts_slot[ele][fpt];
       }
     }
   }

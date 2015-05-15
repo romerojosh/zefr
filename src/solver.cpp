@@ -246,7 +246,7 @@ void FRSolver::U_to_faces()
     {
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
-        int gfpt = geo.fpt2gfpt(ele,fpt);
+        int gfpt = geo.fpt2gfpt(fpt,ele);
         /* Check if flux point is on ghost edge */
         if (gfpt == -1)
         {
@@ -254,7 +254,7 @@ void FRSolver::U_to_faces()
             eles->Ucomm(fpt, ele, n) = eles->U_fpts(fpt, ele, n);
           continue;
         }
-        int slot = geo.fpt2gfpt_slot(ele,fpt);
+        int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         faces->U(slot, gfpt, n) = eles->U_fpts(fpt, ele, n);
         //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
@@ -272,11 +272,11 @@ void FRSolver::U_from_faces()
     {
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
-        int gfpt = geo.fpt2gfpt(ele,fpt);
+        int gfpt = geo.fpt2gfpt(fpt,ele);
         /* Check if flux point is on ghost edge */
         if (gfpt == -1)
           continue;
-        int slot = geo.fpt2gfpt_slot(ele,fpt);
+        int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         eles->Ucomm(fpt, ele, n) = faces->Ucomm(slot, gfpt, n);
       }
@@ -446,11 +446,11 @@ void FRSolver::dU_to_faces()
       {
         for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
-          int gfpt = geo.fpt2gfpt(ele,fpt);
+          int gfpt = geo.fpt2gfpt(fpt,ele);
           /* Check if flux point is on ghost edge */
           if (gfpt == -1)
             continue;
-          int slot = geo.fpt2gfpt_slot(ele,fpt);
+          int slot = geo.fpt2gfpt_slot(fpt,ele);
 
           faces->dU(slot, gfpt, n, dim) = eles->dU_fpts(fpt, ele, n, dim);
           //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
@@ -469,11 +469,11 @@ void FRSolver::F_from_faces()
     {
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
-        int gfpt = geo.fpt2gfpt(ele,fpt);
+        int gfpt = geo.fpt2gfpt(fpt,ele);
         /* Check if flux point is on ghost edge */
         if (gfpt == -1)
           continue;
-        int slot = geo.fpt2gfpt_slot(ele,fpt);
+        int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         eles->Fcomm(fpt, ele, n) = faces->Fcomm(slot, gfpt, n);
       }

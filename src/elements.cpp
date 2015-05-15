@@ -120,7 +120,7 @@ void Elements::set_coords()
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(ele, node);
+          unsigned int gnd = geo->nd2gnd(node, ele);
           geo->coord_spts(spt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_spts(node, spt);
         }
       }
@@ -130,7 +130,7 @@ void Elements::set_coords()
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(ele, node);
+          unsigned int gnd = geo->nd2gnd(node, ele);
           geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
         }
       }
@@ -140,7 +140,7 @@ void Elements::set_coords()
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(ele, node);
+          unsigned int gnd = geo->nd2gnd(node, ele);
           geo->coord_ppts(ppt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_ppts(node, ppt);
         }
       }
@@ -150,7 +150,7 @@ void Elements::set_coords()
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(ele, node);
+          unsigned int gnd = geo->nd2gnd(node, ele);
           geo->coord_qpts(qpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_qpts(node, qpt);
         }
       }
