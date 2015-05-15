@@ -40,6 +40,12 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "AdvDiff_Ay", input.AdvDiff_A[1]);
   read_param(f, "AdvDiff_D", input.AdvDiff_D);
 
+  read_param(f, "gamma", input.gamma);
+  read_param(f, "rho_fs", input.rho_fs);
+  read_param(f, "u_fs", input.u_fs);
+  read_param(f, "v_fs", input.v_fs);
+  read_param(f, "P_fs", input.P_fs);
+
   f.close();
 
   return input;

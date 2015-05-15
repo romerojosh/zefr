@@ -33,3 +33,11 @@ ic_type = 1 (0 = gaussian, 1 = sines)
 AdvDiff_Ax 0
 AdvDiff_Ay 0
 AdvDiff_D 0.1
+
+# Euler/Navier-Stokes
+gamma 1.4
+
+rho_fs 1.4
+u_fs 0.2
+v_fs 0.2
+P_fs 1

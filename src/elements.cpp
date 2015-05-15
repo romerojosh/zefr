@@ -267,7 +267,35 @@ void Elements::compute_Fconv()
 
   else if (input->equation == "EulerNS")
   {
-    ThrowException("Euler flux not implemented yet!");
+    if (nDims == 2)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          /* Compute some primitive variables */
+          double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
+              U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
+          double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3)) - 0.5 * momF;
+          double H = (U_spts(spt, ele, 3) + P) / U_spts(spt, ele, 0);
+
+
+          F_spts(spt, ele, 0, 0) = U_spts(spt, ele, 1);
+          F_spts(spt, ele, 1, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0) + P;
+          F_spts(spt, ele, 2, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 3, 0) = U_spts(spt, ele, 1) * H;
+
+          F_spts(spt, ele, 0, 1) = U_spts(spt, ele, 2);
+          F_spts(spt, ele, 1, 1) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 2, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0) + P;
+          F_spts(spt, ele, 3, 1) = U_spts(spt, ele, 2) * H;
+        }
+      }
+    }
+    else if (nDims == 3)
+    {
+      ThrowException("3D Euler flux not implemented!");
+    }
   }
 
 }

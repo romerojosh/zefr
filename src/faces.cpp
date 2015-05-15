@@ -110,7 +110,34 @@ void Faces::compute_Fconv()
   }
   else if (input->equation == "EulerNS")
   {
-    ThrowException("Euler flux not implemented yet!");
+    if (nDims == 2)
+    {
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      {
+        for (unsigned int slot = 0; slot < 2; slot ++)
+        {
+          /* Compute some primitive variables */
+          double momF = (U(slot, fpt, 1) * U(slot, fpt ,1) + U(slot, fpt, 2) * 
+              U(slot, fpt, 2)) / U(slot, fpt, 0);
+          double P = (input->gamma - 1.0) * (U(slot, fpt, 3)) - 0.5 * momF;
+          double H = (U(slot, fpt, 3) + P) / U(slot, fpt, 0);
+
+          Fconv(slot, fpt, 0, 0) = U(slot, fpt, 1);
+          Fconv(slot, fpt, 1, 0) = U(slot, fpt, 1) * U(slot, fpt, 1) / U(slot, fpt, 0) + P;
+          Fconv(slot, fpt, 2, 0) = U(slot, fpt, 1) * U(slot, fpt, 2) / U(slot, fpt, 0);
+          Fconv(slot, fpt, 3, 0) = U(slot, fpt, 1) * H;
+
+          Fconv(slot, fpt, 0, 1) = U(slot, fpt, 2);
+          Fconv(slot, fpt, 1, 1) = U(slot, fpt, 1) * U(slot, fpt, 2) / U(slot, fpt, 0);
+          Fconv(slot, fpt, 2, 1) = U(slot, fpt, 2) * U(slot, fpt, 2) / U(slot, fpt, 0) + P;
+          Fconv(slot, fpt, 3, 1) = U(slot, fpt, 2) * H;
+        }
+      }
+    }
+    else if (nDims == 3)
+    {
+      ThrowException("3D Euler not implemented yet!");
+    }
   }
 
 

@@ -16,6 +16,7 @@ struct InputStruct
   double rus_k, ldg_b, ldg_tau; 
   double AdvDiff_D, dt;
   std::array<double, 3> AdvDiff_A;
+  double gamma, rho_fs, u_fs, v_fs, P_fs;
 };
 
 InputStruct read_input_file(std::string inputfile);
