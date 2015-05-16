@@ -9,13 +9,13 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 10000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt	  0.01
 
 # Reporting:
 output_prefix data
-write_freq  500
+write_freq  1000
 report_freq 100
 nQpts1D     10
 

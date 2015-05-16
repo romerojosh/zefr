@@ -269,6 +269,7 @@ void Elements::compute_Fconv()
   {
     if (nDims == 2)
     {
+#pragma omp parallel for collapse(2)
       for (unsigned int ele = 0; ele < nEles; ele++)
       {
         for (unsigned int spt = 0; spt < nSpts; spt++)

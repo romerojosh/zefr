@@ -111,6 +111,7 @@ void Faces::compute_Fconv()
   {
     if (nDims == 2)
     {
+#pragma omp parallel for collapse(2)
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
         for (unsigned int slot = 0; slot < 2; slot ++)
@@ -139,7 +140,6 @@ void Faces::compute_Fconv()
       ThrowException("3D Euler not implemented yet!");
     }
   }
-
 
 }
 

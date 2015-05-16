@@ -748,7 +748,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     }
   }
 
-  //if (input->equation == "AdvDiff")
+  if (input->equation == "AdvDiff")
   {
     f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
     f << "SCALARS U double 1" << std::endl;
@@ -762,6 +762,28 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
       }
       f << std::endl;
     }
+  }
+  else if(input->equation == "EulerNS")
+  {
+    std::array<std::string,4> var = {"rho", "xmom", "ymom", "energy"};
+
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+
+      f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
+      f << "SCALARS " << var[n] <<" double 1" << std::endl;
+      f << "LOOKUP_TABLE default" << std::endl;
+      
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+        {
+          f << eles->U_ppts(ppt, ele, n) << " ";
+        }
+        f << std::endl;
+      }
+    }
+
   }
 }
 
