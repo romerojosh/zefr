@@ -452,17 +452,17 @@ double Quads::calc_shape(unsigned int shape_order, unsigned int idx,
     {
       case 0:
         val = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi); break;
-      case 1:
-        val = 0.5*(1.-xi)*(1.+xi)*(1.-eta); break;
-      case 2:
-        val = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi); break;
-      case 3:
-        val = 0.5*(1.+xi)*(1.+eta)*(1.-eta); break;
       case 4:
-        val = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi); break;
+        val = 0.5*(1.-xi)*(1.+xi)*(1.-eta); break;
+      case 1:
+        val = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi); break;
       case 5:
-        val = 0.5*(1.-xi)*(1.+xi)*(1.+eta); break;
+        val = 0.5*(1.+xi)*(1.+eta)*(1.-eta); break;
+      case 2:
+        val = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi); break;
       case 6:
+        val = 0.5*(1.-xi)*(1.+xi)*(1.+eta); break;
+      case 3:
         val = -0.25*(1.-xi)*(1.+eta)*(1.-eta+xi); break;
       case 7:
         val = 0.5*(1.-xi)*(1.+eta)*(1.-eta); break;
@@ -512,17 +512,17 @@ double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
       {
         case 0:
           val = -0.25*(-1.+eta)*(2.*xi+eta); break;
-        case 1:
-          val = xi*(-1.+eta); break;
-        case 2:
-          val = 0.25*(-1.+eta)*(eta - 2.*xi); break;
-        case 3:
-          val = -0.5*(1+eta)*(-1.+eta); break;
         case 4:
-          val = 0.25*(1.+eta)*(2.*xi+eta); break;
+          val = xi*(-1.+eta); break;
+        case 1:
+          val = 0.25*(-1.+eta)*(eta - 2.*xi); break;
         case 5:
-          val = -xi*(1.+eta); break;
+          val = -0.5*(1+eta)*(-1.+eta); break;
+        case 2:
+          val = 0.25*(1.+eta)*(2.*xi+eta); break;
         case 6:
+          val = -xi*(1.+eta); break;
+        case 3:
           val = -0.25*(1.+eta)*(eta-2.*xi); break;
         case 7:
           val = 0.5*(1+eta)*(-1.+eta); break;
@@ -535,17 +535,17 @@ double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
       {
         case 0:
           val = -0.25*(-1.+xi)*(2.*eta+xi); break;
-        case 1:
-          val = 0.5*(1.+xi)*(-1.+xi); break;
-        case 2:
-          val = 0.25*(1.+xi)*(2.*eta - xi); break;
-        case 3:
-          val = -eta*(1.+xi); break;
         case 4:
-          val = 0.25*(1.+xi)*(2.*eta+xi); break;
+          val = 0.5*(1.+xi)*(-1.+xi); break;
+        case 1:
+          val = 0.25*(1.+xi)*(2.*eta - xi); break;
         case 5:
-          val = -0.5*(1.+xi)*(-1.+xi); break;
+          val = -eta*(1.+xi); break;
+        case 2:
+          val = 0.25*(1.+xi)*(2.*eta+xi); break;
         case 6:
+          val = -0.5*(1.+xi)*(-1.+xi); break;
+        case 3:
           val = -0.25*(-1.+xi)*(2.*eta-xi); break;
         case 7:
           val = eta*(-1.+xi); break;

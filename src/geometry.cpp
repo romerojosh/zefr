@@ -161,7 +161,12 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
         geo.nEles++; 
         geo.shape_order = 1; geo.nNodesPerEle = 4;
       }
-      else if (val == 1)
+      else if (val == 9 || val == 10)
+      {
+        geo.nEles++; 
+        geo.shape_order = 2; geo.nNodesPerEle = 8;
+      }
+      else if (val == 1 || val == 8)
       {
         geo.nBnds++;
       }
@@ -199,6 +204,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
         case 1: /* 2-node Line (skip) */
           f >> vint >> vint;
           break;
+
         case 2: /* 3-node Triangle */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
           geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele); 
@@ -207,14 +213,36 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
         case 3: /* 4-node Quadrilateral */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
           ele++; break;
+
+        case 8: /* 3-node Line (skip) */
+          f >> vint >> vint >> vint;
+          break;
+
+        case 9: /* 6-node Triangle */
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele); 
+          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(7,ele);
+          geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele); geo.nd2gnd(6,ele) = geo.nd2gnd(2,ele);
+          ele++; break;
+
+        case 10: /* 9-node Quadilateral (read as 8-node) */
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
+          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
+          f >> vint;
+          ele++; break;
+
         default:
           ThrowException("Unrecognized element type detected!"); break;
+
       }
     }
     else
     {
       ThrowException("3D not implemented yet!");
     }
+    //for (int n = 0; n < 8; n++)
+    //  std::cout << geo.nd2gnd(n, ele) << " ";
+    //std::cout << std::endl;
+    //std::cout<< "!!!" << std::endl;
   }
 
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -244,6 +272,11 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
           f >> vint;
           f >> bnd_id >> vint;
           f >> face[0] >> face[1]; break;
+
+        case 8: /* 3-node Line (skip) */
+          f >> vint;
+          f >> bnd_id >> vint;
+          f >> face[0] >> face[1] >> vint; break;
 
         default:
           std::getline(f,line); continue; break;

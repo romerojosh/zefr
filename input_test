@@ -1,17 +1,17 @@
 # Geometry:
 nDims    2
-meshfile meshes/full_cyl_64x64.msh
+meshfile meshes/cyl_mixed_quad.msh
 
 # Solver:
-order     1
+order     3
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 5000
+n_steps 10000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt	  0.01
+dt	  0.001
 
 # Reporting:
 output_prefix data
