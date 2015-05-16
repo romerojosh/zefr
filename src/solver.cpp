@@ -767,10 +767,10 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   {
     std::array<std::string,4> var = {"rho", "xmom", "ymom", "energy"};
 
+    f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
+
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
-
-      f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
       f << "SCALARS " << var[n] <<" double 1" << std::endl;
       f << "LOOKUP_TABLE default" << std::endl;
       
@@ -780,10 +780,12 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
         {
           f << eles->U_ppts(ppt, ele, n) << " ";
         }
+
         f << std::endl;
       }
-    }
 
+      f << std::endl;
+    }
   }
 }
 
