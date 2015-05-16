@@ -173,20 +173,11 @@ void FRSolver::initialize_U()
   // TODO: Fill in with actual logic. */
   if (input->equation == "AdvDiff")
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    if (input->ic_type == 0)
     {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-      {
-        double x = geo.coord_spts(spt, ele, 0);
-        double y = geo.coord_spts(spt, ele, 1);
-
-        eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, input);
-      }
+      // Do nothing for now
     }
-  }
-  else if (input->equation == "EulerNS")
-  {
-    for (unsigned int n = 0; n < eles->nVars; n++)
+    else if (input->ic_type == 1)
     {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
@@ -195,7 +186,45 @@ void FRSolver::initialize_U()
           double x = geo.coord_spts(spt, ele, 0);
           double y = geo.coord_spts(spt, ele, 1);
 
-          eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, n, input);
+          eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, input);
+        }
+      }
+    }
+    else
+    {
+      ThrowException("ic_type not recognized!");
+    }
+  }
+  else if (input->equation == "EulerNS")
+  {
+    if (input->ic_type == 0)
+    { 
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          eles->U_spts(spt, ele, 0)  = input->rho_fs;
+          eles->U_spts(spt, ele, 1)  = input->rho_fs * input->u_fs;
+          eles->U_spts(spt, ele, 2)  = input->rho_fs * input->v_fs;
+          eles->U_spts(spt, ele, 3)  = input->P_fs/(input->gamma-1.0) + 
+            0.5*input->rho_fs*(input->u_fs * input->u_fs + input->v_fs * input->v_fs);
+        }
+      }
+
+    }
+    else if (input->ic_type == 1)
+    {
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            double x = geo.coord_spts(spt, ele, 0);
+            double y = geo.coord_spts(spt, ele, 1);
+
+            eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, n, input);
+          }
         }
       }
     }

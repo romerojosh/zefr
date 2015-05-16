@@ -47,18 +47,57 @@ void Faces::apply_bcs()
     unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
 
     /* Apply specified boundary condition */
-    if (bnd_id == 1) /* Periodic */
+    switch(bnd_id)
     {
-      unsigned int per_fpt = geo->per_fpt_pairs[fpt];
-
-      for (unsigned int n = 0; n < nVars; n++)
+      case 1:/* Periodic */
       {
-        U(1, n, fpt) = U(0, n, per_fpt);
+        unsigned int per_fpt = geo->per_fpt_pairs[fpt];
+
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          U(1, n, fpt) = U(0, n, per_fpt);
+        }
+        break;
       }
-    }
-    else if (bnd_id == 2) /* Farfield */
-    {
-      U(1, 0, fpt) = 0.; // Hardcode for sine case
+    
+      case 2: /* Farfield and Supersonic Inlet */
+      {
+        /* Set boundaries to freestream values */
+        U(1, 0, fpt) = input->rho_fs;
+        U(1, 1, fpt) = input->rho_fs * input->u_fs;
+        U(1, 2, fpt) = input->rho_fs * input->v_fs;
+        U(1, 3, fpt) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * 
+          (input->u_fs * input->u_fs + input->v_fs * input->v_fs);
+        break;
+      }
+      case 3: /* Supersonic Outlet */
+      {
+        /* Extrapolate boundary values from interior */
+        for (unsigned int n = 0; n < nVars; n++)
+          U(1, n, fpt) = U(0, n, fpt);
+        break;
+      }
+      case 4: /* Characteristic (from HiFiLES) */
+      {
+        break;
+      }
+      case 5: /* Slip Wall */
+      {
+        double momN = 0.0;
+
+        /* Compute wall normal momentum */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momN += U(0, dim+1, fpt) * norm(0, dim, fpt);
+
+        U(1, 0, fpt) = U(0, 0, fpt);
+
+        /* Set boundary state to cancel normal velocity */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(0, dim, fpt);
+
+        U(1, 3, fpt) = U(0, 3, fpt) - 0.5 * (momN * momN) / U(0, 0, fpt);
+        break;
+      }
     }
   } 
 }

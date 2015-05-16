@@ -102,6 +102,18 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     {
       geo.bnd_ids[val] = 2;
     }
+    else if (bnd_id == "\"INLET\"")
+    {
+      geo.bnd_ids[val] = 2;
+    }
+    else if (bnd_id == "\"OUTLET\"")
+    {
+      geo.bnd_ids[val] = 3;
+    }
+    else if (bnd_id == "\"WALL\"")
+    {
+      geo.bnd_ids[val] = 5;
+    }
     else if (bnd_id == "\"FLUID\"")
     {
     }
