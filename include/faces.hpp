@@ -31,7 +31,7 @@ class Faces
     void transform_flux();
 
   protected:
-    mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Ucomm;
+    mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Ucomm, P;
     mdvector<double> norm, jaco;
     mdvector<int> outnorm;
     std::vector<double> dA;

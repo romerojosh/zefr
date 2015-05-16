@@ -276,7 +276,7 @@ void Elements::compute_Fconv()
           /* Compute some primitive variables */
           double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
               U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
-          double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3)) - 0.5 * momF;
+          double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
           double H = (U_spts(spt, ele, 3) + P) / U_spts(spt, ele, 0);
 
 

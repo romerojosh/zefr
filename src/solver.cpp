@@ -180,16 +180,23 @@ void FRSolver::initialize_U()
         double x = geo.coord_spts(spt, ele, 0);
         double y = geo.coord_spts(spt, ele, 1);
 
-        /*
-        if (input->ic_type == 0)
-          eles->U_spts(0,spt,ele) = std::exp(-20. * (x*x + y*y));
-        else if (input->ic_type == 1)
-          eles->U_spts(0,spt,ele) = std::sin(M_PI*x)*sin(M_PI*y);
-        else
-          ThrowException("ic_type not recognized!");
-        */
-
         eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, input);
+      }
+    }
+  }
+  else if (input->equation == "EulerNS")
+  {
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          double x = geo.coord_spts(spt, ele, 0);
+          double y = geo.coord_spts(spt, ele, 1);
+
+          eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, n, input);
+        }
       }
     }
   }
@@ -741,7 +748,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     }
   }
 
-  if (input->equation == "AdvDiff")
+  //if (input->equation == "AdvDiff")
   {
     f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
     f << "SCALARS U double 1" << std::endl;

@@ -27,6 +27,10 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   Fcomm.assign({2, nVars, nFpts});
   Ucomm.assign({2, nVars, nFpts});
 
+  /* If running Euler/NS, allocate memory for pressure */
+  if (input->equation == "EulerNS")
+    P.assign({2,nFpts});
+
   /* Allocate memory for geometry structures */
   norm.assign({2, nDims, nFpts});
   outnorm.assign({2, nFpts});
@@ -111,20 +115,21 @@ void Faces::compute_Fconv()
       {
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
-          /* Compute some primitive variables */
+          /* Compute some primitive variables (keep pressure)*/
           double momF = (U(slot, 1, fpt) * U(slot, 1, fpt) + U(slot, 2, fpt) * 
               U(slot, 2, fpt)) / U(slot, 0, fpt);
-          double P = (input->gamma - 1.0) * (U(slot, 3, fpt)) - 0.5 * momF;
-          double H = (U(slot, 3, fpt) + P) / U(slot, 0, fpt);
+
+          P(slot, fpt) = (input->gamma - 1.0) * (U(slot, 3, fpt) - 0.5 * momF);
+          double H = (U(slot, 3, fpt) + P(slot,fpt)) / U(slot, 0, fpt);
 
           Fconv(slot, 0, 0, fpt) = U(slot, 1, fpt);
-          Fconv(slot, 1, 0, fpt) = U(slot, 1, fpt) * U(slot, 1, fpt) / U(slot, 0, fpt) + P;
+          Fconv(slot, 1, 0, fpt) = U(slot, 1, fpt) * U(slot, 1, fpt) / U(slot, 0, fpt) + P(slot, fpt);
           Fconv(slot, 2, 0, fpt) = U(slot, 1, fpt) * U(slot, 2, fpt) / U(slot, 0, fpt);
           Fconv(slot, 3, 0, fpt) = U(slot, 1, fpt) * H;
 
           Fconv(slot, 0, 1, fpt) = U(slot, 2, fpt);
           Fconv(slot, 1, 1, fpt) = U(slot, 1, fpt) * U(slot, 2, fpt) / U(slot, 0, fpt);
-          Fconv(slot, 2, 1, fpt) = U(slot, 2, fpt) * U(slot, 2, fpt) / U(slot, 0, fpt) + P;
+          Fconv(slot, 2, 1, fpt) = U(slot, 2, fpt) * U(slot, 2, fpt) / U(slot, 0, fpt) + P(slot, fpt);
           Fconv(slot, 3, 1, fpt) = U(slot, 2, fpt) * H;
         }
       }
@@ -265,10 +270,29 @@ void Faces::rusanov_flux()
     }
 
     /* Get numerical wavespeed */
-    // TODO: Add generic wavespeed calculation */
     double waveSp = 0.0;
-    for (unsigned int dim = 0; dim < nDims; dim++)
-      waveSp += input->AdvDiff_A[dim] * norm(0, dim, fpt);
+
+    if (input->equation == "AdvDiff")
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        waveSp += input->AdvDiff_A[dim] * norm(0, dim, fpt);
+    }
+    else if (input->equation == "EulerNS")
+    {
+      /* Compute speed of sound */
+      double aL = std::sqrt(input->gamma * P(0,fpt) / WL[0]);
+      double aR = std::sqrt(input->gamma * P(1,fpt) / WR[0]);
+
+      /* Compute normal velocities */
+      double VnL = 0.0; double VnR = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += WL[dim+1]/WL[0] * norm(0,dim,fpt);
+        VnR += WR[dim+1]/WR[0] * norm(0,dim,fpt);
+      }
+
+      waveSp = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+    }
 
     /* Compute common normal flux */
     for (unsigned int n = 0; n < nVars; n++)
