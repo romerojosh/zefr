@@ -4,6 +4,7 @@
 #include <sstream>
 
 #include "input.hpp"
+#include "multigrid.hpp"
 #include "solver.hpp"
 
 int main(int argc, char* argv[])
@@ -24,12 +25,22 @@ int main(int argc, char* argv[])
   FRSolver solver(&input);
   solver.setup();
 
+  PMGrid pmg;
+  if (input.p_multi)
+  {
+    std::cout << "Setting up multigrid..." << std::endl;
+    pmg.setup(input.order, &input);
+  }
+
   solver.write_solution(input.output_prefix,0);
 
   auto t1 = std::chrono::high_resolution_clock::now();
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
+
+    if (input.p_multi)
+      pmg.cycle(solver);
 
     if (n%input.report_freq == 0 || n == input.n_steps)
     {

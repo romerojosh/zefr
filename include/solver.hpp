@@ -9,9 +9,11 @@
 #include "geometry.hpp"
 #include "input.hpp"
 
-class Elements;
+class PMGrid;
 class FRSolver
 {
+  friend class PMGrid;
+
   private:
     const InputStruct *input = NULL;
     GeoStruct geo;

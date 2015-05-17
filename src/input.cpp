@@ -24,6 +24,9 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "dt", input.dt);
   read_param(f, "CFL", input.CFL);
 
+  read_param(f, "p_multi", input.p_multi);
+  read_param(f, "smooth_steps", input.smooth_steps);
+
   read_param(f, "output_prefix", input.output_prefix);
   read_param(f, "write_freq", input.write_freq);
   read_param(f, "report_freq", input.report_freq);

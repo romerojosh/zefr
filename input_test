@@ -15,6 +15,10 @@ dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
 CFL	  0.06
 
+# Multigrid:
+p_multi 1
+smooth_steps 1
+
 # Reporting:
 output_prefix data
 write_freq  500
