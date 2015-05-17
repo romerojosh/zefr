@@ -54,7 +54,7 @@ void PMGrid::cycle(FRSolver &solver)
     /* Copy initial solution to correction storage */
     std::copy(&grids[P]->eles->U_spts(0,0,0), 
         &grids[P]->eles->U_spts(grids[P]->eles->nSpts-1, grids[P]->eles->nEles-1, 
-          grids[P]->eles->nVars-1), &corrections[P](0,0,0));
+          grids[P]->eles->nVars-1)+1, &corrections[P](0,0,0));
 
     /* Update solution on coarse level */
     grids[P]->update_with_source(sources[P]);
@@ -63,7 +63,7 @@ void PMGrid::cycle(FRSolver &solver)
     for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
       for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
         for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-          corrections[P](spt, ele, n) -= grids[P]->eles->U_spts(spt, ele, n);
+          corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - corrections[P](spt, ele, n);
   }
 
   for (int P = 1; P < order-1; P++)
@@ -143,7 +143,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
 {
   /* Copy restricted fine grid residual to source term */
   std::copy(&grid.divF(0,0,0,0), &grid.divF(grid.eles->nSpts-1, grid.eles->nEles-1, 
-        grid.eles->nVars-1, 1), &source(0,0,0));
+        grid.eles->nVars-1, 1)+1, &source(0,0,0));
 
   /* Update residual on current coarse grid */
   grid.compute_residual(0);
