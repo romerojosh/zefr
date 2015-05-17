@@ -23,6 +23,7 @@ class FRSolver
     unsigned int nStages;
     std::vector<double> rk_alpha, rk_beta;
     mdvector<double> divF;
+    std::vector<double> dt;
     mdvector<double> U_ini;
 
     void initialize_U();
@@ -50,6 +51,8 @@ class FRSolver
 
     void compute_dF();
     void compute_divF(unsigned int stage);
+
+    void compute_element_dt();
 
 
   public:

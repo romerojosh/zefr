@@ -34,7 +34,7 @@ class Faces
     mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Ucomm, P;
     mdvector<double> norm, jaco;
     mdvector<int> outnorm;
-    std::vector<double> dA;
+    std::vector<double> dA, waveSp;
 
   public:
     Faces(GeoStruct *geo, const InputStruct *input);

@@ -9,9 +9,11 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 10000
+n_steps 100000
 dt_scheme RK44      (Euler, RK44, RK54)
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
+CFL	  0.06
 
 # Reporting:
 output_prefix data
@@ -37,7 +39,7 @@ AdvDiff_D 0.1
 # Euler/Navier-Stokes
 gamma 1.4
 
-rho_fs 1.4
-u_fs 0.2
+rho_fs 1
+u_fs 0.35
 v_fs 0.0
-P_fs 1
+P_fs .71428571428

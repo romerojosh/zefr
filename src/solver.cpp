@@ -77,6 +77,9 @@ void FRSolver::setup_update()
   U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
   divF.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
+  // TODO: Should I create this array for user-supplied to save branch?
+  dt.assign(eles->nEles,input->dt);
+
 }
 
 void FRSolver::setup_output()
@@ -637,17 +640,35 @@ void FRSolver::compute_divF(unsigned int stage)
 
 void FRSolver::update()
 {
-  U_ini = eles->U_spts;
+  
+    U_ini = eles->U_spts;
 
   /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
   for (unsigned int stage = 0; stage < (nStages-1); stage++)
   {
     compute_residual(stage);
+
+    /* If in first stage, compute stable timestep */
+    if (stage == 0)
+    {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type == 1)
+      {
+        compute_element_dt();
+        double min_dt = *std::min_element(dt.begin(), dt.end());
+        std::fill(dt.begin(), dt.end(), min_dt);
+      }
+      else if (input->dt_type == 2)
+      {
+        compute_element_dt();
+      }
+    }
+
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * input->dt * divF(spt, ele, n, stage);
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] * divF(spt, ele, n, stage);
   }
 
   /* Final stage */
@@ -659,7 +680,7 @@ void FRSolver::update()
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * input->dt * divF(spt, ele, n, stage);
+          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] * divF(spt, ele, n, stage);
 
   /*
   std::cout << "U" << std::endl;
@@ -673,8 +694,31 @@ void FRSolver::update()
   }
   */
 
-  flow_time += input->dt;
+  flow_time += dt[0];
  
+}
+
+void FRSolver::compute_element_dt()
+{
+#pragma omp parallel for
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  { 
+    double waveSp_max = 0.0;
+
+    /* Compute maximum wavespeed */
+    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+    {
+      int gfpt = geo.fpt2gfpt(fpt,ele);
+      if (gfpt == -1)
+        continue;
+
+      double waveSp = faces->waveSp[gfpt] / faces->dA[gfpt];
+
+      waveSp_max = std::max(waveSp, waveSp_max);
+    }
+
+    dt[ele] = input->CFL * (2.0 / (waveSp_max+1.e-10));
+  }
 }
 
 void FRSolver::write_solution(std::string prefix, unsigned int nIter)
@@ -828,6 +872,7 @@ void FRSolver::report_max_residuals()
   for (auto &val : max_res)
     std::cout << std::scientific << val << " ";
 
+  std::cout << "dt: " << dt[0];
   std::cout << std::endl;
 }
 

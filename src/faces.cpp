@@ -31,6 +31,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   if (input->equation == "EulerNS")
     P.assign({2,nFpts});
 
+  waveSp.assign(nFpts,0.0);
+
   /* Allocate memory for geometry structures */
   norm.assign({2, nDims, nFpts});
   outnorm.assign({2, nFpts});
@@ -309,18 +311,16 @@ void Faces::rusanov_flux()
     }
 
     /* Get numerical wavespeed */
-    double waveSp = 0.0;
-
     if (input->equation == "AdvDiff")
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
-        waveSp += input->AdvDiff_A[dim] * norm(0, dim, fpt);
+        waveSp[fpt] += input->AdvDiff_A[dim] * norm(0, dim, fpt);
     }
     else if (input->equation == "EulerNS")
     {
       /* Compute speed of sound */
-      double aL = std::sqrt(input->gamma * P(0,fpt) / WL[0]);
-      double aR = std::sqrt(input->gamma * P(1,fpt) / WR[0]);
+      double aL = std::sqrt(std::abs(input->gamma * P(0,fpt) / WL[0]));
+      double aR = std::sqrt(std::abs(input->gamma * P(1,fpt) / WR[0]));
 
       /* Compute normal velocities */
       double VnL = 0.0; double VnR = 0.0;
@@ -330,14 +330,14 @@ void Faces::rusanov_flux()
         VnR += WR[dim+1]/WR[0] * norm(0,dim,fpt);
       }
 
-      waveSp = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      waveSp[fpt] = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
     }
 
     /* Compute common normal flux */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(0, n, fpt) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp)*(1.0-k) * (WR[n]-WL[n]);
-      Fcomm(1, n, fpt) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp)*(1.0-k) * (WR[n]-WL[n]);
+      Fcomm(0, n, fpt) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp[fpt])*(1.0-k) * (WR[n]-WL[n]);
+      Fcomm(1, n, fpt) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp[fpt])*(1.0-k) * (WR[n]-WL[n]);
 
       /* Correct for positive parent space sign convention */
       Fcomm(0, n, fpt) *= outnorm(0, fpt);
