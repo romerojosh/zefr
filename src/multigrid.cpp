@@ -2,6 +2,7 @@
 #include <memory>
 
 #include "cblas.h"
+#include "omp.h"
 
 #include "input.hpp"
 #include "multigrid.hpp"
@@ -45,6 +46,7 @@ void PMGrid::cycle(FRSolver &solver)
     compute_source_term(*grids[P], sources[P]);
 
     /* Copy initial solution to correction storage */
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
       for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
         for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
@@ -57,6 +59,7 @@ void PMGrid::cycle(FRSolver &solver)
     }
 
     /* Generate error */
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
       for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
         for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
@@ -67,6 +70,7 @@ void PMGrid::cycle(FRSolver &solver)
     {
       /* Update residual and add source */
       grids[P]->compute_residual(0);
+#pragma omp parallel for collapse(3)
       for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
         for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
           for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
@@ -86,14 +90,16 @@ void PMGrid::cycle(FRSolver &solver)
   prolong_err(*grids[order-1], corrections[order-1], solver, corrections[order]);
 
   /* Add correction to fine grid solution */
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < solver.eles->nVars; n++)
     for (unsigned int ele = 0; ele < solver.eles->nEles; ele++)
       for (unsigned int spt = 0; spt < solver.eles->nSpts; spt++)
         solver.eles->U_spts(spt, ele, n) += corrections[order](spt, ele, n);
 
-  /* Reinitialized corrections to zero*/
-  for (int P = 0; P <= order; P++)
-    corrections[P].fill(0.);
+  /* Reinitialized fine grid correction to zero*/
+  corrections[order].fill(0.);
+//  for (int P = 0; P <= order; P++)
+  //  corrections[P].fill(0.);
 }
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
@@ -101,23 +107,32 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
   if (grid_f.order - grid_c.order > 1)
     ThrowException("Cannot restrict more than 1 order currently!");
 
-  for (unsigned int n = 0; n < grid_f.eles->nVars; n++)
+#pragma omp parallel
   {
-    auto &A = grid_f.eles->oppRes(0,0);
-    auto &B = grid_f.eles->U_spts(0,0,n);
-    auto &C = grid_c.eles->U_spts(0,0,n);
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-        grid_c.eles->nEles, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
-        &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
+    int block_size = (grid_f.eles->nEles + nThreads - 1)/nThreads;
+    int start_idx = block_size * thread_idx;
 
-    
-    auto &B2 = grid_f.divF(0,0,n,0);
-    auto &C2 = grid_c.divF(0,0,n,0);
+    for (unsigned int n = 0; n < grid_f.eles->nVars; n++)
+    {
+      auto &A = grid_f.eles->oppRes(0,0);
+      auto &B = grid_f.eles->U_spts(0,start_idx,n);
+      auto &C = grid_c.eles->U_spts(0,start_idx,n);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-        grid_c.eles->nEles, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
-        &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
+          block_size, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
+          &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
+
+      
+      auto &B2 = grid_f.divF(0,start_idx,n,0);
+      auto &C2 = grid_c.divF(0,start_idx,n,0);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
+          block_size, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
+          &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
+    }
   }
 }
 void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
@@ -141,21 +156,33 @@ void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
 void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c,
     FRSolver &grid_f, mdvector<double> &correction_f)
 {
-  for (unsigned int n = 0; n < grid_c.eles->nVars; n++)
-  {
-    auto &A = grid_c.eles->oppPro(0,0);
-    auto &B = correction_c(0,0,n);
-    auto &C = correction_f(0,0,n);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
-        &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+#pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
+
+    int block_size = (grid_f.eles->nEles + nThreads - 1)/nThreads;
+    int start_idx = block_size * thread_idx;
+
+
+    for (unsigned int n = 0; n < grid_c.eles->nVars; n++)
+    {
+      auto &A = grid_c.eles->oppPro(0,0);
+      auto &B = correction_c(0,start_idx,n);
+      auto &C = correction_f(0,start_idx,n);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+          block_size, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
+          &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+    }
   }
 }
 
 void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
 {
   /* Copy restricted fine grid residual to source term */
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < grid.eles->nVars; n++)
     for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
       for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
@@ -165,6 +192,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
   grid.compute_residual(0);
 
   /* Subtract to generate source term */
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < grid.eles->nVars; n++)
     for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
       for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
