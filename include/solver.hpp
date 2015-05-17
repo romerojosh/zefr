@@ -61,6 +61,7 @@ class FRSolver
     void setup();
     void compute_residual(unsigned int stage);
     void update();
+    void update_with_source(mdvector<double> &source);
     void write_solution(std::string prefix, unsigned int nIter);
     void report_max_residuals();
     void compute_l2_error();

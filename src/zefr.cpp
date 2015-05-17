@@ -34,16 +34,13 @@ int main(int argc, char* argv[])
 
   solver.write_solution(input.output_prefix,0);
 
-  pmg.cycle(solver);
-  
-
   auto t1 = std::chrono::high_resolution_clock::now();
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
 
-    //if (input.p_multi)
-    //  pmg.cycle(solver);
+    if (input.p_multi)
+      pmg.cycle(solver);
 
     if (n%input.report_freq == 0 || n == input.n_steps)
     {

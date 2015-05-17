@@ -698,6 +698,53 @@ void FRSolver::update()
  
 }
 
+void FRSolver::update_with_source(mdvector<double> &source)
+{
+  
+    U_ini = eles->U_spts;
+
+  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
+  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  {
+    compute_residual(stage);
+
+    /* If in first stage, compute stable timestep */
+    if (stage == 0)
+    {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type == 1)
+      {
+        compute_element_dt();
+        double min_dt = *std::min_element(dt.begin(), dt.end());
+        std::fill(dt.begin(), dt.end(), min_dt);
+      }
+      else if (input->dt_type == 2)
+      {
+        compute_element_dt();
+      }
+    }
+
+#pragma omp parallel for collapse(3)
+    for (unsigned int n = 0; n < eles->nVars; n++)
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] * (divF(spt, ele, n, stage) + source(spt, ele, n));
+  }
+
+  /* Final stage */
+  compute_residual(nStages-1);
+  eles->U_spts = U_ini;
+
+  for (unsigned int stage = 0; stage < nStages; stage++)
+#pragma omp parallel for collapse(3)
+    for (unsigned int n = 0; n < eles->nVars; n++)
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] * (divF(spt, ele, n, stage) 
+              + source(spt, ele, n));
+
+}
+
 void FRSolver::compute_element_dt()
 {
 #pragma omp parallel for
