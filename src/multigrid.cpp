@@ -27,10 +27,10 @@ void PMGrid::setup(int order, const InputStruct *input)
 void PMGrid::cycle(FRSolver &solver)
 {
   restrict_pmg(solver, *grids[1]);
-  restrict_pmg(*grids[1], *grids[0]);
+  prolong_pmg(*grids[1], solver);
 
-  grids[0]->write_solution("res0",0);
-  grids[1]->write_solution("res1",0);
+  grids[1]->write_solution("res",0);
+  solver.write_solution("pro",0);
 }
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
@@ -49,6 +49,20 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
         &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
   }
 }
-void PMGrid::prolong_pmg(FRSolver &grid_f, FRSolver &grid_c)
+void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
 {
+  if (grid_f.order - grid_c.order > 1)
+    ThrowException("Cannot prolong more than 1 order currently!");
+
+  for (unsigned int n = 0; n < grid_c.eles->nVars; n++)
+  {
+    auto &A = grid_c.eles->oppPro(0,0);
+    auto &B = grid_c.eles->U_spts(0,0,n);
+    auto &C = grid_f.eles->U_spts(0,0,n);
+
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
+        &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+  }
+
 }

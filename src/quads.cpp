@@ -398,8 +398,10 @@ double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc
 void Quads::setup_PMG()
 {
   /* Allocate memory for operators */
-  unsigned int nSpts_pro = (order+2)*(order+2);
-  unsigned int nSpts_res = (order)*(order);
+  unsigned int nSpts_pro_1D = order+2;
+  unsigned int nSpts_res_1D = order;
+  unsigned int nSpts_pro = nSpts_pro_1D * nSpts_pro_1D;
+  unsigned int nSpts_res = nSpts_res_1D * nSpts_res_1D;
 
   std::vector<double> loc(nDims, 0.0);
 
@@ -414,8 +416,8 @@ void Quads::setup_PMG()
     {
       for (unsigned int pspt = 0; pspt < nSpts_pro; pspt++)
       {
-        loc[0] = loc_spts_pro_1D[pspt%nSpts_pro];
-        loc[1] = loc_spts_pro_1D[pspt/nSpts_pro];
+        loc[0] = loc_spts_pro_1D[pspt%nSpts_pro_1D];
+        loc[1] = loc_spts_pro_1D[pspt/nSpts_pro_1D];
 
         oppPro(pspt, spt) = calc_nodal_basis(spt, loc);
       }
@@ -433,8 +435,8 @@ void Quads::setup_PMG()
     {
       for (unsigned int rspt = 0; rspt < nSpts_res; rspt++)
       {
-        loc[0] = loc_spts_res_1D[rspt%nSpts_res];
-        loc[1] = loc_spts_res_1D[rspt/nSpts_res];
+        loc[0] = loc_spts_res_1D[rspt%nSpts_res_1D];
+        loc[1] = loc_spts_res_1D[rspt/nSpts_res_1D];
 
         oppRes(rspt, spt) = calc_nodal_basis(spt, loc);
       }
