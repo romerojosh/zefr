@@ -23,7 +23,7 @@ class PMGrid
     void compute_source_term(FRSolver &grid, mdvector<double> &source);
 
   public:
-    void setup(int order, const InputStruct *input);
+    void setup(int order, const InputStruct *input, FRSolver &solver);
     void cycle(FRSolver &solver);
 
 

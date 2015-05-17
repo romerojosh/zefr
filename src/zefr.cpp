@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
   if (input.p_multi)
   {
     std::cout << "Setting up multigrid..." << std::endl;
-    pmg.setup(input.order, &input);
+    pmg.setup(input.order, &input, solver);
   }
 
   solver.write_solution(input.output_prefix,0);
