@@ -764,7 +764,9 @@ void FRSolver::compute_element_dt()
       waveSp_max = std::max(waveSp, waveSp_max);
     }
 
-    dt[ele] = input->CFL * (2.0 / (waveSp_max+1.e-10));
+    /* Experiment: Scale CFL with order */
+    /* Note: CFL is applied to parent space element with width 2 */
+    dt[ele] = (input->CFL) / (order+1) * (2.0 / (waveSp_max+1.e-10));
   }
 }
 
