@@ -56,7 +56,6 @@ class FRSolver
 
     void compute_element_dt();
 
-
   public:
     FRSolver(const InputStruct *input, int order = -1);
     void setup();

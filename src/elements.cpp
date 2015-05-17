@@ -24,6 +24,10 @@ void Elements::setup()
   setup_FR();
   setup_aux();
   set_coords();
+
+  /* If P-multigrid is enabled, create associated operators */
+  if (input->p_multi)
+    setup_PMG();
 }
 
 void Elements::set_shape()

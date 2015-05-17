@@ -12,9 +12,11 @@
 //#include "solver.hpp"
 
 class FRSolver;
+class PMGrid;
 class Elements
 {
   friend class FRSolver;
+  friend class PMGrid;
   protected:
     const InputStruct *input = NULL;
     GeoStruct *geo = NULL;
@@ -46,12 +48,15 @@ class Elements
     mdvector<double> Fcomm, Ucomm;
     mdvector<double> dU_spts, dU_fpts, dF_spts, divF_spts;
 
+    /* Multigrid operators */
+    mdvector<double> oppPro_PMG, oppRes_PMG;
 
     void set_coords();
     void set_shape();
     void setup_FR();
     void setup_aux();
 
+    virtual void setup_PMG() = 0;
     virtual void set_locs() = 0;
     virtual void set_transforms() = 0;
     virtual void set_normals() = 0;

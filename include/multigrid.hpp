@@ -16,6 +16,9 @@ class PMGrid
     std::vector<mdvector<double>> corrections;
     std::vector<std::shared_ptr<FRSolver>> grids;
 
+    void restrict_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
+    void prolong_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
+
   public:
     void setup(int order, const InputStruct *input);
     void cycle(FRSolver &solver);

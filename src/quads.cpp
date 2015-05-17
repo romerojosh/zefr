@@ -395,7 +395,52 @@ double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc
 
 }
 
+void Quads::setup_PMG()
+{
+  /* Allocate memory for operators */
+  unsigned int nSpts_pro = (order+2)*(order+2);
+  unsigned int nSpts_res = (order)*(order);
 
+  std::vector<double> loc(nDims, 0.0);
+
+  if (order != input->order)
+  {
+    /* Setup prolongation operator */
+    oppPro_PMG.assign({nSpts_pro, nSpts});
+
+    auto loc_spts_pro_1D = Gauss_Legendre_pts(order+2); 
+
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int pspt = 0; pspt < nSpts_pro; pspt++)
+      {
+        loc[0] = loc_spts_pro_1D[pspt%nSpts_pro];
+        loc[1] = loc_spts_pro_1D[pspt/nSpts_pro];
+
+        oppPro_PMG(pspt, spt) = calc_nodal_basis(spt, loc);
+      }
+    }
+  }
+
+  if (order != 0)
+  {
+    /* Setup restriction operator */
+    oppRes_PMG.assign({nSpts_res, nSpts});
+
+    auto loc_spts_res_1D = Gauss_Legendre_pts(order); 
+
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int rspt = 0; rspt < nSpts_res; rspt++)
+      {
+        loc[0] = loc_spts_res_1D[rspt%nSpts_res];
+        loc[1] = loc_spts_res_1D[rspt/nSpts_res];
+
+        oppRes_PMG(rspt, spt) = calc_nodal_basis(spt, loc);
+      }
+    }
+  }
+}
 
 void Quads::transform_flux()
 {

@@ -15,6 +15,7 @@ class Quads: public Elements
     void set_locs();
     void set_transforms();
     void set_normals();
+    void setup_PMG();
 
     double calc_shape(unsigned int shape_order, unsigned int idx,
                       std::vector<double> &loc);
