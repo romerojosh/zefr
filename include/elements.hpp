@@ -49,7 +49,7 @@ class Elements
     mdvector<double> dU_spts, dU_fpts, dF_spts, divF_spts;
 
     /* Multigrid operators */
-    mdvector<double> oppPro_PMG, oppRes_PMG;
+    mdvector<double> oppPro, oppRes;
 
     void set_coords();
     void set_shape();

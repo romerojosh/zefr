@@ -406,7 +406,7 @@ void Quads::setup_PMG()
   if (order != input->order)
   {
     /* Setup prolongation operator */
-    oppPro_PMG.assign({nSpts_pro, nSpts});
+    oppPro.assign({nSpts_pro, nSpts});
 
     auto loc_spts_pro_1D = Gauss_Legendre_pts(order+2); 
 
@@ -417,7 +417,7 @@ void Quads::setup_PMG()
         loc[0] = loc_spts_pro_1D[pspt%nSpts_pro];
         loc[1] = loc_spts_pro_1D[pspt/nSpts_pro];
 
-        oppPro_PMG(pspt, spt) = calc_nodal_basis(spt, loc);
+        oppPro(pspt, spt) = calc_nodal_basis(spt, loc);
       }
     }
   }
@@ -425,7 +425,7 @@ void Quads::setup_PMG()
   if (order != 0)
   {
     /* Setup restriction operator */
-    oppRes_PMG.assign({nSpts_res, nSpts});
+    oppRes.assign({nSpts_res, nSpts});
 
     auto loc_spts_res_1D = Gauss_Legendre_pts(order); 
 
@@ -436,7 +436,7 @@ void Quads::setup_PMG()
         loc[0] = loc_spts_res_1D[rspt%nSpts_res];
         loc[1] = loc_spts_res_1D[rspt/nSpts_res];
 
-        oppRes_PMG(rspt, spt) = calc_nodal_basis(spt, loc);
+        oppRes(rspt, spt) = calc_nodal_basis(spt, loc);
       }
     }
   }
