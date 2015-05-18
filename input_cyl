@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile meshes/half_cyl_struct_quad.msh
+meshfile meshes/full_cyl_64x64.msh
 
 # Solver:
 order     2
@@ -16,9 +16,9 @@ dt	  0.00001
 CFL	  0.2
 
 # Multigrid
-p_multi 0
-smooth_steps 5
-rel_fac 0.5
+p_multi 1
+smooth_steps 1
+rel_fac 0.8
 
 # Reporting:
 output_prefix data

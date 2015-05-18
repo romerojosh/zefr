@@ -41,8 +41,8 @@ void PMGrid::cycle(FRSolver &solver)
   restrict_pmg(solver, *grids[order-1]);
 
   //for (int P = order-1; P >= 0; P--)
-  for (int P = order-1; P >= solver.geo.shape_order-1; P--)
   //for (int P = order-1; P >= order-1; P--)
+  for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
   {
     /* Generate source term */
     compute_source_term(*grids[P], sources[P]);
@@ -68,9 +68,7 @@ void PMGrid::cycle(FRSolver &solver)
           corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - corrections[P](spt, ele, n);
 
     /* If coarser grid exists, restrict information */
-    //if (P-1 >= 0)
-    if (P-1 >= solver.geo.shape_order-1)
-    //if (P-1 >= order-1)
+    if (P-1 >= (int)solver.geo.shape_order-1)
     {
       /* Update residual and add source */
       grids[P]->compute_residual(0);
@@ -85,9 +83,7 @@ void PMGrid::cycle(FRSolver &solver)
     }
   }
 
-  //for (int P = 0; P < order-1; P++)
   for (int P = solver.geo.shape_order-1; P < order-1; P++)
-  //for (int P = order-1; P < order-1; P++)
   {
     prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
   }
@@ -103,9 +99,9 @@ void PMGrid::cycle(FRSolver &solver)
         solver.eles->U_spts(spt, ele, n) += input->rel_fac*corrections[order](spt, ele, n);
 
   /* Reinitialize fine grid correction to zero*/
-  //corrections[order].fill(0.);
-  for (int P = 0; P <= order; P++)
-    corrections[P].fill(0.);
+  corrections[order].fill(0.);
+  //for (int P = 0; P <= order; P++)
+  //  corrections[P].fill(0.);
 }
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
