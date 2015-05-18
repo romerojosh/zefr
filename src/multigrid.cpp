@@ -40,7 +40,9 @@ void PMGrid::cycle(FRSolver &solver)
   solver.compute_residual(0);
   restrict_pmg(solver, *grids[order-1]);
 
-  for (int P = order-1; P >= 0; P--)
+  //for (int P = order-1; P >= 0; P--)
+  for (int P = order-1; P >= solver.geo.shape_order-1; P--)
+  //for (int P = order-1; P >= order-1; P--)
   {
     /* Generate source term */
     compute_source_term(*grids[P], sources[P]);
@@ -66,7 +68,9 @@ void PMGrid::cycle(FRSolver &solver)
           corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - corrections[P](spt, ele, n);
 
     /* If coarser grid exists, restrict information */
-    if (P-1 >= 0)
+    //if (P-1 >= 0)
+    if (P-1 >= solver.geo.shape_order-1)
+    //if (P-1 >= order-1)
     {
       /* Update residual and add source */
       grids[P]->compute_residual(0);
@@ -74,14 +78,16 @@ void PMGrid::cycle(FRSolver &solver)
       for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
         for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
           for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-            grids[P]->divF(spt, ele, n) += sources[P](spt, ele, n);
+            grids[P]->divF(spt, ele, n, 0) += sources[P](spt, ele, n);
 
       /* Restrict to next coarse grid */
       restrict_pmg(*grids[P], *grids[P-1]);
     }
   }
 
-  for (int P = 0; P < order-1; P++)
+  //for (int P = 0; P < order-1; P++)
+  for (int P = solver.geo.shape_order-1; P < order-1; P++)
+  //for (int P = order-1; P < order-1; P++)
   {
     prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
   }
@@ -94,12 +100,12 @@ void PMGrid::cycle(FRSolver &solver)
   for (unsigned int n = 0; n < solver.eles->nVars; n++)
     for (unsigned int ele = 0; ele < solver.eles->nEles; ele++)
       for (unsigned int spt = 0; spt < solver.eles->nSpts; spt++)
-        solver.eles->U_spts(spt, ele, n) += corrections[order](spt, ele, n);
+        solver.eles->U_spts(spt, ele, n) += input->rel_fac*corrections[order](spt, ele, n);
 
-  /* Reinitialized fine grid correction to zero*/
-  corrections[order].fill(0.);
-//  for (int P = 0; P <= order; P++)
-  //  corrections[P].fill(0.);
+  /* Reinitialize fine grid correction to zero*/
+  //corrections[order].fill(0.);
+  for (int P = 0; P <= order; P++)
+    corrections[P].fill(0.);
 }
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
@@ -114,6 +120,9 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
 
     int block_size = (grid_f.eles->nEles + nThreads - 1)/nThreads;
     int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += grid_f.eles->nEles % (block_size);
 
     for (unsigned int n = 0; n < grid_f.eles->nVars; n++)
     {
@@ -165,6 +174,8 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c,
     int block_size = (grid_f.eles->nEles + nThreads - 1)/nThreads;
     int start_idx = block_size * thread_idx;
 
+    if (thread_idx == nThreads-1)
+      block_size += grid_f.eles->nEles % (block_size);
 
     for (unsigned int n = 0; n < grid_c.eles->nVars; n++)
     {

@@ -15,7 +15,7 @@ struct InputStruct
   bool viscous, p_multi;
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
-  double AdvDiff_D, dt, CFL;
+  double AdvDiff_D, dt, CFL, rel_fac;
   std::array<double, 3> AdvDiff_A;
   double gamma, rho_fs, u_fs, v_fs, P_fs;
 };

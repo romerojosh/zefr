@@ -740,8 +740,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] * (divF(spt, ele, n, stage) 
-              + source(spt, ele, n));
+          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] * (divF(spt, ele, n, stage) + source(spt, ele, n));
 
 }
 
@@ -766,7 +765,7 @@ void FRSolver::compute_element_dt()
 
     /* Experiment: Scale CFL with order */
     /* Note: CFL is applied to parent space element with width 2 */
-    dt[ele] = (input->CFL) / (order+1) * (2.0 / (waveSp_max+1.e-10));
+    dt[ele] = (input->CFL) / ((order+1)*(order+1)) * (2.0 / (waveSp_max+1.e-10));
   }
 }
 
