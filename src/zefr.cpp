@@ -1,6 +1,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <fstream>
 #include <sstream>
 
 #include "input.hpp"
@@ -33,6 +34,8 @@ int main(int argc, char* argv[])
   }
 
   solver.write_solution(input.output_prefix,0);
+  std::ofstream hist_file;
+  hist_file.open(input.output_prefix + "_hist.dat", std::ofstream::app);
 
   auto t1 = std::chrono::high_resolution_clock::now();
   for (unsigned int n = 1; n<=input.n_steps ; n++)
@@ -44,8 +47,7 @@ int main(int argc, char* argv[])
 
     if (n%input.report_freq == 0 || n == input.n_steps)
     {
-      std::cout << n << " ";
-      solver.report_max_residuals();
+      solver.report_max_residuals(hist_file , n, t1);
     }
 
     if (n%input.write_freq == 0 || n == input.n_steps)

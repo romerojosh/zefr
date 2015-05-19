@@ -1,6 +1,8 @@
 #ifndef solver_hpp
 #define solver_hpp
 
+#include <fstream>
+#include <chrono>
 #include <memory>
 #include <string>
 
@@ -63,7 +65,7 @@ class FRSolver
     void update();
     void update_with_source(mdvector<double> &source);
     void write_solution(std::string prefix, unsigned int nIter);
-    void report_max_residuals();
+    void report_max_residuals(std::ofstream &f, unsigned int iter, std::chrono::high_resolution_clock::time_point t1);
     void compute_l2_error();
 
 };

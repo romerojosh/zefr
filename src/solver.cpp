@@ -765,7 +765,8 @@ void FRSolver::compute_element_dt()
 
     /* Experiment: Scale CFL with order */
     /* Note: CFL is applied to parent space element with width 2 */
-    dt[ele] = (input->CFL) / ((order+1)*(order+1)) * (2.0 / (waveSp_max+1.e-10));
+    //dt[ele] = (input->CFL) / ((order+1)*(order+1)) * (2.0 / (waveSp_max+1.e-10));
+    dt[ele] = (input->CFL) / ((order+1)) * (2.0 / (waveSp_max+1.e-10));
   }
 }
 
@@ -910,18 +911,30 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   }
 }
 
-void FRSolver::report_max_residuals()
+void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter, 
+    std::chrono::high_resolution_clock::time_point t1)
 {
   std::vector<double> max_res(eles->nVars,0.0);
 
   for (unsigned int n = 0; n < eles->nVars; n++)
     max_res[n] = *std::max_element(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1));
 
+  std::cout << iter << " ";
   for (auto &val : max_res)
     std::cout << std::scientific << val << " ";
 
   std::cout << "dt: " << dt[0];
   std::cout << std::endl;
+  
+  /* Write to history file */
+  auto t2 = std::chrono::high_resolution_clock::now();
+  auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
+  f << iter << " " << current_runtime.count() << " ";
+
+  for (auto &val : max_res)
+    f << std::scientific << val << " ";
+  f << std::endl;
+
 }
 
 void FRSolver::compute_l2_error()
