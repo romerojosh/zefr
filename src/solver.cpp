@@ -245,7 +245,7 @@ void FRSolver::extrapolate_U()
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int block_size = eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)
@@ -344,7 +344,7 @@ void FRSolver::compute_dU()
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int block_size = eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)
@@ -436,7 +436,7 @@ void FRSolver::extrapolate_dU()
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int block_size = eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)
@@ -539,7 +539,7 @@ void FRSolver::compute_dF()
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int block_size = eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)
@@ -851,7 +851,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int block_size = eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)
@@ -931,7 +931,7 @@ void FRSolver::compute_l2_error()
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (eles->nEles + nThreads - 1)/nThreads;
+    int block_size = eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)

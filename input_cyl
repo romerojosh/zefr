@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile meshes/full_cyl_64x64.msh
+meshfile meshes/half_cyl_2nd.msh
 
 # Solver:
 order     2
@@ -9,21 +9,21 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 100000
+n_steps 5000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.00001
-CFL	  0.2
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.001
+CFL	  0.5
 
 # Multigrid
 p_multi 1
-smooth_steps 1
-rel_fac 0.8
+smooth_steps 10
+rel_fac 1.0
 
 # Reporting:
-output_prefix data
+output_prefix nopmg
 write_freq  500
-report_freq 10
+report_freq 100
 nQpts1D     10
 
 # Riemann Solver:

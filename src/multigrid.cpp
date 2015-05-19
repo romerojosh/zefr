@@ -114,7 +114,7 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (grid_f.eles->nEles + nThreads - 1)/nThreads;
+    int block_size = grid_f.eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)
@@ -167,7 +167,7 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c,
     int nThreads = omp_get_num_threads();
     int thread_idx = omp_get_thread_num();
 
-    int block_size = (grid_f.eles->nEles + nThreads - 1)/nThreads;
+    int block_size = grid_f.eles->nEles / nThreads;
     int start_idx = block_size * thread_idx;
 
     if (thread_idx == nThreads-1)
