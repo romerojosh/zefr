@@ -35,7 +35,7 @@ int main(int argc, char* argv[])
 
   solver.write_solution(input.output_prefix,0);
   std::ofstream hist_file;
-  hist_file.open(input.output_prefix + "_hist.dat", std::ofstream::app);
+  hist_file.open(input.output_prefix + "_hist.dat");
 
   auto t1 = std::chrono::high_resolution_clock::now();
   for (unsigned int n = 1; n<=input.n_steps ; n++)
