@@ -43,9 +43,9 @@ void PMGrid::cycle(FRSolver &solver)
   solver.compute_residual(0);
   restrict_pmg(solver, *grids[order-1]);
 
-  //for (int P = order-1; P >= 0; P--)
+  for (int P = order-1; P >= 0; P--)
   //for (int P = order-1; P >= order-1; P--)
-  for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
+  //for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
   {
     /* Generate source term */
     compute_source_term(*grids[P], sources[P]);
@@ -73,7 +73,8 @@ void PMGrid::cycle(FRSolver &solver)
           */
 
     /* If coarser grid exists, restrict information */
-    if (P-1 >= (int)solver.geo.shape_order-1)
+    //if (P-1 >= (int)solver.geo.shape_order-1)
+    if (P-1 >= 0)
     {
       /* Update residual and add source */
       grids[P]->compute_residual(0);
@@ -88,7 +89,8 @@ void PMGrid::cycle(FRSolver &solver)
     }
   }
 
-  for (int P = solver.geo.shape_order-1; P < order-1; P++)
+  //for (int P = solver.geo.shape_order-1; P < order-1; P++)
+  for (int P = 0; P < order-1; P++)
   {
     /* Add correction to solution */
 #pragma omp parallel for collapse(3)

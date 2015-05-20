@@ -81,7 +81,78 @@ void Faces::apply_bcs()
       }
       case 4: /* Characteristic (from HiFiLES) */
       {
+        /* Compute wall normal velocities */
+        double VnL = 0.0; double VnR = 0.0;
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          VnL += U(0, dim+1, fpt) / U(0, 0, fpt) * norm(0, dim, fpt);
+      
+        VnR += input->u_fs * norm(0,0,fpt);
+        VnR += input->v_fs * norm(0,1,fpt);
+
+        /* Compute pressure. TODO: Compute pressure once!*/
+        double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
+            U(0, 2, fpt)) / U(0, 0, fpt);
+
+        double PL = (input->gamma - 1.0) * (U(0, 3, fpt) - 0.5 * momF);
+        double PR = input->P_fs;
+
+        /* Compute Riemann Invariants */
+        double Rp = VnL + 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PL / 
+            U(0,0,fpt));
+        double Rn = VnR - 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PR / 
+            input->rho_fs);
+
+        double cstar = 0.25 * (input->gamma - 1) * (Rp - Rn);
+        double ustarn = 0.5 * (Rp + Rn);
+
+        if (VnL < 0.0) /* Case 1: Inflow */
+        {
+          double s_inv = std::pow(input->rho_fs, input->gamma) / PR;
+
+          double u_sq = 0.0;
+          u_sq += input->u_fs * input->u_fs;
+          u_sq += input->v_fs * input->v_fs;
+
+          double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs +
+              0.5 * u_sq;
+
+          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/ 
+              (input-> gamma - 1.0));
+
+          U(1, 0, fpt) = rhoR;
+          U(1, 1, fpt) = rhoR * (ustarn * norm(0, 0, fpt) + input->u_fs - VnR * 
+              norm(0, 0, fpt));
+          U(1, 2, fpt) = rhoR * (ustarn * norm(0, 1, fpt) + input->v_fs - VnR * 
+              norm(0, 1, fpt));
+          PR = rhoR / input->gamma * cstar * cstar;
+          U(1, 3, fpt) = rhoR * H_fs - PR;
+          
+        }
+        else  /* Case 2: Outflow */
+        {
+          double rhoL = U(0, 0, fpt);
+          double s_inv = std::pow(rhoL, input->gamma) / PL;
+
+          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/ 
+              (input-> gamma - 1.0));
+
+          U(1, 0, fpt) = rhoR;
+          U(1, 1, fpt) = rhoR * (ustarn * norm(0, 0, fpt) +(U(0, 1, fpt) / 
+                U(0, 0, fpt) - VnL * norm(0, 0, fpt)));
+          U(1, 2, fpt) = rhoR * (ustarn * norm(0, 1, fpt) +(U(0, 2, fpt) / 
+                U(0, 0, fpt) - VnL * norm(0, 1, fpt)));
+          double PR = rhoR / input->gamma * cstar * cstar;
+
+          double u_sq = 0.0;
+          u_sq += U(1, 1, fpt) * U(1, 1, fpt) / (rhoL * rhoL) ;
+          u_sq += U(1, 2, fpt) * U(1, 2, fpt) / (rhoL * rhoL) ;
+          
+          U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * rhoR * u_sq; 
+        }
+ 
         break;
+
       }
       case 5: /* Slip Wall */
       {

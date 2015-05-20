@@ -9,19 +9,19 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 5000
+n_steps 20000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
 CFL	  0.3
 
 # Multigrid
-p_multi 1
+p_multi 0
 smooth_steps 1
 rel_fac 1.0
 
 # Reporting:
-output_prefix pmg
+output_prefix nopmg
 write_freq  500
 report_freq 100
 nQpts1D     10
