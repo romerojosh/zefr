@@ -3,7 +3,7 @@ nDims    2
 meshfile meshes/full_cyl_2nd.msh
 
 # Solver:
-order     0
+order     3
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -13,7 +13,7 @@ n_steps 20000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
-CFL	  0.9
+CFL	  0.5
 
 # Multigrid
 p_multi 0
@@ -21,8 +21,8 @@ smooth_steps 1
 rel_fac 1.00
 
 # Reporting:
-output_prefix test 
-write_freq  500
+output_prefix pmg_10cg
+write_freq  1000
 report_freq 100
 nQpts1D     10
 

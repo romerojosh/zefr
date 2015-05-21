@@ -43,9 +43,7 @@ void PMGrid::cycle(FRSolver &solver)
   solver.compute_residual(0);
   restrict_pmg(solver, *grids[order-1]);
 
-  //for (int P = order-1; P >= order-1; P--)
-  //for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
-  for (int P = order-1; P >= 0; P--)
+  for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
   {
     /* Generate source term */
     compute_source_term(*grids[P], sources[P]);
@@ -63,19 +61,7 @@ void PMGrid::cycle(FRSolver &solver)
       grids[P]->update_with_source(sources[P]);
     }
 
-    /* Generate error */
-  /*
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
-      for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-          corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - corrections[P](spt, ele, n);
-          */
-
-    /* If coarser grid exists, restrict information */
-    //if (P-1 >= order-1)
-    //if (P-1 >= (int)solver.geo.shape_order-1)
-    if (P-1 >= 0)
+    if (P-1 >= (int)solver.geo.shape_order-1)
     {
       /* Update residual and add source */
       grids[P]->compute_residual(0);
@@ -90,22 +76,11 @@ void PMGrid::cycle(FRSolver &solver)
     }
   }
 
-  //for (int P = solver.geo.shape_order-1; P <= order-1; P++)
-  for (int P = 0; P <= order-1; P++)
+  for (int P = solver.geo.shape_order-1; P <= order-1; P++)
   {
-    /* Add correction to solution */
-    /*
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < solver.eles->nVars; n++)
-      for (unsigned int ele = 0; ele < solver.eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < solver.eles->nSpts; spt++)
-          grids[P]->eles->U_spts(spt, ele, n) += input->rel_fac*corrections[order](spt, ele, n);
-    */
-
 
     /* Advance again (v-cycle)*/
-    //if (P != (int)solver.geo.shape_order-1)
-    if (P != 0)
+    if (P != (int)solver.geo.shape_order-1)
     {
       for (unsigned int step = 0; step < input->smooth_steps; step++)
       {
@@ -115,7 +90,7 @@ void PMGrid::cycle(FRSolver &solver)
     /*
     else
     {
-      for (unsigned int step = 0; step < 5; step++)
+      for (unsigned int step = 0; step < 4; step++)
       {
         grids[P]->update_with_source(sources[P]);
       }
@@ -130,28 +105,14 @@ void PMGrid::cycle(FRSolver &solver)
         for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
           corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - solutions[P](spt, ele, n);
 
-    //prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
+    /* Prolong error and add to fine grid solution */
     if (P < order-1)
       prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
   }
 
-  /* Prolong correction to finest grid */
+  /* Prolong correction and add to finest grid solution */
   prolong_err(*grids[order-1], corrections[order-1], solver, corrections[order]);
 
-  /* Add correction to fine grid solution */
-  /*
-#pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < solver.eles->nVars; n++)
-    for (unsigned int ele = 0; ele < solver.eles->nEles; ele++)
-      for (unsigned int spt = 0; spt < solver.eles->nSpts; spt++)
-        solver.eles->U_spts(spt, ele, n) += input->rel_fac*corrections[order](spt, ele, n);
-  */
-
-  /* Reinitialize fine grid correction to zero*/
-  //corrections[order].fill(0.);
-//#pragma omp parallel for
-  //for (int P = 0; P <= order; P++)
-    //corrections[P].fill(0.);
 }
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)

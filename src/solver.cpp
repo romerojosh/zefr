@@ -606,7 +606,6 @@ void FRSolver::compute_divF(unsigned int stage)
     for (unsigned int ele =0; ele < eles->nEles; ele++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         divF(spt, ele, n, stage) = eles->dF_spts(spt, ele, n, 0);
-        //eles->divF_spts(n,spt,ele) = eles->dF_spts(0,n,spt,ele);
 
   for (unsigned int dim = 1; dim < eles->nDims; dim ++)
 #pragma omp parallel for collapse(3)
@@ -614,16 +613,12 @@ void FRSolver::compute_divF(unsigned int stage)
       for (unsigned int ele =0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           divF(spt, ele, n, stage) += eles->dF_spts(spt, ele, n, dim);
-          //eles->divF_spts(n,spt,ele) += eles->dF_spts(dim,n,spt,ele);
-          //
-  for (unsigned int dim = 1; dim < eles->nDims; dim ++)
+
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele =0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           divF(spt, ele, n, stage) /= eles->jaco_det_spts(spt, ele);
-          //eles->divF_spts(n,spt,ele) += eles->dF_spts(dim,n,spt,ele);
-
   /*
   std::cout << "divF" << std::endl;
   for (unsigned int i = 0; i < eles->nSpts; i++)
@@ -728,7 +723,8 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] * (divF(spt, ele, n, stage) + source(spt, ele, n));
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] * 
+            (divF(spt, ele, n, stage) + source(spt, ele, n));
   }
 
   /* Final stage */
@@ -766,7 +762,8 @@ void FRSolver::compute_element_dt()
     /* Experiment: Scale CFL with order */
     /* Note: CFL is applied to parent space element with width 2 */
     //dt[ele] = (input->CFL) / ((order+1)*(order+1)) * (2.0 / (waveSp_max+1.e-10));
-    dt[ele] = (input->CFL) / ((order+1)) * (2.0 / (waveSp_max+1.e-10));
+    dt[ele] = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
+    //dt[ele] = (input->CFL) / ((order+1) * (order+1) + 0.4) * (2.0 / (waveSp_max+1.e-10));
   }
 }
 

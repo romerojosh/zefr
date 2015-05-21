@@ -363,7 +363,8 @@ void Faces::rusanov_flux()
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     /* Initialize FL, FR */
-    FL.assign(nVars,0.0); FR.assign(nVars,0.0);
+    std::fill(FL.begin(), FL.end(), 0.0);
+    std::fill(FR.begin(), FR.end(), 0.0);
 
     /* Get interface-normal flux components  (from L to R)*/
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -447,7 +448,8 @@ void Faces::LDG_flux()
   {
 
     /* Initialize FL, FR */
-    FL.assign(nVars,0.0); FR.assign(nVars,0.0);
+    std::fill(FL.begin(), FL.end(), 0.0);
+    std::fill(FR.begin(), FR.end(), 0.0);
 
     /* Get interface-normal flux components  (from L to R)*/
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -498,7 +500,8 @@ void Faces::central_flux()
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     /* Initialize FL, FR */
-    FL.assign(nVars,0.0); FR.assign(nVars,0.0);
+    std::fill(FL.begin(), FL.end(), 0.0);
+    std::fill(FR.begin(), FR.end(), 0.0);
 
     /* Get interface-normal flux components  (from L to R)*/
     for (unsigned int dim = 0; dim < nDims; dim++)

@@ -6,7 +6,9 @@
 /* Computes solution at specified time and location */
 double compute_U_true(double x, double y, double t, unsigned int var, const InputStruct *input);
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input);
-                     
+
+double get_cfl_limit(int order);
+
 template <typename T>
 struct square
 {
