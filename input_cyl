@@ -1,9 +1,9 @@
 # Geometry:
 nDims    2
-meshfile meshes/half_cyl_2nd.msh
+meshfile meshes/full_cyl_2nd.msh
 
 # Solver:
-order     3
+order     0
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -13,15 +13,15 @@ n_steps 20000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
-CFL	  0.3
+CFL	  0.9
 
 # Multigrid
 p_multi 0
 smooth_steps 1
-rel_fac 1.0
+rel_fac 1.00
 
 # Reporting:
-output_prefix nopmg
+output_prefix test 
 write_freq  500
 report_freq 100
 nQpts1D     10

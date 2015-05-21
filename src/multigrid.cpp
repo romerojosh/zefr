@@ -43,9 +43,9 @@ void PMGrid::cycle(FRSolver &solver)
   solver.compute_residual(0);
   restrict_pmg(solver, *grids[order-1]);
 
-  for (int P = order-1; P >= 0; P--)
   //for (int P = order-1; P >= order-1; P--)
   //for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
+  for (int P = order-1; P >= 0; P--)
   {
     /* Generate source term */
     compute_source_term(*grids[P], sources[P]);
@@ -73,6 +73,7 @@ void PMGrid::cycle(FRSolver &solver)
           */
 
     /* If coarser grid exists, restrict information */
+    //if (P-1 >= order-1)
     //if (P-1 >= (int)solver.geo.shape_order-1)
     if (P-1 >= 0)
     {
@@ -89,48 +90,68 @@ void PMGrid::cycle(FRSolver &solver)
     }
   }
 
-  //for (int P = solver.geo.shape_order-1; P < order-1; P++)
-  for (int P = 0; P < order-1; P++)
+  //for (int P = solver.geo.shape_order-1; P <= order-1; P++)
+  for (int P = 0; P <= order-1; P++)
   {
     /* Add correction to solution */
+    /*
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < solver.eles->nVars; n++)
       for (unsigned int ele = 0; ele < solver.eles->nEles; ele++)
         for (unsigned int spt = 0; spt < solver.eles->nSpts; spt++)
           grids[P]->eles->U_spts(spt, ele, n) += input->rel_fac*corrections[order](spt, ele, n);
+    */
 
 
     /* Advance again (v-cycle)*/
-    for (unsigned int step = 0; step < input->smooth_steps; step++)
+    //if (P != (int)solver.geo.shape_order-1)
+    if (P != 0)
     {
-      grids[P]->update_with_source(sources[P]);
+      for (unsigned int step = 0; step < input->smooth_steps; step++)
+      {
+        grids[P]->update_with_source(sources[P]);
+      }
     }
+    /*
+    else
+    {
+      for (unsigned int step = 0; step < 5; step++)
+      {
+        grids[P]->update_with_source(sources[P]);
+      }
 
+    }
+    */
 
     /* Generate error */
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
       for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
         for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-          corrections[P](spt, ele, n) += grids[P]->eles->U_spts(spt, ele, n) - solutions[P](spt, ele, n);
+          corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - solutions[P](spt, ele, n);
 
-    prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
+    //prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
+    if (P < order-1)
+      prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
   }
 
   /* Prolong correction to finest grid */
   prolong_err(*grids[order-1], corrections[order-1], solver, corrections[order]);
 
   /* Add correction to fine grid solution */
+  /*
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < solver.eles->nVars; n++)
     for (unsigned int ele = 0; ele < solver.eles->nEles; ele++)
       for (unsigned int spt = 0; spt < solver.eles->nSpts; spt++)
         solver.eles->U_spts(spt, ele, n) += input->rel_fac*corrections[order](spt, ele, n);
+  */
 
   /* Reinitialize fine grid correction to zero*/
   //corrections[order].fill(0.);
-  for (int P = 0; P <= order; P++)
-    corrections[P].fill(0.);
+//#pragma omp parallel for
+  //for (int P = 0; P <= order; P++)
+    //corrections[P].fill(0.);
 }
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
@@ -206,11 +227,12 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c,
     {
       auto &A = grid_c.eles->oppPro(0,0);
       auto &B = correction_c(0,start_idx,n);
-      auto &C = correction_f(0,start_idx,n);
+      //auto &C = correction_f(0,start_idx,n);
+      auto &C = grid_f.eles->U_spts(0,start_idx,n);
 
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-          block_size, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
-          &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+          block_size, grid_c.eles->nSpts, input->rel_fac, &A, grid_f.eles->nSpts, 
+          &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
     }
   }
 }

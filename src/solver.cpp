@@ -916,8 +916,10 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
 {
   std::vector<double> max_res(eles->nVars,0.0);
 
+  //for (unsigned int n = 0; n < eles->nVars; n++)
+  //  max_res[n] = *std::max_element(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1));
   for (unsigned int n = 0; n < eles->nVars; n++)
-    max_res[n] = *std::max_element(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1));
+    max_res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1), 0.0, square<double>()));
 
   std::cout << iter << " ";
   for (auto &val : max_res)
