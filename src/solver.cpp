@@ -614,11 +614,13 @@ void FRSolver::compute_divF(unsigned int stage)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           divF(spt, ele, n, stage) += eles->dF_spts(spt, ele, n, dim);
 
+  /*
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele =0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           divF(spt, ele, n, stage) /= eles->jaco_det_spts(spt, ele);
+    */
   /*
   std::cout << "divF" << std::endl;
   for (unsigned int i = 0; i < eles->nSpts; i++)
@@ -663,7 +665,7 @@ void FRSolver::update()
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] * divF(spt, ele, n, stage);
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
   }
 
   /* Final stage */
@@ -675,7 +677,7 @@ void FRSolver::update()
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] * divF(spt, ele, n, stage);
+          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
 
   /*
   std::cout << "U" << std::endl;
@@ -723,7 +725,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] * 
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / eles->jaco_det_spts(spt,ele)* 
             (divF(spt, ele, n, stage) + source(spt, ele, n));
   }
 
@@ -736,7 +738,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] * (divF(spt, ele, n, stage) + source(spt, ele, n));
+          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * (divF(spt, ele, n, stage) + source(spt, ele, n));
 
 }
 
@@ -913,6 +915,11 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
 {
   std::vector<double> max_res(eles->nVars,0.0);
 
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+    for (unsigned int ele =0; ele < eles->nEles; ele++)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      divF(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
   //for (unsigned int n = 0; n < eles->nVars; n++)
   //  max_res[n] = *std::max_element(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1));
   for (unsigned int n = 0; n < eles->nVars; n++)

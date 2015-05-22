@@ -43,7 +43,9 @@ void PMGrid::cycle(FRSolver &solver)
   solver.compute_residual(0);
   restrict_pmg(solver, *grids[order-1]);
 
-  for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
+  //for (int P = order-1; P >= (int)solver.geo.shape_order-1; P--)
+  //for (int P = order-1; P >= 0; P--)
+  for (int P = order-1; P >= (int) input->low_order; P--)
   {
     /* Generate source term */
     compute_source_term(*grids[P], sources[P]);
@@ -56,12 +58,14 @@ void PMGrid::cycle(FRSolver &solver)
           solutions[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n);
 
     /* Update solution on coarse level */
-    for (unsigned int step = 0; step < input->smooth_steps; step++)
-    {
+    //for (unsigned int step = 0; step < input->smooth_steps; step++)
+    //{
       grids[P]->update_with_source(sources[P]);
-    }
+    //}
 
-    if (P-1 >= (int)solver.geo.shape_order-1)
+    //if (P-1 >= (int)solver.geo.shape_order-1)
+    //if (P-1 >= 0)
+    if (P-1 >= (int) input->low_order)
     {
       /* Update residual and add source */
       grids[P]->compute_residual(0);
@@ -76,27 +80,29 @@ void PMGrid::cycle(FRSolver &solver)
     }
   }
 
-  for (int P = solver.geo.shape_order-1; P <= order-1; P++)
+  //for (int P = solver.geo.shape_order-1; P <= order-1; P++)
+  //for (int P = 0; P <= order-1; P++)
+  for (int P = (int) input->low_order; P <= order-1; P++)
   {
 
     /* Advance again (v-cycle)*/
-    if (P != (int)solver.geo.shape_order-1)
+    //if (P != (int)solver.geo.shape_order-1)
+    //if (P != 0)
+    if (P != (int) input->low_order)
+    {
+      //for (unsigned int step = 0; step < input->smooth_steps; step++)
+      //{
+        grids[P]->update_with_source(sources[P]);
+      //}
+    }
+    else
     {
       for (unsigned int step = 0; step < input->smooth_steps; step++)
       {
         grids[P]->update_with_source(sources[P]);
       }
-    }
-    /*
-    else
-    {
-      for (unsigned int step = 0; step < 4; step++)
-      {
-        grids[P]->update_with_source(sources[P]);
-      }
 
     }
-    */
 
     /* Generate error */
 #pragma omp parallel for collapse(3)
