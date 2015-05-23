@@ -1,28 +1,28 @@
 # Geometry:
 nDims    2
-meshfile meshes/half_cyl_2nd.msh
+meshfile meshes/TriBox_8x8.msh
 
 # Solver:
 order     3
-equation EulerNS    (AdvDiff, EulerNS)
-viscous  0
+equation AdvDiff    (AdvDiff, EulerNS)
+viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 20000
+n_steps 25000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.001
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.00001
 CFL	  0.5
 
 # Multigrid
-p_multi 1
+p_multi 0
 smooth_steps 3
 rel_fac 1.00
 low_order 0
 
 # Reporting:
-output_prefix pmg_lts
+output_prefix sines
 write_freq  1000
 report_freq 100
 nQpts1D     10
@@ -32,10 +32,10 @@ fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
 ldg_b      0.0
-ldg_tau    0.0
+ldg_tau    1.0
 
 # Equation Specific Parameters:
-ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
 AdvDiff_Ax 0

@@ -308,9 +308,13 @@ void Faces::compute_common_U()
   /* Compute common solution */
   if (input->fvisc_type == "LDG")
   {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for 
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
+      /* Setting sign of beta (from HiFiLES) */
+      if (norm(0,0, fpt) + norm(0,1,fpt) < 0.0)
+        beta = -beta;
+
       /* Get left and right state variables */
       // TODO: Verify that this is the correct formula. Seem different than papers...
       for (unsigned int n = 0; n < nVars; n++)
@@ -385,6 +389,8 @@ void Faces::rusanov_flux()
     /* Get numerical wavespeed */
     if (input->equation == "AdvDiff")
     {
+      waveSp[fpt] = 0.0;
+
       for (unsigned int dim = 0; dim < nDims; dim++)
         waveSp[fpt] += input->AdvDiff_A[dim] * norm(0, dim, fpt);
     }
@@ -446,6 +452,10 @@ void Faces::LDG_flux()
 #pragma omp parallel for firstprivate(FL, FR, WL, WR, Fcomm_temp, tau, beta)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
+
+    /* Setting sign of beta (from HiFiLES) */
+    if (norm(0,0, fpt) + norm(0,1,fpt) < 0.0)
+      beta = -beta;
 
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
