@@ -116,7 +116,8 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     }
     else if (bnd_id == "\"WALL\"")
     {
-      geo.bnd_ids[val] = 5;
+      //geo.bnd_ids[val] = 5;
+      geo.bnd_ids[val] = 6;
     }
     else if (bnd_id == "\"FLUID\"")
     {

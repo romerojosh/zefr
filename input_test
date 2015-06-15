@@ -1,19 +1,19 @@
 # Geometry:
 nDims    2
-meshfile meshes/QuadBox_32x32_eul.msh
+meshfile meshes/full_cyl_2nd.msh
 
 # Solver:
-order     2
+order     1
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 6000
+n_steps 1000000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.01
-CFL	  0.06
+dt	  0.000025
+CFL	  0.01
 
 # Multigrid:
 p_multi 0
@@ -22,7 +22,7 @@ rel_fac 1.00
 low_order 0
 
 # Reporting:
-output_prefix data
+output_prefix cyl_ns
 write_freq  500
 report_freq 100
 nQpts1D     10
@@ -35,7 +35,7 @@ ldg_b      0.0
 ldg_tau    0.0
 
 # Equation Specific Parameters:
-ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
 AdvDiff_Ax 0
@@ -56,7 +56,7 @@ P_fs .71428571428
 
 # Navier-Stokes specific
 fix_vis 1
-mach_fs 0.2
+mach_fs 0.1
 Re_fs 100
 L_fs 1
 T_fs 300

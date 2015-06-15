@@ -328,6 +328,7 @@ void Elements::compute_Fvisc()
   else if (input->equation == "EulerNS")
   {
 
+#pragma omp parallel for collapse(2)
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -394,7 +395,7 @@ void Elements::compute_Fvisc()
         /* Set viscous flux values */
         F_spts(spt, ele, 1, 0) -= tauxx;
         F_spts(spt, ele, 2, 0) -= tauxy;
-        F_spts(spt, ele, 3, 0) -= (u * tauxy + v * tauyy + (mu / input->prandtl)) *
+        F_spts(spt, ele, 3, 0) -= (u * tauxx + v * tauxy + (mu / input->prandtl)) *
             input-> gamma * de_dx;
 
         F_spts(spt, ele, 1, 1) -= tauxy;

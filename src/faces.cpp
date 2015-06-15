@@ -174,13 +174,15 @@ void Faces::apply_bcs()
 
       case 6: /* No-slip Wall (adiabatic) */
       {
-        U(1, 0, fpt = U(0, 0, fpt);
+        U(1, 0, fpt) = U(0, 0, fpt);
 
         /* Experimental: Set boundary state to negative to get exactly zero */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(1, dim+1, fpt) = -U(0, dim+1, fpt);
+          U(1, dim+1, fpt) = 0.0;
+          //U(1, dim+1, fpt) = -U(0, dim+1, fpt);
 
         U(1, 3, fpt) = U(0, 3, fpt);
+        break;
       }
     }
   } 
@@ -188,7 +190,7 @@ void Faces::apply_bcs()
 
 void Faces::apply_bcs_dU()
 {
-  /* Apply periodic boundaries to solution derivative */
+  /* Apply boundaries to solution derivative */
 #pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
   {
@@ -203,6 +205,17 @@ void Faces::apply_bcs_dU()
         {
             unsigned int per_fpt = geo->per_fpt_pairs[fpt];
             dU(1, n, dim, fpt) = dU(0, n, dim, per_fpt);
+        }
+
+      }
+    }
+    else /* Copy gradient from interior */
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+            dU(1, n, dim, fpt) = dU(0, n, dim, fpt);
         }
 
       }
@@ -287,6 +300,7 @@ void Faces::compute_Fvisc()
   }
   else if (input->equation == "EulerNS")
   {
+#pragma omp parallel for collapse(2)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       for (unsigned int slot = 0; slot < 2; slot++)
@@ -352,15 +366,15 @@ void Faces::compute_Fvisc()
 
         /* Set viscous flux values */
         Fvisc(slot, 0, 0, fpt) = 0.0;
-        Fvisc(slot, 1, 0, fpt) = tauxx;
-        Fvisc(slot, 2, 0, fpt) = tauxy;
-        Fvisc(slot, 3, 0, fpt) = (u * tauxy + v * tauyy + (mu / input->prandtl)) *
+        Fvisc(slot, 1, 0, fpt) = -tauxx;
+        Fvisc(slot, 2, 0, fpt) = -tauxy;
+        Fvisc(slot, 3, 0, fpt) = -(u * tauxx + v * tauxy + (mu / input->prandtl)) *
             input-> gamma * de_dx;
 
         Fvisc(slot, 0, 1, fpt) = 0.0;
-        Fvisc(slot, 1, 1, fpt) = tauxy;
-        Fvisc(slot, 2, 1, fpt) = tauyy;
-        Fvisc(slot, 3, 1, fpt) = (u * tauxy + v * tauyy + (mu / input->prandtl)) *
+        Fvisc(slot, 1, 1, fpt) = -tauxy;
+        Fvisc(slot, 2, 1, fpt) = -tauyy;
+        Fvisc(slot, 3, 1, fpt) = -(u * tauxy + v * tauyy + (mu / input->prandtl)) *
             input->gamma * de_dy;
       }
     }
