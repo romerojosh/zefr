@@ -3,7 +3,7 @@ CXX = g++
 flags = -O3 -Wall -Wextra -Wconversion -fopenmp -DNDEBUG
 #libs = -L /usr/local/Cellar/openblas/0.2.13/lib -lopenblas
 #inc = -I /usr/local/Cellar/openblas/0.2.13/include 
-#libs = -lblas
+libs = -lblas
 #libs = -L /opt/OpenBLAS/lib -lopenblas
 #inc = -I/opt/OpenBLAS/include
 

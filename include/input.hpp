@@ -12,15 +12,18 @@ struct InputStruct
 {
   unsigned int dt_type, ic_type, nDims, nQpts1D, n_steps, order, low_order, report_freq, smooth_steps, write_freq;
   std::string output_prefix, meshfile, equation, spt_type, dt_scheme;
-  bool viscous, p_multi;
+  bool viscous, p_multi, fix_vis;
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
   double AdvDiff_D, dt, CFL, rel_fac;
   std::array<double, 3> AdvDiff_A;
-  double gamma, rho_fs, u_fs, v_fs, P_fs;
+  double gamma, prandtl, mu, R;
+  double rho_fs, u_fs, v_fs, P_fs;
+  double mach_fs, L_fs, T_fs, Re_fs, nx_fs, ny_fs;
 };
 
 InputStruct read_input_file(std::string inputfile);
+void apply_nondim(InputStruct &input);
 
 template <typename T>
 void read_param(std::ifstream &f, std::string name, T &var)

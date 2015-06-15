@@ -1,18 +1,18 @@
 # Geometry:
 nDims    2
-meshfile meshes/cyl_mixed_quad.msh
+meshfile meshes/QuadBox_32x32_eul.msh
 
 # Solver:
 order     2
 equation EulerNS    (AdvDiff, EulerNS)
-viscous  0
+viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 100000
+n_steps 6000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.001
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.01
 CFL	  0.06
 
 # Multigrid:
@@ -35,7 +35,7 @@ ldg_b      0.0
 ldg_tau    0.0
 
 # Equation Specific Parameters:
-ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
 AdvDiff_Ax 0
@@ -44,8 +44,21 @@ AdvDiff_D 0.1
 
 # Euler/Navier-Stokes
 gamma 1.4
+R     287
+mu    1.827E-5
+prandtl 0.72
 
+# Euler specific
 rho_fs 1
 u_fs 0.35
 v_fs 0.0
 P_fs .71428571428
+
+# Navier-Stokes specific
+fix_vis 1
+mach_fs 0.2
+Re_fs 100
+L_fs 1
+T_fs 300
+nx_fs 1
+ny_fs 0

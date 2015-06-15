@@ -1,3 +1,4 @@
+#include <cmath>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -48,12 +49,48 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "AdvDiff_D", input.AdvDiff_D);
 
   read_param(f, "gamma", input.gamma);
+  read_param(f, "R", input.R);
+  read_param(f, "mu", input.mu);
+  read_param(f, "prandtl", input.prandtl);
+
   read_param(f, "rho_fs", input.rho_fs);
   read_param(f, "u_fs", input.u_fs);
   read_param(f, "v_fs", input.v_fs);
   read_param(f, "P_fs", input.P_fs);
 
+
+  read_param(f, "fix_vis", input.fix_vis);
+  read_param(f, "mach_fs", input.mach_fs);
+  read_param(f, "Re_fs", input.Re_fs);
+  read_param(f, "L_fs", input.L_fs);
+  read_param(f, "T_fs", input.T_fs);
+  read_param(f, "nx_fs", input.nx_fs);
+  read_param(f, "ny_fs", input.ny_fs);
+
   f.close();
 
+  if (input.viscous && input.equation == "EulerNS")
+    apply_nondim(input);
+
   return input;
+}
+
+void apply_nondim(InputStruct &input)
+{
+  double vel = input.mach_fs * std::sqrt(input.gamma * input.R * input.T_fs);
+  input.u_fs = vel * input.nx_fs;
+  input.v_fs = vel * input.ny_fs;
+
+  input.rho_fs = input.mu * input.Re_fs / (vel * input.L_fs);
+  input.P_fs = input.rho_fs * input.R * input.T_fs;
+
+  double rho_ref = input.rho_fs;
+  double P_ref = input.rho_fs * vel * vel;
+  double mu_ref = input.rho_fs * vel * input.L_fs;
+
+  input.mu = input.mu/mu_ref;
+  input.rho_fs = input.rho_fs/rho_ref;
+  input.u_fs = input.u_fs / vel;
+  input.v_fs = input.v_fs / vel;
+  input.P_fs = input.P_fs / P_ref;
 }

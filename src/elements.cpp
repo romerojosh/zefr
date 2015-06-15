@@ -333,15 +333,17 @@ void Elements::compute_Fvisc()
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
         /* Setting variables for convenience */
+        /* States */
         double rho = U_spts(spt, ele, 0);
         double momx = U_spts(spt, ele, 1);
         double momy = U_spts(spt, ele, 2);
         double e = U_spts(spt, ele, 3);
 
-        double u = mom_x / rho;
-        double v = mom_y / rho;
+        double u = momx / rho;
+        double v = momy / rho;
         double e_int = e / rho - 0.5 * (u*u + v*v);
 
+        /* Gradients */
         double rho_dx = dU_spts(spt, ele, 0, 0);
         double momx_dx = dU_spts(spt, ele, 1, 0);
         double momy_dx = dU_spts(spt, ele, 2, 0);
@@ -352,16 +354,30 @@ void Elements::compute_Fvisc()
         double momy_dy = dU_spts(spt, ele, 2, 1);
         double e_dy = dU_spts(spt, ele, 3, 1);
 
-        double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
-        double mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
-          (rt_ratio + input->c_sth);
-        mu += input->fix_vis * (input->mu_inf - mu);
+        /* Set viscosity */
+        //double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
+        //double mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
+        //  (rt_ratio + input->c_sth);
+        double mu;
+        if (input->fix_vis)
+        {
+          mu = input->mu;
+        }
+        else
+        {
+          ThrowException("Sutherland's law not yet implemented");
+          /*
+          double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
+          mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
+            (rt_ratio + input->c_sth);
+            */
+        }
 
-        double du_dx = (mom_x_dx - rho_dx * u) / rho;
-        double du_dy = (mom_x_dy - rho_dy * u) / rho;
+        double du_dx = (momx_dx - rho_dx * u) / rho;
+        double du_dy = (momx_dy - rho_dy * u) / rho;
 
-        double dv_dx = (mom_y_dx - rho_dx * v) / rho;
-        double dv_dy = (mom_y_dy - rho_dy * v) / rho;
+        double dv_dx = (momy_dx - rho_dx * v) / rho;
+        double dv_dy = (momy_dy - rho_dy * v) / rho;
 
         double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
         double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
@@ -375,13 +391,14 @@ void Elements::compute_Fvisc()
         double tauxy = mu * (du_dy + dv_dx);
         double tauyy = 2.0 * mu * (dv_dy - diag);
 
+        /* Set viscous flux values */
         F_spts(spt, ele, 1, 0) -= tauxx;
         F_spts(spt, ele, 2, 0) -= tauxy;
         F_spts(spt, ele, 3, 0) -= (u * tauxy + v * tauyy + (mu / input->prandtl)) *
             input-> gamma * de_dx;
 
-        F_spts(spt, ele, 1, 1) += -tauxy;
-        F_spts(spt, ele, 2, 1) += -tauyy;
+        F_spts(spt, ele, 1, 1) -= tauxy;
+        F_spts(spt, ele, 2, 1) -= tauyy;
         F_spts(spt, ele, 3, 1) -= (u * tauxy + v * tauyy + (mu / input->prandtl)) *
             input->gamma * de_dy;
       }

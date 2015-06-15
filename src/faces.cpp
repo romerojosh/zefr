@@ -171,6 +171,17 @@ void Faces::apply_bcs()
         U(1, 3, fpt) = U(0, 3, fpt) - 0.5 * (momN * momN) / U(0, 0, fpt);
         break;
       }
+
+      case 6: /* No-slip Wall (adiabatic) */
+      {
+        U(1, 0, fpt = U(0, 0, fpt);
+
+        /* Experimental: Set boundary state to negative to get exactly zero */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(1, dim+1, fpt) = -U(0, dim+1, fpt);
+
+        U(1, 3, fpt) = U(0, 3, fpt);
+      }
     }
   } 
 }
@@ -276,7 +287,83 @@ void Faces::compute_Fvisc()
   }
   else if (input->equation == "EulerNS")
   {
-    ThrowException("NS flux not implemented yet!");
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      for (unsigned int slot = 0; slot < 2; slot++)
+      {
+        /* Setting variables for convenience */
+        /* States */
+        double rho = U(slot, 0, fpt);
+        double momx = U(slot, 1, fpt);
+        double momy = U(slot, 2, fpt);
+        double e = U(slot, 3, fpt);
+
+        double u = momx / rho;
+        double v = momy / rho;
+        double e_int = e / rho - 0.5 * (u*u + v*v);
+
+        /* Gradients */
+        double rho_dx = dU(slot, 0, 0, fpt);
+        double momx_dx = dU(slot, 1, 0, fpt);
+        double momy_dx = dU(slot, 2, 0, fpt);
+        double e_dx = dU(slot, 3, 0, fpt);
+        
+        double rho_dy = dU(slot, 0, 1, fpt);
+        double momx_dy = dU(slot, 1, 1, fpt);
+        double momy_dy = dU(slot, 2, 1, fpt);
+        double e_dy = dU(slot, 3, 1, fpt);
+
+        /* Set viscosity */
+        //double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
+        //double mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
+        //  (rt_ratio + input->c_sth);
+        double mu;
+        if (input->fix_vis)
+        {
+          mu = input->mu;
+        }
+        else
+        {
+          ThrowException("Sutherland's law not yet implemented");
+          /*
+          double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
+          mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
+            (rt_ratio + input->c_sth);
+            */
+        }
+
+        double du_dx = (momx_dx - rho_dx * u) / rho;
+        double du_dy = (momx_dy - rho_dy * u) / rho;
+
+        double dv_dx = (momy_dx - rho_dx * v) / rho;
+        double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+        double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+        double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+
+        double de_dx = (e_dx - dke_dx - rho_dx * e_int) / rho;
+        double de_dy = (e_dy - dke_dy - rho_dy * e_int) / rho;
+
+        double diag = (du_dx + dv_dy) / 3.0;
+
+        double tauxx = 2.0 * mu * (du_dx - diag);
+        double tauxy = mu * (du_dy + dv_dx);
+        double tauyy = 2.0 * mu * (dv_dy - diag);
+
+        /* Set viscous flux values */
+        Fvisc(slot, 0, 0, fpt) = 0.0;
+        Fvisc(slot, 1, 0, fpt) = tauxx;
+        Fvisc(slot, 2, 0, fpt) = tauxy;
+        Fvisc(slot, 3, 0, fpt) = (u * tauxy + v * tauyy + (mu / input->prandtl)) *
+            input-> gamma * de_dx;
+
+        Fvisc(slot, 0, 1, fpt) = 0.0;
+        Fvisc(slot, 1, 1, fpt) = tauxy;
+        Fvisc(slot, 2, 1, fpt) = tauyy;
+        Fvisc(slot, 3, 1, fpt) = (u * tauxy + v * tauyy + (mu / input->prandtl)) *
+            input->gamma * de_dy;
+      }
+    }
   }
 }
 
