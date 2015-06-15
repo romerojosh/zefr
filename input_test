@@ -3,7 +3,7 @@ nDims    2
 meshfile meshes/cyl_mixed_quad.msh
 
 # Solver:
-order     1
+order     2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -16,8 +16,10 @@ dt	  0.001
 CFL	  0.06
 
 # Multigrid:
-p_multi 1
+p_multi 0
 smooth_steps 1
+rel_fac 1.00
+low_order 0
 
 # Reporting:
 output_prefix data
@@ -33,7 +35,7 @@ ldg_b      0.0
 ldg_tau    0.0
 
 # Equation Specific Parameters:
-ic_type  0 (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
 AdvDiff_Ax 0
