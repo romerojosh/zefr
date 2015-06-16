@@ -395,13 +395,13 @@ void Elements::compute_Fvisc()
         /* Set viscous flux values */
         F_spts(spt, ele, 1, 0) -= tauxx;
         F_spts(spt, ele, 2, 0) -= tauxy;
-        F_spts(spt, ele, 3, 0) -= (u * tauxx + v * tauxy + (mu / input->prandtl)) *
-            input-> gamma * de_dx;
+        F_spts(spt, ele, 3, 0) -= (u * tauxx + v * tauxy + (mu / input->prandtl) *
+            input-> gamma * de_dx);
 
         F_spts(spt, ele, 1, 1) -= tauxy;
         F_spts(spt, ele, 2, 1) -= tauyy;
-        F_spts(spt, ele, 3, 1) -= (u * tauxy + v * tauyy + (mu / input->prandtl)) *
-            input->gamma * de_dy;
+        F_spts(spt, ele, 3, 1) -= (u * tauxy + v * tauyy + (mu / input->prandtl) *
+            input->gamma * de_dy);
       }
     }
   }

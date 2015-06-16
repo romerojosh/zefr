@@ -3,7 +3,7 @@ nDims    2
 meshfile meshes/full_cyl_2nd.msh
 
 # Solver:
-order     1
+order     2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  1
 spt_type Legendre
@@ -12,7 +12,7 @@ spt_type Legendre
 n_steps 1000000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.000025
+dt	  0.0005
 CFL	  0.01
 
 # Multigrid:
@@ -32,7 +32,7 @@ fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
 ldg_b      0.0
-ldg_tau    0.0
+ldg_tau    1.0
 
 # Equation Specific Parameters:
 ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))

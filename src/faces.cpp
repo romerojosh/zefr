@@ -184,6 +184,27 @@ void Faces::apply_bcs()
         U(1, 3, fpt) = U(0, 3, fpt);
         break;
       }
+
+      case 7: /* No-slip Wall (isothermal) */
+      {
+        double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
+            U(0, 2, fpt)) / U(0, 0, fpt);
+
+        double PL = (input->gamma - 1.0) * (U(0, 3, fpt) - 0.5 * momF);
+
+        double PR = PL;
+        //double TR = input->T_fs; 
+        double TR = 1.0;
+        
+        U(1, 0, fpt) = PR / (input->R * TR);
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(1, dim+1, fpt) = 0.0;
+
+        U(1, 3, fpt) = PR / (input->gamma - 1);
+
+        break;
+      }
     }
   } 
 }
@@ -368,14 +389,14 @@ void Faces::compute_Fvisc()
         Fvisc(slot, 0, 0, fpt) = 0.0;
         Fvisc(slot, 1, 0, fpt) = -tauxx;
         Fvisc(slot, 2, 0, fpt) = -tauxy;
-        Fvisc(slot, 3, 0, fpt) = -(u * tauxx + v * tauxy + (mu / input->prandtl)) *
-            input-> gamma * de_dx;
+        Fvisc(slot, 3, 0, fpt) = -(u * tauxx + v * tauxy + (mu / input->prandtl) *
+            input-> gamma * de_dx);
 
         Fvisc(slot, 0, 1, fpt) = 0.0;
         Fvisc(slot, 1, 1, fpt) = -tauxy;
         Fvisc(slot, 2, 1, fpt) = -tauyy;
-        Fvisc(slot, 3, 1, fpt) = -(u * tauxy + v * tauyy + (mu / input->prandtl)) *
-            input->gamma * de_dy;
+        Fvisc(slot, 3, 1, fpt) = -(u * tauxy + v * tauyy + (mu / input->prandtl) *
+            input->gamma * de_dy);
       }
     }
   }
@@ -579,12 +600,25 @@ void Faces::LDG_flux()
     }
 
     /* Compute common normal viscous flux and accumulate */
-    for (unsigned int n = 0; n < nVars; n++)
+    if (fpt < geo->nGfpts_int)
     {
-      Fcomm_temp(n,0) += 0.5*(Fvisc(0, n, 0, fpt) + Fvisc(1, n, 0, fpt)) + tau * norm(0, 0, fpt)* (WL[n]
-          - WR[n]) + beta * norm(0, 0, fpt)* (FL[n] - FR[n]);
-      Fcomm_temp(n,1) += 0.5*(Fvisc(0, n, 1, fpt) + Fvisc(1, n, 1, fpt)) + tau * norm(0, 1, fpt)* (WL[n]
-          - WR[n]) + beta * norm(0, 1, fpt)* (FL[n] - FR[n]);
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        Fcomm_temp(n,0) += 0.5*(Fvisc(0, n, 0, fpt) + Fvisc(1, n, 0, fpt)) + tau * norm(0, 0, fpt)* (WL[n]
+            - WR[n]) + beta * norm(0, 0, fpt)* (FL[n] - FR[n]);
+        Fcomm_temp(n,1) += 0.5*(Fvisc(0, n, 1, fpt) + Fvisc(1, n, 1, fpt)) + tau * norm(0, 1, fpt)* (WL[n]
+            - WR[n]) + beta * norm(0, 1, fpt)* (FL[n] - FR[n]);
+      }
+    }
+    else
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        Fcomm_temp(n,0) += Fvisc(0, n, 0, fpt) + tau * norm(0, 0, fpt)* (WL[n]
+            - WR[n]) + beta * norm(0, 0, fpt)* (FL[n] - FR[n]);
+        Fcomm_temp(n,1) += Fvisc(0, n, 1, fpt) + tau * norm(0, 1, fpt)* (WL[n]
+            - WR[n]) + beta * norm(0, 1, fpt)* (FL[n] - FR[n]);
+      }
     }
 
     for (unsigned int dim = 0; dim < nDims; dim++)

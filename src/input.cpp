@@ -89,6 +89,7 @@ void apply_nondim(InputStruct &input)
   double mu_ref = input.rho_fs * vel * input.L_fs;
 
   input.mu = input.mu/mu_ref;
+  input.R = input.R * input.T_fs / (vel * vel);
   input.rho_fs = input.rho_fs/rho_ref;
   input.u_fs = input.u_fs / vel;
   input.v_fs = input.v_fs / vel;
