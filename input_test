@@ -3,7 +3,7 @@ nDims    2
 meshfile meshes/QuadBox_32x32_eul.msh
 
 # Solver:
-order     1
+order     3
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -17,7 +17,7 @@ CFL	  0.06
 
 # Restarting:
 restart	      1
-restart_file  data_000001000.vtk
+restart_file  data_000000500.vtk
 
 # Multigrid:
 p_multi 0
