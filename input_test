@@ -15,6 +15,10 @@ dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0005
 CFL	  0.01
 
+# Restarting:
+restart	      1
+restart_file  cyl_ns_000005000.vtk
+
 # Multigrid:
 p_multi 0
 smooth_steps 1
