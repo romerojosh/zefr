@@ -18,8 +18,7 @@ class PMGrid
 
     void restrict_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
     void prolong_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
-    void prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, 
-        FRSolver &grid_f, mdvector<double> &correction_f);
+    void prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSolver &grid_f);
     void compute_source_term(FRSolver &grid, mdvector<double> &source);
 
   public:

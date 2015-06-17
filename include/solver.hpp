@@ -20,6 +20,7 @@ class FRSolver
     const InputStruct *input = NULL;
     GeoStruct geo;
     int order;
+    int restart_iter = 0;
     double flow_time = 0.;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
@@ -31,6 +32,7 @@ class FRSolver
     mdvector<double> U_ini;
 
     void initialize_U();
+    void restart(std::string restart_file);
     void setup_update();
     void setup_output();
 

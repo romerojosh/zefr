@@ -113,11 +113,11 @@ void PMGrid::cycle(FRSolver &solver)
 
     /* Prolong error and add to fine grid solution */
     if (P < order-1)
-      prolong_err(*grids[P], corrections[P], *grids[P+1], corrections[P+1]);
+      prolong_err(*grids[P], corrections[P], *grids[P+1]);
   }
 
   /* Prolong correction and add to finest grid solution */
-  prolong_err(*grids[order-1], corrections[order-1], solver, corrections[order]);
+  prolong_err(*grids[order-1], corrections[order-1], solver);
 
 }
 
@@ -175,10 +175,8 @@ void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
 
 }
 
-void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c,
-    FRSolver &grid_f, mdvector<double> &correction_f)
+void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSolver &grid_f)
 {
-
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -194,7 +192,6 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c,
     {
       auto &A = grid_c.eles->oppPro(0,0);
       auto &B = correction_c(0,start_idx,n);
-      //auto &C = correction_f(0,start_idx,n);
       auto &C = grid_f.eles->U_spts(0,start_idx,n);
 
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 

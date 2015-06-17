@@ -42,11 +42,18 @@ void FRSolver::setup()
   std::cout << "Initializing solution..." << std::endl;
   initialize_U();
 
+  if (input->restart)
+  {
+    std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
+    restart(input->restart_file);
+  }
+
   std::cout << "Setting up timestepping..." << std::endl;
   setup_update();
 
   std::cout << "Setting up output..." << std::endl;
   setup_output();
+
 }
 
 void FRSolver::setup_update()
@@ -118,6 +125,51 @@ void FRSolver::setup_output()
   else
   {
     ThrowException("3D not implemented yet!");
+  }
+
+}
+
+void FRSolver::restart(std::string restart_file)
+{
+  std::ifstream f(restart_file);
+
+  std::string param, line;
+  double val;
+  unsigned int n = 0;
+  unsigned int nPpts1D = eles->nSpts1D + 2;
+
+  while (f >> param)
+  {
+    if (param == "CYCLE")
+    {
+      std::getline(f,line);
+      f >> restart_iter;
+    }
+    if (param == "SCALARS")
+    {
+      f >> param;
+      std::cout << param  << std::endl;
+      /* Skip lines */
+      std::getline(f,line);
+      std::getline(f,line);
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        unsigned int spt = 0;
+        for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+        {
+          f >> val;
+
+          /* Logic to deal with extra plot point (corner nodes and flux points). */
+          if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || (ppt+1)%nPpts1D == 0)
+            continue;
+
+          eles->U_spts(spt, ele, n) = val;
+          spt++;
+        }
+      }
+      n++;
+    }
+
   }
 
 }
@@ -262,18 +314,6 @@ void FRSolver::extrapolate_U()
     }
   }
 
-/*  
-  std::cout << "Uext" << std::endl;
-  for (unsigned int i = 0; i < eles->nFpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->U_fpts(i,j,0) << " ";
-    }
-    std::cout << std::endl;
-  }
-*/
-  
 }
 
 void FRSolver::U_to_faces()
@@ -296,7 +336,6 @@ void FRSolver::U_to_faces()
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         faces->U(slot, n, gfpt) = eles->U_fpts(fpt, ele, n);
-        //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
       }
     }
   }
@@ -321,19 +360,6 @@ void FRSolver::U_from_faces()
       }
     }
   }
-
- /* 
-  std::cout << "Ucomm" << std::endl;
-  for (unsigned int i = 0; i < eles->nFpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->Ucomm(i,j,0) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
-  
 
 }
 
@@ -403,30 +429,6 @@ void FRSolver::compute_dU()
         }
       }
     }
-
-  /*
-  std::cout << "dU" << std::endl;
-  for (unsigned int i = 0; i < eles->nSpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->dU_spts(i,j,0,0) << " ";
-    }
-    std::cout << std::endl;
-  }
-
-  for (unsigned int i = 0; i < eles->nSpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->dU_spts(i,j,0,1) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
-  
-   
-
 }
 
 void FRSolver::extrapolate_dU()
@@ -457,21 +459,6 @@ void FRSolver::extrapolate_dU()
     }
   }
 
- /* 
-  std::cout << "dUext" << std::endl;
-
-  for (unsigned int dim = 0; dim < eles->nDims; dim++)
-  {
-    for (unsigned int i = 0; i < eles->nFpts; i++)
-    {
-      for (unsigned int j = 0; j < eles->nEles; j++)
-      {
-        std::cout << eles->dU_fpts(dim, 0,i,j) << " ";
-      }
-      std::cout << std::endl;
-    }
-  }
-*/ 
 }
 
 void FRSolver::dU_to_faces()
@@ -492,7 +479,6 @@ void FRSolver::dU_to_faces()
           int slot = geo.fpt2gfpt_slot(fpt,ele);
 
           faces->dU(slot, n, dim, gfpt) = eles->dU_fpts(fpt, ele, n, dim);
-          //std::cout << gfpt << " " << slot << " " << faces->U(n,gfpt,slot) << std::endl;
         }
       }
     }
@@ -518,18 +504,6 @@ void FRSolver::F_from_faces()
       }
     }
   }
-
-  /*
-  std::cout << "Fcomm" << std::endl;
-  for (unsigned int i = 0; i < eles->nFpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->Fcomm(0,i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
 }
 
 void FRSolver::compute_dF()
@@ -575,28 +549,6 @@ void FRSolver::compute_dF()
     }
   }
 
-  /*
-  std::cout << "dF" << std::endl;
-  for (unsigned int i = 0; i < eles->nSpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->dF_spts(0,0,i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-
-  for (unsigned int i = 0; i < eles->nSpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->dF_spts(1,0,i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
-  
- 
 }
 
 void FRSolver::compute_divF(unsigned int stage)
@@ -614,25 +566,6 @@ void FRSolver::compute_divF(unsigned int stage)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           divF(spt, ele, n, stage) += eles->dF_spts(spt, ele, n, dim);
 
-  /*
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele =0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          divF(spt, ele, n, stage) /= eles->jaco_det_spts(spt, ele);
-    */
-  /*
-  std::cout << "divF" << std::endl;
-  for (unsigned int i = 0; i < eles->nSpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << divF(stage,0,i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
- 
 }
 
 void FRSolver::update()
@@ -678,18 +611,6 @@ void FRSolver::update()
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
-
-  /*
-  std::cout << "U" << std::endl;
-  for (unsigned int i = 0; i < eles->nSpts; i++)
-  {
-    for (unsigned int j = 0; j < eles->nEles; j++)
-    {
-      std::cout << eles->U_spts(0,i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
 
   flow_time += dt[0];
  
@@ -772,7 +693,7 @@ void FRSolver::compute_element_dt()
 void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 {
   std::stringstream ss;
-  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter << ".vtk";
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter << ".vtk";
 
   auto outputfile = ss.str();
   std::cout << "Writing " << outputfile << std::endl;
@@ -792,7 +713,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   f << "TIME 1 1 double" << std::endl;
   f << nIter * input->dt << std::endl;
   f << "CYCLE 1 1 int" << std::endl;
-  f << nIter << std::endl;
+  f << nIter + restart_iter << std::endl;
   f << std::endl;
   
   /* Write plot point coordinates */
@@ -879,7 +800,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     {
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << eles->U_ppts(ppt, ele, 0) << " ";
+        f << std::scientific << std::setprecision(12) << eles->U_ppts(ppt, ele, 0) << " ";
       }
       f << std::endl;
     }
@@ -899,7 +820,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
       {
         for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
         {
-          f << eles->U_ppts(ppt, ele, n) << " ";
+          f << std::scientific << std::setprecision(12) << eles->U_ppts(ppt, ele, n) << " ";
         }
 
         f << std::endl;
@@ -925,7 +846,7 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
   for (unsigned int n = 0; n < eles->nVars; n++)
     max_res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1), 0.0, square<double>()));
 
-  std::cout << iter << " ";
+  std::cout << iter + restart_iter << " ";
   for (auto &val : max_res)
     std::cout << std::scientific << val << " ";
 
