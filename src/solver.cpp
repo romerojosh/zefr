@@ -133,6 +133,9 @@ void FRSolver::restart(std::string restart_file)
 {
   std::ifstream f(restart_file);
 
+  if (!f.is_open())
+    ThrowException("Could not open specified restart file!");
+
   std::string param, line;
   double val;
   unsigned int n = 0;
@@ -148,7 +151,7 @@ void FRSolver::restart(std::string restart_file)
     if (param == "SCALARS")
     {
       f >> param;
-      std::cout << param  << std::endl;
+      std::cout << "Reading " << param  << std::endl;
       /* Skip lines */
       std::getline(f,line);
       std::getline(f,line);
