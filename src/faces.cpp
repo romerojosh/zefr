@@ -172,20 +172,9 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 6: /* No-slip Wall (adiabatic) */
-      {
-        U(1, 0, fpt) = U(0, 0, fpt);
+      
 
-        /* Experimental: Set boundary state to negative to get exactly zero */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(1, dim+1, fpt) = 0.0;
-          //U(1, dim+1, fpt) = -U(0, dim+1, fpt);
-
-        U(1, 3, fpt) = U(0, 3, fpt);
-        break;
-      }
-
-      case 7: /* No-slip Wall (isothermal) */
+      case 6: /* No-slip Wall (isothermal) */
       {
         double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
             U(0, 2, fpt)) / U(0, 0, fpt);
@@ -193,16 +182,42 @@ void Faces::apply_bcs()
         double PL = (input->gamma - 1.0) * (U(0, 3, fpt) - 0.5 * momF);
 
         double PR = PL;
-        //double TR = input->T_fs; 
-        double TR = 1.0;
+        double TR = input->T_wall;
         
-        U(1, 0, fpt) = PR / (input->R * TR);
+        U(1, 0, fpt) = PR / (input->R_ref * TR);
 
         for (unsigned int dim = 0; dim < nDims; dim++)
           U(1, dim+1, fpt) = 0.0;
 
         U(1, 3, fpt) = PR / (input->gamma - 1);
 
+        break;
+      }
+
+      case 7: /* No-slip Wall (isothermal and moving) */
+      {
+        double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
+            U(0, 2, fpt)) / U(0, 0, fpt);
+
+        double PL = (input->gamma - 1.0) * (U(0, 3, fpt) - 0.5 * momF);
+
+        double PR = PL;
+        double TR = input->T_wall;
+        
+        U(1, 0, fpt) = PR / (input->R_ref * TR);
+
+        U(1, 1, fpt) = U(1, 0 , fpt) * input->u_wall;
+        U(1, 2, fpt) = U(1, 0 , fpt) * input->v_wall;
+
+        U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0 , fpt) * (input->u_wall * input->u_wall +
+            input->v_wall * input->v_wall);
+
+        break;
+      }
+
+      case 8: /* No-slip Wall (adiabatic) */
+      {
+        ThrowException("Under construction !");
         break;
       }
     }
@@ -349,22 +364,16 @@ void Faces::compute_Fvisc()
         double e_dy = dU(slot, 3, 1, fpt);
 
         /* Set viscosity */
-        //double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
-        //double mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
-        //  (rt_ratio + input->c_sth);
         double mu;
         if (input->fix_vis)
         {
           mu = input->mu;
         }
+        /* If desired, use Sutherland's law */
         else
         {
-          ThrowException("Sutherland's law not yet implemented");
-          /*
-          double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
-          mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
-            (rt_ratio + input->c_sth);
-            */
+          double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+          mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
         }
 
         double du_dx = (momx_dx - rho_dx * u) / rho;
@@ -600,6 +609,7 @@ void Faces::LDG_flux()
     }
 
     /* Compute common normal viscous flux and accumulate */
+    /* If fpt is on interior face, use normal stencil */
     if (fpt < geo->nGfpts_int)
     {
       for (unsigned int n = 0; n < nVars; n++)
@@ -610,14 +620,28 @@ void Faces::LDG_flux()
             - WR[n]) + beta * norm(0, 1, fpt)* (FL[n] - FR[n]);
       }
     }
+    /* Else, only use left flux state (unless periodic) */
     else
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
+      if (bnd_id != 1)
       {
-        Fcomm_temp(n,0) += Fvisc(0, n, 0, fpt) + tau * norm(0, 0, fpt)* (WL[n]
-            - WR[n]) + beta * norm(0, 0, fpt)* (FL[n] - FR[n]);
-        Fcomm_temp(n,1) += Fvisc(0, n, 1, fpt) + tau * norm(0, 1, fpt)* (WL[n]
-            - WR[n]) + beta * norm(0, 1, fpt)* (FL[n] - FR[n]);
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          Fcomm_temp(n,0) += Fvisc(0, n, 0, fpt) + tau * norm(0, 0, fpt)* (WL[n] - WR[n]);
+          Fcomm_temp(n,1) += Fvisc(0, n, 1, fpt) + tau * norm(0, 1, fpt)* (WL[n] - WR[n]);
+        }
+      }
+      /* If periodic, treat like interior face */
+      else
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          Fcomm_temp(n,0) += 0.5*(Fvisc(0, n, 0, fpt) + Fvisc(1, n, 0, fpt)) + tau * norm(0, 0, fpt)* (WL[n]
+              - WR[n]) + beta * norm(0, 0, fpt)* (FL[n] - FR[n]);
+          Fcomm_temp(n,1) += 0.5*(Fvisc(0, n, 1, fpt) + Fvisc(1, n, 1, fpt)) + tau * norm(0, 1, fpt)* (WL[n]
+              - WR[n]) + beta * norm(0, 1, fpt)* (FL[n] - FR[n]);
+        }
       }
     }
 

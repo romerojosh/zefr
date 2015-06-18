@@ -51,6 +51,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "AdvDiff_Ay", input.AdvDiff_A[1]);
   read_param(f, "AdvDiff_D", input.AdvDiff_D);
 
+  read_param(f, "T_gas", input.T_gas);
   read_param(f, "gamma", input.gamma);
   read_param(f, "R", input.R);
   read_param(f, "mu", input.mu);
@@ -70,8 +71,14 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "nx_fs", input.nx_fs);
   read_param(f, "ny_fs", input.ny_fs);
 
+  read_param(f, "mach_wall", input.mach_wall);
+  read_param(f, "T_wall", input.T_wall);
+  read_param(f, "nx_wall", input.nx_wall);
+  read_param(f, "ny_wall", input.ny_wall);
+
   f.close();
 
+  /* If running Navier-Stokes, nondimensionalize */
   if (input.viscous && input.equation == "EulerNS")
     apply_nondim(input);
 
@@ -80,6 +87,7 @@ InputStruct read_input_file(std::string inputfile)
 
 void apply_nondim(InputStruct &input)
 {
+  /* Compute dimensional freestream quantities */
   double vel = input.mach_fs * std::sqrt(input.gamma * input.R * input.T_fs);
   input.u_fs = vel * input.nx_fs;
   input.v_fs = vel * input.ny_fs;
@@ -87,14 +95,31 @@ void apply_nondim(InputStruct &input)
   input.rho_fs = input.mu * input.Re_fs / (vel * input.L_fs);
   input.P_fs = input.rho_fs * input.R * input.T_fs;
 
-  double rho_ref = input.rho_fs;
-  double P_ref = input.rho_fs * vel * vel;
-  double mu_ref = input.rho_fs * vel * input.L_fs;
+  /* If using Sutherland's law, update viscosity */
+  if (!input.fix_vis)
+  {
+    input.mu = input.mu * std::pow(input.T_fs / input.T_gas, 1.5) * ((input.T_gas + input.S)/(input.T_fs + input.S));
+  }
 
-  input.mu = input.mu/mu_ref;
-  input.R = input.R * input.T_fs / (vel * vel);
-  input.rho_fs = input.rho_fs/rho_ref;
+  /* Set reference quantities for nondimensionalization */
+  input.T_ref = input.T_fs;
+  input.rho_ref = input.rho_fs;
+  input.P_ref = input.rho_fs * vel * vel;
+  input.mu_ref = input.rho_fs * vel * input.L_fs;
+  input.R_ref = input.R * input.T_fs / (vel * vel);
+  input.rt = input.T_gas * input.R / (vel*vel);
+  input.c_sth = input.S / input.T_gas;
+
+  /* Nondimensionalize freestream quantities */
+  input.mu = input.mu/input.mu_ref;
+  input.rho_fs = input.rho_fs/input.rho_ref;
   input.u_fs = input.u_fs / vel;
   input.v_fs = input.v_fs / vel;
-  input.P_fs = input.P_fs / P_ref;
+  input.P_fs = input.P_fs / input.P_ref;
+
+  /* Compute and nondimensionalize wall quantities */
+  double vel_wall = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
+  input.u_wall = vel_wall * input.nx_wall / vel;
+  input.v_wall = vel_wall * input.ny_wall / vel;
+  input.T_wall = input.T_wall / input.T_ref;
 }

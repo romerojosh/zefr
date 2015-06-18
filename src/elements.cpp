@@ -356,9 +356,6 @@ void Elements::compute_Fvisc()
         double e_dy = dU_spts(spt, ele, 3, 1);
 
         /* Set viscosity */
-        //double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
-        //double mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
-        //  (rt_ratio + input->c_sth);
         double mu;
         if (input->fix_vis)
         {
@@ -366,12 +363,8 @@ void Elements::compute_Fvisc()
         }
         else
         {
-          ThrowException("Sutherland's law not yet implemented");
-          /*
-          double rt_ratio = (input->gamma - 1.0) * U_spts(spt, ele, 3) / input-> rt_inf;
-          mu = (input->mu_inf) * std::pow(rt_ratio, 1.5) * (1.0 + input->c_sth) / 
-            (rt_ratio + input->c_sth);
-            */
+          double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+          mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
         }
 
         double du_dx = (momx_dx - rho_dx * u) / rho;

@@ -34,30 +34,6 @@ void load_mesh_data(std::string meshfile, GeoStruct &geo)
 
   std::string param;
 
-  /*
-  while (f >> param)
-  {
-    if (param == "$Elements")
-    {
-      unsigned int val;
-      f >> val >> val >> val;
-
-      if (val == 2 || val == 3)
-      {
-        geo.nDims = 2; geo.shape_order = 1; geo.nNodesPerEle = 4;
-      }
-      else
-      {
-        ThrowException("3D not implemented yet!");
-      }
-    }
-  }
-*/
-
-  /* Return to begining of file */
-  //f.clear();
-  //f.seekg(0, f.beg);
-
   /* Process file information */
   while (f >> param)
   {
@@ -67,6 +43,7 @@ void load_mesh_data(std::string meshfile, GeoStruct &geo)
     /* Load node coordinate data */
     if (param == "$Nodes")
       read_node_coords(f, geo);
+
 
     /* Load element connectivity data */
     if (param == "$Elements")
@@ -116,7 +93,14 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     }
     else if (bnd_id == "\"WALL\"")
     {
-      //geo.bnd_ids[val] = 5;
+      geo.bnd_ids[val] = 5;
+    }
+    else if (bnd_id == "\"WALL_NS_ISO\"")
+    {
+      geo.bnd_ids[val] = 6;
+    }
+    else if (bnd_id == "\"WALL_NS_ISO_MOVE\"")
+    {
       geo.bnd_ids[val] = 7;
     }
     else if (bnd_id == "\"FLUID\"")
@@ -298,7 +282,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
   {
     ThrowException("3D not implemented yet!");
   }
-
   if (geo.per_bnd_flag)
     couple_periodic_bnds(geo);
 }
@@ -490,6 +473,10 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       {
         auto face1 = bnd_face1.first;
         auto fpts1 = bnd_face1.second;
+
+        /* If boundary face is not periodic, skip this pairing */
+        if (geo.bnd_faces[face1] != 1)
+          continue;
 
         auto face2 = geo.per_bnd_pairs[face1];
         auto fpts2 = bndface2fpts[face2];
