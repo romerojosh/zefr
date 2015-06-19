@@ -262,10 +262,16 @@ void FRSolver::initialize_U()
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
           eles->U_spts(spt, ele, 0)  = input->rho_fs;
-          eles->U_spts(spt, ele, 1)  = input->rho_fs * input->u_fs;
-          eles->U_spts(spt, ele, 2)  = input->rho_fs * input->v_fs;
+
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < eles->nDims; dim++)
+          {
+            eles->U_spts(spt, ele, dim+1)  = input->rho_fs * input->V_fs[dim];
+            Vsq += input->V_fs[dim] * input->V_fs[dim];
+          }
+
           eles->U_spts(spt, ele, 3)  = input->P_fs/(input->gamma-1.0) + 
-            0.5*input->rho_fs*(input->u_fs * input->u_fs + input->v_fs * input->v_fs);
+            0.5*input->rho_fs * Vsq;
         }
       }
 

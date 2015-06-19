@@ -1,11 +1,11 @@
 # Geometry:
 nDims    2
-meshfile meshes/full_cyl_utri.msh
+meshfile meshes/full_cyl_uquad.msh
 
 # Solver:
 order     2
 equation EulerNS    (AdvDiff, EulerNS)
-viscous  1
+viscous  0
 spt_type Legendre
 
 # Timestepping:
@@ -13,7 +13,7 @@ n_steps 200000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
-CFL	  0.1
+CFL	  0.5
 
 # Restarting:
 restart	      0
@@ -27,7 +27,7 @@ low_order 0
 
 # Reporting:
 output_prefix cyl_tri
-write_freq  500
+write_freq  1000
 report_freq 100
 nQpts1D     10
 

@@ -75,33 +75,45 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
       geo.bnd_ids[val] = 1;
       geo.per_bnd_flag = true;
     }
-    else if (bnd_id == "\"FARFIELD\"")
+    else if (bnd_id == "\"FARFIELD\"" || bnd_id == "\"INLET_SUP\"")
     {
       geo.bnd_ids[val] = 2;
     }
-    else if (bnd_id == "\"INLET\"")
-    {
-      geo.bnd_ids[val] = 2;
-    }
-    else if (bnd_id == "\"OUTLET\"")
+    else if (bnd_id == "\"OUTLET_SUP\"")
     {
       geo.bnd_ids[val] = 3;
     }
-    else if (bnd_id == "\"CHAR\"")
+    else if (bnd_id == "\"INLET_SUB\"")
     {
       geo.bnd_ids[val] = 4;
     }
-    else if (bnd_id == "\"WALL\"")
+    else if (bnd_id == "\"OUTLET_SUB\"")
     {
       geo.bnd_ids[val] = 5;
     }
-    else if (bnd_id == "\"WALL_NS_ISO\"")
+    else if (bnd_id == "\"CHAR\"")
     {
       geo.bnd_ids[val] = 6;
     }
-    else if (bnd_id == "\"WALL_NS_ISO_MOVE\"")
+    else if (bnd_id == "\"WALL_SLIP\"")
     {
       geo.bnd_ids[val] = 7;
+    }
+    else if (bnd_id == "\"WALL_NS_ISO\"")
+    {
+      geo.bnd_ids[val] = 8;
+    }
+    else if (bnd_id == "\"WALL_NS_ISO_MOVE\"")
+    {
+      geo.bnd_ids[val] = 9;
+    }
+    else if (bnd_id == "\"WALL_NS_ADI\"")
+    {
+      geo.bnd_ids[val] = 10;
+    }
+    else if (bnd_id == "\"WALL_NS_ADI_MOVE\"")
+    {
+      geo.bnd_ids[val] = 11;
     }
     else if (bnd_id == "\"FLUID\"")
     {

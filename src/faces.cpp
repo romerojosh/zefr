@@ -66,12 +66,17 @@ void Faces::apply_bcs()
       {
         /* Set boundaries to freestream values */
         U(1, 0, fpt) = input->rho_fs;
-        U(1, 1, fpt) = input->rho_fs * input->u_fs;
-        U(1, 2, fpt) = input->rho_fs * input->v_fs;
-        U(1, 3, fpt) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * 
-          (input->u_fs * input->u_fs + input->v_fs * input->v_fs);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(1, dim+1, fpt) = input->rho_fs * input->V_fs[dim];
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vsq += input->V_fs[dim] * input->V_fs[dim];
+
+        U(1, 3, fpt) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
         break;
       }
+
       case 3: /* Supersonic Outlet */
       {
         /* Extrapolate boundary values from interior */
@@ -79,16 +84,57 @@ void Faces::apply_bcs()
           U(1, n, fpt) = U(0, n, fpt);
         break;
       }
-      case 4: /* Characteristic (from HiFiLES) */
+
+      case 4: /* Subsonic Inlet */
+      {
+        /* Get states for convenience */
+        double rhoL = U(0, 0, fpt);
+        double uL = U(0, 1, fpt) / rhoL;
+        double vL = U(0, 2, fpt) / rhoL;
+        double Vsq = uL * uL + vL * vL;
+        double eL = U(0, 3 ,fpt);
+        double PL = (input->gamma - 1.0) * (eL - 0.5 * Vsq);
+
+
+        /* Compute left normal velocity */
+        //double VnL = 0.0; 
+
+        //for (unsigned int dim = 0; dim < nDims; dim++)
+        //  VnL += U(0, dim+1, fpt) / U(0, 0, fpt) * norm(0, dim, fpt);
+
+        /* Compute speed of sound */
+        //double cL = std::sqrt(input->gamma * PL / rhoL);
+
+        /* Extrapolate Riemann invariant */
+        //double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
+
+        /* Specify total enthalpy */
+        //double H_tot = input->gamma * input->R_ref / (input->gamma - 1.0) * input->T_tot_fs;
+
+        /* Compute total speed of sound squared */
+        //double c_tot_sq = (input->gamma - 1.0) * (H_tot - (eL + PL) / rhoL + 0.5 * Vsq) + cL * cL;
+
+        /* Dot product of normal flow velocity */
+
+        break;
+      }
+
+      case 5: /* Subsonic Outlet */
+      {
+        break;
+      }
+
+      case 6: /* Characteristic (from HiFiLES) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
 
         for (unsigned int dim = 0; dim < nDims; dim++)
+        {
           VnL += U(0, dim+1, fpt) / U(0, 0, fpt) * norm(0, dim, fpt);
+          VnR += input->V_fs[dim] * norm(0,dim,fpt);
+        }
       
-        VnR += input->u_fs * norm(0,0,fpt);
-        VnR += input->v_fs * norm(0,1,fpt);
 
         /* Compute pressure. TODO: Compute pressure once!*/
         double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
@@ -110,12 +156,12 @@ void Faces::apply_bcs()
         {
           double s_inv = std::pow(input->rho_fs, input->gamma) / PR;
 
-          double u_sq = 0.0;
-          u_sq += input->u_fs * input->u_fs;
-          u_sq += input->v_fs * input->v_fs;
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            Vsq += input->V_fs[dim] * input->V_fs[dim];
 
           double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs +
-              0.5 * u_sq;
+              0.5 * Vsq;
 
           double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/ 
               (input-> gamma - 1.0));
@@ -144,17 +190,17 @@ void Faces::apply_bcs()
                 U(0, 0, fpt) - VnL * norm(0, 1, fpt)));
           double PR = rhoR / input->gamma * cstar * cstar;
 
-          double u_sq = 0.0;
-          u_sq += U(1, 1, fpt) * U(1, 1, fpt) / (rhoL * rhoL) ;
-          u_sq += U(1, 2, fpt) * U(1, 2, fpt) / (rhoL * rhoL) ;
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            Vsq += U(1, dim+1, fpt) * U(1, dim+1, fpt) / (rhoL * rhoL) ;
           
-          U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * rhoR * u_sq; 
+          U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq; 
         }
  
         break;
 
       }
-      case 5: /* Slip Wall */
+      case 7: /* Slip Wall */
       {
         double momN = 0.0;
 
@@ -174,7 +220,7 @@ void Faces::apply_bcs()
 
       
 
-      case 6: /* No-slip Wall (isothermal) */
+      case 8: /* No-slip Wall (isothermal) */
       {
         double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
             U(0, 2, fpt)) / U(0, 0, fpt);
@@ -194,7 +240,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 7: /* No-slip Wall (isothermal and moving) */
+      case 9: /* No-slip Wall (isothermal and moving) */
       {
         double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
             U(0, 2, fpt)) / U(0, 0, fpt);
@@ -206,8 +252,12 @@ void Faces::apply_bcs()
         
         U(1, 0, fpt) = PR / (input->R_ref * TR);
 
-        U(1, 1, fpt) = U(1, 0 , fpt) * input->u_wall;
-        U(1, 2, fpt) = U(1, 0 , fpt) * input->v_wall;
+        double V_wall_sq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          U(1, dim+1, fpt) = U(1, 0 , fpt) * input->V_wall[dim];
+          V_wall_sq += input->V_wall[dim] * input->V_wall[dim];
+        }
 
         U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0 , fpt) * (input->u_wall * input->u_wall +
             input->v_wall * input->v_wall);
@@ -215,7 +265,13 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 8: /* No-slip Wall (adiabatic) */
+      case 10: /* No-slip Wall (adiabatic) */
+      {
+        ThrowException("Under construction !");
+        break;
+      }
+
+      case 11: /* No-slip Wall (adiabatic and moving) */
       {
         ThrowException("Under construction !");
         break;
@@ -245,16 +301,9 @@ void Faces::apply_bcs_dU()
 
       }
     }
-    else /* Copy gradient from interior */
+    else if(bnd_id == 10 || bnd_id == 11) /* Adibatic Wall */
     {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-            dU(1, n, dim, fpt) = dU(0, n, dim, fpt);
-        }
-
-      }
+        ThrowException("Under construction !");
     }
   }
 }
