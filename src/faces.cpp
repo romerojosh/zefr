@@ -46,7 +46,7 @@ void Faces::apply_bcs()
   std::array<double, 3> VL, VR;
 
   /* Loop over boundary flux points */
-#pragma omp parallel for
+#pragma omp parallel for private(VL,VR)
   for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
   {
     unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
@@ -105,7 +105,7 @@ void Faces::apply_bcs()
         }
 
         double eL = U(0, 3 ,fpt);
-        double PL = (input->gamma - 1.0) * (eL - 0.5 * Vsq);
+        double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
 
 
         /* Compute left normal velocity and dot product of normal*/
@@ -157,6 +157,7 @@ void Faces::apply_bcs()
         double PR = input->P_tot_fs * std::pow(TR / input->T_tot_fs, input->gamma/ (input->gamma - 1.0));
 
         U(1, 0, fpt) = PR / (input->R_ref * TR);
+        //std::cout << U(1,0,fpt) <<std::endl;
 
         Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
@@ -166,7 +167,7 @@ void Faces::apply_bcs()
           Vsq += VR[dim] * VR[dim];
         }
 
-        U(1, 4, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0, fpt) * Vsq;
+        U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0, fpt) * Vsq;
 
         break;
       }
@@ -187,7 +188,7 @@ void Faces::apply_bcs()
         }
 
         double eL = U(0, 3 ,fpt);
-        double PL = (input->gamma - 1.0) * (eL - 0.5 * Vsq);
+        double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
 
         /* Compute left normal velocity */
         double VnL = 0.0;
@@ -211,19 +212,19 @@ void Faces::apply_bcs()
         U(1, 0, fpt) = std::pow(PR / s, 1.0 / input->gamma);
 
         /* Compute right speed of sound and velocity magnitude */
-        double cR = std::sqrt(input->gamma * PR/ U(0, 0, fpt));
+        double cR = std::sqrt(input->gamma * PR/ U(1, 0, fpt));
 
         double VnR = R_plus - 2.0 * cR / (input->gamma - 1.0);
 
         Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VR[dim] = VL[dim] - (VnR - VnL) * norm(0, dim+1, fpt);
+          VR[dim] = VL[dim] + (VnR - VnL) * norm(0, dim+1, fpt);
           U(1, dim+1, fpt) = U(1, 0, fpt) * VR[dim];
           Vsq += VR[dim] * VR[dim];
         }
 
-        U(1, 4, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0, fpt) * Vsq;
+        U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0, fpt) * Vsq;
 
         break;
       }
