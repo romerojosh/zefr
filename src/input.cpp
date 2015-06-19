@@ -94,11 +94,11 @@ InputStruct read_input_file(std::string inputfile)
 void apply_nondim(InputStruct &input)
 {
   /* Compute dimensional freestream quantities */
-  double vel = input.mach_fs * std::sqrt(input.gamma * input.R * input.T_fs);
+  double V_fs_mag = input.mach_fs * std::sqrt(input.gamma * input.R * input.T_fs);
   for (unsigned int dim = 0; dim < input.nDims; dim++)
-    input.V_fs[dim] = vel * input.norm_fs[dim];
+    input.V_fs[dim] = V_fs_mag * input.norm_fs[dim];
 
-  input.rho_fs = input.mu * input.Re_fs / (vel * input.L_fs);
+  input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
   input.P_fs = input.rho_fs * input.R * input.T_fs;
 
   /* If using Sutherland's law, update viscosity */
@@ -110,23 +110,26 @@ void apply_nondim(InputStruct &input)
   /* Set reference quantities for nondimensionalization */
   input.T_ref = input.T_fs;
   input.rho_ref = input.rho_fs;
-  input.P_ref = input.rho_fs * vel * vel;
-  input.mu_ref = input.rho_fs * vel * input.L_fs;
-  input.R_ref = input.R * input.T_fs / (vel * vel);
-  input.rt = input.T_gas * input.R / (vel*vel);
+  input.P_ref = input.rho_fs * V_fs_mag * V_fs_mag;
+  input.mu_ref = input.rho_fs * V_fs_mag * input.L_fs;
+  input.R_ref = input.R * input.T_fs / (V_fs_mag * V_fs_mag);
+  input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
   input.c_sth = input.S / input.T_gas;
 
   /* Nondimensionalize freestream quantities */
   input.mu = input.mu/input.mu_ref;
   input.rho_fs = input.rho_fs/input.rho_ref;
   for (unsigned int n = 0; n < input.nDims; n++)
-    input.V_fs[n] = input.V_fs[n] / vel;
+    input.V_fs[n] = input.V_fs[n] / V_fs_mag;
   input.P_fs = input.P_fs / input.P_ref;
+  input.T_tot_fs = (input.T_fs / input.T_ref) * (1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs * input.mach_fs);
+  input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs * input.mach_fs, input.gamma /
+      (input.gamma - 1.0));
 
   /* Compute and nondimensionalize wall quantities */
-  double vel_wall = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
+  double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
   for (unsigned int n = 0; n < input.nDims; n++)
-    input.V_wall[n] = vel_wall * input.norm_wall[n] / vel;
+    input.V_wall[n] = V_wall_mag * input.norm_wall[n] / V_fs_mag;
 
   input.T_wall = input.T_wall / input.T_ref;
 }

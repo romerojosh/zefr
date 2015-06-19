@@ -19,7 +19,7 @@ struct InputStruct
   std::array<double, 3> AdvDiff_A, V_fs, norm_fs, V_wall, norm_wall;
   double T_gas, gamma, prandtl, mu, R, S;
   double rho_fs, u_fs, v_fs, P_fs;
-  double mach_fs, L_fs, T_fs, Re_fs, nx_fs, ny_fs;
+  double mach_fs, L_fs, T_fs, Re_fs, nx_fs, ny_fs, T_tot_fs, P_tot_fs;
   double mach_wall, T_wall, nx_wall, ny_wall, u_wall, v_wall;
   double T_ref, P_ref, rho_ref, mu_ref, time_ref, R_ref, c_sth, rt;
 };

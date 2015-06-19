@@ -3,8 +3,8 @@ $MeshFormat
 $EndMeshFormat
 $PhysicalNames
 3
-1 2 "WALL_SLIP"
-1 3 "FARFIELD"
+1 2 "WALL_NS_ISO"
+1 3 "CHAR"
 2 1 "FLUID"
 $EndPhysicalNames
 $Nodes

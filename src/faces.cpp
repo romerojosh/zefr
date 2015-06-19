@@ -42,6 +42,9 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
 void Faces::apply_bcs()
 {
+  /* Create some useful variables outside loop */
+  std::array<double, 3> VL, VR;
+
   /* Loop over boundary flux points */
 #pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
@@ -66,12 +69,13 @@ void Faces::apply_bcs()
       {
         /* Set boundaries to freestream values */
         U(1, 0, fpt) = input->rho_fs;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(1, dim+1, fpt) = input->rho_fs * input->V_fs[dim];
 
         double Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          U(1, dim+1, fpt) = input->rho_fs * input->V_fs[dim];
           Vsq += input->V_fs[dim] * input->V_fs[dim];
+        }
 
         U(1, 3, fpt) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
         break;
@@ -87,40 +91,140 @@ void Faces::apply_bcs()
 
       case 4: /* Subsonic Inlet */
       {
+        if (!input->viscous)
+          ThrowException("Subsonic inlet only for viscous flows currently!");
+
         /* Get states for convenience */
         double rhoL = U(0, 0, fpt);
-        double uL = U(0, 1, fpt) / rhoL;
-        double vL = U(0, 2, fpt) / rhoL;
-        double Vsq = uL * uL + vL * vL;
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VL[dim] = U(0, dim+1, fpt) / rhoL;
+          Vsq += VL[dim] * VL[dim];
+        }
+
         double eL = U(0, 3 ,fpt);
         double PL = (input->gamma - 1.0) * (eL - 0.5 * Vsq);
 
 
-        /* Compute left normal velocity */
-        //double VnL = 0.0; 
+        /* Compute left normal velocity and dot product of normal*/
+        double VnL = 0.0;
+        double alpha = 0.0;
 
-        //for (unsigned int dim = 0; dim < nDims; dim++)
-        //  VnL += U(0, dim+1, fpt) / U(0, 0, fpt) * norm(0, dim, fpt);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VnL += VL[dim] * norm(0, dim, fpt);
+          alpha += input->norm_fs[dim] * norm(0, dim, fpt);
+        }
 
         /* Compute speed of sound */
-        //double cL = std::sqrt(input->gamma * PL / rhoL);
+        double cL = std::sqrt(input->gamma * PL / rhoL);
 
         /* Extrapolate Riemann invariant */
-        //double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
+        double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
 
         /* Specify total enthalpy */
-        //double H_tot = input->gamma * input->R_ref / (input->gamma - 1.0) * input->T_tot_fs;
+        double H_tot = input->gamma * input->R_ref / (input->gamma - 1.0) * input->T_tot_fs;
 
         /* Compute total speed of sound squared */
-        //double c_tot_sq = (input->gamma - 1.0) * (H_tot - (eL + PL) / rhoL + 0.5 * Vsq) + cL * cL;
+        double c_tot_sq = (input->gamma - 1.0) * (H_tot - (eL + PL) / rhoL + 0.5 * Vsq) + cL * cL;
 
-        /* Dot product of normal flow velocity */
+        /* Coefficients of Quadratic equation */
+        double aa = 1.0 + 0.5 * (input->gamma - 1.0) * alpha * alpha;
+        double bb = -(input->gamma - 1.0) * alpha * R_plus;
+        double cc = 0.5 * (input->gamma - 1.0) * R_plus * R_plus - 2.0 * c_tot_sq / (input->gamma - 1.0);
+
+        /* Solve quadratic for right velocity */
+        double dd = bb * bb  - 4.0 * aa * cc;
+        dd = std::sqrt(std::max(dd, 0.0));  // Max to keep from producing NaN
+        double VR_mag = (dd - bb) / (2.0 * aa);
+        VR_mag = std::max(VR_mag, 0.0);
+        double VR_mag_sq = VR_mag * VR_mag;
+
+        /* Compute right speed of sound and Mach */
+        /* Note: Need to verify what is going on here. */
+        double cR_sq = c_tot_sq - 0.5 * (input->gamma - 1.0) * VR_mag_sq;
+        double Mach_sq = VR_mag_sq / cR_sq;
+        Mach_sq = std::min(Mach_sq, 1.0); // Clamp to Mach = 1
+        VR_mag_sq = Mach_sq * cR_sq;
+        VR_mag = std::sqrt(VR_mag_sq);
+        cR_sq = c_tot_sq - 0.5 * (input->gamma - 1.0) * VR_mag_sq;
+
+        /* Compute right states */
+
+        double TR = cR_sq / (input->gamma * input->R_ref);
+        double PR = input->P_tot_fs * std::pow(TR / input->T_tot_fs, input->gamma/ (input->gamma - 1.0));
+
+        U(1, 0, fpt) = PR / (input->R_ref * TR);
+
+        Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VR[dim] = VR_mag * input->norm_fs[dim];
+          U(1, dim+1, fpt) = U(1, 0, fpt) * VR[dim];
+          Vsq += VR[dim] * VR[dim];
+        }
+
+        U(1, 4, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0, fpt) * Vsq;
 
         break;
       }
 
       case 5: /* Subsonic Outlet */
       {
+        if (!input->viscous)
+          ThrowException("Subsonic outlet only for viscous flows currently!");
+
+        /* Get states for convenience */
+        double rhoL = U(0, 0, fpt);
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VL[dim] = U(0, dim+1, fpt) / rhoL;
+          Vsq += VL[dim] * VL[dim];
+        }
+
+        double eL = U(0, 3 ,fpt);
+        double PL = (input->gamma - 1.0) * (eL - 0.5 * Vsq);
+
+        /* Compute left normal velocity */
+        double VnL = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VnL += VL[dim] * norm(0, dim, fpt);
+        }
+
+        /* Compute speed of sound */
+        double cL = std::sqrt(input->gamma * PL / rhoL);
+
+        /* Extrapolate Riemann invariant */
+        double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
+
+        /* Extrapolate entropy */
+        double s = PL / std::pow(rhoL, input->gamma);
+
+        /* Fix pressure */
+        double PR = input->P_fs;
+
+        U(1, 0, fpt) = std::pow(PR / s, 1.0 / input->gamma);
+
+        /* Compute right speed of sound and velocity magnitude */
+        double cR = std::sqrt(input->gamma * PR/ U(0, 0, fpt));
+
+        double VnR = R_plus - 2.0 * cR / (input->gamma - 1.0);
+
+        Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VR[dim] = VL[dim] - (VnR - VnL) * norm(0, dim+1, fpt);
+          U(1, dim+1, fpt) = U(1, 0, fpt) * VR[dim];
+          Vsq += VR[dim] * VR[dim];
+        }
+
+        U(1, 4, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0, fpt) * Vsq;
+
         break;
       }
 
@@ -167,10 +271,10 @@ void Faces::apply_bcs()
               (input-> gamma - 1.0));
 
           U(1, 0, fpt) = rhoR;
-          U(1, 1, fpt) = rhoR * (ustarn * norm(0, 0, fpt) + input->u_fs - VnR * 
-              norm(0, 0, fpt));
-          U(1, 2, fpt) = rhoR * (ustarn * norm(0, 1, fpt) + input->v_fs - VnR * 
-              norm(0, 1, fpt));
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            U(1, dim+1, fpt) = rhoR * (ustarn * norm(0, dim, fpt) + input->V_fs[dim] - VnR * 
+              norm(0, dim, fpt));
+
           PR = rhoR / input->gamma * cstar * cstar;
           U(1, 3, fpt) = rhoR * H_fs - PR;
           
@@ -218,10 +322,11 @@ void Faces::apply_bcs()
         break;
       }
 
-      
-
       case 8: /* No-slip Wall (isothermal) */
       {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
         double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
             U(0, 2, fpt)) / U(0, 0, fpt);
 
@@ -242,6 +347,9 @@ void Faces::apply_bcs()
 
       case 9: /* No-slip Wall (isothermal and moving) */
       {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
         double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
             U(0, 2, fpt)) / U(0, 0, fpt);
 
@@ -259,20 +367,25 @@ void Faces::apply_bcs()
           V_wall_sq += input->V_wall[dim] * input->V_wall[dim];
         }
 
-        U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0 , fpt) * (input->u_wall * input->u_wall +
-            input->v_wall * input->v_wall);
+        U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0 , fpt) * V_wall_sq;
 
         break;
       }
 
       case 10: /* No-slip Wall (adiabatic) */
       {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
         ThrowException("Under construction !");
         break;
       }
 
       case 11: /* No-slip Wall (adiabatic and moving) */
       {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
         ThrowException("Under construction !");
         break;
       }
