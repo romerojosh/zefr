@@ -34,9 +34,7 @@ void FRSolver::setup()
   std::cout << "Setting up elements and faces..." << std::endl;
   eles = std::make_shared<Quads>(&geo, input, order);
   faces = std::make_shared<Faces>(&geo, input);
-
   eles->associate_faces(faces);
-  std::cout << "Setting up elements and faces..." << std::endl;
   eles->setup();
 
   std::cout << "Initializing solution..." << std::endl;
@@ -143,6 +141,11 @@ void FRSolver::restart(std::string restart_file)
 
   while (f >> param)
   {
+    if (param == "TIME")
+    {
+      std::getline(f,line);
+      f >> flow_time;
+    }
     if (param == "CYCLE")
     {
       std::getline(f,line);
@@ -865,7 +868,7 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
   /* Write to history file */
   auto t2 = std::chrono::high_resolution_clock::now();
   auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
-  f << iter << " " << current_runtime.count() << " ";
+  f << iter + restart_iter << " " << current_runtime.count() << " ";
 
   for (auto &val : max_res)
     f << std::scientific << val << " ";

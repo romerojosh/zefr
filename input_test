@@ -17,7 +17,7 @@ CFL	  0.25
 
 # Restarting:
 restart	      0
-restart_file  cyl_ns_000007500.vtk
+restart_file  fp_pmg_000001000.vtk
 
 # Multigrid:
 p_multi 1

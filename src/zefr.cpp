@@ -17,6 +17,17 @@ int main(int argc, char* argv[])
     exit(1);
   }
 
+  /* Print out cool ascii art header */
+  std::cout << std::endl;
+  std::cout << R"( ______     ______     ______   ______    )" << std::endl; 
+  std::cout << R"(/\___  \   /\  ___\   /\  ___\ /\  == \   )" << std::endl;   
+  std::cout << R"(\/_/  /__  \ \  __\   \ \  __\ \ \  __<   )" << std::endl;   
+  std::cout << R"(  /\_____\  \ \_____\  \ \_\    \ \_\ \_\ )" << std::endl; 
+  std::cout << R"(  \/_____/   \/_____/   \/_/     \/_/ /_/ )" << std::endl;
+  std::cout << R"(__________________________________________)" << std::endl;
+  std::cout << std::endl;
+                                                   
+
   std::string inputfile = argv[1];
 
   std::cout << "Reading input file: " << inputfile <<  std::endl;
@@ -34,8 +45,13 @@ int main(int argc, char* argv[])
   }
 
   solver.write_solution(input.output_prefix,0);
+
+  /* Open file to write residual history */
   std::ofstream hist_file;
-  hist_file.open(input.output_prefix + "_hist.dat");
+  if (input.restart) /* If restarted, append to existing file */
+    hist_file.open(input.output_prefix + "_hist.dat", std::ios::app);
+  else
+    hist_file.open(input.output_prefix + "_hist.dat");
 
   auto t1 = std::chrono::high_resolution_clock::now();
   for (unsigned int n = 1; n<=input.n_steps ; n++)
