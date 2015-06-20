@@ -139,7 +139,10 @@ void Elements::set_coords()
           geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
 
           int gfpt = geo->fpt2gfpt(fpt,ele);
-          faces->coord(gfpt, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
+
+          /* Check if on ghost edge */
+          if (gfpt != -1)
+            faces->coord(gfpt, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
 
         }
       }
