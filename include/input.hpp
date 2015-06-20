@@ -10,7 +10,8 @@
 
 struct InputStruct
 {
-  unsigned int dt_type, ic_type, nDims, nQpts1D, n_steps, order, low_order, report_freq, smooth_steps, write_freq;
+  unsigned int dt_type, ic_type, nDims, nQpts1D, n_steps, order, low_order, smooth_steps;
+  unsigned int report_freq, write_freq, force_freq;
   std::string output_prefix, meshfile, equation, spt_type, dt_scheme, restart_file;
   bool viscous, p_multi, restart, fix_vis;
   std::string fconv_type, fvisc_type;

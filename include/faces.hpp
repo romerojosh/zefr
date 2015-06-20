@@ -10,10 +10,12 @@
 
 //class Elements;
 class FRSolver;
+class Elements;
 class Quads;
 class Faces 
 {
   friend class FRSolver;
+  friend class Elements;
   friend class Quads;
 
   private:
@@ -32,7 +34,7 @@ class Faces
 
   protected:
     mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Ucomm, P;
-    mdvector<double> norm, jaco;
+    mdvector<double> norm, jaco, coord;
     mdvector<int> outnorm;
     std::vector<double> dA, waveSp;
 

@@ -111,6 +111,7 @@ void Elements::set_coords()
   /* Allocate memory for physical coordinates */
   geo->coord_spts.assign({nSpts, nEles, nDims});
   geo->coord_fpts.assign({nFpts, nEles, nDims});
+  faces->coord.assign({geo->nGfpts, nDims});
   geo->coord_ppts.assign({nPpts, nEles, nDims});
   geo->coord_qpts.assign({nQpts, nEles, nDims});
 
@@ -136,6 +137,10 @@ void Elements::set_coords()
         {
           unsigned int gnd = geo->nd2gnd(node, ele);
           geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
+
+          int gfpt = geo->fpt2gfpt(fpt,ele);
+          faces->coord(gfpt, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
+
         }
       }
 

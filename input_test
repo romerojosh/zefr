@@ -29,6 +29,7 @@ low_order 0
 output_prefix fp_pmg
 write_freq  1000
 report_freq 100
+force_freq  1000
 nQpts1D     10
 
 # Riemann Solver:

@@ -876,6 +876,69 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
 
 }
 
+void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int iter)
+{
+  //double CD_visc = 0.0;
+  std::array<double, 3> force_conv, force_visc;
+  force_conv.fill(0.0); force_visc.fill(0.0);
+
+  std::stringstream ss;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter + restart_iter << ".cp";
+  auto cpfile = ss.str();
+  std::ofstream g(cpfile);
+
+  /* Get angle of attack */
+  double aoa = std::atan2(input->V_fs[1], input->V_fs[0]); 
+
+  /* Compute factor for non-dimensional coefficients */
+  double Vsq = 0.0;
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+    Vsq += input->V_fs[dim] * input->V_fs[dim];
+
+  double fac = 1.0 / (0.5 * input->rho_fs * Vsq);
+
+  unsigned int count = 0;
+  /* Loop over boundary faces */
+  for (unsigned int fpt = geo.nGfpts_int; fpt < geo.nGfpts; fpt++)
+  {
+    /* Get boundary ID */
+    unsigned int bnd_id = geo.gfpt2bnd[fpt - geo.nGfpts_int];
+
+    if (bnd_id >= 7) /* On wall boundary */
+    {
+      /* Get pressure */
+      double PL = faces->P(0,fpt);
+
+      double CP = (PL - input->P_fs) * fac;
+
+      /* Write CP distrubtion to file */
+      g << std:: scientific << faces->coord(fpt, 0) << " " << faces-> coord(fpt, 1) << " " << CP << std::endl;
+
+      /* Sum inviscid force contributions */
+      for (unsigned int dim = 0; dim < eles->nDims; dim++)
+        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * (PL - input->P_fs) * 
+          faces->norm(0, dim, fpt) * faces->dA[fpt] * fac;
+
+      count++;
+    }
+  }
+
+  double CL_conv, CD_conv;
+  if (eles->nDims == 2)
+  {
+    CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
+    CD_conv = force_conv[0] * std::cos(aoa) + force_conv[1] * std::sin(aoa);
+  }
+  else
+  {
+    ThrowException("Under construction!");
+  }
+
+  std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv << std::endl;
+  f << iter + restart_iter << " ";
+  f << std::scientific << CL_conv << " " << CD_conv << std::endl;
+}
+
 void FRSolver::compute_l2_error()
 {
 #pragma omp parallel

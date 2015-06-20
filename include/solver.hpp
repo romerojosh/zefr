@@ -68,6 +68,7 @@ class FRSolver
     void update_with_source(mdvector<double> &source);
     void write_solution(std::string prefix, unsigned int nIter);
     void report_max_residuals(std::ofstream &f, unsigned int iter, std::chrono::high_resolution_clock::time_point t1);
+    void report_forces(std::string prefix, std::ofstream &f, unsigned int iter);
     void compute_l2_error();
 
 };

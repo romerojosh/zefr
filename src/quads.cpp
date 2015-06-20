@@ -71,6 +71,10 @@ void Quads::set_locs()
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
+  // NOTE: Currently assuming solution point locations always at Legendre.
+  // Will need extrapolation operation in 1D otherwise
+  weights_spts = Gauss_Legendre_weights(nSpts1D); 
+
   loc_DFR_1D = loc_spts_1D;
   loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
   loc_DFR_1D.insert(loc_DFR_1D.end(), 1.0);
