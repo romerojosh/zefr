@@ -157,7 +157,6 @@ void Faces::apply_bcs()
         double PR = input->P_tot_fs * std::pow(TR / input->T_tot_fs, input->gamma/ (input->gamma - 1.0));
 
         U(1, 0, fpt) = PR / (input->R_ref * TR);
-        //std::cout << U(1,0,fpt) <<std::endl;
 
         Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
@@ -338,10 +337,11 @@ void Faces::apply_bcs()
         
         U(1, 0, fpt) = PR / (input->R_ref * TR);
 
+        /* Set velocity to zero */
         for (unsigned int dim = 0; dim < nDims; dim++)
           U(1, dim+1, fpt) = 0.0;
 
-        U(1, 3, fpt) = PR / (input->gamma - 1);
+        U(1, 3, fpt) = PR / (input->gamma - 1.0);
 
         break;
       }
@@ -361,6 +361,7 @@ void Faces::apply_bcs()
         
         U(1, 0, fpt) = PR / (input->R_ref * TR);
 
+        /* Set velocity to wall velocity */
         double V_wall_sq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
@@ -378,7 +379,22 @@ void Faces::apply_bcs()
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
 
-        ThrowException("Under construction !");
+        /* Extrapolate density */
+        U(1, 0, fpt) = U(0, 0, fpt);
+
+        /* Extrapolate pressure */
+        double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
+            U(0, 2, fpt)) / U(0, 0, fpt);
+
+        double PL = (input->gamma - 1.0) * (U(0, 3, fpt) - 0.5 * momF);
+        double PR = PL; 
+
+        /* Set velocity to zero */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(1, dim+1, fpt) = 0.0;
+
+        U(1, 3, fpt) = PR / (input->gamma - 1.0);
+
         break;
       }
 
@@ -387,7 +403,26 @@ void Faces::apply_bcs()
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
 
-        ThrowException("Under construction !");
+        /* Extrapolate density */
+        U(1, 0, fpt) = U(0, 0, fpt);
+
+        /* Extrapolate pressure */
+        double momF = (U(0, 1, fpt) * U(0, 1, fpt) + U(0, 2, fpt) * 
+            U(0, 2, fpt)) / U(0, 0, fpt);
+
+        double PL = (input->gamma - 1.0) * (U(0, 3, fpt) - 0.5 * momF);
+        double PR = PL; 
+
+        /* Set velocity to wall velocity */
+        double V_wall_sq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          U(1, dim+1, fpt) = U(1, 0 , fpt) * input->V_wall[dim];
+          V_wall_sq += input->V_wall[dim] * input->V_wall[dim];
+        }
+
+        U(1, 3, fpt) = PR / (input->gamma - 1.0) + 0.5 * U(1, 0 , fpt) * V_wall_sq;
+
         break;
       }
     }
@@ -397,7 +432,7 @@ void Faces::apply_bcs()
 void Faces::apply_bcs_dU()
 {
   /* Apply boundaries to solution derivative */
-#pragma omp parallel for
+#pragma omp parallel for 
   for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
   {
     unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
@@ -412,12 +447,51 @@ void Faces::apply_bcs_dU()
             unsigned int per_fpt = geo->per_fpt_pairs[fpt];
             dU(1, n, dim, fpt) = dU(0, n, dim, per_fpt);
         }
-
       }
     }
     else if(bnd_id == 10 || bnd_id == 11) /* Adibatic Wall */
     {
-        ThrowException("Under construction !");
+      /* Extrapolate gradients except for energy */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int n = 0; n < nVars - 1; n++)
+        {
+            dU(1, n, dim, fpt) = dU(0, n, dim, fpt);
+        }
+      }
+
+      /* Compute energy gradient */
+      /* Get right states and velocity gradients*/
+      double rho = U(1, 0, fpt);
+      double momx = U(1, 1, fpt);
+      double momy = U(1, 2, fpt);
+      double e = U(1, 3, fpt);
+
+      double u = momx / rho;
+      double v = momy / rho;
+      double e_int = e / rho - 0.5 * (u*u + v*v);
+
+
+      double rho_dx = dU(1, 0, 0, fpt);
+      double momx_dx = dU(1, 1, 0, fpt);
+      double momy_dx = dU(1, 2, 0, fpt);
+      
+      double rho_dy = dU(1, 0, 1, fpt);
+      double momx_dy = dU(1, 1, 1, fpt);
+      double momy_dy = dU(1, 2, 1, fpt);
+
+      double du_dx = (momx_dx - rho_dx * u) / rho;
+      double du_dy = (momx_dy - rho_dy * u) / rho;
+
+      double dv_dx = (momy_dx - rho_dx * v) / rho;
+      double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+      double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+      double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+
+      dU(1, 3, 0, fpt) = (dke_dx + rho_dx * e_int);
+      dU(1, 3, 1, fpt) = (dke_dy + rho_dy * e_int);
+
     }
   }
 }
@@ -783,11 +857,11 @@ void Faces::LDG_flux()
             - WR[n]) + beta * norm(0, 1, fpt)* (FL[n] - FR[n]);
       }
     }
-    /* Else, only use left flux state (unless periodic) */
+    /* Else, only use left flux state (unless periodic or adiabatic wall) */
     else
     {
       unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
-      if (bnd_id != 1)
+      if (bnd_id != 1 && bnd_id != 10 && bnd_id != 11)
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
@@ -795,7 +869,6 @@ void Faces::LDG_flux()
           Fcomm_temp(n,1) += Fvisc(0, n, 1, fpt) + tau * norm(0, 1, fpt)* (WL[n] - WR[n]);
         }
       }
-      /* If periodic, treat like interior face */
       else
       {
         for (unsigned int n = 0; n < nVars; n++)
