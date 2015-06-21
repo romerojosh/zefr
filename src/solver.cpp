@@ -878,9 +878,8 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
 
 void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int iter)
 {
-  //double CD_visc = 0.0;
-  std::array<double, 3> force_conv, force_visc;
-  force_conv.fill(0.0); force_visc.fill(0.0);
+  std::array<double, 3> force_conv, force_visc, taun;
+  force_conv.fill(0.0); force_visc.fill(0.0); taun.fill(0.0);
 
   std::stringstream ss;
   ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter + restart_iter << ".cp";
@@ -916,27 +915,105 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
 
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
-        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * (PL - input->P_fs) * 
-          faces->norm(0, dim, fpt) * faces->dA[fpt] * fac;
+      {
+        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * CP * faces->norm(0, dim, fpt) * 
+          faces->dA[fpt];
+      }
 
+      if (input->viscous)
+      {
+        if (eles->nDims == 2)
+        {
+          /* Setting variables for convenience */
+          /* States */
+          double rho = faces->U(0, 0, fpt);
+          double momx = faces->U(0, 1, fpt);
+          double momy = faces->U(0, 2, fpt);
+          double e = faces->U(0, 3, fpt);
+
+          double u = momx / rho;
+          double v = momy / rho;
+          double e_int = e / rho - 0.5 * (u*u + v*v);
+
+          /* Gradients */
+          double rho_dx = faces->dU(0, 0, 0, fpt);
+          double momx_dx = faces->dU(0, 1, 0, fpt);
+          double momy_dx = faces->dU(0, 2, 0, fpt);
+          
+          double rho_dy = faces->dU(0, 0, 1, fpt);
+          double momx_dy = faces->dU(0, 1, 1, fpt);
+          double momy_dy = faces->dU(0, 2, 1, fpt);
+
+          /* Set viscosity */
+          double mu;
+          if (input->fix_vis)
+          {
+            mu = input->mu;
+          }
+          /* If desired, use Sutherland's law */
+          else
+          {
+            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
+          }
+
+          double du_dx = (momx_dx - rho_dx * u) / rho;
+          double du_dy = (momx_dy - rho_dy * u) / rho;
+
+          double dv_dx = (momy_dx - rho_dx * v) / rho;
+          double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+          double diag = (du_dx + dv_dy) / 3.0;
+
+          double tauxx = 2.0 * mu * (du_dx - diag);
+          double tauxy = mu * (du_dy + dv_dx);
+          double tauyy = 2.0 * mu * (dv_dy - diag);
+
+          /* Get viscous normal stress */
+          taun[0] = tauxx * faces->norm(0, 0, fpt) + tauxy * faces->norm(0, 1, fpt);
+          taun[1] = tauxy * faces->norm(0, 0, fpt) + tauyy * faces->norm(0, 1, fpt);
+
+          for (unsigned int dim = 0; dim < eles->nDims; dim++)
+            force_visc[dim] -= eles->weights_spts[count%eles->nSpts1D] * taun[dim] * faces->dA[fpt] * fac;
+
+        }
+        else
+        {
+          ThrowException("Under construction!");
+        }
+        
+      }
       count++;
     }
   }
 
-  double CL_conv, CD_conv;
+  /* Compute lift and drag coefficients */
+  double CL_conv, CD_conv, CL_visc, CD_visc;
   if (eles->nDims == 2)
   {
     CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
     CD_conv = force_conv[0] * std::cos(aoa) + force_conv[1] * std::sin(aoa);
+    CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
+    CD_visc = force_visc[0] * std::cos(aoa) + force_visc[1] * std::sin(aoa);
   }
   else
   {
     ThrowException("Under construction!");
   }
 
-  std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv << std::endl;
+  std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
   f << iter + restart_iter << " ";
-  f << std::scientific << CL_conv << " " << CD_conv << std::endl;
+  f << std::scientific << CL_conv << " " << CD_conv;
+
+  if (input->viscous)
+  {
+    std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
+    f << std::scientific << " " << CL_visc << " " << CD_visc;
+  }
+
+  std::cout << std::endl;
+  f << std::endl;
+
 }
 
 void FRSolver::compute_l2_error()

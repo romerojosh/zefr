@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile meshes/flatplate.msh
+meshfile full_cyl_uquad.msh
 
 # Solver:
 order     3
@@ -9,27 +9,27 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 100000
+n_steps 500000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
-CFL	  0.20
+CFL	  0.3
 
 # Restarting:
 restart	      0
-restart_file  fp_pmg_000001000.vtk
+restart_file  cyl_uquad_000001300.vtk
 
 # Multigrid:
 p_multi 1
 smooth_steps 1
 rel_fac 1.00
-low_order 1
+low_order 0
 
 # Reporting:
-output_prefix fp_pmg
-write_freq  1000
-report_freq 100
-force_freq  1000
+output_prefix cyl_uquad
+write_freq  100
+report_freq 10
+force_freq 100
 nQpts1D     10
 
 # Riemann Solver:
@@ -64,7 +64,7 @@ P_fs .71428571428
 # Navier-Stokes specific
 fix_vis 0
 mach_fs 0.1
-Re_fs 200
+Re_fs 20
 L_fs 1
 T_fs 300
 nx_fs 1

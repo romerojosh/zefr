@@ -73,17 +73,17 @@ std::vector<double> Gauss_Legendre_weights(unsigned int n)
       weights = {5./9., 8./9., 5./9.}; break;
 
     case 4:
-      weights = {1./36. * std::sqrt(18. - std::sqrt(30.)),
-                 1./36. * std::sqrt(18. + std::sqrt(30.)),
-                 1./36. * std::sqrt(18. + std::sqrt(30.)),
-                 1./36. * std::sqrt(18. - std::sqrt(30.))}; break;
+      weights = {1./36. * (18. - std::sqrt(30.)),
+                 1./36. * (18. + std::sqrt(30.)),
+                 1./36. * (18. + std::sqrt(30.)),
+                 1./36. * (18. - std::sqrt(30.))}; break;
 
     case 5:
-      weights = {1./900. * (322 + 13. * std::sqrt(70.)),
-                 1./900. * (322 - 13. * std::sqrt(70.)),
+      weights = {1./900. * (322 - 13. * std::sqrt(70.)),
+                 1./900. * (322 + 13. * std::sqrt(70.)),
                  128./225.,
-                 1./900. * (322 - 13. * std::sqrt(70.)),
-                 1./900. * (322 + 13. * std::sqrt(70.))}; break;
+                 1./900. * (322 + 13. * std::sqrt(70.)),
+                 1./900. * (322 - 13. * std::sqrt(70.))}; break;
     case 10:
       weights = {0.066671344308688, 
                  0.149451349150581,

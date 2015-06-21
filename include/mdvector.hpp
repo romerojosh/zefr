@@ -67,7 +67,7 @@ mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, unsigned int padd
 {
   ndims = (int)dims.size();
   
-  assert(ndims <= 4);
+  //assert(ndims <= 4);
   
   unsigned int nvals = 1;
   unsigned int i = 0;
@@ -88,7 +88,7 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, unsigned int p
 {
   ndims = (int)dims.size();
   
-  assert(ndims <= 4);
+  //assert(ndims <= 4);
   
   unsigned int nvals = 1;
   unsigned int i = 0;
@@ -125,14 +125,14 @@ T* mdvector<T>::data(void)
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) 
 {
-  assert(ndims == 2);
+  //assert(ndims == 2);
   return values[idx1 * strides[0] + idx0];
 }
 
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
 {
-  assert(ndims == 3);
+  //assert(ndims == 3);
   return values[(idx2 * strides[1] + idx1) * strides[0] + idx0];
 }
 
@@ -140,7 +140,7 @@ template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3) 
 {
-  assert(ndims == 4);
+  //assert(ndims == 4);
   return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
 }
 
