@@ -218,7 +218,7 @@ void Faces::apply_bcs()
         Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VR[dim] = VL[dim] + (VnR - VnL) * norm(0, dim+1, fpt);
+          VR[dim] = VL[dim] + (VnR - VnL) * norm(0, dim, fpt);
           U(1, dim+1, fpt) = U(1, 0, fpt) * VR[dim];
           Vsq += VR[dim] * VR[dim];
         }

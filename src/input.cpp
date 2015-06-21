@@ -57,6 +57,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "R", input.R);
   read_param(f, "mu", input.mu);
   read_param(f, "prandtl", input.prandtl);
+  read_param(f, "prandtl", input.S);
 
   read_param(f, "rho_fs", input.rho_fs);
   //read_param(f, "u_fs", input.u_fs);
