@@ -18,6 +18,7 @@
 #include "solver.hpp"
 
 #ifdef _GPU
+#include "cuda_runtime.h"
 #include "mdvector_gpu.h"
 #include "cublas.h"
 #endif

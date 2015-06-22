@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "mdvector.hpp"
+#include "cuda_runtime.h"
 #include "solver_kernels.h"
 
 template<typename T>
