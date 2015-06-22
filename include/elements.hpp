@@ -9,7 +9,10 @@
 #include "geometry.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
-//#include "solver.hpp"
+
+#ifdef _GPU
+#include "mdvector_gpu.h"
+#endif
 
 class FRSolver;
 class PMGrid;
@@ -50,6 +53,17 @@ class Elements
 
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;
+
+#ifdef _GPU
+    /* GPU data */
+    mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d;
+    mdvector_gpu<double> oppE_ppts_d, oppE_qpts_d;
+    mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d;
+    mdvector_gpu<double> F_spts_d, F_fpts_d;
+    mdvector_gpu<double> Fconv_spts_d, Fvisc_spts_d;
+    mdvector_gpu<double> Fcomm_d, Ucomm_d;
+    mdvector_gpu<double> dU_spts_d, dU_fpts_d, dF_spts_d, divF_spts_d;
+#endif
 
     void set_coords();
     void set_shape();

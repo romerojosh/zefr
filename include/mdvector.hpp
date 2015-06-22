@@ -15,12 +15,13 @@
 #include <iostream>
 #include <vector>
 
-#include "cuda_runtime.h"
-
+#ifdef _GPU
 #include "mdvector_gpu.h"
+#include "solver_kernels.h"
 
 template<typename T>
 class mdvector_gpu;
+#endif
 
 template <typename T>
 class mdvector
@@ -60,8 +61,10 @@ class mdvector
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
 
+#ifdef _GPU
     //! Assignment (copy from GPU)
     mdvector<T>& operator= (mdvector_gpu<T> &vec);
+#endif
 
 };
 
@@ -162,22 +165,17 @@ const unsigned int* mdvector<T>::strides_ptr() const
   return strides.data();
 }
 
+#ifdef _GPU
 /* NOTE: Currently assumes GPU data to copy is same size! */
 template <typename T>
 mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
 {
-  std::fill(values.begin(), values.end(), 0);
-  cudaMemcpy(values.data(), vec.data(), nvals*sizeof(T), cudaMemcpyDeviceToHost);
-
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess)
-  {
-    std::cout << "ERROR: " << cudaGetErrorString(err) << std::endl;
-  }
-  
+  //cudaMemcpy(values.data(), vec.data(), nvals*sizeof(T), cudaMemcpyDeviceToHost);
+  copy_from_device(values.data(), vec.data(), nvals*sizeof(T));
 
   return *this;
 }
+#endif
 
 
 #endif /* mdvector_hpp */

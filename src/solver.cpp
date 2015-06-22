@@ -17,6 +17,11 @@
 #include "mdvector.hpp"
 #include "solver.hpp"
 
+#ifdef _GPU
+#include "mdvector_gpu.h"
+#include "cublas.h"
+#endif
+
 FRSolver::FRSolver(const InputStruct *input, int order)
 {
   this->input = input;
@@ -304,6 +309,7 @@ void FRSolver::initialize_U()
 
 void FRSolver::extrapolate_U()
 {
+#ifdef _CPU
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -325,6 +331,14 @@ void FRSolver::extrapolate_U()
             eles->nSpts, 1.0, &A, eles->nFpts, &B, eles->nSpts, 0.0, &C, eles->nFpts);
     }
   }
+#endif
+
+#ifdef _GPU
+/* Copy data to GPU */
+  eles->oppE_d = eles->oppE;
+  eles->U_spts_d = eles->U_spts;
+  eles->U_fpts_d = eles->U_fpts;
+#endif
 
 }
 

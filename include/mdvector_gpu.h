@@ -11,9 +11,8 @@
 
 #include <vector>
 
-#include <cuda_runtime.h>
-
 #include "mdvector.hpp"
+#include "solver_kernels.h"
 
 template<typename T>
 class mdvector;
@@ -73,9 +72,14 @@ void mdvector_gpu<T>::free_data()
 {
   if (allocated)
   {
+    /*
     cudaFree(values);
     cudaFree(dims);
     cudaFree(strides);
+    */
+    free_device_data(values);
+    free_device_data(dims);
+    free_device_data(strides);
   }
 }
 
@@ -85,17 +89,24 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
   if(!allocated)
   {
     nvals = vec.get_nvals();
+    /*
     cudaMalloc(&values, nvals*sizeof(T));
     cudaMalloc(&strides, 4*sizeof(unsigned int));
     cudaMalloc(&dims, 4*sizeof(unsigned int));
+    */
+    allocate_device_data(values, nvals*sizeof(T));
+    allocate_device_data(strides, 4*sizeof(T));
+    allocate_device_data(dims, 4*sizeof(T));
     allocated = true;
   }
 
   /* Copy values to GPU */
-  cudaMemcpy(values, vec.data(), nvals*sizeof(T), cudaMemcpyHostToDevice);
+  //cudaMemcpy(values, vec.data(), nvals*sizeof(T), cudaMemcpyHostToDevice);
+  copy_to_device(values, vec.data(), nvals*sizeof(T));
 
   /* Copy strides to GPU (always size 4 for now!) */
-  cudaMemcpy(strides, vec.strides_ptr(), 4*sizeof(unsigned int), cudaMemcpyHostToDevice);
+  //cudaMemcpy(strides, vec.strides_ptr(), 4*sizeof(unsigned int), cudaMemcpyHostToDevice);
+  copy_to_device(strides, vec.strides_ptr(), 4*sizeof(unsigned int));
 
   return *this;
 }
