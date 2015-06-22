@@ -15,16 +15,19 @@
 #include <iostream>
 #include <vector>
 
-template <typename T>
-class mdvector;
-template <typename T>
-std::ostream& operator<<(std::ostream &os, const mdvector<T> &vec);
+#include "cuda_runtime.h"
+
+#include "mdvector_gpu.h"
+
+template<typename T>
+class mdvector_gpu;
 
 template <typename T>
 class mdvector
 {
   private:
     int ndims = 0;
+    unsigned int nvals;
     std::array<unsigned int,4> dims; 
     std::array<unsigned int,4> strides;
     std::vector<T> values;
@@ -46,16 +49,19 @@ class mdvector
     //! Method to return starting data pointer
     T* data();
 
+    //! Method to return number of values (with padding)
+    unsigned int get_nvals() const;
+
+    //! Method to return pointer to strides (for GPU)
+    const unsigned int* strides_ptr() const;
+
     //! Overloaded methods to access data
     T& operator()(unsigned int idx0, unsigned int idx1);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
 
-    //! Assignment
-    //mdvector<T>& operator= (const mdvector<T> &vec);
-    
-    //! Utility function for print
-    friend std::ostream& operator<<<>(std::ostream &os, const mdvector<T> &vec);
+    //! Assignment (copy from GPU)
+    mdvector<T>& operator= (mdvector_gpu<T> &vec);
 
 };
 
@@ -69,7 +75,7 @@ mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, unsigned int padd
   
   //assert(ndims <= 4);
   
-  unsigned int nvals = 1;
+  nvals = 1;
   unsigned int i = 0;
 
   for (auto &d : dims)
@@ -90,7 +96,7 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, unsigned int p
   
   //assert(ndims <= 4);
   
-  unsigned int nvals = 1;
+  nvals = 1;
   unsigned int i = 0;
 
   for (auto &d : dims)
@@ -144,32 +150,34 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
   return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
 }
 
-/*
 template <typename T>
-mdvector<T>&  mdvector<T>::operator= (const mdvector<T> &vec)
+unsigned int mdvector<T>::get_nvals() const
 {
-  this->values = vec.values;
-  this->dims = vec.dims;
-  this->strides = vec.strides;
+  return nvals;
+}
+
+template <typename T>
+const unsigned int* mdvector<T>::strides_ptr() const
+{
+  return strides.data();
+}
+
+/* NOTE: Currently assumes GPU data to copy is same size! */
+template <typename T>
+mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
+{
+  std::fill(values.begin(), values.end(), 0);
+  cudaMemcpy(values.data(), vec.data(), nvals*sizeof(T), cudaMemcpyDeviceToHost);
+
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess)
+  {
+    std::cout << "ERROR: " << cudaGetErrorString(err) << std::endl;
+  }
+  
 
   return *this;
 }
-*/
 
-template<typename T>
-std::ostream& operator<<(std::ostream &os, const mdvector<T> &vec)
-{
-  if (vec.ndims > 2)
-    std::runtime_error("mdvector printing supports up to 2D vectors.");
 
-  for (unsigned int i = 0; i < vec.dims[0]; i++)
-  {
-    for (unsigned int j = 0; j < vec.dims[1]; j++)
-      os << vec.values[j*vec.strides[0] + i] << ' ';
-
-    os << std::endl;
-  }
-  
-  return os;
-}
 #endif /* mdvector_hpp */
