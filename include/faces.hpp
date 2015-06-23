@@ -8,6 +8,10 @@
 #include "input.hpp"
 #include "mdvector.hpp"
 
+#ifdef _GPU
+#include "mdvector_gpu.h"
+#endif
+
 //class Elements;
 class FRSolver;
 class Elements;
@@ -37,6 +41,12 @@ class Faces
     mdvector<double> norm, jaco, coord;
     mdvector<int> outnorm;
     std::vector<double> dA, waveSp;
+
+#ifdef _GPU
+    mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Ucomm_d, P_d;
+    mdvector_gpu<double> norm_d, jaco_d, coord_d;
+    mdvector_gpu<int> outnorm_d;
+#endif
 
   public:
     Faces(GeoStruct *geo, const InputStruct *input);

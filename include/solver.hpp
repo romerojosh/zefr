@@ -36,6 +36,10 @@ class FRSolver
     void setup_update();
     void setup_output();
 
+#ifdef _GPU
+    void solver_data_to_device();
+#endif
+
     void extrapolate_U();
     /* Note: Going to create ele2fpt and slot structure like FR2D. gfpt=-1 means no comm. */
     void U_to_faces();

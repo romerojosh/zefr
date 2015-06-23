@@ -8,6 +8,10 @@
 
 #include "mdvector.hpp"
 
+#ifdef _GPU
+#include "mdvector_gpu.h"
+#endif
+
 struct GeoStruct
 {
     unsigned int nEles = 0; 
@@ -22,6 +26,10 @@ struct GeoStruct
     mdvector<unsigned int> nd2gnd, ppt_connect;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
     mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
+
+#ifdef _GPU
+    mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
+#endif
 };
 
 GeoStruct process_mesh(std::string meshfile, unsigned int order, unsigned int nDims);

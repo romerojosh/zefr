@@ -58,6 +58,10 @@ void FRSolver::setup()
   std::cout << "Setting up output..." << std::endl;
   setup_output();
 
+#ifdef _GPU
+  solver_data_to_device();
+#endif
+
 }
 
 void FRSolver::setup_update()
@@ -185,6 +189,36 @@ void FRSolver::restart(std::string restart_file)
   }
 
 }
+
+#ifdef _GPU
+void FRSolver::solver_data_to_device()
+{
+  /* Initial copy of data to GPU. Assignment operator will allocate data on device when first
+   * used. */
+
+  /* FR operators */
+  eles->oppE_d = eles->oppE;
+  eles->oppD_d = eles->oppD;
+  eles->oppD_fpts_d = eles->oppD_fpts;
+
+  /* Solution data structures (element local) */
+  eles->U_spts_d = eles->U_spts;
+  eles->U_fpts_d = eles->U_fpts;
+  eles->Ucomm_d = eles->Ucomm;
+  eles->dU_spts_d = eles->dU_spts;
+  eles->dU_fpts_d = eles->dU_fpts;
+  eles->Fcomm_d = eles->Fcomm;
+  eles->F_spts_d = eles->F_spts;
+  eles->dF_spts_d = eles->dF_spts;
+
+  /* Solution data structures (faces) */
+  faces->U_d = faces->U;
+
+  /* Additional data */
+  geo.fpt2gfpt_d = geo.fpt2gfpt;
+  geo.fpt2gfpt_slot_d = geo.fpt2gfpt_slot;
+}
+#endif
 
 void FRSolver::compute_residual(unsigned int stage)
 {
@@ -336,9 +370,7 @@ void FRSolver::extrapolate_U()
 
 #ifdef _GPU
   /* Copy data to GPU */
-  eles->oppE_d = eles->oppE;
   eles->U_spts_d = eles->U_spts;
-  eles->U_fpts_d = eles->U_fpts;
  
   /*
   cublasDgemm('N', 'N', eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
@@ -363,6 +395,7 @@ void FRSolver::extrapolate_U()
 
 void FRSolver::U_to_faces()
 {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
@@ -384,6 +417,16 @@ void FRSolver::U_to_faces()
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  U_to_faces_wrapper(eles->U_fpts_d, faces->U_d, eles->Ucomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, input->viscous);
+  check_error();
+
+  /* Copy out result */
+  eles->Ucomm = eles->Ucomm_d;
+  faces->U = faces->U_d;
+#endif
 }
 
 void FRSolver::U_from_faces()
@@ -454,10 +497,7 @@ void FRSolver::compute_dU()
 
 #ifdef _GPU
   /* Copy data to GPU */
-  eles->oppD_d = eles->oppD;
-  eles->oppD_fpts_d = eles->oppD_fpts;
   eles->Ucomm_d = eles->Ucomm;
-  eles->dU_spts_d = eles->dU_spts;
 
 
   double alpha, beta;
@@ -544,7 +584,6 @@ void FRSolver::extrapolate_dU()
 #ifdef _GPU
   /* Copy data to GPU */
   eles->dU_spts_d = eles->dU_spts;
-  eles->dU_fpts_d = eles->dU_fpts;
 
   double alpha = 1.0; double beta = 0.0;
 
@@ -657,7 +696,6 @@ void FRSolver::compute_dF()
   /* Copy data to GPU */
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
-  eles->dF_spts_d = eles->dF_spts;
 
 
   double alpha, beta;
