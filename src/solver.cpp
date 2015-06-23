@@ -213,6 +213,7 @@ void FRSolver::solver_data_to_device()
 
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
+  faces->Ucomm_d = faces->Ucomm;
 
   /* Additional data */
   geo.fpt2gfpt_d = geo.fpt2gfpt;
@@ -431,6 +432,7 @@ void FRSolver::U_to_faces()
 
 void FRSolver::U_from_faces()
 {  
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
@@ -448,6 +450,18 @@ void FRSolver::U_from_faces()
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  /* Copy in data */
+  faces->Ucomm_d = faces->Ucomm;
+  
+  U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts);
+  check_error();
+
+  /* Copy out result */
+  eles->Ucomm = eles->Ucomm_d;
+#endif
 
 }
 

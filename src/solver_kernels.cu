@@ -90,9 +90,9 @@ __global__
 void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> Ucomm, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous)
 {  
-  const int fpt = blockDim.x * blockIdx.x + threadIdx.x;
-  const int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const int var = blockDim.z * blockIdx.z + threadIdx.z;
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
 
   if (fpt >= nFpts || ele >= nEles || var >= nVars)
     return;
@@ -118,4 +118,36 @@ void U_to_faces_wrapper(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpt
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
 
   U_to_faces<<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, viscous);
+}
+
+__global__
+void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+
+  if (fpt >= nFpts || ele >= nEles || var >= nVars)
+    return;
+
+  int gfpt = fpt2gfpt(fpt,ele);
+
+  /* Check if flux point is on ghost edge */
+  if (gfpt != -1)
+  {
+    int slot = fpt2gfpt_slot(fpt,ele);
+
+    Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(slot, var, gfpt);
+  }
+
+}
+
+void U_from_faces_wrapper(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts)
+{
+  dim3 threads(16,16,4);
+  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
+
+  U_from_faces<<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts);
 }
