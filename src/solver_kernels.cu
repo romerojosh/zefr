@@ -134,12 +134,12 @@ void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_f
   int gfpt = fpt2gfpt(fpt,ele);
 
   /* Check if flux point is on ghost edge */
-  if (gfpt != -1)
-  {
-    int slot = fpt2gfpt_slot(fpt,ele);
+  if (gfpt == -1)
+    return;
 
-    Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(slot, var, gfpt);
-  }
+  int slot = fpt2gfpt_slot(fpt,ele);
+
+  Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(slot, var, gfpt);
 
 }
 
@@ -150,4 +150,39 @@ void U_from_faces_wrapper(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double>
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
 
   U_from_faces<<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts);
+}
+
+__global__
+void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+
+  if (fpt >= nFpts || ele >= nEles || var >= nVars)
+    return;
+
+  int gfpt = fpt2gfpt(fpt,ele);
+
+  /* Check if flux point is on ghost edge */
+  if (gfpt == -1)
+    return;
+
+  int slot = fpt2gfpt_slot(fpt,ele);
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    dU_gfpts(slot, var, dim, gfpt) = dU_fpts(fpt, ele, var, dim);
+  }
+
+}
+
+void dU_to_faces_wrapper(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims)
+{
+  dim3 threads(16,16,4);
+  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
+
+  dU_to_faces<<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, nDims);
 }

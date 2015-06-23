@@ -34,5 +34,8 @@ void U_to_faces_wrapper(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpt
 void U_from_faces_wrapper(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts);
 
+void dU_to_faces_wrapper(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims);
+
 
 #endif /* SOLVER_KERNELS_H */
