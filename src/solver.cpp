@@ -214,6 +214,8 @@ void FRSolver::solver_data_to_device()
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
   faces->dU_d = faces->dU;
+  faces->Fconv_d = faces->Fconv;
+  faces->P_d = faces->P;
   faces->Ucomm_d = faces->Ucomm;
   faces->Fcomm_d = faces->Fcomm;
 

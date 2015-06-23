@@ -2,8 +2,8 @@
 #include "mdvector_gpu.h"
 
 __global__
-void compute_Fconv_2D_EulerNS(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int nDims, double gamma)
+void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, unsigned int nSpts, 
+    unsigned int nEles, double gamma)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
@@ -30,11 +30,11 @@ void compute_Fconv_2D_EulerNS(mdvector_gpu<double> F_spts, mdvector_gpu<double> 
  
 }
 
-void compute_Fconv_2D_EulerNS_wrapper(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int nDims, double gamma)
+void compute_Fconv_spts_2D_EulerNS_wrapper(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, unsigned int nSpts, 
+    unsigned int nEles, double gamma)
 {
   dim3 threads(32,32);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y);
 
-  compute_Fconv_2D_EulerNS<<<blocks, threads>>>(F_spts, U_spts, nSpts, nEles, nVars, nEles, gamma);
+  compute_Fconv_spts_2D_EulerNS<<<blocks, threads>>>(F_spts, U_spts, nSpts, nEles, gamma);
 }

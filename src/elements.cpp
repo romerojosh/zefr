@@ -313,7 +313,7 @@ void Elements::compute_Fconv()
 #endif
 
 #ifdef _GPU
-      compute_Fconv_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nVars, nDims, input->gamma);
+      compute_Fconv_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, input->gamma);
       check_error();
 
       /* Copy out data */

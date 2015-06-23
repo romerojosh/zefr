@@ -6,6 +6,11 @@
 #include "geometry.hpp"
 #include "input.hpp"
 
+#ifdef _GPU
+#include "faces_kernels.h"
+#include "solver_kernels.h"
+#endif
+
 
 Faces::Faces(GeoStruct *geo, const InputStruct *input)
 {
@@ -520,6 +525,7 @@ void Faces::compute_Fconv()
   {
     if (nDims == 2)
     {
+#ifdef _CPU
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
@@ -543,6 +549,22 @@ void Faces::compute_Fconv()
           Fconv(slot, 3, 1, fpt) = U(slot, 2, fpt) * H;
         }
       }
+#endif
+
+#ifdef _GPU
+
+      /* Copy in data */
+      U_d = U;
+
+      compute_Fconv_fpts_2D_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, input->gamma);
+      check_error();
+
+      /* Copy out data */
+      Fconv = Fconv_d;
+      P = P_d;
+
+#endif
+
     }
     else if (nDims == 3)
     {
