@@ -225,7 +225,7 @@ void Quads::set_transforms()
 
             unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
-            faces->jaco(slot, dimX, dimXi, gfpt) += geo->coord_nodes(gnd,dimX) * dshape_fpts(node, fpt, dimXi);
+            faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(gnd,dimX) * dshape_fpts(node, fpt, dimXi);
           }
         }
       }
@@ -321,23 +321,23 @@ void Quads::set_normals()
 
       unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
-      faces->norm(slot, 0, gfpt) = faces->jaco(slot, 1, 1, gfpt) * tnorm(fpt, 0) - 
-                                 faces->jaco(slot, 1, 0, gfpt) * tnorm(fpt, 1);
-      faces->norm(slot,1, gfpt) = -faces->jaco(slot, 0, 1, gfpt) * tnorm(fpt, 0) + 
-                                 faces->jaco(slot, 0, 0, gfpt) * tnorm(fpt, 1);
+      faces->norm(gfpt, 0, slot) = faces->jaco(gfpt, 1, 1, slot) * tnorm(fpt, 0) - 
+                                 faces->jaco(gfpt, 1, 0, slot) * tnorm(fpt, 1);
+      faces->norm(gfpt, 1, slot) = -faces->jaco(gfpt, 0, 1, slot) * tnorm(fpt, 0) + 
+                                 faces->jaco(gfpt, 0, 0, slot) * tnorm(fpt, 1);
 
-      faces->dA[gfpt] = std::sqrt(faces->norm(slot, 0, gfpt)*faces->norm(slot, 0, gfpt) + 
-                        faces->norm(slot, 1, gfpt)*faces->norm(slot, 1, gfpt));
+      faces->dA[gfpt] = std::sqrt(faces->norm(gfpt, 0, slot)*faces->norm(gfpt, 0, slot) + 
+                        faces->norm(gfpt, 1, slot)*faces->norm(gfpt, 1, slot));
 
-      faces->norm(slot, 0, gfpt) /= faces->dA[gfpt];
-      faces->norm(slot, 1, gfpt) /= faces->dA[gfpt];
+      faces->norm(gfpt, 0, slot) /= faces->dA[gfpt];
+      faces->norm(gfpt, 1, slot) /= faces->dA[gfpt];
 
       unsigned int face_idx = fpt/nSpts1D;
 
       if(face_idx == 0 || face_idx == 3)
-        faces->outnorm(slot,gfpt) = -1; 
+        faces->outnorm(gfpt, slot) = -1; 
       else 
-        faces->outnorm(slot,gfpt) = 1; 
+        faces->outnorm(gfpt, slot) = 1; 
 
     }
   }

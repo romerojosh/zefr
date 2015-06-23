@@ -418,7 +418,7 @@ void FRSolver::U_to_faces()
         }
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-        faces->U(slot, n, gfpt) = eles->U_fpts(fpt, ele, n);
+        faces->U(gfpt, n, slot) = eles->U_fpts(fpt, ele, n);
       }
     }
   }
@@ -450,7 +450,7 @@ void FRSolver::U_from_faces()
           continue;
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-        eles->Ucomm(fpt, ele, n) = faces->Ucomm(slot, n, gfpt);
+        eles->Ucomm(fpt, ele, n) = faces->Ucomm(gfpt, n, slot);
       }
     }
   }
@@ -638,7 +638,7 @@ void FRSolver::dU_to_faces()
             continue;
           int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-          faces->dU(slot, n, dim, gfpt) = eles->dU_fpts(fpt, ele, n, dim);
+          faces->dU(gfpt, n, dim, slot) = eles->dU_fpts(fpt, ele, n, dim);
         }
       }
     }
@@ -671,7 +671,7 @@ void FRSolver::F_from_faces()
           continue;
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-        eles->Fcomm(fpt, ele, n) = faces->Fcomm(slot, n, gfpt);
+        eles->Fcomm(fpt, ele, n) = faces->Fcomm(gfpt, n, slot);
       }
     }
   }
@@ -1113,17 +1113,17 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
     if (bnd_id >= 7) /* On wall boundary */
     {
       /* Get pressure */
-      double PL = faces->P(0,fpt);
+      double PL = faces->P(fpt, 0);
 
       double CP = (PL - input->P_fs) * fac;
 
       /* Write CP distrubtion to file */
-      g << std:: scientific << faces->coord(fpt, 0) << " " << faces-> coord(fpt, 1) << " " << CP << std::endl;
+      g << std:: scientific << faces->coord(fpt, 0) << " " << faces->coord(fpt, 1) << " " << CP << std::endl;
 
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
-        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * CP * faces->norm(0, dim, fpt) * 
+        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * CP * faces->norm(fpt, dim, 0) * 
           faces->dA[fpt];
       }
 
@@ -1133,23 +1133,23 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
         {
           /* Setting variables for convenience */
           /* States */
-          double rho = faces->U(0, 0, fpt);
-          double momx = faces->U(0, 1, fpt);
-          double momy = faces->U(0, 2, fpt);
-          double e = faces->U(0, 3, fpt);
+          double rho = faces->U(fpt, 0, 0);
+          double momx = faces->U(fpt, 1, 0);
+          double momy = faces->U(fpt, 2, 0);
+          double e = faces->U(fpt, 3, 0);
 
           double u = momx / rho;
           double v = momy / rho;
           double e_int = e / rho - 0.5 * (u*u + v*v);
 
           /* Gradients */
-          double rho_dx = faces->dU(0, 0, 0, fpt);
-          double momx_dx = faces->dU(0, 1, 0, fpt);
-          double momy_dx = faces->dU(0, 2, 0, fpt);
+          double rho_dx = faces->dU(fpt, 0, 0, 0);
+          double momx_dx = faces->dU(fpt, 1, 0, 0);
+          double momy_dx = faces->dU(fpt, 2, 0, 0);
           
-          double rho_dy = faces->dU(0, 0, 1, fpt);
-          double momx_dy = faces->dU(0, 1, 1, fpt);
-          double momy_dy = faces->dU(0, 2, 1, fpt);
+          double rho_dy = faces->dU(fpt, 0, 1, 0);
+          double momx_dy = faces->dU(fpt, 1, 1, 0);
+          double momy_dy = faces->dU(fpt, 2, 1, 0);
 
           /* Set viscosity */
           double mu;
@@ -1177,8 +1177,8 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(0, 0, fpt) + tauxy * faces->norm(0, 1, fpt);
-          taun[1] = tauxy * faces->norm(0, 0, fpt) + tauyy * faces->norm(0, 1, fpt);
+          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0);
+          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_spts[count%eles->nSpts1D] * taun[dim] * faces->dA[fpt] * fac;
