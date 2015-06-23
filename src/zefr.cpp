@@ -7,6 +7,7 @@
 #include "input.hpp"
 #include "multigrid.hpp"
 #include "solver.hpp"
+#include "solver_kernels.h"
 
 int main(int argc, char* argv[])
 {
@@ -45,6 +46,10 @@ int main(int argc, char* argv[])
     std::cout << "Setting up multigrid..." << std::endl;
     pmg.setup(input.order, &input, solver);
   }
+
+#ifdef _GPU
+  start_cublas();
+#endif
 
   /* Open file to write residual history and force history */
   std::ofstream hist_file;

@@ -10,7 +10,7 @@ cuflags = -arch=sm_20 -O3
 #libs = -L /opt/OpenBLAS/lib -lopenblas
 #inc = -I/opt/OpenBLAS/include
 libs = -L/cm/shared/apps/openblas/dynamic/current/lib -lopenblas
-libs += -lcudart -L=/cm/shared/apps/cuda65/toolkit/6.5.14/lib64
+libs += -lcudart -lcublas -L=/cm/shared/apps/cuda65/toolkit/6.5.14/lib64 
 inc = -I/cm/shared/apps/openblas/dynamic/current/include
 
 zefr:

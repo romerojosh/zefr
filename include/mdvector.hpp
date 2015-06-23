@@ -171,7 +171,7 @@ template <typename T>
 mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
 {
   //cudaMemcpy(values.data(), vec.data(), nvals*sizeof(T), cudaMemcpyDeviceToHost);
-  copy_from_device(values.data(), vec.data(), nvals*sizeof(T));
+  copy_from_device(values.data(), vec.data(), nvals);
 
   return *this;
 }

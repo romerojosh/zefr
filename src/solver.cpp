@@ -19,7 +19,8 @@
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
-#include "cublas.h"
+#include "solver_kernels.h"
+#include "cublas_v2.h"
 #endif
 
 FRSolver::FRSolver(const InputStruct *input, int order)
@@ -338,30 +339,24 @@ void FRSolver::extrapolate_U()
   eles->oppE_d = eles->oppE;
   eles->U_spts_d = eles->U_spts;
   eles->U_fpts_d = eles->U_fpts;
+
  
+  /*
+  cublasDgemm('N', 'N', eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
+      eles->oppE_d.data(), eles->nFpts, eles->U_spts_d.data(), eles->nSpts, 0.0,
+      eles->U_fpts_d.data(), eles->nFpts);
+  */
 
+  double alpha = 1.0; double beta = 0.0;
+  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
+      eles->oppE_d.data(), eles->nFpts, eles->U_spts_d.data(), eles->nSpts, &beta,
+      eles->U_fpts_d.data(), eles->nFpts);
 
-#pragma omp parallel
-  {
-    int nThreads = omp_get_num_threads();
-    int thread_idx = omp_get_thread_num();
+  check_error();
 
-    int block_size = eles->nEles / nThreads;
-    int start_idx = block_size * thread_idx;
+  /* Copy result out */
+  eles->U_fpts = eles->U_fpts_d;
 
-    if (thread_idx == nThreads-1)
-      block_size += eles->nEles % (block_size);
-
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      auto &A = eles->oppE(0,0);
-      auto &B = eles->U_spts(0,start_idx,n);
-      auto &C = eles->U_fpts(0,start_idx,n);
-
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nFpts, block_size,
-            eles->nSpts, 1.0, &A, eles->nFpts, &B, eles->nSpts, 0.0, &C, eles->nFpts);
-    }
-  }
 
 #endif
 
@@ -416,6 +411,7 @@ void FRSolver::U_from_faces()
 
 void FRSolver::compute_dU()
 {
+#ifdef _CPU
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -455,7 +451,51 @@ void FRSolver::compute_dU()
       }
     }
   }
+#endif
 
+#ifdef _GPU
+  eles->oppD_d = eles->oppD;
+  eles->oppD_fpts_d = eles->oppD_fpts;
+  eles->dU_spts_d = eles->dU_spts;
+  eles->Ucomm_d = eles->Ucomm;
+
+
+  double alpha, beta;
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    /*
+    cublasDgemm('N', 'N', eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
+        eles->oppD_d.data() + 0 * (eles->nSpts * eles->nSpts), eles->nSpts, eles->U_spts_d.data(), 
+        eles->nSpts, 0.0, eles->dU_spts_d.data() + 0 *(eles->nSpts * eles->nVars * eles->nEles), 
+        eles->nSpts);
+    */
+    alpha = 1.0; beta = 0.0;
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
+        eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, eles->U_spts_d.data(), 
+        eles->nSpts, &beta, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
+        eles->nSpts);
+
+    check_error();
+
+    /*
+    cublasDgemm('N' ,'N', eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0,
+        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, eles->Ucomm_d.data(), 
+        eles->nFpts, 1.0, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
+        eles->nSpts);
+    */
+    alpha = 1.0; beta = 1.0;
+
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, &alpha,
+        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, eles->Ucomm_d.data(), 
+        eles->nFpts, &beta, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
+        eles->nSpts);
+
+    check_error();
+  }
+
+  eles->dU_spts = eles->dU_spts_d;
+
+#endif
 
     /* Transform dU back to physical space */
     if (eles->nDims == 2)
