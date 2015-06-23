@@ -215,6 +215,7 @@ void FRSolver::solver_data_to_device()
   faces->U_d = faces->U;
   faces->dU_d = faces->dU;
   faces->Ucomm_d = faces->Ucomm;
+  faces->Fcomm_d = faces->Fcomm;
 
   /* Additional data */
   geo.fpt2gfpt_d = geo.fpt2gfpt;
@@ -654,6 +655,7 @@ void FRSolver::dU_to_faces()
 
 void FRSolver::F_from_faces()
 {
+#ifdef _GPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
@@ -671,6 +673,20 @@ void FRSolver::F_from_faces()
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  /* Copy in data */
+  faces->Fcomm_d = faces->Fcomm;
+
+  /* Can reuse kernel here */
+  U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts);
+  check_error();
+
+  /* Copy out data */
+  eles->Fcomm = eles->Fcomm_d;
+
+#endif
 }
 
 void FRSolver::compute_dF()
