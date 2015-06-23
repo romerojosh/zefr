@@ -95,19 +95,20 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
     cudaMalloc(&strides, 4*sizeof(unsigned int));
     cudaMalloc(&dims, 4*sizeof(unsigned int));
     */
-    allocate_device_data(values, nvals*sizeof(T));
-    allocate_device_data(strides, 4*sizeof(T));
-    allocate_device_data(dims, 4*sizeof(T));
+    allocate_device_data(values, (unsigned int) (nvals*sizeof(T)));
+    allocate_device_data(strides, (unsigned int) (4*sizeof(T)));
+
+    copy_to_device(strides, vec.strides_ptr(), (unsigned int) (4*sizeof(unsigned int)));
     allocated = true;
   }
 
   /* Copy values to GPU */
   //cudaMemcpy(values, vec.data(), nvals*sizeof(T), cudaMemcpyHostToDevice);
-  copy_to_device(values, vec.data(), nvals*sizeof(T));
+  copy_to_device(values, vec.data(), (unsigned int) (nvals*sizeof(T)));
 
   /* Copy strides to GPU (always size 4 for now!) */
   //cudaMemcpy(strides, vec.strides_ptr(), 4*sizeof(unsigned int), cudaMemcpyHostToDevice);
-  copy_to_device(strides, vec.strides_ptr(), 4*sizeof(unsigned int));
+  //copy_to_device(strides, vec.strides_ptr(), 4*sizeof(unsigned int));
 
   return *this;
 }

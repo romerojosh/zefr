@@ -18,7 +18,6 @@
 #include "solver.hpp"
 
 #ifdef _GPU
-#include "cuda_runtime.h"
 #include "mdvector_gpu.h"
 #include "cublas.h"
 #endif
@@ -335,10 +334,35 @@ void FRSolver::extrapolate_U()
 #endif
 
 #ifdef _GPU
-/* Copy data to GPU */
+  /* Copy data to GPU */
   eles->oppE_d = eles->oppE;
   eles->U_spts_d = eles->U_spts;
   eles->U_fpts_d = eles->U_fpts;
+ 
+
+
+#pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
+
+    int block_size = eles->nEles / nThreads;
+    int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += eles->nEles % (block_size);
+
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      auto &A = eles->oppE(0,0);
+      auto &B = eles->U_spts(0,start_idx,n);
+      auto &C = eles->U_fpts(0,start_idx,n);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nFpts, block_size,
+            eles->nSpts, 1.0, &A, eles->nFpts, &B, eles->nSpts, 0.0, &C, eles->nFpts);
+    }
+  }
+
 #endif
 
 }
