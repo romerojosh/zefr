@@ -657,7 +657,7 @@ void FRSolver::dU_to_faces()
 
 void FRSolver::F_from_faces()
 {
-#ifdef _GPU
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {

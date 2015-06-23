@@ -103,6 +103,8 @@ void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvec
   {
     if (viscous) // if viscous, put extrapolated solution into Ucomm
       Ucomm(fpt, ele, var) = U_fpts(fpt, ele, var);
+
+    return;
   }
 
   int slot = fpt2gfpt_slot(fpt,ele);
