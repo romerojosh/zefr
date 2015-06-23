@@ -339,7 +339,6 @@ void FRSolver::extrapolate_U()
   eles->oppE_d = eles->oppE;
   eles->U_spts_d = eles->U_spts;
   eles->U_fpts_d = eles->U_fpts;
-
  
   /*
   cublasDgemm('N', 'N', eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
@@ -454,21 +453,16 @@ void FRSolver::compute_dU()
 #endif
 
 #ifdef _GPU
+  /* Copy data to GPU */
   eles->oppD_d = eles->oppD;
   eles->oppD_fpts_d = eles->oppD_fpts;
-  eles->dU_spts_d = eles->dU_spts;
   eles->Ucomm_d = eles->Ucomm;
+  eles->dU_spts_d = eles->dU_spts;
 
 
   double alpha, beta;
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    /*
-    cublasDgemm('N', 'N', eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
-        eles->oppD_d.data() + 0 * (eles->nSpts * eles->nSpts), eles->nSpts, eles->U_spts_d.data(), 
-        eles->nSpts, 0.0, eles->dU_spts_d.data() + 0 *(eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts);
-    */
     alpha = 1.0; beta = 0.0;
     cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
         eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, eles->U_spts_d.data(), 
@@ -477,12 +471,6 @@ void FRSolver::compute_dU()
 
     check_error();
 
-    /*
-    cublasDgemm('N' ,'N', eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0,
-        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, eles->Ucomm_d.data(), 
-        eles->nFpts, 1.0, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts);
-    */
     alpha = 1.0; beta = 1.0;
 
     cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, &alpha,
@@ -493,6 +481,7 @@ void FRSolver::compute_dU()
     check_error();
   }
 
+  /* Copy out result */
   eles->dU_spts = eles->dU_spts_d;
 
 #endif
@@ -524,6 +513,7 @@ void FRSolver::compute_dU()
 
 void FRSolver::extrapolate_dU()
 {
+#ifdef _CPU
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -549,6 +539,27 @@ void FRSolver::extrapolate_dU()
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  /* Copy data to GPU */
+  eles->dU_spts_d = eles->dU_spts;
+  eles->dU_fpts_d = eles->dU_fpts;
+
+  double alpha = 1.0; double beta = 0.0;
+
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha, eles->oppE_d.data(), 
+      eles->nFpts, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
+      eles->nSpts, &beta, eles->dU_fpts_d.data() + dim * (eles->nFpts * eles->nVars * eles->nEles),
+      eles->nFpts);
+  }
+
+  /* Copy out result */
+  eles->dU_fpts = eles->dU_fpts_d;
+
+#endif
 
 }
 
@@ -599,6 +610,7 @@ void FRSolver::F_from_faces()
 
 void FRSolver::compute_dF()
 {
+#ifdef _CPU
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -639,6 +651,40 @@ void FRSolver::compute_dF()
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  /* Copy data to GPU */
+  eles->Fcomm_d = eles->Fcomm;
+  eles->F_spts_d = eles->F_spts;
+  eles->dF_spts_d = eles->dF_spts;
+
+
+  double alpha, beta;
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    alpha = 1.0; beta = 0.0;
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
+        eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, 
+        eles->F_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
+        eles->nSpts, &beta, eles->dF_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
+        eles->nSpts);
+
+    check_error();
+
+    alpha = 1.0; beta = 1.0;
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, &alpha,
+        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, eles->Fcomm_d.data(), 
+        eles->nFpts, &beta, eles->dF_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
+        eles->nSpts);
+
+    check_error();
+  }
+
+  /* Copy out result */
+  eles->dF_spts = eles->dF_spts_d;
+
+#endif
 
 }
 
