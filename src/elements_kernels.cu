@@ -2,7 +2,7 @@
 #include "mdvector_gpu.h"
 
 __global__
-void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, unsigned int nSpts, 
+void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, unsigned int nSpts, 
     unsigned int nEles, double gamma)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
@@ -12,21 +12,21 @@ void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F_spts, mdvector_gpu<dou
     return;
 
   /* Compute some primitive variables */
-  double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
-      U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
-  double P = (gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
-  double H = (U_spts(spt, ele, 3) + P) / U_spts(spt, ele, 0);
+  double momF = (U(spt, ele, 1) * U(spt,ele,1) + U(spt, ele, 2) * 
+      U(spt, ele,2)) / U(spt, ele, 0);
+  double P = (gamma - 1.0) * (U(spt, ele, 3) - 0.5 * momF);
+  double H = (U(spt, ele, 3) + P) / U(spt, ele, 0);
 
 
-  F_spts(spt, ele, 0, 0) = U_spts(spt, ele, 1);
-  F_spts(spt, ele, 1, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0) + P;
-  F_spts(spt, ele, 2, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
-  F_spts(spt, ele, 3, 0) = U_spts(spt, ele, 1) * H;
+  F(spt, ele, 0, 0) = U(spt, ele, 1);
+  F(spt, ele, 1, 0) = U(spt, ele, 1) * U(spt, ele, 1) / U(spt, ele, 0) + P;
+  F(spt, ele, 2, 0) = U(spt, ele, 1) * U(spt, ele, 2) / U(spt, ele, 0);
+  F(spt, ele, 3, 0) = U(spt, ele, 1) * H;
 
-  F_spts(spt, ele, 0, 1) = U_spts(spt, ele, 2);
-  F_spts(spt, ele, 1, 1) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
-  F_spts(spt, ele, 2, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0) + P;
-  F_spts(spt, ele, 3, 1) = U_spts(spt, ele, 2) * H;
+  F(spt, ele, 0, 1) = U(spt, ele, 2);
+  F(spt, ele, 1, 1) = U(spt, ele, 1) * U(spt, ele, 2) / U(spt, ele, 0);
+  F(spt, ele, 2, 1) = U(spt, ele, 2) * U(spt, ele, 2) / U(spt, ele, 0) + P;
+  F(spt, ele, 3, 1) = U(spt, ele, 2) * H;
  
 }
 
