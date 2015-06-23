@@ -13,21 +13,21 @@ void compute_Fconv_fpts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
    for (unsigned int slot = 0; slot < 2; slot ++)
    {
      /* Compute some primitive variables (keep pressure)*/
-     double momF = (U(slot, 1, fpt) * U(slot, 1, fpt) + U(slot, 2, fpt) * 
-         U(slot, 2, fpt)) / U(slot, 0, fpt);
+     double momF = (U(fpt, 1, slot) * U(fpt, 1, slot) + U(fpt, 2, slot) * 
+         U(fpt, 2, slot)) / U(fpt, 0, slot);
 
-     P(slot, fpt) = (gamma - 1.0) * (U(slot, 3, fpt) - 0.5 * momF);
-     double H = (U(slot, 3, fpt) + P(slot,fpt)) / U(slot, 0, fpt);
+     P(fpt, slot) = (gamma - 1.0) * (U(fpt, 3, slot) - 0.5 * momF);
+     double H = (U(fpt, 3, slot) + P(fpt, slot)) / U(fpt, 0, slot);
 
-     F(slot, 0, 0, fpt) = U(slot, 1, fpt);
-     F(slot, 1, 0, fpt) = U(slot, 1, fpt) * U(slot, 1, fpt) / U(slot, 0, fpt) + P(slot, fpt);
-     F(slot, 2, 0, fpt) = U(slot, 1, fpt) * U(slot, 2, fpt) / U(slot, 0, fpt);
-     F(slot, 3, 0, fpt) = U(slot, 1, fpt) * H;
+     F(fpt, 0, 0, slot) = U(fpt, 1, slot);
+     F(fpt, 1, 0, slot) = U(fpt, 1, slot) * U(fpt, 1, slot) / U(fpt, 0, slot) + P(fpt, slot);
+     F(fpt, 2, 0, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
+     F(fpt, 3, 0, slot) = U(fpt, 1, slot) * H;
 
-     F(slot, 0, 1, fpt) = U(slot, 2, fpt);
-     F(slot, 1, 1, fpt) = U(slot, 1, fpt) * U(slot, 2, fpt) / U(slot, 0, fpt);
-     F(slot, 2, 1, fpt) = U(slot, 2, fpt) * U(slot, 2, fpt) / U(slot, 0, fpt) + P(slot, fpt);
-     F(slot, 3, 1, fpt) = U(slot, 2, fpt) * H;
+     F(fpt, 0, 1, slot) = U(fpt, 2, slot);
+     F(fpt, 1, 1, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
+     F(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
+     F(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
    }
 }
 

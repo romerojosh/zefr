@@ -109,7 +109,7 @@ void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvec
 
   int slot = fpt2gfpt_slot(fpt,ele);
 
-  U_gfpts(slot, var, gfpt) = U_fpts(fpt, ele, var);
+  U_gfpts(gfpt, var, slot) = U_fpts(fpt, ele, var);
 
 }
 
@@ -141,7 +141,7 @@ void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_f
 
   int slot = fpt2gfpt_slot(fpt,ele);
 
-  Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(slot, var, gfpt);
+  Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(gfpt, var, slot);
 
 }
 
@@ -175,7 +175,7 @@ void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, md
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    dU_gfpts(slot, var, dim, gfpt) = dU_fpts(fpt, ele, var, dim);
+    dU_gfpts(gfpt, var, dim, slot) = dU_fpts(fpt, ele, var, dim);
   }
 
 }
