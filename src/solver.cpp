@@ -213,6 +213,8 @@ void FRSolver::solver_data_to_device()
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
   eles->dF_spts_d = eles->dF_spts;
+  eles->jaco_spts_d = eles->jaco_spts;
+  eles->jaco_det_spts_d = eles->jaco_det_spts;
 
   /* Solution data structures (faces) */
   faces->U_d = faces->U;

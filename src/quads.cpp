@@ -11,6 +11,11 @@
 #include "quads.hpp"
 #include "shape.hpp"
 
+#ifdef _GPU
+#include "elements_kernels.h"
+#include "solver_kernels.h"
+#endif
+
 //Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
 Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
 {
@@ -451,6 +456,7 @@ void Quads::setup_PMG()
 
 void Quads::transform_flux()
 {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < nVars; n++)
   {
@@ -467,6 +473,16 @@ void Quads::transform_flux()
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  F_spts_d = F_spts;
+  transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars);
+
+  check_error();
+
+  F_spts = F_spts_d;
+#endif
 }
 
 double Quads::calc_shape(unsigned int shape_order, unsigned int idx, 
