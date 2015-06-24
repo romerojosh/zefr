@@ -754,20 +754,93 @@ void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
 __global__
 void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> norm, mdvector_gpu<int> outnorm, 
-    double ldb_b, double ldg_tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_temp, mdvector_gpu<double> norm, 
+    mdvector_gpu<int> outnorm, mdvector_gpu<int> LDG_bias, double beta, double tau, 
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (fpt >= nFpts)
+    return;
+
+  /* Hardcoded for EulerNS. Will need to add nVar template */
+  double FL[4]; double FR[4];
+  double WL[4]; double WR[4];
+   
+  /* Zero out temporary array */
+  for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      Fcomm_temp(fpt, n, dim) = 0.0;
+
+  /* Initialize FL, FR */
+  for (unsigned int n = 0; n < 4; n++)
+  {
+    FL[n] = 0.0; FR[n] = 0.0;
+  }
+
+
+  /* Setting sign of beta (from HiFiLES) */
+  if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+    beta = -beta;
+
+
+  /* Get interface-normal flux components  (from L to R)*/
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      FL[n] += Fvisc(fpt, n, dim, 0) * norm(fpt, dim, 0);
+      FR[n] += Fvisc(fpt, n, dim, 1) * norm(fpt, dim, 0);
+    }
+  }
+
+  /* Get left and right state variables */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
+  }
+
+  /* Compute common normal viscous flux and accumulate */
+  if (!LDG_bias(fpt))
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm_temp(fpt, n, 0) += 0.5*(Fvisc(fpt, n, 0, 0) + Fvisc(fpt, n, 0, 1)) + tau * norm(fpt, 0, 0)* (WL[n]
+          - WR[n]) + beta * norm(fpt, 0, 0)* (FL[n] - FR[n]);
+      Fcomm_temp(fpt, n, 1) += 0.5*(Fvisc(fpt, n, 1, 0) + Fvisc(fpt, n, 1, 1)) + tau * norm(fpt, 1, 0)* (WL[n]
+          - WR[n]) + beta * norm(fpt, 1, 0)* (FL[n] - FR[n]);
+    }
+  }
+  /* Else, only use left flux state */
+  else
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm_temp(fpt, n, 0) += Fvisc(fpt, n, 0, 0) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
+      Fcomm_temp(fpt, n, 1) += Fvisc(fpt, n, 1, 0) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
+    }
+  }
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
+      Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+    }
+  }
 
 }
 
 void LDG_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> norm, mdvector_gpu<int> outnorm, 
-    double ldb_b, double ldg_tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_temp, mdvector_gpu<double> norm, 
+    mdvector_gpu<int> outnorm, mdvector_gpu<int> LDG_bias, double beta, double tau, 
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nFpts + threads - 1)/threads;
 
-  LDG_flux<<<threads,blocks>>>(U, Fvisc, Fcomm, norm, outnorm, ldb_b, ldg_tau, 
+  LDG_flux<<<threads,blocks>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
       nFpts, nVars, nDims);
 }
 __global__

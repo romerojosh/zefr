@@ -31,8 +31,9 @@ void compute_common_U_LDG_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> U
     mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars);
 
 void LDG_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> norm, mdvector_gpu<int> outnorm, 
-    double ldb_b, double ldg_tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims);
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_temp, mdvector_gpu<double> norm, 
+    mdvector_gpu<int> outnorm, mdvector_gpu<int> LDG_bias, double beta, double tau, 
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims);
 
 void transform_flux_faces_wrapper(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
     unsigned int nFpts, unsigned int nVars);

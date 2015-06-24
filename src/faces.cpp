@@ -768,19 +768,17 @@ void Faces::compute_common_F()
   {
     if (input->fvisc_type == "LDG")
     {
-//#ifdef _CPU
+#ifdef _CPU
       LDG_flux();
-//#endif
+#endif
 
 #ifdef _GPU
-      /*
-      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_visc_d, Fcomm_d, norm_d, outnorm_d, input->ldb_b,
+      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, outnorm_d, LDG_bias_d, input->ldg_b,
           input->ldg_tau, nFpts, nVars, nDims);
 
       check_error();
 
       Fcomm = Fcomm_d;
-      */
 #endif
     }
     /*
