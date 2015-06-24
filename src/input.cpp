@@ -48,8 +48,9 @@ InputStruct read_input_file(std::string inputfile)
 
   read_param(f, "ic_type", input.ic_type);
 
-  read_param(f, "AdvDiff_Ax", input.AdvDiff_A[0]);
-  read_param(f, "AdvDiff_Ay", input.AdvDiff_A[1]);
+  input.AdvDiff_A.assign({3});
+  read_param(f, "AdvDiff_Ax", input.AdvDiff_A(0));
+  read_param(f, "AdvDiff_Ay", input.AdvDiff_A(1));
   read_param(f, "AdvDiff_D", input.AdvDiff_D);
 
   read_param(f, "T_gas", input.T_gas);
@@ -62,8 +63,9 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "rho_fs", input.rho_fs);
   //read_param(f, "u_fs", input.u_fs);
   //read_param(f, "v_fs", input.v_fs);
-  read_param(f, "u_fs", input.V_fs[0]);
-  read_param(f, "v_fs", input.V_fs[1]);
+  input.V_fs.assign({3});
+  read_param(f, "u_fs", input.V_fs(0));
+  read_param(f, "v_fs", input.V_fs(1));
   read_param(f, "P_fs", input.P_fs);
 
 
@@ -74,15 +76,18 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "T_fs", input.T_fs);
   //read_param(f, "nx_fs", input.nx_fs);
   //read_param(f, "ny_fs", input.ny_fs);
-  read_param(f, "nx_fs", input.norm_fs[0]);
-  read_param(f, "ny_fs", input.norm_fs[1]);
+  input.norm_fs.assign({3});
+  read_param(f, "nx_fs", input.norm_fs(0));
+  read_param(f, "ny_fs", input.norm_fs(1));
 
   read_param(f, "mach_wall", input.mach_wall);
   read_param(f, "T_wall", input.T_wall);
   //read_param(f, "nx_wall", input.nx_wall);
   //read_param(f, "ny_wall", input.ny_wall);
-  read_param(f, "nx_wall", input.norm_wall[0]);
-  read_param(f, "ny_wall", input.norm_wall[1]);
+  input.norm_wall.assign({3});
+  input.V_wall.assign({3});
+  read_param(f, "nx_wall", input.norm_wall(0));
+  read_param(f, "ny_wall", input.norm_wall(1));
 
   f.close();
 
@@ -98,7 +103,7 @@ void apply_nondim(InputStruct &input)
   /* Compute dimensional freestream quantities */
   double V_fs_mag = input.mach_fs * std::sqrt(input.gamma * input.R * input.T_fs);
   for (unsigned int dim = 0; dim < input.nDims; dim++)
-    input.V_fs[dim] = V_fs_mag * input.norm_fs[dim];
+    input.V_fs(dim) = V_fs_mag * input.norm_fs(dim);
 
   input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
   input.P_fs = input.rho_fs * input.R * input.T_fs;
@@ -122,7 +127,7 @@ void apply_nondim(InputStruct &input)
   input.mu = input.mu/input.mu_ref;
   input.rho_fs = input.rho_fs/input.rho_ref;
   for (unsigned int n = 0; n < input.nDims; n++)
-    input.V_fs[n] = input.V_fs[n] / V_fs_mag;
+    input.V_fs(n) = input.V_fs(n) / V_fs_mag;
   input.P_fs = input.P_fs / input.P_ref;
   input.T_tot_fs = (input.T_fs / input.T_ref) * (1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs * input.mach_fs);
   input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs * input.mach_fs, input.gamma /
@@ -131,7 +136,7 @@ void apply_nondim(InputStruct &input)
   /* Compute and nondimensionalize wall quantities */
   double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
   for (unsigned int n = 0; n < input.nDims; n++)
-    input.V_wall[n] = V_wall_mag * input.norm_wall[n] / V_fs_mag;
+    input.V_wall(n) = V_wall_mag * input.norm_wall(n) / V_fs_mag;
 
   input.T_wall = input.T_wall / input.T_ref;
 }

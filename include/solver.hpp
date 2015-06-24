@@ -17,7 +17,8 @@ class FRSolver
   friend class PMGrid;
 
   private:
-    const InputStruct *input = NULL;
+    //const InputStruct *input = NULL;
+    InputStruct *input = NULL;
     GeoStruct geo;
     int order;
     int restart_iter = 0;
@@ -65,7 +66,8 @@ class FRSolver
     void compute_element_dt();
 
   public:
-    FRSolver(const InputStruct *input, int order = -1);
+    //FRSolver(const InputStruct *input, int order = -1);
+    FRSolver(InputStruct *input, int order = -1);
     void setup();
     void compute_residual(unsigned int stage);
     void update();

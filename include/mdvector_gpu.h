@@ -43,6 +43,8 @@ class mdvector_gpu
 
     //! Overloaded methods to access data
     __device__
+    T& operator()(unsigned int idx0);
+    __device__
     T& operator()(unsigned int idx0, unsigned int idx1);
     __device__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
@@ -73,11 +75,6 @@ void mdvector_gpu<T>::free_data()
 {
   if (allocated)
   {
-    /*
-    cudaFree(values);
-    cudaFree(dims);
-    cudaFree(strides);
-    */
     free_device_data(values);
     free_device_data(dims);
     free_device_data(strides);
@@ -90,11 +87,6 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
   if(!allocated)
   {
     nvals = vec.get_nvals();
-    /*
-    cudaMalloc(&values, nvals*sizeof(T));
-    cudaMalloc(&strides, 4*sizeof(unsigned int));
-    cudaMalloc(&dims, 4*sizeof(unsigned int));
-    */
     allocate_device_data(values, nvals);
     allocate_device_data(strides, 4);
 
@@ -103,7 +95,6 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
   }
 
   /* Copy values to GPU */
-  //cudaMemcpy(values, vec.data(), nvals*sizeof(T), cudaMemcpyHostToDevice);
   copy_to_device(values, vec.data(), nvals);
 
   /* Copy strides to GPU (always size 4 for now!) */
@@ -117,6 +108,14 @@ template <typename T>
 T* mdvector_gpu<T>::data(void)
 {
   return values;
+}
+
+template <typename T>
+__device__
+T& mdvector_gpu<T>::operator() (unsigned int idx0) 
+{
+  //assert(ndims == 1);
+  return values[idx0];
 }
 
 template <typename T>

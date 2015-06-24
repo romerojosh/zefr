@@ -8,7 +8,8 @@
 #include "multigrid.hpp"
 #include "solver.hpp"
 
-void PMGrid::setup(int order, const InputStruct *input, FRSolver &solver)
+//void PMGrid::setup(int order, const InputStruct *input, FRSolver &solver)
+void PMGrid::setup(int order, InputStruct *input, FRSolver &solver)
 {
   this-> order = order;
   this-> input = input;

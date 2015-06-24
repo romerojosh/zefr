@@ -23,7 +23,8 @@
 #include "cublas_v2.h"
 #endif
 
-FRSolver::FRSolver(const InputStruct *input, int order)
+//FRSolver::FRSolver(const InputStruct *input, int order)
+FRSolver::FRSolver(InputStruct *input, int order)
 {
   this->input = input;
   if (order == -1)
@@ -220,8 +221,17 @@ void FRSolver::solver_data_to_device()
   faces->Fcomm_d = faces->Fcomm;
 
   /* Additional data */
+  /* Geometry */
   geo.fpt2gfpt_d = geo.fpt2gfpt;
   geo.fpt2gfpt_slot_d = geo.fpt2gfpt_slot;
+  geo.gfpt2bnd_d = geo.gfpt2bnd;
+  geo.per_fpt_list_d = geo.per_fpt_list;
+
+  /* Input parameters */
+  input->V_fs_d = input->V_fs;
+  input->V_wall_d = input->V_wall;
+  input->norm_fs_d = input->norm_fs;
+
 }
 #endif
 
@@ -314,8 +324,8 @@ void FRSolver::initialize_U()
           double Vsq = 0.0;
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
           {
-            eles->U_spts(spt, ele, dim+1)  = input->rho_fs * input->V_fs[dim];
-            Vsq += input->V_fs[dim] * input->V_fs[dim];
+            eles->U_spts(spt, ele, dim+1)  = input->rho_fs * input->V_fs(dim);
+            Vsq += input->V_fs(dim) * input->V_fs(dim);
           }
 
           eles->U_spts(spt, ele, 3)  = input->P_fs/(input->gamma-1.0) + 
@@ -392,7 +402,6 @@ void FRSolver::extrapolate_U()
 
   /* Copy result out */
   eles->U_fpts = eles->U_fpts_d;
-
 
 #endif
 
@@ -1094,12 +1103,12 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
   std::ofstream g(cpfile);
 
   /* Get angle of attack */
-  double aoa = std::atan2(input->V_fs[1], input->V_fs[0]); 
+  double aoa = std::atan2(input->V_fs(1), input->V_fs(0)); 
 
   /* Compute factor for non-dimensional coefficients */
   double Vsq = 0.0;
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
-    Vsq += input->V_fs[dim] * input->V_fs[dim];
+    Vsq += input->V_fs(dim) * input->V_fs(dim);
 
   double fac = 1.0 / (0.5 * input->rho_fs * Vsq);
 
@@ -1108,7 +1117,7 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
   for (unsigned int fpt = geo.nGfpts_int; fpt < geo.nGfpts; fpt++)
   {
     /* Get boundary ID */
-    unsigned int bnd_id = geo.gfpt2bnd[fpt - geo.nGfpts_int];
+    unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
 
     if (bnd_id >= 7) /* On wall boundary */
     {

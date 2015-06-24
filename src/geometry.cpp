@@ -481,6 +481,10 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     /* Pair up periodic flux points if needed */ 
     if (geo.per_bnd_flag)
     {
+      /* Creating simple vector of flux point pairs to replace map, since it
+       * cannot be used for GPU */
+      geo.per_fpt_list.assign({gfpt_bnd - geo.nGfpts_int}, 0);
+
       for (auto &bnd_face1 : bndface2fpts)
       {
         auto face1 = bnd_face1.first;
@@ -496,6 +500,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         for (unsigned int i = 0; i < nFptsPerFace; i++)
         {
           geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
+          geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i];
         }
       } 
     }

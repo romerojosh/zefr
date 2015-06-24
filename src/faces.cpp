@@ -12,7 +12,8 @@
 #endif
 
 
-Faces::Faces(GeoStruct *geo, const InputStruct *input)
+//Faces::Faces(GeoStruct *geo, const InputStruct *input)
+Faces::Faces(GeoStruct *geo, InputStruct *input)
 {
   this->input = input;
   this->geo = geo;
@@ -47,6 +48,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
 void Faces::apply_bcs()
 {
+#ifdef _GPU
   /* Create some useful variables outside loop */
   std::array<double, 3> VL, VR;
 
@@ -54,14 +56,14 @@ void Faces::apply_bcs()
 #pragma omp parallel for private(VL,VR)
   for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
   {
-    unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
+    unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Apply specified boundary condition */
     switch(bnd_id)
     {
       case 1:/* Periodic */
       {
-        unsigned int per_fpt = geo->per_fpt_pairs[fpt];
+        unsigned int per_fpt = geo->per_fpt_list(fpt);
 
         for (unsigned int n = 0; n < nVars; n++)
         {
@@ -78,8 +80,8 @@ void Faces::apply_bcs()
         double Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          U(fpt, dim+1, 1) = input->rho_fs * input->V_fs[dim];
-          Vsq += input->V_fs[dim] * input->V_fs[dim];
+          U(fpt, dim+1, 1) = input->rho_fs * input->V_fs(dim);
+          Vsq += input->V_fs(dim) * input->V_fs(dim);
         }
 
         U(fpt, 3, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
@@ -120,7 +122,7 @@ void Faces::apply_bcs()
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           VnL += VL[dim] * norm(fpt, dim, 0);
-          alpha += input->norm_fs[dim] * norm(fpt, dim, 0);
+          alpha += input->norm_fs(dim) * norm(fpt, dim, 0);
         }
 
         /* Compute speed of sound */
@@ -166,7 +168,7 @@ void Faces::apply_bcs()
         Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VR[dim] = VR_mag * input->norm_fs[dim];
+          VR[dim] = VR_mag * input->norm_fs(dim);
           U(fpt, dim+1, 1) = U(fpt, 0, 1) * VR[dim];
           Vsq += VR[dim] * VR[dim];
         }
@@ -241,7 +243,7 @@ void Faces::apply_bcs()
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
-          VnR += input->V_fs[dim] * norm(fpt, dim, 0);
+          VnR += input->V_fs(dim) * norm(fpt, dim, 0);
         }
       
 
@@ -267,7 +269,7 @@ void Faces::apply_bcs()
 
           double Vsq = 0.0;
           for (unsigned int dim = 0; dim < nDims; dim++)
-            Vsq += input->V_fs[dim] * input->V_fs[dim];
+            Vsq += input->V_fs(dim) * input->V_fs(dim);
 
           double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs +
               0.5 * Vsq;
@@ -277,7 +279,7 @@ void Faces::apply_bcs()
 
           U(fpt, 0, 1) = rhoR;
           for (unsigned int dim = 0; dim < nDims; dim++)
-            U(fpt, dim+1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs[dim] - VnR * 
+            U(fpt, dim+1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs(dim) - VnR * 
               norm(fpt, dim, 0));
 
           PR = rhoR / input->gamma * cstar * cstar;
@@ -370,8 +372,8 @@ void Faces::apply_bcs()
         double V_wall_sq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          U(fpt, dim+1, 1) = U(fpt, 0 , 1) * input->V_wall[dim];
-          V_wall_sq += input->V_wall[dim] * input->V_wall[dim];
+          U(fpt, dim+1, 1) = U(fpt, 0 , 1) * input->V_wall(dim);
+          V_wall_sq += input->V_wall(dim) * input->V_wall(dim);
         }
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
@@ -422,8 +424,8 @@ void Faces::apply_bcs()
         double V_wall_sq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          U(fpt, dim+1, 1) = U(fpt, 0 , 1) * input->V_wall[dim];
-          V_wall_sq += input->V_wall[dim] * input->V_wall[dim];
+          U(fpt, dim+1, 1) = U(fpt, 0 , 1) * input->V_wall(dim);
+          V_wall_sq += input->V_wall(dim) * input->V_wall(dim);
         }
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
@@ -432,6 +434,13 @@ void Faces::apply_bcs()
       }
     }
   } 
+#endif
+
+#ifdef _APU
+  apply_bcs_wrapper(U_d, gfpts2bnd, per_fpt_pairs, input->rho_fs, input->V_fs_d, input->P_fs,
+      input->gamma, input->norm_fs_d, norm_d, input->R_ref, input->T_tot_fs, input->T_wall, input->V_wall_d);
+#endif
+
 }
 
 void Faces::apply_bcs_dU()
@@ -440,7 +449,7 @@ void Faces::apply_bcs_dU()
 #pragma omp parallel for 
   for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
   {
-    unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
+    unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Apply specified boundary condition */
     if (bnd_id == 1) /* Periodic */
@@ -449,7 +458,8 @@ void Faces::apply_bcs_dU()
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
-            unsigned int per_fpt = geo->per_fpt_pairs[fpt];
+            //unsigned int per_fpt = geo->per_fpt_pairs[fpt];
+            unsigned int per_fpt = geo->per_fpt_list(fpt);
             dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
         }
       }
@@ -513,9 +523,9 @@ void Faces::compute_Fconv()
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
-          Fconv(fpt, n, dim, 0) = input->AdvDiff_A[dim] * U(fpt, n, 0);
+          Fconv(fpt, n, dim, 0) = input->AdvDiff_A(dim) * U(fpt, n, 0);
 
-          Fconv(fpt, n, dim, 1) = input->AdvDiff_A[dim] * U(fpt, n, 1);
+          Fconv(fpt, n, dim, 1) = input->AdvDiff_A(dim) * U(fpt, n, 1);
 
         }
       }
@@ -782,7 +792,7 @@ void Faces::rusanov_flux()
       waveSp[fpt] = 0.0;
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        waveSp[fpt] += input->AdvDiff_A[dim] * norm(fpt, dim, 0);
+        waveSp[fpt] += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
     }
     else if (input->equation == "EulerNS")
     {
@@ -882,7 +892,7 @@ void Faces::LDG_flux()
     /* Else, only use left flux state (unless periodic or adiabatic wall) */
     else
     {
-      unsigned int bnd_id = geo->gfpt2bnd[fpt - geo->nGfpts_int];
+      unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
       if (bnd_id != 1 && bnd_id != 10 && bnd_id != 11)
       {
         for (unsigned int n = 0; n < nVars; n++)

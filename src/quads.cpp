@@ -11,7 +11,8 @@
 #include "quads.hpp"
 #include "shape.hpp"
 
-Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
+//Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
+Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
 {
   this->geo = geo;
   this->input = input;  

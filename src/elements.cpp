@@ -275,7 +275,7 @@ void Elements::compute_Fconv()
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
-            F_spts(spt, ele, n, dim) = input->AdvDiff_A[dim] * U_spts(spt, ele, n);
+            F_spts(spt, ele, n, dim) = input->AdvDiff_A(dim) * U_spts(spt, ele, n);
           }
         }
       }

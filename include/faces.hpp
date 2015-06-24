@@ -23,7 +23,8 @@ class Faces
   friend class Quads;
 
   private:
-    const InputStruct *input = NULL;
+    //const InputStruct *input = NULL;
+    InputStruct *input = NULL;
     GeoStruct *geo = NULL;
     unsigned int nFpts, nDims, nVars;
 
@@ -49,7 +50,8 @@ class Faces
 #endif
 
   public:
-    Faces(GeoStruct *geo, const InputStruct *input);
+    //Faces(GeoStruct *geo, const InputStruct *input);
+    Faces(GeoStruct *geo, InputStruct *input);
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U();
     void compute_common_F();

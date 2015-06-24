@@ -11,7 +11,8 @@
 class PMGrid
 {
   private:
-    const InputStruct *input = NULL;
+    //const InputStruct *input = NULL;
+    InputStruct *input = NULL;
     int order;
     std::vector<mdvector<double>> corrections, sources, solutions;
     std::vector<std::shared_ptr<FRSolver>> grids;
@@ -22,7 +23,8 @@ class PMGrid
     void compute_source_term(FRSolver &grid, mdvector<double> &source);
 
   public:
-    void setup(int order, const InputStruct *input, FRSolver &solver);
+    //void setup(int order, const InputStruct *input, FRSolver &solver);
+    void setup(int order, InputStruct *input, FRSolver &solver);
     void cycle(FRSolver &solver);
 
 

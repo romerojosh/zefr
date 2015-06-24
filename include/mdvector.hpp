@@ -41,6 +41,9 @@ class mdvector
     //! Setup operator
     void assign(std::vector<unsigned int> dims, T value = 0, unsigned int padding = 0);
 
+    //! Push back operator (for compatibility)
+    void push_back(T value);
+
     //! Fill operator
     void fill(T value);
 
@@ -57,6 +60,8 @@ class mdvector
     const unsigned int* strides_ptr() const;
 
     //! Overloaded methods to access data
+    T operator()(unsigned int idx0) const;
+    T& operator()(unsigned int idx0);
     T& operator()(unsigned int idx0, unsigned int idx1);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
@@ -120,6 +125,12 @@ void mdvector<T>::fill(T value)
 }
 
 template <typename T>
+void mdvector<T>::push_back(T value)
+{
+  values.push_back(value);
+}
+
+template <typename T>
 std::array<unsigned int,4> mdvector<T>::shape(void) const
 {
   return dims;
@@ -129,6 +140,20 @@ template <typename T>
 T* mdvector<T>::data(void)
 {
   return values.data();
+}
+
+template <typename T>
+T& mdvector<T>::operator() (unsigned int idx0) 
+{
+  //assert(ndims == 1);
+  return values[idx0];
+}
+
+template <typename T>
+T mdvector<T>::operator() (unsigned int idx0)const
+{
+  //assert(ndims == 1);
+  return values[idx0];
 }
 
 template <typename T>

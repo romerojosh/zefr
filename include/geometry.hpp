@@ -19,7 +19,7 @@ struct GeoStruct
     unsigned int nDims, nNodes, shape_order, nNodesPerEle, nGfpts, nGfpts_int;
     bool per_bnd_flag = false;
     std::vector<unsigned int> bnd_ids;
-    std::vector<unsigned int> gfpt2bnd;
+    mdvector<unsigned int> gfpt2bnd, per_fpt_list;
     std::map<std::vector<unsigned int>, unsigned int> bnd_faces;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs;
     std::unordered_map<unsigned int, unsigned int> per_fpt_pairs;
@@ -29,6 +29,7 @@ struct GeoStruct
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
+    mdvector_gpu<unsigned int> gfpt2bnd_d, per_fpt_list_d;
 #endif
 };
 

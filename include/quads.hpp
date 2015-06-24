@@ -30,8 +30,8 @@ class Quads: public Elements
                                    unsigned int dim);
 
   public:
-    Quads(GeoStruct *geo, const InputStruct *input, 
-          int order = -1);
+    //Quads(GeoStruct *geo, const InputStruct *input, int order = -1);
+    Quads(GeoStruct *geo, InputStruct *input, int order = -1);
     void transform_flux();
 
 };
