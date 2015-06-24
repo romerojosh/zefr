@@ -48,7 +48,7 @@ class Faces
     mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Ucomm_d, P_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<int> outnorm_d;
-    mdvector<double> dA_d, waveSp_d;
+    mdvector_gpu<double> dA_d, waveSp_d;
 #endif
 
   public:

@@ -15,7 +15,7 @@ void apply_bcs_wrapper(mdvector_gpu<double> U, unsigned int nFpts, unsigned int 
 
 void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm,
-    mdvector_gpu<double>outnorm, mdvector_gpu<double> waveSp, double gamma, 
+    mdvector_gpu<int>outnorm, mdvector_gpu<double> waveSp, double gamma, double rus_k,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims);
 
 #endif /* faces_kernels_h */

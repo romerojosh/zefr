@@ -685,20 +685,25 @@ void Faces::compute_Fvisc()
 void Faces::compute_common_F()
 {
   if (input->fconv_type == "Rusanov")
-#ifdef _GPU
+  {
+#ifdef _CPU
     rusanov_flux();
 #endif
 
-#ifdef _APU
+#ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, norm_d, outnorm_d, waveSp_d, input->gamma, 
         input->rus_k, nFpts, nVars, nDims);
 
     check_error();
 
-    F_comm = F_comm_d;
+    Fcomm = Fcomm_d;
+    waveSp = waveSp_d;
 #endif
+  }
   else
+  {
     ThrowException("Numerical convective flux type not recognized!");
+  }
 
   if (input->viscous)
   {
