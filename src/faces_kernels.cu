@@ -550,6 +550,36 @@ void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 }
 
 __global__
+void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm, 
+    mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars)
+{
+    const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+    const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (fpt >= nFpts || var >= nVars)
+      return;
+
+    /* Setting sign of beta (from HiFiLES) */
+    if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+      beta = -beta;
+
+    double UL = U(fpt, var, 0); double UR = U(fpt, var, 1);
+
+    Ucomm(fpt, var, 0) = 0.5*(UL + UR) - beta*(UL - UR);
+    Ucomm(fpt, var, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+
+}
+
+void compute_common_U_LDG_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm, 
+    mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars)
+{
+  dim3 threads(32,4);
+  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  compute_common_U_LDG<<<threads, blocks>>>(U, Ucomm, norm, beta, nFpts, nVars);
+
+}
+__global__
 void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
     unsigned int nFpts, unsigned int nVars)
 {

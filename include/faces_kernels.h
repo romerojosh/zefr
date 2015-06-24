@@ -18,6 +18,9 @@ void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     mdvector_gpu<int>outnorm, mdvector_gpu<double> waveSp, double gamma, double rus_k,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims);
 
+void compute_common_U_LDG_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm, 
+    mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars);
+
 void transform_flux_faces_wrapper(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
     unsigned int nFpts, unsigned int nVars);
 

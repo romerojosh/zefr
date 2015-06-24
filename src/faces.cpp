@@ -433,7 +433,8 @@ void Faces::apply_bcs()
         break;
       }
     
-  } 
+    } 
+  }
 #endif
 
 #ifdef _GPU
@@ -726,6 +727,7 @@ void Faces::compute_common_U()
   /* Compute common solution */
   if (input->fvisc_type == "LDG")
   {
+#ifdef _CPU
 #pragma omp parallel for 
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
@@ -745,15 +747,24 @@ void Faces::compute_common_U()
       }
 
     }
+#endif
+
+#ifdef _GPU
+    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars);
+
+    check_error();
+
+    Ucomm = Ucomm_d;
+#endif
   }
 
   // TODO: Can potentially remove central treatment since LDG recovers.
+  /*
   else if (input->fvisc_type == "Central")
   {
 #pragma omp parallel for collapse(2)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      /* Get left and right state variables */
       for (unsigned int n = 0; n < nVars; n++)
       {
         double UL = U(fpt, n, 0); double UR = U(fpt, n, 1);
@@ -764,6 +775,7 @@ void Faces::compute_common_U()
 
     }
   }
+*/
   else
   {
     ThrowException("Numerical viscous flux type not recognized!");
