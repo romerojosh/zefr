@@ -258,6 +258,7 @@ void FRSolver::compute_residual(unsigned int stage)
     faces->compute_common_U();
     U_from_faces();
     compute_dU();
+    eles->transform_dU();
     extrapolate_dU();
     dU_to_faces();
     faces->apply_bcs_dU();
@@ -569,35 +570,6 @@ void FRSolver::compute_dU()
 
 #endif
 
-    /* Transform dU back to physical space */
-    if (eles->nDims == 2)
-    {
-#pragma omp parallel for collapse(3)
-      for (unsigned int n = 0; n < eles->nVars; n++)
-      {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            double dUtemp = eles->dU_spts(spt, ele, n, 0);
-
-            eles->dU_spts(spt, ele, n, 0) = eles->dU_spts(spt, ele, n, 0) * 
-              eles->jaco_spts(1, 1, spt, ele)- eles->dU_spts(spt, ele, n, 1) * 
-              eles->jaco_spts(1, 0, spt, ele); 
-
-            eles->dU_spts(spt, ele, n, 1) = -dUtemp * eles->jaco_spts(0, 1, spt, ele) +
-              eles->dU_spts(spt, ele, n, 1) * eles->jaco_spts(0, 0, spt, ele); 
-
-            eles->dU_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
-            eles->dU_spts(spt, ele, n, 1) /= eles->jaco_det_spts(spt, ele);
-          }
-        }
-      }
-    }
-
-#ifdef _GPU
-  eles->dU_spts_d = eles->dU_spts;
-#endif
 }
 
 void FRSolver::extrapolate_dU()

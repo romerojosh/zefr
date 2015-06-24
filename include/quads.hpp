@@ -32,6 +32,7 @@ class Quads: public Elements
   public:
     //Quads(GeoStruct *geo, const InputStruct *input, int order = -1);
     Quads(GeoStruct *geo, InputStruct *input, int order = -1);
+    void transform_dU();
     void transform_flux();
 
 };

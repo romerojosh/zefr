@@ -454,6 +454,38 @@ void Quads::setup_PMG()
   }
 }
 
+void Quads::transform_dU()
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        double dUtemp = dU_spts(spt, ele, n, 0);
+
+        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) - 
+                                  dU_spts(spt, ele, n, 1) * jaco_spts(1, 0, spt, ele); 
+
+        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
+                                  dUtemp * jaco_spts(0, 1, spt, ele);
+
+        dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
+        dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  transform_dU_quad_wrapper(dU_spts_d, jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars);
+  dU_spts = dU_spts_d;
+#endif
+
+}
+
 void Quads::transform_flux()
 {
 #ifdef _CPU

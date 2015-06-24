@@ -94,6 +94,7 @@ class Elements
     void compute_Fconv();
     void compute_Fvisc();
     virtual void transform_flux() = 0;
+    virtual void transform_dU() = 0;
 
 };
 
