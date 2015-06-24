@@ -351,7 +351,7 @@ void Elements::compute_Fvisc()
   }
   else if (input->equation == "EulerNS")
   {
-
+#ifdef _CPU
 #pragma omp parallel for collapse(2)
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
@@ -421,6 +421,15 @@ void Elements::compute_Fvisc()
             input->gamma * de_dy);
       }
     }
-  }
+#endif
 
+#ifdef _GPU
+      compute_Fvisc_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, 
+          input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
+      check_error();
+
+      F_spts = F_spts_d;
+#endif
+
+  }
 }
