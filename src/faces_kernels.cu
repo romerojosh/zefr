@@ -41,9 +41,11 @@ void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> F_gfpts, mdvecto
 }
 
 __global__
-void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma, 
-      double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
-      mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list) 
+void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
+    unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, 
+    double P_fs, double gamma, double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, 
+    mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, mdvector_gpu<double> norm, 
+    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -445,12 +447,105 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
 }
 
-void apply_bcs_wrapper(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma, 
-      double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
-      mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list) 
+void apply_bcs_wrapper(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
+    unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, 
+    double P_fs, double gamma, double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, 
+    mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, mdvector_gpu<double> norm, 
+    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
 {
   unsigned int threads = 192;
   unsigned int blocks = ((nFpts - nGfpts_int) + threads - 1)/threads;
 
-  apply_bcs<<<threads, blocks>>>(U, nFpts, nGfpts_int, nVars, nDims, rho_fs, V_fs, P_fs, gamma, R_ref, T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list); 
+  apply_bcs<<<threads, blocks>>>(U, nFpts, nGfpts_int, nVars, nDims, rho_fs, V_fs, P_fs, gamma, R_ref, 
+      T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list); 
+}
+
+__global__
+void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm,
+    mdvector_gpu<double>outnorm, mdvector_gpu<double> waveSp, double gamma, double rus_k,
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (fpt >= nFpts)
+    return;
+
+  /* Currently hardcoded for Euler. Need to pass nVars as template arg. */
+  double FL[4]; double FR[4];
+  double WL[4]; double WR[4];
+
+  /* Initialize FL, FR */
+  for (unsigned int i = 0; i < 4; i++)
+  {
+    FL[i] = 0.0; FR[i] = 0.0;
+  }
+
+  /* Get interface-normal flux components  (from L to R)*/
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      FL[n] += Fconv(fpt, n, dim, 0) * norm(fpt, dim, 0);
+      FR[n] += Fconv(fpt, n, dim, 1) * norm(fpt, dim, 0);
+    }
+  }
+
+  /* Get left and right state variables */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
+  }
+
+  /* Get numerical wavespeed */
+  /*
+  if (input->equation == "AdvDiff")
+  {
+    waveSp[fpt] = 0.0;
+
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      waveSp[fpt] += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+  }
+  else if (input->equation == "EulerNS")
+  {
+  */
+  /* Compute speed of sound */
+  double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
+  double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
+
+  /* Compute normal velocities */
+  double VnL = 0.0; double VnR = 0.0;
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    VnL += WL[dim+1]/WL[0] * norm(fpt, dim, 0);
+    VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
+  }
+
+  waveSp(fpt) = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+  //}
+
+  /* Compute common normal flux */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    Fcomm(fpt, n, 0) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-rus_k) * (WR[n]-WL[n]);
+    Fcomm(fpt, n, 1) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-rus_k) * (WR[n]-WL[n]);
+
+    /* Correct for positive parent space sign convention */
+    Fcomm(fpt, n, 0) *= outnorm(fpt, 0);
+    Fcomm(fpt, n, 1) *= -outnorm(fpt, 1);
+  }
+
+}
+
+void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm,
+    mdvector_gpu<double>outnorm, mdvector_gpu<double> waveSp, double gamma, double rus_k,
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (nFpts + threads - 1)/threads;
+
+  rusanov_flux<<<threads, blocks>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
+      nFpts, nVars, nDims);
+
 }

@@ -83,7 +83,8 @@ void FRSolver::setup_update()
   {
     nStages = 5;
     rk_alpha = {-0.417890474499852, -1.192151694642677, -1.697784692471528, -1.514183444257156};
-    rk_beta = {0.149659021999229, 0.379210312999627, 0.822955029386982, 0.699450455949122, 0.153057247968152};
+    rk_beta = {0.149659021999229, 0.379210312999627, 0.822955029386982, 0.699450455949122, 
+      0.153057247968152};
   }
   else
   {
@@ -177,7 +178,8 @@ void FRSolver::restart(std::string restart_file)
           f >> val;
 
           /* Logic to deal with extra plot point (corner nodes and flux points). */
-          if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || (ppt+1)%nPpts1D == 0)
+          if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || 
+              (ppt+1)%nPpts1D == 0)
             continue;
 
           eles->U_spts(spt, ele, n) = val;
@@ -220,6 +222,9 @@ void FRSolver::solver_data_to_device()
   faces->Ucomm_d = faces->Ucomm;
   faces->Fcomm_d = faces->Fcomm;
   faces->norm_d = faces->norm;
+  faces->outnorm_d = faces->outnorm;
+  faces->dA_d = faces->dA;
+  faces->waveSp_d = faces->waveSp;
 
   /* Additional data */
   /* Geometry */
@@ -248,7 +253,7 @@ void FRSolver::compute_residual(unsigned int stage)
   if (input->viscous)
   {
     faces->compute_common_U();
-    U_from_faces(); 
+    U_from_faces();
     compute_dU();
     extrapolate_dU();
     dU_to_faces();
@@ -315,7 +320,7 @@ void FRSolver::initialize_U()
   else if (input->equation == "EulerNS")
   {
     if (input->ic_type == 0)
-    { 
+    {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
@@ -329,7 +334,7 @@ void FRSolver::initialize_U()
             Vsq += input->V_fs(dim) * input->V_fs(dim);
           }
 
-          eles->U_spts(spt, ele, 3)  = input->P_fs/(input->gamma-1.0) + 
+          eles->U_spts(spt, ele, 3)  = input->P_fs/(input->gamma-1.0) +
             0.5*input->rho_fs * Vsq;
         }
       }
@@ -387,7 +392,7 @@ void FRSolver::extrapolate_U()
 #ifdef _GPU
   /* Copy data to GPU */
   eles->U_spts_d = eles->U_spts;
- 
+
   /*
   cublasDgemm('N', 'N', eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
       eles->oppE_d.data(), eles->nFpts, eles->U_spts_d.data(), eles->nSpts, 0.0,
@@ -412,7 +417,7 @@ void FRSolver::U_to_faces()
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < eles->nVars; n++) 
+  for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
@@ -435,7 +440,9 @@ void FRSolver::U_to_faces()
 #endif
 
 #ifdef _GPU
-  U_to_faces_wrapper(eles->U_fpts_d, faces->U_d, eles->Ucomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, input->viscous);
+  U_to_faces_wrapper(eles->U_fpts_d, faces->U_d, eles->Ucomm_d, geo.fpt2gfpt_d,
+      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, input->viscous);
+
   check_error();
 
   /* Copy out result */
@@ -445,10 +452,10 @@ void FRSolver::U_to_faces()
 }
 
 void FRSolver::U_from_faces()
-{  
+{
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < eles->nVars; n++) 
+  for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
@@ -469,8 +476,10 @@ void FRSolver::U_from_faces()
 #ifdef _GPU
   /* Copy in data */
   faces->Ucomm_d = faces->Ucomm;
-  
-  U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts);
+
+  U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d,
+      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts);
+
   check_error();
 
   /* Copy out result */
@@ -533,18 +542,18 @@ void FRSolver::compute_dU()
   {
     alpha = 1.0; beta = 0.0;
     cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
-        eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, eles->U_spts_d.data(), 
-        eles->nSpts, &beta, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts);
+        eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, 
+        eles->U_spts_d.data(), eles->nSpts, &beta, eles->dU_spts_d.data() + dim * 
+        (eles->nSpts * eles->nVars * eles->nEles), eles->nSpts);
 
     check_error();
 
     alpha = 1.0; beta = 1.0;
 
     cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, &alpha,
-        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, eles->Ucomm_d.data(), 
-        eles->nFpts, &beta, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts);
+        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts,
+        eles->Ucomm_d.data(), eles->nFpts, &beta, eles->dU_spts_d.data() + dim * 
+        (eles->nSpts * eles->nVars * eles->nEles), eles->nSpts);
 
     check_error();
   }
@@ -565,11 +574,13 @@ void FRSolver::compute_dU()
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
             double dUtemp = eles->dU_spts(spt, ele, n, 0);
-            
-            eles->dU_spts(spt, ele, n, 0) = eles->dU_spts(spt, ele, n, 0) * eles->jaco_spts(1, 1, spt, ele)-
-                                      eles->dU_spts(spt, ele, n, 1) * eles->jaco_spts(1, 0, spt, ele); 
+
+            eles->dU_spts(spt, ele, n, 0) = eles->dU_spts(spt, ele, n, 0) * 
+              eles->jaco_spts(1, 1, spt, ele)- eles->dU_spts(spt, ele, n, 1) * 
+              eles->jaco_spts(1, 0, spt, ele); 
+
             eles->dU_spts(spt, ele, n, 1) = -dUtemp * eles->jaco_spts(0, 1, spt, ele) +
-                                      eles->dU_spts(spt, ele, n, 1) * eles->jaco_spts(0, 0, spt, ele); 
+              eles->dU_spts(spt, ele, n, 1) * eles->jaco_spts(0, 0, spt, ele); 
 
             eles->dU_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
             eles->dU_spts(spt, ele, n, 1) /= eles->jaco_det_spts(spt, ele);
@@ -617,10 +628,10 @@ void FRSolver::extrapolate_dU()
 
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha, eles->oppE_d.data(), 
-      eles->nFpts, eles->dU_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-      eles->nSpts, &beta, eles->dU_fpts_d.data() + dim * (eles->nFpts * eles->nVars * eles->nEles),
-      eles->nFpts);
+  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha, 
+      eles->oppE_d.data(), eles->nFpts, eles->dU_spts_d.data() + dim * (eles->nSpts * 
+      eles->nVars * eles->nEles), eles->nSpts, &beta, eles->dU_fpts_d.data() + dim * 
+      (eles->nFpts * eles->nVars * eles->nEles), eles->nFpts);
   }
 
   /* Copy out result */
@@ -656,7 +667,9 @@ void FRSolver::dU_to_faces()
 #endif
 
 #ifdef _GPU
-  dU_to_faces_wrapper(eles->dU_fpts_d, faces->dU_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, eles->nDims);
+  dU_to_faces_wrapper(eles->dU_fpts_d, faces->dU_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
+      eles->nVars, eles->nEles, eles->nFpts, eles->nDims);
+
   check_error();
 
   /* Copy out result */
@@ -692,7 +705,9 @@ void FRSolver::F_from_faces()
   faces->Fcomm_d = faces->Fcomm;
 
   /* Can reuse kernel here */
-  U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts);
+  U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
+      eles->nVars, eles->nEles, eles->nFpts);
+
   check_error();
 
   /* Copy out data */
@@ -759,16 +774,16 @@ void FRSolver::compute_dF()
     cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
         eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, 
         eles->F_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts, &beta, eles->dF_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts);
+        eles->nSpts, &beta, eles->dF_spts_d.data() + dim * (eles->nSpts * eles->nVars * 
+        eles->nEles), eles->nSpts);
 
     check_error();
 
     alpha = 1.0; beta = 1.0;
     cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, &alpha,
-        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, eles->Fcomm_d.data(), 
-        eles->nFpts, &beta, eles->dF_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts);
+        eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, 
+        eles->Fcomm_d.data(), eles->nFpts, &beta, eles->dF_spts_d.data() + dim * 
+        (eles->nSpts * eles->nVars * eles->nEles), eles->nSpts);
 
     check_error();
   }
@@ -827,7 +842,8 @@ void FRSolver::update()
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / 
+            eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
   }
 
   /* Final stage */
@@ -839,7 +855,8 @@ void FRSolver::update()
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
+          eles->U_spts(spt, ele, n) -=rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * 
+            divF(spt, ele, n, stage);
 
   flow_time += dt[0];
  
@@ -875,8 +892,8 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / eles->jaco_det_spts(spt,ele)* 
-            (divF(spt, ele, n, stage) + source(spt, ele, n));
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / 
+            eles->jaco_det_spts(spt,ele) * (divF(spt, ele, n, stage) + source(spt, ele, n));
   }
 
   /* Final stage */
@@ -888,7 +905,8 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -=  rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * (divF(spt, ele, n, stage) + source(spt, ele, n));
+          eles->U_spts(spt, ele, n) -= rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) *
+            (divF(spt, ele, n, stage) + source(spt, ele, n));
 
 }
 
@@ -906,16 +924,13 @@ void FRSolver::compute_element_dt()
       if (gfpt == -1)
         continue;
 
-      double waveSp = faces->waveSp[gfpt] / faces->dA[gfpt];
+      double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
 
       waveSp_max = std::max(waveSp, waveSp_max);
     }
 
-    /* Experiment: Scale CFL with order */
     /* Note: CFL is applied to parent space element with width 2 */
-    //dt[ele] = (input->CFL) / ((order+1)*(order+1)) * (2.0 / (waveSp_max+1.e-10));
     dt[ele] = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
-    //dt[ele] = (input->CFL) / ((order+1) * (order+1) + 0.4) * (2.0 / (waveSp_max+1.e-10));
   }
 }
 
@@ -1070,10 +1085,10 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
     for (unsigned int ele =0; ele < eles->nEles; ele++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       divF(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
-  //for (unsigned int n = 0; n < eles->nVars; n++)
-  //  max_res[n] = *std::max_element(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1));
+
   for (unsigned int n = 0; n < eles->nVars; n++)
-    max_res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1), 0.0, square<double>()));
+    max_res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, 
+            eles->nEles-1, n, nStages-1), 0.0, square<double>()));
 
   std::cout << iter + restart_iter << " ";
   for (auto &val : max_res)
@@ -1128,13 +1143,14 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
       double CP = (PL - input->P_fs) * fac;
 
       /* Write CP distrubtion to file */
-      g << std:: scientific << faces->coord(fpt, 0) << " " << faces->coord(fpt, 1) << " " << CP << std::endl;
+      g << std:: scientific << faces->coord(fpt, 0) << " " << faces->coord(fpt, 1) << " " << 
+        CP << std::endl;
 
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
-        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * CP * faces->norm(fpt, dim, 0) * 
-          faces->dA[fpt];
+        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * CP * 
+          faces->norm(fpt, dim, 0) * faces->dA(fpt);
       }
 
       if (input->viscous)
@@ -1171,7 +1187,8 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
           else
           {
             double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
+            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + 
+                input->c_sth);
           }
 
           double du_dx = (momx_dx - rho_dx * u) / rho;
@@ -1191,7 +1208,8 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
           taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
-            force_visc[dim] -= eles->weights_spts[count%eles->nSpts1D] * taun[dim] * faces->dA[fpt] * fac;
+            force_visc[dim] -= eles->weights_spts[count%eles->nSpts1D] * taun[dim] * 
+              faces->dA(fpt) * fac;
 
         }
         else

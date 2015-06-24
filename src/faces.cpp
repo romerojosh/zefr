@@ -37,12 +37,12 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   if (input->equation == "EulerNS")
     P.assign({nFpts, 2});
 
-  waveSp.assign(nFpts, 0.0);
+  waveSp.assign({nFpts}, 0.0);
 
   /* Allocate memory for geometry structures */
   norm.assign({nFpts, nDims, 2});
   outnorm.assign({nFpts, 2});
-  dA.assign(nFpts,0.0);
+  dA.assign({nFpts},0.0);
   jaco.assign({nFpts, nDims, nDims , 2});
 }
 
@@ -685,7 +685,18 @@ void Faces::compute_Fvisc()
 void Faces::compute_common_F()
 {
   if (input->fconv_type == "Rusanov")
+#ifdef _GPU
     rusanov_flux();
+#endif
+
+#ifdef _APU
+    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, norm_d, outnorm_d, waveSp_d, input->gamma, 
+        input->rus_k, nFpts, nVars, nDims);
+
+    check_error();
+
+    F_comm = F_comm_d;
+#endif
   else
     ThrowException("Numerical convective flux type not recognized!");
 
@@ -791,10 +802,10 @@ void Faces::rusanov_flux()
     /* Get numerical wavespeed */
     if (input->equation == "AdvDiff")
     {
-      waveSp[fpt] = 0.0;
+      waveSp(fpt) = 0.0;
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        waveSp[fpt] += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+        waveSp(fpt) += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
     }
     else if (input->equation == "EulerNS")
     {
@@ -810,14 +821,14 @@ void Faces::rusanov_flux()
         VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
       }
 
-      waveSp[fpt] = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      waveSp(fpt) = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
     }
 
     /* Compute common normal flux */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp[fpt])*(1.0-k) * (WR[n]-WL[n]);
-      Fcomm(fpt, n, 1) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp[fpt])*(1.0-k) * (WR[n]-WL[n]);
+      Fcomm(fpt, n, 0) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-k) * (WR[n]-WL[n]);
+      Fcomm(fpt, n, 1) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-k) * (WR[n]-WL[n]);
 
       /* Correct for positive parent space sign convention */
       Fcomm(fpt, n, 0) *= outnorm(fpt, 0);
@@ -833,8 +844,8 @@ void Faces::transform_flux()
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) *= dA[fpt];
-      Fcomm(fpt, n, 1) *= dA[fpt];
+      Fcomm(fpt, n, 0) *= dA(fpt);
+      Fcomm(fpt, n, 1) *= dA(fpt);
     }
   }
 }
