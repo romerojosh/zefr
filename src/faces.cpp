@@ -31,6 +31,14 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   Fconv.assign({nFpts, nVars, nDims, 2});
   Fvisc.assign({nFpts, nVars, nDims, 2});
   Fcomm.assign({nFpts, nVars, 2});
+
+  /* If viscous, allocate arrays used for LDG flux */
+  if(input->viscous)
+  {
+    Fcomm_temp.assign({nFpts, nVars, nDims});
+    LDG_bias.assign({nFpts}, 0);
+  }
+
   Ucomm.assign({nFpts, nVars, 2});
 
   /* If running Euler/NS, allocate memory for pressure */
@@ -85,6 +93,10 @@ void Faces::apply_bcs()
         }
 
         U(fpt, 3, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
+
         break;
       }
 
@@ -93,6 +105,10 @@ void Faces::apply_bcs()
         /* Extrapolate boundary values from interior */
         for (unsigned int n = 0; n < nVars; n++)
           U(fpt, n, 1) = U(fpt, n, 0);
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
+
         break;
       }
 
@@ -175,6 +191,9 @@ void Faces::apply_bcs()
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
+
         break;
       }
 
@@ -231,6 +250,9 @@ void Faces::apply_bcs()
         }
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
 
         break;
       }
@@ -307,6 +329,10 @@ void Faces::apply_bcs()
           
           U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq; 
         }
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
+
  
         break;
 
@@ -326,6 +352,10 @@ void Faces::apply_bcs()
           U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
 
         U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
+
         break;
       }
 
@@ -349,6 +379,10 @@ void Faces::apply_bcs()
           U(fpt, dim+1, 1) = 0.0;
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0);
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
+
 
         break;
       }
@@ -377,6 +411,9 @@ void Faces::apply_bcs()
         }
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
 
         break;
       }
@@ -440,11 +477,12 @@ void Faces::apply_bcs()
 #ifdef _GPU
   apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, nVars, nDims, input->rho_fs, input->V_fs_d, input->P_fs, input->gamma, 
       input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, input->norm_fs_d, 
-      norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d) ;
+      norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d);
 
   check_error();
 
   U = U_d;
+  LDG_bias = LDG_bias_d;
 #endif
 
 }
@@ -729,11 +767,30 @@ void Faces::compute_common_F()
   if (input->viscous)
   {
     if (input->fvisc_type == "LDG")
+    {
+//#ifdef _CPU
       LDG_flux();
+//#endif
+
+#ifdef _GPU
+      /*
+      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_visc_d, Fcomm_d, norm_d, outnorm_d, input->ldb_b,
+          input->ldg_tau, nFpts, nVars, nDims);
+
+      check_error();
+
+      Fcomm = Fcomm_d;
+      */
+#endif
+    }
+    /*
     else if (input->fvisc_type == "Central")
       central_flux();
+    */
     else
+    {
       ThrowException("Numerical viscous flux type not recognized!");
+    }
   }
 
   //transform_flux();
@@ -910,9 +967,9 @@ void Faces::LDG_flux()
   double tau = input->ldg_tau;
   double beta = input->ldg_b;
 
-  mdvector<double> Fcomm_temp({nVars,nDims});
+  Fcomm_temp.fill(0.0);
 
-#pragma omp parallel for firstprivate(FL, FR, WL, WR, Fcomm_temp, tau, beta)
+#pragma omp parallel for firstprivate(FL, FR, WL, WR, tau, beta)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
 
@@ -941,38 +998,23 @@ void Faces::LDG_flux()
     }
 
     /* Compute common normal viscous flux and accumulate */
-    /* If fpt is on interior face, use normal stencil */
-    if (fpt < geo->nGfpts_int)
+    if (!LDG_bias(fpt))
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm_temp(n,0) += 0.5*(Fvisc(fpt, n, 0, 0) + Fvisc(fpt, n, 0, 1)) + tau * norm(fpt, 0, 0)* (WL[n]
+        Fcomm_temp(fpt, n, 0) += 0.5*(Fvisc(fpt, n, 0, 0) + Fvisc(fpt, n, 0, 1)) + tau * norm(fpt, 0, 0)* (WL[n]
             - WR[n]) + beta * norm(fpt, 0, 0)* (FL[n] - FR[n]);
-        Fcomm_temp(n,1) += 0.5*(Fvisc(fpt, n, 1, 0) + Fvisc(fpt, n, 1, 1)) + tau * norm(fpt, 1, 0)* (WL[n]
+        Fcomm_temp(fpt, n, 1) += 0.5*(Fvisc(fpt, n, 1, 0) + Fvisc(fpt, n, 1, 1)) + tau * norm(fpt, 1, 0)* (WL[n]
             - WR[n]) + beta * norm(fpt, 1, 0)* (FL[n] - FR[n]);
       }
     }
-    /* Else, only use left flux state (unless periodic or adiabatic wall) */
+    /* Else, only use left flux state */
     else
     {
-      unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
-      if (bnd_id != 1 && bnd_id != 10 && bnd_id != 11)
+      for (unsigned int n = 0; n < nVars; n++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-          Fcomm_temp(n,0) += Fvisc(fpt, n, 0, 0) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
-          Fcomm_temp(n,1) += Fvisc(fpt, n, 1, 0) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
-        }
-      }
-      else
-      {
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-          Fcomm_temp(n,0) += 0.5*(Fvisc(fpt, n, 0, 0) + Fvisc(fpt, n, 0, 1)) + tau * norm(fpt, 0, 0)* (WL[n]
-              - WR[n]) + beta * norm(fpt, 0, 0)* (FL[n] - FR[n]);
-          Fcomm_temp(n,1) += 0.5*(Fvisc(fpt, n, 1, 0) + Fvisc(fpt, n, 1, 1)) + tau * norm(fpt, 1, 0)* (WL[n]
-              - WR[n]) + beta * norm(fpt, 1, 0)* (FL[n] - FR[n]);
-        }
+        Fcomm_temp(fpt, n, 0) += Fvisc(fpt, n, 0, 0) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
+        Fcomm_temp(fpt, n, 1) += Fvisc(fpt, n, 1, 0) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
       }
     }
 
@@ -980,12 +1022,11 @@ void Faces::LDG_flux()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm(fpt, n, 0) += (Fcomm_temp(n, dim) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-        Fcomm(fpt, n, 1) += (Fcomm_temp(n, dim) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+        Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
+        Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
       }
     }
 
-    Fcomm_temp.fill(0);
   }
 }
 

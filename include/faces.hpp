@@ -38,17 +38,19 @@ class Faces
     void transform_flux();
 
   protected:
-    mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Ucomm, P;
+    mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Fcomm_temp, Ucomm, P;
     mdvector<double> norm, jaco, coord;
     mdvector<int> outnorm;
     //std::vector<double> dA, waveSp;
     mdvector<double> dA, waveSp;
+    mdvector<int> LDG_bias;
 
 #ifdef _GPU
-    mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Ucomm_d, P_d;
+    mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, Ucomm_d, P_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<int> outnorm_d;
     mdvector_gpu<double> dA_d, waveSp_d;
+    mdvector_gpu<int> LDG_bias_d;
 #endif
 
   public:
