@@ -263,7 +263,10 @@ void FRSolver::compute_residual(unsigned int stage)
   }
 
   faces->compute_common_F();
+
   eles->transform_flux();
+  faces->transform_flux();
+
   F_from_faces();
 
 

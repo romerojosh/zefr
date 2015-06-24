@@ -547,5 +547,28 @@ void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
   rusanov_flux<<<threads, blocks>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
       nFpts, nVars, nDims);
+}
+
+__global__
+void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
+    unsigned int nFpts, unsigned int nVars)
+{
+    const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+    const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (fpt >= nFpts || var >= nVars)
+      return;
+
+    Fcomm(fpt, var, 0) *= dA(fpt);
+    Fcomm(fpt, var, 1) *= dA(fpt);
+}
+
+void transform_flux_faces_wrapper(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
+    unsigned int nFpts, unsigned int nVars)
+{
+  dim3 threads(32,4);
+  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  transform_flux_faces<<<threads, blocks>>>(Fcomm, dA, nFpts, nVars);
 
 }

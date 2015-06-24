@@ -715,7 +715,7 @@ void Faces::compute_common_F()
       ThrowException("Numerical viscous flux type not recognized!");
   }
 
-  transform_flux();
+  //transform_flux();
 }
 
 void Faces::compute_common_U()
@@ -844,6 +844,7 @@ void Faces::rusanov_flux()
 
 void Faces::transform_flux()
 {
+#ifdef _CPU
 #pragma omp parallel for collapse(2)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
@@ -853,6 +854,18 @@ void Faces::transform_flux()
       Fcomm(fpt, n, 1) *= dA(fpt);
     }
   }
+#endif
+
+#ifdef _GPU
+  Fcomm_d = Fcomm;
+
+  transform_flux_faces_wrapper(Fcomm_d, dA_d, nFpts, nVars);
+
+  check_error();
+
+  Fcomm = Fcomm_d;
+#endif
+
 }
 
 void Faces::LDG_flux()
