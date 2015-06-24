@@ -1,6 +1,6 @@
 CXX = g++
 #CXX = g++-4.9
-flags = -Ofast -Wall -Wextra -Wconversion -fopenmp 
+flags = -Ofast -Wall -Wextra -Wconversion -fopenmp -g
 flags += -D_CPU
 #libs = -L /usr/local/Cellar/openblas/0.2.13/lib -lopenblas
 #inc = -I /usr/local/Cellar/openblas/0.2.13/include 

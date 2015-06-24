@@ -48,7 +48,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
 void Faces::apply_bcs()
 {
-#ifdef _GPU
+#ifdef _CPU
   /* Create some useful variables outside loop */
   std::array<double, 3> VL, VR;
 
@@ -63,7 +63,7 @@ void Faces::apply_bcs()
     {
       case 1:/* Periodic */
       {
-        unsigned int per_fpt = geo->per_fpt_list(fpt);
+        unsigned int per_fpt = geo->per_fpt_list(fpt - geo->nGfpts_int);
 
         for (unsigned int n = 0; n < nVars; n++)
         {
