@@ -219,6 +219,7 @@ void FRSolver::solver_data_to_device()
   faces->P_d = faces->P;
   faces->Ucomm_d = faces->Ucomm;
   faces->Fcomm_d = faces->Fcomm;
+  faces->norm_d = faces->norm;
 
   /* Additional data */
   /* Geometry */

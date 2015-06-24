@@ -40,3 +40,417 @@ void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> F_gfpts, mdvecto
   compute_Fconv_fpts_2D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma);
 }
 
+__global__
+void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma, 
+      double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
+      mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list) 
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
+
+  if (fpt >= nFpts)
+    return;
+
+  unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
+
+  /* Apply specified boundary condition */
+  switch(bnd_id)
+  {
+    case 1:/* Periodic */
+    {
+      unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
+
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        U(fpt, n, 1) = U(per_fpt, n, 0);
+      }
+      break;
+    }
+  
+    case 2: /* Farfield and Supersonic Inlet */
+    {
+      /* Set boundaries to freestream values */
+      U(fpt, 0, 1) = rho_fs;
+
+      double Vsq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        U(fpt, dim+1, 1) = rho_fs * V_fs(dim);
+        Vsq += V_fs(dim) * V_fs(dim);
+      }
+
+      U(fpt, 3, 1) = P_fs/(gamma-1.0) + 0.5*rho_fs * Vsq; 
+      break;
+    }
+
+    case 3: /* Supersonic Outlet */
+    {
+      /* Extrapolate boundary values from interior */
+      for (unsigned int n = 0; n < nVars; n++)
+        U(fpt, n, 1) = U(fpt, n, 0);
+      break;
+    }
+
+    case 4: /* Subsonic Inlet */
+    {
+      double VL[3]; double VR[3];
+      /*
+      if (!input->viscous)
+        ThrowException("Subsonic inlet only for viscous flows currently!");
+      */
+
+      /* Get states for convenience */
+      double rhoL = U(fpt, 0, 0);
+
+      double Vsq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VL[dim] = U(fpt, dim+1, 0) / rhoL;
+        Vsq += VL[dim] * VL[dim];
+      }
+
+      double eL = U(fpt, 3 ,0);
+      double PL = (gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
+
+
+      /* Compute left normal velocity and dot product of normal*/
+      double VnL = 0.0;
+      double alpha = 0.0;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += VL[dim] * norm(fpt, dim, 0);
+        alpha += norm_fs(dim) * norm(fpt, dim, 0);
+      }
+
+      /* Compute speed of sound */
+      double cL = std::sqrt(gamma * PL / rhoL);
+
+      /* Extrapolate Riemann invariant */
+      double R_plus  = VnL + 2.0 * cL / (gamma - 1.0);
+
+      /* Specify total enthalpy */
+      double H_tot = gamma * R_ref / (gamma - 1.0) * T_tot_fs;
+
+      /* Compute total speed of sound squared */
+      double c_tot_sq = (gamma - 1.0) * (H_tot - (eL + PL) / rhoL + 0.5 * Vsq) + cL * cL;
+
+      /* Coefficients of Quadratic equation */
+      double aa = 1.0 + 0.5 * (gamma - 1.0) * alpha * alpha;
+      double bb = -(gamma - 1.0) * alpha * R_plus;
+      double cc = 0.5 * (gamma - 1.0) * R_plus * R_plus - 2.0 * c_tot_sq / (gamma - 1.0);
+
+      /* Solve quadratic for right velocity */
+      double dd = bb * bb  - 4.0 * aa * cc;
+      dd = std::sqrt(max(dd, 0.0));  // Max to keep from producing NaN
+      double VR_mag = (dd - bb) / (2.0 * aa);
+      VR_mag = max(VR_mag, 0.0);
+      double VR_mag_sq = VR_mag * VR_mag;
+
+      /* Compute right speed of sound and Mach */
+      /* Note: Need to verify what is going on here. */
+      double cR_sq = c_tot_sq - 0.5 * (gamma - 1.0) * VR_mag_sq;
+      double Mach_sq = VR_mag_sq / cR_sq;
+      Mach_sq = min(Mach_sq, 1.0); // Clamp to Mach = 1
+      VR_mag_sq = Mach_sq * cR_sq;
+      VR_mag = std::sqrt(VR_mag_sq);
+      cR_sq = c_tot_sq - 0.5 * (gamma - 1.0) * VR_mag_sq;
+
+      /* Compute right states */
+
+      double TR = cR_sq / (gamma * R_ref);
+      double PR = P_tot_fs * std::pow(TR / T_tot_fs, gamma/ (gamma - 1.0));
+
+      U(fpt, 0, 1) = PR / (R_ref * TR);
+
+      Vsq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VR[dim] = VR_mag * norm_fs(dim);
+        U(fpt, dim+1, 1) = U(fpt, 0, 1) * VR[dim];
+        Vsq += VR[dim] * VR[dim];
+      }
+
+      U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
+
+      break;
+    }
+
+    case 5: /* Subsonic Outlet */
+    {
+      /*
+      if (!input->viscous)
+        ThrowException("Subsonic outlet only for viscous flows currently!");
+      */
+
+      double VL[3]; double VR[3];
+
+      /* Get states for convenience */
+      double rhoL = U(fpt, 0, 0);
+
+      double Vsq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VL[dim] = U(fpt, dim+1, 0) / rhoL;
+        Vsq += VL[dim] * VL[dim];
+      }
+
+      double eL = U(fpt, 3 ,0);
+      double PL = (gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
+
+      /* Compute left normal velocity */
+      double VnL = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += VL[dim] * norm(fpt, dim, 0);
+      }
+
+      /* Compute speed of sound */
+      double cL = std::sqrt(gamma * PL / rhoL);
+
+      /* Extrapolate Riemann invariant */
+      double R_plus  = VnL + 2.0 * cL / (gamma - 1.0);
+
+      /* Extrapolate entropy */
+      double s = PL / std::pow(rhoL, gamma);
+
+      /* Fix pressure */
+      double PR = P_fs;
+
+      U(fpt, 0, 1) = std::pow(PR / s, 1.0 / gamma);
+
+      /* Compute right speed of sound and velocity magnitude */
+      double cR = std::sqrt(gamma * PR/ U(fpt, 0, 1));
+
+      double VnR = R_plus - 2.0 * cR / (gamma - 1.0);
+
+      Vsq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VR[dim] = VL[dim] + (VnR - VnL) * norm(fpt, dim, 0);
+        U(fpt, dim+1, 1) = U(fpt, 0, 1) * VR[dim];
+        Vsq += VR[dim] * VR[dim];
+      }
+
+      U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
+
+      break;
+    }
+
+    case 6: /* Characteristic (from HiFiLES) */
+    {
+      /* Compute wall normal velocities */
+      double VnL = 0.0; double VnR = 0.0;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+        VnR += V_fs(dim) * norm(fpt, dim, 0);
+      }
+    
+
+      /* Compute pressure. TODO: Compute pressure once!*/
+      double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
+          U(fpt, 2, 0)) / U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+      double PR = P_fs;
+
+      /* Compute Riemann Invariants */
+      double Rp = VnL + 2.0 / (gamma - 1) * std::sqrt(gamma * PL / 
+          U(fpt, 0,0));
+      double Rn = VnR - 2.0 / (gamma - 1) * std::sqrt(gamma * PR / 
+          rho_fs);
+
+      double cstar = 0.25 * (gamma - 1) * (Rp - Rn);
+      double ustarn = 0.5 * (Rp + Rn);
+
+      if (VnL < 0.0) /* Case 1: Inflow */
+      {
+        double s_inv = std::pow(rho_fs, gamma) / PR;
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vsq += V_fs(dim) * V_fs(dim);
+
+        double H_fs = gamma / (gamma - 1.0) * PR / rho_fs +
+            0.5 * Vsq;
+
+        double rhoR = std::pow(1.0 / gamma * (s_inv * cstar * cstar), 1.0/ 
+            (gamma - 1.0));
+
+        U(fpt, 0, 1) = rhoR;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + V_fs(dim) - VnR * 
+            norm(fpt, dim, 0));
+
+        PR = rhoR / gamma * cstar * cstar;
+        U(fpt, 3, 1) = rhoR * H_fs - PR;
+        
+      }
+      else  /* Case 2: Outflow */
+      {
+        double rhoL = U(fpt, 0, 0);
+        double s_inv = std::pow(rhoL, gamma) / PL;
+
+        double rhoR = std::pow(1.0 / gamma * (s_inv * cstar * cstar), 1.0/ 
+            (gamma - 1.0));
+
+        U(fpt, 0, 1) = rhoR;
+        U(fpt, 1, 1) = rhoR * (ustarn * norm(fpt, 0, 0) +(U(fpt, 1, 0) / 
+              U(fpt, 0, 0) - VnL * norm(fpt, 0, 0)));
+        U(fpt, 2, 1) = rhoR * (ustarn * norm(fpt, 1, 0) +(U(fpt, 2, 0) / 
+              U(fpt, 0, 0) - VnL * norm(fpt, 1, 0)));
+        double PR = rhoR / gamma * cstar * cstar;
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoL * rhoL) ;
+        
+        U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * rhoR * Vsq; 
+      }
+
+      break;
+
+    }
+    case 7: /* Slip Wall */
+    {
+      double momN = 0.0;
+
+      /* Compute wall normal momentum */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+
+      U(fpt, 0, 1) = U(fpt, 0, 0);
+
+      /* Set boundary state to cancel normal velocity */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+
+      U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+      break;
+    }
+
+    case 8: /* No-slip Wall (isothermal) */
+    {
+      /*
+      if (!input->viscous)
+        ThrowException("No slip wall boundary only for viscous flows!");
+      */
+
+      double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
+          U(fpt, 2, 0)) / U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+
+      double PR = PL;
+      double TR = T_wall;
+      
+      U(fpt, 0, 1) = PR / (R_ref * TR);
+
+      /* Set velocity to zero */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        U(fpt, dim+1, 1) = 0.0;
+
+      U(fpt, 3, 1) = PR / (gamma - 1.0);
+
+      break;
+    }
+
+    case 9: /* No-slip Wall (isothermal and moving) */
+    {
+      /*
+      if (!input->viscous)
+        ThrowException("No slip wall boundary only for viscous flows!");
+      */
+
+      double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
+          U(fpt, 2, 0)) / U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+
+      double PR = PL;
+      double TR = T_wall;
+      
+      U(fpt, 0, 1) = PR / (R_ref * TR);
+
+      /* Set velocity to wall velocity */
+      double V_wall_sq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        U(fpt, dim+1, 1) = U(fpt, 0 , 1) * V_wall(dim);
+        V_wall_sq += V_wall(dim) * V_wall(dim);
+      }
+
+      U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
+
+      break;
+    }
+
+    case 10: /* No-slip Wall (adiabatic) */
+    {
+      /*
+      if (!input->viscous)
+        ThrowException("No slip wall boundary only for viscous flows!");
+      */
+
+      /* Extrapolate density */
+      U(fpt, 0, 1) = U(fpt, 0, 0);
+
+      /* Extrapolate pressure */
+      double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
+          U(fpt, 2, 0)) / U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+      double PR = PL; 
+
+      /* Set velocity to zero */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        U(fpt, dim+1, 1) = 0.0;
+
+      U(fpt, 3, 1) = PR / (gamma - 1.0);
+
+      break;
+    }
+
+    case 11: /* No-slip Wall (adiabatic and moving) */
+    {
+      /*
+      if (!input->viscous)
+        ThrowException("No slip wall boundary only for viscous flows!");
+      */
+
+      /* Extrapolate density */
+      U(fpt, 0, 1) = U(fpt, 0, 0);
+
+      /* Extrapolate pressure */
+      double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
+          U(fpt, 2, 0)) / U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+      double PR = PL; 
+
+      /* Set velocity to wall velocity */
+      double V_wall_sq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        U(fpt, dim+1, 1) = U(fpt, 0 , 1) * V_wall(dim);
+        V_wall_sq += V_wall(dim) * V_wall(dim);
+      }
+
+      U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
+
+      break;
+    }
+  }
+
+}
+
+void apply_bcs_wrapper(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma, 
+      double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
+      mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list) 
+{
+  unsigned int threads = 192;
+  unsigned int blocks = ((nFpts - nGfpts_int) + threads - 1)/threads;
+
+  apply_bcs<<<threads, blocks>>>(U, nFpts, nGfpts_int, nVars, nDims, rho_fs, V_fs, P_fs, gamma, R_ref, T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list); 
+}

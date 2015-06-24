@@ -28,7 +28,7 @@ class mdvector
 {
   private:
     int ndims = 0;
-    unsigned int nvals;
+    unsigned int nvals = 0;
     std::array<unsigned int,4> dims; 
     std::array<unsigned int,4> strides;
     std::vector<T> values;
@@ -128,6 +128,7 @@ template <typename T>
 void mdvector<T>::push_back(T value)
 {
   values.push_back(value);
+  nvals++;
 }
 
 template <typename T>

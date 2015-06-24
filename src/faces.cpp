@@ -432,13 +432,18 @@ void Faces::apply_bcs()
 
         break;
       }
-    }
+    
   } 
 #endif
 
-#ifdef _APU
-  apply_bcs_wrapper(U_d, gfpts2bnd, per_fpt_pairs, input->rho_fs, input->V_fs_d, input->P_fs,
-      input->gamma, input->norm_fs_d, norm_d, input->R_ref, input->T_tot_fs, input->T_wall, input->V_wall_d);
+#ifdef _GPU
+  apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, nVars, nDims, input->rho_fs, input->V_fs_d, input->P_fs, input->gamma, 
+      input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, input->norm_fs_d, 
+      norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d) ;
+
+  check_error();
+
+  U = U_d;
 #endif
 
 }
@@ -562,9 +567,6 @@ void Faces::compute_Fconv()
 #endif
 
 #ifdef _GPU
-
-      /* Copy in data */
-      U_d = U;
 
       compute_Fconv_fpts_2D_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, input->gamma);
       check_error();
