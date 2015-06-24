@@ -41,6 +41,97 @@ void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> F_gfpts, mdvecto
 }
 
 __global__
+void compute_Fvisc_fpts_2D_EulerNS(mdvector_gpu<double> Fvisc, 
+    mdvector_gpu<double> U, mdvector_gpu<double> dU, unsigned int nFpts, double gamma, 
+        double prandtl, double mu_in, double c_sth, double rt, bool fix_vis)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (fpt >= nFpts)
+    return;
+
+  for (unsigned int slot = 0; slot < 2; slot++)
+  {
+    /* Setting variables for convenience */
+    /* States */
+    double rho = U(fpt, 0, slot);
+    double momx = U(fpt, 1, slot);
+    double momy = U(fpt, 2, slot);
+    double e = U(fpt, 3, slot);
+
+    double u = momx / rho;
+    double v = momy / rho;
+    double e_int = e / rho - 0.5 * (u*u + v*v);
+
+    /* Gradients */
+    double rho_dx = dU(fpt, 0, 0, slot);
+    double momx_dx = dU(fpt, 1, 0, slot);
+    double momy_dx = dU(fpt, 2, 0, slot);
+    double e_dx = dU(fpt, 3, 0, slot);
+    
+    double rho_dy = dU(fpt, 0, 1, slot);
+    double momx_dy = dU(fpt, 1, 1, slot);
+    double momy_dy = dU(fpt, 2, 1, slot);
+    double e_dy = dU(fpt, 3, 1, slot);
+
+    /* Set viscosity */
+    double mu;
+    if (fix_vis)
+    {
+      mu = mu_in;
+    }
+    /* If desired, use Sutherland's law */
+    else
+    {
+      double rt_ratio = (gamma - 1.0) * e_int / (rt);
+      mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+    }
+
+    double du_dx = (momx_dx - rho_dx * u) / rho;
+    double du_dy = (momx_dy - rho_dy * u) / rho;
+
+    double dv_dx = (momy_dx - rho_dx * v) / rho;
+    double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+    double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+    double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+
+    double de_dx = (e_dx - dke_dx - rho_dx * e_int) / rho;
+    double de_dy = (e_dy - dke_dy - rho_dy * e_int) / rho;
+
+    double diag = (du_dx + dv_dy) / 3.0;
+
+    double tauxx = 2.0 * mu * (du_dx - diag);
+    double tauxy = mu * (du_dy + dv_dx);
+    double tauyy = 2.0 * mu * (dv_dy - diag);
+
+    /* Set viscous flux values */
+    Fvisc(fpt, 0, 0, slot) = 0.0;
+    Fvisc(fpt, 1, 0, slot) = -tauxx;
+    Fvisc(fpt, 2, 0, slot) = -tauxy;
+    Fvisc(fpt, 3, 0, slot) = -(u * tauxx + v * tauxy + (mu / prandtl) *
+        gamma * de_dx);
+
+    Fvisc(fpt, 0, 1, slot) = 0.0;
+    Fvisc(fpt, 1, 1, slot) = -tauxy;
+    Fvisc(fpt, 2, 1, slot) = -tauyy;
+    Fvisc(fpt, 3, 1, slot) = -(u * tauxy + v * tauyy + (mu / prandtl) *
+        gamma * de_dy);
+  }
+
+}
+
+void compute_Fvisc_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> Fvisc, 
+    mdvector_gpu<double> U, mdvector_gpu<double> dU, unsigned int nFpts, double gamma, 
+        double prandtl, double mu_in, double c_sth, double rt, bool fix_vis)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (nFpts + threads - 1)/threads;
+
+  compute_Fvisc_fpts_2D_EulerNS<<<threads, blocks>>>(Fvisc, U, dU, nFpts, gamma, 
+      prandtl, mu_in, c_sth, rt, fix_vis);
+}
+__global__
 void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, 
     double P_fs, double gamma, double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, 
@@ -458,6 +549,89 @@ void apply_bcs_wrapper(mdvector_gpu<double> U, unsigned int nFpts, unsigned int 
 
   apply_bcs<<<threads, blocks>>>(U, nFpts, nGfpts_int, nVars, nDims, rho_fs, V_fs, P_fs, gamma, R_ref, 
       T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list); 
+}
+
+__global__
+void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int nFpts, 
+    unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
+    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
+
+  if (fpt >= nFpts)
+    return;
+
+  unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
+
+  /* Apply specified boundary condition */
+  if (bnd_id == 1) /* Periodic */
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+          //unsigned int per_fpt = per_fpt_pairs[fpt];
+          unsigned int per_fpt = per_fpt_list(fpt);
+          dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
+      }
+    }
+  }
+  else if(bnd_id == 10 || bnd_id == 11) /* Adibatic Wall */
+  {
+    /* Extrapolate gradients except for energy */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars - 1; n++)
+      {
+          dU(fpt, n, dim, 1) = dU(fpt, n, dim, 0);
+      }
+    }
+
+    /* Compute energy gradient */
+    /* Get right states and velocity gradients*/
+    double rho = U(fpt, 0, 1);
+    double momx = U(fpt, 1, 1);
+    double momy = U(fpt, 2, 1);
+    double e = U(fpt, 3, 1);
+
+    double u = momx / rho;
+    double v = momy / rho;
+    double e_int = e / rho - 0.5 * (u*u + v*v);
+
+    double rho_dx = dU(fpt, 0, 0, 1);
+    double momx_dx = dU(fpt, 1, 0, 1);
+    double momy_dx = dU(fpt, 2, 0, 1);
+    
+    double rho_dy = dU(fpt, 0, 1, 1);
+    double momx_dy = dU(fpt, 1, 1, 1);
+    double momy_dy = dU(fpt, 2, 1, 1);
+
+    double du_dx = (momx_dx - rho_dx * u) / rho;
+    double du_dy = (momx_dy - rho_dy * u) / rho;
+
+    double dv_dx = (momy_dx - rho_dx * v) / rho;
+    double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+    double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+    double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+
+    dU(fpt, 3, 0, 1) = (dke_dx + rho_dx * e_int);
+    dU(fpt, 3, 1, 1) = (dke_dy + rho_dy * e_int);
+
+    }
+
+}
+
+
+void apply_bcs_dU_wrapper(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int nFpts, 
+    unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
+    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = ((nFpts - nGfpts_int) + threads - 1)/threads;
+
+  apply_bcs_dU<<<threads, blocks>>>(dU, U, nFpts, nGfpts_int, nVars, nDims, 
+      gfpt2bnd, per_fpt_list);
 }
 
 __global__

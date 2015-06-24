@@ -220,6 +220,7 @@ void FRSolver::solver_data_to_device()
   faces->U_d = faces->U;
   faces->dU_d = faces->dU;
   faces->Fconv_d = faces->Fconv;
+  faces->Fvisc_d = faces->Fvisc;
   faces->P_d = faces->P;
   faces->Ucomm_d = faces->Ucomm;
   faces->Fcomm_d = faces->Fcomm;
@@ -593,6 +594,10 @@ void FRSolver::compute_dU()
         }
       }
     }
+
+#ifdef _GPU
+  eles->dU_spts_d = eles->dU_spts;
+#endif
 }
 
 void FRSolver::extrapolate_dU()

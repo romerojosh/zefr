@@ -451,6 +451,7 @@ void Faces::apply_bcs()
 
 void Faces::apply_bcs_dU()
 {
+#ifdef _CPU
   /* Apply boundaries to solution derivative */
 #pragma omp parallel for 
   for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
@@ -492,7 +493,6 @@ void Faces::apply_bcs_dU()
       double v = momy / rho;
       double e_int = e / rho - 0.5 * (u*u + v*v);
 
-
       double rho_dx = dU(fpt, 0, 0, 1);
       double momx_dx = dU(fpt, 1, 0, 1);
       double momy_dx = dU(fpt, 2, 0, 1);
@@ -515,6 +515,16 @@ void Faces::apply_bcs_dU()
 
     }
   }
+#endif
+
+#ifdef _GPU
+  apply_bcs_dU_wrapper(dU_d, U_d, nFpts, geo->nGfpts_int, nVars, nDims,
+      geo->gfpt2bnd_d, geo->per_fpt_list_d);
+
+  check_error();
+  
+  dU = dU_d;
+#endif
 }
 
 
@@ -608,6 +618,7 @@ void Faces::compute_Fvisc()
   }
   else if (input->equation == "EulerNS")
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(2)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
@@ -680,6 +691,15 @@ void Faces::compute_Fvisc()
             input->gamma * de_dy);
       }
     }
+#endif
+
+#ifdef _GPU
+    compute_Fvisc_fpts_2D_EulerNS_wrapper(Fvisc_d, U_d, dU_d, nFpts, input->gamma, 
+        input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
+    check_error();
+
+    Fvisc = Fvisc_d;
+#endif
   }
 }
 
