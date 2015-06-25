@@ -113,7 +113,7 @@ void FRSolver::setup_update()
   divF.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
   // TODO: Should I create this array for user-supplied to save branch?
-  dt.assign(eles->nEles,input->dt);
+  dt.assign({eles->nEles},input->dt);
 
 }
 
@@ -227,6 +227,7 @@ void FRSolver::solver_data_to_device()
   U_ini_d = U_ini;
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
+  dt_d = dt;
 
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
@@ -424,7 +425,7 @@ void FRSolver::extrapolate_U()
 
 #ifdef _GPU
   /* Copy data to GPU */
-  eles->U_spts_d = eles->U_spts;
+  //eles->U_spts_d = eles->U_spts;
 
   double alpha = 1.0; double beta = 0.0;
   cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
@@ -818,7 +819,7 @@ void FRSolver::compute_divF(unsigned int stage)
   compute_divF_wrapper(divF_d, eles->dF_spts_d, eles->nSpts, eles->nVars, eles->nEles, eles->nDims, stage);
   check_error();
 
-  divF = divF_d;
+  //divF = divF_d;
 #endif
 
 }
@@ -843,13 +844,7 @@ void FRSolver::update()
     if (stage == 0)
     {
       // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type == 1)
-      {
-        compute_element_dt();
-        double min_dt = *std::min_element(dt.begin(), dt.end());
-        std::fill(dt.begin(), dt.end(), min_dt);
-      }
-      else if (input->dt_type == 2)
+      if (input->dt_type != 0)
       {
         compute_element_dt();
       }
@@ -860,18 +855,26 @@ void FRSolver::update()
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt[ele] / 
-            eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
-#endif
-#ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, U_ini_d, divF_d, eles->jaco_det_spts_d, dt[0], 
-        rk_alpha_d, eles->nSpts, eles->nEles, eles->nVars, stage);
-    check_error();
+        {
+          if (input->dt_type != 2)
+          {
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
+              eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
+          }
+          else
+          {
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
+              eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
+          }
+        }
 #endif
 
 #ifdef _GPU
-  eles->U_spts = eles->U_spts_d;
+    RK_update_wrapper(eles->U_spts_d, U_ini_d, divF_d, eles->jaco_det_spts_d, dt_d, 
+        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, stage);
+    check_error();
 #endif
+
   }
 
   /* Final stage */
@@ -890,22 +893,29 @@ void FRSolver::update()
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt[ele] / eles->jaco_det_spts(spt,ele) * 
-            divF(spt, ele, n, stage);
+        {
+          if (input->dt_type != 2)
+          {
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
+              divF(spt, ele, n, stage);
+          }
+          else
+          {
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
+              divF(spt, ele, n, stage);
+          }
+        }
 #endif
 
 #ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, divF_d, eles->jaco_det_spts_d, dt[0], 
-        rk_beta_d, eles->nSpts, eles->nEles, eles->nVars, stage);
+    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, divF_d, eles->jaco_det_spts_d, dt_d, 
+        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, stage);
     check_error();
 #endif
   }
 
 
-#ifdef _GPU
-  eles->U_spts = eles->U_spts_d;
-#endif
-  flow_time += dt[0];
+  flow_time += dt(0);
  
 }
 
@@ -923,13 +933,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
     if (stage == 0)
     {
       // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type == 1)
-      {
-        compute_element_dt();
-        double min_dt = *std::min_element(dt.begin(), dt.end());
-        std::fill(dt.begin(), dt.end(), min_dt);
-      }
-      else if (input->dt_type == 2)
+      if (input->dt_type != 0)
       {
         compute_element_dt();
       }
@@ -939,8 +943,18 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt[ele] / 
-            eles->jaco_det_spts(spt,ele) * (divF(spt, ele, n, stage) + source(spt, ele, n));
+        {
+          if (input->dt_type != 2)
+          {
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
+              eles->jaco_det_spts(spt,ele) * (divF(spt, ele, n, stage) + source(spt, ele, n));
+          }
+          else
+          {
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
+              eles->jaco_det_spts(spt,ele) * (divF(spt, ele, n, stage) + source(spt, ele, n));
+          }
+        }
   }
 
   /* Final stage */
@@ -952,13 +966,24 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt[ele] / eles->jaco_det_spts(spt,ele) *
-            (divF(spt, ele, n, stage) + source(spt, ele, n));
+        {
+          if (input->dt_type != 2)
+          {
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+              (divF(spt, ele, n, stage) + source(spt, ele, n));
+          }
+          else
+          {
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+              (divF(spt, ele, n, stage) + source(spt, ele, n));
+          }
+        }
 
 }
 
 void FRSolver::compute_element_dt()
 {
+#ifdef _CPU
 #pragma omp parallel for
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   { 
@@ -967,6 +992,7 @@ void FRSolver::compute_element_dt()
     /* Compute maximum wavespeed */
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
     {
+      /* Skip if on ghost edge. */
       int gfpt = geo.fpt2gfpt(fpt,ele);
       if (gfpt == -1)
         continue;
@@ -977,12 +1003,29 @@ void FRSolver::compute_element_dt()
     }
 
     /* Note: CFL is applied to parent space element with width 2 */
-    dt[ele] = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
+    dt(ele) = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
   }
+
+  if (input->dt_type == 1) /* Global minimum */
+  {
+    //double min_dt = *std::min_element(dt.begin(), dt.end());
+    dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
+    //std::fill(dt.begin(), dt.end(), min_dt);
+  }
+#endif
+
+#ifdef _GPU
+  compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->dA_d, geo.fpt2gfpt_d, 
+      input->CFL, order, input->dt_type, eles->nFpts, eles->nEles);
+#endif
 }
 
 void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 {
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
   std::stringstream ss;
   ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter << ".vtk";
 
@@ -1125,13 +1168,16 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter, 
     std::chrono::high_resolution_clock::time_point t1)
 {
+#ifdef _GPU
+  divF = divF_d;
+#endif
   std::vector<double> max_res(eles->nVars,0.0);
 
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int ele =0; ele < eles->nEles; ele++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-      divF(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
+        divF(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
 
   for (unsigned int n = 0; n < eles->nVars; n++)
     max_res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, 
@@ -1141,7 +1187,7 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
   for (auto &val : max_res)
     std::cout << std::scientific << val << " ";
 
-  std::cout << "dt: " << dt[0];
+  std::cout << "dt: " << dt(0);
   std::cout << std::endl;
   
   /* Write to history file */

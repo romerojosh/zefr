@@ -3,6 +3,9 @@
 #include "cuda_runtime.h"
 #include "cublas_v2.h"
 
+#include <thrust/device_vector.h>
+#include <thrust/extrema.h>
+
 #include "macros.hpp"
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
@@ -228,8 +231,8 @@ void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spt
 
 __global__
 void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, double dt, 
-    mdvector_gpu<double> rk_coeff, unsigned int nSpts, unsigned int nEles, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
+    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int stage)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
@@ -239,14 +242,21 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   if (spt >= nSpts || ele >= nEles || var >= nVars)
     return;
 
-  /* Uses only a set dt right now. Will update tomorrow. */
-  U_spts(spt, ele, var) = U_ini(spt, ele, var) - rk_coeff(stage) * dt / 
-    jaco_det_spts(spt,ele) * divF(spt, ele, var, stage);
+  if (dt_type != 2)
+  {
+    U_spts(spt, ele, var) = U_ini(spt, ele, var) - rk_coeff(stage) * dt(0) / 
+      jaco_det_spts(spt,ele) * divF(spt, ele, var, stage);
+  }
+  else
+  {
+    U_spts(spt, ele, var) = U_ini(spt, ele, var) - rk_coeff(stage) * dt(ele) / 
+      jaco_det_spts(spt,ele) * divF(spt, ele, var, stage);
+  }
 }
 
 void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, double dt, 
-    mdvector_gpu<double> rk_coeff, unsigned int nSpts, unsigned int nEles, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
+    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int stage)
 {
   dim3 threads(16,16,4);
@@ -254,5 +264,81 @@ void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
       threads.y, (nVars + threads.z - 1)/threads.z);
 
   RK_update<<<threads, blocks>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
-    rk_coeff, nSpts, nEles, nVars, stage);
+      rk_coeff, dt_type, nSpts, nEles, nVars, stage);
+}
+
+
+__device__
+double get_cfl_limit_dev(int order)
+{
+  switch(order)
+  {
+    case 0:
+      return 1.393;
+
+    case 1:
+      return 0.464; 
+
+    case 2:
+      return 0.235;
+
+    case 3:
+      return 0.139;
+
+    case 4:
+      return 0.100;
+
+    case 5:
+      return 0.068;
+  }
+}
+
+
+__global__
+void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfpts, 
+    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
+    unsigned int nFpts, unsigned int nEles)
+{
+  const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (ele >= nEles)
+    return;
+
+  double waveSp_max = 0.0;
+
+  /* Compute maximum wavespeed */
+  for (unsigned int fpt = 0; fpt <nFpts; fpt++)
+  {
+    /* Skip if on ghost edge. */
+    int gfpt = fpt2gfpt(fpt,ele);
+    if (gfpt == -1)
+      continue;
+
+    double waveSp = waveSp_gfpts(gfpt) / dA(gfpt);
+
+    waveSp_max = max(waveSp, waveSp_max);
+  }
+
+  /* Note: CFL is applied to parent space element with width 2 */
+  dt(ele) = (CFL) * get_cfl_limit_dev(order) * (2.0 / (waveSp_max+1.e-10));
+}
+
+void compute_element_dt_wrapper(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp, 
+    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
+    unsigned int dt_type, unsigned int nFpts, unsigned int nEles)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (nEles + threads - 1) / threads;
+
+  compute_element_dt<<<threads, blocks>>>(dt, waveSp, dA, fpt2gfpt, CFL, order, 
+      nFpts, nEles);
+
+  if (dt_type == 1)
+  {
+    /* Get min dt using thrust */
+    thrust::device_ptr<double> dt_ptr = thrust::device_pointer_cast(dt.data());
+    thrust::device_ptr<double> min_ptr = thrust::min_element(dt_ptr, dt_ptr + nEles);
+    dt_ptr[0] = min_ptr[0];
+  }
+
 }

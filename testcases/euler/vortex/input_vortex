@@ -9,10 +9,10 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 500
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.004
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.0001
 CFL	  0.05
 
 # Restarting:
@@ -28,7 +28,7 @@ low_order 0
 # Reporting:
 output_prefix vortex
 write_freq  1000
-report_freq 100
+report_freq 1000
 force_freq  100000
 nQpts1D     10
 

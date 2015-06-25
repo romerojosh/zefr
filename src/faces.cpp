@@ -756,7 +756,7 @@ void Faces::compute_common_F()
     check_error();
 
     //Fcomm = Fcomm_d;
-    waveSp = waveSp_d;
+    //waveSp = waveSp_d;
 #endif
   }
   else

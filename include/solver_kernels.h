@@ -5,6 +5,7 @@
 template<typename T>
 class mdvector_gpu;
 
+/* TODO: Move these general operators to a different file (aux_kernels.h/cu) */
 void check_error();
 
 void start_cublas();
@@ -44,8 +45,12 @@ void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spt
     unsigned int stage);
 
 void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, double dt, 
-    mdvector_gpu<double> rk_coeff, unsigned int nSpts, unsigned int nEles, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
+    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int stage);
+
+void compute_element_dt_wrapper(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp, 
+    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
+    unsigned int dt_type, unsigned int nFpts, unsigned int nEles);
 
 #endif /* solver_kernels_h */

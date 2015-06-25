@@ -34,7 +34,7 @@ class FRSolver
     //std::vector<double> rk_alpha, rk_beta;
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> divF;
-    std::vector<double> dt;
+    mdvector<double> dt;
     mdvector<double> U_ini;
 
 #ifdef _GPU
