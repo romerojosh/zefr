@@ -9,9 +9,9 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 10000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
 CFL	  0.4
 
@@ -20,7 +20,7 @@ restart	      0
 restart_file  cyl_uquad_000005000.vtk
 
 # Multigrid:
-p_multi 1
+p_multi 0
 smooth_steps 1
 rel_fac 1.00
 low_order 0
@@ -28,7 +28,7 @@ low_order 0
 # Reporting:
 output_prefix cyl_eul
 write_freq  1000
-report_freq 100
+report_freq 1000
 force_freq 1000
 nQpts1D     10
 

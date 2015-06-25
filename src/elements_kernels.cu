@@ -11,22 +11,27 @@ void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
   if (spt >= nSpts || ele >= nEles)
     return;
 
+  /* Get state variables */
+  double rho = U(spt, ele, 0);
+  double momx = U(spt, ele, 1);
+  double momy = U(spt, ele, 2);
+  double ene = U(spt, ele, 3);
+
   /* Compute some primitive variables */
-  double momF = (U(spt, ele, 1) * U(spt,ele,1) + U(spt, ele, 2) * 
-      U(spt, ele,2)) / U(spt, ele, 0);
-  double P = (gamma - 1.0) * (U(spt, ele, 3) - 0.5 * momF);
-  double H = (U(spt, ele, 3) + P) / U(spt, ele, 0);
+  double momF = (momx * momx + momy * momy) / rho;
+  double P = (gamma - 1.0) * (ene - 0.5 * momF);
+  double H = (ene + P) / rho;
 
 
-  F(spt, ele, 0, 0) = U(spt, ele, 1);
-  F(spt, ele, 1, 0) = U(spt, ele, 1) * U(spt, ele, 1) / U(spt, ele, 0) + P;
-  F(spt, ele, 2, 0) = U(spt, ele, 1) * U(spt, ele, 2) / U(spt, ele, 0);
-  F(spt, ele, 3, 0) = U(spt, ele, 1) * H;
+  F(spt, ele, 0, 0) = momx;
+  F(spt, ele, 1, 0) = momx * momx / rho + P;
+  F(spt, ele, 2, 0) = momx * momy / rho;
+  F(spt, ele, 3, 0) = momx * H;
 
-  F(spt, ele, 0, 1) = U(spt, ele, 2);
-  F(spt, ele, 1, 1) = U(spt, ele, 1) * U(spt, ele, 2) / U(spt, ele, 0);
-  F(spt, ele, 2, 1) = U(spt, ele, 2) * U(spt, ele, 2) / U(spt, ele, 0) + P;
-  F(spt, ele, 3, 1) = U(spt, ele, 2) * H;
+  F(spt, ele, 0, 1) = momy;
+  F(spt, ele, 1, 1) = momx * momy / rho;
+  F(spt, ele, 2, 1) = momy * momy / rho + P;
+  F(spt, ele, 3, 1) = momy * H;
  
 }
 
@@ -34,7 +39,7 @@ void compute_Fconv_spts_2D_EulerNS_wrapper(mdvector_gpu<double> F_spts,
     mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles,
     double gamma)
 {
-  dim3 threads(32,32);
+  dim3 threads(32,6);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
       threads.y);
 
@@ -177,17 +182,26 @@ void transform_flux_quad(mdvector_gpu<double> F_spts,
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
 
-  if (spt >= nSpts || ele >= nEles || var >= nVars)
+  if (spt >= nSpts || ele >= nEles)
     return;
 
-  double Ftemp = F_spts(spt, ele, var, 0);
+  /* Get metric terms */
+  double jaco[2][2];
+  jaco[0][0] = jaco_spts(0, 0, spt, ele);
+  jaco[0][1] = jaco_spts(0, 1, spt, ele);
+  jaco[1][0] = jaco_spts(1, 0, spt, ele);
+  jaco[1][1] = jaco_spts(1, 1, spt, ele);
 
-  F_spts(spt, ele, var, 0) = F_spts(spt, ele, var, 0) * jaco_spts(1, 1, spt, ele) -
-                           F_spts(spt, ele, var, 1) * jaco_spts(0, 1, spt, ele);
-  F_spts(spt, ele, var, 1) = F_spts(spt, ele, var, 1) * jaco_spts(0, 0, spt, ele) -
-                           Ftemp * jaco_spts(1, 0, spt, ele);
+  for (unsigned int var = 0; var < nVars; var ++)
+  {
+    double Ftemp = F_spts(spt, ele, var, 0);
+
+    F_spts(spt, ele, var, 0) = F_spts(spt, ele, var, 0) * jaco[1][1] -
+                             F_spts(spt, ele, var, 1) * jaco[0][1];
+    F_spts(spt, ele, var, 1) = F_spts(spt, ele, var, 1) * jaco[0][0] -
+                             Ftemp * jaco[1][0];
+  }
 
 }
 
@@ -195,9 +209,9 @@ void transform_flux_quad_wrapper(mdvector_gpu<double> F_spts,
     mdvector_gpu<double> jaco_spts, unsigned int nSpts, 
     unsigned int nEles, unsigned int nVars)
 {
-  dim3 threads(16, 16, 4);
+  dim3 threads(32, 32);
   dim3 blocks((nSpts + threads.x - 1) / threads.x, (nEles + threads.y - 1) / 
-      threads.y, (nVars + threads.z - 1) / threads.z);
+      threads.y);
 
   transform_flux_quad<<<threads, blocks>>>(F_spts, jaco_spts, nSpts, nEles, nVars);
 }

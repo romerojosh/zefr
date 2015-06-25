@@ -33,11 +33,11 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   Fcomm.assign({nFpts, nVars, 2});
 
   /* If viscous, allocate arrays used for LDG flux */
-  if(input->viscous)
-  {
+  //if(input->viscous)
+  //{
     Fcomm_temp.assign({nFpts, nVars, nDims});
     LDG_bias.assign({nFpts}, 0);
-  }
+  //}
 
   Ucomm.assign({nFpts, nVars, 2});
 

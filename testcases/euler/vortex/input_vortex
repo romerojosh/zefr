@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile TriBox_32x32_eul.msh
+meshfile QuadBox_32x32_eul.msh
 
 # Solver:
 order     3

@@ -212,10 +212,15 @@ void compute_divF(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts,
   if (spt >= nSpts || ele >= nEles || var >= nVars)
     return;
 
-  divF(spt, ele, var, stage) = dF_spts(spt, ele, var, 0);
+  double sum = 0.0;
+  //divF(spt, ele, var, stage) = dF_spts(spt, ele, var, 0);
 
-  for (unsigned int dim = 1; dim < nDims; dim ++)
-    divF(spt, ele, var, stage) += dF_spts(spt, ele, var, dim);
+  for (unsigned int dim = 0; dim < nDims; dim ++)
+    sum += dF_spts(spt, ele, var, dim);
+    //divF(spt, ele, var, stage) += dF_spts(spt, ele, var, dim);
+
+  divF(spt, ele, var, stage) = sum;
+
 
 }
 
@@ -231,27 +236,28 @@ void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spt
 
 __global__
 void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
     mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int stage)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
 
-  if (spt >= nSpts || ele >= nEles || var >= nVars)
+  if (spt >= nSpts || ele >= nEles)
     return;
 
+  double dt;
   if (dt_type != 2)
-  {
-    U_spts(spt, ele, var) = U_ini(spt, ele, var) - rk_coeff(stage) * dt(0) / 
-      jaco_det_spts(spt,ele) * divF(spt, ele, var, stage);
-  }
+    dt = dt_in(0);
   else
-  {
-    U_spts(spt, ele, var) = U_ini(spt, ele, var) - rk_coeff(stage) * dt(ele) / 
-      jaco_det_spts(spt,ele) * divF(spt, ele, var, stage);
-  }
+    dt = dt_in(ele);
+
+  double coeff = rk_coeff(stage);
+  double jaco_det = jaco_det_spts(spt,ele);
+
+  for (unsigned int var = 0; var < nVars; var ++)
+    U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff * dt / 
+        jaco_det * divF(spt, ele, var, stage);
 }
 
 void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
@@ -259,9 +265,9 @@ void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
     mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int stage)
 {
-  dim3 threads(16,16,4);
+  dim3 threads(32,32);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
-      threads.y, (nVars + threads.z - 1)/threads.z);
+      threads.y);
 
   RK_update<<<threads, blocks>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
       rk_coeff, dt_type, nSpts, nEles, nVars, stage);
