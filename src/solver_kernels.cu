@@ -12,6 +12,7 @@
 
 void check_error()
 {
+  cudaDeviceSynchronize();
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess)
   {
@@ -127,7 +128,7 @@ void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvec
 void U_to_faces_wrapper(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> Ucomm, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous)
 {
-  dim3 threads(16,16,4);
+  dim3 threads(16, 16, 4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
 
   U_to_faces<<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, viscous);
@@ -159,7 +160,7 @@ void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_f
 void U_from_faces_wrapper(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts)
 {
-  dim3 threads(16,16,4);
+  dim3 threads(16 ,16, 4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
 
   U_from_faces<<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts);
@@ -194,7 +195,7 @@ void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, md
 void dU_to_faces_wrapper(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims)
 {
-  dim3 threads(16,16,4);
+  dim3 threads(16, 16, 4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
 
   dU_to_faces<<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, nDims);
@@ -231,7 +232,7 @@ void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spt
   dim3 threads(16,16,4);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
 
-  compute_divF<<<threads,blocks>>>(divF, dF_spts, nSpts, nVars, nEles, nDims, stage);
+  compute_divF<<<blocks, threads>>>(divF, dF_spts, nSpts, nVars, nEles, nDims, stage);
 }
 
 __global__
@@ -269,7 +270,7 @@ void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
       threads.y);
 
-  RK_update<<<threads, blocks>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
+  RK_update<<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
       rk_coeff, dt_type, nSpts, nEles, nVars, stage);
 }
 
@@ -336,7 +337,7 @@ void compute_element_dt_wrapper(mdvector_gpu<double> dt, mdvector_gpu<double> wa
   unsigned int threads = 192;
   unsigned int blocks = (nEles + threads - 1) / threads;
 
-  compute_element_dt<<<threads, blocks>>>(dt, waveSp, dA, fpt2gfpt, CFL, order, 
+  compute_element_dt<<<blocks, threads>>>(dt, waveSp, dA, fpt2gfpt, CFL, order, 
       nFpts, nEles);
 
   if (dt_type == 1)

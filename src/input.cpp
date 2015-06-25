@@ -38,6 +38,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "report_freq", input.report_freq);
   read_param(f, "force_freq", input.force_freq);
   read_param(f, "nQpts1D", input.nQpts1D);
+  read_param(f, "compute_error", input.compute_error);
 
   read_param(f, "fconv_type", input.fconv_type);
   read_param(f, "fvisc_type", input.fvisc_type);

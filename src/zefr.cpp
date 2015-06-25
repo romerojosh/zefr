@@ -93,7 +93,8 @@ int main(int argc, char* argv[])
   }
   auto t2 = std::chrono::high_resolution_clock::now();
 
-  solver.compute_l2_error();
+  if (input.compute_error)
+    solver.compute_l2_error();
  
   auto elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
   std::cout << "Elapsed time: " << elapsed_time.count() << " s" << std::endl;

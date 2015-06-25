@@ -482,6 +482,7 @@ void Quads::transform_dU()
 #ifdef _GPU
   transform_dU_quad_wrapper(dU_spts_d, jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars);
   //dU_spts = dU_spts_d;
+  check_error();
 #endif
 
 }

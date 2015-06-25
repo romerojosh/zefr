@@ -300,7 +300,6 @@ void FRSolver::compute_residual(unsigned int stage)
 
   F_from_faces();
 
-
   compute_dF();
   compute_divF(stage);
 }

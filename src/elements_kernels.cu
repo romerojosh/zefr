@@ -129,11 +129,11 @@ void compute_Fvisc_spts_2D_EulerNS_wrapper(mdvector_gpu<double> F_spts,
     unsigned int nSpts, unsigned int nEles, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis)
 {
-  dim3 threads(32,32);
+  dim3 threads(32,6);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
       threads.y);
 
-  compute_Fvisc_spts_2D_EulerNS<<<threads, blocks>>>(F_spts, 
+  compute_Fvisc_spts_2D_EulerNS<<<blocks, threads>>>(F_spts, 
     U_spts, dU_spts, nSpts, nEles, gamma, prandtl, mu_in, c_sth, rt, fix_vis);
 
 }
@@ -145,21 +145,29 @@ void transform_dU_quad(mdvector_gpu<double> dU_spts,
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
 
-  if (spt >= nSpts || ele >= nEles || var >= nVars)
+  if (spt >= nSpts || ele >= nEles)
     return;
 
-  double dUtemp = dU_spts(spt, ele, var, 0);
+  double jaco[2][2];
+  jaco[0][0] = jaco_spts(0, 0, spt, ele);
+  jaco[0][1] = jaco_spts(0, 1, spt, ele);
+  jaco[1][0] = jaco_spts(1, 0, spt, ele);
+  jaco[1][1] = jaco_spts(1, 1, spt, ele);
+  double jaco_det = jaco_det_spts(spt,ele);
 
-  dU_spts(spt, ele, var, 0) = dU_spts(spt, ele, var, 0) * jaco_spts(1, 1, spt, ele) - 
-                            dU_spts(spt, ele, var, 1) * jaco_spts(1, 0, spt, ele); 
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    double dUtemp = dU_spts(spt, ele, var, 0);
 
-  dU_spts(spt, ele, var, 1) = dU_spts(spt, ele, var, 1) * jaco_spts(0, 0, spt, ele) -
-                            dUtemp * jaco_spts(0, 1, spt, ele);
+    dU_spts(spt, ele, var, 0) = (dU_spts(spt, ele, var, 0) * jaco[1][1] - 
+                                dU_spts(spt, ele, var, 1) * jaco[1][0]) /
+                                jaco_det; 
 
-  dU_spts(spt, ele, var, 0) /= jaco_det_spts(spt, ele);
-  dU_spts(spt, ele, var, 1) /= jaco_det_spts(spt, ele);
+    dU_spts(spt, ele, var, 1) = (dU_spts(spt, ele, var, 1) * jaco[0][0] -
+                                 dUtemp * jaco[0][1]) / jaco_det;
+
+  }
 
 }
 
@@ -167,11 +175,11 @@ void transform_dU_quad_wrapper(mdvector_gpu<double> dU_spts,
     mdvector_gpu<double> jaco_spts, mdvector_gpu<double> jaco_det_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
-  dim3 threads(16, 16, 4);
+  dim3 threads(32, 6);
   dim3 blocks((nSpts + threads.x - 1) / threads.x, (nEles + threads.y - 1) / 
-      threads.y, (nVars + threads.z - 1) / threads.z);
+      threads.y);
 
-  transform_dU_quad<<<threads, blocks>>>(dU_spts, jaco_spts, jaco_det_spts,
+  transform_dU_quad<<<blocks, threads>>>(dU_spts, jaco_spts, jaco_det_spts,
       nSpts, nEles, nVars);
 }
 
@@ -213,5 +221,5 @@ void transform_flux_quad_wrapper(mdvector_gpu<double> F_spts,
   dim3 blocks((nSpts + threads.x - 1) / threads.x, (nEles + threads.y - 1) / 
       threads.y);
 
-  transform_flux_quad<<<threads, blocks>>>(F_spts, jaco_spts, nSpts, nEles, nVars);
+  transform_flux_quad<<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles, nVars);
 }
