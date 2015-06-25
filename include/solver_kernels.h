@@ -27,30 +27,33 @@ void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int s
 void test_access_wrapper(mdvector_gpu<double> vec, double val);
 
 /* Wrapper for cublas DGEMM */
-void cublasDGEMM_wrapper(int M, int N, int K, const double* alpha, const double* A, int lda, const double* B, int ldb,
-    const double* beta, double *C, int ldc);
+void cublasDGEMM_wrapper(int M, int N, int K, const double* alpha, const double* A, 
+    int lda, const double* B, int ldb, const double* beta, double *C, int ldc);
 
 /* Wrappers for custom kernels */
-void U_to_faces_wrapper(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> Ucomm, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous);
+void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
+    mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 
+    unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous);
 
-void U_from_faces_wrapper(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts);
+void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double> &Ucomm_fpts, 
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
+    unsigned int nEles, unsigned int nFpts);
 
-void dU_to_faces_wrapper(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims);
+void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU_gfpts, 
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
+    unsigned int nEles, unsigned int nFpts, unsigned int nDims);
 
-void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
+void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_spts, 
     unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
     unsigned int stage);
 
-void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
-    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
+void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
+    mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int stage);
 
-void compute_element_dt_wrapper(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp, 
-    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
+void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 
     unsigned int dt_type, unsigned int nFpts, unsigned int nEles);
 
 #endif /* solver_kernels_h */

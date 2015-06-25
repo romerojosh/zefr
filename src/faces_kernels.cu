@@ -12,26 +12,34 @@ void compute_Fconv_fpts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
 
    for (unsigned int slot = 0; slot < 2; slot ++)
    {
+     /* Get states */
+     double rho = U(fpt, 0, slot);
+     double momx = U(fpt, 1, slot);
+     double momy = U(fpt, 2, slot);
+     double ene = U(fpt, 3, slot);
+
      /* Compute some primitive variables (keep pressure)*/
-     double momF = (U(fpt, 1, slot) * U(fpt, 1, slot) + U(fpt, 2, slot) * 
-         U(fpt, 2, slot)) / U(fpt, 0, slot);
+     double momF = (momx * momx + momy * momy) / rho;
 
-     P(fpt, slot) = (gamma - 1.0) * (U(fpt, 3, slot) - 0.5 * momF);
-     double H = (U(fpt, 3, slot) + P(fpt, slot)) / U(fpt, 0, slot);
+     double P_d = (gamma - 1.0) * (ene - 0.5 * momF);
+     P(fpt, slot) = P_d;
 
-     F(fpt, 0, 0, slot) = U(fpt, 1, slot);
-     F(fpt, 1, 0, slot) = U(fpt, 1, slot) * U(fpt, 1, slot) / U(fpt, 0, slot) + P(fpt, slot);
-     F(fpt, 2, 0, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
-     F(fpt, 3, 0, slot) = U(fpt, 1, slot) * H;
+     double H = (ene + P_d) / rho;
 
-     F(fpt, 0, 1, slot) = U(fpt, 2, slot);
-     F(fpt, 1, 1, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
-     F(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
-     F(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
+     F(fpt, 0, 0, slot) = momx;
+     F(fpt, 1, 0, slot) = momx * momx / rho + P_d;
+     F(fpt, 2, 0, slot) = momx * momy / rho;
+     F(fpt, 3, 0, slot) = momx * H;
+
+     F(fpt, 0, 1, slot) = momy;
+     F(fpt, 1, 1, slot) = momx * momy / rho;
+     F(fpt, 2, 1, slot) = momy * momy / rho + P_d;
+     F(fpt, 3, 1, slot) = momy * H;
    }
 }
 
-void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> F_gfpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> P_gfpts, 
+void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
+    mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
     unsigned int nFpts, double gamma)
 {
   unsigned int threads = 192;
@@ -121,8 +129,8 @@ void compute_Fvisc_fpts_2D_EulerNS(mdvector_gpu<double> Fvisc,
 
 }
 
-void compute_Fvisc_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> Fvisc, 
-    mdvector_gpu<double> U, mdvector_gpu<double> dU, unsigned int nFpts, double gamma, 
+void compute_Fvisc_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> &Fvisc, 
+    mdvector_gpu<double> &U, mdvector_gpu<double> &dU, unsigned int nFpts, double gamma, 
         double prandtl, double mu_in, double c_sth, double rt, bool fix_vis)
 {
   unsigned int threads = 192;
@@ -566,12 +574,12 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
 }
 
-void apply_bcs_wrapper(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
-    unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> V_fs, 
+void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
+    unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, 
     double P_fs, double gamma, double R_ref, double T_tot_fs, double P_tot_fs, double T_wall, 
-    mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, mdvector_gpu<double> norm, 
-    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list,
-    mdvector_gpu<int> LDG_bias)
+    mdvector_gpu<double> &V_wall, mdvector_gpu<double> &norm_fs, mdvector_gpu<double> &norm, 
+    mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list,
+    mdvector_gpu<int> &LDG_bias)
 {
   unsigned int threads = 192;
   unsigned int blocks = ((nFpts - nGfpts_int) + threads - 1)/threads;
@@ -652,9 +660,9 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int 
 }
 
 
-void apply_bcs_dU_wrapper(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int nFpts, 
+void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, unsigned int nFpts, 
     unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
-    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
+    mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list)
 {
   unsigned int threads = 192;
   unsigned int blocks = ((nFpts - nGfpts_int) + threads - 1)/threads;
@@ -665,8 +673,8 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsig
 
 __global__
 void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm,
-    mdvector_gpu<int> outnorm, mdvector_gpu<double> waveSp, double gamma, double rus_k,
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts,
+    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, double gamma, double rus_k,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
@@ -678,10 +686,17 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   double FL[4]; double FR[4];
   double WL[4]; double WR[4];
 
+  double norm[2]; double outnorm[2];
+
+  norm[0] = norm_gfpts(fpt, 0, 0);
+  norm[1] = norm_gfpts(fpt, 1, 0);
+  outnorm[0] = outnorm_gfpts(fpt, 0);
+  outnorm[1] = outnorm_gfpts(fpt, 1);
+
   /* Initialize FL, FR */
-  for (unsigned int i = 0; i < 4; i++)
+  for (unsigned int n = 0; n < 4; n++)
   {
-    FL[i] = 0.0; FR[i] = 0.0;
+    FL[n] = 0.0; FR[n] = 0.0;
   }
 
   /* Get interface-normal flux components  (from L to R)*/
@@ -689,8 +704,8 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      FL[n] += Fconv(fpt, n, dim, 0) * norm(fpt, dim, 0);
-      FR[n] += Fconv(fpt, n, dim, 1) * norm(fpt, dim, 0);
+      FL[n] += Fconv(fpt, n, dim, 0) * norm[dim];
+      FR[n] += Fconv(fpt, n, dim, 1) * norm[dim];
     }
   }
 
@@ -720,29 +735,31 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   double VnL = 0.0; double VnR = 0.0;
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    VnL += WL[dim+1]/WL[0] * norm(fpt, dim, 0);
-    VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
+    VnL += WL[dim+1]/WL[0] * norm[dim];
+    VnR += WR[dim+1]/WR[0] * norm[dim];
   }
 
-  waveSp(fpt) = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+  double waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+
+  // NOTE: Can I just store absolute of waveSp?
+  waveSp_gfpts(fpt) = waveSp;
+  waveSp = std::abs(waveSp);
   //}
 
   /* Compute common normal flux */
   for (unsigned int n = 0; n < nVars; n++)
   {
-    Fcomm(fpt, n, 0) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-rus_k) * (WR[n]-WL[n]);
-    Fcomm(fpt, n, 1) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-rus_k) * (WR[n]-WL[n]);
-
-    /* Correct for positive parent space sign convention */
-    Fcomm(fpt, n, 0) *= outnorm(fpt, 0);
-    Fcomm(fpt, n, 1) *= -outnorm(fpt, 1);
+    Fcomm(fpt, n, 0) = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0-rus_k) * 
+        (WR[n]-WL[n])) * outnorm[0];
+    Fcomm(fpt, n, 1) = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0-rus_k) * 
+        (WR[n]-WL[n])) * -outnorm[1];
   }
 
 }
 
-void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm,
-    mdvector_gpu<int> outnorm, mdvector_gpu<double> waveSp, double gamma, double rus_k,
+void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &norm,
+    mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, double gamma, double rus_k,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   unsigned int threads = 192;
@@ -754,8 +771,8 @@ void rusanov_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
 __global__
 void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_temp, mdvector_gpu<double> norm, 
-    mdvector_gpu<int> outnorm, mdvector_gpu<int> LDG_bias, double beta, double tau, 
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_no, mdvector_gpu<double> norm_gfpts, 
+    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<int> LDG_bias, double beta, double tau, 
     unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
@@ -766,11 +783,14 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   /* Hardcoded for EulerNS. Will need to add nVar template */
   double FL[4]; double FR[4];
   double WL[4]; double WR[4];
+  double Fcomm_temp[4][2];
+  double norm[2];
+  double outnorm[2];
    
   /* Zero out temporary array */
   for (unsigned int n = 0; n < nVars; n++)
     for (unsigned int dim = 0; dim < nDims; dim++)
-      Fcomm_temp(fpt, n, dim) = 0.0;
+      Fcomm_temp[n][dim] = 0.0;
 
   /* Initialize FL, FR */
   for (unsigned int n = 0; n < 4; n++)
@@ -778,9 +798,13 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
     FL[n] = 0.0; FR[n] = 0.0;
   }
 
+  norm[0] = norm_gfpts(fpt, 0, 0);
+  norm[1] = norm_gfpts(fpt, 1, 0);
+  outnorm[0] = outnorm_gfpts(fpt, 0);
+  outnorm[1] = outnorm_gfpts(fpt, 1);
 
   /* Setting sign of beta (from HiFiLES) */
-  if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+  if (norm[0] + norm[1] < 0.0)
     beta = -beta;
 
 
@@ -789,8 +813,8 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      FL[n] += Fvisc(fpt, n, dim, 0) * norm(fpt, dim, 0);
-      FR[n] += Fvisc(fpt, n, dim, 1) * norm(fpt, dim, 0);
+      FL[n] += Fvisc(fpt, n, dim, 0) * norm[dim];
+      FR[n] += Fvisc(fpt, n, dim, 1) * norm[dim];
     }
   }
 
@@ -805,10 +829,10 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm_temp(fpt, n, 0) += 0.5*(Fvisc(fpt, n, 0, 0) + Fvisc(fpt, n, 0, 1)) + tau * norm(fpt, 0, 0)* (WL[n]
-          - WR[n]) + beta * norm(fpt, 0, 0)* (FL[n] - FR[n]);
-      Fcomm_temp(fpt, n, 1) += 0.5*(Fvisc(fpt, n, 1, 0) + Fvisc(fpt, n, 1, 1)) + tau * norm(fpt, 1, 0)* (WL[n]
-          - WR[n]) + beta * norm(fpt, 1, 0)* (FL[n] - FR[n]);
+      Fcomm_temp[n][0] += 0.5*(Fvisc(fpt, n, 0, 0) + Fvisc(fpt, n, 0, 1)) + 
+        tau * norm[0] * (WL[n] - WR[n]) + beta * norm[0] * (FL[n] - FR[n]);
+      Fcomm_temp[n][1] += 0.5*(Fvisc(fpt, n, 1, 0) + Fvisc(fpt, n, 1, 1)) + 
+        tau * norm[1] * (WL[n] - WR[n]) + beta * norm[1] * (FL[n] - FR[n]);
     }
   }
   /* Else, only use left flux state */
@@ -816,8 +840,8 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm_temp(fpt, n, 0) += Fvisc(fpt, n, 0, 0) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
-      Fcomm_temp(fpt, n, 1) += Fvisc(fpt, n, 1, 0) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
+      Fcomm_temp[n][0] += Fvisc(fpt, n, 0, 0) + tau * norm[0] * (WL[n] - WR[n]);
+      Fcomm_temp[n][1] += Fvisc(fpt, n, 1, 0) + tau * norm[1] * (WL[n] - WR[n]);
     }
   }
 
@@ -825,16 +849,16 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-      Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+      Fcomm(fpt, n, 0) += (Fcomm_temp[n][dim] * norm[dim]) * outnorm[0];
+      Fcomm(fpt, n, 1) += (Fcomm_temp[n][dim] * norm[dim]) * -outnorm[1];
     }
   }
 
 }
 
-void LDG_flux_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_temp, mdvector_gpu<double> norm, 
-    mdvector_gpu<int> outnorm, mdvector_gpu<int> LDG_bias, double beta, double tau, 
+void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc, 
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, 
+    mdvector_gpu<int> &outnorm, mdvector_gpu<int> &LDG_bias, double beta, double tau, 
     unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   unsigned int threads = 192;
@@ -864,8 +888,8 @@ void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm,
 
 }
 
-void compute_common_U_LDG_wrapper(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm, 
-    mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars)
+void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 
+    mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars)
 {
   dim3 threads(32,4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
@@ -887,7 +911,7 @@ void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA,
     Fcomm(fpt, var, 1) *= dA(fpt);
 }
 
-void transform_flux_faces_wrapper(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
+void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars)
 {
   dim3 threads(32,4);

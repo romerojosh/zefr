@@ -79,8 +79,8 @@ void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int s
   check_error();
 }
 
-void cublasDGEMM_wrapper(int M, int N, int K, const double *alpha, const double* A, int lda, const double* B, int ldb,
-    const double* beta, double *C, int ldc)
+void cublasDGEMM_wrapper(int M, int N, int K, const double *alpha, const double* A, 
+    int lda, const double* B, int ldb, const double* beta, double *C, int ldc)
 {
     cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
 }
@@ -125,8 +125,9 @@ void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvec
 
 }
 
-void U_to_faces_wrapper(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> Ucomm, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous)
+void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
+    mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 
+    unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous)
 {
   dim3 threads(16, 16, 4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
@@ -157,8 +158,9 @@ void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_f
 
 }
 
-void U_from_faces_wrapper(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts)
+void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double> &Ucomm_fpts, 
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
+    unsigned int nEles, unsigned int nFpts)
 {
   dim3 threads(16 ,16, 4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
@@ -192,8 +194,9 @@ void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, md
 
 }
 
-void dU_to_faces_wrapper(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims)
+void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU_gfpts, 
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
+    unsigned int nEles, unsigned int nFpts, unsigned int nDims)
 {
   dim3 threads(16, 16, 4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
@@ -225,7 +228,7 @@ void compute_divF(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts,
 
 }
 
-void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
+void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_spts, 
     unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
     unsigned int stage)
 {
@@ -261,9 +264,9 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
         jaco_det * divF(spt, ele, var, stage);
 }
 
-void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
-    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
+void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
+    mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int stage)
 {
   dim3 threads(32,32);
@@ -330,8 +333,8 @@ void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfp
   dt(ele) = (CFL) * get_cfl_limit_dev(order) * (2.0 / (waveSp_max+1.e-10));
 }
 
-void compute_element_dt_wrapper(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp, 
-    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
+void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 
     unsigned int dt_type, unsigned int nFpts, unsigned int nEles)
 {
   unsigned int threads = 192;
@@ -342,7 +345,7 @@ void compute_element_dt_wrapper(mdvector_gpu<double> dt, mdvector_gpu<double> wa
 
   if (dt_type == 1)
   {
-    /* Get min dt using thrust */
+    /* Get min dt using thrust (pretty slow) */
     thrust::device_ptr<double> dt_ptr = thrust::device_pointer_cast(dt.data());
     thrust::device_ptr<double> min_ptr = thrust::min_element(dt_ptr, dt_ptr + nEles);
     dt_ptr[0] = min_ptr[0];

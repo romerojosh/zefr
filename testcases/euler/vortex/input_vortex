@@ -27,10 +27,11 @@ low_order 0
 
 # Reporting:
 output_prefix vortex
-write_freq  1000
-report_freq 1000
-force_freq  100000
-nQpts1D     10
+write_freq    1000
+report_freq   1000
+force_freq    100000
+nQpts1D       10
+compute_error 0
 
 # Riemann Solver:
 fconv_type Rusanov

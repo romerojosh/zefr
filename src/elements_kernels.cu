@@ -35,8 +35,8 @@ void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
  
 }
 
-void compute_Fconv_spts_2D_EulerNS_wrapper(mdvector_gpu<double> F_spts, 
-    mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles,
+void compute_Fconv_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
+    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
     double gamma)
 {
   dim3 threads(32,6);
@@ -59,7 +59,6 @@ void compute_Fvisc_spts_2D_EulerNS(mdvector_gpu<double> F_spts,
   if (spt >= nSpts || ele >= nEles)
     return;
 
-  /* Setting variables for convenience */
   /* States */
   double rho = U_spts(spt, ele, 0);
   double momx = U_spts(spt, ele, 1);
@@ -124,8 +123,8 @@ void compute_Fvisc_spts_2D_EulerNS(mdvector_gpu<double> F_spts,
 
 }
 
-void compute_Fvisc_spts_2D_EulerNS_wrapper(mdvector_gpu<double> F_spts, 
-    mdvector_gpu<double> U_spts, mdvector_gpu<double> dU_spts, 
+void compute_Fvisc_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
+    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts, 
     unsigned int nSpts, unsigned int nEles, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis)
 {
@@ -171,8 +170,8 @@ void transform_dU_quad(mdvector_gpu<double> dU_spts,
 
 }
 
-void transform_dU_quad_wrapper(mdvector_gpu<double> dU_spts, 
-    mdvector_gpu<double> jaco_spts, mdvector_gpu<double> jaco_det_spts,
+void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts, 
+    mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &jaco_det_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   dim3 threads(32, 6);
@@ -213,8 +212,8 @@ void transform_flux_quad(mdvector_gpu<double> F_spts,
 
 }
 
-void transform_flux_quad_wrapper(mdvector_gpu<double> F_spts, 
-    mdvector_gpu<double> jaco_spts, unsigned int nSpts, 
+void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts, 
+    mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
     unsigned int nEles, unsigned int nVars)
 {
   dim3 threads(32, 32);
