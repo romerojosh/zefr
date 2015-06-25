@@ -481,8 +481,8 @@ void Faces::apply_bcs()
 
   check_error();
 
-  U = U_d;
-  LDG_bias = LDG_bias_d;
+  //U = U_d;
+  //LDG_bias = LDG_bias_d;
 #endif
 
 }
@@ -561,7 +561,7 @@ void Faces::apply_bcs_dU()
 
   check_error();
   
-  dU = dU_d;
+  //dU = dU_d;
 #endif
 }
 
@@ -621,8 +621,8 @@ void Faces::compute_Fconv()
       check_error();
 
       /* Copy out data */
-      Fconv = Fconv_d;
-      P = P_d;
+      //Fconv = Fconv_d;
+      //P = P_d;
 
 #endif
 
@@ -736,7 +736,7 @@ void Faces::compute_Fvisc()
         input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
     check_error();
 
-    Fvisc = Fvisc_d;
+    //Fvisc = Fvisc_d;
 #endif
   }
 }
@@ -755,7 +755,7 @@ void Faces::compute_common_F()
 
     check_error();
 
-    Fcomm = Fcomm_d;
+    //Fcomm = Fcomm_d;
     waveSp = waveSp_d;
 #endif
   }
@@ -778,7 +778,7 @@ void Faces::compute_common_F()
 
       check_error();
 
-      Fcomm = Fcomm_d;
+      //Fcomm = Fcomm_d;
 #endif
     }
     /*
@@ -829,7 +829,7 @@ void Faces::compute_common_U()
 
     check_error();
 
-    Ucomm = Ucomm_d;
+    //Ucomm = Ucomm_d;
 #endif
   }
 
@@ -944,13 +944,13 @@ void Faces::transform_flux()
 #endif
 
 #ifdef _GPU
-  Fcomm_d = Fcomm;
+  //Fcomm_d = Fcomm;
 
   transform_flux_faces_wrapper(Fcomm_d, dA_d, nFpts, nVars);
 
   check_error();
 
-  Fcomm = Fcomm_d;
+  //Fcomm = Fcomm_d;
 #endif
 
 }

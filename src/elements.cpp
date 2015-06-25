@@ -317,7 +317,7 @@ void Elements::compute_Fconv()
       check_error();
 
       /* Copy out data */
-      F_spts = F_spts_d;
+      //F_spts = F_spts_d;
 #endif
 
     }
@@ -428,7 +428,7 @@ void Elements::compute_Fvisc()
           input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
       check_error();
 
-      F_spts = F_spts_d;
+      //F_spts = F_spts_d;
 #endif
 
   }

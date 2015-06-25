@@ -1,5 +1,5 @@
-#ifndef SOLVER_KERNELS_H
-#define SOLVER_KERNELS_H
+#ifndef solver_kernels_h
+#define solver_kernels_h
 
 
 template<typename T>
@@ -37,5 +37,9 @@ void U_from_faces_wrapper(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double>
 void dU_to_faces_wrapper(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims);
 
+void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
+    unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
+    unsigned int stage);
 
-#endif /* SOLVER_KERNELS_H */
+
+#endif /* solver_kernels_h */

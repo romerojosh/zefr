@@ -11,6 +11,10 @@
 #include "geometry.hpp"
 #include "input.hpp"
 
+#ifdef _GPU
+#include "mdvector_gpu.h"
+#endif
+
 class PMGrid;
 class FRSolver
 {
@@ -31,6 +35,12 @@ class FRSolver
     mdvector<double> divF;
     std::vector<double> dt;
     mdvector<double> U_ini;
+
+#ifdef _GPU
+    mdvector_gpu<double> divF_d;
+    mdvector_gpu<double> U_ini_d;
+    mdvector_gpu<double> dt_d;
+#endif
 
     void initialize_U();
     void restart(std::string restart_file);

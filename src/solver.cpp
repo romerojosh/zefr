@@ -204,6 +204,9 @@ void FRSolver::solver_data_to_device()
   eles->oppD_d = eles->oppD;
   eles->oppD_fpts_d = eles->oppD_fpts;
 
+  /* Solver data structures */
+  divF_d = divF;
+
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
   eles->U_fpts_d = eles->U_fpts;
@@ -402,12 +405,6 @@ void FRSolver::extrapolate_U()
   /* Copy data to GPU */
   eles->U_spts_d = eles->U_spts;
 
-  /*
-  cublasDgemm('N', 'N', eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
-      eles->oppE_d.data(), eles->nFpts, eles->U_spts_d.data(), eles->nSpts, 0.0,
-      eles->U_fpts_d.data(), eles->nFpts);
-  */
-
   double alpha = 1.0; double beta = 0.0;
   cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
       eles->oppE_d.data(), eles->nFpts, eles->U_spts_d.data(), eles->nSpts, &beta,
@@ -416,7 +413,7 @@ void FRSolver::extrapolate_U()
   check_error();
 
   /* Copy result out */
-  eles->U_fpts = eles->U_fpts_d;
+  //eles->U_fpts = eles->U_fpts_d;
 
 #endif
 
@@ -455,8 +452,8 @@ void FRSolver::U_to_faces()
   check_error();
 
   /* Copy out result */
-  eles->Ucomm = eles->Ucomm_d;
-  faces->U = faces->U_d;
+  //eles->Ucomm = eles->Ucomm_d;
+  //faces->U = faces->U_d;
 #endif
 }
 
@@ -484,7 +481,7 @@ void FRSolver::U_from_faces()
 
 #ifdef _GPU
   /* Copy in data */
-  faces->Ucomm_d = faces->Ucomm;
+  //faces->Ucomm_d = faces->Ucomm;
 
   U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d,
       geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts);
@@ -492,7 +489,7 @@ void FRSolver::U_from_faces()
   check_error();
 
   /* Copy out result */
-  eles->Ucomm = eles->Ucomm_d;
+  //eles->Ucomm = eles->Ucomm_d;
 #endif
 
 }
@@ -543,7 +540,7 @@ void FRSolver::compute_dU()
 
 #ifdef _GPU
   /* Copy data to GPU */
-  eles->Ucomm_d = eles->Ucomm;
+  //eles->Ucomm_d = eles->Ucomm;
 
 
   double alpha, beta;
@@ -568,7 +565,7 @@ void FRSolver::compute_dU()
   }
 
   /* Copy out result */
-  eles->dU_spts = eles->dU_spts_d;
+  //eles->dU_spts = eles->dU_spts_d;
 
 #endif
 
@@ -606,7 +603,7 @@ void FRSolver::extrapolate_dU()
 
 #ifdef _GPU
   /* Copy data to GPU */
-  eles->dU_spts_d = eles->dU_spts;
+  //eles->dU_spts_d = eles->dU_spts;
 
   double alpha = 1.0; double beta = 0.0;
 
@@ -619,7 +616,7 @@ void FRSolver::extrapolate_dU()
   }
 
   /* Copy out result */
-  eles->dU_fpts = eles->dU_fpts_d;
+  //eles->dU_fpts = eles->dU_fpts_d;
 
 #endif
 
@@ -657,7 +654,7 @@ void FRSolver::dU_to_faces()
   check_error();
 
   /* Copy out result */
-  faces->dU = faces->dU_d;
+  //faces->dU = faces->dU_d;
 
 #endif
 }
@@ -686,7 +683,7 @@ void FRSolver::F_from_faces()
 
 #ifdef _GPU
   /* Copy in data */
-  faces->Fcomm_d = faces->Fcomm;
+  //faces->Fcomm_d = faces->Fcomm;
 
   /* Can reuse kernel here */
   U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
@@ -695,7 +692,7 @@ void FRSolver::F_from_faces()
   check_error();
 
   /* Copy out data */
-  eles->Fcomm = eles->Fcomm_d;
+  //eles->Fcomm = eles->Fcomm_d;
 
 #endif
 }
@@ -747,8 +744,8 @@ void FRSolver::compute_dF()
 
 #ifdef _GPU
   /* Copy data to GPU */
-  eles->Fcomm_d = eles->Fcomm;
-  eles->F_spts_d = eles->F_spts;
+  //eles->Fcomm_d = eles->Fcomm;
+  //eles->F_spts_d = eles->F_spts;
 
 
   double alpha, beta;
@@ -773,7 +770,7 @@ void FRSolver::compute_dF()
   }
 
   /* Copy out result */
-  eles->dF_spts = eles->dF_spts_d;
+  //eles->dF_spts = eles->dF_spts_d;
 
 #endif
 
@@ -781,6 +778,7 @@ void FRSolver::compute_dF()
 
 void FRSolver::compute_divF(unsigned int stage)
 {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int ele =0; ele < eles->nEles; ele++)
@@ -793,6 +791,14 @@ void FRSolver::compute_divF(unsigned int stage)
       for (unsigned int ele =0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           divF(spt, ele, n, stage) += eles->dF_spts(spt, ele, n, dim);
+#endif
+
+#ifdef _GPU
+  compute_divF_wrapper(divF_d, eles->dF_spts_d, eles->nSpts, eles->nVars, eles->nEles, eles->nDims, stage);
+  check_error();
+
+  divF = divF_d;
+#endif
 
 }
 
@@ -1094,6 +1100,13 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
 
 void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int iter)
 {
+  /* If using GPU, copy out solution, gradient and pressure */
+#ifdef _GPU
+  faces->U = faces->U_d;
+  faces->dU = faces->dU_d;
+  faces->P = faces->P_d;
+#endif
+
   std::array<double, 3> force_conv, force_visc, taun;
   force_conv.fill(0.0); force_visc.fill(0.0); taun.fill(0.0);
 

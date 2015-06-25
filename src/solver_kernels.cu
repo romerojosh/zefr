@@ -188,3 +188,32 @@ void dU_to_faces_wrapper(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_g
 
   dU_to_faces<<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, nDims);
 }
+
+__global__
+void compute_divF(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
+    unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
+    unsigned int stage)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+
+  if (spt >= nSpts || ele >= nEles || var >= nVars)
+    return;
+
+  divF(spt, ele, var, stage) = dF_spts(spt, ele, var, 0);
+
+  for (unsigned int dim = 1; dim < nDims; dim ++)
+    divF(spt, ele, var, stage) += dF_spts(spt, ele, var, dim);
+
+}
+
+void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
+    unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
+    unsigned int stage)
+{
+  dim3 threads(16,16,4);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
+
+  compute_divF<<<threads,blocks>>>(divF, dF_spts, nSpts, nVars, nEles, nDims, stage);
+}
