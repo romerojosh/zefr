@@ -71,20 +71,38 @@ void FRSolver::setup_update()
   if (input->dt_scheme == "Euler")
   {
     nStages = 1;
-    rk_beta = {1.0};
+    //rk_beta = {1.0};
+    rk_beta.assign({nStages},1.0);
+
   }
   else if (input->dt_scheme == "RK44")
   {
     nStages = 4;
-    rk_alpha = {0.5, 0.5, 1.0};
-    rk_beta = {1./6., 1./3., 1./3., 1./6.};
+    //rk_alpha = {0.5, 0.5, 1.0};
+    //rk_beta = {1./6., 1./3., 1./3., 1./6.};
+    
+    rk_alpha.assign({nStages-1});
+    rk_alpha(0) = 0.5; rk_alpha(1) = 0.5; rk_alpha(2) = 1.0;
+
+    rk_beta.assign({nStages});
+    rk_beta(0) = 1./6.; rk_beta(1) = 1./3.; 
+    rk_beta(2) = 1./3.; rk_beta(3) = 1./6.;
   }
   else if (input->dt_scheme == "RK54")
   {
     nStages = 5;
-    rk_alpha = {-0.417890474499852, -1.192151694642677, -1.697784692471528, -1.514183444257156};
-    rk_beta = {0.149659021999229, 0.379210312999627, 0.822955029386982, 0.699450455949122, 
-      0.153057247968152};
+    //rk_alpha = {-0.417890474499852, -1.192151694642677, -1.697784692471528, -1.514183444257156};
+    //rk_beta = {0.149659021999229, 0.379210312999627, 0.822955029386982, 0.699450455949122, 
+    //  0.153057247968152};
+
+    rk_alpha.assign({nStages-1});
+    rk_alpha(0) = -0.417890474499852; rk_alpha(1) = -1.192151694642677; 
+    rk_alpha(2) = -1.697784692471528; rk_alpha(3) = -1.514183444257156;
+
+    rk_beta.assign({nStages});
+    rk_beta(0) = 0.149659021999229; rk_beta(1) = 0.379210312999627; 
+    rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
+    rk_beta(4) = 0.153057247968152;
   }
   else
   {
@@ -206,6 +224,9 @@ void FRSolver::solver_data_to_device()
 
   /* Solver data structures */
   divF_d = divF;
+  U_ini_d = U_ini;
+  rk_alpha_d = rk_alpha;
+  rk_beta_d = rk_beta;
 
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
@@ -805,7 +826,13 @@ void FRSolver::compute_divF(unsigned int stage)
 void FRSolver::update()
 {
   
-    U_ini = eles->U_spts;
+#ifdef _CPU
+  U_ini = eles->U_spts;
+#endif
+
+#ifdef _GPU
+  copy_U(U_ini_d, eles->U_spts_d, eles->U_spts.get_nvals());
+#endif
 
   /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
   for (unsigned int stage = 0; stage < (nStages-1); stage++)
@@ -828,26 +855,56 @@ void FRSolver::update()
       }
     }
 
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / 
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt[ele] / 
             eles->jaco_det_spts(spt,ele) * divF(spt, ele, n, stage);
+#endif
+#ifdef _GPU
+    RK_update_wrapper(eles->U_spts_d, U_ini_d, divF_d, eles->jaco_det_spts_d, dt[0], 
+        rk_alpha_d, eles->nSpts, eles->nEles, eles->nVars, stage);
+    check_error();
+#endif
+
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
   }
 
   /* Final stage */
   compute_residual(nStages-1);
+#ifdef _CPU
   eles->U_spts = U_ini;
+#endif
+#ifdef _GPU
+  copy_U(eles->U_spts_d, U_ini_d, eles->U_spts.get_nvals());
+#endif
 
   for (unsigned int stage = 0; stage < nStages; stage++)
+  {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -=rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) * 
+          eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt[ele] / eles->jaco_det_spts(spt,ele) * 
             divF(spt, ele, n, stage);
+#endif
 
+#ifdef _GPU
+    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, divF_d, eles->jaco_det_spts_d, dt[0], 
+        rk_beta_d, eles->nSpts, eles->nEles, eles->nVars, stage);
+    check_error();
+#endif
+  }
+
+
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
   flow_time += dt[0];
  
 }
@@ -882,7 +939,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha[stage] * dt[ele] / 
+          eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt[ele] / 
             eles->jaco_det_spts(spt,ele) * (divF(spt, ele, n, stage) + source(spt, ele, n));
   }
 
@@ -895,7 +952,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          eles->U_spts(spt, ele, n) -= rk_beta[stage] * dt[ele] / eles->jaco_det_spts(spt,ele) *
+          eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt[ele] / eles->jaco_det_spts(spt,ele) *
             (divF(spt, ele, n, stage) + source(spt, ele, n));
 
 }

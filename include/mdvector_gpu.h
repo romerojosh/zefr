@@ -11,6 +11,7 @@
 
 #include <vector>
 
+#include "macros.hpp"
 #include "mdvector.hpp"
 #include "cuda_runtime.h"
 #include "solver_kernels.h"
@@ -103,6 +104,7 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
 
   return *this;
 }
+
 
 template <typename T>
 T* mdvector_gpu<T>::data(void)

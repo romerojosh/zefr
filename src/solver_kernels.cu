@@ -67,6 +67,14 @@ template void copy_from_device<double>(double* host_data, const double* device_d
 template void copy_from_device<unsigned int>(unsigned int* host_data, const unsigned int* device_data, unsigned int size);
 template void copy_from_device<int>(int* host_data, const int* device_data, unsigned int size);
 
+
+void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+{
+  //TODO: Replace with kernel that does this. Should be faster. */
+  cudaMemcpy(vec1.data(), vec2.data(), size * sizeof(double), cudaMemcpyDeviceToDevice);
+  check_error();
+}
+
 void cublasDGEMM_wrapper(int M, int N, int K, const double *alpha, const double* A, int lda, const double* B, int ldb,
     const double* beta, double *C, int ldc)
 {
@@ -216,4 +224,35 @@ void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spt
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
 
   compute_divF<<<threads,blocks>>>(divF, dF_spts, nSpts, nVars, nEles, nDims, stage);
+}
+
+__global__
+void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, double dt, 
+    mdvector_gpu<double> rk_coeff, unsigned int nSpts, unsigned int nEles, 
+    unsigned int nVars, unsigned int stage)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+
+  if (spt >= nSpts || ele >= nEles || var >= nVars)
+    return;
+
+  /* Uses only a set dt right now. Will update tomorrow. */
+  U_spts(spt, ele, var) = U_ini(spt, ele, var) - rk_coeff(stage) * dt / 
+    jaco_det_spts(spt,ele) * divF(spt, ele, var, stage);
+}
+
+void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, double dt, 
+    mdvector_gpu<double> rk_coeff, unsigned int nSpts, unsigned int nEles, 
+    unsigned int nVars, unsigned int stage)
+{
+  dim3 threads(16,16,4);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
+      threads.y, (nVars + threads.z - 1)/threads.z);
+
+  RK_update<<<threads, blocks>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
+    rk_coeff, nSpts, nEles, nVars, stage);
 }

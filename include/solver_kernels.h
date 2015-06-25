@@ -21,6 +21,8 @@ void copy_to_device(T* device_data, const T* host_data, unsigned int size);
 template<typename T>
 void copy_from_device(T* host_data, const T* device_data, unsigned int size);
 
+void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
+
 void test_access_wrapper(mdvector_gpu<double> vec, double val);
 
 /* Wrapper for cublas DGEMM */
@@ -41,5 +43,9 @@ void compute_divF_wrapper(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spt
     unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
     unsigned int stage);
 
+void RK_update_wrapper(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, double dt, 
+    mdvector_gpu<double> rk_coeff, unsigned int nSpts, unsigned int nEles, 
+    unsigned int nVars, unsigned int stage);
 
 #endif /* solver_kernels_h */

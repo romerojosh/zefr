@@ -31,15 +31,14 @@ class FRSolver
     std::shared_ptr<Faces> faces;
 
     unsigned int nStages;
-    std::vector<double> rk_alpha, rk_beta;
+    //std::vector<double> rk_alpha, rk_beta;
+    mdvector<double> rk_alpha, rk_beta;
     mdvector<double> divF;
     std::vector<double> dt;
     mdvector<double> U_ini;
 
 #ifdef _GPU
-    mdvector_gpu<double> divF_d;
-    mdvector_gpu<double> U_ini_d;
-    mdvector_gpu<double> dt_d;
+    mdvector_gpu<double> divF_d, U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
 #endif
 
     void initialize_U();
