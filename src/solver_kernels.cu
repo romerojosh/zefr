@@ -441,7 +441,8 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
     /* Get min dt using thrust (pretty slow) */
     thrust::device_ptr<double> dt_ptr = thrust::device_pointer_cast(dt.data());
     thrust::device_ptr<double> min_ptr = thrust::min_element(dt_ptr, dt_ptr + nEles);
-    dt_ptr[0] = min_ptr[0];
+    //dt_ptr[0] = min_ptr[0];
+    thrust::copy(min_ptr, min_ptr+1, dt_ptr);
   }
 
 }

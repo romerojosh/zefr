@@ -1,4 +1,5 @@
 #include "elements_kernels.h"
+#include "input.hpp"
 #include "mdvector_gpu.h"
 
 __global__
@@ -137,13 +138,14 @@ void compute_Fvisc_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts,
 
 }
 
+template <unsigned int nVars>
 __global__
 void transform_dU_quad(mdvector_gpu<double> dU_spts, 
     mdvector_gpu<double> jaco_spts, mdvector_gpu<double> jaco_det_spts,
-    unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    unsigned int nSpts, unsigned int nEles)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
   if (spt >= nSpts || ele >= nEles)
     return;
@@ -172,23 +174,35 @@ void transform_dU_quad(mdvector_gpu<double> dU_spts,
 
 void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts, 
     mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &jaco_det_spts,
-    unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation)
 {
-  dim3 threads(16, 12);
-  dim3 blocks((nSpts + threads.x - 1) / threads.x, (nEles + threads.y - 1) / 
-      threads.y);
+  unsigned int threads= 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  transform_dU_quad<<<blocks, threads>>>(dU_spts, jaco_spts, jaco_det_spts,
-      nSpts, nEles, nVars);
+  if (equation == AdvDiff)
+  {
+    transform_dU_quad<1><<<blocks, threads>>>(dU_spts, jaco_spts, jaco_det_spts,
+        nSpts, nEles);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      transform_dU_quad<4><<<blocks, threads>>>(dU_spts, jaco_spts, jaco_det_spts,
+          nSpts, nEles);
+    else if (nDims == 3)
+      ThrowException("Under Construction!");
+  }
 }
 
+template <unsigned int nVars>
 __global__
 void transform_flux_quad(mdvector_gpu<double> F_spts, 
     mdvector_gpu<double> jaco_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars)
+    unsigned int nEles)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
   if (spt >= nSpts || ele >= nEles)
     return;
@@ -214,11 +228,21 @@ void transform_flux_quad(mdvector_gpu<double> F_spts,
 
 void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars)
+    unsigned int nEles, unsigned int nVars, unsigned int nDims,
+    unsigned int equation)
 {
-  dim3 threads(16, 12);
-  dim3 blocks((nSpts + threads.x - 1) / threads.x, (nEles + threads.y - 1) / 
-      threads.y);
+  unsigned int threads= 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  transform_flux_quad<<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles, nVars);
+  if (equation == AdvDiff)
+  {
+    transform_flux_quad<1><<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      transform_flux_quad<4><<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles);
+    else if (nDims == 3)
+      ThrowException("Under Construction!");
+  }
 }

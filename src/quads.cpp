@@ -480,7 +480,8 @@ void Quads::transform_dU()
 #endif
 
 #ifdef _GPU
-  transform_dU_quad_wrapper(dU_spts_d, jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars);
+  transform_dU_quad_wrapper(dU_spts_d, jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars,
+      nDims, input->equation);
   //dU_spts = dU_spts_d;
   check_error();
 #endif
@@ -510,7 +511,8 @@ void Quads::transform_flux()
 
 #ifdef _GPU
   //F_spts_d = F_spts;
-  transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars);
+  transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars,
+      nDims, input->equation);
 
   check_error();
 
