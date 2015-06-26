@@ -6,6 +6,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/extrema.h>
 
+#include "input.hpp"
 #include "macros.hpp"
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
@@ -97,15 +98,15 @@ void test_access_wrapper(mdvector_gpu<double> vec, double val)
   test_access<<<1,1>>>(vec, val);
 }
 
+template <unsigned int nVars>
 __global__
 void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> Ucomm, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous)
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts, bool viscous)
 {  
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
-  if (fpt >= nFpts || ele >= nEles || var >= nVars)
+  if (fpt >= nFpts || ele >= nEles)
     return;
 
   int gfpt = fpt2gfpt(fpt,ele);
@@ -113,36 +114,50 @@ void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvec
   if (gfpt == -1)
   {
     if (viscous) // if viscous, put extrapolated solution into Ucomm
-      Ucomm(fpt, ele, var) = U_fpts(fpt, ele, var);
-
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+        Ucomm(fpt, ele, var) = U_fpts(fpt, ele, var);
+    }
     return;
   }
 
   int slot = fpt2gfpt_slot(fpt,ele);
 
-  U_gfpts(gfpt, var, slot) = U_fpts(fpt, ele, var);
+  for (unsigned int var = 0; var < nVars; var++)
+    U_gfpts(gfpt, var, slot) = U_fpts(fpt, ele, var);
 
 }
 
 void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
     mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 
-    unsigned int nVars, unsigned int nEles, unsigned int nFpts, bool viscous)
+    unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation, 
+    bool viscous)
 {
-  dim3 threads(16, 16, 2);
-  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
+  unsigned int threads= 192;
+  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
 
-  U_to_faces<<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, viscous);
+  if (equation == AdvDiff)
+  {
+    U_to_faces<1><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      U_to_faces<4><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
+    else if (nDims == 3)
+      ThrowException("Under Construction!");
+  }
 }
 
+template <unsigned int nVars>
 __global__
 void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts)
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts)
 {
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
-  if (fpt >= nFpts || ele >= nEles || var >= nVars)
+  if (fpt >= nFpts || ele >= nEles)
     return;
 
   int gfpt = fpt2gfpt(fpt,ele);
@@ -153,23 +168,36 @@ void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_f
 
   int slot = fpt2gfpt_slot(fpt,ele);
 
-  Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(gfpt, var, slot);
+  for (unsigned int var = 0; var < nVars; var++)
+    Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(gfpt, var, slot);
 
 }
 
 void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double> &Ucomm_fpts, 
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
-    unsigned int nEles, unsigned int nFpts)
+    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation)
 {
-  dim3 threads(16 ,16, 2);
-  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
+  unsigned int threads= 192;
+  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
 
-  U_from_faces<<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts);
+  if (equation == AdvDiff)
+  {
+    U_from_faces<1><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      U_from_faces<4><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
+    else
+      ThrowException("Under Construction");
+  }
+
 }
 
+template <unsigned int nVars, unsigned int nDims>
 __global__
 void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims)
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts)
 {
   const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
@@ -197,54 +225,83 @@ void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, md
 
 void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU_gfpts, 
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
-    unsigned int nEles, unsigned int nFpts, unsigned int nDims)
+    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation)
 {
   unsigned int threads= 192;
   unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
   
 
-  dU_to_faces<<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, nDims);
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      dU_to_faces<1, 2><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
+    else
+      ThrowException("Under Construction");
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      dU_to_faces<4, 2><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
+    else
+      ThrowException("Under Construction");
+  }
 }
 
+template <unsigned int nVars, unsigned int nDims>
 __global__
 void compute_divF(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
-    unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
-    unsigned int stage)
+    unsigned int nSpts, unsigned int nEles, unsigned int stage)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
-  if (spt >= nSpts || ele >= nEles || var >= nVars)
+  if (spt >= nSpts || ele >= nEles)
     return;
 
-  double sum = 0.0;
-  //divF(spt, ele, var, stage) = dF_spts(spt, ele, var, 0);
+  double sum[nVars];
 
-  for (unsigned int dim = 0; dim < nDims; dim ++)
-    sum += dF_spts(spt, ele, var, dim);
-    //divF(spt, ele, var, stage) += dF_spts(spt, ele, var, dim);
+  for (unsigned int var = 0; var < nVars; var++)
+    sum[var] = 0.0;
 
-  divF(spt, ele, var, stage) = sum;
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int var = 0; var < nVars; var++)
+      sum[var] += dF_spts(spt, ele, var, dim);
+
+  for (unsigned int var = 0; var < nVars; var++)
+    divF(spt, ele, var, stage) = sum[var];
 
 
 }
 
 void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_spts, 
     unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
-    unsigned int stage)
+    unsigned int equation, unsigned int stage)
 {
-  dim3 threads(16,16,2);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
+  unsigned int threads= 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  compute_divF<<<blocks, threads>>>(divF, dF_spts, nSpts, nVars, nEles, nDims, stage);
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      compute_divF<1,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
+    else
+      ThrowException("Under construction!");
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      compute_divF<4,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
+    else
+      ThrowException("Under construction!");
+  }
 }
 
+template <unsigned int nVars>
 __global__
 void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
     mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
     mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
-    unsigned int nVars, unsigned int stage, unsigned int nStages, bool last_stage)
+    unsigned int stage, unsigned int nStages, bool last_stage)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
@@ -269,7 +326,7 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   }
   else
   {
-    double sum[4];
+    double sum[nVars];
     for (unsigned int var = 0; var < nVars; var++)
       sum[var] = 0.;
 
@@ -291,14 +348,26 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
 void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
     mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
     mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
-    unsigned int nVars, unsigned int stage, unsigned int nStages, bool last_stage)
+    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int stage, 
+    unsigned int nStages, bool last_stage)
 {
   dim3 threads(16,12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
       threads.y);
 
-  RK_update<<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
-      rk_coeff, dt_type, nSpts, nEles, nVars, stage, nStages, last_stage);
+  if (equation == AdvDiff)
+  {
+      RK_update<1><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      RK_update<4><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+    else
+      ThrowException("Under Construction");
+  }
 }
 
 

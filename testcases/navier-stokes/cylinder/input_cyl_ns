@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile full_cyl_utri.msh
+meshfile full_cyl_uquad.msh
 
 # Solver:
 order     2
@@ -11,7 +11,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
 CFL	  0.6
 

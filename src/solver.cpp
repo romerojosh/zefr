@@ -468,7 +468,8 @@ void FRSolver::U_to_faces()
 
 #ifdef _GPU
   U_to_faces_wrapper(eles->U_fpts_d, faces->U_d, eles->Ucomm_d, geo.fpt2gfpt_d,
-      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, input->viscous);
+      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, eles->nDims,
+      input->equation, input->viscous);
 
   check_error();
 
@@ -505,7 +506,8 @@ void FRSolver::U_from_faces()
   //faces->Ucomm_d = faces->Ucomm;
 
   U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d,
-      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts);
+      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts,
+      eles->nDims, input->equation);
 
   check_error();
 
@@ -670,7 +672,7 @@ void FRSolver::dU_to_faces()
 
 #ifdef _GPU
   dU_to_faces_wrapper(eles->dU_fpts_d, faces->dU_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
-      eles->nVars, eles->nEles, eles->nFpts, eles->nDims);
+      eles->nVars, eles->nEles, eles->nFpts, eles->nDims, input->equation);
 
   check_error();
 
@@ -707,8 +709,9 @@ void FRSolver::F_from_faces()
   //faces->Fcomm_d = faces->Fcomm;
 
   /* Can reuse kernel here */
-  U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
-      eles->nVars, eles->nEles, eles->nFpts);
+  U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, 
+      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, 
+      eles->nDims, input->equation);
 
   check_error();
 
@@ -815,7 +818,8 @@ void FRSolver::compute_divF(unsigned int stage)
 #endif
 
 #ifdef _GPU
-  compute_divF_wrapper(divF_d, eles->dF_spts_d, eles->nSpts, eles->nVars, eles->nEles, eles->nDims, stage);
+  compute_divF_wrapper(divF_d, eles->dF_spts_d, eles->nSpts, eles->nVars, eles->nEles, 
+      eles->nDims, input->equation, stage);
   check_error();
 
   //divF = divF_d;
@@ -870,7 +874,8 @@ void FRSolver::update()
 
 #ifdef _GPU
     RK_update_wrapper(eles->U_spts_d, U_ini_d, divF_d, eles->jaco_det_spts_d, dt_d, 
-        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, stage, nStages, false);
+        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+        input->equation, stage, nStages, false);
     check_error();
 #endif
 
@@ -909,7 +914,8 @@ void FRSolver::update()
 
 #ifdef _GPU
     RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, divF_d, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, 0, nStages, true);
+        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+        input->equation, 0, nStages, true);
     check_error();
 #endif
 
