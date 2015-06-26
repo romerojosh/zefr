@@ -171,11 +171,10 @@ __global__
 void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims)
 {
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
-  const unsigned int var = blockDim.z * blockIdx.z + threadIdx.z;
+  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
-  if (fpt >= nFpts || ele >= nEles || var >= nVars)
+  if (fpt >= nFpts || ele >= nEles)
     return;
 
   int gfpt = fpt2gfpt(fpt,ele);
@@ -188,7 +187,10 @@ void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, md
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    dU_gfpts(gfpt, var, dim, slot) = dU_fpts(fpt, ele, var, dim);
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      dU_gfpts(gfpt, var, dim, slot) = dU_fpts(fpt, ele, var, dim);
+    }
   }
 
 }
@@ -197,8 +199,9 @@ void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
     unsigned int nEles, unsigned int nFpts, unsigned int nDims)
 {
-  dim3 threads(16, 12, 2);
-  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y, (nVars + threads.z - 1)/threads.z);
+  unsigned int threads= 192;
+  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
+  
 
   dU_to_faces<<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nVars, nEles, nFpts, nDims);
 }

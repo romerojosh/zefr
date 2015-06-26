@@ -264,7 +264,7 @@ void Elements::setup_aux()
 
 void Elements::compute_Fconv()
 {
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
 #pragma omp parallel for collapse(4)
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -282,7 +282,7 @@ void Elements::compute_Fconv()
     }
   }
 
-  else if (input->equation == "EulerNS")
+  else if (input->equation == EulerNS)
   {
     if (nDims == 2)
     {
@@ -331,7 +331,7 @@ void Elements::compute_Fconv()
 
 void Elements::compute_Fvisc()
 {
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
 #pragma omp parallel for collapse(4)
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -349,7 +349,7 @@ void Elements::compute_Fvisc()
       }
     }
   }
-  else if (input->equation == "EulerNS")
+  else if (input->equation == EulerNS)
   {
 #ifdef _CPU
 #pragma omp parallel for collapse(2)

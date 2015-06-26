@@ -42,7 +42,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   Ucomm.assign({nFpts, nVars, 2});
 
   /* If running Euler/NS, allocate memory for pressure */
-  if (input->equation == "EulerNS")
+  if (input->equation == EulerNS)
     P.assign({nFpts, 2});
 
   waveSp.assign({nFpts}, 0.0);
@@ -568,7 +568,7 @@ void Faces::apply_bcs_dU()
 
 void Faces::compute_Fconv()
 {  
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -585,7 +585,7 @@ void Faces::compute_Fconv()
       }
     }
   }
-  else if (input->equation == "EulerNS")
+  else if (input->equation == EulerNS)
   {
     if (nDims == 2)
     {
@@ -637,7 +637,7 @@ void Faces::compute_Fconv()
 
 void Faces::compute_Fvisc()
 {  
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -654,7 +654,7 @@ void Faces::compute_Fvisc()
       }
     }
   }
-  else if (input->equation == "EulerNS")
+  else if (input->equation == EulerNS)
   {
 #ifdef _CPU
 #pragma omp parallel for collapse(2)
@@ -751,7 +751,7 @@ void Faces::compute_common_F()
 
 #ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, norm_d, outnorm_d, waveSp_d, input->gamma, 
-        input->rus_k, nFpts, nVars, nDims);
+        input->rus_k, nFpts, nVars, nDims, input->equation);
 
     check_error();
 
@@ -774,7 +774,7 @@ void Faces::compute_common_F()
 
 #ifdef _GPU
       LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, outnorm_d, LDG_bias_d, input->ldg_b,
-          input->ldg_tau, nFpts, nVars, nDims);
+          input->ldg_tau, nFpts, nVars, nDims, input->equation);
 
       check_error();
 
@@ -892,14 +892,14 @@ void Faces::rusanov_flux()
     }
 
     /* Get numerical wavespeed */
-    if (input->equation == "AdvDiff")
+    if (input->equation == AdvDiff)
     {
       waveSp(fpt) = 0.0;
 
       for (unsigned int dim = 0; dim < nDims; dim++)
         waveSp(fpt) += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
     }
-    else if (input->equation == "EulerNS")
+    else if (input->equation == EulerNS)
     {
       /* Compute speed of sound */
       double aL = std::sqrt(std::abs(input->gamma * P(fpt, 0) / WL[0]));

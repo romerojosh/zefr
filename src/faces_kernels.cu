@@ -1,3 +1,4 @@
+#include "input.hpp"
 #include "faces_kernels.h"
 #include "mdvector_gpu.h"
 
@@ -92,7 +93,7 @@ void compute_Fvisc_fpts_2D_EulerNS(mdvector_gpu<double> Fvisc,
     else
     {
       double rt_ratio = (gamma - 1.0) * e_int / (rt);
-      mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+      mu = mu_in * pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
     }
 
     double du_dx = (momx_dx - rho_dx * u) / rho;
@@ -671,22 +672,21 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, uns
       gfpt2bnd, per_fpt_list);
 }
 
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts,
     mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, double gamma, 
-    double rus_k, unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+    double rus_k, unsigned int nFpts)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (fpt >= nFpts)
     return;
 
-  /* Currently hardcoded for Euler. Need to pass nVars as template arg. */
-  double FL[4]; double FR[4];
-  double WL[4]; double WR[4];
-
-  double norm[2]; double outnorm[2];
+  double FL[nVars]; double FR[nVars];
+  double WL[nVars]; double WR[nVars];
+  double norm[nDims]; double outnorm[nDims];
 
   norm[0] = norm_gfpts(fpt, 0, 0);
   norm[1] = norm_gfpts(fpt, 1, 0);
@@ -694,7 +694,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   outnorm[1] = outnorm_gfpts(fpt, 1);
 
   /* Initialize FL, FR */
-  for (unsigned int n = 0; n < 4; n++)
+  for (unsigned int n = 0; n < nVars; n++)
   {
     FL[n] = 0.0; FR[n] = 0.0;
   }
@@ -716,37 +716,38 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   }
 
   /* Get numerical wavespeed */
-  
-  /*
-  if (input->equation == "AdvDiff")
+  double waveSp;
+  if (equation == AdvDiff) 
   {
-    waveSp[fpt] = 0.0;
+    //waveSp = 0.0;
 
+    //for (unsigned int dim = 0; dim < nDims; dim++)
+      //waveSp += AdvDiff_A(dim) * norm(fpt, dim, 0);
+    
+    waveSp = FL[0]/WL[0];
+
+    waveSp_gfpts(fpt) = waveSp;
+  }
+  else if (equation == EulerNS)
+  {
+    /* Compute speed of sound */
+    double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
+    double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
+
+    /* Compute normal velocities */
+    double VnL = 0.0; double VnR = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
-      waveSp[fpt] += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+    {
+      VnL += WL[dim+1]/WL[0] * norm[dim];
+      VnR += WR[dim+1]/WR[0] * norm[dim];
+    }
+
+    waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+
+    // NOTE: Can I just store absolute of waveSp?
+    waveSp_gfpts(fpt) = waveSp;
+    waveSp = std::abs(waveSp);
   }
-  else if (input->equation == "EulerNS")
-  {
-  */
-  
-  /* Compute speed of sound */
-  double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
-  double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
-
-  /* Compute normal velocities */
-  double VnL = 0.0; double VnR = 0.0;
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    VnL += WL[dim+1]/WL[0] * norm[dim];
-    VnR += WR[dim+1]/WR[0] * norm[dim];
-  }
-
-  double waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
-
-  // NOTE: Can I just store absolute of waveSp?
-  waveSp_gfpts(fpt) = waveSp;
-  waveSp = std::abs(waveSp);
-  //}
 
   /* Compute common normal flux */
   for (unsigned int n = 0; n < nVars; n++)
@@ -762,25 +763,41 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &norm,
     mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, double gamma, double rus_k,
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation)
 {
-  //unsigned int threads = 192;
-  //unsigned int blocks = (nFpts + threads - 1)/threads;
-  int threads; int minBlocks; int blocks;
+  unsigned int threads = 256;
+  unsigned int blocks = (nFpts + threads - 1)/threads;
+  //int threads; int minBlocks; int blocks;
 
-  cudaOccupancyMaxPotentialBlockSize(&minBlocks, &threads, (const void*)rusanov_flux, 0, nFpts);
+  //cudaOccupancyMaxPotentialBlockSize(&minBlocks, &threads, (const void*)rusanov_flux, 0, nFpts);
 
-  blocks = (nFpts + threads - 1) / threads;
+  //blocks = (nFpts + threads - 1) / threads;
 
-  rusanov_flux<<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
-      nFpts, nVars, nDims);
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
+          nFpts);
+    else
+      ThrowException("Under Construction");
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
+          nFpts);
+    else
+      ThrowException("Under Construction");
+
+  }
 }
 
+template <unsigned int nVars, unsigned int nDims>
 __global__
 void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_no, mdvector_gpu<double> norm_gfpts, 
     mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<int> LDG_bias, double beta, double tau, 
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+    unsigned int nFpts)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -788,11 +805,11 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
     return;
 
   /* Hardcoded for EulerNS. Will need to add nVar template */
-  double FL[4]; double FR[4];
-  double WL[4]; double WR[4];
-  double Fcomm_temp[4][2];
-  double norm[2];
-  double outnorm[2];
+  double FL[nVars]; double FR[nVars];
+  double WL[nVars]; double WR[nVars];
+  double Fcomm_temp[nVars][nDims];
+  double norm[nDims];
+  double outnorm[nDims];
    
   /* Zero out temporary array */
   for (unsigned int n = 0; n < nVars; n++)
@@ -800,7 +817,7 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
       Fcomm_temp[n][dim] = 0.0;
 
   /* Initialize FL, FR */
-  for (unsigned int n = 0; n < 4; n++)
+  for (unsigned int n = 0; n < nVars; n++)
   {
     FL[n] = 0.0; FR[n] = 0.0;
   }
@@ -866,13 +883,27 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
 void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, 
     mdvector_gpu<int> &outnorm, mdvector_gpu<int> &LDG_bias, double beta, double tau, 
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 256;
   unsigned int blocks = (nFpts + threads - 1)/threads;
 
-  LDG_flux<<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
-      nFpts, nVars, nDims);
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      LDG_flux<1, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
+          nFpts);
+    else
+      ThrowException("Under Construction!");
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      LDG_flux<4, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
+          nFpts);
+    else
+      ThrowException("Under Construction!");
+  }
 }
 __global__
 void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm, 

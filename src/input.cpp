@@ -11,12 +11,21 @@ InputStruct read_input_file(std::string inputfile)
   std::ifstream f(inputfile);
 
   InputStruct input;
+  std::string str;
 
   read_param(f, "nDims", input.nDims);
   read_param(f, "meshfile", input.meshfile);
 
   read_param(f, "order", input.order);
-  read_param(f, "equation", input.equation);
+  read_param(f, "equation", str);
+
+  if (str == "AdvDiff")
+    input.equation = AdvDiff;
+  else if (str == "EulerNS")
+    input.equation = EulerNS;
+  else
+    ThrowException("Equation not recognized!");
+
   read_param(f, "viscous", input.viscous);
 
   read_param(f, "n_steps", input.n_steps);
@@ -93,7 +102,7 @@ InputStruct read_input_file(std::string inputfile)
   f.close();
 
   /* If running Navier-Stokes, nondimensionalize */
-  if (input.viscous && input.equation == "EulerNS")
+  if (input.viscous && input.equation == EulerNS)
     apply_nondim(input);
 
   return input;

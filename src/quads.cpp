@@ -48,11 +48,11 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   nFpts = nSpts1D * nFaces;
   nPpts = (nSpts1D+2)*(nSpts1D+2);
   
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
     nVars = 1;
   }
-  else if (input->equation == "EulerNS")
+  else if (input->equation == EulerNS)
   {
     nVars = 4;
   }

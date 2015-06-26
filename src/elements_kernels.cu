@@ -89,7 +89,7 @@ void compute_Fvisc_spts_2D_EulerNS(mdvector_gpu<double> F_spts,
   else
   {
     double rt_ratio = (gamma - 1.0) * e_int / (rt);
-    mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+    mu = mu_in * pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
   }
 
   double du_dx = (momx_dx - rho_dx * u) / rho;

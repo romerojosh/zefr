@@ -326,7 +326,7 @@ void FRSolver::initialize_U()
 
   /* Initialize solution */
   // TODO: Fill in with actual logic. */
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
     if (input->ic_type == 0)
     {
@@ -350,7 +350,7 @@ void FRSolver::initialize_U()
       ThrowException("ic_type not recognized!");
     }
   }
-  else if (input->equation == "EulerNS")
+  else if (input->equation == EulerNS)
   {
     if (input->ic_type == 0)
     {
@@ -1123,7 +1123,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     }
   }
 
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
     f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
     f << "SCALARS U double 1" << std::endl;
@@ -1138,7 +1138,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
       f << std::endl;
     }
   }
-  else if(input->equation == "EulerNS")
+  else if(input->equation == EulerNS)
   {
     std::array<std::string,4> var = {"rho", "xmom", "ymom", "energy"};
 

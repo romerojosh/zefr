@@ -3,7 +3,7 @@ CU = nvcc
 #CXX = g++-4.9
 cflags = -Ofast -Wall -Wextra -Wconversion -fopenmp 
 flags += -D_GPU -std=c++11
-cuflags = -arch=sm_20 -O3
+cuflags = -arch=sm_20 -O3 -use_fast_math
 #libs = -L /usr/local/Cellar/openblas/0.2.13/lib -lopenblas
 #inc = -I /usr/local/Cellar/openblas/0.2.13/include 
 #libs = -lblas
