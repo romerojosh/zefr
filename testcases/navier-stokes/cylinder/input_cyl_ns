@@ -9,7 +9,7 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 3000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
@@ -28,9 +28,10 @@ low_order 0
 # Reporting:
 output_prefix cyl_uquad
 write_freq  1000
-report_freq 100
+report_freq 1000
 force_freq 1000
 nQpts1D     10
+compute_error 0
 
 # Riemann Solver:
 fconv_type Rusanov

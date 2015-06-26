@@ -39,7 +39,7 @@ void compute_Fconv_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts,
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
     double gamma)
 {
-  dim3 threads(32,6);
+  dim3 threads(16,12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
       threads.y);
 
@@ -128,7 +128,7 @@ void compute_Fvisc_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts,
     unsigned int nSpts, unsigned int nEles, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis)
 {
-  dim3 threads(32,6);
+  dim3 threads(16, 12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
       threads.y);
 
@@ -174,7 +174,7 @@ void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts,
     mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &jaco_det_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
-  dim3 threads(32, 6);
+  dim3 threads(16, 12);
   dim3 blocks((nSpts + threads.x - 1) / threads.x, (nEles + threads.y - 1) / 
       threads.y);
 
@@ -216,7 +216,7 @@ void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts,
     mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
     unsigned int nEles, unsigned int nVars)
 {
-  dim3 threads(32, 32);
+  dim3 threads(16, 12);
   dim3 blocks((nSpts + threads.x - 1) / threads.x, (nEles + threads.y - 1) / 
       threads.y);
 

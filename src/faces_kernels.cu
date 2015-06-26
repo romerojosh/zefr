@@ -674,8 +674,8 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, uns
 __global__
 void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts,
-    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, double gamma, double rus_k,
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims)
+    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, double gamma, 
+    double rus_k, unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -699,7 +699,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     FL[n] = 0.0; FR[n] = 0.0;
   }
 
-  /* Get interface-normal flux components  (from L to R)*/
+  /* Get interface-normal flux components  (from L to R) */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int n = 0; n < nVars; n++)
@@ -716,6 +716,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   }
 
   /* Get numerical wavespeed */
+  
   /*
   if (input->equation == "AdvDiff")
   {
@@ -727,6 +728,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   else if (input->equation == "EulerNS")
   {
   */
+  
   /* Compute speed of sound */
   double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
   double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
@@ -762,8 +764,13 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
     mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, double gamma, double rus_k,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
-  unsigned int threads = 192;
-  unsigned int blocks = (nFpts + threads - 1)/threads;
+  //unsigned int threads = 192;
+  //unsigned int blocks = (nFpts + threads - 1)/threads;
+  int threads; int minBlocks; int blocks;
+
+  cudaOccupancyMaxPotentialBlockSize(&minBlocks, &threads, (const void*)rusanov_flux, 0, nFpts);
+
+  blocks = (nFpts + threads - 1) / threads;
 
   rusanov_flux<<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
       nFpts, nVars, nDims);

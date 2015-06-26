@@ -870,7 +870,7 @@ void FRSolver::update()
 
 #ifdef _GPU
     RK_update_wrapper(eles->U_spts_d, U_ini_d, divF_d, eles->jaco_det_spts_d, dt_d, 
-        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, stage);
+        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, stage, nStages, false);
     check_error();
 #endif
 
@@ -885,9 +885,9 @@ void FRSolver::update()
   copy_U(eles->U_spts_d, U_ini_d, eles->U_spts.get_nvals());
 #endif
 
+#ifdef _CPU
   for (unsigned int stage = 0; stage < nStages; stage++)
   {
-#ifdef _CPU
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -904,14 +904,14 @@ void FRSolver::update()
               divF(spt, ele, n, stage);
           }
         }
+  }
 #endif
 
 #ifdef _GPU
     RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, divF_d, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, stage);
+        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, 0, nStages, true);
     check_error();
 #endif
-  }
 
 
   flow_time += dt(0);
