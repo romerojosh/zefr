@@ -1,6 +1,8 @@
 #ifndef funcs_hpp
 #define funcs_hpp
 
+#include <cmath>
+
 #include "input.hpp"
 
 /* Computes solution at specified time and location */
@@ -15,6 +17,15 @@ struct square
   T operator()(const T &val1, const T &val2)
   {
     return (val1 + val2 * val2);
+  }
+};
+
+template <typename T>
+struct abs_sum
+{
+  T operator()(const T &val1, const T &val2)
+  {
+    return (val1 + std::abs(val2));
   }
 };
 

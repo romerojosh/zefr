@@ -1,15 +1,15 @@
 # Geometry:
 nDims    2
-meshfile QuadBox_32x32_eul.msh
+meshfile QuadBox_128x128_eul.msh
 
 # Solver:
 order     3
 equation EulerNS    (AdvDiff, EulerNS)
-viscous  0
+viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 500
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
@@ -28,8 +28,9 @@ low_order 0
 # Reporting:
 output_prefix vortex
 write_freq    1000
-report_freq   1000
+report_freq   100
 force_freq    100000
+res_type      1
 nQpts1D       10
 compute_error 0
 

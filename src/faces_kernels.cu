@@ -184,7 +184,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, 3, 1) = P_fs/(gamma-1.0) + 0.5*rho_fs * Vsq; 
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
     }
@@ -196,7 +196,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
         U(fpt, n, 1) = U(fpt, n, 0);
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
     }
@@ -284,7 +284,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
     }
@@ -348,7 +348,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
     }
@@ -427,7 +427,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       }
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
 
@@ -449,7 +449,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
     }
@@ -478,7 +478,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, 3, 1) = PR / (gamma - 1.0);
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
     }
@@ -511,7 +511,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
 
       /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      LDG_bias(fpt) = -1;
 
       break;
     }
@@ -538,6 +538,9 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
         U(fpt, dim+1, 1) = 0.0;
 
       U(fpt, 3, 1) = PR / (gamma - 1.0);
+
+      /* Set LDG bias */
+      LDG_bias(fpt) = 1;
 
       break;
     }
@@ -568,6 +571,9 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       }
 
       U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
+
+      /* Set LDG bias */
+      LDG_bias(fpt) = 1;
 
       break;
     }
@@ -849,7 +855,8 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   }
 
   /* Compute common normal viscous flux and accumulate */
-  if (!LDG_bias(fpt))
+  /* If interior, use central */
+  if (LDG_bias(fpt) == 0)
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -859,8 +866,8 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
         tau * norm[1] * (WL[n] - WR[n]) + beta * norm[1] * (FL[n] - FR[n]);
     }
   }
-  /* Else, only use left flux state */
-  else
+  /* If Dirichlet boundary, use left state only */
+  else if (LDG_bias(fpt) == -1)
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -868,7 +875,15 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
       Fcomm_temp[n][1] += Fvisc(fpt, n, 1, 0) + tau * norm[1] * (WL[n] - WR[n]);
     }
   }
-
+  /* If Neumann boundary, use right state only */
+  else if (LDG_bias(fpt) == 1)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm_temp[n][0] += Fvisc(fpt, n, 0, 1) + tau * norm[0] * (WL[n] - WR[n]);
+      Fcomm_temp[n][1] += Fvisc(fpt, n, 1, 1) + tau * norm[1] * (WL[n] - WR[n]);
+    }
+  }
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int n = 0; n < nVars; n++)
@@ -905,9 +920,11 @@ void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc,
       ThrowException("Under Construction!");
   }
 }
+
 __global__
 void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm, 
-    mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars)
+    mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars,
+    mdvector_gpu<int> LDG_bias)
 {
     const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
     const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
@@ -921,18 +938,30 @@ void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm,
 
     double UL = U(fpt, var, 0); double UR = U(fpt, var, 1);
 
-    Ucomm(fpt, var, 0) = 0.5*(UL + UR) - beta*(UL - UR);
-    Ucomm(fpt, var, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+    if (LDG_bias(fpt) == 0)
+    {
+      Ucomm(fpt, var, 0) = 0.5*(UL + UR) - beta*(UL - UR);
+      Ucomm(fpt, var, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+    }
+    /* If on boundary, don't use beta (this is from HiFILES. Need to check) */
+    else
+    {
+      Ucomm(fpt, var, 0) = 0.5*(UL + UR);
+      Ucomm(fpt, var, 1) = 0.5*(UL + UR);
+    }
+
 
 }
 
 void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 
-    mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars)
+    mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,
+    mdvector_gpu<int> &LDG_bias)
 {
   dim3 threads(32,4);
   dim3 blocks((nFpts + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
 
-  compute_common_U_LDG<<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts, nVars);
+  compute_common_U_LDG<<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts, nVars,
+      LDG_bias);
 
 }
 __global__

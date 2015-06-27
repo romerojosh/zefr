@@ -1173,10 +1173,13 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter, 
     std::chrono::high_resolution_clock::time_point t1)
 {
+
+  /* If running on GPU, copy out divergence */
 #ifdef _GPU
   divF = divF_d;
 #endif
-  std::vector<double> max_res(eles->nVars,0.0);
+
+  std::vector<double> res(eles->nVars,0.0);
 
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
@@ -1185,14 +1188,28 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
         divF(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
 
   for (unsigned int n = 0; n < eles->nVars; n++)
-    max_res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, 
-            eles->nEles-1, n, nStages-1), 0.0, square<double>()));
+  {
+    /* Infinity norm */
+    if (input->res_type == 0)
+      res[n] =*std::max_element(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1));
 
+    /* L1 norm */
+    else if (input->res_type == 1)
+      res[n] = std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, 
+              eles->nEles-1, n, nStages-1), 0.0, abs_sum<double>());
+
+    /* L2 norm */
+    else if (input->res_type == 2)
+      res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, 
+              eles->nEles-1, n, nStages-1), 0.0, square<double>()));
+  }
+
+  /* Write residual (normalized by number of solution points) */
   std::cout << iter + restart_iter << " ";
-  for (auto &val : max_res)
-    std::cout << std::scientific << val << " ";
+  for (auto &val : res)
+    std::cout << std::scientific << val / (eles->nSpts * eles->nEles) << " ";
 
-  std::cout << "dt: " << dt(0);
+  //std::cout << "dt: " << dt(0);
   std::cout << std::endl;
   
   /* Write to history file */
@@ -1200,8 +1217,8 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
   auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
   f << iter + restart_iter << " " << current_runtime.count() << " ";
 
-  for (auto &val : max_res)
-    f << std::scientific << val << " ";
+  for (auto &val : res)
+    f << std::scientific << val / (eles->nSpts * eles->nEles) << " ";
   f << std::endl;
 
 }

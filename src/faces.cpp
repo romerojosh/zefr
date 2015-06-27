@@ -95,7 +95,7 @@ void Faces::apply_bcs()
         U(fpt, 3, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
         break;
       }
@@ -107,7 +107,7 @@ void Faces::apply_bcs()
           U(fpt, n, 1) = U(fpt, n, 0);
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
         break;
       }
@@ -192,7 +192,7 @@ void Faces::apply_bcs()
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
         break;
       }
@@ -252,7 +252,7 @@ void Faces::apply_bcs()
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
         break;
       }
@@ -331,7 +331,7 @@ void Faces::apply_bcs()
         }
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
  
         break;
@@ -354,7 +354,7 @@ void Faces::apply_bcs()
         U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
         break;
       }
@@ -381,7 +381,7 @@ void Faces::apply_bcs()
         U(fpt, 3, 1) = PR / (input->gamma - 1.0);
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
 
         break;
@@ -413,7 +413,7 @@ void Faces::apply_bcs()
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
 
         break;
       }
@@ -438,6 +438,9 @@ void Faces::apply_bcs()
           U(fpt, dim+1, 1) = 0.0;
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0);
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
 
         break;
       }
@@ -466,6 +469,9 @@ void Faces::apply_bcs()
         }
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
 
         break;
       }
@@ -812,20 +818,34 @@ void Faces::compute_common_U()
 
       /* Get left and right state variables */
       // TODO: Verify that this is the correct formula. Seem different than papers...
-      for (unsigned int n = 0; n < nVars; n++)
+      /* If interior, allow use of beta factor */
+      if (LDG_bias(fpt) == 0)
       {
-        double UL = U(fpt, n, 0); double UR = U(fpt, n, 1);
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          double UL = U(fpt, n, 0); double UR = U(fpt, n, 1);
 
-         Ucomm(fpt, n, 0) = 0.5*(UL + UR) - beta*(UL - UR);
-         Ucomm(fpt, n, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+           Ucomm(fpt, n, 0) = 0.5*(UL + UR) - beta*(UL - UR);
+           Ucomm(fpt, n, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+        }
+      }
+      /* If on boundary, don't use beta (this is from HiFILES. Need to check) */
+      else
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          double UL = U(fpt, n, 0); double UR = U(fpt, n, 1);
 
+           Ucomm(fpt, n, 0) = 0.5*(UL + UR);
+           Ucomm(fpt, n, 1) = 0.5*(UL + UR);
+        }
       }
 
     }
 #endif
 
 #ifdef _GPU
-    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars);
+    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars, LDG_bias_d);
 
     check_error();
 
@@ -996,7 +1016,8 @@ void Faces::LDG_flux()
     }
 
     /* Compute common normal viscous flux and accumulate */
-    if (!LDG_bias(fpt))
+    /* If interior, use central */
+    if (LDG_bias(fpt) == 0)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
@@ -1006,13 +1027,22 @@ void Faces::LDG_flux()
             - WR[n]) + beta * norm(fpt, 1, 0)* (FL[n] - FR[n]);
       }
     }
-    /* Else, only use left flux state */
-    else
+    /* If Dirichlet boundary, use left state only */
+    else if (LDG_bias(fpt) == -1)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
         Fcomm_temp(fpt, n, 0) += Fvisc(fpt, n, 0, 0) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
         Fcomm_temp(fpt, n, 1) += Fvisc(fpt, n, 1, 0) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
+      }
+    }
+    /* If Neumann boundary, use right state only */
+    else if (LDG_bias(fpt) == 1)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        Fcomm_temp(fpt, n, 0) += Fvisc(fpt, n, 0, 1) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
+        Fcomm_temp(fpt, n, 1) += Fvisc(fpt, n, 1, 1) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
       }
     }
 
