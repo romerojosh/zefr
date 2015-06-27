@@ -1191,17 +1191,17 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
   {
     /* Infinity norm */
     if (input->res_type == 0)
-      res[n] =*std::max_element(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, eles->nEles-1, n, nStages-1));
+      res[n] =*std::max_element(&divF(0, 0, n, nStages-1), &divF(0, 0, n+1, nStages-1));
 
     /* L1 norm */
     else if (input->res_type == 1)
-      res[n] = std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, 
-              eles->nEles-1, n, nStages-1), 0.0, abs_sum<double>());
+      res[n] = std::accumulate(&divF(0, 0, n, nStages-1), &divF(0, 0, n+1, nStages-1), 
+          0.0, abs_sum<double>());
 
     /* L2 norm */
     else if (input->res_type == 2)
-      res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(eles->nSpts-1, 
-              eles->nEles-1, n, nStages-1), 0.0, square<double>()));
+      res[n] = std::sqrt(std::accumulate(&divF(0, 0, n, nStages-1), &divF(0, 0, n+1, nStages-1),
+          0.0, square<double>()));
   }
 
   /* Write residual (normalized by number of solution points) */
