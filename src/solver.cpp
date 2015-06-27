@@ -222,6 +222,13 @@ void FRSolver::solver_data_to_device()
   eles->oppD_d = eles->oppD;
   eles->oppD_fpts_d = eles->oppD_fpts;
 
+  /* If using multigrid, copy relevant operators */
+  if (input->p_multi)
+  {
+    eles->oppPro_d = eles->oppPro;
+    eles->oppRes_d = eles->oppRes;
+  }
+
   /* Solver data structures */
   divF_d = divF;
   U_ini_d = U_ini;
@@ -426,9 +433,8 @@ void FRSolver::extrapolate_U()
   /* Copy data to GPU */
   //eles->U_spts_d = eles->U_spts;
 
-  double alpha = 1.0; double beta = 0.0;
-  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
-      eles->oppE_d.data(), eles->nFpts, eles->U_spts_d.data(), eles->nSpts, &beta,
+  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
+      eles->oppE_d.data(), eles->nFpts, eles->U_spts_d.data(), eles->nSpts, 0.0,
       eles->U_fpts_d.data(), eles->nFpts);
 
   check_error();
@@ -566,22 +572,18 @@ void FRSolver::compute_dU()
   //eles->Ucomm_d = eles->Ucomm;
 
 
-  double alpha, beta;
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    alpha = 1.0; beta = 0.0;
-    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
         eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, 
-        eles->U_spts_d.data(), eles->nSpts, &beta, eles->dU_spts_d.data() + dim * 
+        eles->U_spts_d.data(), eles->nSpts, 0.0, eles->dU_spts_d.data() + dim * 
         (eles->nSpts * eles->nVars * eles->nEles), eles->nSpts);
 
     check_error();
 
-    alpha = 1.0; beta = 1.0;
-
-    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, &alpha,
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0,
         eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts,
-        eles->Ucomm_d.data(), eles->nFpts, &beta, eles->dU_spts_d.data() + dim * 
+        eles->Ucomm_d.data(), eles->nFpts, 1.0, eles->dU_spts_d.data() + dim * 
         (eles->nSpts * eles->nVars * eles->nEles), eles->nSpts);
 
     check_error();
@@ -628,13 +630,12 @@ void FRSolver::extrapolate_dU()
   /* Copy data to GPU */
   //eles->dU_spts_d = eles->dU_spts;
 
-  double alpha = 1.0; double beta = 0.0;
 
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, &alpha, 
+  cublasDGEMM_wrapper(eles->nFpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, 
       eles->oppE_d.data(), eles->nFpts, eles->dU_spts_d.data() + dim * (eles->nSpts * 
-      eles->nVars * eles->nEles), eles->nSpts, &beta, eles->dU_fpts_d.data() + dim * 
+      eles->nVars * eles->nEles), eles->nSpts, 0.0, eles->dU_fpts_d.data() + dim * 
       (eles->nFpts * eles->nVars * eles->nEles), eles->nFpts);
   }
 
@@ -771,23 +772,19 @@ void FRSolver::compute_dF()
   //eles->Fcomm_d = eles->Fcomm;
   //eles->F_spts_d = eles->F_spts;
 
-
-  double alpha, beta;
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
   {
-    alpha = 1.0; beta = 0.0;
-    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, &alpha,
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
         eles->oppD_d.data() + dim * (eles->nSpts * eles->nSpts), eles->nSpts, 
         eles->F_spts_d.data() + dim * (eles->nSpts * eles->nVars * eles->nEles), 
-        eles->nSpts, &beta, eles->dF_spts_d.data() + dim * (eles->nSpts * eles->nVars * 
+        eles->nSpts, 0.0, eles->dF_spts_d.data() + dim * (eles->nSpts * eles->nVars * 
         eles->nEles), eles->nSpts);
 
     check_error();
 
-    alpha = 1.0; beta = 1.0;
-    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, &alpha,
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0,
         eles->oppD_fpts_d.data() + dim * (eles->nSpts * eles->nFpts), eles->nSpts, 
-        eles->Fcomm_d.data(), eles->nFpts, &beta, eles->dF_spts_d.data() + dim * 
+        eles->Fcomm_d.data(), eles->nFpts, 1.0, eles->dF_spts_d.data() + dim * 
         (eles->nSpts * eles->nVars * eles->nEles), eles->nSpts);
 
     check_error();
@@ -835,7 +832,7 @@ void FRSolver::update()
 #endif
 
 #ifdef _GPU
-  copy_U(U_ini_d, eles->U_spts_d, eles->U_spts.get_nvals());
+  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 #endif
 
   /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
@@ -887,7 +884,7 @@ void FRSolver::update()
   eles->U_spts = U_ini;
 #endif
 #ifdef _GPU
-  copy_U(eles->U_spts_d, U_ini_d, eles->U_spts.get_nvals());
+  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
 #endif
 
 #ifdef _CPU
@@ -985,6 +982,46 @@ void FRSolver::update_with_source(mdvector<double> &source)
         }
 
 }
+
+#ifdef _GPU
+void FRSolver::update_with_source(mdvector_gpu<double> &source)
+{
+  
+  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
+
+  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
+  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  {
+    compute_residual(stage);
+
+    /* If in first stage, compute stable timestep */
+    if (stage == 0)
+    {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+    }
+
+    RK_update_source_wrapper(eles->U_spts_d, U_ini_d, divF_d, source, eles->jaco_det_spts_d, dt_d, 
+        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+        input->equation, stage, nStages, false);
+    check_error();
+
+  }
+
+  /* Final stage */
+  compute_residual(nStages-1);
+  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+
+  RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, divF_d, source, eles->jaco_det_spts_d, dt_d, 
+      rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+      input->equation, 0, nStages, true);
+  check_error();
+
+}
+#endif
 
 void FRSolver::compute_element_dt()
 {

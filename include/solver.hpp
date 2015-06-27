@@ -81,6 +81,9 @@ class FRSolver
     void compute_residual(unsigned int stage);
     void update();
     void update_with_source(mdvector<double> &source);
+#ifdef _GPU
+    void update_with_source(mdvector_gpu<double> &source);
+#endif
     void write_solution(std::string prefix, unsigned int nIter);
     void report_max_residuals(std::ofstream &f, unsigned int iter, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::string prefix, std::ofstream &f, unsigned int iter);

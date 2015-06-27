@@ -65,6 +65,9 @@ class Elements
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, dF_spts_d, divF_spts_d;
     mdvector_gpu<double> jaco_spts_d, jaco_det_spts_d;
+
+    /* Multigrid operators */
+    mdvector_gpu<double> oppPro_d, oppRes_d;
 #endif
 
     void set_coords();

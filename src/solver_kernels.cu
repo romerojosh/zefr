@@ -79,10 +79,65 @@ void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int s
   check_error();
 }
 
-void cublasDGEMM_wrapper(int M, int N, int K, const double *alpha, const double* A, 
-    int lda, const double* B, int ldb, const double* beta, double *C, int ldc)
+__global__
+void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
 {
-    cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+
+  const unsigned int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (idx >= size)
+    return;
+
+  vec1(idx) = vec2(idx);
+
+}
+
+void device_copy(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (size + threads - 1) /threads;
+  copy_kernel<<<blocks, threads>>>(vec1, vec2, size);
+}
+
+__global__
+void add_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+{
+  const unsigned int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (idx >= size)
+    return;
+
+  vec1(idx) += vec2(idx);
+}
+
+void device_add(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (size + threads - 1) /threads;
+  add_kernel<<<blocks, threads>>>(vec1, vec2, size);
+}
+
+__global__
+void subtract_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+{
+  const unsigned int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (idx >= size)
+    return;
+
+  vec1(idx) -= vec2(idx);
+}
+void device_subtract(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (size + threads - 1) /threads;
+  subtract_kernel<<<blocks, threads>>>(vec1, vec2, size);
+}
+
+void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc)
+{
+    cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 __global__
@@ -370,6 +425,80 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
   }
 }
 
+template <unsigned int nVars>
+__global__
+void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
+    mdvector_gpu<double> divF, mdvector_gpu<double> source, mdvector_gpu<double> jaco_det_spts, 
+    mdvector_gpu<double> dt_in, mdvector_gpu<double> rk_coeff, unsigned int dt_type, 
+    unsigned int nSpts, unsigned int nEles, unsigned int stage, unsigned int nStages, 
+    bool last_stage)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  double dt;
+  if (dt_type != 2)
+    dt = dt_in(0);
+  else
+    dt = dt_in(ele);
+
+  double jaco_det = jaco_det_spts(spt,ele);
+
+  if (!last_stage)
+  {
+    double coeff = rk_coeff(stage);
+    for (unsigned int var = 0; var < nVars; var ++)
+      U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff * dt / 
+          jaco_det * (divF(spt, ele, var, stage) + source(spt, ele, var));
+  }
+  else
+  {
+    double sum[nVars];
+    for (unsigned int var = 0; var < nVars; var++)
+      sum[var] = 0.;
+
+    for (unsigned int n = 0; n < nStages; n++)
+    {
+      double coeff = rk_coeff(n);
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        sum[var] -= coeff * dt / jaco_det * (divF(spt, ele, var, n) + source(spt, ele, var));
+      }
+    }
+
+    for (unsigned int var = 0; var < nVars; var++)
+      U_spts(spt,ele,var) += sum[var];
+
+  }
+}
+
+void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
+    mdvector_gpu<double> &divF, mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, 
+    mdvector_gpu<double> &dt, mdvector_gpu<double> &rk_coeff, unsigned int dt_type, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, 
+    unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
+      threads.y);
+
+  if (equation == AdvDiff)
+  {
+      RK_update_source<1><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      RK_update_source<4><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+    else
+      ThrowException("Under Construction");
+  }
+}
 
 __device__
 double get_cfl_limit_dev(int order)

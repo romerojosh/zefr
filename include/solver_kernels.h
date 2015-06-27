@@ -23,12 +23,15 @@ template<typename T>
 void copy_from_device(T* host_data, const T* device_data, unsigned int size);
 
 void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
+void device_copy(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
+void device_add(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
+void device_subtract(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
 
 void test_access_wrapper(mdvector_gpu<double> vec, double val);
 
 /* Wrapper for cublas DGEMM */
-void cublasDGEMM_wrapper(int M, int N, int K, const double* alpha, const double* A, 
-    int lda, const double* B, int ldb, const double* beta, double *C, int ldc);
+void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc);
 
 /* Wrappers for custom kernels */
 void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
@@ -53,6 +56,12 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
     mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int stage, 
     unsigned int nStages, bool last_stage);
+
+void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
+    mdvector_gpu<double> &divF, mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, 
+    mdvector_gpu<double> &dt, mdvector_gpu<double> &rk_coeff, unsigned int dt_type, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, 
+    unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage);
 
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 

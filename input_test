@@ -30,6 +30,7 @@ output_prefix fp_pmg
 write_freq  1000
 report_freq 100
 force_freq  1000
+res_type    1
 nQpts1D     10
 compute_error 0
 
