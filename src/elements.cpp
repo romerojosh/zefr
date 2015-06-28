@@ -288,7 +288,7 @@ void Elements::extrapolate_U()
 #ifdef _GPU
   cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0,
       oppE_d.data(), nFpts, U_spts_d.data(), nSpts, 0.0,
-      eles->U_fpts_d.data(), nFpts);
+      U_fpts_d.data(), nFpts);
 
   check_error();
 #endif
@@ -383,7 +383,7 @@ void Elements::compute_dU()
 #endif
 
 #ifdef _GPU
-  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  for (unsigned int dim = 0; dim < nDims; dim++)
   {
     /* Compute contribution to derivative from solution at solution points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
@@ -395,7 +395,7 @@ void Elements::compute_dU()
 
     /* Compute contribution to derivative from common solution at flux points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
-        oppD_fpts_d.data() + dim * (nSpts * eles->nFpts), nSpts,
+        oppD_fpts_d.data() + dim * (nSpts * nFpts), nSpts,
         Ucomm_d.data(), nFpts, 1.0, dU_spts_d.data() + dim * 
         (nSpts * nVars * nEles), nSpts);
 
@@ -451,7 +451,7 @@ void Elements::compute_dF()
 #endif
 
 #ifdef _GPU
-  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  for (unsigned int dim = 0; dim < nDims; dim++)
   {
     /* Compute contribution to derivative from flux at solution points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
