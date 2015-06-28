@@ -1,10 +1,12 @@
 #ifndef quads_hpp
 #define quads_hpp
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "elements.hpp"
+#include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
 #include "solver.hpp"
@@ -13,8 +15,8 @@ class Quads: public Elements
 {
   private:
     void set_locs();
-    void set_transforms();
-    void set_normals();
+    void set_transforms(std::shared_ptr<Faces> faces);
+    void set_normals(std::shared_ptr<Faces> faces);
     void setup_PMG();
 
     double calc_shape(unsigned int shape_order, unsigned int idx,

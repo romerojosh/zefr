@@ -1,39 +1,44 @@
-include Makefile.in
+ifeq ($(CONFIG),)
+include configfiles/default.config
+else
+include $(CONFIG)
+endif
+
 
 CXX = g++
 CU = nvcc
-FLAGS += -std=c++11
+FLAGS += -std=c++11 -g
 CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -fopenmp 
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math -Xcompiler -fopenmp
 
 # Setting BLAS flags
-ifeq ($(BLAS),STANDARD)
-#	LIBS = -L$(BLAS_DIR)/lib -lblas
+ifeq ($(strip $(BLAS)),STANDARD)
+	LIBS = -L$(BLAS_DIR)/lib -lblas
 endif
 
-ifeq ($(BLAS),OPENBLAS)
+ifeq ($(strip $(BLAS)),OPENBLAS)
 	LIBS = -L$(BLAS_DIR)/lib -lopenblas
 endif
 
-ifeq ($(BLAS),ATLAS)
+ifeq ($(strip $(BLAS)),$(strip ATLAS))
 	LIBS = -L$(BLAS_DIR)/lib -latlas
 endif
 
-INCS = -I$(BLAS_DIR)/include 
+INCS = -I$(strip $(BLAS_DIR))/include 
 
-ifeq ($(ARCH), CPU)
+ifeq ($(strip $(ARCH)),CPU)
 	FLAGS += -D_CPU
 endif
 
-ifeq ($(ARCH), GPU)
+ifeq ($(strip $(ARCH)),GPU)
 	FLAGS += -D_GPU
-	LIBS += -L$(CUDA_DIR)/lib64 -lcudart -lcublas
+	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas
 endif
 
 TARGET = zefr
 OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/shape.o bin/solver.o bin/zefr.o 
 
-ifeq ($(ARCH), GPU)
+ifeq ($(strip $(ARCH)),GPU)
 	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o 
 endif
 
@@ -45,7 +50,7 @@ $(TARGET): $(OBJS)
 bin/%.o: src/%.cpp  include/*.hpp include/*.h
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
 
-ifeq ($(ARCH), GPU)
+ifeq ($(strip $(ARCH)),GPU)
 bin/%.o: src/%.cu include/*.hpp include/*.h
 	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS)
 endif

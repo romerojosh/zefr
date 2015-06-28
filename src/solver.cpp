@@ -41,8 +41,9 @@ void FRSolver::setup()
   std::cout << "Setting up elements and faces..." << std::endl;
   eles = std::make_shared<Quads>(&geo, input, order);
   faces = std::make_shared<Faces>(&geo, input);
-  eles->associate_faces(faces);
-  eles->setup();
+
+  faces->setup(eles->nDims, eles->nVars);
+  eles->setup(faces);
 
   std::cout << "Initializing solution..." << std::endl;
   initialize_U();
@@ -1207,7 +1208,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   }
 }
 
-void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter, 
+void FRSolver::report_residuals(std::ofstream &f, unsigned int iter, 
     std::chrono::high_resolution_clock::time_point t1)
 {
 
@@ -1241,12 +1242,11 @@ void FRSolver::report_max_residuals(std::ofstream &f, unsigned int iter,
           0.0, square<double>()));
   }
 
-  /* Write residual (normalized by number of solution points) */
+  /* Print residual to terminal (normalized by number of solution points) */
   std::cout << iter + restart_iter << " ";
   for (auto &val : res)
     std::cout << std::scientific << val / (eles->nSpts * eles->nEles) << " ";
 
-  //std::cout << "dt: " << dt(0);
   std::cout << std::endl;
   
   /* Write to history file */
@@ -1410,7 +1410,7 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
 
 }
 
-void FRSolver::compute_l2_error()
+void FRSolver::report_error(std::ofstream &f, unsigned int iter)
 {
 #pragma omp parallel
   {
@@ -1474,8 +1474,16 @@ void FRSolver::compute_l2_error()
     }
   }
 
+  /* Print to terminal */
   std::cout << "l2_error: ";
   for (auto &val : l2_error)
     std::cout << std::scientific << std::setprecision(12) << std::sqrt(val) << " ";
   std::cout << std::endl;
+
+  /* Write to file */
+  f << iter + restart_iter << " ";
+  for (auto &val : l2_error)
+    f << std::scientific << std::setprecision(12) << std::sqrt(val) << " ";
+  f << std::endl;
+
 }

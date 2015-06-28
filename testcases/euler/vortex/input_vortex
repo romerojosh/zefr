@@ -12,7 +12,7 @@ spt_type Legendre
 n_steps 2000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.0001
+dt	  0.01
 CFL	  0.05
 
 # Restarting:
@@ -26,13 +26,14 @@ rel_fac 1.00
 low_order 0
 
 # Reporting:
+# Note: You can suppress output by setting freq to zero. 
 output_prefix vortex
 write_freq    1000
 report_freq   100
-force_freq    100000
 res_type      1
+force_freq    0
+error_freq    2000
 nQpts1D       10
-compute_error 0
 
 # Riemann Solver:
 fconv_type Rusanov

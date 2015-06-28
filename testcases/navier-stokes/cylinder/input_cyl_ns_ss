@@ -11,7 +11,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 500000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
 CFL	  0.3
 
@@ -20,19 +20,20 @@ restart	      0
 restart_file  cyl_uquad_ss_000080000.vtk
 
 # Multigrid:
-p_multi 0
+p_multi 1
 smooth_steps 1
 rel_fac 1.00
 low_order 0
 
 # Reporting:
-output_prefix cyl_uquad_ss_nopmg
+# Note: You can suppress output by setting freq to zero. 
+output_prefix cyl_uquad_ss
 write_freq  5000
 report_freq 100
-force_freq 1000
-res_type   1
+res_type    1
+force_freq  1000
+error_freq  0
 nQpts1D     10
-compute_error 0
 
 # Riemann Solver:
 fconv_type Rusanov

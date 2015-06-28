@@ -175,7 +175,7 @@ void Quads::set_locs()
 }
 
 
-void Quads::set_transforms()
+void Quads::set_transforms(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for jacobian matrices and determinant */
   jaco_spts.assign({nDims, nDims, nSpts, nEles});
@@ -285,7 +285,7 @@ void Quads::set_transforms()
 
 }
 
-void Quads::set_normals()
+void Quads::set_normals(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for normals */
   tnorm.assign({nFpts,nDims});

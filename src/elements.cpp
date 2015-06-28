@@ -14,21 +14,15 @@
 #include "solver_kernels.h"
 #endif
 
-void Elements::associate_faces(std::shared_ptr<Faces> faces)
-{
-  this->faces = faces;
-  this->faces->setup(nDims, nVars);
-}
-
-void Elements::setup()
+void Elements::setup(std::shared_ptr<Faces> faces)
 {
   set_locs();
   set_shape();
-  set_transforms();
-  set_normals();
+  set_transforms(faces);
+  set_normals(faces);
   setup_FR();
   setup_aux();
-  set_coords();
+  set_coords(faces);
 
   /* If P-multigrid is enabled, create associated operators */
   if (input->p_multi)
@@ -111,7 +105,7 @@ void Elements::set_shape()
   }
 }
 
-void Elements::set_coords()
+void Elements::set_coords(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for physical coordinates */
   geo->coord_spts.assign({nSpts, nEles, nDims});

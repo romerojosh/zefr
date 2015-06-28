@@ -614,8 +614,7 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int 
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-          //unsigned int per_fpt = per_fpt_pairs[fpt];
-          unsigned int per_fpt = per_fpt_list(fpt);
+	  unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
           dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
       }
     }

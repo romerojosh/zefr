@@ -24,7 +24,7 @@ class Elements
     //const InputStruct *input = NULL;
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
-    std::shared_ptr<Faces> faces;
+    //std::shared_ptr<Faces> faces;
 
     /* Geometric Parameters */
     unsigned int order, shape_order;
@@ -70,15 +70,15 @@ class Elements
     mdvector_gpu<double> oppPro_d, oppRes_d;
 #endif
 
-    void set_coords();
+    void set_coords(std::shared_ptr<Faces> faces);
     void set_shape();
     void setup_FR();
     void setup_aux();
 
     virtual void setup_PMG() = 0;
     virtual void set_locs() = 0;
-    virtual void set_transforms() = 0;
-    virtual void set_normals() = 0;
+    virtual void set_transforms(std::shared_ptr<Faces> faces) = 0;
+    virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
     virtual double calc_shape(unsigned int shape_order, unsigned int idx,
                             std::vector<double> &loc) = 0;
     virtual double calc_d_shape(unsigned int shape_order, unsigned int idx,
@@ -92,8 +92,7 @@ class Elements
 
 
   public:
-    void associate_faces(std::shared_ptr<Faces> faces);
-    void setup();
+    void setup(std::shared_ptr<Faces> faces);
     void compute_Fconv();
     void compute_Fvisc();
     virtual void transform_flux() = 0;

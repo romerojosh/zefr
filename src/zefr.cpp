@@ -51,50 +51,59 @@ int main(int argc, char* argv[])
   start_cublas();
 #endif
 
-  /* Open file to write residual history and force history */
+  /* Open file to write history output */
   std::ofstream hist_file;
   std::ofstream force_file;
+  std::ofstream error_file;
+
   if (input.restart) /* If restarted, append to existing file */
   {
     hist_file.open(input.output_prefix + "_hist.dat", std::ios::app);
     force_file.open(input.output_prefix + "_forces.dat", std::ios::app);
+    error_file.open(input.output_prefix + "_error.dat", std::ios::app);
   }
   else
   {
     hist_file.open(input.output_prefix + "_hist.dat");
     force_file.open(input.output_prefix + "_forces.dat");
+    error_file.open(input.output_prefix + "_error.dat");
   }
 
   /* Write initial solution */
   solver.write_solution(input.output_prefix,0);
 
   auto t1 = std::chrono::high_resolution_clock::now();
+  /* Main iteration loop */
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
 
+    /* If using multigrid, perform correction cycle */
     if (input.p_multi)
       pmg.cycle(solver);
 
-    if (n%input.report_freq == 0 || n == input.n_steps || n == 1)
+    /* Write output if required */
+    if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
     {
-      solver.report_max_residuals(hist_file , n, t1);
+      solver.report_residuals(hist_file , n, t1);
     }
 
-    if (n%input.write_freq == 0 || n == input.n_steps)
+    if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps))
     {
       solver.write_solution(input.output_prefix,n);
     }
 
-    if (n%input.force_freq == 0 || n == input.n_steps)
+    if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps))
     {
       solver.report_forces(input.output_prefix, force_file, n);
     }
+
+    if (input.error_freq != 0 && (n%input.error_freq == 0 || n == input.n_steps))
+    {
+      solver.report_error(error_file, n);
+    }
   }
   auto t2 = std::chrono::high_resolution_clock::now();
-
-  if (input.compute_error)
-    solver.compute_l2_error();
  
   auto elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
   std::cout << "Elapsed time: " << elapsed_time.count() << " s" << std::endl;

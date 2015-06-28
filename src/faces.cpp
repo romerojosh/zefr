@@ -509,8 +509,7 @@ void Faces::apply_bcs_dU()
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
-            //unsigned int per_fpt = geo->per_fpt_pairs[fpt];
-            unsigned int per_fpt = geo->per_fpt_list(fpt);
+            unsigned int per_fpt = geo->per_fpt_list(fpt - geo->nGfpts_int);
             dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
         }
       }

@@ -26,11 +26,14 @@ rel_fac 1.00
 low_order 0
 
 # Reporting:
+# Note: You can suppress output by setting freq to zero. 
 output_prefix fp_pmg
-write_freq  1000
-report_freq 100
-force_freq  1000
-nQpts1D     10
+write_freq    1000
+report_freq   100
+res_type      1
+force_freq    0
+error_freq    0
+nQpts1D       10
 
 # Riemann Solver:
 fconv_type Rusanov
