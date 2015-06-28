@@ -7,7 +7,7 @@ endif
 
 CXX = g++
 CU = nvcc
-FLAGS += -std=c++11 -g
+FLAGS += -std=c++11
 CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -fopenmp 
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math -Xcompiler -fopenmp
 
@@ -48,6 +48,7 @@ $(TARGET): $(OBJS)
 	$(CXX) $(INCS) -o bin/$(TARGET) $(OBJS) $(LIBS) $(CXXFLAGS)
 
 bin/%.o: src/%.cpp  include/*.hpp include/*.h
+	@mkdir -p bin
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
 
 ifeq ($(strip $(ARCH)),GPU)
