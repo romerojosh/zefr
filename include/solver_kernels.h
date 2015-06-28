@@ -22,12 +22,9 @@ void copy_to_device(T* device_data, const T* host_data, unsigned int size);
 template<typename T>
 void copy_from_device(T* host_data, const T* device_data, unsigned int size);
 
-void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
 void device_copy(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
 void device_add(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
 void device_subtract(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
-
-void test_access_wrapper(mdvector_gpu<double> vec, double val);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 

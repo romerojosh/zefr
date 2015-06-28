@@ -71,14 +71,6 @@ template void copy_from_device<double>(double* host_data, const double* device_d
 template void copy_from_device<unsigned int>(unsigned int* host_data, const unsigned int* device_data, unsigned int size);
 template void copy_from_device<int>(int* host_data, const int* device_data, unsigned int size);
 
-
-void copy_U(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
-{
-  //TODO: Replace with kernel that does this. Should be faster. */
-  cudaMemcpy(vec1.data(), vec2.data(), size * sizeof(double), cudaMemcpyDeviceToDevice);
-  check_error();
-}
-
 __global__
 void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
 {
@@ -138,19 +130,6 @@ void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* 
     int lda, const double* B, int ldb, const double beta, double *C, int ldc)
 {
     cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
-}
-
-__global__
-void test_access(mdvector_gpu<double> vec, double val)
-{
-  vec(1,1) = val;
-  vec(2,1) = val;
-  vec(1,2) = val;
-}
-
-void test_access_wrapper(mdvector_gpu<double> vec, double val)
-{
-  test_access<<<1,1>>>(vec, val);
 }
 
 template <unsigned int nVars>
