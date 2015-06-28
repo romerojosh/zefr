@@ -93,6 +93,11 @@ class Elements
 
   public:
     void setup(std::shared_ptr<Faces> faces);
+    void extrapolate_U();
+    void extrapolate_dU();
+    void compute_dU();
+    void compute_dF();
+    void compute_divF(unsigned int stage);
     void compute_Fconv();
     void compute_Fvisc();
     virtual void transform_flux() = 0;

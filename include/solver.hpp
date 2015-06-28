@@ -50,32 +50,16 @@ class FRSolver
     void solver_data_to_device();
 #endif
 
-    void extrapolate_U();
-    /* Note: Going to create ele2fpt and slot structure like FR2D. gfpt=-1 means no comm. */
     void U_to_faces();
 
-    /* Viscous Stuff */
+    /* Routines to communicate data between faces and elements */
     void U_from_faces();
-    void compute_dU();
-    void extrapolate_dU();
     void dU_to_faces();
-
-    /* Note: These will be additive, Fvisc will use F_spts += */
-    void compute_Fconv_spts();
-    void compute_Fvisc_spts();
-
-    /* Note: Do I have to transform dU? */
-    void transform_F();
-
     void F_from_faces();
-
-    void compute_dF();
-    void compute_divF(unsigned int stage);
 
     void compute_element_dt();
 
   public:
-    //FRSolver(const InputStruct *input, int order = -1);
     FRSolver(InputStruct *input, int order = -1);
     void setup();
     void compute_residual(unsigned int stage);

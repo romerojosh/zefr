@@ -2,6 +2,9 @@
 #include <memory>
 #include <string>
 
+#include <cblas.h>
+#include <omp.h>
+
 #include "elements.hpp"
 #include "faces.hpp"
 #include "mdvector.hpp"
@@ -254,6 +257,245 @@ void Elements::setup_aux()
     }
   }
 
+}
+
+void Elements::extrapolate_U()
+{
+#ifdef _CPU
+#pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
+
+    int block_size = nEles / nThreads;
+    int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += nEles % (block_size);
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      auto &A = oppE(0,0);
+      auto &B = U_spts(0,start_idx,n);
+      auto &C = U_fpts(0,start_idx,n);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, block_size,
+            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+    }
+  }
+#endif
+
+#ifdef _GPU
+  cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0,
+      oppE_d.data(), nFpts, U_spts_d.data(), nSpts, 0.0,
+      eles->U_fpts_d.data(), nFpts);
+
+  check_error();
+#endif
+
+}
+
+void Elements::extrapolate_dU()
+{
+#ifdef _CPU
+#pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
+
+    int block_size = nEles / nThreads;
+    int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += nEles % (block_size);
+
+
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        auto &A = oppE(0,0);
+        auto &B = dU_spts(0,start_idx,n,dim);
+        auto &C = dU_fpts(0,start_idx,n,dim);
+
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, block_size,
+            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0, 
+        oppE_d.data(), nFpts, dU_spts_d.data() + dim * (nSpts * 
+        nVars * nEles), nSpts, 0.0, dU_fpts_d.data() + dim * 
+        (nFpts * nVars * nEles), nFpts);
+  }
+#endif
+}
+
+void Elements::compute_dU()
+{
+#ifdef _CPU
+#pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
+
+    int block_size = nEles / nThreads;
+    int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += nEles % (block_size);
+
+    /* Compute contribution to derivative from solution at solution points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        auto &A = oppD(0,0,dim);
+        auto &B = U_spts(0,start_idx,n);
+        auto &C = dU_spts(0,start_idx,n,dim);
+
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            block_size, nSpts, 1.0, &A, nSpts, &B, nSpts, 
+            0.0, &C, nSpts);
+      }
+    }
+
+    /* Compute contribution to derivative from common solution at flux points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        auto &A = oppD_fpts(0,0,dim);
+        auto &B = Ucomm(0,start_idx,n);
+        auto &C = dU_spts(0,start_idx,n,dim);
+
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            block_size, nFpts, 1.0, &A, nSpts, &B, nFpts, 
+            1.0, &C, nSpts);
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    /* Compute contribution to derivative from solution at solution points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
+        oppD_d.data() + dim * (nSpts * nSpts), nSpts, 
+        U_spts_d.data(), nSpts, 0.0, dU_spts_d.data() + dim * 
+        (nSpts * nVars * nEles), nSpts);
+
+    check_error();
+
+    /* Compute contribution to derivative from common solution at flux points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
+        oppD_fpts_d.data() + dim * (nSpts * eles->nFpts), nSpts,
+        Ucomm_d.data(), nFpts, 1.0, dU_spts_d.data() + dim * 
+        (nSpts * nVars * nEles), nSpts);
+
+    check_error();
+  }
+#endif
+
+}
+
+void Elements::compute_dF()
+{
+#ifdef _CPU
+#pragma omp parallel
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
+
+    int block_size = nEles / nThreads;
+    int start_idx = block_size * thread_idx;
+
+    if (thread_idx == nThreads-1)
+      block_size += nEles % (block_size);
+
+
+    /* Compute contribution to derivative from flux at solution points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        auto &A = oppD(0,0,dim);
+        auto &B = F_spts(0,start_idx,n,dim);
+        auto &C = dF_spts(0,start_idx,n,dim);
+
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, block_size,
+              nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+      }
+    }
+
+    /* Compute contribution to derivative from common flux at flux points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        auto &A = oppD_fpts(0,0,dim);
+        auto &B = Fcomm(0,start_idx,n);
+        auto &C = dF_spts(0,start_idx,n,dim);
+
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, block_size,
+            nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+    /* Compute contribution to derivative from flux at solution points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
+        oppD_d.data() + dim * (nSpts * nSpts), nSpts, 
+        F_spts_d.data() + dim * (nSpts * nVars * nEles), 
+        nSpts, 0.0, dF_spts_d.data() + dim * (nSpts * nVars * 
+        nEles), nSpts);
+
+    check_error();
+
+    /* Compute contribution to derivative from common flux at flux points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
+        oppD_fpts_d.data() + dim * (nSpts * nFpts), nSpts, 
+        Fcomm_d.data(), nFpts, 1.0, dF_spts_d.data() + dim * 
+        (nSpts * nVars * nEles), nSpts);
+
+    check_error();
+  }
+#endif
+
+}
+
+void Elements::compute_divF(unsigned int stage)
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int ele =0; ele < nEles; ele++)
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+        divF_spts(spt, ele, n, stage) = dF_spts(spt, ele, n, 0);
+
+  for (unsigned int dim = 1; dim < nDims; dim ++)
+#pragma omp parallel for collapse(3)
+    for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int ele =0; ele < nEles; ele++)
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+          divF_spts(spt, ele, n, stage) += dF_spts(spt, ele, n, dim);
+#endif
+
+#ifdef _GPU
+  compute_divF_wrapper(divF_spts_d, dF_spts_d, nSpts, nVars, nEles, 
+      nDims, input->equation, stage);
+  check_error();
+#endif
 }
 
 void Elements::compute_Fconv()

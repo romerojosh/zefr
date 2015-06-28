@@ -110,11 +110,11 @@ void PMGrid::cycle(FRSolver &solver)
       for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
         for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
           for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-            grids[P]->divF(spt, ele, n, 0) += sources[P](spt, ele, n);
+            grids[P]->eles->divF_spts(spt, ele, n, 0) += sources[P](spt, ele, n);
 #endif
 
 #ifdef _GPU
-      device_add(grids[P]->divF_d, sources_d[P], sources_d[P].get_nvals());
+      device_add(grids[P]->eles->divF_spts_d, sources_d[P], sources_d[P].get_nvals());
 #endif
 
       /* Restrict to next coarse grid */
@@ -224,8 +224,8 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
           &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
 
       
-      auto &B2 = grid_f.divF(0,start_idx,n,0);
-      auto &C2 = grid_c.divF(0,start_idx,n,0);
+      auto &B2 = grid_f.eles->divF_spts(0,start_idx,n,0);
+      auto &C2 = grid_c.eles->divF_spts(0,start_idx,n,0);
 
       /* Restrict residual */
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
@@ -245,7 +245,8 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
   /* Restrict residual */
   cublasDGEMM_wrapper(grid_c.eles->nSpts, grid_f.eles->nEles * grid_f.eles->nVars, 
       grid_f.eles->nSpts, 1.0, grid_f.eles->oppRes_d.data(), grid_c.eles->nSpts, 
-      grid_f.divF_d.data(), grid_f.eles->nSpts, 0.0, grid_c.divF_d.data(), grid_c.eles->nSpts);
+      grid_f.eles->divF_spts_d.data(), grid_f.eles->nSpts, 0.0, 
+      grid_c.eles->divF_spts_d.data(), grid_c.eles->nSpts);
 #endif
 }
 
@@ -312,7 +313,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
   for (unsigned int n = 0; n < grid.eles->nVars; n++)
     for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
       for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
-        source(spt,ele,n) = grid.divF(spt,ele,n,0);
+        source(spt,ele,n) = grid.eles->divF_spts(spt,ele,n,0);
 
   /* Update residual on current coarse grid */
   grid.compute_residual(0);
@@ -322,7 +323,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
   for (unsigned int n = 0; n < grid.eles->nVars; n++)
     for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
       for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
-        source(spt, ele, n) -= grid.divF(spt, ele, n, 0);
+        source(spt, ele, n) -= grid.eles->divF_spts(spt, ele, n, 0);
 
 }
 
@@ -330,13 +331,13 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
 void PMGrid::compute_source_term(FRSolver &grid, mdvector_gpu<double> &source)
 {
   /* Copy restricted fine grid residual to source term */
-  device_copy(source, grid.divF_d, source.get_nvals());
+  device_copy(source, grid.eles->divF_spts_d, source.get_nvals());
 
   /* Update residual on current coarse grid */
   grid.compute_residual(0);
 
   /* Subtract to generate source term */
-  device_subtract(source, grid.divF_d, source.get_nvals());
+  device_subtract(source, grid.eles->divF_spts_d, source.get_nvals());
 
 }
 #endif
