@@ -11,8 +11,6 @@
 #include "solver_kernels.h"
 #endif
 
-
-//Faces::Faces(GeoStruct *geo, const InputStruct *input)
 Faces::Faces(GeoStruct *geo, InputStruct *input)
 {
   this->input = input;

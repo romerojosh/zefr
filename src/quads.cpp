@@ -9,7 +9,6 @@
 #include "points.hpp"
 #include "polynomials.hpp"
 #include "quads.hpp"
-#include "shape.hpp"
 
 #ifdef _GPU
 #include "elements_kernels.h"

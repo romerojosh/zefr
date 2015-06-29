@@ -106,9 +106,6 @@ void FRSolver::setup_update()
   }
 
   U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
-  divF.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
-
-  // TODO: Should I create this array for user-supplied to save branch?
   dt.assign({eles->nEles},input->dt);
 
 }

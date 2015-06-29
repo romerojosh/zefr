@@ -36,7 +36,7 @@ ifeq ($(strip $(ARCH)),GPU)
 endif
 
 TARGET = zefr
-OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/shape.o bin/solver.o bin/zefr.o 
+OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/zefr.o 
 
 ifeq ($(strip $(ARCH)),GPU)
 	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o 

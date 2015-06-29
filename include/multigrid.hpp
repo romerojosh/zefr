@@ -15,7 +15,6 @@
 class PMGrid
 {
   private:
-    //const InputStruct *input = NULL;
     InputStruct *input = NULL;
     int order;
     std::vector<mdvector<double>> corrections, sources, solutions;
@@ -37,11 +36,8 @@ class PMGrid
 #endif
 
   public:
-    //void setup(int order, const InputStruct *input, FRSolver &solver);
     void setup(int order, InputStruct *input, FRSolver &solver);
     void cycle(FRSolver &solver);
-
-
 };
 
 #endif /* multigrid_hpp */

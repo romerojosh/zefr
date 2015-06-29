@@ -21,7 +21,6 @@ class FRSolver
   friend class PMGrid;
 
   private:
-    //const InputStruct *input = NULL;
     InputStruct *input = NULL;
     GeoStruct geo;
     int order;
@@ -31,14 +30,12 @@ class FRSolver
     std::shared_ptr<Faces> faces;
 
     unsigned int nStages;
-    //std::vector<double> rk_alpha, rk_beta;
     mdvector<double> rk_alpha, rk_beta;
-    mdvector<double> divF;
     mdvector<double> dt;
     mdvector<double> U_ini;
 
 #ifdef _GPU
-    mdvector_gpu<double> divF_d, U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
+    mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
 #endif
 
     void initialize_U();
@@ -50,9 +47,9 @@ class FRSolver
     void solver_data_to_device();
 #endif
 
-    void U_to_faces();
 
     /* Routines to communicate data between faces and elements */
+    void U_to_faces();
     void U_from_faces();
     void dU_to_faces();
     void F_from_faces();

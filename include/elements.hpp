@@ -21,10 +21,8 @@ class Elements
   friend class FRSolver;
   friend class PMGrid;
   protected:
-    //const InputStruct *input = NULL;
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
-    //std::shared_ptr<Faces> faces;
 
     /* Geometric Parameters */
     unsigned int order, shape_order;
