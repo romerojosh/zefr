@@ -223,7 +223,6 @@ void FRSolver::solver_data_to_device()
   }
 
   /* Solver data structures */
-  divF_d = divF;
   U_ini_d = U_ini;
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
