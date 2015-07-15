@@ -29,7 +29,7 @@ low_order 0
 # Note: You can suppress output by setting freq to zero. 
 output_prefix fp_pmg
 write_freq    1000
-report_freq   100
+report_freq   10
 res_type      1
 force_freq    0
 error_freq    0

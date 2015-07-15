@@ -57,6 +57,28 @@ std::vector<double> Gauss_Legendre_pts(unsigned int P)
   return zeros;
 }
 
+std::vector<double> DFRsp_pts(unsigned int P, double z1)
+{
+  std::vector<double> zeros(P,0.0);
+
+  switch(P)
+  {
+    case 4:
+      zeros = {-std::sqrt((3. - 5. * z1*z1)/(5. - 15.* z1 * z1)), 
+               -z1,
+                z1, 
+                std::sqrt((3. - 5. * z1*z1)/(5. - 15.* z1 * z1))};
+      break;
+
+    default:
+      ThrowException("DFRsp_pts supports limited cases right now!");
+    
+  }
+
+  return zeros;
+
+}
+
 std::vector<double> Gauss_Legendre_weights(unsigned int n)
 {
   std::vector<double> weights(n,0.0);

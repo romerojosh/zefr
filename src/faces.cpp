@@ -345,11 +345,13 @@ void Faces::apply_bcs()
 
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
-        /* Set boundary state to cancel normal velocity */
+        /* Set boundary state to reflect normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
-        U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+        /* TODO: Extrapolate energy or recompute? */
+        //U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+        U(fpt, 3, 1) = U(fpt, 3, 0);
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;

@@ -11,6 +11,7 @@
  */
 
 std::vector<double> Gauss_Legendre_pts(unsigned int P); 
+std::vector<double> DFRsp_pts(unsigned int P, double z1);
 
 //! Returns a vector containing weights for Gauss-Legendre quadrature
 /*!

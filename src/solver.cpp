@@ -1116,6 +1116,11 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
 
 void FRSolver::report_error(std::ofstream &f, unsigned int iter)
 {
+  /* If using GPU, copy out solution */
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();

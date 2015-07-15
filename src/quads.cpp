@@ -72,7 +72,9 @@ void Quads::set_locs()
 
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
-     loc_spts_1D = Gauss_Legendre_pts(order+1); 
+   loc_spts_1D = Gauss_Legendre_pts(order+1); 
+  else if (input->spt_type == "DFRsp")
+    loc_spts_1D = DFRsp_pts(order+1, 0.339842589774454);
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
