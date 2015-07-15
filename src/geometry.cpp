@@ -195,7 +195,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     unsigned int vint, ele_type;
     f >> vint >> ele_type;
 
-    for (unsigned int n = 0; n < 3 ; n++)
+    unsigned int nTags;
+    f >> nTags; 
+
+    for (unsigned int n = 0; n < nTags ; n++)
       f >> vint;
 
     if (geo.nDims == 2)
@@ -262,7 +265,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
     std::vector<unsigned int> face(2,0);
     for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
     {
-      unsigned int vint, ele_type, bnd_id;
+      unsigned int vint, ele_type, bnd_id, nTags;
       std::string line;
       f >> vint >> ele_type;
 
@@ -270,13 +273,21 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       switch (ele_type)
       {
         case 1: /* 2-node line */
-          f >> vint;
-          f >> bnd_id >> vint;
+          f >> nTags;
+          f >> bnd_id;
+
+          for (unsigned int i = 0; i < nTags - 1; i++)
+            f >> vint;
+
           f >> face[0] >> face[1]; break;
 
         case 8: /* 3-node Line (skip) */
-          f >> vint;
-          f >> bnd_id >> vint;
+          f >> nTags;
+          f >> bnd_id;
+
+          for (unsigned int i = 0; i < nTags - 1; i++)
+            f >> vint;
+
           f >> face[0] >> face[1] >> vint; break;
 
         default:
