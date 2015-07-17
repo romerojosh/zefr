@@ -432,7 +432,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
 
     }
-    case 7: /* Slip Wall */
+    case 7:
+    case 8: /* Slip Wall */
     {
       double momN = 0.0;
 
@@ -455,7 +456,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 8: /* No-slip Wall (isothermal) */
+    case 9: /* No-slip Wall (isothermal) */
     {
       /*
       if (!input->viscous)
@@ -484,7 +485,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 9: /* No-slip Wall (isothermal and moving) */
+    case 10: /* No-slip Wall (isothermal and moving) */
     {
       /*
       if (!input->viscous)
@@ -517,7 +518,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 10: /* No-slip Wall (adiabatic) */
+    case 11: /* No-slip Wall (adiabatic) */
     {
       /*
       if (!input->viscous)
@@ -546,7 +547,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 11: /* No-slip Wall (adiabatic and moving) */
+    case 12: /* No-slip Wall (adiabatic and moving) */
     {
       /*
       if (!input->viscous)
@@ -620,7 +621,7 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int 
       }
     }
   }
-  else if(bnd_id == 10 || bnd_id == 11) /* Adibatic Wall */
+  else if(bnd_id == 11 || bnd_id == 12) /* Adibatic Wall */
   {
     /* Extrapolate gradients except for energy */
     for (unsigned int dim = 0; dim < nDims; dim++)

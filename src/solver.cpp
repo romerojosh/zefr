@@ -998,7 +998,7 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
     /* Get boundary ID */
     unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
 
-    if (bnd_id >= 7) /* On wall boundary */
+    if (bnd_id >= 8) /* On wall boundary */
     {
       /* Get pressure */
       double PL = faces->P(fpt, 0);

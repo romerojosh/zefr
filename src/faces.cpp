@@ -335,7 +335,8 @@ void Faces::apply_bcs()
         break;
 
       }
-      case 7: /* Slip Wall */
+      case 7:
+      case 8: /* Slip Wall */
       {
         double momN = 0.0;
 
@@ -359,7 +360,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 8: /* No-slip Wall (isothermal) */
+      case 9: /* No-slip Wall (isothermal) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -387,7 +388,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 9: /* No-slip Wall (isothermal and moving) */
+      case 10: /* No-slip Wall (isothermal and moving) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -418,7 +419,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 10: /* No-slip Wall (adiabatic) */
+      case 11: /* No-slip Wall (adiabatic) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -436,8 +437,11 @@ void Faces::apply_bcs()
         /* Set velocity to zero */
         for (unsigned int dim = 0; dim < nDims; dim++)
           U(fpt, dim+1, 1) = 0.0;
+          //U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
 
         U(fpt, 3, 1) = PR / (input->gamma - 1.0);
+        /* Extrapolate energy */
+        //U(fpt, 3, 1) = U(fpt, 3, 0);
 
         /* Set LDG bias */
         LDG_bias(fpt) = 1;
@@ -445,7 +449,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 11: /* No-slip Wall (adiabatic and moving) */
+      case 12: /* No-slip Wall (adiabatic and moving) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -514,7 +518,7 @@ void Faces::apply_bcs_dU()
         }
       }
     }
-    else if(bnd_id == 10 || bnd_id == 11) /* Adibatic Wall */
+    else if(bnd_id == 11 || bnd_id == 12) /* Adibatic Wall */
     {
       /* Extrapolate gradients except for energy */
       for (unsigned int dim = 0; dim < nDims; dim++)

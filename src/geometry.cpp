@@ -95,25 +95,29 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     {
       geo.bnd_ids[val] = 6;
     }
-    else if (bnd_id == "\"WALL_SLIP\"")
+    else if (bnd_id == "\"SYMMETRY\"")
     {
       geo.bnd_ids[val] = 7;
     }
-    else if (bnd_id == "\"WALL_NS_ISO\"")
+    else if (bnd_id == "\"WALL_SLIP\"")
     {
       geo.bnd_ids[val] = 8;
     }
-    else if (bnd_id == "\"WALL_NS_ISO_MOVE\"")
+    else if (bnd_id == "\"WALL_NS_ISO\"")
     {
       geo.bnd_ids[val] = 9;
     }
-    else if (bnd_id == "\"WALL_NS_ADI\"")
+    else if (bnd_id == "\"WALL_NS_ISO_MOVE\"")
     {
       geo.bnd_ids[val] = 10;
     }
-    else if (bnd_id == "\"WALL_NS_ADI_MOVE\"")
+    else if (bnd_id == "\"WALL_NS_ADI\"")
     {
       geo.bnd_ids[val] = 11;
+    }
+    else if (bnd_id == "\"WALL_NS_ADI_MOVE\"")
+    {
+      geo.bnd_ids[val] = 12;
     }
     else if (bnd_id == "\"FLUID\"")
     {
