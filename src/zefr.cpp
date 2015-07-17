@@ -70,7 +70,11 @@ int main(int argc, char* argv[])
   }
 
   /* Write initial solution */
-  solver.write_solution(input.output_prefix,0);
+  solver.write_solution(input.output_prefix, 0);
+
+  /* Write initial error (if required) */
+  if (input.error_freq != 0)
+    solver.report_error(error_file, 0);
 
   auto t1 = std::chrono::high_resolution_clock::now();
   /* Main iteration loop */

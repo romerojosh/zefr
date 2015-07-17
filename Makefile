@@ -33,6 +33,7 @@ endif
 ifeq ($(strip $(ARCH)),GPU)
 	FLAGS += -D_GPU
 	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas
+	INCS += -I$(strip $(CUDA_DIR))/include
 endif
 
 TARGET = zefr
