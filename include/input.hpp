@@ -20,7 +20,7 @@ struct InputStruct
   unsigned int equation, dt_type, ic_type, nDims, nQpts1D, n_steps, order, low_order, smooth_steps;
   unsigned int report_freq, write_freq, force_freq, res_type, error_freq;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file;
-  bool viscous, p_multi, restart, fix_vis;
+  bool viscous, p_multi, restart, fix_vis, squeeze;
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
   double AdvDiff_D, dt, CFL, rel_fac;
@@ -30,6 +30,7 @@ struct InputStruct
   double mach_fs, L_fs, T_fs, Re_fs, nx_fs, ny_fs, T_tot_fs, P_tot_fs;
   double mach_wall, T_wall, nx_wall, ny_wall, u_wall, v_wall;
   double T_ref, P_ref, rho_ref, mu_ref, time_ref, R_ref, c_sth, rt;
+  double exps0;
 
 #ifdef _GPU
   mdvector_gpu<double> AdvDiff_A_d, V_fs_d, norm_fs_d, V_wall_d, norm_wall_d;

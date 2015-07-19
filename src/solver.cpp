@@ -275,6 +275,14 @@ void FRSolver::compute_residual(unsigned int stage)
 {
   eles->extrapolate_U();
 
+  if (input->squeeze)
+  {
+    eles->compute_Uavg();
+    eles->poly_squeeze();
+
+  }
+  
+
   U_to_faces();
   faces->apply_bcs();
   eles->compute_Fconv();
@@ -313,6 +321,7 @@ void FRSolver::initialize_U()
   eles->Ucomm.assign({eles->nFpts, eles->nEles, eles->nVars});
   eles->U_ppts.assign({eles->nPpts, eles->nEles, eles->nVars});
   eles->U_qpts.assign({eles->nQpts, eles->nEles, eles->nVars});
+  eles->Uavg.assign({eles->nEles, eles->nVars});
 
   eles->F_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
   eles->F_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
@@ -847,6 +856,10 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   f << std::endl;
 
   /* Write solution information */
+
+  /* TEST: Write cell average solution */
+  //eles->compute_Uavg();
+
  #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -870,6 +883,13 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     }
   }
 
+  /* Apply squeezing if needed */
+  if (input->squeeze)
+  {
+    eles->compute_Uavg();
+    eles->poly_squeeze_ppts();
+  }
+
   if (input->equation == AdvDiff)
   {
     f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
@@ -890,6 +910,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     std::array<std::string,4> var = {"rho", "xmom", "ymom", "energy"};
 
     f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
+    //f << "CELL_DATA " << nCells << std::endl;
 
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
@@ -901,10 +922,20 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
         for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
         {
           f << std::scientific << std::setprecision(12) << eles->U_ppts(ppt, ele, n) << " ";
+          //f << std::scientific << std::setprecision(12) << eles->Uavg(ele, n) << " ";
         }
 
         f << std::endl;
       }
+
+      /*
+      for (unsigned int cell = 0; cell < nCells; cell++)
+      {
+          f << std::scientific << std::setprecision(12) << eles->Uavg(cell/eles->nSubelements, n) << " ";
+
+        f << std::endl;
+      }
+      */
 
       f << std::endl;
     }
@@ -951,6 +982,7 @@ void FRSolver::report_residuals(std::ofstream &f, unsigned int iter,
   for (auto &val : res)
     std::cout << std::scientific << val / (eles->nSpts * eles->nEles) << " ";
 
+  std::cout << "dt: " << dt(0);
   std::cout << std::endl;
   
   /* Write to history file */

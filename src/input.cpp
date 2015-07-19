@@ -27,6 +27,7 @@ InputStruct read_input_file(std::string inputfile)
     ThrowException("Equation not recognized!");
 
   read_param(f, "viscous", input.viscous);
+  read_param(f, "squeeze", input.squeeze);
 
   read_param(f, "n_steps", input.n_steps);
   read_param(f, "dt_scheme", input.dt_scheme);
@@ -105,6 +106,15 @@ InputStruct read_input_file(std::string inputfile)
   /* If running Navier-Stokes, nondimensionalize */
   if (input.viscous && input.equation == EulerNS)
     apply_nondim(input);
+
+  /* If using polynomial squeezing, set entropy bound */
+  /* NOTES: This bound seems to play a large role in convergence. */
+  if (input.squeeze)
+  {
+    input.exps0 = 0.98 * input.P_fs / std::pow(input.rho_fs, input.gamma);
+    //input.exps0 = 0.0;
+  }
+
 
   return input;
 }

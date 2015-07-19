@@ -70,6 +70,7 @@ class FRSolver
     void report_forces(std::string prefix, std::ofstream &f, unsigned int iter);
     void report_error(std::ofstream &f, unsigned int iter);
 
+
 };
 
 #endif /* solver_hpp */

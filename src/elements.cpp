@@ -669,3 +669,222 @@ void Elements::compute_Fvisc()
 
   }
 }
+
+void Elements::compute_Uavg()
+{
+  /* Compute average solution using quadrature */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      double sum = 0.0;
+      double vol = 0.0;
+
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        /* Get quadrature weight */
+        unsigned int i = idx_spts(spt,0);
+        unsigned int j = idx_spts(spt,1);
+        double weight = weights_spts[i] * weights_spts[j];
+
+        sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
+        vol += weight * jaco_det_spts(spt, ele);
+      }
+
+      Uavg(ele, n) = sum / vol; 
+
+    }
+  }
+}
+
+void Elements::poly_squeeze()
+{
+  double V[3]; 
+
+  /* For each element, check for negative density at solution and flux points */
+  double tol = 1e-10;
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    bool negRho = false;
+    double minRho = U_spts(0, ele, 0);
+
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      if (U_spts(spt, ele, 0) < 0)
+      {
+        negRho = true;
+        minRho = std::min(minRho, U_spts(spt, ele, 0));
+      }
+    }
+    
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      if (U_fpts(fpt, ele, 0) < 0)
+      {
+        negRho = true;
+        minRho = std::min(minRho, U_fpts(fpt, ele, 0));
+      }
+    }
+
+    /* If negative density found, squeeze density */
+    if (negRho)
+    {
+      double theta = (Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho); 
+      //double theta = 1.0;
+
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+        U_spts(spt, ele, 0) = theta * U_spts(spt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        U_fpts(fpt, ele, 0) = theta * U_fpts(fpt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+      
+    }
+  }
+
+  /* For each element, check for entropy loss */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    double minTau = 1.0;
+
+    /* Get minimum tau value */
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      double rho = U_spts(spt, ele, 0);
+      double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
+          U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
+      double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
+
+      double tau = P - input->exps0 * std::pow(rho, input->gamma);
+      minTau = std::min(minTau, tau);
+
+    }
+    
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      double rho = U_fpts(fpt, ele, 0);
+      double momF = (U_fpts(fpt, ele, 1) * U_fpts(fpt,ele,1) + U_spts(fpt, ele, 2) * 
+          U_fpts(fpt, ele,2)) / U_fpts(fpt, ele, 0);
+      double P = (input->gamma - 1.0) * (U_fpts(fpt, ele, 3) - 0.5 * momF);
+
+      double tau = P - input->exps0 * std::pow(rho, input->gamma);
+      minTau = std::min(minTau, tau);
+
+    }
+
+    /* If minTau is negative, squeeze solution */
+    if (minTau < 0)
+    {
+      double rho = Uavg(ele, 0);
+      double Vsq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        V[dim] = Uavg(ele, dim+1) / rho;
+        Vsq += V[dim] * V[dim];
+      }
+
+      double e = Uavg(ele, 3);
+      double P = (input->gamma - 1.0) * (e - 0.5 * rho * Vsq);
+
+      double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
+
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          U_spts(spt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_spts(spt, ele, n);
+          //U_spts(spt, ele, n) = (1.0 - eps) * Uavg(ele, n) + eps * U_spts(spt, ele, n);
+        }
+      }
+
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        {
+          U_fpts(fpt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_fpts(fpt, ele, n);
+          //U_fpts(fpt, ele, n) = (1.0 - eps) * Uavg(ele, n) + eps * U_fpts(fpt, ele, n);
+        }
+      }
+
+    }
+
+  }
+
+}
+
+void Elements::poly_squeeze_ppts()
+{
+  double V[3]; 
+
+  /* For each element, check for negative density at plot points */
+  double tol = 1e-10;
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    bool negRho = false;
+    double minRho = U_ppts(0, ele, 0);
+
+    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+    {
+      if (U_ppts(ppt, ele, 0) < 0)
+      {
+        negRho = true;
+        minRho = std::min(minRho, U_ppts(ppt, ele, 0));
+      }
+    }
+    
+    /* If negative density found, squeeze density */
+    if (negRho)
+    {
+      double theta = std::abs(Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho); 
+
+      for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+        U_ppts(ppt, ele, 0) = theta * U_ppts(ppt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+    }
+  }
+
+  /* For each element, check for entropy loss */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    double minTau = 1.0;
+
+    /* Get minimum tau value */
+    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+    {
+      double rho = U_ppts(ppt, ele, 0);
+      double momF = (U_ppts(ppt, ele, 1) * U_ppts(ppt,ele,1) + U_ppts(ppt, ele, 2) * 
+          U_ppts(ppt, ele,2)) / U_ppts(ppt, ele, 0);
+      double P = (input->gamma - 1.0) * (U_ppts(ppt, ele, 3) - 0.5 * momF);
+
+      double tau = P - input->exps0 * std::pow(rho, input->gamma);
+      minTau = std::min(minTau, tau);
+    }
+    
+    /* If minTau is negative, squeeze solution */
+    if (minTau < 0)
+    {
+      double rho = Uavg(ele, 0);
+      double Vsq = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        V[dim] = Uavg(ele, dim+1) / rho;
+        Vsq += V[dim] * V[dim];
+      }
+
+      double e = Uavg(ele, 3);
+      double P = (input->gamma - 1.0) * (e - 0.5 * rho * Vsq);
+
+      double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
+
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+        {
+          U_ppts(ppt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_ppts(ppt, ele, n);
+          //U_ppts(ppt, ele, n) = (1.0 - eps) * Uavg(ele, n) + eps * U_ppts(ppt, ele, n);
+        }
+      }
+
+    }
+
+  }
+
+}

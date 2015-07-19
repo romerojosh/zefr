@@ -44,7 +44,7 @@ class Elements
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts;
     mdvector<double> oppE_ppts, oppE_qpts;
-    mdvector<double> U_spts, U_fpts, U_ppts, U_qpts;
+    mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fconv_spts, Fvisc_spts;
     mdvector<double> Fcomm, Ucomm;
@@ -100,6 +100,11 @@ class Elements
     void compute_Fvisc();
     virtual void transform_flux() = 0;
     virtual void transform_dU() = 0;
+
+    /* Polynomial squeeze methods */
+    void compute_Uavg();
+    void poly_squeeze();
+    void poly_squeeze_ppts();
 
 };
 

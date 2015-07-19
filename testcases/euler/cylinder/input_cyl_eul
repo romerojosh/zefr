@@ -6,13 +6,14 @@ meshfile full_cyl_quad.msh
 order     2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
+squeeze  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 5000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.000001
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.001
 CFL	  0.4
 
 # Restarting:
@@ -60,7 +61,7 @@ S       120
 
 # Euler specific
 rho_fs 1
-u_fs 0.1
+u_fs 0.38
 v_fs 0.0
 P_fs .71428571428
 
