@@ -787,6 +787,9 @@ void Elements::poly_squeeze()
 
       double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
 
+      if (P < input->exps0 * std::pow(rho, input->gamma))
+        std::cout << "Constraint violated. Lower CFL?" << std::endl;
+
       for (unsigned int n = 0; n < nVars; n++)
       {
         for (unsigned int spt = 0; spt < nSpts; spt++)

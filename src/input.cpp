@@ -28,6 +28,7 @@ InputStruct read_input_file(std::string inputfile)
 
   read_param(f, "viscous", input.viscous);
   read_param(f, "squeeze", input.squeeze);
+  read_param(f, "s_factor", input.s_factor);
 
   read_param(f, "n_steps", input.n_steps);
   read_param(f, "dt_scheme", input.dt_scheme);
@@ -111,8 +112,7 @@ InputStruct read_input_file(std::string inputfile)
   /* NOTES: This bound seems to play a large role in convergence. */
   if (input.squeeze)
   {
-    input.exps0 = 0.98 * input.P_fs / std::pow(input.rho_fs, input.gamma);
-    //input.exps0 = 0.0;
+    input.exps0 = input.s_factor * (input.P_fs / std::pow(input.rho_fs, input.gamma));
   }
 
 
