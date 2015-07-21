@@ -80,7 +80,10 @@ void Quads::set_locs()
 
   // NOTE: Currently assuming solution point locations always at Legendre.
   // Will need extrapolation operation in 1D otherwise
-  weights_spts = Gauss_Legendre_weights(nSpts1D); 
+  auto weights_spts_temp = Gauss_Legendre_weights(nSpts1D); 
+  weights_spts.assign({nSpts1D});
+  for (unsigned int spt = 0; spt < nSpts1D; spt++)
+    weights_spts(spt) = weights_spts_temp[spt];
 
   loc_DFR_1D = loc_spts_1D;
   loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);

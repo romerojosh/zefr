@@ -246,3 +246,178 @@ void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts,
       ThrowException("Under Construction!");
   }
 }
+
+__global__
+void compute_Uavg(mdvector_gpu<double> U_spts, 
+    mdvector_gpu<double> Uavg, mdvector_gpu<double> jaco_det_spts, 
+    mdvector_gpu<double> weights_spts, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, int order)
+{
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+
+  if (ele >= nEles)
+    return;
+
+  /* Compute average solution using quadrature */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    double sum = 0.0;
+    double vol = 0.0;
+
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      /* Get quadrature weight */
+      unsigned int i = spt % (order + 1);
+      unsigned int j = spt / (order + 1);
+      double weight = weights_spts(i) * weights_spts(j);
+
+      sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
+      vol += weight * jaco_det_spts(spt, ele);
+    }
+
+    Uavg(ele, n) = sum / vol; 
+
+  }
+
+}
+
+void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 
+    mdvector_gpu<double> &Uavg, mdvector_gpu<double> &jaco_det_spts, 
+    mdvector_gpu<double> &weights_spts, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, int order)
+{
+  unsigned int threads= 192;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
+
+  compute_Uavg<<<blocks, threads>>>(U_spts, Uavg, jaco_det_spts, weights_spts, nSpts, nEles, nVars, order);
+}
+
+__global__
+void poly_squeeze(mdvector_gpu<double> U_spts, 
+    mdvector_gpu<double> U_fpts, mdvector_gpu<double> Uavg, 
+    double gamma, double exps0, unsigned int nSpts, 
+    unsigned int nFpts, unsigned int nEles, unsigned int nVars,
+    unsigned int nDims)
+{
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+
+  if (ele >= nEles)
+    return;
+
+  double V[3]; 
+
+  /* For each element, check for negative density at solution and flux points */
+  double tol = 1e-10;
+
+  bool negRho = false;
+  double minRho = U_spts(0, ele, 0);
+
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    if (U_spts(spt, ele, 0) < 0)
+    {
+      negRho = true;
+      minRho = min(minRho, U_spts(spt, ele, 0));
+    }
+  }
+  
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    if (U_fpts(fpt, ele, 0) < 0)
+    {
+      negRho = true;
+      minRho = min(minRho, U_fpts(fpt, ele, 0));
+    }
+  }
+
+  /* If negative density found, squeeze density */
+  if (negRho)
+  {
+    double theta = (Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho); 
+
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+      U_spts(spt, ele, 0) = theta * U_spts(spt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      U_fpts(fpt, ele, 0) = theta * U_fpts(fpt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+    
+  }
+
+  /* For each element, check for entropy loss */
+  double minTau = 1.0;
+
+  /* Get minimum tau value */
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    double rho = U_spts(spt, ele, 0);
+    double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
+        U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
+    double P = (gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
+
+    double tau = P - exps0 * pow(rho, gamma);
+    minTau = min(minTau, tau);
+
+  }
+  
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    double rho = U_fpts(fpt, ele, 0);
+    double momF = (U_fpts(fpt, ele, 1) * U_fpts(fpt,ele,1) + U_spts(fpt, ele, 2) * 
+        U_fpts(fpt, ele,2)) / U_fpts(fpt, ele, 0);
+    double P = (gamma - 1.0) * (U_fpts(fpt, ele, 3) - 0.5 * momF);
+
+    double tau = P - exps0 * pow(rho, gamma);
+    minTau = min(minTau, tau);
+
+  }
+
+  /* If minTau is negative, squeeze solution */
+  if (minTau < 0)
+  {
+    double rho = Uavg(ele, 0);
+    double Vsq = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      V[dim] = Uavg(ele, dim+1) / rho;
+      Vsq += V[dim] * V[dim];
+    }
+
+    double e = Uavg(ele, 3);
+    double P = (gamma - 1.0) * (e - 0.5 * rho * Vsq);
+
+    double eps = minTau / (minTau - P + exps0 * pow(rho, gamma));
+
+//      if (P < input->exps0 * std::pow(rho, input->gamma))
+//        std::cout << "Constraint violated. Lower CFL?" << std::endl;
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        U_spts(spt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_spts(spt, ele, n);
+      }
+    }
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      {
+        U_fpts(fpt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_fpts(fpt, ele, n);
+      }
+    }
+  }
+
+}
+
+void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts, 
+    mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &Uavg, 
+    double gamma, double exps0, unsigned int nSpts, 
+    unsigned int nFpts, unsigned int nEles, unsigned int nVars,
+    unsigned int nDims)
+{
+  unsigned int threads= 192;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
+
+  poly_squeeze<<<blocks, threads>>>(U_spts, U_fpts, Uavg, gamma, exps0, nSpts, nFpts,
+      nEles, nVars, nDims);
+}

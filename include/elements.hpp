@@ -39,7 +39,8 @@ class Elements
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
-    std::vector<double> weights_spts, weights_qpts;
+    mdvector<double> weights_spts;
+    std::vector<double> weights_qpts;
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts;
@@ -57,12 +58,13 @@ class Elements
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d;
     mdvector_gpu<double> oppE_ppts_d, oppE_qpts_d;
-    mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d;
+    mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d, Uavg_d;
     mdvector_gpu<double> F_spts_d, F_fpts_d;
     mdvector_gpu<double> Fconv_spts_d, Fvisc_spts_d;
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, dF_spts_d, divF_spts_d;
     mdvector_gpu<double> jaco_spts_d, jaco_det_spts_d;
+    mdvector_gpu<double> weights_spts_d;
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;

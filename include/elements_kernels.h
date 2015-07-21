@@ -23,4 +23,15 @@ void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts,
     unsigned int nEles, unsigned int nVars, unsigned int nDims,
     unsigned int equation);
 
+void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 
+    mdvector_gpu<double> &Uavg, mdvector_gpu<double> &jaco_det_spts, 
+    mdvector_gpu<double> &weights_spts, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, int order);
+
+void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts, 
+    mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &Uavg, 
+    double gamma, double exps0, unsigned int nSpts, 
+    unsigned int nFpts, unsigned int nEles, unsigned int nVars,
+    unsigned int nDims);
+
 #endif /* elements_kernels_h */

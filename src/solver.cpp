@@ -232,6 +232,8 @@ void FRSolver::solver_data_to_device()
   eles->U_spts_d = eles->U_spts;
   eles->U_fpts_d = eles->U_fpts;
   eles->Ucomm_d = eles->Ucomm;
+  eles->Uavg_d = eles->Uavg;
+  eles->weights_spts_d = eles->weights_spts;
   eles->dU_spts_d = eles->dU_spts;
   eles->dU_fpts_d = eles->dU_fpts;
   eles->Fcomm_d = eles->Fcomm;
@@ -887,6 +889,11 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   if (input->squeeze)
   {
     eles->compute_Uavg();
+
+#ifdef _GPU
+    eles->Uavg = eles->Uavg_d;
+#endif
+
     eles->poly_squeeze_ppts();
   }
 
@@ -1044,7 +1051,7 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
-        force_conv[dim] += eles->weights_spts[count%eles->nSpts1D] * CP * 
+        force_conv[dim] += eles->weights_spts(count%eles->nSpts1D) * CP * 
           faces->norm(fpt, dim, 0) * faces->dA(fpt);
       }
 
@@ -1103,7 +1110,7 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
           taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
-            force_visc[dim] -= eles->weights_spts[count%eles->nSpts1D] * taun[dim] * 
+            force_visc[dim] -= eles->weights_spts(count%eles->nSpts1D) * taun[dim] * 
               faces->dA(fpt) * fac;
 
         }

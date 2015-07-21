@@ -672,6 +672,7 @@ void Elements::compute_Fvisc()
 
 void Elements::compute_Uavg()
 {
+#ifdef _CPU
   /* Compute average solution using quadrature */
   for (unsigned int n = 0; n < nVars; n++)
   {
@@ -685,7 +686,7 @@ void Elements::compute_Uavg()
         /* Get quadrature weight */
         unsigned int i = idx_spts(spt,0);
         unsigned int j = idx_spts(spt,1);
-        double weight = weights_spts[i] * weights_spts[j];
+        double weight = weights_spts(i) * weights_spts(j);
 
         sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
         vol += weight * jaco_det_spts(spt, ele);
@@ -695,10 +696,16 @@ void Elements::compute_Uavg()
 
     }
   }
+#endif
+
+#ifdef _GPU
+  compute_Uavg_wrapper(U_spts_d, Uavg_d, jaco_det_spts_d, weights_spts_d, nSpts, nEles, nVars, order);
+#endif
 }
 
 void Elements::poly_squeeze()
 {
+#ifdef _CPU
   double V[3]; 
 
   /* For each element, check for negative density at solution and flux points */
@@ -787,15 +794,14 @@ void Elements::poly_squeeze()
 
       double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
 
-      if (P < input->exps0 * std::pow(rho, input->gamma))
-        std::cout << "Constraint violated. Lower CFL?" << std::endl;
+//      if (P < input->exps0 * std::pow(rho, input->gamma))
+//        std::cout << "Constraint violated. Lower CFL?" << std::endl;
 
       for (unsigned int n = 0; n < nVars; n++)
       {
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
           U_spts(spt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_spts(spt, ele, n);
-          //U_spts(spt, ele, n) = (1.0 - eps) * Uavg(ele, n) + eps * U_spts(spt, ele, n);
         }
       }
 
@@ -804,13 +810,18 @@ void Elements::poly_squeeze()
         for (unsigned int fpt = 0; fpt < nFpts; fpt++)
         {
           U_fpts(fpt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_fpts(fpt, ele, n);
-          //U_fpts(fpt, ele, n) = (1.0 - eps) * Uavg(ele, n) + eps * U_fpts(fpt, ele, n);
         }
       }
 
     }
 
   }
+#endif
+
+#ifdef _GPU
+  poly_squeeze_wrapper(U_spts_d, U_fpts_d, Uavg_d, input->gamma, input->exps0, nSpts, nFpts,
+      nEles, nVars, nDims);
+#endif
 
 }
 
