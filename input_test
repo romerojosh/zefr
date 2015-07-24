@@ -25,6 +25,10 @@ smooth_steps 1
 rel_fac 1.00
 low_order 1
 
+# Stabilization:
+squeeze  0
+s_factor 0.0
+
 # Reporting:
 output_prefix fp_pmg
 write_freq  1000

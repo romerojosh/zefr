@@ -25,6 +25,10 @@ smooth_steps 1
 rel_fac 1.00
 low_order 0
 
+# Stabilization:
+squeeze  0
+s_factor 0.0
+
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix fp_pmg
