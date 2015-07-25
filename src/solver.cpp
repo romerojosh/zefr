@@ -39,7 +39,11 @@ void FRSolver::setup()
   geo = process_mesh(input->meshfile, order, input->nDims);
 
   std::cout << "Setting up elements and faces..." << std::endl;
-  eles = std::make_shared<Quads>(&geo, input, order);
+  if (input->nDims == 2)
+    eles = std::make_shared<Quads>(&geo, input, order);
+  else if (input->nDims == 3)
+    //eles = std::make_shared<Hexas>(&geo, input, order);
+
   faces = std::make_shared<Faces>(&geo, input);
 
   faces->setup(eles->nDims, eles->nVars);

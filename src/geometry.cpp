@@ -182,7 +182,16 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     }
     else if (geo.nDims == 3)
     {
-        ThrowException("3D not implemented yet!");
+        //ThrowException("3D not implemented yet!");
+      if (val == 3)
+      {
+        geo.nBnds++;
+      }
+      else if (val == 5)
+      {
+        geo.nEles++;
+        geo.shape_order = 1; geo.nNodesPerEle = 8;
+      }
     }
     std::getline(f,line);
   }
@@ -245,12 +254,28 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     }
     else
     {
-      ThrowException("3D not implemented yet!");
+      //ThrowException("3D not implemented yet!");
+
+      switch(ele_type)
+      {
+        case 2: /* 3-node Triangle (skip)*/
+          f >> vint >> vint >> vint;
+          break;
+
+        case 3: /* 4-node Quadrilateral (skip)*/
+          f >> vint >> vint >> vint >> vint;
+          break;
+
+        case 5: /* 8-node Hexahedral */
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
+          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
+          ele++; break;
+
+        default:
+          ThrowException("Unrecognized element type detected!"); break;
+      }
+
     }
-    //for (int n = 0; n < 8; n++)
-    //  std::cout << geo.nd2gnd(n, ele) << " ";
-    //std::cout << std::endl;
-    //std::cout<< "!!!" << std::endl;
   }
 
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -285,7 +310,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
           f >> face[0] >> face[1]; break;
 
-        case 8: /* 3-node Line (skip) */
+        case 8: /* 3-node Line */
           f >> nTags;
           f >> bnd_id;
 
@@ -305,10 +330,52 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
     }
   }
-  else
+  else if (geo.nDims == 3)
   {
-    ThrowException("3D not implemented yet!");
+    std::vector<unsigned int> face(4,0);
+    for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
+    {
+      unsigned int vint, ele_type, bnd_id, nTags;
+      std::string line;
+      f >> vint >> ele_type;
+
+      /* Get boundary id and face nodes */
+      switch (ele_type)
+      {
+        case 2: /* 3-node Triangle */
+          f >> nTags;
+          f >> bnd_id;
+
+          for (unsigned int i = 0; i < nTags - 1; i++)
+            f >> vint;
+
+          f >> face[0] >> face[1] >> face[2]; 
+          face[3] = face[2]; break;
+
+        case 3: /* 4-node Quadrilateral */
+          f >> nTags;
+          f >> bnd_id;
+
+          for (unsigned int i = 0; i < nTags - 1; i++)
+            f >> vint;
+
+          f >> face[0] >> face[1] >> face[2] >> face[3]; break;
+
+        default:
+          std::getline(f,line); continue; break;
+      }
+
+      face[0]--; face[1]--; face[2]--; face[3]--;
+
+      /* Sort for consistency and add to map*/
+      std::sort(face.begin(), face.end());
+      geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
+    }
+ 
+    //ThrowException("3D not implemented yet!");
+
   }
+
   if (geo.per_bnd_flag)
     couple_periodic_bnds(geo);
 }
@@ -369,6 +436,59 @@ void couple_periodic_bnds(GeoStruct &geo)
             {
               geo.per_bnd_pairs[face] = face2;
             }
+          }
+        }
+      }
+    }
+
+  }
+  else if (geo.nDims == 4)
+  {
+    for (auto &bnd_face : geo.bnd_faces)
+    {
+      unsigned int bnd_id = bnd_face.second;
+      auto face = bnd_face.first;
+      
+      /* Check if face is periodic */
+      if (bnd_id == 1)
+      {
+        /* Get face node coordinates */
+        double x0, x1, y0, y1;
+        x0 = geo.coord_nodes(face[0], 0);
+        y0 = geo.coord_nodes(face[0], 1);
+        x1 = geo.coord_nodes(face[1], 0);
+        y1 = geo.coord_nodes(face[1], 1);
+
+        /* Compute centroid location */
+        std::array<double, 2> c1;
+        c1[0] = 0.5 * (x0 + x1);
+        c1[1] = 0.5 * (y0 + y1);
+
+        /* Search for face to couple */
+        for(auto &bnd_face2 : geo.bnd_faces)
+        {
+          auto face2 = bnd_face2.first;
+          if (face2 == face)
+            continue;
+
+          double x2, x3, y2, y3;
+          x2 = geo.coord_nodes(face2[0], 0);
+          y2 = geo.coord_nodes(face2[0], 1);
+          x3 = geo.coord_nodes(face2[1], 0);
+          y3 = geo.coord_nodes(face2[1], 1);
+
+          std::array<double, 2> c2;
+          c2[0] = 0.5 * (x2 + x3);
+          c2[1] = 0.5 * (y2 + y3);
+
+          int count = 0;
+          for (unsigned int i = 0; i < 2; i++)
+            if (c1[i] == c2[i])
+              count++;
+
+          if (count == 1)
+          {
+            geo.per_bnd_pairs[face] = face2;
           }
         }
       }
@@ -534,9 +654,202 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       }
     }
   }
+  else if (geo.nDims == 3)
+  {
+    unsigned int nFptsPerFace = (order + 1)*(order+1);
+    std::map<std::vector<unsigned int>, std::vector<unsigned int>> face_fpts;
+    std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
+    std::vector<std::vector<int>> ele2fpts(geo.nEles);
+    std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
+
+    std::vector<unsigned int> face(4,0);
+
+    /* Define node indices for hexahedral faces */
+    unsigned int nFaces = 6;
+    std::vector<std::vector<unsigned int>> faces_nodes(nFaces);
+
+    for (auto &nodes : faces_nodes)
+    {
+      nodes.assign(4,0);
+    }
+
+    /* Face 0: Bottom */
+    faces_nodes[0][0] = 0; faces_nodes[0][1] = 1;
+    faces_nodes[0][2] = 2; faces_nodes[0][3] = 3;
+
+    /* Face 1: Top */
+    faces_nodes[1][0] = 4; faces_nodes[1][1] = 5;
+    faces_nodes[1][2] = 6; faces_nodes[1][3] = 7;
+
+    /* Face 2: Left */
+    faces_nodes[2][0] = 3; faces_nodes[2][1] = 0;
+    faces_nodes[2][2] = 4; faces_nodes[2][3] = 7;
+
+    /* Face 3: Right */
+    faces_nodes[3][0] = 2; faces_nodes[3][1] = 1;
+    faces_nodes[3][2] = 5; faces_nodes[3][3] = 6;
+
+    /* Face 4: Front */
+    faces_nodes[4][0] = 0; faces_nodes[4][1] = 1;
+    faces_nodes[4][2] = 5; faces_nodes[4][3] = 4;
+
+    /* Face 5: Back */
+    faces_nodes[5][0] = 7; faces_nodes[5][1] = 6;
+    faces_nodes[5][2] = 3; faces_nodes[5][3] = 2;
+
+    /* Determine number of interior global flux points */
+    std::set<std::vector<unsigned int>> unique_faces;
+    geo.nGfpts_int = 0;
+
+    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    {
+      for (unsigned int n = 0; n < nFaces; n++)
+      {
+        for (unsigned int i = 0; i < 4; i++)
+        {
+          face[i] = geo.nd2gnd(faces_nodes[n][i], ele);
+        }
+
+        /* Check if face is collapsed */
+        if (face[2] == face[3])
+          continue;
+
+        std::sort(face.begin(), face.end());
+
+        /* Check if face is not on boundary and not previously encountered */
+        if (!unique_faces.count(face) && !geo.bnd_faces.count(face))
+          geo.nGfpts_int += nFptsPerFace;
+
+        unique_faces.insert(face);
+      }
+    }
+
+    /* Initialize global flux point indicies (to place boundary fpts at end of global fpt data structure) */
+    unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;
+
+    /* Begin loop through faces */
+    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    {
+      ele2fpts[ele].assign(6*nFptsPerFace, -1);
+      ele2fpts_slot[ele].assign(6*nFptsPerFace, -1);
+
+      for (unsigned int n = 0; n < nFaces; n++)
+      {
+        /* Get face nodes and sort for consistency */
+        for (unsigned int i = 0; i < 4; i++)
+        {
+          face[i] = geo.nd2gnd(faces_nodes[n][i], ele);
+        }
+
+        /* Check if face is collapsed */
+        if (face[2] == face[3])
+          continue;
+
+        std::sort(face.begin(), face.end());
+
+        /* Check if face has been encountered previously */
+        std::vector<unsigned int> fpts(nFptsPerFace,0);
+        if(!face_fpts.count(face))
+        {
+          /* Check if face is on boundary */
+          if (geo.bnd_faces.count(face))
+          {
+            unsigned int bnd_id = geo.bnd_faces[face];
+            for (auto &fpt : fpts)
+            {
+              geo.gfpt2bnd.push_back(bnd_id);
+              fpt = gfpt_bnd;
+              gfpt_bnd++;
+            }
+
+            bndface2fpts[face] = fpts;
+            
+          }
+          else
+          {
+            for (auto &fpt : fpts)
+            {
+              fpt = gfpt;
+              gfpt++;
+            }
+          }
+
+          face_fpts[face] = fpts;
+
+          for (unsigned int i = 0; i < nFptsPerFace; i++)
+          {
+            ele2fpts[ele][n*nFptsPerFace + i] = fpts[i];
+            ele2fpts_slot[ele][n*nFptsPerFace + i] = 0;
+          }
+        }
+        else
+        {
+          auto fpts = face_fpts[face];
+          for (unsigned int i = 0; i < nFptsPerFace; i++)
+          {
+            ele2fpts[ele][n*nFptsPerFace + i] = fpts[nFptsPerFace-1-i];
+            ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+          }
+        }
+      }
+    }
+
+    /* Pair up periodic flux points if needed */ 
+    if (geo.per_bnd_flag)
+    {
+      /* Creating simple vector of flux point pairs to replace map, since it
+       * cannot be used for GPU */
+      geo.per_fpt_list.assign({gfpt_bnd - geo.nGfpts_int}, 0);
+
+      for (auto &bnd_face1 : bndface2fpts)
+      {
+        auto face1 = bnd_face1.first;
+        auto fpts1 = bnd_face1.second;
+
+        /* If boundary face is not periodic, skip this pairing */
+        if (geo.bnd_faces[face1] != 1)
+          continue;
+
+        auto face2 = geo.per_bnd_pairs[face1];
+        auto fpts2 = bndface2fpts[face2];
+
+        for (unsigned int i = 0; i < nFptsPerFace; i++)
+        {
+          geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
+          geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i];
+        }
+      } 
+    }
+
+    /* Populate data structures */
+    geo.nGfpts = gfpt_bnd;
+    std::cout << geo.nGfpts << std::endl;
+
+    geo.fpt2gfpt.assign({6*nFptsPerFace, geo.nEles});
+    geo.fpt2gfpt_slot.assign({6*nFptsPerFace, geo.nEles});
+
+    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    {
+      for (unsigned int fpt = 0; fpt < 6*nFptsPerFace; fpt++)
+      {
+        geo.fpt2gfpt(fpt,ele) = ele2fpts[ele][fpt];
+        geo.fpt2gfpt_slot(fpt,ele) = ele2fpts_slot[ele][fpt];
+      }
+    }
+
+    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    {
+      std::cout << ele;
+      for (unsigned int fpt = 0; fpt < 6*nFptsPerFace; fpt++)
+      {
+        std::cout << " " << geo.fpt2gfpt(fpt, ele);
+      }
+      std::cout << std::endl;
+    }
+  }
   else
   {
-    ThrowException("3D not implemented!");
+    ThrowException("nDims is not valid!");
   }
 
 
