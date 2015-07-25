@@ -161,6 +161,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     f >> val >> val;
     if (geo.nDims == 2)
     {
+      geo.nFaces = 4; geo.nNodesPerFace = 2;
+
       if (val == 2 || val == 3)
       {
         geo.nEles++; 
@@ -182,7 +184,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     }
     else if (geo.nDims == 3)
     {
-        //ThrowException("3D not implemented yet!");
+      geo.nFaces = 6; geo.nNodesPerFace = 4;
       if (val == 3)
       {
         geo.nBnds++;
@@ -291,7 +293,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
   if (geo.nDims == 2)
   {
     //std::unordered_map<std::array<unsigned int, 2>, unsigned int> bnd_faces;
-    std::vector<unsigned int> face(2,0);
+    std::vector<unsigned int> face(geo.nNodesPerFace,0);
     for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
     {
       unsigned int vint, ele_type, bnd_id, nTags;
@@ -332,7 +334,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
   }
   else if (geo.nDims == 3)
   {
-    std::vector<unsigned int> face(4,0);
+    std::vector<unsigned int> face(geo.nNodesPerFace,0);
     for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
     {
       unsigned int vint, ele_type, bnd_id, nTags;
@@ -383,7 +385,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 void couple_periodic_bnds(GeoStruct &geo)
 {
   /* Loop over boundary faces */
-  if (geo.nDims == 2)
+  if (geo.nDims == 5)
   {
     for (auto &bnd_face : geo.bnd_faces)
     {
@@ -442,8 +444,12 @@ void couple_periodic_bnds(GeoStruct &geo)
     }
 
   }
-  else if (geo.nDims == 4)
+  else if (geo.nDims == 2)
   {
+    mdvector<double> coords_face1, coords_face2;
+    coords_face1.assign({geo.nNodesPerFace,geo.nDims});
+    coords_face2.assign({geo.nNodesPerFace,geo.nDims});
+
     for (auto &bnd_face : geo.bnd_faces)
     {
       unsigned int bnd_id = bnd_face.second;
@@ -459,10 +465,21 @@ void couple_periodic_bnds(GeoStruct &geo)
         x1 = geo.coord_nodes(face[1], 0);
         y1 = geo.coord_nodes(face[1], 1);
 
+        for (unsigned int node = 0; node < geo.nNodesPerFace; node++)
+          for (unsigned int dim = 0; dim < geo.nDims; dim++)
+            coords_face1(node, dim) = geo.coord_nodes(face[node], dim);
+
         /* Compute centroid location */
-        std::array<double, 2> c1;
-        c1[0] = 0.5 * (x0 + x1);
-        c1[1] = 0.5 * (y0 + y1);
+        std::vector<double> c1(geo.nDims, 0.0);
+        for (unsigned int dim = 0; dim < geo.nDims; dim++)
+        {
+          for (unsigned int node = 0; node < geo.nNodesPerFace; node++)
+          {
+            c1[dim] += coords_face1(node, dim);
+          }
+
+          c1[dim] /= geo.nNodesPerFace;
+        }
 
         /* Search for face to couple */
         for(auto &bnd_face2 : geo.bnd_faces)
@@ -477,16 +494,30 @@ void couple_periodic_bnds(GeoStruct &geo)
           x3 = geo.coord_nodes(face2[1], 0);
           y3 = geo.coord_nodes(face2[1], 1);
 
-          std::array<double, 2> c2;
-          c2[0] = 0.5 * (x2 + x3);
-          c2[1] = 0.5 * (y2 + y3);
+          /* Get face node coordinates */
+          for (unsigned int node = 0; node < geo.nNodesPerFace; node++)
+            for (unsigned int dim = 0; dim < geo.nDims; dim++)
+              coords_face2(node, dim) = geo.coord_nodes(face2[node], dim);
+
+
+          /* Compute centroid location */
+          std::vector<double> c2(geo.nDims, 0.0);
+          for (unsigned int dim = 0; dim < geo.nDims; dim++)
+          {
+            for (unsigned int node = 0; node < geo.nNodesPerFace; node++)
+            {
+              c2[dim] += coords_face2(node, dim);
+            }
+
+            c2[dim] /= geo.nNodesPerFace;
+          }
 
           int count = 0;
-          for (unsigned int i = 0; i < 2; i++)
-            if (c1[i] == c2[i])
+          for (unsigned int dim = 0; dim < geo.nDims; dim++)
+            if (std::abs(c1[dim] - c2[dim]) < 1.e-6 && std::abs(coords_face1(0,dim) - coords_face1(1,dim)) > 1e-6 )
               count++;
 
-          if (count == 1)
+          if (count == geo.nDims - 1)
           {
             geo.per_bnd_pairs[face] = face2;
           }

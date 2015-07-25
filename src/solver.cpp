@@ -41,7 +41,7 @@ void FRSolver::setup()
   std::cout << "Setting up elements and faces..." << std::endl;
   if (input->nDims == 2)
     eles = std::make_shared<Quads>(&geo, input, order);
-  else if (input->nDims == 3)
+  //else if (input->nDims == 3)
     //eles = std::make_shared<Hexas>(&geo, input, order);
 
   faces = std::make_shared<Faces>(&geo, input);
