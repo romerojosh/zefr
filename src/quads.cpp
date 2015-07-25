@@ -33,19 +33,19 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   /* If order argument is not provided, use order in input file */
   if (order == -1)
   {
-    nSpts = (input->order+1)*(input->order+1);
-    nSpts1D = input->order+1;
+    nSpts = (input->order + 1) * (input->order + 1);
+    nSpts1D = input->order + 1;
     this->order = input->order;
   }
   else
   {
-    nSpts = (order+1)*(order+1);
-    nSpts1D = order+1;
+    nSpts = (order + 1) * (order + 1);
+    nSpts1D = order + 1;
     this->order = order;
   }
 
   nFpts = nSpts1D * nFaces;
-  nPpts = (nSpts1D+2)*(nSpts1D+2);
+  nPpts = (nSpts1D + 2) * (nSpts1D + 2);
   
   if (input->equation == AdvDiff)
   {

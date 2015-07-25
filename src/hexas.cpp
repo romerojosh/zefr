@@ -1,46 +1,57 @@
+#include <cmath>
 #include <iostream>
 #include <string>
 
-#include "hexas.hpp"
+#include "faces.hpp"
+#include "geometry.hpp"
 #include "mdvector.hpp"
 #include "macros.hpp"
 #include "points.hpp"
 #include "polynomials.hpp"
+#include "hexas.hpp"
 
-Hexas::Hexas(unsigned int nEles, unsigned int shape_order,
-                   const InputStruct *input, unsigned int order)
+#ifdef _GPU
+#include "elements_kernels.h"
+#include "solver_kernels.h"
+#endif
+
+//Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
+Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
 {
-  this->nEles = nEles;  
+  this->geo = geo;
   this->input = input;  
-  this->shape_order = shape_order;  
+  this->shape_order = geo->shape_order;  
+  this->nEles = geo->nEles;  
+  this->nQpts = input->nQpts1D * input->nQpts1D * input->nQpts1D;
 
   /* Generic hexahedral geometry */
   nDims = 3;
   nFaces = 6;
-  nNodes = 8 * shape_order;
+  //nNodes = (shape_order+1)*(shape_order+1); // Lagrange Elements
+  nNodes = 8*(shape_order); // Serendipity Elements (not really, need to fix)
   
+  /* If order argument is not provided, use order in input file */
   if (order == -1)
   {
-    nSpts = (input->order+1)*(input->order+1)*(input->order+1);
+    nSpts = (input->order+1) * (input->order+1) * (input->order+1);
     nSpts1D = input->order+1;
-    nFptsPerFace = (input->order+1)*(input->order+1);
     this->order = input->order;
   }
   else
   {
-    nSpts = (order+1)*(order+1)*(order+1);
+    nSpts = (order+1) * (order+1) * (order+1);
     nSpts1D = order+1;
-    nFptsPerFace = (order+1)*(order+1);
     this->order = order;
   }
 
-  nFpts = nFptsPerFace * nFaces;
+  nFpts = (nSpts1D * nSpts1D) * nFaces;
+  nPpts = (nSpts1D + 2) * (nSpts1D + 2) * (nSpts1D + 2);
   
-  if (input->equation == "AdvDiff")
+  if (input->equation == AdvDiff)
   {
     nVars = 1;
   }
-  else if (input->equation == "EulerNS")
+  else if (input->equation == EulerNS)
   {
     nVars = 5;
   }
@@ -48,10 +59,655 @@ Hexas::Hexas(unsigned int nEles, unsigned int shape_order,
   {
     ThrowException("Equation not recognized: " + input->equation);
   }
-
+  
 }
 
 void Hexas::set_locs()
 {
+  /* Allocate memory for point location structures */
+  loc_spts.assign({nSpts,nDims}); idx_spts.assign({nSpts,nDims});
+  loc_fpts.assign({nFpts,nDims}); idx_fpts.assign({nFpts,nDims});
+  loc_ppts.assign({nPpts,nDims}); idx_ppts.assign({nPpts,nDims});
+  loc_qpts.assign({nQpts,nDims}); idx_qpts.assign({nQpts,nDims});
+
+  /* Get positions of points in 1D */
+  if (input->spt_type == "Legendre")
+   loc_spts_1D = Gauss_Legendre_pts(order+1); 
+  else if (input->spt_type == "DFRsp")
+    loc_spts_1D = DFRsp_pts(order+1, 0.339842589774454);
+  else
+    ThrowException("spt_type not recognized: " + input->spt_type);
+
+  // NOTE: Currently assuming solution point locations always at Legendre.
+  // Will need extrapolation operation in 1D otherwise
+  auto weights_spts_temp = Gauss_Legendre_weights(nSpts1D); 
+  weights_spts.assign({nSpts1D});
+  for (unsigned int spt = 0; spt < nSpts1D; spt++)
+    weights_spts(spt) = weights_spts_temp[spt];
+
+  loc_DFR_1D = loc_spts_1D;
+  loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
+  loc_DFR_1D.insert(loc_DFR_1D.end(), 1.0);
+
+  /* Setup solution point locations */
+  unsigned int spt = 0;
+  for (unsigned int i = 0; i < nSpts1D; i++)
+  {
+    for (unsigned int j = 0; j < nSpts1D; j++)
+    {
+      for (unsigned int k = 0; k < nSpts1D; k++)
+      {
+        loc_spts(spt,0) = loc_spts_1D[k];
+        loc_spts(spt,1) = loc_spts_1D[j];
+        loc_spts(spt,2) = loc_spts_1D[i];
+        idx_spts(spt,0) = k;
+        idx_spts(spt,1) = j;
+        idx_spts(spt,2) = i;
+        spt++;
+      }
+    }
+  }
+
+  /* Setup flux point locations */
+  unsigned int fpt = 0;
+  for (unsigned int i = 0; i < nFaces; i++)
+  {
+    for (unsigned int j = 0; j < nSpts1D; j++)
+    {
+      for (unsigned int k = 0; k < nSpts1D; k++)
+      {
+        switch(i)
+        {
+          case 0: /* Bottom face */
+            loc_fpts(fpt,0) = loc_spts_1D[k];
+            loc_fpts(fpt,1) = loc_spts_1D[j]; 
+            loc_fpts(fpt,2) = -1.0; 
+            idx_fpts(fpt,0) = k;
+            idx_fpts(fpt,1) = j;
+            idx_fpts(fpt,2) = -1; break;
+
+          case 1: /* Top face */
+            loc_fpts(fpt,0) = loc_spts_1D[k];
+            loc_fpts(fpt,1) = loc_spts_1D[j]; 
+            loc_fpts(fpt,2) = 1.0; 
+            idx_fpts(fpt,0) = k;
+            idx_fpts(fpt,1) = j;
+            idx_fpts(fpt,2) = nSpts1D; break;
+
+          case 2: /* Left face */
+            loc_fpts(fpt,0) = -1.0
+            loc_fpts(fpt,1) = loc_spts_1D[k];
+            loc_fpts(fpt,2) = loc_spts_1D[j];
+            idx_fpts(fpt,0) = -1;
+            idx_fpts(fpt,1) = k;
+            idx_fpts(fpt,2) = j; break;
+
+          case 3: /* Right face */
+            loc_fpts(fpt,0) = 1.0
+            loc_fpts(fpt,1) = loc_spts_1D[k];
+            loc_fpts(fpt,2) = loc_spts_1D[j];
+            idx_fpts(fpt,0) = nSpts1D;
+            idx_fpts(fpt,1) = k;
+            idx_fpts(fpt,2) = j; break;
+
+          case 4: /* Front face */
+            loc_fpts(fpt,0) = loc_spts_1D[k];
+            loc_fpts(fpt,1) = -1.0
+            loc_fpts(fpt,2) = loc_spts_1D[j];
+            idx_fpts(fpt,0) = k;
+            idx_fpts(fpt,1) = -1;
+            idx_fpts(fpt,2) = j; break;
+
+          case 5: /* Back face */
+            loc_fpts(fpt,0) = loc_spts_1D[k];
+            loc_fpts(fpt,1) = 1.0
+            loc_fpts(fpt,2) = loc_spts_1D[j];
+            idx_fpts(fpt,0) = k;
+            idx_fpts(fpt,1) = nSpts1D;
+            idx_fpts(fpt,2) = j; break;
+        }
+      }
+
+      fpt++;
+    }
+  }
+  
+  /* Setup plot point locations */
+  auto loc_ppts_1D = loc_spts_1D;
+  loc_ppts_1D.insert(loc_ppts_1D.begin(), -1.0);
+  loc_ppts_1D.insert(loc_ppts_1D.end(), 1.0);
+
+  unsigned int ppt = 0;
+  for (unsigned int i = 0; i < nSpts1D+2; i++)
+  {
+    for (unsigned int j = 0; j < nSpts1D+2; j++)
+    {
+      for (unsigned int k = 0; k < nSpts1D+2; k++)
+      {
+        loc_ppts(ppt,0) = loc_ppts_1D[k];
+        loc_ppts(ppt,1) = loc_ppts_1D[j];
+        loc_ppts(ppt,2) = loc_ppts_1D[i];
+        idx_ppts(ppt,0) = k;
+        idx_ppts(ppt,1) = j;
+        idx_ppts(ppt,2) = i;
+        ppt++;
+      }
+    }
+  }
+
+  /* Setup gauss quadrature point locations and weights */
+  loc_qpts_1D = Gauss_Legendre_pts(input->nQpts1D); 
+  weights_qpts = Gauss_Legendre_weights(input->nQpts1D);
+
+  /* Setup quadrature point locations */
+  unsigned int qpt = 0;
+  for (unsigned int i = 0; i < input->nQpts1D; i++)
+  {
+    for (unsigned int j = 0; j < input->nQpts1D; j++)
+    {
+      for (unsigned int k = 0; k < input->nQpts1D; k++)
+      {
+        loc_qpts(qpt,0) = loc_qpts_1D[k];
+        loc_qpts(qpt,1) = loc_qpts_1D[j];
+        loc_qpts(qpt,2) = loc_qpts_1D[i];
+        idx_qpts(qpt,0) = k;
+        idx_qpts(qpt,1) = j;
+        idx_qpts(qpt,2) = i;
+        qpt++;
+      }
+    }
+  }
 
 }
+
+
+void Hexas::set_transforms(std::shared_ptr<Faces> faces)
+{
+  /* Allocate memory for jacobian matrices and determinant */
+  jaco_spts.assign({nDims, nDims, nSpts, nEles});
+  jaco_ppts.assign({nDims, nDims, nPpts, nEles});
+  jaco_qpts.assign({nDims, nDims, nQpts, nEles});
+  jaco_det_spts.assign({nSpts, nEles});
+  jaco_det_qpts.assign({nQpts, nEles});
+
+  /* Set jacobian matrix and determinant at solution points */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+      {
+        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+        {
+          for (unsigned int node = 0; node < nNodes; node++)
+          {
+            unsigned int gnd = geo->nd2gnd(node,ele);
+            jaco_spts(dimX, dimXi, spt, ele) += geo->coord_nodes(gnd,dimX) * dshape_spts(node, spt, dimXi); 
+          }
+        }
+      }
+      
+      double xr = jaco_spts(0, 0, spt, ele); double xs = jaco_spts(0, 1, spt, ele); double xt = jaco_spts(0, 2, spt, ele);
+      double yr = jaco_spts(1, 0, spt, ele); double ys = jaco_spts(1, 1, spt, ele); double yt = jaco_spts(1, 2, spt, ele);
+      double zr = jaco_spts(2, 0, spt, ele); double zs = jaco_spts(2, 1, spt, ele); double zt = jaco_spts(2, 2, spt, ele);
+
+      jaco_det_spts(spt,ele) = xr * (ys * zt - yt * zs) + xs * (yr*zt - yt*zr) + 
+        xt * (yr * zs - ys * zr);
+
+      if (jaco_det_spts(spt,ele) < 0.)
+        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
+
+    }
+  }
+
+  /* Set jacobian matrix at face flux points (do not need the determinant) */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+      {
+        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+        {
+          for (unsigned int node = 0; node < nNodes; node++)
+          {
+            unsigned int gnd = geo->nd2gnd(node,ele);
+            int gfpt = geo->fpt2gfpt(fpt,ele);
+
+            /* Skip fpts on ghost edges */
+            if (gfpt == -1)
+              continue;
+
+            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+
+            faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(gnd,dimX) * dshape_fpts(node, fpt, dimXi);
+          }
+        }
+      }
+    }
+  }
+
+  /* Set jacobian matrix at plot points (do not need the determinant) */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+    {
+      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+      {
+        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+        {
+          for (unsigned int node = 0; node < nNodes; node++)
+          {
+            unsigned int gnd = geo->nd2gnd(node,ele);
+            jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(gnd,dimX) * dshape_ppts(node, ppt, dimXi); 
+          }
+        }
+      }
+    }
+  }
+  /* Set jacobian matrix and determinant at quadrature points */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
+    {
+      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+      {
+        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+        {
+          for (unsigned int node = 0; node < nNodes; node++)
+          {
+            unsigned int gnd = geo->nd2gnd(node, ele);
+            jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(gnd,dimX) * dshape_qpts(node,qpt,dimXi); 
+          }
+        }
+      }
+
+      double xr = jaco_qpts(0, 0, qpt, ele); double xs = jaco_qpts(0, 1, qpt, ele); double xt = jaco_qpts(0, 2, qpt, ele);
+      double yr = jaco_qpts(1, 0, qpt, ele); double ys = jaco_qpts(1, 1, qpt, ele); double yt = jaco_qpts(1, 2, qpt, ele);
+      double zr = jaco_qpts(2, 0, qpt, ele); double zs = jaco_qpts(2, 1, qpt, ele); double zt = jaco_qpts(2, 2, qpt, ele);
+
+      jaco_det_qpts(qpt,ele) = xr * (ys * zt - yt * zs) + xs * (yr*zt - yt*zr) + 
+        xt * (yr * zs - ys * zr);
+
+      if (jaco_det_qpts(qpt,ele) < 0.)
+        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " qpt:" + std::to_string(qpt));
+
+    }
+  }
+
+}
+
+void Hexas::set_normals(std::shared_ptr<Faces> faces)
+{
+  /* Allocate memory for normals */
+  tnorm.assign({nFpts,nDims});
+
+  /* Setup parent-space (transformed) normals at flux points */
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    switch(fpt/(nSpts1D * nSpts1D))
+    {
+      case 0: /* Bottom */
+        tnorm(fpt,0) = 0.0;
+        tnorm(fpt,1) = 0.0; 
+        tnorm(fpt,2) = -1.0; break;
+
+      case 1: /* Top */
+        tnorm(fpt,0) = 1.0;
+        tnorm(fpt,1) = 0.0; 
+        tnorm(fpt,2) = 0.0; break;
+
+      case 2: /* Left */
+        tnorm(fpt,0) = -1.0;
+        tnorm(fpt,1) = 0.0; 
+        tnorm(fpt,2) = 0.0; break;
+
+      case 3: /* Right */
+        tnorm(fpt,0) = 1.0;
+        tnorm(fpt,1) = 0.0; 
+        tnorm(fpt,2) = 0.0; break;
+
+      case 4: /* Front */
+        tnorm(fpt,0) = 0.0;
+        tnorm(fpt,1) = -1.0; 
+        tnorm(fpt,2) = 0.0; break;
+
+      case 5: /* Back */
+        tnorm(fpt,0) = 0.0;
+        tnorm(fpt,1) = 1.0; 
+        tnorm(fpt,2) = 0.0; break;
+    }
+
+  }
+
+  /* Use transform to obtain physical normals at face flux points */
+  mdvector<double> invJac({nDims, nDims});
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      int gfpt = geo->fpt2gfpt(fpt,ele);
+
+      /* Check if flux point is on ghost edge */
+      if (gfpt == -1) 
+        continue;
+
+      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+
+      double xr = faces->jaco(gfpt, 0, 0, slot); double xs = faces->jaco(gfpt, 0, 1, slot); double xt = faces->jaco(gfpt, 0, 2, slot);
+      double yr = faces->jaco(gfpt, 1, 0, slot); double ys = faces->jaco(gfpt, 1, 1, slot); double yt = faces->jaco(gfpt, 1, 2, slot);
+      double zr = faces->jaco(gfpt, 2, 0, slot); double zs = faces->jaco(gfpt, 2, 1, slot); double zt = faces->jaco(gfpt, 2, 2, slot);
+
+      invJac(0,0) = ys * zt + yt * zs; invJac(0,1) = xt * zs + xs * zt; invJac(0,2) = xs * yt - xt * ys;
+      invJac(1,0) = yt * zr + yr * zt; invJac(1,1) = xr * zt + xt * zr; invJac(1,2) = xt * yr - xr * yt;
+      invJac(2,0) = yr * zs + ys * zr; invJac(2,1) = xs * zr + xr * zs; invJac(2,2) = xr * ys - xs * yr;
+      
+      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+      {
+        for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+        {
+          faces->norm(gfpt, dim1, slot) += invJac(dim2, dim1) * tnorm(fpt, dim2); 
+        }
+      }
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        faces->dA(gfpt) += faces->norm(gfpt, dim, slot) * faces->norm(gfpt, dim, slot);
+
+      faces->dA(gfpt) = std::sqrt(faces->dA(gfpt));
+                        
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        faces->norm(gfpt, dim, slot) /= faces->dA(gfpt);
+
+      unsigned int face_idx = fpt/(nSpts1D * nSpts1D);
+
+      if(face_idx == 0 || face_idx == 2 || faces_idx == 4)
+        faces->outnorm(gfpt, slot) = -1; 
+      else 
+        faces->outnorm(gfpt, slot) = 1; 
+
+    }
+  }
+
+}
+
+double Hexas::calc_nodal_basis(unsigned int spt, std::vector<double> &loc)
+{
+  /* Get indices for Lagrange polynomial evaluation */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+  unsigned int k = idx_spts(spt,2);
+
+  double val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]) * Lagrange(loc_spts_1D, k, loc[2]);
+
+  return val;
+}
+
+double Hexas::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, unsigned int dim)
+{
+  /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
+   * boundary points for DFR) */
+  unsigned int i = idx_spts(spt,0) + 1;
+  unsigned int j = idx_spts(spt,1) + 1;
+  unsigned int k = idx_spts(spt,2) + 1;
+
+  double val = 0.0;
+
+  if (dim == 0)
+  {
+    val = Lagrange_d1(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]) * Lagrange(loc_DFR_1D, k, loc[2]);
+  }
+  else if (dim == 1)
+  {
+    val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange_d1(loc_DFR_1D, j, loc[1]) * Lagrange(loc_DFR_1D, k, loc[2]);
+  }
+  else
+  {
+    val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]) * Lagrange_d1(loc_DFR_1D, k, loc[2]);
+  }
+
+  return val;
+
+}
+
+double Hexas::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, unsigned int dim)
+{
+  /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
+   * boundary points for DFR) */
+  unsigned int i = idx_fpts(fpt,0) + 1;
+  unsigned int j = idx_fpts(fpt,1) + 1;
+  unsigned int k = idx_fpts(fpt,2) + 1;
+
+  double val = 0.0;
+
+  if (dim == 0)
+  {
+    val = Lagrange_d1(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]) * Lagrange(loc_DFR_1D, k, loc[2]);
+  }
+  else if (dim == 1)
+  {
+    val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange_d1(loc_DFR_1D, j, loc[1]) * Lagrange(loc_DFR_1D, k, loc[2]);
+  }
+  else
+  {
+    val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]) * Lagrange_d1(loc_DFR_1D, k, loc[2]);
+  }
+
+  return val;
+
+}
+
+void Hexas::setup_PMG()
+{
+  /*
+  unsigned int nSpts_pro_1D = order+2;
+  unsigned int nSpts_res_1D = order;
+  unsigned int nSpts_pro = nSpts_pro_1D * nSpts_pro_1D;
+  unsigned int nSpts_res = nSpts_res_1D * nSpts_res_1D;
+
+  std::vector<double> loc(nDims, 0.0);
+
+  if (order != input->order)
+  {
+    oppPro.assign({nSpts_pro, nSpts});
+
+    auto loc_spts_pro_1D = Gauss_Legendre_pts(order+2); 
+
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int pspt = 0; pspt < nSpts_pro; pspt++)
+      {
+        loc[0] = loc_spts_pro_1D[pspt%nSpts_pro_1D];
+        loc[1] = loc_spts_pro_1D[pspt/nSpts_pro_1D];
+
+        oppPro(pspt, spt) = calc_nodal_basis(spt, loc);
+      }
+    }
+  }
+
+  if (order != 0)
+  {
+    oppRes.assign({nSpts_res, nSpts});
+
+    auto loc_spts_res_1D = Gauss_Legendre_pts(order); 
+
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int rspt = 0; rspt < nSpts_res; rspt++)
+      {
+        loc[0] = loc_spts_res_1D[rspt%nSpts_res_1D];
+        loc[1] = loc_spts_res_1D[rspt/nSpts_res_1D];
+
+        oppRes(rspt, spt) = calc_nodal_basis(spt, loc);
+      }
+    }
+  }
+  */
+}
+
+void Hexas::transform_dU()
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        double dUtemp = dU_spts(spt, ele, n, 0);
+
+        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) - 
+                                  dU_spts(spt, ele, n, 1) * jaco_spts(1, 0, spt, ele); 
+
+        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
+                                  dUtemp * jaco_spts(0, 1, spt, ele);
+
+        dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
+        dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  transform_dU_quad_wrapper(dU_spts_d, jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars,
+      nDims, input->equation);
+  //dU_spts = dU_spts_d;
+  check_error();
+#endif
+
+}
+
+void Hexas::transform_flux()
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        double Ftemp = F_spts(spt, ele, n, 0);
+
+        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
+                                 F_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
+        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
+                                 Ftemp * jaco_spts(1, 0, spt, ele);
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  //F_spts_d = F_spts;
+  transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars,
+      nDims, input->equation);
+
+  check_error();
+
+  //F_spts = F_spts_d;
+#endif
+}
+
+double Hexas::calc_shape(unsigned int shape_order, unsigned int idx, 
+                         std::vector<double> &loc)
+{
+  double val = 0.0;
+  double xi = loc[0]; 
+  double eta = loc[1];
+  double nu = loc[2];
+
+  /* Trilinear hexahedral/8-node Serendipity */
+  if (shape_order == 1)
+  {
+    unsigned int i = 0;
+    unsigned int j = 0;
+    unsigned int k = 0;
+
+    switch(idx)
+    {
+      case 0:
+        i = 0; j = 0; k = 0; break;
+      case 1:
+        i = 1; j = 0; k = 0; break;
+      case 2:
+        i = 1; j = 1; k = 0; break;
+      case 3:
+        i = 0; j = 1; k = 0; break;
+      case 4:
+        i = 0; j = 0; k = 1; break;
+      case 5:
+        i = 1; j = 0; k = 1; break;
+      case 6:
+        i = 1; j = 1; k = 1; break;
+      case 7:
+        i = 0; j = 1; k = 1; break;
+    }
+
+    val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta) * Lagrange({-1.,1.}, k, nu);
+  }
+
+  return val;
+}
+
+double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
+                          std::vector<double> &loc, unsigned int dim)
+{
+  double val = 0.0;
+  double xi = loc[0];
+  double eta = loc[1];
+  double nu = loc[2];
+
+  /* Bilinear quadrilateral/4-node Serendipity */
+  if (shape_order == 1)
+  {
+    unsigned int i = 0;
+    unsigned int j = 0;
+    unsigned int k = 0;
+
+    switch(idx)
+    {
+      case 0:
+        i = 0; j = 0; k = 0; break;
+      case 1:
+        i = 1; j = 0; k = 0; break;
+      case 2:
+        i = 1; j = 1; k = 0; break;
+      case 3:
+        i = 0; j = 1; k = 0; break;
+      case 4:
+        i = 0; j = 0; k = 1; break;
+      case 5:
+        i = 1; j = 0; k = 1; break;
+      case 6:
+        i = 1; j = 1; k = 1; break;
+      case 7:
+        i = 0; j = 1; k = 1; break;
+    }
+
+    if (dim == 0)
+      val = Lagrange_d1({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange({-1,1}, k, nu);
+    else if (dim == 1)
+      val = Lagrange({-1,1}, i, xi) * Lagrange_d1({-1,1}, j, eta) * Lagrange({-1,1}, k, nu);
+    else
+      val = Lagrange({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange_d1({-1,1}, k, nu);
+  }
+
+
+  return val;
+
+}
+  /*
+  std::cout << "tflux" << std::endl;
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    for (unsigned int j = 0; j < nEles; j++)
+    {
+      std::cout << F_spts(0,0,i,j) << " ";
+    }
+    std::cout << std::endl;
+  }
+  */
+
