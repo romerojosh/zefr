@@ -135,7 +135,7 @@ void Hexas::set_locs()
             idx_fpts(fpt,2) = nSpts1D; break;
 
           case 2: /* Left face */
-            loc_fpts(fpt,0) = -1.0
+            loc_fpts(fpt,0) = -1.0;
             loc_fpts(fpt,1) = loc_spts_1D[k];
             loc_fpts(fpt,2) = loc_spts_1D[j];
             idx_fpts(fpt,0) = -1;
@@ -143,7 +143,7 @@ void Hexas::set_locs()
             idx_fpts(fpt,2) = j; break;
 
           case 3: /* Right face */
-            loc_fpts(fpt,0) = 1.0
+            loc_fpts(fpt,0) = 1.0;
             loc_fpts(fpt,1) = loc_spts_1D[k];
             loc_fpts(fpt,2) = loc_spts_1D[j];
             idx_fpts(fpt,0) = nSpts1D;
@@ -152,7 +152,7 @@ void Hexas::set_locs()
 
           case 4: /* Front face */
             loc_fpts(fpt,0) = loc_spts_1D[k];
-            loc_fpts(fpt,1) = -1.0
+            loc_fpts(fpt,1) = -1.0;
             loc_fpts(fpt,2) = loc_spts_1D[j];
             idx_fpts(fpt,0) = k;
             idx_fpts(fpt,1) = -1;
@@ -160,7 +160,7 @@ void Hexas::set_locs()
 
           case 5: /* Back face */
             loc_fpts(fpt,0) = loc_spts_1D[k];
-            loc_fpts(fpt,1) = 1.0
+            loc_fpts(fpt,1) = 1.0;
             loc_fpts(fpt,2) = loc_spts_1D[j];
             idx_fpts(fpt,0) = k;
             idx_fpts(fpt,1) = nSpts1D;
@@ -421,7 +421,7 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
 
       unsigned int face_idx = fpt/(nSpts1D * nSpts1D);
 
-      if(face_idx == 0 || face_idx == 2 || faces_idx == 4)
+      if(face_idx == 0 || face_idx == 2 || face_idx == 4)
         faces->outnorm(gfpt, slot) = -1; 
       else 
         faces->outnorm(gfpt, slot) = 1; 
@@ -652,7 +652,7 @@ double Hexas::calc_shape(unsigned int shape_order, unsigned int idx,
   return val;
 }
 
-double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
+double Hexas::calc_d_shape(unsigned int shape_order, unsigned int idx,
                           std::vector<double> &loc, unsigned int dim)
 {
   double val = 0.0;
@@ -660,7 +660,7 @@ double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
   double eta = loc[1];
   double nu = loc[2];
 
-  /* Bilinear quadrilateral/4-node Serendipity */
+  /* Bilinear hexahedral/8-node Serendipity */
   if (shape_order == 1)
   {
     unsigned int i = 0;

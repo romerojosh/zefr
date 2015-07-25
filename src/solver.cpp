@@ -12,6 +12,7 @@
 #include "faces.hpp"
 #include "funcs.hpp"
 #include "geometry.hpp"
+#include "hexas.hpp"
 #include "quads.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
@@ -41,8 +42,8 @@ void FRSolver::setup()
   std::cout << "Setting up elements and faces..." << std::endl;
   if (input->nDims == 2)
     eles = std::make_shared<Quads>(&geo, input, order);
-  //else if (input->nDims == 3)
-    //eles = std::make_shared<Hexas>(&geo, input, order);
+  else if (input->nDims == 3)
+    eles = std::make_shared<Hexas>(&geo, input, order);
 
   faces = std::make_shared<Faces>(&geo, input);
 
@@ -134,7 +135,7 @@ void FRSolver::setup_output()
     for (unsigned int i = 0; i < nSubelements1D; i++)
     {
       for (unsigned int j = 0; j < nSubelements1D; j++)
-    {
+      {
         for (unsigned int node = 0; node < 4; node ++)
         {
           geo.ppt_connect(node, ele) = nd[node] + j;
@@ -147,9 +148,56 @@ void FRSolver::setup_output()
         nd[node] += nSubelements1D + 1;
     }
   }
-  else
+  else if (eles->nDims == 3)
   {
-    ThrowException("3D not implemented yet!");
+    unsigned int nSubelements1D = eles->nSpts1D+1;
+    eles->nSubelements = nSubelements1D * nSubelements1D * nSubelements1D;
+    eles->nNodesPerSubelement = 8;
+
+    /* Allocate memory for local plot point connectivity and solution at plot points */
+    geo.ppt_connect.assign({8, eles->nSubelements});
+
+    /* Setup plot "subelement" connectivity */
+    std::vector<unsigned int> nd(8,0);
+
+    unsigned int ele = 0;
+    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+    nd[4] = (nSubelements1D + 1) * (nSubelements1D + 1); nd[5] = nd[4] + 1; 
+    nd[6] = nd[4] + nSubelements1D + 2; nd[7] = nd[4] + nSubelements1D + 1;
+
+    for (unsigned int i = 0; i < nSubelements1D; i++)
+    {
+      for (unsigned int j = 0; j < nSubelements1D; j++)
+      {
+        for (unsigned int k = 0; k < nSubelements1D; k++)
+        {
+          for (unsigned int node = 0; node < 8; node ++)
+          {
+            geo.ppt_connect(node, ele) = nd[node] + k;
+          }
+
+          ele++;
+        }
+
+        for (unsigned int node = 0; node < 8; node ++)
+          nd[node] += (nSubelements1D + 1);
+
+      }
+
+      for (unsigned int node = 0; node < 8; node ++)
+        nd[node] += (nSubelements1D + 1);
+    }
+
+    for (int ele = 0; ele < eles->nSubelements; ele++)
+    {
+      for (int node = 0; node < 8; node++)
+      {
+        std::cout << geo.ppt_connect(node,ele) << " ";
+      }
+      std::cout << std::endl;
+    }
+
+    //ThrowException("3D not implemented yet!");
   }
 
 }
@@ -828,7 +876,17 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   }
   else
   {
-    ThrowException("3D not implemented!");
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+      }
+    }
+
+    //ThrowException("3D not implemented!");
   }
   f << std::endl;
 
@@ -857,7 +915,10 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   }
   else
   {
-    ThrowException("3D not implemented!");
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 12 << std::endl;
+    
+    //ThrowException("3D not implemented!");
   }
   f << std::endl;
 

@@ -15,11 +15,13 @@
 class FRSolver;
 class Elements;
 class Quads;
+class Hexas;
 class Faces 
 {
   friend class FRSolver;
   friend class Elements;
   friend class Quads;
+  friend class Hexas;
 
   private:
     InputStruct *input = NULL;
