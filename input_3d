@@ -3,7 +3,7 @@ nDims    3
 meshfile meshes/HexBox.msh
 
 # Solver:
-order     2
+order     0
 equation AdvDiff    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre

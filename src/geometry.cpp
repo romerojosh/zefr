@@ -185,11 +185,11 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     else if (geo.nDims == 3)
     {
       geo.nFacesPerEle = 6; geo.nNodesPerFace = 4;
-      if (val == 3)
+      if (val == 2 || val == 3)
       {
         geo.nBnds++;
       }
-      else if (val == 5)
+      else if (val == 5 || val == 6)
       {
         geo.nEles++;
         geo.shape_order = 1; geo.nNodesPerEle = 8;
@@ -273,6 +273,13 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
           ele++; break;
 
+        case 6: /* 6-node Prism */
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
+          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele);
+          geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele);
+          geo.nd2gnd(7,ele) = geo.nd2gnd(6,ele);
+          ele++; break;
+
         default:
           ThrowException("Unrecognized element type detected!"); break;
       }
@@ -281,8 +288,15 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
   }
 
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  {
+    std::cout << ele << " ";
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
+    {
+      std::cout << geo.nd2gnd(n,ele) << " ";
       geo.nd2gnd(n,ele)--;
+    }
+    std::cout << std::endl;
+  }
 
   /* Rewind file */
   f.seekg(pos);

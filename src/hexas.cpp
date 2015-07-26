@@ -251,7 +251,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
       double yr = jaco_spts(1, 0, spt, ele); double ys = jaco_spts(1, 1, spt, ele); double yt = jaco_spts(1, 2, spt, ele);
       double zr = jaco_spts(2, 0, spt, ele); double zs = jaco_spts(2, 1, spt, ele); double zt = jaco_spts(2, 2, spt, ele);
 
-      jaco_det_spts(spt,ele) = xr * (ys * zt - yt * zs) + xs * (yr*zt - yt*zr) + 
+      jaco_det_spts(spt,ele) = xr * (ys * zt - yt * zs) - xs * (yr * zt - yt * zr) + 
         xt * (yr * zs - ys * zr);
 
       if (jaco_det_spts(spt,ele) < 0.)
@@ -326,7 +326,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
       double yr = jaco_qpts(1, 0, qpt, ele); double ys = jaco_qpts(1, 1, qpt, ele); double yt = jaco_qpts(1, 2, qpt, ele);
       double zr = jaco_qpts(2, 0, qpt, ele); double zs = jaco_qpts(2, 1, qpt, ele); double zt = jaco_qpts(2, 2, qpt, ele);
 
-      jaco_det_qpts(qpt,ele) = xr * (ys * zt - yt * zs) + xs * (yr*zt - yt*zr) + 
+      jaco_det_qpts(qpt,ele) = xr * (ys * zt - yt * zs) - xs * (yr * zt - yt * zr) + 
         xt * (yr * zs - ys * zr);
 
       if (jaco_det_qpts(qpt,ele) < 0.)
