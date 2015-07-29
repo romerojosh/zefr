@@ -37,7 +37,7 @@ class Elements
     mdvector<double> tnorm; 
     mdvector<double> shape_spts, shape_fpts, shape_ppts, shape_qpts;
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
-    mdvector<double> jaco_spts, jaco_det_spts;
+    mdvector<double> jaco_spts, jaco_det_spts, inv_jaco_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
     mdvector<double> weights_spts;
     std::vector<double> weights_qpts;

@@ -186,8 +186,8 @@ void Elements::setup_FR()
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      loc[0] = loc_fpts(fpt,0);
-      loc[1] = loc_fpts(fpt,1);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        loc[dim] = loc_fpts(fpt , dim);
 
       oppE(fpt,spt) = calc_nodal_basis(spt, loc);
     }
@@ -201,8 +201,8 @@ void Elements::setup_FR()
     {
       for (unsigned int ispt = 0; ispt < nSpts; ispt++)
       {
-        loc[0] = loc_spts(ispt,0);
-        loc[1] = loc_spts(ispt,1);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          loc[dim] = loc_spts(ispt , dim);
 
         oppD(ispt,jspt,dim) = calc_d_nodal_basis_spts(jspt, loc, dim);
       }
@@ -216,8 +216,9 @@ void Elements::setup_FR()
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        loc[0] = loc_spts(spt,0);
-        loc[1] = loc_spts(spt,1);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          loc[dim] = loc_spts(spt , dim);
+
         oppD_fpts(spt,fpt,dim) = calc_d_nodal_basis_fpts(fpt, loc, dim);
       }
     }
@@ -238,8 +239,8 @@ void Elements::setup_aux()
   {
     for (unsigned int ppt = 0; ppt < nPpts; ppt++)
     {
-      loc[0] = loc_ppts(ppt,0);
-      loc[1] = loc_ppts(ppt,1);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        loc[dim] = loc_ppts(ppt , dim);
 
       oppE_ppts(ppt, spt) = calc_nodal_basis(spt, loc);
     }
@@ -250,8 +251,8 @@ void Elements::setup_aux()
   {
     for (unsigned int qpt = 0; qpt < nQpts; qpt++)
     {
-      loc[0] = loc_qpts(qpt,0);
-      loc[1] = loc_qpts(qpt,1);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        loc[dim] = loc_qpts(qpt , dim);
 
       oppE_qpts(qpt,spt) = calc_nodal_basis(spt, loc);
     }

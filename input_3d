@@ -1,6 +1,6 @@
 # Geometry:
 nDims    3
-meshfile meshes/HexBox.msh
+meshfile meshes/HexBox_3x3.msh
 
 # Solver:
 order     0
@@ -9,10 +9,10 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 0
-dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.000001
+n_steps 1
+dt_scheme Euler      (Euler, RK44, RK54)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.0001
 CFL	  0.20
 
 # Restarting:
@@ -31,7 +31,7 @@ s_factor 0.0
 
 # Reporting:
 output_prefix test3d
-write_freq  1000
+write_freq  100
 report_freq 100
 res_type    1
 force_freq  0
@@ -49,9 +49,10 @@ ldg_tau    1.0
 ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
-AdvDiff_Ax 0
+AdvDiff_Ax 1
 AdvDiff_Ay 0
-AdvDiff_D 0.1
+AdvDiff_Az 0
+AdvDiff_D 0.0
 
 # Euler/Navier-Stokes
 T_gas 291.15

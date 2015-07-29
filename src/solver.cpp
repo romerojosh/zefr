@@ -188,6 +188,7 @@ void FRSolver::setup_output()
         nd[node] += (nSubelements1D + 1);
     }
 
+    /*
     for (int ele = 0; ele < eles->nSubelements; ele++)
     {
       for (int node = 0; node < 8; node++)
@@ -196,6 +197,7 @@ void FRSolver::setup_output()
       }
       std::cout << std::endl;
     }
+    */
 
     //ThrowException("3D not implemented yet!");
   }
@@ -397,15 +399,33 @@ void FRSolver::initialize_U()
     }
     else if (input->ic_type == 1)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      if (input->nDims == 2)
       {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          double x = geo.coord_spts(spt, ele, 0);
-          double y = geo.coord_spts(spt, ele, 1);
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            double x = geo.coord_spts(spt, ele, 0);
+            double y = geo.coord_spts(spt, ele, 1);
 
-          eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, input);
+            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
+          }
         }
+      }
+      else if (input->nDims == 3)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            double x = geo.coord_spts(spt, ele, 0);
+            double y = geo.coord_spts(spt, ele, 1);
+            double z = geo.coord_spts(spt, ele, 2);
+
+            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
+          }
+        }
+
       }
     }
     else
@@ -447,7 +467,7 @@ void FRSolver::initialize_U()
             double x = geo.coord_spts(spt, ele, 0);
             double y = geo.coord_spts(spt, ele, 1);
 
-            eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, n, input);
+            eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
           }
         }
       }
@@ -1266,7 +1286,7 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
         if (eles->nDims == 2)
         {
           /* Compute true solution */
-          U_true = compute_U_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 
+          U_true = compute_U_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
               flow_time, n, input);
 
           /* Get quadrature point index and weight */

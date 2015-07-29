@@ -70,10 +70,13 @@ void Faces::apply_bcs()
       case 1:/* Periodic */
       {
         unsigned int per_fpt = geo->per_fpt_list(fpt - geo->nGfpts_int);
+        //std::cout << "AA " << per_fpt << " " << fpt << std::endl;
 
         for (unsigned int n = 0; n < nVars; n++)
         {
           U(fpt, n, 1) = U(per_fpt, n, 0);
+
+          //std::cout << fpt << " " << U(fpt, n, 1) << " " << per_fpt << " " << U(per_fpt,n,0) << std::endl;
         }
         break;
       }
@@ -90,7 +93,7 @@ void Faces::apply_bcs()
           Vsq += input->V_fs(dim) * input->V_fs(dim);
         }
 
-        U(fpt, 3, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
+        U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
@@ -125,7 +128,7 @@ void Faces::apply_bcs()
           Vsq += VL[dim] * VL[dim];
         }
 
-        double eL = U(fpt, 3 ,0);
+        double eL = U(fpt, nDims + 1 ,0);
         double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
 
 
@@ -187,7 +190,7 @@ void Faces::apply_bcs()
           Vsq += VR[dim] * VR[dim];
         }
 
-        U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
@@ -210,7 +213,7 @@ void Faces::apply_bcs()
           Vsq += VL[dim] * VL[dim];
         }
 
-        double eL = U(fpt, 3 ,0);
+        double eL = U(fpt, nDims + 1, 0);
         double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
 
         /* Compute left normal velocity */
@@ -247,7 +250,7 @@ void Faces::apply_bcs()
           Vsq += VR[dim] * VR[dim];
         }
 
-        U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
@@ -268,10 +271,11 @@ void Faces::apply_bcs()
       
 
         /* Compute pressure. TODO: Compute pressure once!*/
+        /* TODO: Make momF computations general for 3D */
         double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
             U(fpt, 2, 0)) / U(fpt, 0, 0);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = input->P_fs;
 
         /* Compute Riemann Invariants */
@@ -303,7 +307,7 @@ void Faces::apply_bcs()
               norm(fpt, dim, 0));
 
           PR = rhoR / input->gamma * cstar * cstar;
-          U(fpt, 3, 1) = rhoR * H_fs - PR;
+          U(fpt, nDims + 1, 1) = rhoR * H_fs - PR;
           
         }
         else  /* Case 2: Outflow */
@@ -325,7 +329,7 @@ void Faces::apply_bcs()
           for (unsigned int dim = 0; dim < nDims; dim++)
             Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoL * rhoL) ;
           
-          U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq; 
+          U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq; 
         }
 
         /* Set LDG bias */
@@ -352,7 +356,7 @@ void Faces::apply_bcs()
 
         /* TODO: Extrapolate energy or recompute? */
         //U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-        U(fpt, 3, 1) = U(fpt, 3, 0);
+        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
@@ -368,7 +372,7 @@ void Faces::apply_bcs()
         double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
             U(fpt, 2, 0)) / U(fpt, 0, 0);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momF);
 
         double PR = PL;
         double TR = input->T_wall;
@@ -379,7 +383,7 @@ void Faces::apply_bcs()
         for (unsigned int dim = 0; dim < nDims; dim++)
           U(fpt, dim+1, 1) = 0.0;
 
-        U(fpt, 3, 1) = PR / (input->gamma - 1.0);
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
@@ -396,7 +400,7 @@ void Faces::apply_bcs()
         double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
             U(fpt, 2, 0)) / U(fpt, 0, 0);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
 
         double PR = PL;
         double TR = input->T_wall;
@@ -411,7 +415,7 @@ void Faces::apply_bcs()
           V_wall_sq += input->V_wall(dim) * input->V_wall(dim);
         }
 
-        U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
@@ -431,7 +435,7 @@ void Faces::apply_bcs()
         double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
             U(fpt, 2, 0)) / U(fpt, 0, 0);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = PL; 
 
         /* Set velocity to zero */
@@ -439,7 +443,7 @@ void Faces::apply_bcs()
           U(fpt, dim+1, 1) = 0.0;
           //U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
 
-        U(fpt, 3, 1) = PR / (input->gamma - 1.0);
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
         /* Extrapolate energy */
         //U(fpt, 3, 1) = U(fpt, 3, 0);
 
@@ -461,7 +465,7 @@ void Faces::apply_bcs()
         double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
             U(fpt, 2, 0)) / U(fpt, 0, 0);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = PL; 
 
         /* Set velocity to wall velocity */
@@ -472,7 +476,7 @@ void Faces::apply_bcs()
           V_wall_sq += input->V_wall(dim) * input->V_wall(dim);
         }
 
-        U(fpt, 3, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
 
         /* Set LDG bias */
         LDG_bias(fpt) = 1;
@@ -530,6 +534,7 @@ void Faces::apply_bcs_dU()
       }
 
       /* Compute energy gradient */
+      /* TODO : Generalize for 3D */
       /* Get right states and velocity gradients*/
       double rho = U(fpt, 0, 1);
       double momx = U(fpt, 1, 1);

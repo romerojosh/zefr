@@ -166,9 +166,9 @@ void Hexas::set_locs()
             idx_fpts(fpt,1) = nSpts1D;
             idx_fpts(fpt,2) = j; break;
         }
-      }
+        fpt++;
 
-      fpt++;
+      }
     }
   }
   
@@ -225,10 +225,12 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for jacobian matrices and determinant */
   jaco_spts.assign({nDims, nDims, nSpts, nEles});
+  inv_jaco_spts.assign({nDims, nDims, nSpts, nEles});
   jaco_ppts.assign({nDims, nDims, nPpts, nEles});
   jaco_qpts.assign({nDims, nDims, nQpts, nEles});
   jaco_det_spts.assign({nSpts, nEles});
   jaco_det_qpts.assign({nQpts, nEles});
+
 
   /* Set jacobian matrix and determinant at solution points */
   for (unsigned int ele = 0; ele < nEles; ele++)
@@ -250,6 +252,10 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
       double xr = jaco_spts(0, 0, spt, ele); double xs = jaco_spts(0, 1, spt, ele); double xt = jaco_spts(0, 2, spt, ele);
       double yr = jaco_spts(1, 0, spt, ele); double ys = jaco_spts(1, 1, spt, ele); double yt = jaco_spts(1, 2, spt, ele);
       double zr = jaco_spts(2, 0, spt, ele); double zs = jaco_spts(2, 1, spt, ele); double zt = jaco_spts(2, 2, spt, ele);
+
+      inv_jaco_spts(0, 0, spt, ele) = ys * zt - yt * zs; inv_jaco_spts(0, 1, spt, ele) = xt * zs - xs * zt; inv_jaco_spts(0, 2, spt, ele) = xs * yt - xt * ys;
+      inv_jaco_spts(1, 0, spt, ele) = yt * zr - yr * zt; inv_jaco_spts(1, 1, spt, ele) = xr * zt - xt * zr; inv_jaco_spts(1, 2, spt, ele) = xt * yr - xr * yt;
+      inv_jaco_spts(2, 0, spt, ele) = yr * zs - ys * zr; inv_jaco_spts(2, 1, spt, ele) = xs * zr - xr * zs; inv_jaco_spts(2, 2, spt, ele) = xr * ys - xs * yr;
 
       jaco_det_spts(spt,ele) = xr * (ys * zt - yt * zs) - xs * (yr * zt - yt * zr) + 
         xt * (yr * zs - ys * zr);
@@ -353,9 +359,9 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
         tnorm(fpt,2) = -1.0; break;
 
       case 1: /* Top */
-        tnorm(fpt,0) = 1.0;
+        tnorm(fpt,0) = 0.0;
         tnorm(fpt,1) = 0.0; 
-        tnorm(fpt,2) = 0.0; break;
+        tnorm(fpt,2) = 1.0; break;
 
       case 2: /* Left */
         tnorm(fpt,0) = -1.0;
@@ -381,7 +387,7 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
   }
 
   /* Use transform to obtain physical normals at face flux points */
-  mdvector<double> invJac({nDims, nDims});
+  mdvector<double> inv_jaco({nDims, nDims});
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -398,15 +404,15 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
       double yr = faces->jaco(gfpt, 1, 0, slot); double ys = faces->jaco(gfpt, 1, 1, slot); double yt = faces->jaco(gfpt, 1, 2, slot);
       double zr = faces->jaco(gfpt, 2, 0, slot); double zs = faces->jaco(gfpt, 2, 1, slot); double zt = faces->jaco(gfpt, 2, 2, slot);
 
-      invJac(0,0) = ys * zt + yt * zs; invJac(0,1) = xt * zs + xs * zt; invJac(0,2) = xs * yt - xt * ys;
-      invJac(1,0) = yt * zr + yr * zt; invJac(1,1) = xr * zt + xt * zr; invJac(1,2) = xt * yr - xr * yt;
-      invJac(2,0) = yr * zs + ys * zr; invJac(2,1) = xs * zr + xr * zs; invJac(2,2) = xr * ys - xs * yr;
+      inv_jaco(0,0) = ys * zt - yt * zs; inv_jaco(0,1) = xt * zs - xs * zt; inv_jaco(0,2) = xs * yt - xt * ys;
+      inv_jaco(1,0) = yt * zr - yr * zt; inv_jaco(1,1) = xr * zt - xt * zr; inv_jaco(1,2) = xt * yr - xr * yt;
+      inv_jaco(2,0) = yr * zs - ys * zr; inv_jaco(2,1) = xs * zr - xr * zs; inv_jaco(2,2) = xr * ys - xs * yr;
       
       for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
       {
         for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
         {
-          faces->norm(gfpt, dim1, slot) += invJac(dim2, dim1) * tnorm(fpt, dim2); 
+          faces->norm(gfpt, dim1, slot) += inv_jaco(dim2, dim1) * tnorm(fpt, dim2); 
         }
       }
 
@@ -425,6 +431,13 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
         faces->outnorm(gfpt, slot) = -1; 
       else 
         faces->outnorm(gfpt, slot) = 1; 
+
+      if (ele == 0)
+      {
+        std::cout << fpt << " "<<faces->norm(gfpt, 0, 0) << " " << faces->norm(gfpt, 1, 0) << " ";
+        std::cout << faces->norm(gfpt, 2, 0) << " " << faces->dA(gfpt) << " ";
+        std::cout << faces->outnorm(gfpt, 0) << std::endl;
+      }
 
     }
   }
@@ -499,11 +512,10 @@ double Hexas::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc
 
 void Hexas::setup_PMG()
 {
-  /*
   unsigned int nSpts_pro_1D = order+2;
   unsigned int nSpts_res_1D = order;
-  unsigned int nSpts_pro = nSpts_pro_1D * nSpts_pro_1D;
-  unsigned int nSpts_res = nSpts_res_1D * nSpts_res_1D;
+  unsigned int nSpts_pro = nSpts_pro_1D * nSpts_pro_1D * nSpts_pro_1D;
+  unsigned int nSpts_res = nSpts_res_1D * nSpts_res_1D * nSpts_res_1D;
 
   std::vector<double> loc(nDims, 0.0);
 
@@ -519,6 +531,7 @@ void Hexas::setup_PMG()
       {
         loc[0] = loc_spts_pro_1D[pspt%nSpts_pro_1D];
         loc[1] = loc_spts_pro_1D[pspt/nSpts_pro_1D];
+        loc[2] = loc_spts_pro_1D[pspt/(nSpts_pro_1D * nSpts_pro_1D)]; //TODO: Correct?
 
         oppPro(pspt, spt) = calc_nodal_basis(spt, loc);
       }
@@ -537,12 +550,12 @@ void Hexas::setup_PMG()
       {
         loc[0] = loc_spts_res_1D[rspt%nSpts_res_1D];
         loc[1] = loc_spts_res_1D[rspt/nSpts_res_1D];
+        loc[2] = loc_spts_res_1D[rspt/(nSpts_res_1D * nSpts_res_1D)]; //TODO: Correct?
 
         oppRes(rspt, spt) = calc_nodal_basis(spt, loc);
       }
     }
   }
-  */
 }
 
 void Hexas::transform_dU()
@@ -555,16 +568,24 @@ void Hexas::transform_dU()
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        double dUtemp = dU_spts(spt, ele, n, 0);
+        double dUtemp0 = dU_spts(spt, ele, n, 0);
+        double dUtemp1 = dU_spts(spt, ele, n, 1);
 
-        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) - 
-                                  dU_spts(spt, ele, n, 1) * jaco_spts(1, 0, spt, ele); 
+        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco_spts(0, 0, spt, ele) + 
+                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 0, spt, ele) +  
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 0, spt, ele);  
 
-        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
-                                  dUtemp * jaco_spts(0, 1, spt, ele);
+        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(0, 1, spt, ele) + 
+                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 1, spt, ele) +  
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 1, spt, ele);  
+                                  
+        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(0, 2, spt, ele) + 
+                                  dUtemp1 * inv_jaco_spts(1, 2, spt, ele) +  
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 2, spt, ele);  
 
         dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
         dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
+        dU_spts(spt, ele, n, 2) /= jaco_det_spts(spt, ele);
       }
     }
   }
@@ -589,12 +610,21 @@ void Hexas::transform_flux()
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        double Ftemp = F_spts(spt, ele, n, 0);
+        double Ftemp0 = F_spts(spt, ele, n, 0);
+        double Ftemp1 = F_spts(spt, ele, n, 1);
 
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
-                                 F_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
-        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
-                                 Ftemp * jaco_spts(1, 0, spt, ele);
+        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * inv_jaco_spts(0, 0, spt, ele) + 
+                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(1, 0, spt, ele) +  
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(2, 0, spt, ele); 
+
+        F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco_spts(0, 1, spt, ele) + 
+                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(1, 1, spt, ele) +  
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(2, 1, spt, ele);  
+                                  
+        F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco_spts(0, 2, spt, ele) + 
+                                  Ftemp1 * inv_jaco_spts(1, 2, spt, ele) +  
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(2, 2, spt, ele); 
+
       }
     }
   }

@@ -64,6 +64,7 @@ InputStruct read_input_file(std::string inputfile)
   input.AdvDiff_A.assign({3});
   read_param(f, "AdvDiff_Ax", input.AdvDiff_A(0));
   read_param(f, "AdvDiff_Ay", input.AdvDiff_A(1));
+  read_param(f, "AdvDiff_Az", input.AdvDiff_A(2));
   read_param(f, "AdvDiff_D", input.AdvDiff_D);
 
   read_param(f, "T_gas", input.T_gas);
@@ -71,7 +72,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "R", input.R);
   read_param(f, "mu", input.mu);
   read_param(f, "prandtl", input.prandtl);
-  read_param(f, "prandtl", input.S);
+  read_param(f, "S", input.S);
 
   read_param(f, "rho_fs", input.rho_fs);
   //read_param(f, "u_fs", input.u_fs);

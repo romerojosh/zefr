@@ -289,13 +289,13 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
-    std::cout << ele << " ";
+    //std::cout << ele << " ";
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
     {
-      std::cout << geo.nd2gnd(n,ele) << " ";
+      //std::cout << geo.nd2gnd(n,ele) << " ";
       geo.nd2gnd(n,ele)--;
     }
-    std::cout << std::endl;
+    //std::cout << std::endl;
   }
 
   /* Rewind file */
@@ -678,6 +678,11 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         }
       } 
 
+    }
+
+    for (unsigned int i = 0; i < gfpt_bnd - geo.nGfpts_int; i++)
+    {
+      std::cout << i + geo.nGfpts_int << " " << geo.per_fpt_list(i) << std::endl;
     }
 
     /* Populate data structures */
