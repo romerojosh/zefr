@@ -423,6 +423,7 @@ void FRSolver::initialize_U()
             double z = geo.coord_spts(spt, ele, 2);
 
             eles->U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
+
           }
         }
 
@@ -596,6 +597,9 @@ void FRSolver::F_from_faces()
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         eles->Fcomm(fpt, ele, n) = faces->Fcomm(gfpt, n, slot);
+
+        //std::cout << eles->Fcomm(fpt, ele,n) << std::endl;
+
       }
     }
   }
@@ -679,7 +683,9 @@ void FRSolver::update()
   {
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
+    {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
           if (input->dt_type != 2)
@@ -693,6 +699,8 @@ void FRSolver::update()
               eles->divF_spts(spt, ele, n, stage);
           }
         }
+      }
+    }
   }
 #endif
 
@@ -702,7 +710,6 @@ void FRSolver::update()
         input->equation, 0, nStages, true);
     check_error();
 #endif
-
 
   flow_time += dt(0);
  

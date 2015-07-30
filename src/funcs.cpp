@@ -17,15 +17,10 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     }
     else if (input->nDims == 3)
     {
-      if (x > 0 && y > 0 && z>0)
-        val = 1.0;
-
-      /*
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t))*
              std::sin(M_PI * (z - input->AdvDiff_A(2) * t));
-       */
     }
   }
   else if (input->equation == EulerNS)

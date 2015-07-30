@@ -490,6 +490,7 @@ void Elements::compute_divF(unsigned int stage)
       for (unsigned int ele =0; ele < nEles; ele++)
         for (unsigned int spt = 0; spt < nSpts; spt++)
           divF_spts(spt, ele, n, stage) += dF_spts(spt, ele, n, dim);
+
 #endif
 
 #ifdef _GPU

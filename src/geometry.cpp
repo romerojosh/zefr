@@ -551,8 +551,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       faces_nodes[4][2] = 5; faces_nodes[4][3] = 4;
 
       /* Face 5: Back */
-      faces_nodes[5][0] = 7; faces_nodes[5][1] = 6;
-      faces_nodes[5][2] = 3; faces_nodes[5][3] = 2;
+      faces_nodes[5][0] = 3; faces_nodes[5][1] = 2;
+      faces_nodes[5][2] = 6; faces_nodes[5][3] = 7;
     }
 
     /* Determine number of interior global flux points */

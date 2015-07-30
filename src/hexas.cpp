@@ -416,10 +416,13 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
         }
       }
 
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        faces->dA(gfpt) += faces->norm(gfpt, dim, slot) * faces->norm(gfpt, dim, slot);
+      if (slot == 0)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          faces->dA(gfpt) += faces->norm(gfpt, dim, slot) * faces->norm(gfpt, dim, slot);
 
-      faces->dA(gfpt) = std::sqrt(faces->dA(gfpt));
+        faces->dA(gfpt) = std::sqrt(faces->dA(gfpt));
+      }
                         
 
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -432,12 +435,6 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
       else 
         faces->outnorm(gfpt, slot) = 1; 
 
-      if (ele == 0)
-      {
-        std::cout << fpt << " "<<faces->norm(gfpt, 0, 0) << " " << faces->norm(gfpt, 1, 0) << " ";
-        std::cout << faces->norm(gfpt, 2, 0) << " " << faces->dA(gfpt) << " ";
-        std::cout << faces->outnorm(gfpt, 0) << std::endl;
-      }
 
     }
   }
@@ -572,15 +569,15 @@ void Hexas::transform_dU()
         double dUtemp1 = dU_spts(spt, ele, n, 1);
 
         dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco_spts(0, 0, spt, ele) + 
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 0, spt, ele) +  
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 0, spt, ele);  
+                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(0, 1, spt, ele) +  
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(0, 2, spt, ele);  
 
-        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(0, 1, spt, ele) + 
+        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(1, 0, spt, ele) + 
                                   dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 1, spt, ele) +  
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 1, spt, ele);  
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(1, 2, spt, ele);  
                                   
-        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(0, 2, spt, ele) + 
-                                  dUtemp1 * inv_jaco_spts(1, 2, spt, ele) +  
+        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(2, 0, spt, ele) + 
+                                  dUtemp1 * inv_jaco_spts(2, 1, spt, ele) +  
                                   dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 2, spt, ele);  
 
         dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
@@ -614,20 +611,22 @@ void Hexas::transform_flux()
         double Ftemp1 = F_spts(spt, ele, n, 1);
 
         F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * inv_jaco_spts(0, 0, spt, ele) + 
-                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(1, 0, spt, ele) +  
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(2, 0, spt, ele); 
+                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(0, 1, spt, ele) +  
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(0, 2, spt, ele); 
 
-        F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco_spts(0, 1, spt, ele) + 
+        F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco_spts(1, 0, spt, ele) + 
                                   F_spts(spt, ele, n, 1) * inv_jaco_spts(1, 1, spt, ele) +  
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(2, 1, spt, ele);  
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(1, 2, spt, ele);  
                                   
-        F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco_spts(0, 2, spt, ele) + 
-                                  Ftemp1 * inv_jaco_spts(1, 2, spt, ele) +  
+        F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco_spts(2, 0, spt, ele) + 
+                                  Ftemp1 * inv_jaco_spts(2, 1, spt, ele) +  
                                   F_spts(spt, ele, n, 2) * inv_jaco_spts(2, 2, spt, ele); 
 
       }
+
     }
   }
+
 #endif
 
 #ifdef _GPU
@@ -729,15 +728,3 @@ double Hexas::calc_d_shape(unsigned int shape_order, unsigned int idx,
   return val;
 
 }
-  /*
-  std::cout << "tflux" << std::endl;
-  for (unsigned int i = 0; i < nSpts; i++)
-  {
-    for (unsigned int j = 0; j < nEles; j++)
-    {
-      std::cout << F_spts(0,0,i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
-

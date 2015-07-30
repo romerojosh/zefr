@@ -70,13 +70,10 @@ void Faces::apply_bcs()
       case 1:/* Periodic */
       {
         unsigned int per_fpt = geo->per_fpt_list(fpt - geo->nGfpts_int);
-        //std::cout << "AA " << per_fpt << " " << fpt << std::endl;
 
         for (unsigned int n = 0; n < nVars; n++)
         {
           U(fpt, n, 1) = U(per_fpt, n, 0);
-
-          //std::cout << fpt << " " << U(fpt, n, 1) << " " << per_fpt << " " << U(per_fpt,n,0) << std::endl;
         }
         break;
       }
