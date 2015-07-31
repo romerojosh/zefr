@@ -3,7 +3,7 @@ $MeshFormat
 $EndMeshFormat
 $PhysicalNames
 2
-2 1 "FARFIELD"
+2 1 "PERIODIC"
 3 2 "FLUID"
 $EndPhysicalNames
 $Nodes

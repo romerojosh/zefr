@@ -1,6 +1,6 @@
 # Geometry:
 nDims    3
-meshfile meshes/HexBox.msh
+meshfile HexBox_2d.msh
 
 # Solver:
 order     1
