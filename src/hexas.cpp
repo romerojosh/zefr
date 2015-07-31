@@ -159,7 +159,7 @@ void Hexas::set_locs()
             loc_fpts(fpt,0) = loc_spts_1D[nSpts1D - k - 1];
             loc_fpts(fpt,1) = loc_spts_1D[j]; 
             loc_fpts(fpt,2) = 1.0; 
-            idx_fpts(fpt,0) = k;
+            idx_fpts(fpt,0) = nSpts1D - k - 1;
             idx_fpts(fpt,1) = j;
             idx_fpts(fpt,2) = nSpts1D; break;
 
@@ -168,7 +168,7 @@ void Hexas::set_locs()
             loc_fpts(fpt,1) = loc_spts_1D[k];
             loc_fpts(fpt,2) = loc_spts_1D[j];
             idx_fpts(fpt,0) = -1;
-            idx_fpts(fpt,1) = nSpts1D - k - 1;
+            idx_fpts(fpt,1) = k;
             idx_fpts(fpt,2) = j; break;
 
           case 3: /* Right face */
@@ -183,7 +183,7 @@ void Hexas::set_locs()
             loc_fpts(fpt,0) = loc_spts_1D[nSpts1D - k - 1];
             loc_fpts(fpt,1) = -1.0;
             loc_fpts(fpt,2) = loc_spts_1D[j];
-            idx_fpts(fpt,0) = k;
+            idx_fpts(fpt,0) = nSpts1D - k - 1;
             idx_fpts(fpt,1) = -1;
             idx_fpts(fpt,2) = j; break;
 

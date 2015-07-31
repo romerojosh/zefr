@@ -758,7 +758,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
           */
 
-          std::cout << rot << std::endl;
+          //std::cout << rot << std::endl;
 
           /* Based on rotation, couple flux points */
           switch (rot)
@@ -769,33 +769,25 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
                 for (unsigned int j = 0; j < nFpts1D; j++)
                 {
                   ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[i * nFpts1D + j];
-                  //ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
                 }
               } break;
-              /*
-              for (unsigned int i = 0; i < nFptsPerFace; i++)
-              {
-                ele2fpts[ele][n*nFptsPerFace + i] = fpts[i];
-                //ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
-              } break;
-              */
 
             case 1:
               for (unsigned int i = 0; i < nFpts1D; i++)
               {
                 for (unsigned int j = 0; j < nFpts1D; j++)
                 {
-                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFpts1D - i - 1 + j * nFpts1D];
-                  //ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFpts1D * (i+1) - j- 1];
-                  //ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFpts1D - i + j * nFpts1D - 1];
                 }
               } break;
 
             case 2:
-              for (unsigned int i = 0; i < nFptsPerFace; i++)
+              for (unsigned int i = 0; i < nFpts1D; i++)
               {
-                ele2fpts[ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
-                //ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+                for (unsigned int j = 0; j < nFpts1D; j++)
+                {
+                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - i * nFpts1D - j - 1];
+                }
               } break;
 
             case 3:
@@ -803,9 +795,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
               {
                 for (unsigned int j = 0; j < nFpts1D; j++)
                 {
-                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = 
-                    fpts[nFptsPerFace - nFpts1D * (i+1) +j];
-                  //ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - (j+1) * nFpts1D + i];
                 }
               } break;
           }
@@ -879,7 +869,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
           rot = 2;
         }
 
-        std::cout << " per_rot " << rot << std::endl;
+        //std::cout << " per_rot " << rot << std::endl;
 
         /* Based on rotation, couple flux points */
         switch (rot)
@@ -893,13 +883,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
                 geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[i * nFpts1D + j];
               }
             } break;
-            /*
-            for (unsigned int i = 0; i < nFptsPerFace; i++)
-            {
-              geo.per_fpt_pairs[fpts1[i]] = fpts2[i];
-              geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[i];
-            } break;
-            */
 
           case 1:
             for (unsigned int i = 0; i < nFpts1D; i++)
@@ -908,16 +891,17 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
               {
                 geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFpts1D - i - 1 + j*nFpts1D];
                 geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFpts1D - i - 1 + j*nFpts1D];
-                //geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFpts1D * (i+1) - j - 1];
-                //geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFpts1D * (i+1) - j - 1];
               }
             } break;
 
           case 2:
-            for (unsigned int i = 0; i < nFptsPerFace; i++)
+            for (unsigned int i = 0; i < nFpts1D; i++)
             {
-              geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
-              geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i];
+              for (unsigned int j = 0; j < nFpts1D; j++)
+              {
+                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - 1 - i * nFpts1D - j];
+                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i * nFpts1D - j];
+              }
             } break;
 
           case 3:
@@ -925,8 +909,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             {
               for (unsigned int j = 0; j < nFpts1D; j++)
               {
-                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - nFpts1D * (i+1) + j];
-                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace -nFpts1D * (i+1) +j];
+                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
+                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
               }
             } break;
         }
@@ -940,10 +924,12 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         */
       } 
 
+      /*
       for (unsigned int i = 0; i < gfpt_bnd - geo.nGfpts_int; i++)
       {
         std::cout << i + geo.nGfpts_int << " " << geo.per_fpt_list(i) << std::endl;
       }
+      */
 
     }
 
