@@ -531,8 +531,14 @@ void Elements::compute_Fconv()
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
           /* Compute some primitive variables */
-          double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
-              U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
+          double momF = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim ++)
+          {
+            momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
+          }
+
+          momF /= U_spts(spt, ele, 0);
+
           double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
           double H = (U_spts(spt, ele, 3) + P) / U_spts(spt, ele, 0);
 
@@ -543,7 +549,7 @@ void Elements::compute_Fconv()
           F_spts(spt, ele, 3, 0) = U_spts(spt, ele, 1) * H;
 
           F_spts(spt, ele, 0, 1) = U_spts(spt, ele, 2);
-          F_spts(spt, ele, 1, 1) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 1, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
           F_spts(spt, ele, 2, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0) + P;
           F_spts(spt, ele, 3, 1) = U_spts(spt, ele, 2) * H;
         }
@@ -561,7 +567,56 @@ void Elements::compute_Fconv()
     }
     else if (nDims == 3)
     {
-      ThrowException("3D Euler flux not implemented!");
+#ifdef _CPU
+#pragma omp parallel for collapse(2)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          /* Compute some primitive variables */
+          double momF = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim ++)
+          {
+            momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
+          }
+
+          momF /= U_spts(spt, ele, 0);
+
+          double P = (input->gamma - 1.0) * (U_spts(spt, ele, 4) - 0.5 * momF);
+          double H = (U_spts(spt, ele, 4) + P) / U_spts(spt, ele, 0);
+
+
+          F_spts(spt, ele, 0, 0) = U_spts(spt, ele, 1);
+          F_spts(spt, ele, 1, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0) + P;
+          F_spts(spt, ele, 2, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 3, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 3) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 4, 0) = U_spts(spt, ele, 1) * H;
+
+          F_spts(spt, ele, 0, 1) = U_spts(spt, ele, 2);
+          F_spts(spt, ele, 1, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 2, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0) + P;
+          F_spts(spt, ele, 3, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 3) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 4, 1) = U_spts(spt, ele, 2) * H;
+
+          F_spts(spt, ele, 0, 2) = U_spts(spt, ele, 3);
+          F_spts(spt, ele, 1, 2) = U_spts(spt, ele, 3) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 2, 2) = U_spts(spt, ele, 3) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+          F_spts(spt, ele, 3, 2) = U_spts(spt, ele, 3) * U_spts(spt, ele, 3) / U_spts(spt, ele, 0) + P;
+          F_spts(spt, ele, 4, 2) = U_spts(spt, ele, 3) * H;
+        }
+      }
+#endif
+
+#ifdef _GPU
+      ThrowException("3D Euler not implemented on GPU yet!");
+      //compute_Fconv_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, input->gamma);
+      check_error();
+
+      /* Copy out data */
+      //F_spts = F_spts_d;
+#endif
+
+
     }
   }
 

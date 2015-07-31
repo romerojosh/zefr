@@ -1,10 +1,10 @@
 # Geometry:
 nDims    3
-meshfile meshes/HexBox_u.msh
+meshfile meshes/HexBox_10.msh
 
 # Solver:
 order     3
-equation AdvDiff    (AdvDiff, EulerNS)
+equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
 
@@ -12,7 +12,7 @@ spt_type Legendre
 n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.001
+dt	  0.01
 CFL	  0.20
 
 # Restarting:
@@ -64,7 +64,7 @@ S       120
 
 # Euler specific
 rho_fs 1
-u_fs 0.0
+u_fs 0.2
 v_fs 0.0
 P_fs .71428571428
 

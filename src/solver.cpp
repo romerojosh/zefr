@@ -1006,7 +1006,11 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   }
   else if(input->equation == EulerNS)
   {
-    std::array<std::string,4> var = {"rho", "xmom", "ymom", "energy"};
+    std::vector<std::string> var;
+    if (eles->nDims == 2)
+      var = {"rho", "xmom", "ymom", "energy"};
+    else
+      var = {"rho", "xmom", "ymom", "zmom", "energy"};
 
     f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
     //f << "CELL_DATA " << nCells << std::endl;

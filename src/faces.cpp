@@ -268,9 +268,13 @@ void Faces::apply_bcs()
       
 
         /* Compute pressure. TODO: Compute pressure once!*/
-        /* TODO: Make momF computations general for 3D */
-        double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
-            U(fpt, 2, 0)) / U(fpt, 0, 0);
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = input->P_fs;
@@ -300,7 +304,7 @@ void Faces::apply_bcs()
 
           U(fpt, 0, 1) = rhoR;
           for (unsigned int dim = 0; dim < nDims; dim++)
-            U(fpt, dim+1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs(dim) - VnR * 
+            U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs(dim) - VnR * 
               norm(fpt, dim, 0));
 
           PR = rhoR / input->gamma * cstar * cstar;
@@ -366,8 +370,13 @@ void Faces::apply_bcs()
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
 
-        double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
-            U(fpt, 2, 0)) / U(fpt, 0, 0);
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momF);
 
@@ -394,8 +403,13 @@ void Faces::apply_bcs()
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
 
-        double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
-            U(fpt, 2, 0)) / U(fpt, 0, 0);
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
 
@@ -429,8 +443,13 @@ void Faces::apply_bcs()
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Extrapolate pressure */
-        double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
-            U(fpt, 2, 0)) / U(fpt, 0, 0);
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = PL; 
@@ -459,8 +478,13 @@ void Faces::apply_bcs()
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Extrapolate pressure */
-        double momF = (U(fpt, 1, 0) * U(fpt, 1, 0) + U(fpt, 2, 0) * 
-            U(fpt, 2, 0)) / U(fpt, 0, 0);
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = PL; 
@@ -607,8 +631,13 @@ void Faces::compute_Fconv()
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
           /* Compute some primitive variables (keep pressure)*/
-          double momF = (U(fpt, 1, slot) * U(fpt, 1, slot) + U(fpt, 2, slot) * 
-              U(fpt, 2, slot)) / U(fpt, 0, slot);
+          double momF = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim ++)
+          {
+            momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
+          }
+
+          momF /= U(fpt, 0, slot);
 
           P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, 3, slot) - 0.5 * momF);
           double H = (U(fpt, 3, slot) + P(fpt, slot)) / U(fpt, 0, slot);
@@ -619,7 +648,7 @@ void Faces::compute_Fconv()
           Fconv(fpt, 3, 0, slot) = U(fpt, 1, slot) * H;
 
           Fconv(fpt, 0, 1, slot) = U(fpt, 2, slot);
-          Fconv(fpt, 1, 1, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 1, 1, slot) = U(fpt, 2, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
           Fconv(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
           Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
         }
@@ -640,7 +669,57 @@ void Faces::compute_Fconv()
     }
     else if (nDims == 3)
     {
-      ThrowException("3D Euler not implemented yet!");
+#ifdef _CPU
+#pragma omp parallel for collapse(2)
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      {
+        for (unsigned int slot = 0; slot < 2; slot ++)
+        {
+          /* Compute some primitive variables (keep pressure)*/
+          double momF = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim ++)
+          {
+            momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
+          }
+
+          momF /= U(fpt, 0, slot);
+
+          P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, 4, slot) - 0.5 * momF);
+          double H = (U(fpt, 4, slot) + P(fpt, slot)) / U(fpt, 0, slot);
+
+          Fconv(fpt, 0, 0, slot) = U(fpt, 1, slot);
+          Fconv(fpt, 1, 0, slot) = U(fpt, 1, slot) * U(fpt, 1, slot) / U(fpt, 0, slot) + P(fpt, slot);
+          Fconv(fpt, 2, 0, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 3, 0, slot) = U(fpt, 1, slot) * U(fpt, 3, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 4, 0, slot) = U(fpt, 1, slot) * H;
+
+          Fconv(fpt, 0, 1, slot) = U(fpt, 2, slot);
+          Fconv(fpt, 1, 1, slot) = U(fpt, 2, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
+          Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * U(fpt, 3, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 4, 1, slot) = U(fpt, 2, slot) * H;
+
+          Fconv(fpt, 0, 2, slot) = U(fpt, 3, slot);
+          Fconv(fpt, 1, 2, slot) = U(fpt, 3, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 2, 2, slot) = U(fpt, 3, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 3, 2, slot) = U(fpt, 3, slot) * U(fpt, 3, slot) / U(fpt, 0, slot) + P(fpt, slot);
+          Fconv(fpt, 4, 2, slot) = U(fpt, 3, slot) * H;
+        }
+      }
+#endif
+
+#ifdef _GPU
+
+      ThrowException("3D Euler not implemented on GPU yet!");
+      compute_Fconv_fpts_2D_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, input->gamma);
+      check_error();
+
+      /* Copy out data */
+      //Fconv = Fconv_d;
+      //P = P_d;
+
+#endif
+
     }
   }
 

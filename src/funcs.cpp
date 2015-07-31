@@ -36,16 +36,35 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     double Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
     double P = std::pow(rho, input->gamma);
 
-    switch (var)
+    if (input->nDims == 2)
     {
-      case 0:
-        val = rho; break;
-      case 1:
-        val = rho * Vx; break;
-      case 2:
-        val = rho * Vy; break;
-      case 3:
-        val = P/(input->gamma - 1.0) + 0.5 * rho * (Vx * Vx + Vy * Vy); break;
+      switch (var)
+      {
+        case 0:
+          val = rho; break;
+        case 1:
+          val = rho * Vx; break;
+        case 2:
+          val = rho * Vy; break;
+        case 3:
+          val = P/(input->gamma - 1.0) + 0.5 * rho * (Vx * Vx + Vy * Vy); break;
+      }
+    }
+    else
+    {
+      switch (var)
+      {
+        case 0:
+          val = rho; break;
+        case 1:
+          val = rho * Vx; break;
+        case 2:
+          val = rho * Vy; break;
+        case 3:
+          val = 0; break;
+        case 4:
+          val = P/(input->gamma - 1.0) + 0.5 * rho * (Vx * Vx + Vy * Vy); break;
+      }
     }
   }
   else
