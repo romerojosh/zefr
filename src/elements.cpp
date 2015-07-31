@@ -504,6 +504,7 @@ void Elements::compute_Fconv()
 {
   if (input->equation == AdvDiff)
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(4)
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -518,6 +519,12 @@ void Elements::compute_Fconv()
         }
       }
     }
+#endif
+
+#ifdef _GPU
+    compute_Fconv_spts_AdvDiff_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d);
+    check_error();
+#endif
   }
 
   else if (input->equation == EulerNS)
@@ -556,13 +563,13 @@ void Elements::compute_Fconv()
       }
 #endif
 
+      /*
 #ifdef _GPU
       compute_Fconv_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, input->gamma);
       check_error();
 
-      /* Copy out data */
-      //F_spts = F_spts_d;
 #endif
+      */
 
     }
     else if (nDims == 3)
@@ -607,17 +614,22 @@ void Elements::compute_Fconv()
       }
 #endif
 
+      /*
 #ifdef _GPU
-      ThrowException("3D Euler not implemented on GPU yet!");
-      //compute_Fconv_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, input->gamma);
+      compute_Fconv_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, input->gamma);
       check_error();
-
-      /* Copy out data */
-      //F_spts = F_spts_d;
 #endif
+*/
 
 
     }
+
+#ifdef _GPU
+    compute_Fconv_spts_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma);
+    check_error();
+#endif
+
+
   }
 
 }

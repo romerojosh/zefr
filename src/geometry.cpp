@@ -535,7 +535,7 @@ void couple_periodic_bnds(GeoStruct &geo)
           }
           else
           {
-            rot = 2;
+            rot = 4; /* Rotation for 2D edge only */
           }
           //std::cout << rot << std::endl;
 
@@ -743,7 +743,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
           }
           else
           {
-            rot = 2;
+            rot = 4;
           }
 
           /*
@@ -797,6 +797,12 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
                 {
                   ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - (j+1) * nFpts1D + i];
                 }
+              } break;
+
+            case 4:
+              for (unsigned int i = 0; i < nFptsPerFace; i++)
+              {
+                  ele2fpts[ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
               } break;
           }
           
@@ -866,7 +872,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         }
         else
         {
-          rot = 2;
+          rot = 4;
         }
 
         //std::cout << " per_rot " << rot << std::endl;
@@ -912,6 +918,13 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
                 geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
                 geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
               }
+            } break;
+
+          case 4:
+            for (unsigned int i = 0; i < nFptsPerFace; i++)
+            {
+                geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - i - 1];
+                geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - i - 1];
             } break;
         }
 

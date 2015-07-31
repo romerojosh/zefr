@@ -295,6 +295,7 @@ void FRSolver::solver_data_to_device()
   eles->dF_spts_d = eles->dF_spts;
   eles->divF_spts_d = eles->divF_spts;
   eles->jaco_spts_d = eles->jaco_spts;
+  eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
 
   /* Solution data structures (faces) */
@@ -323,6 +324,7 @@ void FRSolver::solver_data_to_device()
   input->V_fs_d = input->V_fs;
   input->V_wall_d = input->V_wall;
   input->norm_fs_d = input->norm_fs;
+  input->AdvDiff_A_d = input->AdvDiff_A;
 
 }
 #endif

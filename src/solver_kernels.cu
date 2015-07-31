@@ -179,7 +179,7 @@ void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gf
     if (nDims == 2)
       U_to_faces<4><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
     else if (nDims == 3)
-      ThrowException("Under Construction!");
+      U_to_faces<5><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
   }
 }
 
@@ -223,7 +223,7 @@ void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double
     if (nDims == 2)
       U_from_faces<4><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
     else
-      ThrowException("Under Construction");
+      U_from_faces<5><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
   }
 
 }
@@ -270,14 +270,14 @@ void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU
     if (nDims == 2)
       dU_to_faces<1, 2><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
     else
-      ThrowException("Under Construction");
+      dU_to_faces<1, 3><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       dU_to_faces<4, 2><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
     else
-      ThrowException("Under Construction");
+      dU_to_faces<5, 3><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
   }
 }
 
@@ -319,14 +319,14 @@ void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_s
     if (nDims == 2)
       compute_divF<1,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
     else
-      ThrowException("Under construction!");
+      compute_divF<1,3><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       compute_divF<4,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
     else
-      ThrowException("Under construction!");
+      compute_divF<5,3><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
   }
 }
 
@@ -400,7 +400,8 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
       RK_update<4><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
     else
-      ThrowException("Under Construction");
+      RK_update<5><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
   }
 }
 
@@ -475,7 +476,8 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
       RK_update_source<4><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
     else
-      ThrowException("Under Construction");
+      RK_update_source<5><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
   }
 }
 

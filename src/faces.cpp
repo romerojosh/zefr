@@ -320,10 +320,11 @@ void Faces::apply_bcs()
               (input-> gamma - 1.0));
 
           U(fpt, 0, 1) = rhoR;
-          U(fpt, 1, 1) = rhoR * (ustarn * norm(fpt, 0, 0) +(U(fpt, 1, 0) / 
-                U(fpt, 0, 0) - VnL * norm(fpt, 0, 0)));
-          U(fpt, 2, 1) = rhoR * (ustarn * norm(fpt, 1, 0) +(U(fpt, 2, 0) / 
-                U(fpt, 0, 0) - VnL * norm(fpt, 1, 0)));
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) +(U(fpt, dim + 1, 0) / 
+                U(fpt, 0, 0) - VnL * norm(fpt, dim, 0)));
+
           double PR = rhoR / input->gamma * cstar * cstar;
 
           double Vsq = 0.0;
@@ -605,6 +606,7 @@ void Faces::compute_Fconv()
 {  
   if (input->equation == AdvDiff)
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
@@ -619,6 +621,12 @@ void Faces::compute_Fconv()
         }
       }
     }
+#endif
+
+#ifdef _GPU
+    compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->AdvDiff_A_d);
+    check_error();
+#endif
   }
   else if (input->equation == EulerNS)
   {
@@ -655,16 +663,13 @@ void Faces::compute_Fconv()
       }
 #endif
 
+/*
 #ifdef _GPU
 
       compute_Fconv_fpts_2D_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, input->gamma);
       check_error();
-
-      /* Copy out data */
-      //Fconv = Fconv_d;
-      //P = P_d;
-
 #endif
+*/
 
     }
     else if (nDims == 3)
@@ -708,19 +713,21 @@ void Faces::compute_Fconv()
       }
 #endif
 
+/*
 #ifdef _GPU
 
       ThrowException("3D Euler not implemented on GPU yet!");
       compute_Fconv_fpts_2D_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, input->gamma);
       check_error();
-
-      /* Copy out data */
-      //Fconv = Fconv_d;
-      //P = P_d;
-
 #endif
+*/
 
     }
+
+#ifdef _GPU
+      compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma);
+      check_error();
+#endif
   }
 
 }
@@ -998,10 +1005,14 @@ void Faces::rusanov_flux()
     /* Get numerical wavespeed */
     if (input->equation == AdvDiff)
     {
+      /*
       waveSp(fpt) = 0.0;
 
       for (unsigned int dim = 0; dim < nDims; dim++)
         waveSp(fpt) += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+        */
+
+      waveSp(fpt) = FL[0] / WL[0];
     }
     else if (input->equation == EulerNS)
     {

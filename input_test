@@ -51,6 +51,7 @@ ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 # Advection-Diffusion
 AdvDiff_Ax 0
 AdvDiff_Ay 0
+AdvDiff_Az 0
 AdvDiff_D 0.1
 
 # Euler/Navier-Stokes

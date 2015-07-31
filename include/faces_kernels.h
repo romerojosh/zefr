@@ -3,9 +3,17 @@
 
 #include "mdvector_gpu.h"
 
+void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F, 
+    mdvector_gpu<double> &U, mdvector_gpu<double> &P, unsigned int nFpts, 
+    unsigned int nDims, mdvector_gpu<double> &AdvDiff_A);
+
 void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
     mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, unsigned int nFpts, 
     double gamma);
+
+void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
+    mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
+    unsigned int nFpts, unsigned int nDims, double gamma);
 
 void compute_Fvisc_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> &Fvisc, 
     mdvector_gpu<double> &U, mdvector_gpu<double> &dU, unsigned int nFpts, double gamma, 
