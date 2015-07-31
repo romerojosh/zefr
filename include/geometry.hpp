@@ -20,9 +20,9 @@ struct GeoStruct
     bool per_bnd_flag = false;
     std::vector<unsigned int> bnd_ids;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;
-    std::map<std::vector<unsigned int>, unsigned int> bnd_faces;
-    std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs;
-    std::unordered_map<unsigned int, unsigned int> per_fpt_pairs;
+    std::map<std::vector<unsigned int>, unsigned int> bnd_faces, per_bnd_rot;
+    std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
+    std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
     mdvector<unsigned int> nd2gnd, ppt_connect;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
     mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;

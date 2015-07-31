@@ -383,17 +383,24 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
       face[0]--; face[1]--; face[2]--; face[3]--;
 
+      // Idea: Create map from sorted faces to ordered faces
+       auto face_ordered = face;
+       std::sort(face.begin(), face.end());
+       geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
+       geo.face2ordered[face] = face_ordered;
+      
       /* Sort for consistency and add to map*/
-      std::sort(face.begin(), face.end());
-      geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
+     // std::sort(face.begin(), face.end());
+     // geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
+
     }
  
     //ThrowException("3D not implemented yet!");
 
   }
 
-  if (geo.per_bnd_flag)
-    couple_periodic_bnds(geo);
+  //if (geo.per_bnd_flag)
+  //  couple_periodic_bnds(geo);
 }
 
 void couple_periodic_bnds(GeoStruct &geo)
@@ -405,7 +412,7 @@ void couple_periodic_bnds(GeoStruct &geo)
   for (auto &bnd_face : geo.bnd_faces)
   {
     unsigned int bnd_id = bnd_face.second;
-    auto face = bnd_face.first;
+    auto face1 = bnd_face.first;
     
     /* Check if face is periodic */
     if (bnd_id == 1)
@@ -413,7 +420,7 @@ void couple_periodic_bnds(GeoStruct &geo)
       /* Get face node coordinates */
       for (unsigned int node = 0; node < geo.nNodesPerFace; node++)
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
-          coords_face1(node, dim) = geo.coord_nodes(face[node], dim);
+          coords_face1(node, dim) = geo.coord_nodes(face1[node], dim);
 
       /* Compute centroid location */
       std::vector<double> c1(geo.nDims, 0.0);
@@ -431,7 +438,7 @@ void couple_periodic_bnds(GeoStruct &geo)
       for(auto &bnd_face2 : geo.bnd_faces)
       {
         auto face2 = bnd_face2.first;
-        if (face2 == face)
+        if (face2 == face1)
           continue;
 
         /* Get face node coordinates */
@@ -474,7 +481,65 @@ void couple_periodic_bnds(GeoStruct &geo)
 
         if (count == geo.nDims - 1)
         {
-          geo.per_bnd_pairs[face] = face2;
+          geo.per_bnd_pairs[face1] = face2;
+
+          /* Fill in map coupling nodes */
+          for (unsigned int node1 = 0; node1 < geo.nNodesPerFace; node1++)
+          {
+            unsigned int per_node = -1;
+
+            for (unsigned int node2 = 0; node2 < geo.nNodesPerFace; node2++)
+            {
+              unsigned int count2 = 0;
+              for (unsigned int dim = 0; dim < geo.nDims; dim++)
+              {
+                if (std::abs(coords_face1(node1, dim) - coords_face2(node2,dim)) < 1e-6)
+                  count2++;
+              }
+
+              //std::cout << "count " << count2 << std::endl;
+              if (count2++ == geo.nDims - 1)
+              {
+                per_node = node2; break;
+              }
+            }
+
+            geo.per_node_pairs[face1[node1]] = face2[per_node];
+            std::cout << "per_node " << face1[node1] << " " << face2[per_node] << std::endl;
+          }
+
+          auto face1_ordered = geo.face2ordered[face1];
+          for (auto &i: face1_ordered)
+            i = geo.per_node_pairs[i];
+          auto face2_ordered = geo.face2ordered[face2];
+
+          std::cout << "face 1: ";
+          for (auto i : face1_ordered)
+            std::cout << i << " ";
+          std::cout << std::endl;
+          std::cout << "face 2: ";
+          for (auto i : face2_ordered)
+            std::cout << i << " ";
+          std::cout << std::endl;
+
+          /* Determine rotation using ordered faces*/
+          unsigned int rot = 0;
+          if (geo.nDims == 3)
+          {
+            while (face1_ordered[rot] != face2_ordered[0])
+            {
+              rot++;
+            }
+          }
+          else
+          {
+            rot = 2;
+          }
+          std::cout << rot << std::endl;
+
+          geo.per_bnd_rot[face1] = rot;
+          //geo.face2ordered[face1] = face1_ordered;
+
         }
       }
     }
@@ -495,6 +560,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
   if (geo.nDims == 2 || geo.nDims == 3)
   {
     unsigned int nFptsPerFace = (order + 1);
+    unsigned int nFpts1D = (order + 1);
     if (geo.nDims == 3)
       nFptsPerFace *= (order + 1);
 
@@ -603,6 +669,10 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         if (face[geo.nNodesPerFace - 2] == face[geo.nNodesPerFace - 1])
           continue;
 
+        /* Before sorting, save ordered face */
+        //unsigned int idx0 = face[0];
+        auto face_ordered = face;
+
         std::sort(face.begin(), face.end());
 
         /* Check if face has been encountered previously */
@@ -630,9 +700,12 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
               fpt = gfpt;
               gfpt++;
             }
+            //geo.face2ordered[face] = face_ordered;
           }
 
           face_fpts[face] = fpts;
+          //face_idx0[face] = idx0;
+          geo.face2ordered[face] = face_ordered;
 
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
@@ -640,18 +713,80 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             ele2fpts_slot[ele][n*nFptsPerFace + i] = 0;
           }
         }
+        /* If face has already been encountered, must assign existing global flux points */
         else
         {
           auto fpts = face_fpts[face];
+          auto face0_ordered = geo.face2ordered[face];
+          
+          /* Determine rotation using ordered faces*/
+          unsigned int rot = 0;
+          if (geo.nDims == 3)
+          {
+            while (face_ordered[rot] != face0_ordered[0])
+            {
+              rot++;
+            }
+          }
+          else
+          {
+            rot = 2;
+          }
+
+          std::cout << rot << std::endl;
+
+          /* Based on rotation, couple flux points */
+          switch (rot)
+          {
+            case 0:
+              for (unsigned int i = 0; i < nFptsPerFace; i++)
+              {
+                ele2fpts[ele][n*nFptsPerFace + i] = fpts[i];
+                ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+              } break;
+
+            case 1:
+              for (unsigned int i = 0; i < nFpts1D; i++)
+              {
+                for (unsigned int j = 0; j < nFpts1D; j++)
+                {
+                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFpts1D * (i+1) - j- 1];
+                  ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+                }
+              } break;
+
+            case 2:
+              for (unsigned int i = 0; i < nFptsPerFace; i++)
+              {
+                ele2fpts[ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
+                ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+              } break;
+
+            case 3:
+              for (unsigned int i = 0; i < nFpts1D; i++)
+              {
+                for (unsigned int j = 0; j < nFpts1D; j++)
+                {
+                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = 
+                    fpts[nFptsPerFace - nFpts1D * (i+1) +j];
+                  ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+                }
+              } break;
+          }
+          
+          /*
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
             ele2fpts[ele][n*nFptsPerFace + i] = fpts[nFptsPerFace-1-i];
             ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
           }
+          */
         }
       }
     }
 
+    if (geo.per_bnd_flag)
+      couple_periodic_bnds(geo);
     /* Pair up periodic flux points if needed */ 
     if (geo.per_bnd_flag)
     {
@@ -663,6 +798,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       {
         auto face1 = bnd_face1.first;
         auto fpts1 = bnd_face1.second;
+        auto face1_ordered = geo.face2ordered[face1];
 
         /* If boundary face is not periodic, skip this pairing */
         if (geo.bnd_faces[face1] != 1)
@@ -670,20 +806,101 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
         auto face2 = geo.per_bnd_pairs[face1];
         auto fpts2 = bndface2fpts[face2];
+        auto face2_ordered = geo.face2ordered[face2];
 
+        std::cout << "face 1: ";
+        for (auto i : face1_ordered)
+          std::cout << i << " ";
+        std::cout << std::endl;
+        std::cout << "face 2: ";
+        for (auto i : face2_ordered)
+          std::cout << i << " ";
+        std::cout << std::endl;
+
+        /* Convert face2 nodes to paired nodes on face 1 */
+        /*
+        for (auto &i : face2_ordered)
+          i = geo.per_node_pairs[i];
+        
+        std::cout << "face 2: ";
+        for (auto i : face2_ordered)
+          std::cout << i << " ";
+        std::cout << std::endl;
+        */
+
+        /* Determine rotation using ordered faces*/
+        unsigned int rot = 0;
+        if (geo.nDims == 3)
+        {
+         // while (face1_ordered[rot] != face2_ordered[0])
+         // {
+         //   rot++;
+         // }
+          //rot = 2;
+          rot = geo.per_bnd_rot[face2];
+        }
+        else
+        {
+          rot = 2;
+        }
+
+        std::cout << " per_rot " << rot << std::endl;
+
+        /* Based on rotation, couple flux points */
+        switch (rot)
+        {
+          case 0:
+            for (unsigned int i = 0; i < nFptsPerFace; i++)
+            {
+              geo.per_fpt_pairs[fpts1[i]] = fpts2[i];
+              geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[i];
+            } break;
+
+          case 1:
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              for (unsigned int j = 0; j < nFpts1D; j++)
+              {
+                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFpts1D * (i+1) - j - 1];
+                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFpts1D * (i+1) - j - 1];
+              }
+            } break;
+
+          case 2:
+            for (unsigned int i = 0; i < nFptsPerFace; i++)
+            {
+              geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
+              geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i];
+            } break;
+
+          case 3:
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              for (unsigned int j = 0; j < nFpts1D; j++)
+              {
+                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - nFpts1D * (i+1) + j];
+                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace -nFpts1D * (i+1) +j];
+              }
+            } break;
+        }
+
+        /*
         for (unsigned int i = 0; i < nFptsPerFace; i++)
         {
           geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
           geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i];
         }
+        */
       } 
 
     }
 
+    /*
     for (unsigned int i = 0; i < gfpt_bnd - geo.nGfpts_int; i++)
     {
       std::cout << i + geo.nGfpts_int << " " << geo.per_fpt_list(i) << std::endl;
     }
+    */
 
     /* Populate data structures */
     geo.nGfpts = gfpt_bnd;

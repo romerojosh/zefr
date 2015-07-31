@@ -8,7 +8,7 @@ endif
 CXX = g++
 CU = nvcc
 FLAGS += -std=c++11
-CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -fopenmp 
+CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -fopenmp -g
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math -Xcompiler -fopenmp
 
 # Setting BLAS flags

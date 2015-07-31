@@ -1,9 +1,9 @@
 # Geometry:
 nDims    3
-meshfile meshes/HexBox_10x10.msh
+meshfile meshes/HexBox.msh
 
 # Solver:
-order     0
+order     1
 equation AdvDiff    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -64,7 +64,7 @@ S       120
 
 # Euler specific
 rho_fs 1
-u_fs 0.35
+u_fs 0.0
 v_fs 0.0
 P_fs .71428571428
 

@@ -109,6 +109,35 @@ void Hexas::set_locs()
   }
 
   /* Setup flux point locations */
+  /* Note: Flux points are ordered progressing from corner nearest
+   * to starting face node (see geometry.cpp) and sweeping up to
+   * opposite corner.
+   * Some diagrams:
+   * Bottom/Top Faces:
+   * ^ y
+   * |
+   * 3 ----- 2
+   * | 2   3 |
+   * | 0   1 |
+   * 0-------1 --> x
+   *
+   * Front/Back Faces:
+   * ^ z
+   * |
+   * 4 ----- 5
+   * | 2   3 |
+   * | 0   1 |
+   * 0-------1 --> x
+   *
+   * Left/Right Faces:
+   *               ^ z
+   *               |
+   *       7 ----- 4
+   *       | 2   3 |
+   *       | 0   1 |
+   * y <-- 3-------0 
+   * */
+
   unsigned int fpt = 0;
   for (unsigned int i = 0; i < nFaces; i++)
   {
@@ -136,18 +165,18 @@ void Hexas::set_locs()
 
           case 2: /* Left face */
             loc_fpts(fpt,0) = -1.0;
-            loc_fpts(fpt,1) = loc_spts_1D[k];
+            loc_fpts(fpt,1) = loc_spts_1D[nSpts1D - k - 1];
             loc_fpts(fpt,2) = loc_spts_1D[j];
             idx_fpts(fpt,0) = -1;
-            idx_fpts(fpt,1) = k;
+            idx_fpts(fpt,1) = nSpts1D - k - 1;
             idx_fpts(fpt,2) = j; break;
 
           case 3: /* Right face */
             loc_fpts(fpt,0) = 1.0;
-            loc_fpts(fpt,1) = loc_spts_1D[k];
+            loc_fpts(fpt,1) = loc_spts_1D[nSpts1D - k - 1];
             loc_fpts(fpt,2) = loc_spts_1D[j];
             idx_fpts(fpt,0) = nSpts1D;
-            idx_fpts(fpt,1) = k;
+            idx_fpts(fpt,1) = nSpts1D - k - 1;
             idx_fpts(fpt,2) = j; break;
 
           case 4: /* Front face */
@@ -271,6 +300,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
+      int gfpt = geo->fpt2gfpt(fpt,ele);
       for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
       {
         for (unsigned int dimX = 0; dimX < nDims; dimX++)
@@ -278,7 +308,6 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
           for (unsigned int node = 0; node < nNodes; node++)
           {
             unsigned int gnd = geo->nd2gnd(node,ele);
-            int gfpt = geo->fpt2gfpt(fpt,ele);
 
             /* Skip fpts on ghost edges */
             if (gfpt == -1)
@@ -292,6 +321,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
       }
     }
   }
+
 
   /* Set jacobian matrix at plot points (do not need the determinant) */
   for (unsigned int ele = 0; ele < nEles; ele++)
