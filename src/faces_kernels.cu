@@ -546,7 +546,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
         U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
       //U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-      U(fpt, nDims + 1, 1) = U(fpt, 3, 0);
+      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
       LDG_bias(fpt) = -1;
@@ -569,8 +569,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       momF /= U(fpt, 0, 0);
 
-      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
-
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
       double PR = PL;
       double TR = T_wall;
       
@@ -580,7 +579,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       for (unsigned int dim = 0; dim < nDims; dim++)
         U(fpt, dim+1, 1) = 0.0;
 
-      U(fpt, 3, 1) = PR / (gamma - 1.0);
+      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
 
       /* Set LDG bias */
       LDG_bias(fpt) = -1;
@@ -603,7 +602,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       momF /= U(fpt, 0, 0);
 
-      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
 
       double PR = PL;
       double TR = T_wall;
@@ -618,7 +617,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
         V_wall_sq += V_wall(dim) * V_wall(dim);
       }
 
-      U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
+      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
 
       /* Set LDG bias */
       LDG_bias(fpt) = -1;
@@ -645,14 +644,14 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       momF /= U(fpt, 0, 0);
 
-      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
       double PR = PL; 
 
       /* Set velocity to zero */
       for (unsigned int dim = 0; dim < nDims; dim++)
         U(fpt, dim+1, 1) = 0.0;
 
-      U(fpt, 3, 1) = PR / (gamma - 1.0);
+      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
@@ -679,7 +678,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       momF /= U(fpt, 0, 0);
 
-      double PL = (gamma - 1.0) * (U(fpt, 3, 0) - 0.5 * momF);
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
       double PR = PL; 
 
       /* Set velocity to wall velocity */
@@ -690,7 +689,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
         V_wall_sq += V_wall(dim) * V_wall(dim);
       }
 
-      U(fpt, 3, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
+      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
