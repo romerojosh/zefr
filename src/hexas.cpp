@@ -599,15 +599,15 @@ void Hexas::transform_dU()
         double dUtemp1 = dU_spts(spt, ele, n, 1);
 
         dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco_spts(0, 0, spt, ele) + 
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(0, 1, spt, ele) +  
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(0, 2, spt, ele);  
+                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 0, spt, ele) +  
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 0, spt, ele);  
 
-        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(1, 0, spt, ele) + 
+        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(0, 1, spt, ele) + 
                                   dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 1, spt, ele) +  
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(1, 2, spt, ele);  
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 1, spt, ele);  
                                   
-        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(2, 0, spt, ele) + 
-                                  dUtemp1 * inv_jaco_spts(2, 1, spt, ele) +  
+        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(0, 2, spt, ele) + 
+                                  dUtemp1 * inv_jaco_spts(1, 2, spt, ele) +  
                                   dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 2, spt, ele);  
 
         dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);

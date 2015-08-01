@@ -1,11 +1,11 @@
 # Geometry:
 nDims    3
-meshfile meshes/HexBox_u.msh
+meshfile meshes/HexBox_5x5.msh
 
 # Solver:
 order     3
 equation AdvDiff    (AdvDiff, EulerNS)
-viscous  0
+viscous  1
 spt_type Legendre
 
 # Timestepping:
@@ -49,10 +49,10 @@ ldg_tau    1.0
 ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
-AdvDiff_Ax 1
-AdvDiff_Ay 1
-AdvDiff_Az 1
-AdvDiff_D 0.0
+AdvDiff_Ax 0
+AdvDiff_Ay 0
+AdvDiff_Az 0
+AdvDiff_D 0.1
 
 # Euler/Navier-Stokes
 T_gas 291.15

@@ -1107,30 +1107,35 @@ void Faces::LDG_flux()
     /* If interior, use central */
     if (LDG_bias(fpt) == 0)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        Fcomm_temp(fpt, n, 0) += 0.5*(Fvisc(fpt, n, 0, 0) + Fvisc(fpt, n, 0, 1)) + tau * norm(fpt, 0, 0)* (WL[n]
-            - WR[n]) + beta * norm(fpt, 0, 0)* (FL[n] - FR[n]);
-        Fcomm_temp(fpt, n, 1) += 0.5*(Fvisc(fpt, n, 1, 0) + Fvisc(fpt, n, 1, 1)) + tau * norm(fpt, 1, 0)* (WL[n]
-            - WR[n]) + beta * norm(fpt, 1, 0)* (FL[n] - FR[n]);
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          Fcomm_temp(fpt, n, dim) += 0.5*(Fvisc(fpt, n, dim, 0) + Fvisc(fpt, n, dim, 1)) + tau * norm(fpt, dim, 0)* (WL[n]
+              - WR[n]) + beta * norm(fpt, dim, 0)* (FL[n] - FR[n]);
+        }
       }
     }
     /* If Dirichlet boundary, use left state only */
     else if (LDG_bias(fpt) == -1)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        Fcomm_temp(fpt, n, 0) += Fvisc(fpt, n, 0, 0) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
-        Fcomm_temp(fpt, n, 1) += Fvisc(fpt, n, 1, 0) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          Fcomm_temp(fpt, n, dim) += Fvisc(fpt, n, dim, 0) + tau * norm(fpt, dim, 0)* (WL[n] - WR[n]);
+        }
       }
     }
     /* If Neumann boundary, use right state only */
     else if (LDG_bias(fpt) == 1)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        Fcomm_temp(fpt, n, 0) += Fvisc(fpt, n, 0, 1) + tau * norm(fpt, 0, 0)* (WL[n] - WR[n]);
-        Fcomm_temp(fpt, n, 1) += Fvisc(fpt, n, 1, 1) + tau * norm(fpt, 1, 0)* (WL[n] - WR[n]);
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          Fcomm_temp(fpt, n, dim) += Fvisc(fpt, n, dim, 1) + tau * norm(fpt, dim, 0)* (WL[n] - WR[n]);
+        }
       }
     }
 
