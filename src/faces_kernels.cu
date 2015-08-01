@@ -10,6 +10,9 @@ void compute_Fconv_fpts_AdvDiff(mdvector_gpu<double> F,
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
 
+  if (fpt >= nFpts)
+    return;
+
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
       F(fpt, 0, dim, 0) = AdvDiff_A(dim) * U(fpt, 0, 0);
@@ -847,6 +850,8 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     waveSp = FL[0] / WL[0];
 
     waveSp_gfpts(fpt) = waveSp;
+
+    waveSp = std::abs(waveSp);
   }
   else if (equation == EulerNS)
   {

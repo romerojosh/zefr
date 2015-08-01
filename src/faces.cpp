@@ -1005,13 +1005,6 @@ void Faces::rusanov_flux()
     /* Get numerical wavespeed */
     if (input->equation == AdvDiff)
     {
-      /*
-      waveSp(fpt) = 0.0;
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        waveSp(fpt) += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
-        */
-
       waveSp(fpt) = FL[0] / WL[0];
     }
     else if (input->equation == EulerNS)

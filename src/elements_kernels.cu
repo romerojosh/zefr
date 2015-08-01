@@ -11,6 +11,9 @@ void compute_Fconv_spts_AdvDiff(mdvector_gpu<double> F_spts,
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
 
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     F_spts(spt, ele, 0, dim) = AdvDiff_A(dim) * U_spts(spt, ele, 0);
