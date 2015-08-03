@@ -269,13 +269,66 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           break;
 
         case 4: /* 4-node Tetrahedral */
+        {
+          std::vector<unsigned int> nodes(4,0);
+
+          for (unsigned int i = 0; i < 4; i++)
+          {
+            f >> nodes[i];
+            std::cout << nodes[i] << " ";
+          }
+          std::cout << std::endl;
+
+          auto it_min = std::min_element(nodes.begin(), nodes.end());
+          auto min_node = *it_min;
+
+          unsigned int min_pos;
+          for (unsigned int i = 0; i < 4; i++)
+          {
+            if (nodes[i] == min_node)
+              min_pos = i;
+          }
+
+
+          geo.nd2gnd(4, ele) = min_node;
+          geo.nd2gnd(5, ele) = min_node;
+          geo.nd2gnd(6, ele) = min_node;
+          geo.nd2gnd(7, ele) = min_node;
+
+
+          nodes.erase(it_min);
+          it_min = std::min_element(nodes.begin(), nodes.end());
+          min_node = *it_min;
+
+          while (nodes[2] != min_node)
+          {
+            std::rotate(nodes.begin(), nodes.begin() + 1, nodes.end());
+          }
+          if (min_pos == 0 || min_pos == 2)
+          {
+            geo.nd2gnd(0, ele) = nodes[1];
+            geo.nd2gnd(1, ele) = nodes[0];
+            geo.nd2gnd(2, ele) = nodes[2];
+            geo.nd2gnd(3, ele) = nodes[2];
+          }
+          else if (min_pos == 1 || min_pos == 3)
+          {
+            geo.nd2gnd(0, ele) = nodes[0];
+            geo.nd2gnd(1, ele) = nodes[1];
+            geo.nd2gnd(2, ele) = nodes[2];
+            geo.nd2gnd(3, ele) = nodes[2];
+          }
+
+          /*
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
           f >> geo.nd2gnd(4,ele);
           geo.nd2gnd(3, ele) = geo.nd2gnd(2, ele);
           geo.nd2gnd(5, ele) = geo.nd2gnd(4, ele);
           geo.nd2gnd(6, ele) = geo.nd2gnd(4, ele);
           geo.nd2gnd(7, ele) = geo.nd2gnd(4, ele);
+          */
           ele++; break;
+        }
 
         case 5: /* 8-node Hexahedral */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
@@ -298,13 +351,13 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
-    //std::cout << ele << " ";
+    std::cout << ele << " ";
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
     {
-      //std::cout << geo.nd2gnd(n,ele) << " ";
+      std::cout << geo.nd2gnd(n,ele) << " ";
       geo.nd2gnd(n,ele)--;
     }
-    //std::cout << std::endl;
+    std::cout << std::endl;
   }
 
   /* Rewind file */
@@ -822,7 +875,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
           */
 
-          //std::cout << rot << std::endl;
+          std::cout << rot << std::endl;
 
           /* Based on rotation, couple flux points */
           switch (rot)
