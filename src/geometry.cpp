@@ -179,7 +179,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
       }
       else
       {
-        ThrowException("Inconsistent Element/Face type detected!");
+        ThrowException("Inconsistent Element/Face type detected! Is nDims set correctly?");
       }
     }
     else if (geo.nDims == 3)
@@ -193,6 +193,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
       {
         geo.nEles++;
         geo.shape_order = 1; geo.nNodesPerEle = 8;
+      }
+      else
+      {
+        ThrowException("Inconsistent Element/Face type detected! Is nDims set correctly?");
       }
     }
     std::getline(f,line);
@@ -256,8 +260,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     }
     else
     {
-      //ThrowException("3D not implemented yet!");
-
       switch(ele_type)
       {
         case 2: /* 3-node Triangle (skip)*/
@@ -270,15 +272,16 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
         case 4: /* 4-node Tetrahedral */
         {
+          /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
+           * fully tetrahedral meshes. */
           std::vector<unsigned int> nodes(4,0);
 
           for (unsigned int i = 0; i < 4; i++)
           {
             f >> nodes[i];
-            std::cout << nodes[i] << " ";
           }
-          std::cout << std::endl;
 
+          /* Locate minimum node index and position */
           auto it_min = std::min_element(nodes.begin(), nodes.end());
           auto min_node = *it_min;
 
@@ -289,17 +292,21 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
               min_pos = i;
           }
 
-
+          /* Set minimum node to "top" collapsed node */
           geo.nd2gnd(4, ele) = min_node;
           geo.nd2gnd(5, ele) = min_node;
           geo.nd2gnd(6, ele) = min_node;
           geo.nd2gnd(7, ele) = min_node;
 
-
           nodes.erase(it_min);
+
+          /* Find next minimum node */
           it_min = std::min_element(nodes.begin(), nodes.end());
           min_node = *it_min;
 
+
+          /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
+           * Reorder for CCW orientation if needed */
           while (nodes[2] != min_node)
           {
             std::rotate(nodes.begin(), nodes.begin() + 1, nodes.end());
@@ -319,14 +326,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
             geo.nd2gnd(3, ele) = nodes[2];
           }
 
-          /*
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
-          f >> geo.nd2gnd(4,ele);
-          geo.nd2gnd(3, ele) = geo.nd2gnd(2, ele);
-          geo.nd2gnd(5, ele) = geo.nd2gnd(4, ele);
-          geo.nd2gnd(6, ele) = geo.nd2gnd(4, ele);
-          geo.nd2gnd(7, ele) = geo.nd2gnd(4, ele);
-          */
           ele++; break;
         }
 
@@ -351,13 +350,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
-    std::cout << ele << " ";
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
     {
-      std::cout << geo.nd2gnd(n,ele) << " ";
       geo.nd2gnd(n,ele)--;
     }
-    std::cout << std::endl;
   }
 
   /* Rewind file */
@@ -368,7 +364,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 {
   if (geo.nDims == 2)
   {
-    //std::unordered_map<std::array<unsigned int, 2>, unsigned int> bnd_faces;
     std::vector<unsigned int> face(geo.nNodesPerFace,0);
     for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
     {
@@ -410,7 +405,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
   }
   else if (geo.nDims == 3)
   {
-    //std::vector<unsigned int> face(geo.nNodesPerFace,0);
     std::vector<unsigned int> face;
     for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
     {
@@ -429,11 +423,9 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
             f >> vint;
 
           
-          //std::vector<unsigned int> face(3,0);
           face.assign(3,0);
           f >> face[0] >> face[1] >> face[2]; 
           break;
-          //face[3] = face[2]; break;
 
         case 3: /* 4-node Quadrilateral */
           f >> nTags;
@@ -442,7 +434,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
           for (unsigned int i = 0; i < nTags - 1; i++)
             f >> vint;
 
-          //std::vector<unsigned int> face(4,0);
           face.assign(4,0);
           f >> face[0] >> face[1] >> face[2] >> face[3]; break;
 
@@ -450,29 +441,16 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
           std::getline(f,line); continue; break;
       }
 
-      //face[0]--; face[1]--; face[2]--; face[3]--;
-      
-      for (auto &i : face)
-        i--;
+      for (auto &node : face)
+        node--;
 
-      // Idea: Create map from sorted faces to ordered faces
-       //auto face_ordered = face;
-       std::sort(face.begin(), face.end());
-       geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
-       //geo.face2ordered[face] = face_ordered;
+      std::sort(face.begin(), face.end());
+      geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
       
-      /* Sort for consistency and add to map*/
-     // std::sort(face.begin(), face.end());
-     // geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
-
     }
- 
-    //ThrowException("3D not implemented yet!");
 
   }
 
-  //if (geo.per_bnd_flag)
-  //  couple_periodic_bnds(geo);
 }
 
 void couple_periodic_bnds(GeoStruct &geo)
@@ -490,13 +468,6 @@ void couple_periodic_bnds(GeoStruct &geo)
     /* Check if face is periodic */
     if (bnd_id == 1)
     {
-      /*
-      std::cout << "face 1: ";
-      for (auto i : geo.face2ordered[face1])
-        std::cout << i << " ";
-      std::cout << std::endl;
-      */
-
       /* Get face node coordinates */
       for (unsigned int node = 0; node < nNodesPerFace; node++)
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
@@ -515,6 +486,7 @@ void couple_periodic_bnds(GeoStruct &geo)
       }
 
       /* Search for face to couple */
+      bool paired = false;
       for(auto &bnd_face2 : geo.bnd_faces)
       {
         auto face2 = bnd_face2.first;
@@ -561,6 +533,7 @@ void couple_periodic_bnds(GeoStruct &geo)
 
         if (count == geo.nDims - 1)
         {
+          paired = true;
           geo.per_bnd_pairs[face1] = face2;
 
           /* Fill in map coupling nodes */
@@ -577,7 +550,6 @@ void couple_periodic_bnds(GeoStruct &geo)
                   count2++;
               }
 
-              //std::cout << "count " << count2 << std::endl;
               if (count2++ == geo.nDims - 1)
               {
                 per_node = node2; break;
@@ -585,21 +557,12 @@ void couple_periodic_bnds(GeoStruct &geo)
             }
 
             geo.per_node_pairs[face1[node1]] = face2[per_node];
-            //std::cout << "per_node " << face1[node1] << " " << face2[per_node] << std::endl;
           }
 
           auto face1_ordered = geo.face2ordered[face1];
           for (auto &i: face1_ordered)
             i = geo.per_node_pairs[i];
           auto face2_ordered = geo.face2ordered[face2];
-
-          /*
-          std::cout << "face 2: ";
-          for (auto i : face2)
-            std::cout << i << " ";
-          std::cout << std::endl;
-          */
-          
 
           /* Determine rotation using ordered faces*/
           unsigned int rot = 0;
@@ -614,24 +577,16 @@ void couple_periodic_bnds(GeoStruct &geo)
           {
             rot = 4; /* Rotation for 2D edge only */
           }
-          //std::cout << rot << std::endl;
 
           geo.per_bnd_rot[face1] = rot;
-          //geo.face2ordered[face1] = face1_ordered;
           break;
-
         }
       }
+
+      if (!paired)
+        ThrowException("Unpaired periodic face detected. Check your mesh.");
     }
   }
-
-  /*
-  std::cout << "per_bnd_pairs" << std::endl;
-  for (auto &pair : geo.per_bnd_pairs)
-  {
-    std::cout << pair.first[0] << " " << pair.first[1] << " -> " << pair.second[0] << " " << pair.second[1] << std::endl;
-  }
-  */
 }
 
 void setup_global_fpts(GeoStruct &geo, unsigned int order)
@@ -709,7 +664,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     {
       for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
       {
-        face.assign(4,geo.nNodesPerFace);
+        face.assign(geo.nNodesPerFace, 0);
 
         for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
         {
@@ -721,7 +676,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         for (auto node : face)
           face_nodes.insert(node);
 
-        if (face_nodes.size() <= 2) /* Fully collapsed face. Assign no fpts. */
+        if (face_nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
           continue;
         }
@@ -729,10 +684,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         {
           face.assign(face_nodes.begin(), face_nodes.end());
         }
-
-
-        //if (face[geo.nNodesPerFace - 2] == face[geo.nNodesPerFace - 1])
-        //  continue;
 
         std::sort(face.begin(), face.end());
 
@@ -755,20 +706,13 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
       for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
       {
-        face.assign(4,geo.nNodesPerFace);
+        face.assign(geo.nNodesPerFace, 0);
 
         /* Get face nodes and sort for consistency */
         for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
         {
           face[i] = geo.nd2gnd(faces_nodes[n][i], ele);
         }
-
-        /*
-        std::cout << "read face: ";
-        for (auto i : face)
-          std::cout << i << " ";
-        std::cout << std::endl;
-        */
 
         auto face_ordered = face;
 
@@ -777,7 +721,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         for (auto node : face)
           face_nodes.insert(node);
 
-        if (face_nodes.size() <= 2) /* Fully collapsed face. Assign no fpts. */
+        if (face_nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
           continue;
         }
@@ -785,11 +729,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         {
           face.assign(face_nodes.begin(), face_nodes.end());
         }
-        //if (face[geo.nNodesPerFace - 2] == face[geo.nNodesPerFace - 1])
-        //  continue;
-
-        /* Before sorting, save ordered face */
-        //unsigned int idx0 = face[0];
 
         std::sort(face.begin(), face.end());
 
@@ -818,24 +757,10 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
               fpt = gfpt;
               gfpt++;
             }
-            //geo.face2ordered[face] = face_ordered;
           }
 
           face_fpts[face] = fpts;
-          //face_idx0[face] = idx0;
           geo.face2ordered[face] = face_ordered;
-
-          /*
-          std::cout << "face: ";
-          for (auto i : face)
-            std::cout << i << " ";
-          std::cout << std::endl;
-          std::cout << "ordered face: ";
-          for (auto i : face_ordered)
-            std::cout << i << " ";
-          std::cout << std::endl;
-          */
-          
 
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
@@ -862,20 +787,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
           {
             rot = 4;
           }
-
-          /*
-          std::cout << "face: ";
-          for (auto i : face_ordered)
-            std::cout << i << " ";
-          std::cout << std::endl;
-          std::cout << "face0: ";
-          for (auto i : face0_ordered)
-            std::cout << i << " ";
-          std::cout << std::endl;
-
-          */
-
-          std::cout << rot << std::endl;
 
           /* Based on rotation, couple flux points */
           switch (rot)
@@ -954,45 +865,16 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         auto fpts2 = bndface2fpts[face2];
         auto face2_ordered = geo.face2ordered[face2];
 
-        /*
-        std::cout << "face 1: ";
-        for (auto i : face1_ordered)
-          std::cout << i << " ";
-        std::cout << std::endl;
-        std::cout << "face 2 (2nd): ";
-        for (auto i : face2_ordered)
-          std::cout << i << " ";
-        std::cout << std::endl;
-        */
-
-        /* Convert face2 nodes to paired nodes on face 1 */
-        /*
-        for (auto &i : face2_ordered)
-          i = geo.per_node_pairs[i];
-        
-        std::cout << "face 2: ";
-        for (auto i : face2_ordered)
-          std::cout << i << " ";
-        std::cout << std::endl;
-        */
-
         /* Determine rotation using ordered faces*/
         unsigned int rot = 0;
         if (geo.nDims == 3)
         {
-         // while (face1_ordered[rot] != face2_ordered[0])
-         // {
-         //   rot++;
-         // }
-          //rot = 2;
           rot = geo.per_bnd_rot[face2];
         }
         else
         {
           rot = 4;
         }
-
-        //std::cout << " per_rot " << rot << std::endl;
 
         /* Based on rotation, couple flux points */
         switch (rot)
@@ -1044,31 +926,12 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
                 geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - i - 1];
             } break;
         }
-
-        /*
-        for (unsigned int i = 0; i < nFptsPerFace; i++)
-        {
-          geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - 1 - i];
-          geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i];
-        }
-        */
       } 
-
-      /*
-      for (unsigned int i = 0; i < gfpt_bnd - geo.nGfpts_int; i++)
-      {
-        std::cout << i + geo.nGfpts_int << " " << geo.per_fpt_list(i) << std::endl;
-      }
-      */
 
     }
 
-    
-    
-
     /* Populate data structures */
     geo.nGfpts = gfpt_bnd;
-    //std::cout << geo.nGfpts << std::endl;
 
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
@@ -1082,21 +945,10 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       }
     }
 
-    for (unsigned int ele = 0; ele < geo.nEles; ele++)
-    {
-      //std::cout << ele;
-      for (unsigned int fpt = 0; fpt < geo.nFacesPerEle * nFptsPerFace; fpt++)
-      {
-        //std::cout << " " << geo.fpt2gfpt(fpt, ele);
-      }
-      //std::cout << std::endl;
-    }
   }
   else
   {
     ThrowException("nDims is not valid!");
   }
 
-
 }
-
