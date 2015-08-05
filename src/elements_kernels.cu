@@ -149,6 +149,45 @@ void compute_Fconv_spts_EulerNS_wrapper(mdvector_gpu<double> &F_spts,
   }
 }
 
+template <unsigned int nDims>
+__global__
+void compute_Fvisc_spts_AdvDiff(mdvector_gpu<double> F_spts, 
+    mdvector_gpu<double> dU_spts, unsigned int nSpts, unsigned int nEles, 
+    double AdvDiff_D)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  /* Can just add viscous flux to existing convective flux */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    F_spts(spt, ele, 0, dim) -= AdvDiff_D * dU_spts(spt, ele, 0, dim);
+  }
+}
+
+void compute_Fvisc_spts_AdvDiff_wrapper(mdvector_gpu<double> &F_spts, 
+    mdvector_gpu<double> &dU_spts, unsigned int nSpts, unsigned int nEles, 
+    unsigned int nDims, double AdvDiff_D)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+      threads.y);
+
+  if (nDims == 2)
+  {
+    compute_Fvisc_spts_AdvDiff<2><<<blocks, threads>>>(F_spts, dU_spts, nSpts, 
+      nEles, AdvDiff_D);
+  }
+  else
+  {
+    compute_Fvisc_spts_AdvDiff<3><<<blocks, threads>>>(F_spts, dU_spts, nSpts, 
+      nEles, AdvDiff_D);
+  }
+
+}
 __global__
 void compute_Fvisc_spts_2D_EulerNS(mdvector_gpu<double> F_spts, 
     mdvector_gpu<double> U_spts, mdvector_gpu<double> dU_spts, 
@@ -323,15 +362,15 @@ void transform_dU_hexa(mdvector_gpu<double> dU_spts,
     double dUtemp1 = dU_spts(spt, ele, n, 1);
 
     dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco[0][0] + 
-                              dU_spts(spt, ele, n, 1) * inv_jaco[0][1] +  
-                              dU_spts(spt, ele, n, 2) * inv_jaco[0][2];  
+                              dU_spts(spt, ele, n, 1) * inv_jaco[1][0] +  
+                              dU_spts(spt, ele, n, 2) * inv_jaco[2][0];  
 
-    dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco[1][0] + 
+    dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco[0][1] + 
                               dU_spts(spt, ele, n, 1) * inv_jaco[1][1] +  
-                              dU_spts(spt, ele, n, 2) * inv_jaco[1][2];  
+                              dU_spts(spt, ele, n, 2) * inv_jaco[2][1];  
                               
-    dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco[2][0] + 
-                              dUtemp1 * inv_jaco[2][1] +  
+    dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco[0][2] + 
+                              dUtemp1 * inv_jaco[1][2] +  
                               dU_spts(spt, ele, n, 2) * inv_jaco[2][2];  
 
     dU_spts(spt, ele, n, 0) /= jaco_det;

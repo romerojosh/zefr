@@ -624,7 +624,7 @@ void Faces::compute_Fconv()
 #endif
 
 #ifdef _GPU
-    compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->AdvDiff_A_d);
+    compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, nFpts, nDims, input->AdvDiff_A_d);
     check_error();
 #endif
   }
@@ -736,6 +736,7 @@ void Faces::compute_Fvisc()
 {  
   if (input->equation == AdvDiff)
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
@@ -750,6 +751,13 @@ void Faces::compute_Fvisc()
         }
       }
     }
+#endif
+
+#ifdef _GPU
+    compute_Fvisc_fpts_AdvDiff_wrapper(Fvisc_d, dU_d, nFpts, nDims, input->AdvDiff_D);
+    check_error();
+#endif
+
   }
   else if (input->equation == EulerNS)
   {
@@ -904,8 +912,16 @@ void Faces::compute_common_U()
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       /* Setting sign of beta (from HiFiLES) */
-      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
-        beta = -beta;
+      if (nDims == 2)
+      {
+        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+          beta = -beta;
+      }
+      else if (nDims == 3)
+      {
+        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+          beta = -beta;
+      }
 
       /* Get left and right state variables */
       // TODO: Verify that this is the correct formula. Seem different than papers...
@@ -936,7 +952,7 @@ void Faces::compute_common_U()
 #endif
 
 #ifdef _GPU
-    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars, LDG_bias_d);
+    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars, nDims, LDG_bias_d);
 
     check_error();
 
@@ -1080,8 +1096,16 @@ void Faces::LDG_flux()
   {
 
     /* Setting sign of beta (from HiFiLES) */
-    if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
-      beta = -beta;
+    if (nDims == 2)
+    {
+      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+        beta = -beta;
+    }
+    else if (nDims == 3)
+    {
+      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+        beta = -beta;
+    }
 
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);

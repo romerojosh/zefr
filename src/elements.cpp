@@ -638,6 +638,7 @@ void Elements::compute_Fvisc()
 {
   if (input->equation == AdvDiff)
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(4)
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -653,6 +654,13 @@ void Elements::compute_Fvisc()
         }
       }
     }
+#endif
+
+#ifdef _GPU
+    compute_Fvisc_spts_AdvDiff_wrapper(F_spts_d, dU_spts_d, nSpts, nEles, nDims, input->AdvDiff_D);
+    check_error();
+#endif
+
   }
   else if (input->equation == EulerNS)
   {
