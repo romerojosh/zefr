@@ -185,7 +185,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     else if (geo.nDims == 3)
     {
       geo.nFacesPerEle = 6; geo.nNodesPerFace = 4;
-      if (val == 2 || val == 3)
+      if (val == 2 || val == 3 || val == 10)
       {
         geo.nBnds++;
       }
@@ -193,6 +193,11 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
       {
         geo.nEles++;
         geo.shape_order = 1; geo.nNodesPerEle = 8;
+      }
+      else if (val == 12)
+      {
+        geo.nEles++;
+        geo.shape_order = 2; geo.nNodesPerEle = 20;
       }
       else
       {
@@ -209,6 +214,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
 
   /* Read element connectivity (skip boundaries in this loop) */
   unsigned int ele = 0;
+  std::string line;
   for (unsigned int n = 0; n < nElesBnds; n++)
   {
     unsigned int vint, ele_type;
@@ -269,6 +275,9 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
         case 3: /* 4-node Quadrilateral (skip)*/
           f >> vint >> vint >> vint >> vint;
           break;
+
+        case 10: /* 9-node Quadrilateral (skip) */
+          std::getline(f,line); break;
 
         case 4: /* 4-node Tetrahedral */
         {
@@ -340,6 +349,15 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele);
           geo.nd2gnd(7,ele) = geo.nd2gnd(6,ele);
           ele++; break;
+
+        case 12: /* Triquadratic Hex (read as 20-node serendipity) */
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
+          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
+          f >> geo.nd2gnd(8,ele) >> geo.nd2gnd(11,ele) >> geo.nd2gnd(12,ele) >> geo.nd2gnd(9,ele);
+          f >> geo.nd2gnd(13,ele) >> geo.nd2gnd(10,ele) >> geo.nd2gnd(14,ele) >> geo.nd2gnd(15,ele);
+          f >> geo.nd2gnd(16,ele) >> geo.nd2gnd(19,ele) >> geo.nd2gnd(17,ele) >> geo.nd2gnd(18,ele);
+          std::getline(f,line); ele++; break;
+
 
         default:
           ThrowException("Unrecognized element type detected!"); break;
@@ -436,6 +454,19 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
           face.assign(4,0);
           f >> face[0] >> face[1] >> face[2] >> face[3]; break;
+
+        case 10: /* 9-node Quadrilateral */
+          f >> nTags;
+          f >> bnd_id;
+
+          for (unsigned int i = 0; i < nTags - 1; i++)
+            f >> vint;
+
+          face.assign(4,0);
+          f >> face[0] >> face[1] >> face[2] >> face[3];
+          std::getline(f,line);
+          break;
+
 
         default:
           std::getline(f,line); continue; break;
@@ -787,6 +818,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
           {
             rot = 4;
           }
+
+          //std::cout << rot << std::endl;
 
           /* Based on rotation, couple flux points */
           switch (rot)

@@ -28,7 +28,10 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   nDims = 3;
   nFaces = 6;
   //nNodes = (shape_order+1)*(shape_order+1); // Lagrange Elements
-  nNodes = 8*(shape_order); // Serendipity Elements (not really, need to fix)
+  if (shape_order == 1)
+    nNodes = 8;
+  else if (shape_order == 2)
+    nNodes = 20;
   
   /* If order argument is not provided, use order in input file */
   if (order == -1)
@@ -676,15 +679,15 @@ double Hexas::calc_shape(unsigned int shape_order, unsigned int idx,
   double val = 0.0;
   double xi = loc[0]; 
   double eta = loc[1];
-  double nu = loc[2];
+  double mu = loc[2];
+
+  unsigned int i = 0;
+  unsigned int j = 0;
+  unsigned int k = 0;
 
   /* Trilinear hexahedral/8-node Serendipity */
   if (shape_order == 1)
   {
-    unsigned int i = 0;
-    unsigned int j = 0;
-    unsigned int k = 0;
-
     switch(idx)
     {
       case 0:
@@ -705,7 +708,58 @@ double Hexas::calc_shape(unsigned int shape_order, unsigned int idx,
         i = 0; j = 1; k = 1; break;
     }
 
-    val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta) * Lagrange({-1.,1.}, k, nu);
+    val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta) * Lagrange({-1.,1.}, k, mu);
+  }
+  /* 20-node Seredipity */
+  else if (shape_order == 2)
+  {
+    switch(idx)
+    {
+      /* Corner Nodes */
+      case 0:
+        val = 0.125 * (1. - xi) * (1. - eta) * (1. - mu) * (-xi - eta - mu - 2.); break;
+      case 1:
+        val = 0.125 * (1. + xi) * (1. - eta) * (1. - mu) * (xi - eta - mu - 2.); break;
+      case 2:
+        val = 0.125 * (1. + xi) * (1. + eta) * (1. - mu) * (xi + eta - mu - 2.); break;
+      case 3:
+        val = 0.125 * (1. - xi) * (1. + eta) * (1. - mu) * (-xi + eta - mu - 2.); break;
+      case 4:
+        val = 0.125 * (1. - xi) * (1. - eta) * (1. + mu) * (-xi - eta + mu - 2.); break;
+      case 5:
+        val = 0.125 * (1. + xi) * (1. - eta) * (1. + mu) * (xi - eta + mu - 2.); break;
+      case 6:
+        val = 0.125 * (1. + xi) * (1. + eta) * (1. + mu) * (xi + eta + mu - 2.); break;
+      case 7:
+        val = 0.125 * (1. - xi) * (1. + eta) * (1. + mu) * (-xi + eta + mu - 2.); break;
+
+      /* Edge Nodes */
+      case 8:
+        val = 0.25 * (1. - xi*xi) * (1. - eta) * (1. - mu); break;
+      case 9:
+        val = 0.25 * (1. + xi) * (1. - eta*eta) * (1. - mu); break;
+      case 10:
+        val = 0.25 * (1. - xi*xi) * (1. + eta) * (1. - mu); break;
+      case 11:
+        val = 0.25 * (1. - xi) * (1. - eta*eta) * (1. - mu); break;
+      case 12:
+        val = 0.25 * (1. - xi) * (1. - eta) * (1. - mu*mu); break;
+      case 13:
+        val = 0.25 * (1. + xi) * (1. - eta) * (1. - mu*mu); break;
+      case 14:
+        val = 0.25 * (1. + xi) * (1. + eta) * (1. - mu*mu); break;
+      case 15:
+        val = 0.25 * (1. - xi) * (1. + eta) * (1. - mu*mu); break;
+      case 16:
+        val = 0.25 * (1. - xi*xi) * (1. - eta) * (1. + mu); break;
+      case 17:
+        val = 0.25 * (1. + xi) * (1. - eta*eta) * (1. + mu); break;
+      case 18:
+        val = 0.25 * (1. - xi*xi) * (1. + eta) * (1. + mu); break;
+      case 19:
+        val = 0.25 * (1. - xi) * (1. - eta*eta) * (1. + mu); break;
+    }
+ 
   }
 
   return val;
@@ -717,15 +771,15 @@ double Hexas::calc_d_shape(unsigned int shape_order, unsigned int idx,
   double val = 0.0;
   double xi = loc[0];
   double eta = loc[1];
-  double nu = loc[2];
+  double mu = loc[2];
+
+  unsigned int i = 0;
+  unsigned int j = 0;
+  unsigned int k = 0;
 
   /* Bilinear hexahedral/8-node Serendipity */
   if (shape_order == 1)
   {
-    unsigned int i = 0;
-    unsigned int j = 0;
-    unsigned int k = 0;
-
     switch(idx)
     {
       case 0:
@@ -747,11 +801,156 @@ double Hexas::calc_d_shape(unsigned int shape_order, unsigned int idx,
     }
 
     if (dim == 0)
-      val = Lagrange_d1({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange({-1,1}, k, nu);
+      val = Lagrange_d1({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange({-1,1}, k, mu);
     else if (dim == 1)
-      val = Lagrange({-1,1}, i, xi) * Lagrange_d1({-1,1}, j, eta) * Lagrange({-1,1}, k, nu);
+      val = Lagrange({-1,1}, i, xi) * Lagrange_d1({-1,1}, j, eta) * Lagrange({-1,1}, k, mu);
     else
-      val = Lagrange({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange_d1({-1,1}, k, nu);
+      val = Lagrange({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange_d1({-1,1}, k, mu);
+  }
+  /* 20-node Serendipity */
+  else if (shape_order == 2)
+  {
+    if (dim == 0)
+    {
+      switch(idx)
+      {
+        case 0:
+          val = -0.125 * (1. - eta) * (1. - mu) * (-2.*xi - eta - mu - 1.); break;
+        case 1:
+          val = 0.125 * (1. - eta) * (1. - mu) * (2.*xi - eta - mu - 1.); break;
+        case 2:
+          val = 0.125 * (1. + eta) * (1. - mu) * (2.*xi + eta - mu - 1.); break;
+        case 3:
+          val = -0.125 * (1. + eta) * (1. - mu) * (-2.*xi + eta - mu - 1.); break;
+        case 4:
+          val = -0.125 * (1. - eta) * (1. + mu) * (-2.*xi - eta + mu - 1.); break;
+        case 5:
+          val = 0.125 * (1. - eta) * (1. + mu) * (2.*xi - eta + mu - 1.); break;
+        case 6:
+          val = 0.125 * (1. + eta) * (1. + mu) * (2.*xi + eta + mu - 1.); break;
+        case 7:
+          val = -0.125 * (1. + eta) * (1. + mu) * (-2.*xi + eta + mu - 1.); break;
+
+        case 8:
+          val = -0.5 * xi * (1. - eta) * (1. - mu); break;
+        case 9:
+          val = 0.25 * (1. - eta*eta) * (1. - mu); break;
+        case 10:
+          val = -0.5 * xi * (1. + eta) * (1. - mu); break;
+        case 11:
+          val = -0.25 * (1. - eta*eta) * (1. - mu); break;
+        case 12:
+          val = -0.25 * (1. - eta) * (1. - mu*mu); break;
+        case 13:
+          val = 0.25 * (1. - eta) * (1. - mu*mu); break;
+        case 14:
+          val = 0.25 * (1. + eta) * (1. - mu*mu); break;
+        case 15:
+          val = -0.25 * (1. + eta) * (1. - mu*mu); break;
+        case 16:
+          val = -0.5 * xi * (1. - eta) * (1. + mu); break;
+        case 17:
+          val = 0.25 * (1. - eta*eta) * (1. + mu); break;
+        case 18:
+          val = -0.5 * xi * (1. + eta) * (1. + mu); break;
+        case 19:
+          val = -0.25 * (1. - eta*eta) * (1. + mu); break;
+      }
+    }
+    else if (dim == 1)
+    {
+      switch(idx)
+      {
+        case 0:
+          val = -0.125 * (1. - xi) * (1. - mu) * (-xi -2.*eta - mu - 1.); break;
+        case 1:
+          val = -0.125 * (1. + xi) * (1. - mu) * (xi - 2.*eta - mu - 1.); break;
+        case 2:
+          val = 0.125 * (1. + xi) * (1. - mu) * (xi + 2.*eta - mu - 1.); break;
+        case 3:
+          val = 0.125 * (1. - xi) * (1. - mu) * (-xi + 2.*eta - mu - 1.); break;
+        case 4:
+          val = -0.125 * (1. - xi) * (1. + mu) * (-xi - 2.*eta + mu - 1.); break;
+        case 5:
+          val = -0.125 * (1. + xi) * (1. + mu) * (xi - 2.*eta + mu - 1.); break;
+        case 6:
+          val = 0.125 * (1. + xi) * (1. + mu) * (xi + 2.*eta + mu - 1.); break;
+        case 7:
+          val = 0.125 * (1. - xi) * (1. + mu) * (-xi + 2.*eta + mu - 1.); break;
+
+        case 8:
+          val = -0.25 * (1. - xi*xi) * (1. - mu); break;
+        case 9:
+          val = -0.5 * eta * (1. + xi) * (1. - mu); break;
+        case 10:
+          val = 0.25 * (1. - xi*xi) * (1. - mu); break;
+        case 11:
+          val = -0.5 * eta * (1. - xi) * (1. - mu); break;
+        case 12:
+          val = -0.25 * (1. - xi) * (1. - mu*mu); break;
+        case 13:
+          val = -0.25 * (1. + xi) * (1. - mu*mu); break;
+        case 14:
+          val = 0.25 * (1. + xi) * (1. - mu*mu); break;
+        case 15:
+          val = 0.25 * (1. - xi) * (1. - mu*mu); break;
+        case 16:
+          val = -0.25 * (1. - xi*xi) * (1. + mu); break;
+        case 17:
+          val = -0.5 * eta * (1. + xi) * (1. + mu); break;
+        case 18:
+          val = 0.25 * (1. - xi*xi) * (1. + mu); break;
+        case 19:
+          val = -0.5 * eta * (1. - xi) * (1. + mu); break;
+      }
+    }
+    else if (dim == 2)
+    {
+      switch(idx)
+      {
+        case 0:
+          val = -0.125 * (1. - xi) * (1. - eta) * (-xi - eta - 2.*mu - 1.); break;
+        case 1:
+          val = -0.125 * (1. + xi) * (1. - eta) * (xi - eta - 2.*mu - 1.); break;
+        case 2:
+          val = -0.125 * (1. + xi) * (1. + eta) * (xi + eta - 2.*mu - 1.); break;
+        case 3:
+          val = -0.125 * (1. - xi) * (1. + eta) * (-xi + eta - 2.*mu - 1.); break;
+        case 4:
+          val = 0.125 * (1. - xi) * (1. - eta) * (-xi - eta + 2.*mu - 1.); break;
+        case 5:
+          val = 0.125 * (1. + xi) * (1. - eta) * (xi - eta + 2.*mu - 1.); break;
+        case 6:
+          val = 0.125 * (1. + xi) * (1. + eta) * (xi + eta + 2.*mu - 1.); break;
+        case 7:
+          val = 0.125 * (1. - xi) * (1. + eta) * (-xi + eta + 2.*mu - 1.); break;
+        case 8:
+          val = -0.25 * (1. - xi*xi) * (1. - eta); break;
+        case 9:
+          val = -0.25 * (1. + xi) * (1. - eta*eta); break;
+        case 10:
+          val = -0.25 * (1. - xi*xi) * (1. + eta); break;
+        case 11:
+          val = -0.25 * (1. - xi) * (1. - eta*eta); break;
+        case 12:
+          val = -0.5 * mu * (1. - xi) * (1. - eta); break;
+        case 13:
+          val = -0.5 * mu * (1. + xi) * (1. - eta); break;
+        case 14:
+          val = -0.5 * mu * (1. + xi) * (1. + eta); break;
+        case 15:
+          val = -0.5 * mu * (1. - xi) * (1. + eta); break;
+        case 16:
+          val = 0.25 * (1. - xi*xi) * (1. - eta); break;
+        case 17:
+          val = 0.25 * (1. + xi) * (1. - eta*eta); break;
+        case 18:
+          val = 0.25 * (1. - xi*xi) * (1. + eta); break;
+        case 19:
+          val = 0.25 * (1. - xi) * (1. - eta*eta); break;
+      }
+    }
+
   }
 
 

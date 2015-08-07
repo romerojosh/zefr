@@ -453,7 +453,7 @@ void FRSolver::initialize_U()
             Vsq += input->V_fs(dim) * input->V_fs(dim);
           }
 
-          eles->U_spts(spt, ele, 3)  = input->P_fs/(input->gamma-1.0) +
+          eles->U_spts(spt, ele, eles->nDims + 1)  = input->P_fs/(input->gamma-1.0) +
             0.5*input->rho_fs * Vsq;
         }
       }

@@ -1,36 +1,36 @@
 # Geometry:
-nDims    2
-meshfile meshes/flatplate.msh
+nDims    3
+meshfile meshes/sphere_hex.msh
 
 # Solver:
-order     3
+order     2
 equation EulerNS    (AdvDiff, EulerNS)
-viscous  1
+viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 500
+n_steps 100000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.000001
-CFL	  0.20
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.0001
+CFL	  0.5
 
 # Restarting:
 restart	      0
 restart_file  fp_pmg_000001000.vtk
 
 # Multigrid:
-p_multi 1
+p_multi 0
 smooth_steps 1
 rel_fac 1.00
-low_order 1
+low_order 0
 
 # Stabilization:
 squeeze  0
 s_factor 0.0
 
 # Reporting:
-output_prefix fp_pmg
+output_prefix test3d
 write_freq  1000
 report_freq 100
 res_type    1
@@ -64,7 +64,7 @@ S       120
 
 # Euler specific
 rho_fs 1
-u_fs 0.35
+u_fs 0.2
 v_fs 0.0
 w_fs 0.0
 P_fs .71428571428
