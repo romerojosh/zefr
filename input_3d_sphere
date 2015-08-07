@@ -1,9 +1,9 @@
 # Geometry:
 nDims    3
-meshfile meshes/sphere_hex.msh
+meshfile meshes/sphere_hex_lin.msh
 
 # Solver:
-order     2
+order     1
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -11,7 +11,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 100000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
 CFL	  0.5
 
@@ -64,9 +64,9 @@ S       120
 
 # Euler specific
 rho_fs 1
-u_fs 0.2
+u_fs 0.0
 v_fs 0.0
-w_fs 0.0
+w_fs 0.1
 P_fs .71428571428
 
 # Navier-Stokes specific

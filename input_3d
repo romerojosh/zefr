@@ -5,14 +5,14 @@ meshfile meshes/HexBox_u.msh
 # Solver:
 order     3
 equation AdvDiff    (AdvDiff, EulerNS)
-viscous  1
+viscous  0
 spt_type Legendre
 
 # Timestepping:
 n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.0001
+dt	  0.001
 CFL	  0.20
 
 # Restarting:
@@ -51,8 +51,8 @@ ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 # Advection-Diffusion
 AdvDiff_Ax 0
 AdvDiff_Ay 0
-AdvDiff_Az 0
-AdvDiff_D 0.1
+AdvDiff_Az 1
+AdvDiff_D 0.0
 
 # Euler/Navier-Stokes
 T_gas 291.15
@@ -66,6 +66,7 @@ S       120
 rho_fs 1
 u_fs 0.2
 v_fs 0.0
+w_fs 0.0
 P_fs .71428571428
 
 # Navier-Stokes specific

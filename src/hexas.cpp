@@ -559,9 +559,12 @@ void Hexas::setup_PMG()
     {
       for (unsigned int pspt = 0; pspt < nSpts_pro; pspt++)
       {
-        loc[0] = loc_spts_pro_1D[pspt%nSpts_pro_1D];
-        loc[1] = loc_spts_pro_1D[pspt/nSpts_pro_1D];
-        loc[2] = loc_spts_pro_1D[pspt/(nSpts_pro_1D * nSpts_pro_1D)]; //TODO: Correct?
+        unsigned int i = pspt % nSpts_pro_1D;
+        unsigned int j = (pspt / nSpts_pro_1D) % nSpts_pro_1D;
+        unsigned int k = pspt / (nSpts_pro_1D * nSpts_pro_1D);
+        loc[0] = loc_spts_pro_1D[i];
+        loc[1] = loc_spts_pro_1D[j];
+        loc[2] = loc_spts_pro_1D[k]; //TODO: Correct?
 
         oppPro(pspt, spt) = calc_nodal_basis(spt, loc);
       }
@@ -578,9 +581,12 @@ void Hexas::setup_PMG()
     {
       for (unsigned int rspt = 0; rspt < nSpts_res; rspt++)
       {
-        loc[0] = loc_spts_res_1D[rspt%nSpts_res_1D];
-        loc[1] = loc_spts_res_1D[rspt/nSpts_res_1D];
-        loc[2] = loc_spts_res_1D[rspt/(nSpts_res_1D * nSpts_res_1D)]; //TODO: Correct?
+        unsigned int i = rspt % nSpts_res_1D;
+        unsigned int j = (rspt / nSpts_res_1D) % nSpts_res_1D;
+        unsigned int k = rspt / (nSpts_res_1D * nSpts_res_1D);
+        loc[0] = loc_spts_res_1D[i];
+        loc[1] = loc_spts_res_1D[j];
+        loc[2] = loc_spts_res_1D[k]; //TODO: Correct?
 
         oppRes(rspt, spt) = calc_nodal_basis(spt, loc);
       }
