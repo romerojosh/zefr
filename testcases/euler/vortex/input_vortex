@@ -3,16 +3,16 @@ nDims    2
 meshfile QuadBox_32x32_eul.msh
 
 # Solver:
-order     3
+order     2
 equation EulerNS    (AdvDiff, EulerNS)
-viscous  0
+viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 2000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.01
+dt	  0.0001
 CFL	  0.05
 
 # Restarting:
@@ -33,10 +33,10 @@ s_factor 0.0
 # Note: You can suppress output by setting freq to zero. 
 output_prefix vortex
 write_freq    1000
-report_freq   100
-res_type      1
+report_freq   10
+res_type      2
 force_freq    0
-error_freq    2000
+error_freq    0
 nQpts1D       10
 
 # Riemann Solver:
@@ -52,6 +52,7 @@ ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 # Advection-Diffusion
 AdvDiff_Ax 0
 AdvDiff_Ay 0
+AdvDiff_Az 0
 AdvDiff_D 0.1
 
 # Euler/Navier-Stokes
@@ -66,10 +67,11 @@ S       120
 rho_fs 1
 u_fs 0.35
 v_fs 0.0
+w_fs 0.0
 P_fs .71428571428
 
 # Navier-Stokes specific
-fix_vis 0
+fix_vis 1
 mach_fs 0.1
 Re_fs 200
 L_fs 1

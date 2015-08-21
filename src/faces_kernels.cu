@@ -415,7 +415,32 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
     }
 
     case 5: /* Subsonic Outlet */
-    {
+    { 
+      /* Extrapolate Density */
+      U(fpt, 0, 1) = U(fpt, 0, 0);
+
+      /* Extrapolate Momentum */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        U(fpt, dim+1, 1) =  U(fpt, dim+1, 0);
+      }
+
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+      }
+
+      momF /= U(fpt, 0, 0);
+
+      /* Fix pressure */
+      U(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5 * momF; 
+
+      /* Set LDG bias */
+      LDG_bias(fpt) = -1;
+
+      break;
+
       /*
       if (!input->viscous)
         ThrowException("Subsonic outlet only for viscous flows currently!");
@@ -682,9 +707,11 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       /* Set velocity to zero */
       for (unsigned int dim = 0; dim < nDims; dim++)
-        U(fpt, dim+1, 1) = 0.0;
+        U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
+        //U(fpt, dim+1, 1) = 0.0;
 
-      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
+      //U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
+      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
@@ -833,8 +860,8 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts,
-    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, double gamma, 
-    double rus_k, unsigned int nFpts)
+    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
+    double gamma, double rus_k, unsigned int nFpts)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -852,6 +879,10 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
   outnorm[0] = outnorm_gfpts(fpt, 0);
   outnorm[1] = outnorm_gfpts(fpt, 1);
+
+  /* If on boundary, use central */
+  if (LDG_bias(fpt) != 0)
+    rus_k = 1.0;
 
   /* Initialize FL, FR */
   for (unsigned int n = 0; n < nVars; n++)
@@ -919,8 +950,8 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &norm,
-    mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, double gamma, double rus_k,
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation)
+    mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, mdvector_gpu<int> &LDG_bias, 
+    double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation)
 {
   unsigned int threads = 256;
   unsigned int blocks = (nFpts + threads - 1)/threads;
@@ -933,20 +964,20 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
-          nFpts);
+      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma,
+          rus_k, nFpts);
     else
-      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
-          nFpts);
+      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma, 
+          rus_k, nFpts);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
-          nFpts);
+      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma, 
+          rus_k, nFpts);
     else
-      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, gamma, rus_k, 
-          nFpts);
+      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma, 
+          rus_k, nFpts);
 
   }
 }

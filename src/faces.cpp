@@ -855,8 +855,8 @@ void Faces::compute_common_F()
 #endif
 
 #ifdef _GPU
-    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, norm_d, outnorm_d, waveSp_d, input->gamma, 
-        input->rus_k, nFpts, nVars, nDims, input->equation);
+    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, 
+        input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation);
 
     check_error();
 
