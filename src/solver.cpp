@@ -1054,6 +1054,7 @@ void FRSolver::report_residuals(std::ofstream &f, unsigned int iter,
   /* If running on GPU, copy out divergence */
 #ifdef _GPU
   eles->divF_spts = eles->divF_spts_d;
+  dt = dt_d;
 #endif
 
   std::vector<double> res(eles->nVars,0.0);
@@ -1210,6 +1211,11 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_spts(count%eles->nSpts1D) * taun[dim] * 
               faces->dA(fpt) * fac;
+
+          /* Print gradients (temporary) */
+          //double ene_dx = faces->dU(fpt, 3, 0, 0);
+          //std::cout << fpt << " " << rho_dx << " " << momx_dx << " ";
+          //std::cout << fpt << " " << momy_dx << " " << ene_dx << std::endl;
 
         }
         else

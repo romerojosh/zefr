@@ -30,8 +30,8 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
     mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list,
     mdvector_gpu<int> &LDG_bias); 
 
-void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, unsigned int nFpts, 
-    unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
+void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdvector_gpu<double> &norm, 
+    unsigned int nFpts, unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
     mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list);
 
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 

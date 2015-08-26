@@ -7,6 +7,8 @@ order     3
 equation AdvDiff    (AdvDiff, EulerNS)
 viscous  1
 spt_type Legendre
+squeeze  0
+s_factor  0.0
 
 # Timestepping:
 n_steps 25000
@@ -52,6 +54,7 @@ ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 # Advection-Diffusion
 AdvDiff_Ax 0
 AdvDiff_Ay 0
+AdvDiff_Az 0
 AdvDiff_D 0.1
 
 # Euler/Navier-Stokes
@@ -66,6 +69,7 @@ S       120
 rho_fs 1
 u_fs 0.2
 v_fs 0.0
+w_fs 0.0
 P_fs .71428571428
 
 # Navier-Stokes specific

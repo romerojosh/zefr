@@ -309,7 +309,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5*rho_fs * Vsq; 
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
 
       break;
     }
@@ -321,7 +322,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
         U(fpt, n, 1) = U(fpt, n, 0);
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
 
       break;
     }
@@ -409,7 +411,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
 
       break;
     }
@@ -437,7 +440,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5 * momF; 
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
 
       break;
 
@@ -498,7 +502,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
 
       break;
     }
@@ -583,7 +588,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       }
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
 
       break;
 
@@ -601,10 +607,11 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       /* Set boundary state to reflect normal velocity */
       for (unsigned int dim = 0; dim < nDims; dim++)
-        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+        //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
-      //U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
       LDG_bias(fpt) = -1;
@@ -707,11 +714,11 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       /* Set velocity to zero */
       for (unsigned int dim = 0; dim < nDims; dim++)
-        U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
-        //U(fpt, dim+1, 1) = 0.0;
+        U(fpt, dim+1, 1) = 0.0;
+        //U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
 
-      //U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
-      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
+      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
@@ -775,8 +782,8 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
 }
 
 __global__
-void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int nFpts, 
-    unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
+void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<double> norm_gfpt,
+    unsigned int nFpts, unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
     mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
@@ -800,33 +807,37 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int 
   }
   else if(bnd_id == 11 || bnd_id == 12) /* Adibatic Wall */
   {
-    /* Extrapolate gradients except for energy */
+    double norm[2];
+
+    norm[0] = norm_gfpt(fpt, 0, 0);
+    norm[1] = norm_gfpt(fpt, 1, 0);
+
+    /* Extrapolate density gradient */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int n = 0; n < nVars - 1; n++)
-      {
-          dU(fpt, n, dim, 1) = dU(fpt, n, dim, 0);
-      }
+      dU(fpt, 0, dim, 1) = dU(fpt, 0, dim, 0);
     }
 
     /* Compute energy gradient */
     /* Get right states and velocity gradients*/
-    double rho = U(fpt, 0, 1);
-    double momx = U(fpt, 1, 1);
-    double momy = U(fpt, 2, 1);
-    double e = U(fpt, 3, 1);
+    double rho = U(fpt, 0, 0);
+    double momx = U(fpt, 1, 0);
+    double momy = U(fpt, 2, 0);
+    double E = U(fpt, 3, 0);
 
     double u = momx / rho;
     double v = momy / rho;
-    double e_int = e / rho - 0.5 * (u*u + v*v);
+    //double e_int = e / rho - 0.5 * (u*u + v*v);
 
-    double rho_dx = dU(fpt, 0, 0, 1);
-    double momx_dx = dU(fpt, 1, 0, 1);
-    double momy_dx = dU(fpt, 2, 0, 1);
+    double rho_dx = dU(fpt, 0, 0, 0);
+    double momx_dx = dU(fpt, 1, 0, 0);
+    double momy_dx = dU(fpt, 2, 0, 0);
+    double E_dx = dU(fpt, 3, 0, 0);
     
-    double rho_dy = dU(fpt, 0, 1, 1);
-    double momx_dy = dU(fpt, 1, 1, 1);
-    double momy_dy = dU(fpt, 2, 1, 1);
+    double rho_dy = dU(fpt, 0, 1, 0);
+    double momx_dy = dU(fpt, 1, 1, 0);
+    double momy_dy = dU(fpt, 2, 1, 0);
+    double E_dy = dU(fpt, 3, 1, 0);
 
     double du_dx = (momx_dx - rho_dx * u) / rho;
     double du_dy = (momx_dy - rho_dy * u) / rho;
@@ -834,25 +845,62 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, unsigned int 
     double dv_dx = (momy_dx - rho_dx * v) / rho;
     double dv_dy = (momy_dy - rho_dy * v) / rho;
 
-    double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
-    double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+    /* Option 1: Extrapolate momentum gradients */
+    //dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+    //dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+    //dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+    //dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
 
-    dU(fpt, 3, 0, 1) = (dke_dx + rho_dx * e_int);
-    dU(fpt, 3, 1, 1) = (dke_dy + rho_dy * e_int);
+    /* Option 2: Enforce constraint on tangential velocity gradient */
+    double du_dn = du_dx * norm[0] + du_dy * norm[1];
+    double dv_dn = dv_dx * norm[0] + dv_dy * norm[1];
 
+    dU(fpt, 1, 0, 1) = rho * du_dn * norm[0];
+    dU(fpt, 1, 1, 1) = rho * du_dn * norm[1];
+    dU(fpt, 2, 0, 1) = rho * dv_dn * norm[0];
+    dU(fpt, 2, 1, 1) =  rho * dv_dn * norm[1];
+
+   // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+   // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+
+    /* Compute temperature gradient (actually C_v * rho * dT) */
+    double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx);
+    double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
+
+    /* Compute wall normal temperature gradient */
+    double dT_dn = dT_dx * norm[0] + dT_dy * norm[1];
+
+    /* Option 1: Simply remove contribution of dT from total energy gradient */
+    //dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm[0]; 
+    //dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm[1]; 
+
+    /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
+    dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 3, 1) / rho; 
+    dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 3, 1) / rho; 
+
+  }
+  else
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        dU(fpt, n, dim, 1) = dU(fpt, n, dim , 0);
+      }
     }
+  }
 
 }
 
 
-void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, unsigned int nFpts, 
-    unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
+void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdvector_gpu<double> &norm, 
+    unsigned int nFpts, unsigned int nGfpts_int, unsigned int nVars, unsigned int nDims,
     mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list)
 {
   unsigned int threads = 192;
   unsigned int blocks = ((nFpts - nGfpts_int) + threads - 1)/threads;
 
-  apply_bcs_dU<<<blocks, threads>>>(dU, U, nFpts, nGfpts_int, nVars, nDims, 
+  apply_bcs_dU<<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nVars, nDims, 
       gfpt2bnd, per_fpt_list);
 }
 
@@ -880,9 +928,6 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   outnorm[0] = outnorm_gfpts(fpt, 0);
   outnorm[1] = outnorm_gfpts(fpt, 1);
 
-  /* If on boundary, use central */
-  if (LDG_bias(fpt) != 0)
-    rus_k = 1.0;
 
   /* Initialize FL, FR */
   for (unsigned int n = 0; n < nVars; n++)
@@ -898,6 +943,18 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       FL[n] += Fconv(fpt, n, dim, 0) * norm[dim];
       FR[n] += Fconv(fpt, n, dim, 1) * norm[dim];
     }
+  }
+
+  /* If on boundary, set common to right state flux */
+  if (LDG_bias(fpt) != 0)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm(fpt, n, 0) = FR[n] * outnorm[0];
+      Fcomm(fpt, n, 1) = FR[n] * -outnorm[1];
+    }
+
+    return;
   }
 
   /* Get left and right state variables */
@@ -940,10 +997,10 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   /* Compute common normal flux */
   for (unsigned int n = 0; n < nVars; n++)
   {
-    Fcomm(fpt, n, 0) = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0-rus_k) * 
-        (WR[n]-WL[n])) * outnorm[0];
-    Fcomm(fpt, n, 1) = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0-rus_k) * 
-        (WR[n]-WL[n])) * -outnorm[1];
+    double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0-rus_k) * 
+        (WR[n]-WL[n]);
+    Fcomm(fpt, n, 0) = F * outnorm[0];
+    Fcomm(fpt, n, 1) = F * -outnorm[1];
   }
 
 }
@@ -1062,19 +1119,8 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
       }
     }
   }
-  /* If Dirichlet boundary, use left state only */
-  else if (LDG_bias(fpt) == -1)
-  {
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        Fcomm_temp[n][dim] += Fvisc(fpt, n, dim, 0) + tau * norm[dim] * (WL[n] - WR[n]);
-      }
-    }
-  }
-  /* If Neumann boundary, use right state only */
-  else if (LDG_bias(fpt) == 1)
+  /* If boundary, use right state only */
+  else
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -1089,8 +1135,9 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) += (Fcomm_temp[n][dim] * norm[dim]) * outnorm[0];
-      Fcomm(fpt, n, 1) += (Fcomm_temp[n][dim] * norm[dim]) * -outnorm[1];
+      double F = Fcomm_temp[n][dim] * norm[dim];
+      Fcomm(fpt, n, 0) += F * outnorm[0];
+      Fcomm(fpt, n, 1) += F * -outnorm[1];
     }
   }
 
@@ -1157,11 +1204,11 @@ void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm,
     /* If on boundary, don't use beta (this is from HiFILES. Need to check) */
     else
     {
-      Ucomm(fpt, var, 0) = 0.5*(UL + UR);
-      Ucomm(fpt, var, 1) = 0.5*(UL + UR);
+      Ucomm(fpt, var, 0) = UR;
+      Ucomm(fpt, var, 1) = UR;
+      //Ucomm(fpt, var, 0) = 0.5*(UL + UR);
+      //Ucomm(fpt, var, 1) = 0.5*(UL + UR);
     }
-
-
 }
 
 void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 

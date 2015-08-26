@@ -93,7 +93,8 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
 
         /* Set LDG bias */
-        LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
+        //LDG_bias(fpt) = -1;
 
         break;
       }
@@ -199,6 +200,32 @@ void Faces::apply_bcs()
       {
         if (!input->viscous)
           ThrowException("Subsonic outlet only for viscous flows currently!");
+
+        /* Extrapolate Density */
+        U(fpt, 0, 1) = U(fpt, 0, 0);
+
+        /* Extrapolate Momentum */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          U(fpt, dim+1, 1) =  U(fpt, dim+1, 0);
+        }
+
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        /* Fix pressure */
+        U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5 * momF; 
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = -1;
+
+        break;
+
 
         /* Get states for convenience */
         double rhoL = U(fpt, 0, 0);
@@ -353,12 +380,14 @@ void Faces::apply_bcs()
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Set boundary state to reflect normal velocity */
+        /* Set boundary state to with cancelled normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+          //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
         /* TODO: Extrapolate energy or recompute? */
-        //U(fpt, 3, 1) = U(fpt, 3, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+        //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
@@ -455,13 +484,12 @@ void Faces::apply_bcs()
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = PL; 
 
-        /* Set velocity to zero */
+        /* Set right state (common) velocity to zero */
         for (unsigned int dim = 0; dim < nDims; dim++)
           U(fpt, dim+1, 1) = 0.0;
           //U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
 
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
-        /* Extrapolate energy */
         //U(fpt, 3, 1) = U(fpt, 3, 0);
 
         /* Set LDG bias */
@@ -546,34 +574,34 @@ void Faces::apply_bcs_dU()
     }
     else if(bnd_id == 11 || bnd_id == 12) /* Adibatic Wall */
     {
-      /* Extrapolate gradients except for energy */
+      /* Extrapolate density gradient */
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars - 1; n++)
-        {
-            dU(fpt, n, dim, 1) = dU(fpt, n, dim, 0);
-        }
+        dU(fpt, 0, dim, 1) = dU(fpt, 0, dim, 0);
       }
 
       /* Compute energy gradient */
       /* TODO : Generalize for 3D */
-      /* Get right states and velocity gradients*/
-      double rho = U(fpt, 0, 1);
-      double momx = U(fpt, 1, 1);
-      double momy = U(fpt, 2, 1);
-      double e = U(fpt, 3, 1);
+      /* Get left states and velocity gradients*/
+      double rho = U(fpt, 0, 0);
+      double momx = U(fpt, 1, 0);
+      double momy = U(fpt, 2, 0);
+      double E = U(fpt, 3, 0);
 
       double u = momx / rho;
       double v = momy / rho;
-      double e_int = e / rho - 0.5 * (u*u + v*v);
 
-      double rho_dx = dU(fpt, 0, 0, 1);
-      double momx_dx = dU(fpt, 1, 0, 1);
-      double momy_dx = dU(fpt, 2, 0, 1);
+      double eL = E / rho - 0.5 * (u*u + v*v);
+
+      double rho_dx = dU(fpt, 0, 0, 0);
+      double momx_dx = dU(fpt, 1, 0, 0);
+      double momy_dx = dU(fpt, 2, 0, 0);
+      double E_dx = dU(fpt, 3, 0, 0);
       
-      double rho_dy = dU(fpt, 0, 1, 1);
-      double momx_dy = dU(fpt, 1, 1, 1);
-      double momy_dy = dU(fpt, 2, 1, 1);
+      double rho_dy = dU(fpt, 0, 1, 0);
+      double momx_dy = dU(fpt, 1, 1, 0);
+      double momy_dy = dU(fpt, 2, 1, 0);
+      double E_dy = dU(fpt, 3, 1, 0);
 
       double du_dx = (momx_dx - rho_dx * u) / rho;
       double du_dy = (momx_dy - rho_dy * u) / rho;
@@ -581,18 +609,70 @@ void Faces::apply_bcs_dU()
       double dv_dx = (momy_dx - rho_dx * v) / rho;
       double dv_dy = (momy_dy - rho_dy * v) / rho;
 
-      double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
-      double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+      /* Compute normal velocity gradients */
+      double du_dn = du_dx * norm(fpt, 0, 0) + du_dy * norm(fpt, 1, 0);
+      double dv_dn = dv_dx * norm(fpt, 0, 0) + dv_dy * norm(fpt, 1, 0);
 
-      dU(fpt, 3, 0, 1) = (dke_dx + rho_dx * e_int);
-      dU(fpt, 3, 1, 1) = (dke_dy + rho_dy * e_int);
+      /* Set right state (common) momentum gradients */
+      dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+      dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+      dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+      dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
 
+      //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
+      //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
+      //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
+      //dU(fpt, 2, 1, 1) = rho * dv_dn * norm(fpt, 1, 0);
+
+
+      /* Compute energy gradients */
+     // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+     // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+
+     // double de_dx = 1./rho * (E_dx - dke_dx - rho_dx * eL);
+     // double de_dy = 1./rho * (E_dy - dke_dy - rho_dy * eL);
+
+      /* Compute temperature gradient (actually C_v * rho * dT) */
+      double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx);
+      double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
+
+      /* Compute wall normal internal energy gradient */
+      //double de_dn = de_dx * norm(fpt, 0, 0) + de_dy * norm(fpt, 1, 0);
+
+      /* Compute wall normal temperature gradient */
+      double dT_dn = dT_dx * norm(fpt, 0, 0) + dT_dy * norm(fpt, 1, 0);
+
+      /* Correct total energy gradient */
+      dU(fpt, 3, 0, 1) = dU(fpt, 3, 0, 0) - dT_dn * norm(fpt, 0, 0); 
+      dU(fpt, 3, 1, 1) = dU(fpt, 3, 1, 0) - dT_dn * norm(fpt, 1, 0); 
+
+      /* Correct internal energy gradient */
+      //de_dx = de_dx - de_dn * norm(fpt, 0, 0);
+      //de_dy = de_dy - de_dn * norm(fpt, 1, 0);
+
+      /* Set right state (common) energy gradient */
+      //double ER = U(fpt, 3, 1);
+      //double er = ER / rho; // Velocities are zero
+
+      //dU(fpt, 3, 0, 1) = (rho_dx * er + rho * de_dx); // Kinetic energy gradient is zero
+      //dU(fpt, 3, 1, 1) = (rho_dy * er + rho * de_dy);
+
+    }
+    else /* Otherwise, right state gradient equals left state gradient */
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+            dU(fpt, n, dim, 1) = dU(fpt, n, dim, 0);
+        }
+      }
     }
   }
 #endif
 
 #ifdef _GPU
-  apply_bcs_dU_wrapper(dU_d, U_d, nFpts, geo->nGfpts_int, nVars, nDims,
+  apply_bcs_dU_wrapper(dU_d, U_d, norm_d, nFpts, geo->nGfpts_int, nVars, nDims,
       geo->gfpt2bnd_d, geo->per_fpt_list_d);
 
   check_error();
@@ -936,15 +1016,19 @@ void Faces::compute_common_U()
            Ucomm(fpt, n, 1) = 0.5*(UL + UR) - beta*(UL - UR);
         }
       }
-      /* If on boundary, don't use beta (this is from HiFILES. Need to check) */
+      /* If on (non-periodic) boundary, don't use beta (this is from HiFILES. Need to check) */
+      /* If on (non-periodic) boundary, set right state as common (strong) */
       else
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
           double UL = U(fpt, n, 0); double UR = U(fpt, n, 1);
 
-           Ucomm(fpt, n, 0) = 0.5*(UL + UR);
-           Ucomm(fpt, n, 1) = 0.5*(UL + UR);
+          Ucomm(fpt, n, 0) = UR;
+          Ucomm(fpt, n, 1) = UR;
+
+           //Ucomm(fpt, n, 0) = 0.5*(UL + UR);
+           //Ucomm(fpt, n, 1) = 0.5*(UL + UR);
         }
       }
 
@@ -1012,6 +1096,16 @@ void Faces::rusanov_flux()
       }
     }
 
+    if (LDG_bias(fpt) != 0)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        Fcomm(fpt, n, 0) = FR[n] * outnorm(fpt, 0);
+        Fcomm(fpt, n, 1) = FR[n] * -outnorm(fpt, 1);
+      }
+      continue;
+    }
+
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -1043,12 +1137,11 @@ void Faces::rusanov_flux()
     /* Compute common normal flux */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-k) * (WR[n]-WL[n]);
-      Fcomm(fpt, n, 1) = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-k) * (WR[n]-WL[n]);
+      double F = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-k) * (WR[n]-WL[n]);
 
       /* Correct for positive parent space sign convention */
-      Fcomm(fpt, n, 0) *= outnorm(fpt, 0);
-      Fcomm(fpt, n, 1) *= -outnorm(fpt, 1);
+      Fcomm(fpt, n, 0) = F * outnorm(fpt, 0);
+      Fcomm(fpt, n, 1) = F * -outnorm(fpt, 1);
     }
   }
 }
@@ -1140,24 +1233,14 @@ void Faces::LDG_flux()
         }
       }
     }
-    /* If Dirichlet boundary, use left state only */
-    else if (LDG_bias(fpt) == -1)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-          Fcomm_temp(fpt, n, dim) += Fvisc(fpt, n, dim, 0) + tau * norm(fpt, dim, 0)* (WL[n] - WR[n]);
-        }
-      }
-    }
     /* If Neumann boundary, use right state only */
-    else if (LDG_bias(fpt) == 1)
+    else
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
+          //Fcomm_temp(fpt, n, dim) += Fvisc(fpt, n, dim, 1);
           Fcomm_temp(fpt, n, dim) += Fvisc(fpt, n, dim, 1) + tau * norm(fpt, dim, 0)* (WL[n] - WR[n]);
         }
       }
