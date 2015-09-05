@@ -189,7 +189,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
       {
         geo.nBnds++;
       }
-      else if (val == 4 || val == 5 || val == 6)
+      else if (val == 4 || val == 5 || val == 6 || val == 7)
       {
         geo.nEles++;
         geo.shape_order = 1; geo.nNodesPerEle = 8;
@@ -348,6 +348,14 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele);
           geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele);
           geo.nd2gnd(7,ele) = geo.nd2gnd(6,ele);
+          ele++; break;
+
+        case 7: /* 5-node Pyramid */
+          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1, ele) >> geo.nd2gnd(2, ele);
+          f >> geo.nd2gnd(3, ele) >> geo.nd2gnd(4,ele);
+          geo.nd2gnd(5, ele) = geo.nd2gnd(4, ele);
+          geo.nd2gnd(6, ele) = geo.nd2gnd(4, ele);
+          geo.nd2gnd(7, ele) = geo.nd2gnd(4, ele);
           ele++; break;
 
         case 12: /* Triquadratic Hex (read as 20-node serendipity) */

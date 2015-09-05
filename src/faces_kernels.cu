@@ -636,7 +636,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
       double PR = PL;
-      double TR = T_wall;
+      //double TR = T_wall;
+      double TR = 1; // T_wall = T_fs (hardcoded for couette flow)
       
       U(fpt, 0, 1) = PR / (R_ref * TR);
 

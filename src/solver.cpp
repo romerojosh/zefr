@@ -387,6 +387,7 @@ void FRSolver::initialize_U()
 
   eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
   eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
+  eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
   eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
@@ -1262,6 +1263,7 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
   /* If using GPU, copy out solution */
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
+  eles->dU_spts = eles->dU_spts_d;
 #endif
 
 #pragma omp parallel
@@ -1286,27 +1288,49 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, block_size,
           eles->nSpts, 1.0, &A, eles->nQpts, &B, eles->nSpts, 0.0, &C, eles->nQpts);
     }
+
+    /* Extrapolate derivatives to quadrature points */
+    for (unsigned int dim = 0; dim < eles->nDims; dim++)
+    {
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        auto &A = eles->oppE_qpts(0,0);
+        auto &B = eles->dU_spts(0,start_idx,n,dim);
+        auto &C = eles->dU_qpts(0,start_idx,n,dim);
+
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, block_size,
+            eles->nSpts, 1.0, &A, eles->nQpts, &B, eles->nSpts, 0.0, &C, eles->nQpts);
+      }
+    }
   }
 
 
-  std::vector<double> l2_error(eles->nVars,0.0);
+  //std::vector<double> l2_error(eles->nVars,0.0);
+  std::vector<double> l2_error(2,0.0);
 
-  for (unsigned int n = 0; n < eles->nVars; n++)
-  {
+  //for (unsigned int n = 0; n < eles->nVars; n++)
+  //{
+  unsigned int n = 0;
+  std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
 #pragma omp for collapse (2)
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       for (unsigned int qpt = 0; qpt < eles->nQpts; qpt++)
       {
-
         double U_true = 0.0;
         double weight = 0.0;
 
         if (eles->nDims == 2)
         {
-          /* Compute true solution */
+          /* Compute true solution and derivatives */
           U_true = compute_U_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
               flow_time, n, input);
+
+          dU_true[0] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
+              flow_time, n, 0, input);
+          dU_true[1] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
+              flow_time, n, 1, input);
+          
 
           /* Get quadrature point index and weight */
           unsigned int i = eles->idx_qpts(qpt,0);
@@ -1318,13 +1342,37 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
           ThrowException("Under construction!");
         }
 
-        /* Compute error */
-        double error = U_true - eles->U_qpts(qpt, ele, n);
+        /* Compute errors */
+        double U_error;
+        if (input->equation == EulerNS && input->viscous) // Couette flow case
+        {
+          double rho = eles->U_qpts(qpt, ele, 0);
+          double u =  eles->U_qpts(qpt, ele, 1) / rho;
+          double rho_dx = eles->dU_qpts(qpt, ele, 0, 0);
+          double rho_dy = eles->dU_qpts(qpt, ele, 0, 1);
+          double momx_dx = eles->dU_qpts(qpt, ele, 1, 0);
+          double momx_dy = eles->dU_qpts(qpt, ele, 1, 1);
 
-        l2_error[n] += weight * eles->jaco_det_qpts(qpt, ele) * error * error; 
+          double du_dx = (momx_dx - rho_dx * u) / rho;
+          double du_dy = (momx_dy - rho_dy * u) / rho;
+
+          U_error = U_true - u;
+          dU_error[0] = dU_true[0] - du_dx;
+          dU_error[1] = dU_true[1] - du_dy;
+        }
+        else
+        {
+          U_error = U_true - eles->U_qpts(qpt, ele, n);
+          dU_error[0] = dU_true[0] - eles->dU_qpts(qpt, ele, n, 0); 
+          dU_error[1] = dU_true[1] - eles->dU_qpts(qpt, ele, n, 1);
+        }
+
+        l2_error[0] += weight * eles->jaco_det_qpts(qpt, ele) * U_error * U_error; 
+        l2_error[1] += weight * eles->jaco_det_qpts(qpt, ele) * (U_error * U_error +
+            dU_error[0] * dU_error[0] + dU_error[1] * dU_error[1]); 
       }
     }
-  }
+  //}
 
   /* Print to terminal */
   std::cout << "l2_error: ";
