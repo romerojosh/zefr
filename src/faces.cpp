@@ -935,7 +935,7 @@ void Faces::compute_common_F()
 #endif
 
 #ifdef _GPU
-    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, 
+    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, 
         input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation);
 
     check_error();
@@ -1115,7 +1115,14 @@ void Faces::rusanov_flux()
     /* Get numerical wavespeed */
     if (input->equation == AdvDiff)
     {
-      waveSp(fpt) = FL[0] / WL[0];
+      double An = 0.;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+      }
+
+      waveSp(fpt) = An;
     }
     else if (input->equation == EulerNS)
     {

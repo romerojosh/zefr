@@ -908,8 +908,9 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdv
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts,
-    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
+    mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
+    mdvector_gpu<double> norm_gfpts, mdvector_gpu<int> outnorm_gfpts, 
+    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
     double gamma, double rus_k, unsigned int nFpts)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
@@ -965,10 +966,13 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   }
 
   /* Get numerical wavespeed */
-  double waveSp;
+  double waveSp = 0.;
   if (equation == AdvDiff) 
   {
-    waveSp = FL[0] / WL[0];
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      waveSp += AdvDiff_A(dim) * norm[dim];
+    }
 
     waveSp_gfpts(fpt) = waveSp;
 
@@ -1007,9 +1011,10 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 }
 
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &norm,
-    mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, mdvector_gpu<int> &LDG_bias, 
-    double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation)
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
+    mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation)
 {
   unsigned int threads = 256;
   unsigned int blocks = (nFpts + threads - 1)/threads;
@@ -1022,20 +1027,20 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma,
-          rus_k, nFpts);
+      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+          waveSp, LDG_bias, gamma, rus_k, nFpts);
     else
-      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma, 
-          rus_k, nFpts);
+      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+          waveSp, LDG_bias, gamma, rus_k, nFpts);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma, 
-          rus_k, nFpts);
+      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+          waveSp, LDG_bias, gamma, rus_k, nFpts);
     else
-      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, norm, outnorm, waveSp, LDG_bias, gamma, 
-          rus_k, nFpts);
+      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+          waveSp, LDG_bias, gamma, rus_k, nFpts);
 
   }
 }

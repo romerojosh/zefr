@@ -35,9 +35,10 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdv
     mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list);
 
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &norm,
-    mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, mdvector_gpu<int> &LDG_bias,
-    double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation);
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
+    mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation);
 
 void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,
