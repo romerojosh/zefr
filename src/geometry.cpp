@@ -289,7 +289,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           auto it_min = std::min_element(nodes.begin(), nodes.end());
           auto min_node = *it_min;
 
-          unsigned int min_pos;
+          unsigned int min_pos = 0;
           for (unsigned int i = 0; i < 4; i++)
           {
             if (nodes[i] == min_node)
@@ -375,7 +375,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           auto it_min = std::min_element(verts.begin(), verts.end());
           auto min_vert = *it_min;
 
-          unsigned int min_pos;
+          unsigned int min_pos = 0;
           for (unsigned int i = 0; i < 4; i++)
           {
             if (verts[i] == min_vert)
@@ -616,7 +616,7 @@ void couple_periodic_bnds(GeoStruct &geo)
   {
     unsigned int bnd_id = bnd_face.second;
     auto face1 = bnd_face.first;
-    unsigned int nNodesPerFace = face1.size();
+    unsigned int nNodesPerFace = (unsigned int) face1.size();
     
     /* Check if face is periodic */
     if (bnd_id == 1)

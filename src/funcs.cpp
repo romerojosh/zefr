@@ -115,25 +115,7 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
   {
     if (!input->viscous)
     {
-      double G = 5.0;
-      double R = 1.;
-
-      double f = (1.0 - x*x - y*y)/R;
-
-      double rho = std::pow(1.0 - (G * G * (input->gamma - 1.))/(8.0 * input->gamma * 
-                M_PI * M_PI) * std::exp(f), 1.0/(input->gamma - 1.0)); 
-      double Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f); 
-      double Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
-      double P = std::pow(rho, input->gamma);
-
-      if (input->nDims == 2)
-      {
-        ThrowException("Under construction!");
-      }
-      else
-      {
-        ThrowException("Under construction!");
-      }
+      ThrowException("Under construction!");
     }
     else
     {

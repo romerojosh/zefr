@@ -605,17 +605,18 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
-      /* Set boundary state to reflect normal velocity */
       for (unsigned int dim = 0; dim < nDims; dim++)
-        //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
-        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+        /* Set boundary state to cancelled normal velocity (strong)*/
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+        /* Set boundary state to reflect normal velocity */
+        //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
-      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
-      //LDG_bias(fpt) = -1;
-      LDG_bias(fpt) = 0;
+      LDG_bias(fpt) = -1;
+      //LDG_bias(fpt) = 0;
 
       break;
     }

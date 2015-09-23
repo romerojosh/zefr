@@ -93,8 +93,8 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
 
         /* Set LDG bias */
-        LDG_bias(fpt) = 0;
         //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
 
         break;
       }
@@ -106,7 +106,8 @@ void Faces::apply_bcs()
           U(fpt, n, 1) = U(fpt, n, 0);
 
         /* Set LDG bias */
-        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
 
         break;
       }
@@ -191,7 +192,8 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
         /* Set LDG bias */
-        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
 
         break;
       }
@@ -222,7 +224,8 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5 * momF; 
 
         /* Set LDG bias */
-        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
 
         break;
 
@@ -277,7 +280,8 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
         /* Set LDG bias */
-        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
 
         break;
       }
@@ -362,7 +366,8 @@ void Faces::apply_bcs()
         }
 
         /* Set LDG bias */
-        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
 
  
         break;
@@ -379,18 +384,19 @@ void Faces::apply_bcs()
 
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
-        /* Set boundary state to reflect normal velocity */
-        /* Set boundary state to with cancelled normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
+          /* Set boundary state to cancelled normal velocity (strong)*/
           U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+          /* Set boundary state to reflect normal velocity */
           //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
-        /* TODO: Extrapolate energy or recompute? */
+        /* Set energy */
         U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
         //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = 0;
 
         break;
       }
@@ -591,7 +597,6 @@ void Faces::apply_bcs_dU()
       double u = momx / rho;
       double v = momy / rho;
 
-      double eL = E / rho - 0.5 * (u*u + v*v);
 
       double rho_dx = dU(fpt, 0, 0, 0);
       double momx_dx = dU(fpt, 1, 0, 0);
@@ -609,53 +614,38 @@ void Faces::apply_bcs_dU()
       double dv_dx = (momy_dx - rho_dx * v) / rho;
       double dv_dy = (momy_dy - rho_dy * v) / rho;
 
-      /* Compute normal velocity gradients */
+      /* Option 1: Extrapolate momentum gradients */
+      //dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+      //dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+      //dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+      //dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+
+      /* Option 2: Enforce constraint on tangential velocity gradient */
       double du_dn = du_dx * norm(fpt, 0, 0) + du_dy * norm(fpt, 1, 0);
       double dv_dn = dv_dx * norm(fpt, 0, 0) + dv_dy * norm(fpt, 1, 0);
 
-      /* Set right state (common) momentum gradients */
-      dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
-      dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
-      dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
-      dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+      dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
+      dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
+      dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
+      dU(fpt, 2, 1, 1) =  rho * dv_dn * norm(fpt, 1, 0);
 
-      //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
-      //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
-      //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
-      //dU(fpt, 2, 1, 1) = rho * dv_dn * norm(fpt, 1, 0);
-
-
-      /* Compute energy gradients */
-     // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
-     // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
-
-     // double de_dx = 1./rho * (E_dx - dke_dx - rho_dx * eL);
-     // double de_dy = 1./rho * (E_dy - dke_dy - rho_dy * eL);
+      // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+      // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
 
       /* Compute temperature gradient (actually C_v * rho * dT) */
       double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx);
       double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
 
-      /* Compute wall normal internal energy gradient */
-      //double de_dn = de_dx * norm(fpt, 0, 0) + de_dy * norm(fpt, 1, 0);
-
       /* Compute wall normal temperature gradient */
       double dT_dn = dT_dx * norm(fpt, 0, 0) + dT_dy * norm(fpt, 1, 0);
 
-      /* Correct total energy gradient */
-      dU(fpt, 3, 0, 1) = dU(fpt, 3, 0, 0) - dT_dn * norm(fpt, 0, 0); 
-      dU(fpt, 3, 1, 1) = dU(fpt, 3, 1, 0) - dT_dn * norm(fpt, 1, 0); 
+      /* Option 1: Simply remove contribution of dT from total energy gradient */
+      //dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm[0]; 
+      //dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm[1]; 
 
-      /* Correct internal energy gradient */
-      //de_dx = de_dx - de_dn * norm(fpt, 0, 0);
-      //de_dy = de_dy - de_dn * norm(fpt, 1, 0);
-
-      /* Set right state (common) energy gradient */
-      //double ER = U(fpt, 3, 1);
-      //double er = ER / rho; // Velocities are zero
-
-      //dU(fpt, 3, 0, 1) = (rho_dx * er + rho * de_dx); // Kinetic energy gradient is zero
-      //dU(fpt, 3, 1, 1) = (rho_dy * er + rho * de_dy);
+      /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
+      dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
+      dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 3, 1) / rho; 
 
     }
     else /* Otherwise, right state gradient equals left state gradient */
@@ -1022,7 +1012,8 @@ void Faces::compute_common_U()
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
-          double UL = U(fpt, n, 0); double UR = U(fpt, n, 1);
+          //double UL = U(fpt, n, 0); 
+          double UR = U(fpt, n, 1);
 
           Ucomm(fpt, n, 0) = UR;
           Ucomm(fpt, n, 1) = UR;
