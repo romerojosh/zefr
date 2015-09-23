@@ -25,7 +25,7 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   }
   else if (input->equation == EulerNS)
   {
-    if (!input->viscous)
+    if (!input->viscous || input->viscous)
     {
       double G = 5.0;
       double R = 1.;

@@ -185,7 +185,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
     else if (geo.nDims == 3)
     {
       geo.nFacesPerEle = 6; geo.nNodesPerFace = 4;
-      if (val == 2 || val == 3 || val == 10)
+      if (val == 2 || val == 3 || val == 9 || val == 10)
       {
         geo.nBnds++;
       }
@@ -194,7 +194,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
         geo.nEles++;
         geo.shape_order = 1; geo.nNodesPerEle = 8;
       }
-      else if (val == 12)
+      else if (val == 11 || val == 12)
       {
         geo.nEles++;
         geo.shape_order = 2; geo.nNodesPerEle = 20;
@@ -269,13 +269,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
       switch(ele_type)
       {
         case 2: /* 3-node Triangle (skip)*/
-          f >> vint >> vint >> vint;
-          break;
-
         case 3: /* 4-node Quadrilateral (skip)*/
-          f >> vint >> vint >> vint >> vint;
-          break;
-
+        case 9: /* 6-node Triangle (skip) */
         case 10: /* 9-node Quadrilateral (skip) */
           std::getline(f,line); break;
 
@@ -357,6 +352,112 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           geo.nd2gnd(6, ele) = geo.nd2gnd(4, ele);
           geo.nd2gnd(7, ele) = geo.nd2gnd(4, ele);
           ele++; break;
+
+        case 11: /* 10-node Tetrahedron (read as collapsed 20-node serendipity) */
+        {
+          /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
+           * fully tetrahedral meshes. */
+          std::vector<unsigned int> nodes(10,0);
+          std::vector<unsigned int> verts(4,0);
+
+          for (unsigned int i = 0; i < 10; i++)
+          {
+            f >> nodes[i];
+            //nodes[i] = i;
+          }
+
+          for (unsigned int i = 0; i < 4; i++)
+          {
+            verts[i] = nodes[i];
+          }
+
+          /* Locate minimum vertex index and position */
+          auto it_min = std::min_element(verts.begin(), verts.end());
+          auto min_vert = *it_min;
+
+          unsigned int min_pos;
+          for (unsigned int i = 0; i < 4; i++)
+          {
+            if (verts[i] == min_vert)
+              min_pos = i;
+          }
+
+          std::cout << ele << " " << min_pos << std::endl;
+
+          /* Set minimum node to "top" collapsed node */
+          geo.nd2gnd(4, ele) = min_vert; geo.nd2gnd(5, ele) = min_vert;
+          geo.nd2gnd(6, ele) = min_vert; geo.nd2gnd(7, ele) = min_vert;
+          geo.nd2gnd(16,ele) =  min_vert; geo.nd2gnd(17,ele) = min_vert;
+          geo.nd2gnd(18,ele) =  min_vert; geo.nd2gnd(19,ele) = min_vert;
+
+          verts.erase(it_min);
+
+          /* Get bottom and middle edge vertices, based on min_pos */
+          std::vector<unsigned int> bverts(3,0);
+          std::vector<unsigned int> mverts(3,0);
+          if (min_pos == 0)
+          {
+            bverts = {nodes[5], nodes[8], nodes[9]};
+            mverts = {nodes[4], nodes[6], nodes[7]};
+          }
+          else if (min_pos == 1)
+          {
+            bverts = {nodes[6], nodes[8], nodes[7]};
+            mverts = {nodes[4], nodes[5], nodes[9]};
+          }
+          else if (min_pos == 2)
+          {
+            bverts = {nodes[4], nodes[9], nodes[7]};
+            mverts = {nodes[6], nodes[5], nodes[8]};
+          }
+          else
+          {
+            bverts = {nodes[4], nodes[5], nodes[6]};
+            mverts = {nodes[7], nodes[9], nodes[8]};
+          }
+
+          /* Find next minimum vertex */
+          it_min = std::min_element(verts.begin(), verts.end());
+          min_vert = *it_min;
+
+
+          /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
+           * Reorder for CCW orientation if needed */
+          while (verts[2] != min_vert)
+          {
+            std::rotate(verts.begin(), verts.begin() + 1, verts.end());
+            std::rotate(bverts.begin(), bverts.begin() + 1, bverts.end());
+            std::rotate(mverts.begin(), mverts.begin() + 1, mverts.end());
+          }
+          if (min_pos == 0 || min_pos == 2)
+          {
+            geo.nd2gnd(0, ele) = verts[1];
+            geo.nd2gnd(1, ele) = verts[0];
+            geo.nd2gnd(2, ele) = verts[2];
+            geo.nd2gnd(3, ele) = verts[2];
+
+            geo.nd2gnd(8,ele) =  bverts[0]; geo.nd2gnd(9,ele) = bverts[2];
+            geo.nd2gnd(10,ele) = verts[2]; geo.nd2gnd(11,ele) = bverts[1];
+
+            geo.nd2gnd(12,ele) =  mverts[1]; geo.nd2gnd(13,ele) = mverts[0];
+            geo.nd2gnd(14,ele) =  mverts[2]; geo.nd2gnd(15,ele) = mverts[2];
+          }
+          else if (min_pos == 1 || min_pos == 3)
+          {
+            geo.nd2gnd(0, ele) = verts[0];
+            geo.nd2gnd(1, ele) = verts[1];
+            geo.nd2gnd(2, ele) = verts[2];
+            geo.nd2gnd(3, ele) = verts[2];
+
+            geo.nd2gnd(8,ele) =  bverts[0]; geo.nd2gnd(9,ele) = bverts[1];
+            geo.nd2gnd(10,ele) = verts[2]; geo.nd2gnd(11,ele) = bverts[2];
+
+            geo.nd2gnd(12,ele) =  mverts[0]; geo.nd2gnd(13,ele) = mverts[1];
+            geo.nd2gnd(14,ele) =  mverts[2]; geo.nd2gnd(15,ele) = mverts[2];
+          }
+
+          ele++; break;
+        }
 
         case 12: /* Triquadratic Hex (read as 20-node serendipity) */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
@@ -462,6 +563,19 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
           face.assign(4,0);
           f >> face[0] >> face[1] >> face[2] >> face[3]; break;
+
+        case 9: /* 6-node Triangle */
+          f >> nTags;
+          f >> bnd_id;
+
+          for (unsigned int i = 0; i < nTags - 1; i++)
+            f >> vint;
+
+          face.assign(3,0);
+          f >> face[0] >> face[1] >> face[2]; 
+          std::getline(f,line);
+          break;
+
 
         case 10: /* 9-node Quadrilateral */
           f >> nTags;
@@ -826,8 +940,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
           {
             rot = 4;
           }
-
-          //std::cout << rot << std::endl;
 
           /* Based on rotation, couple flux points */
           switch (rot)

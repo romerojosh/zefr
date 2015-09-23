@@ -11,7 +11,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 100000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
 CFL	  0.25
 
@@ -20,7 +20,7 @@ restart	      0
 restart_file  fp_pmg_000001000.vtk
 
 # Multigrid:
-p_multi 1
+p_multi 0
 smooth_steps 1
 rel_fac 1.00
 low_order 0
@@ -33,7 +33,7 @@ s_factor 0.0
 # Note: You can suppress output by setting freq to zero. 
 output_prefix fp_pmg
 write_freq    1000
-report_freq   10
+report_freq   100
 res_type      1
 force_freq    0
 error_freq    0
@@ -44,7 +44,7 @@ fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
 ldg_b      0.0
-ldg_tau    1.0
+ldg_tau    0.0
 
 # Equation Specific Parameters:
 ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
@@ -52,6 +52,7 @@ ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 # Advection-Diffusion
 AdvDiff_Ax 0
 AdvDiff_Ay 0
+AdvDiff_Az 0
 AdvDiff_D 0.1
 
 # Euler/Navier-Stokes
@@ -66,6 +67,7 @@ S       120
 rho_fs 1
 u_fs 0.35
 v_fs 0.0
+w_fs 0.0
 P_fs .71428571428
 
 # Navier-Stokes specific
