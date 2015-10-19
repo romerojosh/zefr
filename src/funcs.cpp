@@ -115,7 +115,7 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
   {
     if (!input->viscous)
     {
-      ThrowException("Under construction!");
+      val = 0.0; // Just a placeholder value for now.
     }
     else
     {

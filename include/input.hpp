@@ -18,7 +18,7 @@ enum EQN {AdvDiff = 0, EulerNS = 1};
 struct InputStruct
 {
   unsigned int equation, dt_type, ic_type, nDims, nQpts1D, n_steps, order, low_order, smooth_steps;
-  unsigned int report_freq, write_freq, force_freq, res_type, error_freq;
+  unsigned int report_freq, write_freq, force_freq, res_type, error_freq, test_case, err_field;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file;
   bool viscous, p_multi, restart, fix_vis, squeeze;
   std::string fconv_type, fvisc_type;
@@ -40,6 +40,8 @@ struct InputStruct
 InputStruct read_input_file(std::string inputfile);
 void apply_nondim(InputStruct &input);
 
+/* Function to read parameter from input file. Throws exception if parameter 
+ * is not found. */
 template <typename T>
 void read_param(std::ifstream &f, std::string name, T &var)
 {
@@ -64,6 +66,33 @@ void read_param(std::ifstream &f, std::string name, T &var)
 
   ThrowException("Input parameter " + name + " not found!");
 
+}
+
+/* Function to read parameter from input file. Sets var to provided default
+ * value if parameter is not found. */
+template <typename T>
+void read_param(std::ifstream &f, std::string name, T &var, T default_val)
+{
+  if (!f.is_open())
+  {
+    ThrowException("Input file not open for reading!");
+  }
+
+  std::string param;
+
+  f.clear();
+  f.seekg(0, f.beg);
+
+  while (f >> param)
+  {
+    if (param == name)
+    {
+      f >> var;
+      return;
+    }
+  }
+
+  var = default_val;
 }
 
 #endif /* input_hpp */

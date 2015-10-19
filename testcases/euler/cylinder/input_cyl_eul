@@ -3,7 +3,7 @@ nDims    2
 meshfile full_cyl_quad.msh
 
 # Solver:
-order     2
+order     3
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -15,19 +15,11 @@ dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
 CFL	  0.4
 
-# Restarting:
-restart	      0
-restart_file  cyl_uquad_000005000.vtk
-
 # Multigrid:
-p_multi 1
+p_multi 0
 smooth_steps 1
 rel_fac 1.00
 low_order 0
-
-# Stabilization:
-squeeze  0
-s_factor 0.0
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
@@ -49,12 +41,6 @@ ldg_tau    1.0
 # Equation Specific Parameters:
 ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
-# Advection-Diffusion
-AdvDiff_Ax 0
-AdvDiff_Ay 0
-AdvDiff_Az 0
-AdvDiff_D 0.1
-
 # Euler/Navier-Stokes
 T_gas 291.15
 gamma 1.4
@@ -70,16 +56,3 @@ v_fs 0.0
 w_fs 0.0
 P_fs .71428571428
 
-# Navier-Stokes specific
-fix_vis 0
-mach_fs 0.1
-Re_fs 100
-L_fs 1
-T_fs 300
-nx_fs 1
-ny_fs 0
-
-T_wall 300    # Used for isothermal wall boundary only.          
-mach_wall 0.0           
-nx_wall 1
-ny_wall 0

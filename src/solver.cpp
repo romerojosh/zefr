@@ -188,18 +188,6 @@ void FRSolver::setup_output()
         nd[node] += (nSubelements1D + 1);
     }
 
-    /*
-    for (int ele = 0; ele < eles->nSubelements; ele++)
-    {
-      for (int node = 0; node < 8; node++)
-      {
-        std::cout << geo.ppt_connect(node,ele) << " ";
-      }
-      std::cout << std::endl;
-    }
-    */
-
-    //ThrowException("3D not implemented yet!");
   }
 
 }
@@ -337,9 +325,7 @@ void FRSolver::compute_residual(unsigned int stage)
   {
     eles->compute_Uavg();
     eles->poly_squeeze();
-
   }
-  
 
   U_to_faces();
   faces->apply_bcs();
@@ -393,7 +379,6 @@ void FRSolver::initialize_U()
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
   /* Initialize solution */
-  // TODO: Fill in with actual logic. */
   if (input->equation == AdvDiff)
   {
     if (input->ic_type == 0)
@@ -600,8 +585,6 @@ void FRSolver::F_from_faces()
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         eles->Fcomm(fpt, ele, n) = faces->Fcomm(gfpt, n, slot);
-
-        //std::cout << eles->Fcomm(fpt, ele,n) << std::endl;
 
       }
     }
@@ -1213,11 +1196,6 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
             force_visc[dim] -= eles->weights_spts(count%eles->nSpts1D) * taun[dim] * 
               faces->dA(fpt) * fac;
 
-          /* Print gradients (temporary) */
-          //double ene_dx = faces->dU(fpt, 3, 0, 0);
-          //std::cout << fpt << " " << rho_dx << " " << momx_dx << " ";
-          //std::cout << fpt << " " << momy_dx << " " << ene_dx << std::endl;
-
         }
         else
         {
@@ -1305,12 +1283,9 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
   }
 
 
-  //std::vector<double> l2_error(eles->nVars,0.0);
   std::vector<double> l2_error(2,0.0);
 
-  //for (unsigned int n = 0; n < eles->nVars; n++)
-  //{
-  unsigned int n = 0;
+  unsigned int n = input->err_field;
   std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
 #pragma omp for collapse (2)
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -1323,8 +1298,15 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
         if (eles->nDims == 2)
         {
           /* Compute true solution and derivatives */
-          U_true = compute_U_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
-              flow_time, n, input);
+          if (input->test_case == 3) // Isentropic Bump
+          {
+            U_true = input->P_fs / std::pow(input->rho_fs, input->gamma);
+          }
+          else 
+          {
+            U_true = compute_U_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
+                flow_time, n, input);
+          }
 
           dU_true[0] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
               flow_time, n, 0, input);
@@ -1344,7 +1326,7 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
 
         /* Compute errors */
         double U_error;
-        if (input->equation == EulerNS && input->viscous) // Couette flow case
+        if (input->test_case == 2) // Couette flow case
         {
           double rho = eles->U_qpts(qpt, ele, 0);
           double u =  eles->U_qpts(qpt, ele, 1) / rho;
@@ -1360,6 +1342,20 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
           dU_error[0] = dU_true[0] - du_dx;
           dU_error[1] = dU_true[1] - du_dy;
         }
+        else if (input->test_case == 3) // Isentropic bump
+        {
+          double momF = 0.0;
+          for (unsigned int dim = 0; dim < eles->nDims; dim ++)
+          {
+            momF += eles->U_qpts(qpt, ele, dim + 1) * eles->U_qpts(qpt, ele, dim + 1);
+          }
+
+          momF /= eles->U_qpts(qpt, ele, 0);
+
+          double P = (input->gamma - 1.0) * (eles->U_qpts(qpt, ele, 3) - 0.5 * momF);
+
+          U_error = U_true - P/std::pow(eles->U_qpts(qpt, ele, 0), input->gamma);
+        }
         else
         {
           U_error = U_true - eles->U_qpts(qpt, ele, n);
@@ -1371,8 +1367,7 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
         l2_error[1] += weight * eles->jaco_det_qpts(qpt, ele) * (U_error * U_error +
             dU_error[0] * dU_error[0] + dU_error[1] * dU_error[1]); 
       }
-    }
-  //}
+  }
 
   /* Print to terminal */
   std::cout << "l2_error: ";

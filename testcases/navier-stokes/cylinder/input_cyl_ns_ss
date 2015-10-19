@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile cyl_quad.msh
+meshfile full_cyl_uquad.msh
 
 # Solver:
 order     3
@@ -17,19 +17,11 @@ dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
 CFL	  0.05
 
-# Restarting:
-restart	      1
-restart_file  cyl_uquad_ss_000010000.vtk
-
 # Multigrid:
 p_multi 1
 smooth_steps 1
 rel_fac 1.00
 low_order 0
-
-# Stabilization:
-squeeze  0
-s_factor 0.0
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
@@ -51,12 +43,6 @@ ldg_tau    1.0
 # Equation Specific Parameters:
 ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
-# Advection-Diffusion
-AdvDiff_Ax 0
-AdvDiff_Ay 0
-AdvDiff_Az 0
-AdvDiff_D 0.1
-
 # Euler/Navier-Stokes
 T_gas 291.15
 gamma 1.4
@@ -64,13 +50,6 @@ R     286.9
 mu    1.827E-5
 prandtl 0.72
 S       120
-
-# Euler specific
-rho_fs 1
-u_fs 0.35
-v_fs 0.0
-w_fs 0.0
-P_fs .71428571428
 
 # Navier-Stokes specific
 fix_vis 0
