@@ -7,13 +7,14 @@ endif
 
 CXX = g++
 CU = nvcc
-FLAGS += -std=c++11
-CXXFLAGS = -Ofast -Wall -Wextra -Wconversion
+FLAGS += -std=c++11 
+CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -Wno-unknown-pragmas
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math -Xcompiler
 
 ifeq ($(strip $(OPENMP)),$(strip YES))
 	CXXFLAGS += -fopenmp
 	CUFLAGS += -fopenmp
+	FLAGS += -D_OMP
 endif
 
 # Setting BLAS flags

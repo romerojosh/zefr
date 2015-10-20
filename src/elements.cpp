@@ -3,7 +3,6 @@
 #include <string>
 
 #include <cblas.h>
-#include <omp.h>
 
 #include "elements.hpp"
 #include "faces.hpp"
@@ -264,39 +263,18 @@ void Elements::setup_aux()
 void Elements::extrapolate_U()
 {
 #ifdef _CPU
-/*
-#pragma omp parallel
-  {
-    int nThreads = omp_get_num_threads();
-    int thread_idx = omp_get_thread_num();
-
-    int block_size = nEles / nThreads;
-    int start_idx = block_size * thread_idx;
-
-    if (thread_idx == nThreads-1)
-      block_size += nEles % (block_size);
-
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      auto &A = oppE(0,0);
-      auto &B = U_spts(0,start_idx,n);
-      auto &C = U_fpts(0,start_idx,n);
-
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, block_size,
-            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
-    }
-  }
-*/
   auto &A = oppE(0,0);
   auto &B = U_spts(0, 0, 0);
   auto &C = U_fpts(0, 0, 0);
 
-  /*
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-        nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
-  */
+#ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
         nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+#else
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+        nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+#endif
+
 #endif
 
 #ifdef _GPU
@@ -312,45 +290,19 @@ void Elements::extrapolate_U()
 void Elements::extrapolate_dU()
 {
 #ifdef _CPU
-  /*
-#pragma omp parallel
-  {
-    int nThreads = omp_get_num_threads();
-    int thread_idx = omp_get_thread_num();
-
-    int block_size = nEles / nThreads;
-    int start_idx = block_size * thread_idx;
-
-    if (thread_idx == nThreads-1)
-      block_size += nEles % (block_size);
-
-
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        auto &A = oppE(0,0);
-        auto &B = dU_spts(0,start_idx,n,dim);
-        auto &C = dU_fpts(0,start_idx,n,dim);
-
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, block_size,
-            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
-      }
-    }
-  }
-  */
   for (unsigned int dim = 0; dim < nDims; dim++)
     {
         auto &A = oppE(0,0);
         auto &B = dU_spts(0, 0, 0, dim);
         auto &C = dU_fpts(0, 0, 0, dim);
 
-        /*
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
-        */
+#ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
             nEles * nVars, nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+#else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+#endif
     }
 #endif
 
@@ -368,49 +320,6 @@ void Elements::extrapolate_dU()
 void Elements::compute_dU()
 {
 #ifdef _CPU
-  /*
-#pragma omp parallel
-  {
-    int nThreads = omp_get_num_threads();
-    int thread_idx = omp_get_thread_num();
-
-    int block_size = nEles / nThreads;
-    int start_idx = block_size * thread_idx;
-
-    if (thread_idx == nThreads-1)
-      block_size += nEles % (block_size);
-
-    / Compute contribution to derivative from solution at solution points /
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        auto &A = oppD(0,0,dim);
-        auto &B = U_spts(0,start_idx,n);
-        auto &C = dU_spts(0,start_idx,n,dim);
-
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            block_size, nSpts, 1.0, &A, nSpts, &B, nSpts, 
-            0.0, &C, nSpts);
-      }
-    }
-
-    / Compute contribution to derivative from common solution at flux points /
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        auto &A = oppD_fpts(0,0,dim);
-        auto &B = Ucomm(0,start_idx,n);
-        auto &C = dU_spts(0,start_idx,n,dim);
-
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            block_size, nFpts, 1.0, &A, nSpts, &B, nFpts, 
-            1.0, &C, nSpts);
-      }
-    }
-  }
-  */
   /* Compute contribution to derivative from solution at solution points */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -418,14 +327,15 @@ void Elements::compute_dU()
       auto &B = U_spts(0, 0, 0);
       auto &C = dU_spts(0, 0, 0, dim);
 
-      /*
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
-          0.0, &C, nSpts);
-      */
+#ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
           nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
           0.0, &C, nSpts);
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
+          0.0, &C, nSpts);
+#endif
     }
 
     /* Compute contribution to derivative from common solution at flux points */
@@ -435,14 +345,15 @@ void Elements::compute_dU()
       auto &B = Ucomm(0, 0, 0);
       auto &C = dU_spts(0, 0, 0, dim);
 
-      /*
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
-          1.0, &C, nSpts);
-      */
+#ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
           nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
           1.0, &C, nSpts);
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
+          1.0, &C, nSpts);
+#endif
     }
 
 #endif
@@ -473,48 +384,6 @@ void Elements::compute_dU()
 void Elements::compute_dF()
 {
 #ifdef _CPU
-  /*
-#pragma omp parallel
-  {
-    int nThreads = omp_get_num_threads();
-    int thread_idx = omp_get_thread_num();
-
-    int block_size = nEles / nThreads;
-    int start_idx = block_size * thread_idx;
-
-    if (thread_idx == nThreads-1)
-      block_size += nEles % (block_size);
-
-
-     Compute contribution to derivative from flux at solution points/
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        auto &A = oppD(0,0,dim);
-        auto &B = F_spts(0,start_idx,n,dim);
-        auto &C = dF_spts(0,start_idx,n,dim);
-
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, block_size,
-              nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
-      }
-    }
-
-     Compute contribution to derivative from common flux at flux points/
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        auto &A = oppD_fpts(0,0,dim);
-        auto &B = Fcomm(0,start_idx,n);
-        auto &C = dF_spts(0,start_idx,n,dim);
-
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, block_size,
-            nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
-      }
-    }
-  }
-  */
     /* Compute contribution to derivative from flux at solution points */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -522,10 +391,14 @@ void Elements::compute_dF()
       auto &B = F_spts(0, 0, 0, dim);
       auto &C = dF_spts(0, 0, 0, dim);
 
-      //cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-      //      nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+#ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
           nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+            nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+#endif
+
     }
 
     /* Compute contribution to derivative from common flux at flux points */
@@ -535,10 +408,13 @@ void Elements::compute_dF()
       auto &B = Fcomm(0, 0, 0);
       auto &C = dF_spts(0, 0, 0, dim);
 
-      //cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-      //    nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+#ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
           nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+          nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+#endif
     }
 
 #endif

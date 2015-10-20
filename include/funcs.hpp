@@ -15,9 +15,12 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
     unsigned int dim, const InputStruct *input);
 
 double get_cfl_limit(int order);
+
+#ifdef _OMP
 void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA, 
     CBLAS_TRANSPOSE transB, int M, int N, int K, double alpha, double* A, int lda, 
     double* B, int ldb, double beta, double* C, int ldc);
+#endif
 
 template <typename T>
 struct square
