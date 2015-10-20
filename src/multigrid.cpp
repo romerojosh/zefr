@@ -201,6 +201,7 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
     ThrowException("Cannot restrict more than 1 order currently!");
 
 #ifdef _CPU
+/*
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -214,7 +215,7 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
 
     for (unsigned int n = 0; n < grid_f.eles->nVars; n++)
     {
-      /* Restrict solution */
+      / Restrict solution /
       auto &A = grid_f.eles->oppRes(0,0);
       auto &B = grid_f.eles->U_spts(0,start_idx,n);
       auto &C = grid_c.eles->U_spts(0,start_idx,n);
@@ -227,12 +228,31 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
       auto &B2 = grid_f.eles->divF_spts(0,start_idx,n,0);
       auto &C2 = grid_c.eles->divF_spts(0,start_idx,n,0);
 
-      /* Restrict residual */
+      / Restrict residual /
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
           block_size, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
           &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
     }
   }
+  */
+  /* Restrict solution */
+  auto &A = grid_f.eles->oppRes(0, 0);
+  auto &B = grid_f.eles->U_spts(0, 0, 0);
+  auto &C = grid_c.eles->U_spts(0, 0, 0);
+
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
+      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
+      &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
+
+  
+  auto &B2 = grid_f.eles->divF_spts(0, 0, 0, 0);
+  auto &C2 = grid_c.eles->divF_spts(0, 0, 0, 0);
+
+  /* Restrict residual */
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
+      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
+      &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
+
 #endif
 
 #ifdef _GPU
@@ -257,9 +277,9 @@ void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
 
   for (unsigned int n = 0; n < grid_c.eles->nVars; n++)
   {
-    auto &A = grid_c.eles->oppPro(0,0);
-    auto &B = grid_c.eles->U_spts(0,0,n);
-    auto &C = grid_f.eles->U_spts(0,0,n);
+    auto &A = grid_c.eles->oppPro(0, 0);
+    auto &B = grid_c.eles->U_spts(0, 0, n);
+    auto &C = grid_f.eles->U_spts(0, 0, n);
 
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
         grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
@@ -270,6 +290,7 @@ void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
 
 void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSolver &grid_f)
 {
+/*
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -287,12 +308,21 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSol
       auto &B = correction_c(0,start_idx,n);
       auto &C = grid_f.eles->U_spts(0,start_idx,n);
 
-      /* Prolong error */
+      / Prolong error /
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
           block_size, grid_c.eles->nSpts, input->rel_fac, &A, grid_f.eles->nSpts, 
           &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
     }
   }
+*/
+  auto &A = grid_c.eles->oppPro(0, 0);
+  auto &B = correction_c(0, 0, 0);
+  auto &C = grid_f.eles->U_spts(0, 0, 0);
+
+  /* Prolong error */
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, &A, grid_f.eles->nSpts, 
+      &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
 }
 
 #ifdef _GPU

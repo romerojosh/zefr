@@ -263,6 +263,7 @@ void Elements::setup_aux()
 void Elements::extrapolate_U()
 {
 #ifdef _CPU
+/*
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -284,6 +285,13 @@ void Elements::extrapolate_U()
             nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
     }
   }
+*/
+  auto &A = oppE(0,0);
+  auto &B = U_spts(0, 0, 0);
+  auto &C = U_fpts(0, 0, 0);
+
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+        nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
 #endif
 
 #ifdef _GPU
@@ -299,6 +307,7 @@ void Elements::extrapolate_U()
 void Elements::extrapolate_dU()
 {
 #ifdef _CPU
+  /*
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -324,6 +333,16 @@ void Elements::extrapolate_dU()
       }
     }
   }
+  */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+        auto &A = oppE(0,0);
+        auto &B = dU_spts(0, 0, 0, dim);
+        auto &C = dU_fpts(0, 0, 0, dim);
+
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+    }
 #endif
 
 #ifdef _GPU
@@ -340,6 +359,7 @@ void Elements::extrapolate_dU()
 void Elements::compute_dU()
 {
 #ifdef _CPU
+  /*
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -351,7 +371,7 @@ void Elements::compute_dU()
     if (thread_idx == nThreads-1)
       block_size += nEles % (block_size);
 
-    /* Compute contribution to derivative from solution at solution points */
+    / Compute contribution to derivative from solution at solution points /
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
@@ -366,7 +386,7 @@ void Elements::compute_dU()
       }
     }
 
-    /* Compute contribution to derivative from common solution at flux points */
+    / Compute contribution to derivative from common solution at flux points /
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
@@ -381,6 +401,31 @@ void Elements::compute_dU()
       }
     }
   }
+  */
+  /* Compute contribution to derivative from solution at solution points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      auto &A = oppD(0, 0, dim);
+      auto &B = U_spts(0, 0, 0);
+      auto &C = dU_spts(0, 0, 0, dim);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
+          0.0, &C, nSpts);
+    }
+
+    /* Compute contribution to derivative from common solution at flux points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      auto &A = oppD_fpts(0, 0, dim);
+      auto &B = Ucomm(0, 0, 0);
+      auto &C = dU_spts(0, 0, 0, dim);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
+          1.0, &C, nSpts);
+    }
+
 #endif
 
 #ifdef _GPU
@@ -409,6 +454,7 @@ void Elements::compute_dU()
 void Elements::compute_dF()
 {
 #ifdef _CPU
+  /*
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -421,7 +467,7 @@ void Elements::compute_dF()
       block_size += nEles % (block_size);
 
 
-    /* Compute contribution to derivative from flux at solution points */
+     Compute contribution to derivative from flux at solution points/
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
@@ -435,7 +481,7 @@ void Elements::compute_dF()
       }
     }
 
-    /* Compute contribution to derivative from common flux at flux points */
+     Compute contribution to derivative from common flux at flux points/
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
@@ -449,6 +495,29 @@ void Elements::compute_dF()
       }
     }
   }
+  */
+    /* Compute contribution to derivative from flux at solution points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      auto &A = oppD(0, 0,dim);
+      auto &B = F_spts(0, 0, 0, dim);
+      auto &C = dF_spts(0, 0, 0, dim);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+            nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+    }
+
+    /* Compute contribution to derivative from common flux at flux points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      auto &A = oppD_fpts(0, 0, dim);
+      auto &B = Fcomm(0, 0, 0);
+      auto &C = dF_spts(0, 0, 0, dim);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+          nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+    }
+
 #endif
 
 #ifdef _GPU

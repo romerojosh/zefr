@@ -940,6 +940,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   /* TEST: Write cell average solution */
   //eles->compute_Uavg();
 
+  /*
  #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -951,7 +952,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     if (thread_idx == nThreads-1)
       block_size += eles->nEles % (block_size);
 
-   /* Extrapolate solution to plot points */
+   / Extrapolate solution to plot points /
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       auto &A = eles->oppE_ppts(0,0);
@@ -962,6 +963,15 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
           eles->nSpts, 1.0, &A, eles->nPpts, &B, eles->nSpts, 0.0, &C, eles->nPpts);
     }
   }
+*/
+  /* Extrapolate solution to plot points */
+  auto &A = eles->oppE_ppts(0, 0);
+  auto &B = eles->U_spts(0, 0, 0);
+  auto &C = eles->U_ppts(0, 0, 0);
+
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, eles->nEles * eles->nVars,
+      eles->nSpts, 1.0, &A, eles->nPpts, &B, eles->nSpts, 0.0, &C, eles->nPpts);
+
 
   /* Apply squeezing if needed */
   if (input->squeeze)
@@ -1244,6 +1254,7 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
   eles->dU_spts = eles->dU_spts_d;
 #endif
 
+  /*
 #pragma omp parallel
   {
     int nThreads = omp_get_num_threads();
@@ -1256,7 +1267,7 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
       block_size += eles->nEles % (block_size);
 
 
-    /* Extrapolate solution to quadrature points */
+    / Extrapolate solution to quadrature points /
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       auto &A = eles->oppE_qpts(0,0);
@@ -1267,7 +1278,7 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
           eles->nSpts, 1.0, &A, eles->nQpts, &B, eles->nSpts, 0.0, &C, eles->nQpts);
     }
 
-    /* Extrapolate derivatives to quadrature points */
+    / Extrapolate derivatives to quadrature points /
     for (unsigned int dim = 0; dim < eles->nDims; dim++)
     {
       for (unsigned int n = 0; n < eles->nVars; n++)
@@ -1281,7 +1292,25 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
       }
     }
   }
+*/
+  /* Extrapolate solution to quadrature points */
+  auto &A = eles->oppE_qpts(0, 0);
+  auto &B = eles->U_spts(0, 0, 0);
+  auto &C = eles->U_qpts(0, 0, 0);
 
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, eles->nEles * eles->nVars,
+      eles->nSpts, 1.0, &A, eles->nQpts, &B, eles->nSpts, 0.0, &C, eles->nQpts);
+
+  /* Extrapolate derivatives to quadrature points */
+  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  {
+      auto &A = eles->oppE_qpts(0, 0);
+      auto &B = eles->dU_spts(0, 0, 0, dim);
+      auto &C = eles->dU_qpts(0, 0, 0, dim);
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, eles->nEles * eles->nVars,
+          eles->nSpts, 1.0, &A, eles->nQpts, &B, eles->nSpts, 0.0, &C, eles->nQpts);
+  }
 
   std::vector<double> l2_error(2,0.0);
 
