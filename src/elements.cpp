@@ -7,6 +7,7 @@
 
 #include "elements.hpp"
 #include "faces.hpp"
+#include "funcs.hpp"
 #include "mdvector.hpp"
 #include "macros.hpp"
 #include "points.hpp"
@@ -290,7 +291,11 @@ void Elements::extrapolate_U()
   auto &B = U_spts(0, 0, 0);
   auto &C = U_fpts(0, 0, 0);
 
+  /*
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+        nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+  */
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
         nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
 #endif
 
@@ -340,8 +345,12 @@ void Elements::extrapolate_dU()
         auto &B = dU_spts(0, 0, 0, dim);
         auto &C = dU_fpts(0, 0, 0, dim);
 
+        /*
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
             nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+        */
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
+            nEles * nVars, nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
     }
 #endif
 
@@ -409,7 +418,12 @@ void Elements::compute_dU()
       auto &B = U_spts(0, 0, 0);
       auto &C = dU_spts(0, 0, 0, dim);
 
+      /*
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
+          0.0, &C, nSpts);
+      */
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
           nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
           0.0, &C, nSpts);
     }
@@ -421,7 +435,12 @@ void Elements::compute_dU()
       auto &B = Ucomm(0, 0, 0);
       auto &C = dU_spts(0, 0, 0, dim);
 
+      /*
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
+          1.0, &C, nSpts);
+      */
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
           nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
           1.0, &C, nSpts);
     }
@@ -503,8 +522,10 @@ void Elements::compute_dF()
       auto &B = F_spts(0, 0, 0, dim);
       auto &C = dF_spts(0, 0, 0, dim);
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-            nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+      //cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+      //      nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
     }
 
     /* Compute contribution to derivative from common flux at flux points */
@@ -514,8 +535,10 @@ void Elements::compute_dF()
       auto &B = Fcomm(0, 0, 0);
       auto &C = dF_spts(0, 0, 0, dim);
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-          nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+      //cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+      //    nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
     }
 
 #endif

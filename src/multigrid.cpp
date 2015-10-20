@@ -4,6 +4,7 @@
 #include "cblas.h"
 #include "omp.h"
 
+#include "funcs.hpp"
 #include "input.hpp"
 #include "multigrid.hpp"
 #include "solver.hpp"
@@ -240,18 +241,30 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
   auto &B = grid_f.eles->U_spts(0, 0, 0);
   auto &C = grid_c.eles->U_spts(0, 0, 0);
 
+  /*
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
-      &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
+      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
+      grid_c.eles->nSpts, &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
+      */
+
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
+      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
+      grid_c.eles->nSpts, &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
 
   
   auto &B2 = grid_f.eles->divF_spts(0, 0, 0, 0);
   auto &C2 = grid_c.eles->divF_spts(0, 0, 0, 0);
 
   /* Restrict residual */
+  /*
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, grid_c.eles->nSpts, 
-      &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
+      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
+      grid_c.eles->nSpts, &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
+  */    
+
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
+      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
+      grid_c.eles->nSpts, &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
 
 #endif
 
@@ -281,7 +294,13 @@ void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
     auto &B = grid_c.eles->U_spts(0, 0, n);
     auto &C = grid_f.eles->U_spts(0, 0, n);
 
+    /*
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
+        &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+    */
+    
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
         grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
         &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
   }
@@ -320,9 +339,15 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSol
   auto &C = grid_f.eles->U_spts(0, 0, 0);
 
   /* Prolong error */
+  /*
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, &A, grid_f.eles->nSpts, 
-      &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
+      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+  */
+
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
+      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
 }
 
 #ifdef _GPU

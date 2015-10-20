@@ -1,4 +1,13 @@
+/*!
+ * \file funcs.cpp
+ * \author J. Romero, Stanford University
+ * \brief This file contains several miscellaneous functions used in the code.
+ */
+
 #include <cmath>
+
+#include "cblas.h"
+#include "omp.h"
 
 #include "input.hpp"
 
@@ -163,3 +172,24 @@ double get_cfl_limit(int order)
       ThrowException("CFL limit no available for this order!");
   }
 }
+
+void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA, 
+    CBLAS_TRANSPOSE transB, int M, int N, int K, double alpha, double* A, int lda, 
+    double* B, int ldb, double beta, double* C, int ldc)
+{
+#pragma omp parallel
+    {
+      int nThreads = omp_get_num_threads();
+      int thread_idx = omp_get_thread_num();
+
+      int block_size = N / nThreads;
+      int start_idx = block_size * thread_idx;
+
+      if (thread_idx == nThreads-1)
+        block_size += N % (block_size);
+
+      cblas_dgemm(mode, transA, transB, M, block_size, K, alpha, A, lda, 
+          B + ldb * start_idx, ldb, beta, C + ldc * start_idx, ldc);
+  }
+}
+

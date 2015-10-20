@@ -969,8 +969,15 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   auto &B = eles->U_spts(0, 0, 0);
   auto &C = eles->U_ppts(0, 0, 0);
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, eles->nEles * eles->nVars,
-      eles->nSpts, 1.0, &A, eles->nPpts, &B, eles->nSpts, 0.0, &C, eles->nPpts);
+  /*
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
+      eles->nSpts, 0.0, &C, eles->nPpts);
+  */
+
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
+      eles->nSpts, 0.0, &C, eles->nPpts);
 
 
   /* Apply squeezing if needed */
@@ -1298,8 +1305,15 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
   auto &B = eles->U_spts(0, 0, 0);
   auto &C = eles->U_qpts(0, 0, 0);
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, eles->nEles * eles->nVars,
-      eles->nSpts, 1.0, &A, eles->nQpts, &B, eles->nSpts, 0.0, &C, eles->nQpts);
+  /*
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
+      eles->nSpts, 0.0, &C, eles->nQpts);
+  */
+
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
+      eles->nSpts, 0.0, &C, eles->nQpts);
 
   /* Extrapolate derivatives to quadrature points */
   for (unsigned int dim = 0; dim < eles->nDims; dim++)
@@ -1308,8 +1322,15 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
       auto &B = eles->dU_spts(0, 0, 0, dim);
       auto &C = eles->dU_qpts(0, 0, 0, dim);
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, eles->nEles * eles->nVars,
-          eles->nSpts, 1.0, &A, eles->nQpts, &B, eles->nSpts, 0.0, &C, eles->nQpts);
+      /*
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
+          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
+          eles->nSpts, 0.0, &C, eles->nQpts);
+      */
+
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
+          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
+          eles->nSpts, 0.0, &C, eles->nQpts);
   }
 
   std::vector<double> l2_error(2,0.0);
