@@ -9,12 +9,12 @@ CXX = g++
 CU = nvcc
 FLAGS += -std=c++11 
 CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -Wno-unknown-pragmas
-CUFLAGS = -arch=sm_20 -O3 -use_fast_math -Xcompiler
+CUFLAGS = -arch=sm_20 -O3 -use_fast_math 
 
 # Setting OpenMP flags
 ifeq ($(strip $(OPENMP)),YES)
 	CXXFLAGS += -fopenmp
-	CUFLAGS += -fopenmp
+	CUFLAGS += Xcompiler -fopenmp
 	FLAGS += -D_OMP
 endif
 
@@ -38,7 +38,7 @@ ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
 	INCS += -I$(strip $(METIS_DIR))/include
-	LIBS += -I$(strip $(METIS_DIR))/lib -lmetis 
+	LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
 endif
 
 # Setting Architecture flags

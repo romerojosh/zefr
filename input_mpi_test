@@ -1,0 +1,48 @@
+# Geometry:
+nDims    2
+meshfile meshes/QuadBox_4x4.msh
+
+# Solver:
+order     2
+equation AdvDiff    (AdvDiff, EulerNS)
+viscous  0
+spt_type Legendre
+
+# Timestepping:
+n_steps 100
+dt_scheme RK44      (Euler, RK44, RK54)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.01
+CFL	  0.20
+
+# Multigrid:
+p_multi 0
+smooth_steps 1
+rel_fac 1.00
+low_order 1
+
+# Reporting:
+output_prefix mpi_test
+write_freq  100
+report_freq 10
+res_type    1
+force_freq  0
+error_freq  0
+test_case   0
+nQpts1D     10
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.0
+ldg_tau    1.0
+
+# Equation Specific Parameters:
+ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+
+# Advection-Diffusion
+AdvDiff_Ax 1
+AdvDiff_Ay 1
+AdvDiff_Az 0
+AdvDiff_D 0.0
