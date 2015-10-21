@@ -8,11 +8,16 @@
 #include <string>
 #include <vector>
 
+#ifdef _MPI
+#include "mpi.h"
+#include "metis.h"
+#endif
+
 #include "geometry.hpp"
 #include "macros.hpp"
 #include "mdvector.hpp"
 
-GeoStruct process_mesh(std::string meshfile, unsigned int order, unsigned int nDims)
+GeoStruct process_mesh(std::string meshfile, unsigned int order, int nDims)
 {
   GeoStruct geo;
   geo.nDims = nDims;
@@ -20,6 +25,10 @@ GeoStruct process_mesh(std::string meshfile, unsigned int order, unsigned int nD
   load_mesh_data(meshfile, geo);
 
   setup_global_fpts(geo, order);
+
+#ifdef _MPI
+  partition_geometry(geo);
+#endif
 
   return geo;
 
@@ -1105,3 +1114,49 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
   }
 
 }
+
+#ifdef _MPI
+void partition_geometry(GeoStruct &geo)
+{
+  int rank, nRanks;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+
+  /* Setup METIS */
+  idx_t options[METIS_NOPTIONS];
+  METIS_SetDefaultOptions(options);
+
+  /* Form eptr and eind arrays */
+  std::vector<int> eptr(geo.nEles + 1); 
+  std::vector<int> eind(geo.nEles * geo.nNodesPerEle); 
+
+  int n = 0;
+  eptr[0] = 0;
+  for (unsigned int i = 0; i < geo.nEles; i++)
+  {
+    for (unsigned int j = 0; j < geo.nNodesPerEle; j++)
+    {
+      eind[j + n] = geo.nd2gnd(j, i);
+    } 
+
+    n += geo.nNodesPerEle;
+    eptr[i + 1] = n;
+  }
+
+  int objval;
+  std::vector<int> epart(geo.nEles, 0);
+  std::vector<int> npart(geo.nNodes);
+  if (nRanks > 1) 
+  {
+    METIS_PartMeshDual( &geo.nEles, &geo.nNodes, eptr.data(), eind.data(), nullptr, 
+        nullptr, &geo.nDims, &nRanks, nullptr, options, &objval, epart.data(), 
+        npart.data());  
+  }
+
+  if (rank == 0) 
+  {
+    for (int val : epart)
+      std::cout << val << std::endl;
+  }
+}
+#endif

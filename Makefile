@@ -11,7 +11,8 @@ FLAGS += -std=c++11
 CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -Wno-unknown-pragmas
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math -Xcompiler
 
-ifeq ($(strip $(OPENMP)),$(strip YES))
+# Setting OpenMP flags
+ifeq ($(strip $(OPENMP)),YES)
 	CXXFLAGS += -fopenmp
 	CUFLAGS += -fopenmp
 	FLAGS += -D_OMP
@@ -32,6 +33,15 @@ endif
 
 INCS = -I$(strip $(BLAS_DIR))/include 
 
+# Setting MPI/METIS flags
+ifeq ($(strip $(MPI)),YES)
+	CXX = mpicxx
+	FLAGS += -D_MPI
+	INCS += -I$(strip $(METIS_DIR))/include
+	LIBS += -I$(strip $(METIS_DIR))/lib -lmetis 
+endif
+
+# Setting Architecture flags
 ifeq ($(strip $(ARCH)),CPU)
 	FLAGS += -D_CPU
 endif

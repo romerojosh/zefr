@@ -35,10 +35,11 @@ FRSolver::FRSolver(InputStruct *input, int order)
 
 void FRSolver::setup()
 {
-  std::cout << "Reading mesh: " << input->meshfile << std::endl;
+  if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
   geo = process_mesh(input->meshfile, order, input->nDims);
 
-  std::cout << "Setting up elements and faces..." << std::endl;
+  if (input->rank == 0) std::cout << "Setting up elements and faces..." << std::endl;
+
   if (input->nDims == 2)
     eles = std::make_shared<Quads>(&geo, input, order);
   else if (input->nDims == 3)
@@ -49,18 +50,18 @@ void FRSolver::setup()
   faces->setup(eles->nDims, eles->nVars);
   eles->setup(faces);
 
-  std::cout << "Setting up timestepping..." << std::endl;
+  if (input->rank == 0) std::cout << "Setting up timestepping..." << std::endl;
   setup_update();
 
-  std::cout << "Setting up output..." << std::endl;
+  if (input->rank == 0) std::cout << "Setting up output..." << std::endl;
   setup_output();
 
-  std::cout << "Initializing solution..." << std::endl;
+  if (input->rank == 0) std::cout << "Initializing solution..." << std::endl;
   initialize_U();
 
   if (input->restart)
   {
-    std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
+    if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
     restart(input->restart_file);
   }
 

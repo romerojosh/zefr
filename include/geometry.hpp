@@ -14,9 +14,9 @@
 
 struct GeoStruct
 {
-    unsigned int nEles = 0; 
-    unsigned int nBnds = 0;
-    unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nGfpts, nGfpts_int;
+    int nEles = 0; 
+    int nBnds = 0;
+    int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nGfpts, nGfpts_int;
     bool per_bnd_flag = false;
     std::vector<unsigned int> bnd_ids;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;
@@ -33,7 +33,7 @@ struct GeoStruct
 #endif
 };
 
-GeoStruct process_mesh(std::string meshfile, unsigned int order, unsigned int nDims);
+GeoStruct process_mesh(std::string meshfile, unsigned int order, int nDims);
 void load_mesh_data(std::string meshfile, GeoStruct &geo);
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo);
 void read_node_coords(std::ifstream &f, GeoStruct &geo);
@@ -42,5 +42,9 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);
 void setup_global_fpts(GeoStruct &geo, unsigned int order);
 void pair_periodic_gfpts(GeoStruct &geo);
+
+#ifdef _MPI
+void partition_geometry(GeoStruct &geo);
+#endif
 
 #endif /* geometry_hpp */
