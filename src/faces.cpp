@@ -1,7 +1,5 @@
 #include <cmath>
 
-#include <omp.h>
-
 #include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"

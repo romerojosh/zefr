@@ -2,7 +2,6 @@
 #include <memory>
 
 #include "cblas.h"
-#include "omp.h"
 
 #include "funcs.hpp"
 #include "input.hpp"
