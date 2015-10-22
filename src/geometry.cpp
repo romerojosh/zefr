@@ -24,11 +24,12 @@ GeoStruct process_mesh(std::string meshfile, unsigned int order, int nDims)
 
   load_mesh_data(meshfile, geo);
 
-  setup_global_fpts(geo, order);
-
 #ifdef _MPI
   partition_geometry(geo);
 #endif
+
+  setup_global_fpts(geo, order);
+
 
   return geo;
 
@@ -1146,6 +1147,7 @@ void partition_geometry(GeoStruct &geo)
   int objval;
   std::vector<int> epart(geo.nEles, 0);
   std::vector<int> npart(geo.nNodes);
+  /* TODO: Should just not call this entire function if nRanks == 1 */
   if (nRanks > 1) 
   {
     METIS_PartMeshDual( &geo.nEles, &geo.nNodes, eptr.data(), eind.data(), nullptr, 
@@ -1158,5 +1160,95 @@ void partition_geometry(GeoStruct &geo)
     for (int val : epart)
       std::cout << val << std::endl;
   }
+
+  /* Obtain list of elements on this partition */
+  std::vector<int> myEles;
+  for (int ele = 0; ele < geo.nEles; ele++) 
+  {
+    if (epart[ele] == rank) 
+      myEles.push_back(ele);
+  }
+
+  /* Reduce connectivity to contain only partition local element data */
+  auto nd2gnd_glob = geo.nd2gnd;
+  geo.nd2gnd.assign({geo.nNodesPerEle, myEles.size()},0);
+  for (int ele = 0; ele < myEles.size(); ele++)
+  {
+    for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+    {
+      geo.nd2gnd(nd, ele) = nd2gnd_glob(nd, myEles[ele]);
+      std::cout << nd2gnd_glob(nd, myEles[ele]) << " ";
+    }
+    std::cout << std::endl;
+  }
+  std::cout << "myEles.size() " << myEles.size() << std::endl;
+
+
+  /* Obtain set of unique nodes on this partition */
+  std::set<int> uniqueNodes;
+  for (int ele = 0; ele < myEles.size(); ele++)
+  {
+    for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+    {
+      uniqueNodes.insert(geo.nd2gnd(nd, ele));
+    }
+  }
+  std::cout << "uniqueNodes.size() " << uniqueNodes.size() << std::endl;
+
+  /* Reduce node coordinate data to contain only partition local node data */
+  auto coord_nodes_glob = geo.coord_nodes;
+  geo.coord_nodes.assign({uniqueNodes.size(), geo.nDims}, 0);
+  std::map<int, int> node_map;
+  int idx = 0;
+  for (int nd: uniqueNodes)
+  {
+    node_map[nd] = idx;
+
+    for (int dim = 0; dim < geo.nDims; dim++)
+      geo.coord_nodes(idx, dim) = coord_nodes_glob(nd, dim);
+
+    idx++;
+  }
+
+  /* Renumber connectivity data using partition local indexing */
+  for (int ele = 0; ele < myEles.size(); ele++)
+    for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+      geo.nd2gnd(nd, ele) = node_map[geo.nd2gnd(nd, ele)];
+
+  /* Reduce boundary faces data to contain only faces on local partition */
+  auto bnd_faces_glob = geo.bnd_faces;
+  geo.bnd_faces.clear();
+  
+  /* Iterate over all boundary faces */
+  for (auto entry : bnd_faces_glob)
+  {
+    std::vector<unsigned int> bnd_face = entry.first;
+    int bnd_id = entry.second;
+
+    /* If all nodes are on this partition, keep face data */
+    bool myFace = true;
+    for (auto nd : bnd_face)
+    {
+      if (!uniqueNodes.count(nd))
+      {
+        myFace = false;
+      }
+    }
+
+    if (myFace)
+    {
+      /* Renumber nodes and store */
+      for (auto &nd : bnd_face)
+      {
+        nd = node_map[nd];
+      }
+      geo.bnd_faces[bnd_face] = bnd_id;
+    }
+  }
+  
+  /* Set number of nodes/elements to partition local */
+  geo.nNodes = uniqueNodes.size();
+  geo.nEles = myEles.size();
+
 }
 #endif

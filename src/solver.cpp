@@ -849,7 +849,8 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 #endif
 
   std::stringstream ss;
-  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter << ".vtk";
+  ss << prefix << "_p" << std::setw(3) << std::setfill('0') << input->rank;
+  ss << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter<< ".vtk";
 
   auto outputfile = ss.str();
   std::cout << "Writing " << outputfile << std::endl;

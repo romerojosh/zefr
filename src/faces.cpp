@@ -78,17 +78,25 @@ void Faces::apply_bcs()
     
       case 2: /* Farfield and Supersonic Inlet */
       {
-        /* Set boundaries to freestream values */
-        U(fpt, 0, 1) = input->rho_fs;
-
-        double Vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
+        if (input->equation == AdvDiff)
         {
-          U(fpt, dim+1, 1) = input->rho_fs * input->V_fs(dim);
-          Vsq += input->V_fs(dim) * input->V_fs(dim);
+          /* Set boundaries to zero */
+          U(fpt, 0, 1) = 0;
         }
+        else
+        {
+          /* Set boundaries to freestream values */
+          U(fpt, 0, 1) = input->rho_fs;
 
-        U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            U(fpt, dim+1, 1) = input->rho_fs * input->V_fs(dim);
+            Vsq += input->V_fs(dim) * input->V_fs(dim);
+          }
+
+          U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
+        }
 
         /* Set LDG bias */
         //LDG_bias(fpt) = -1;

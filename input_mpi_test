@@ -12,7 +12,7 @@ spt_type Legendre
 n_steps 100
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.01
+dt	  0.005
 CFL	  0.20
 
 # Multigrid:
@@ -43,6 +43,6 @@ ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
 AdvDiff_Ax 1
-AdvDiff_Ay 1
+AdvDiff_Ay 0
 AdvDiff_Az 0
 AdvDiff_D 0.0
