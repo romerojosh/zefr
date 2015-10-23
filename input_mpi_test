@@ -3,7 +3,7 @@ nDims    2
 meshfile meshes/QuadBox_2x2.msh
 
 # Solver:
-order     2
+order     1
 equation AdvDiff    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre

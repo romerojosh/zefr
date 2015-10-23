@@ -814,6 +814,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
 #ifdef _MPI
     geo.nGfpts_mpi = 0;
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -932,7 +934,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
           {
             /* Add face to set to process later. */
             mpi_faces_to_process.insert(face);
-            std::cout << "Yo." << std::endl;
 
             for (auto &fpt : fpts)
             {
@@ -1043,8 +1044,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       int recvRank = *std::max_element(ranks.begin(), ranks.end());
 
       /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
-      int rank;
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
 
       /* If partition has minimum (of 2) ranks assigned to this face, use its flux point order. Send
@@ -1079,17 +1078,84 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         for (auto &fpt : face_ordered_mpi)
           fpt = geo.node_map_g2p[fpt];
 
+        /* Determine rotation using ordered faces*/
+        unsigned int rot = 0;
+        if (geo.nDims == 3)
+        {
+          while (face_ordered[rot] != face_ordered_mpi[0])
+          {
+            rot++;
+          }
+        }
+        else
+        {
+          rot = 4;
+        }
+
+        /* Based on rotation, append flux points to fpt_buffer_map (to be consistent with paired rank fpt order) */
+        switch (rot)
+        {
+          case 0:
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              for (unsigned int j = 0; j < nFpts1D; j++)
+              {
+                 fpt_buffer_map[sendRank].push_back(fpts[i * nFpts1D + j]);
+              }
+            } break;
+
+          case 1:
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              for (unsigned int j = 0; j < nFpts1D; j++)
+              {
+                fpt_buffer_map[sendRank].push_back(fpts[nFpts1D - i + j * nFpts1D - 1]);
+              }
+            } break;
+
+          case 2:
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              for (unsigned int j = 0; j < nFpts1D; j++)
+              {
+                fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i * nFpts1D - j - 1]);
+              }
+            } break;
+
+          case 3:
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              for (unsigned int j = 0; j < nFpts1D; j++)
+              {
+                fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - (j+1) * nFpts1D + i]);
+              }
+            } break;
+
+          case 4:
+            for (unsigned int i = 0; i < nFptsPerFace; i++)
+            {
+              fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
+            } break;
+        }
+
       }
       else
       {
         ThrowException("Error in mpi_faces. Neither rank is this rank.");
       }
-
     }
 
-    std::cout << "Before" << std::endl;
+    sleep(rank);
+    std::cout << "RANK: " << rank << std::endl;
+    for (auto entry : fpt_buffer_map)
+    {
+      std::cout << entry.first << ": ";
+      for (auto val : entry.second)
+        std::cout << val << " ";
+      std::cout << std::endl;
+    }
+
     MPI_Barrier(MPI_COMM_WORLD);
-    std::cout << "AFTER" << std::endl;
 #endif
 
     // TODO: For periodic MPI, move this up the code, define which faces are periodic first.
@@ -1179,7 +1245,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             } break;
         }
       } 
-
     }
 
     /* Populate data structures */
@@ -1188,8 +1253,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 #else
     geo.nGfpts = gfpt_bnd;
 #endif
-
-    std::cout << "geo.nGfpts: " << geo.nGfpts << std::endl;
 
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
