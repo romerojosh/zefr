@@ -58,7 +58,8 @@ void Faces::apply_bcs()
 
   /* Loop over boundary flux points */
 #pragma omp parallel for private(VL,VR)
-  for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
+  //for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
+  for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -568,7 +569,8 @@ void Faces::apply_bcs_dU()
 #ifdef _CPU
   /* Apply boundaries to solution derivative */
 #pragma omp parallel for 
-  for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
+  //for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
+  for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 

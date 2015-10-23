@@ -810,7 +810,11 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     /* Determine number of interior global flux points */
     std::set<std::vector<unsigned int>> unique_faces;
-    geo.nGfpts_int = 0;
+    geo.nGfpts_int = 0; geo.nGfpts_bnd = 0;
+
+#ifdef _MPI
+    geo.nGfpts_mpi = 0;
+#endif
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
     {
@@ -839,9 +843,24 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
         std::sort(face.begin(), face.end());
 
-        /* Check if face is not on boundary and not previously encountered */
-        if (!unique_faces.count(face) && !geo.bnd_faces.count(face))
-          geo.nGfpts_int += nFptsPerFace;
+        /* Check if face is has not been previously encountered */
+        if (!unique_faces.count(face))
+        {
+            if (geo.bnd_faces.count(face))
+            {
+              geo.nGfpts_bnd += nFptsPerFace;
+            }
+#ifdef _MPI
+            else if (geo.mpi_faces.count(face))
+            {
+              geo.nGfpts_mpi += nFptsPerFace;
+            }
+#endif
+            else
+            {
+              geo.nGfpts_int += nFptsPerFace;
+            }
+        }
 
         unique_faces.insert(face);
       }
@@ -849,6 +868,11 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     /* Initialize global flux point indicies (to place boundary fpts at end of global fpt data structure) */
     unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;
+
+#ifdef _MPI
+    unsigned int gfpt_mpi = geo.nGfpts_int + geo.nGfpts_bnd;
+    std::set<std::vector<unsigned int>> mpi_faces_to_process;
+#endif
 
     /* Begin loop through faces */
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -902,6 +926,21 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             bndface2fpts[face] = fpts;
             
           }
+#ifdef _MPI
+          /* Check if face is on MPI boundary */
+          else if (geo.mpi_faces.count(face))
+          {
+            /* Add face to set to process later. */
+            mpi_faces_to_process.insert(face);
+            std::cout << "Yo." << std::endl;
+
+            for (auto &fpt : fpts)
+            {
+              fpt = gfpt_mpi;
+              gfpt_mpi++;
+            }
+          }
+#endif
           else
           {
             for (auto &fpt : fpts)
@@ -994,8 +1033,69 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       }
     }
 
+    /* Process MPI faces, if needed */
+#ifdef _MPI
+    std::map<unsigned int, std::vector<unsigned int>> fpt_buffer_map;
+    for (const auto &face : mpi_faces_to_process)
+    {
+      auto ranks = geo.mpi_faces[face];
+      int sendRank = *std::min_element(ranks.begin(), ranks.end());
+      int recvRank = *std::max_element(ranks.begin(), ranks.end());
+
+      /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
+      int rank;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+
+      /* If partition has minimum (of 2) ranks assigned to this face, use its flux point order. Send
+       * information to other rank. */
+      if (rank == sendRank)
+      {
+        auto fpts = face_fpts[face];
+        auto face_ordered = geo.face2ordered[face];
+
+        /* Convert face_ordered node indexing to global indexing */
+        for (auto &fpt : face_ordered)
+          fpt = geo.node_map_p2g[fpt];
+
+        /* Append flux points to fpt_buffer_map in existing order */
+        for (auto fpt : fpts)
+          fpt_buffer_map[recvRank].push_back(fpt);
+
+        /* Send ordered face to paired rank */
+        MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
+      }
+      else if (rank == recvRank)
+      {
+        auto fpts = face_fpts[face];
+        auto face_ordered = geo.face2ordered[face];
+        auto face_ordered_mpi = face_ordered;
+
+        /* Receive ordered face from paired rank */
+        MPI_Status temp;
+        MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, MPI_COMM_WORLD, &temp);
+
+        /* Convert received face_ordered node indexing to partition local indexing */
+        for (auto &fpt : face_ordered_mpi)
+          fpt = geo.node_map_g2p[fpt];
+
+      }
+      else
+      {
+        ThrowException("Error in mpi_faces. Neither rank is this rank.");
+      }
+
+    }
+
+    std::cout << "Before" << std::endl;
+    MPI_Barrier(MPI_COMM_WORLD);
+    std::cout << "AFTER" << std::endl;
+#endif
+
+    // TODO: For periodic MPI, move this up the code, define which faces are periodic first.
     if (geo.per_bnd_flag)
       couple_periodic_bnds(geo);
+
     /* Pair up periodic flux points if needed */ 
     if (geo.per_bnd_flag)
     {
@@ -1083,7 +1183,13 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     }
 
     /* Populate data structures */
+#ifdef _MPI
+    geo.nGfpts = gfpt_mpi;
+#else
     geo.nGfpts = gfpt_bnd;
+#endif
+
+    std::cout << "geo.nGfpts: " << geo.nGfpts << std::endl;
 
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
@@ -1164,8 +1270,8 @@ void partition_geometry(GeoStruct &geo)
 
   /* Collect map of *ALL* MPI interfaces from METIS partition data */
   std::vector<unsigned int> face(geo.nNodesPerFace);
-  std::map<std::vector<unsigned int>, std::set<unsigned int>> face2ranks;    
-  std::map<std::vector<unsigned int>, std::set<unsigned int>> mpi_faces_glob;
+  std::map<std::vector<unsigned int>, std::set<int>> face2ranks;    
+  std::map<std::vector<unsigned int>, std::set<int>> mpi_faces_glob;
 
   /* Iterate over faces of complete mesh */
   for (unsigned int ele = 0; ele < geo.nEles; ele++)

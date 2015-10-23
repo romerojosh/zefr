@@ -17,18 +17,24 @@ struct GeoStruct
 {
     unsigned int nEles = 0; 
     unsigned int nBnds = 0;
-    unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nGfpts, nGfpts_int;
+    unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace;
+    unsigned int nGfpts, nGfpts_int, nGfpts_bnd;
     bool per_bnd_flag = false;
     std::vector<unsigned int> bnd_ids;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;
     std::map<std::vector<unsigned int>, unsigned int> bnd_faces, per_bnd_rot;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
-    std::map<std::vector<unsigned int>, std::set<unsigned int>> mpi_faces;
-    std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs, node_map_p2g, node_map_g2p;
+    std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
     mdvector<unsigned int> nd2gnd, ppt_connect;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
     mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
     mdvector<unsigned int> face_nodes;
+
+#ifdef _MPI
+    unsigned int nGfpts_mpi;
+    std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
+    std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
+#endif
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
