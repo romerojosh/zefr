@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile meshes/QuadBox_4x4.msh
+meshfile meshes/QuadBox_2x2.msh
 
 # Solver:
 order     2

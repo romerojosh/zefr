@@ -9,6 +9,7 @@
 #include <vector>
 
 #ifdef _MPI
+#include <unistd.h>
 #include "mpi.h"
 #include "metis.h"
 #endif
@@ -63,7 +64,10 @@ void load_mesh_data(std::string meshfile, GeoStruct &geo)
     }
   }
 
+  set_face_nodes(geo);
+
   f.close();
+
 }
 
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
@@ -616,6 +620,41 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
 }
 
+void set_face_nodes(GeoStruct &geo)
+{
+  /* Define node indices for faces */
+  geo.face_nodes.assign({geo.nFacesPerEle, geo.nNodesPerFace}, 0);
+
+
+  if (geo.nDims == 2)
+  {
+    /* Face 0: Bottom */
+    geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
+    /* Face 1: Right */
+    geo.face_nodes(1, 0) = 1; geo.face_nodes(1, 1) = 2;
+    /* Face 2: Top */
+    geo.face_nodes(2, 0) = 2; geo.face_nodes(2, 1) = 3;
+    /* Face 3: Left */
+    geo.face_nodes(3, 0) = 3; geo.face_nodes(3, 1) = 0;
+
+  }
+  else if (geo.nDims == 3)
+  {
+    /* Face 0: Bottom */
+    geo.face_nodes(0, 2) = 2; geo.face_nodes(0, 3) = 3;
+    /* Face 1: Top */
+    geo.face_nodes(1, 2) = 7; geo.face_nodes(1, 3) = 6;
+    /* Face 2: Left */
+    geo.face_nodes(2, 2) = 7; geo.face_nodes(2, 3) = 4;
+    /* Face 3: Right */
+    geo.face_nodes(3, 2) = 5; geo.face_nodes(3, 3) = 6;
+    /* Face 4: Front */
+    geo.face_nodes(4, 2) = 4; geo.face_nodes(4, 3) = 5;
+    /* Face 5: Back */
+    geo.face_nodes(5, 2) = 6; geo.face_nodes(5, 3) = 7;
+  }
+}
+
 void couple_periodic_bnds(GeoStruct &geo)
 {
   mdvector<double> coords_face1, coords_face2;
@@ -769,56 +808,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     std::vector<unsigned int> face(geo.nNodesPerFace,0);
 
-    /* Define node indices for faces */
-    std::vector<std::vector<unsigned int>> faces_nodes(geo.nFacesPerEle);
-
-    for (auto &nodes : faces_nodes)
-    {
-      nodes.assign(geo.nNodesPerFace,0);
-    }
-
-    if (geo.nDims == 2)
-    {
-      /* Face 0: Bottom */
-      faces_nodes[0][0] = 0; faces_nodes[0][1] = 1;
-
-      /* Face 1: Right */
-      faces_nodes[1][0] = 1; faces_nodes[1][1] = 2;
-
-      /* Face 2: Top */
-      faces_nodes[2][0] = 2; faces_nodes[2][1] = 3;
-
-      /* Face 3: Left */
-      faces_nodes[3][0] = 3; faces_nodes[3][1] = 0;
-
-    }
-    else if (geo.nDims == 3)
-    {
-      /* Face 0: Bottom */
-      faces_nodes[0][0] = 0; faces_nodes[0][1] = 1;
-      faces_nodes[0][2] = 2; faces_nodes[0][3] = 3;
-
-      /* Face 1: Top */
-      faces_nodes[1][0] = 5; faces_nodes[1][1] = 4;
-      faces_nodes[1][2] = 7; faces_nodes[1][3] = 6;
-
-      /* Face 2: Left */
-      faces_nodes[2][0] = 0; faces_nodes[2][1] = 3;
-      faces_nodes[2][2] = 7; faces_nodes[2][3] = 4;
-
-      /* Face 3: Right */
-      faces_nodes[3][0] = 2; faces_nodes[3][1] = 1;
-      faces_nodes[3][2] = 5; faces_nodes[3][3] = 6;
-
-      /* Face 4: Front */
-      faces_nodes[4][0] = 1; faces_nodes[4][1] = 0;
-      faces_nodes[4][2] = 4; faces_nodes[4][3] = 5;
-
-      /* Face 5: Back */
-      faces_nodes[5][0] = 3; faces_nodes[5][1] = 2;
-      faces_nodes[5][2] = 6; faces_nodes[5][3] = 7;
-    }
-
     /* Determine number of interior global flux points */
     std::set<std::vector<unsigned int>> unique_faces;
     geo.nGfpts_int = 0;
@@ -831,21 +820,21 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
         for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
         {
-          face[i] = geo.nd2gnd(faces_nodes[n][i], ele);
+          face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
         }
 
         /* Check if face is collapsed */
-        std::set<unsigned int> face_nodes;
+        std::set<unsigned int> nodes;
         for (auto node : face)
-          face_nodes.insert(node);
+          nodes.insert(node);
 
-        if (face_nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
+        if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
           continue;
         }
-        else if (face_nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
+        else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
         {
-          face.assign(face_nodes.begin(), face_nodes.end());
+          face.assign(nodes.begin(), nodes.end());
         }
 
         std::sort(face.begin(), face.end());
@@ -874,23 +863,23 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         /* Get face nodes and sort for consistency */
         for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
         {
-          face[i] = geo.nd2gnd(faces_nodes[n][i], ele);
+          face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
         }
 
         auto face_ordered = face;
 
         /* Check if face is collapsed */
-        std::set<unsigned int> face_nodes;
+        std::set<unsigned int> nodes;
         for (auto node : face)
-          face_nodes.insert(node);
+          nodes.insert(node);
 
-        if (face_nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
+        if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
           continue;
         }
-        else if (face_nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
+        else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
         {
-          face.assign(face_nodes.begin(), face_nodes.end());
+          face.assign(nodes.begin(), nodes.end());
         }
 
         std::sort(face.begin(), face.end());
@@ -1150,8 +1139,12 @@ void partition_geometry(GeoStruct &geo)
   /* TODO: Should just not call this entire function if nRanks == 1 */
   if (nRanks > 1) 
   {
-    METIS_PartMeshDual( &geo.nEles, &geo.nNodes, eptr.data(), eind.data(), nullptr, 
-        nullptr, &geo.nDims, &nRanks, nullptr, options, &objval, epart.data(), 
+    int nDims = geo.nDims;
+    int nEles = geo.nEles;
+    int nNodes = geo.nNodes;
+
+    METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), nullptr, 
+        nullptr, &nDims, &nRanks, nullptr, options, &objval, epart.data(), 
         npart.data());  
   }
 
@@ -1162,19 +1155,49 @@ void partition_geometry(GeoStruct &geo)
   }
 
   /* Obtain list of elements on this partition */
-  std::vector<int> myEles;
-  for (int ele = 0; ele < geo.nEles; ele++) 
+  std::vector<unsigned int> myEles;
+  for (unsigned int ele = 0; ele < geo.nEles; ele++) 
   {
     if (epart[ele] == rank) 
       myEles.push_back(ele);
   }
 
-  /* Reduce connectivity to contain only partition local element data */
-  auto nd2gnd_glob = geo.nd2gnd;
-  geo.nd2gnd.assign({geo.nNodesPerEle, myEles.size()},0);
-  for (int ele = 0; ele < myEles.size(); ele++)
+  /* Collect map of *ALL* MPI interfaces from METIS partition data */
+  std::vector<unsigned int> face(geo.nNodesPerFace);
+  std::map<std::vector<unsigned int>, std::set<unsigned int>> face2ranks;    
+  std::map<std::vector<unsigned int>, std::set<unsigned int>> mpi_faces_glob;
+
+  /* Iterate over faces of complete mesh */
+  for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
-    for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+    int face_rank = epart[ele];
+    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+    {
+      //face.assign(geo.nNodesPerFace, 0); TODO: Might need this?
+      for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+      {
+        face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+      }
+
+      /* Sort for consistency */
+      std::sort(face.begin(), face.end());
+      
+      face2ranks[face].insert(face_rank);
+
+      /* If two ranks assigned to same face, add to map of "MPI" faces */
+      if (face2ranks[face].size() == 2)
+      {
+        mpi_faces_glob[face] = face2ranks[face];  
+      }
+    }
+  }
+
+  /* Reduce connectivity to contain only partition local elements */
+  auto nd2gnd_glob = geo.nd2gnd;
+  geo.nd2gnd.assign({geo.nNodesPerEle, (unsigned int) myEles.size()},0);
+  for (unsigned int ele = 0; ele < myEles.size(); ele++)
+  {
+    for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
     {
       geo.nd2gnd(nd, ele) = nd2gnd_glob(nd, myEles[ele]);
       std::cout << nd2gnd_glob(nd, myEles[ele]) << " ";
@@ -1185,37 +1208,38 @@ void partition_geometry(GeoStruct &geo)
 
 
   /* Obtain set of unique nodes on this partition */
-  std::set<int> uniqueNodes;
-  for (int ele = 0; ele < myEles.size(); ele++)
+  std::set<unsigned int> uniqueNodes;
+  for (unsigned int ele = 0; ele < myEles.size(); ele++)
   {
-    for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+    for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
     {
       uniqueNodes.insert(geo.nd2gnd(nd, ele));
     }
   }
   std::cout << "uniqueNodes.size() " << uniqueNodes.size() << std::endl;
 
-  /* Reduce node coordinate data to contain only partition local node data */
+  /* Reduce node coordinate data to contain only partition local nodes */
   auto coord_nodes_glob = geo.coord_nodes;
-  geo.coord_nodes.assign({uniqueNodes.size(), geo.nDims}, 0);
-  std::map<int, int> node_map;
-  int idx = 0;
-  for (int nd: uniqueNodes)
+  geo.coord_nodes.assign({(unsigned int) uniqueNodes.size(), geo.nDims}, 0);
+  unsigned int idx = 0;
+  for (unsigned int nd: uniqueNodes)
   {
-    node_map[nd] = idx;
+    geo.node_map_g2p[nd] = idx; /* Map of global node idx to partition node idx */
+    geo.node_map_p2g[idx] = nd; /* Map of parition node idx to global node idx */
 
-    for (int dim = 0; dim < geo.nDims; dim++)
+    for (unsigned int dim = 0; dim < geo.nDims; dim++)
       geo.coord_nodes(idx, dim) = coord_nodes_glob(nd, dim);
 
     idx++;
   }
 
-  /* Renumber connectivity data using partition local indexing */
-  for (int ele = 0; ele < myEles.size(); ele++)
-    for (int nd = 0; nd < geo.nNodesPerEle; nd++)
-      geo.nd2gnd(nd, ele) = node_map[geo.nd2gnd(nd, ele)];
+  /* Renumber connectivity data using partition local indexing (via geo.node_map_g2p)*/
+  for (unsigned int ele = 0; ele < myEles.size(); ele++)
+    for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
+      geo.nd2gnd(nd, ele) = geo.node_map_g2p[geo.nd2gnd(nd, ele)];
 
-  /* Reduce boundary faces data to contain only faces on local partition */
+  /* Reduce boundary faces data to contain only faces on local partition. Also
+   * reindex via geo.node_map_g2p */
   auto bnd_faces_glob = geo.bnd_faces;
   geo.bnd_faces.clear();
   
@@ -1240,15 +1264,57 @@ void partition_geometry(GeoStruct &geo)
       /* Renumber nodes and store */
       for (auto &nd : bnd_face)
       {
-        nd = node_map[nd];
+        nd = geo.node_map_g2p[nd];
       }
       geo.bnd_faces[bnd_face] = bnd_id;
     }
   }
+
+  /* Reduce MPI face data to contain only MPI faces for local partition. Also
+   * reindex via geo.node_map_g2p. */
+  for (auto entry : mpi_faces_glob)
+  {
+    std::vector<unsigned int> mpi_face = entry.first;
+    auto face_ranks = entry.second;
+
+    /* If all nodes are on this partition, keep face data */
+    bool myFace = true;
+    for (auto nd : mpi_face)
+    {
+      if (!uniqueNodes.count(nd))
+      {
+        myFace = false;
+      }
+    }
+
+    if (myFace)
+    {
+      /* Renumber nodes and store */
+      for (auto &nd : mpi_face)
+      {
+        nd = geo.node_map_g2p[nd];
+      }
+      geo.mpi_faces[mpi_face] = face_ranks;
+    }
+
+  }
+  
+  
+  sleep(rank);
+  std::cout << "mpi_faces" << std::endl;
+  for (auto &entry : geo.mpi_faces)
+  {
+    for (auto nd : entry.first)
+      std::cout << nd << " ";
+    for (auto r : entry.second)
+      std::cout << r << " ";
+    std::cout << std::endl;
+  }
   
   /* Set number of nodes/elements to partition local */
-  geo.nNodes = uniqueNodes.size();
-  geo.nEles = myEles.size();
+  geo.nNodes = (unsigned int) uniqueNodes.size();
+  geo.nEles = (unsigned int) myEles.size();
 
 }
+
 #endif
