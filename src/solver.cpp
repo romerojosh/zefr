@@ -17,6 +17,10 @@
 #include "mdvector.hpp"
 #include "solver.hpp"
 
+#ifdef _MPI
+#include "mpi.h"
+#endif
+
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
@@ -858,7 +862,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   ss << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter<< ".vtk";
 
   auto outputfile = ss.str();
-  std::cout << "Writing " << outputfile << std::endl;
+  if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
 
   /* Write solution to file in .vtk format */
   std::ofstream f(outputfile);
@@ -1061,27 +1065,52 @@ void FRSolver::report_residuals(std::ofstream &f, unsigned int iter,
 
     /* L2 norm */
     else if (input->res_type == 2)
-      res[n] = std::sqrt(std::accumulate(&eles->divF_spts(0, 0, n, nStages-1), 
-            &eles->divF_spts(0, 0, n+1, nStages-1), 0.0, square<double>()));
+      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, nStages-1), 
+            &eles->divF_spts(0, 0, n+1, nStages-1), 0.0, square<double>());
   }
 
+  /* Note: Keeping nDoF as unsigned int, which might cause issues with MPI_Reduce using MPI_INT type? 
+   * Works now though. */
+  unsigned int nDoF =  (eles->nSpts * eles->nEles);
+
+#ifdef _MPI
+  if (input->rank == 0)
+  {
+    MPI_Reduce(MPI_IN_PLACE, res.data(), eles->nVars, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, &nDoF, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  }
+  else
+  {
+    MPI_Reduce(res.data(), res.data(), eles->nVars, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&nDoF, &nDoF, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  }
+#endif
+
   /* Print residual to terminal (normalized by number of solution points) */
-  std::cout << iter + restart_iter << " ";
-  for (auto &val : res)
-    std::cout << std::scientific << val / (eles->nSpts * eles->nEles) << " ";
+  if (input->rank == 0) 
+  {
+    if (input->res_type == 2)
+    {
+      for (auto &val : res)  
+        val = std::sqrt(val);
+    }
 
-  std::cout << "dt: " << dt(0);
-  std::cout << std::endl;
-  
-  /* Write to history file */
-  auto t2 = std::chrono::high_resolution_clock::now();
-  auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
-  f << iter + restart_iter << " " << current_runtime.count() << " ";
+    std::cout << iter + restart_iter << " ";
+    for (auto val : res)
+      std::cout << std::scientific << val / nDoF << " ";
 
-  for (auto &val : res)
-    f << std::scientific << val / (eles->nSpts * eles->nEles) << " ";
-  f << std::endl;
+    std::cout << "dt: " << dt(0);
+    std::cout << std::endl;
+    
+    /* Write to history file */
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
+    f << iter + restart_iter << " " << current_runtime.count() << " ";
 
+    for (auto val : res)
+      f << std::scientific << val / nDoF << " ";
+    f << std::endl;
+  }
 }
 
 void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int iter)

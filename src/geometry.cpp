@@ -1144,16 +1144,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       }
     }
 
-    sleep(rank);
-    std::cout << "RANK: " << rank << std::endl;
-    for (auto entry : geo.fpt_buffer_map)
-    {
-      std::cout << entry.first << ": ";
-      for (auto val : entry.second)
-        std::cout << val << " ";
-      std::cout << std::endl;
-    }
-
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
@@ -1316,12 +1306,6 @@ void partition_geometry(GeoStruct &geo)
         npart.data());  
   }
 
-  if (rank == 0) 
-  {
-    for (int val : epart)
-      std::cout << val << std::endl;
-  }
-
   /* Obtain list of elements on this partition */
   std::vector<unsigned int> myEles;
   for (unsigned int ele = 0; ele < geo.nEles; ele++) 
@@ -1368,12 +1352,8 @@ void partition_geometry(GeoStruct &geo)
     for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
     {
       geo.nd2gnd(nd, ele) = nd2gnd_glob(nd, myEles[ele]);
-      std::cout << nd2gnd_glob(nd, myEles[ele]) << " ";
     }
-    std::cout << std::endl;
   }
-  std::cout << "myEles.size() " << myEles.size() << std::endl;
-
 
   /* Obtain set of unique nodes on this partition */
   std::set<unsigned int> uniqueNodes;
@@ -1384,7 +1364,6 @@ void partition_geometry(GeoStruct &geo)
       uniqueNodes.insert(geo.nd2gnd(nd, ele));
     }
   }
-  std::cout << "uniqueNodes.size() " << uniqueNodes.size() << std::endl;
 
   /* Reduce node coordinate data to contain only partition local nodes */
   auto coord_nodes_glob = geo.coord_nodes;
@@ -1464,19 +1443,6 @@ void partition_geometry(GeoStruct &geo)
       }
       geo.mpi_faces[mpi_face] = face_ranks;
     }
-
-  }
-  
-  
-  sleep(rank);
-  std::cout << "mpi_faces" << std::endl;
-  for (auto &entry : geo.mpi_faces)
-  {
-    for (auto nd : entry.first)
-      std::cout << nd << " ";
-    for (auto r : entry.second)
-      std::cout << r << " ";
-    std::cout << std::endl;
   }
   
   /* Set number of nodes/elements to partition local */
@@ -1484,5 +1450,4 @@ void partition_geometry(GeoStruct &geo)
   geo.nEles = (unsigned int) myEles.size();
 
 }
-
 #endif
