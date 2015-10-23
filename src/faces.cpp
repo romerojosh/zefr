@@ -1324,6 +1324,7 @@ void Faces::central_flux()
 void Faces::swap_U()
 {
   //mdvector<double> U_sbuff, U_rbuff;
+  std::vector<MPI_Request> sreq, rreq;
   
   /* Stage all the non-blocking receives */
   for (const auto &entry : geo->fpt_buffer_map)
@@ -1333,6 +1334,7 @@ void Faces::swap_U()
 
     MPI_Request req;
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &req);
+    rreq.push_back(req);
   }
 
   for (const auto &entry : geo->fpt_buffer_map)
@@ -1356,10 +1358,13 @@ void Faces::swap_U()
     /* Send buffer to paired rank */
     MPI_Request req;
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &req);
+    sreq.push_back(req);
   }
 
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Waitall(rreq.size(), rreq.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreq.size(), sreq.data(), MPI_STATUSES_IGNORE);
+  //MPI_Barrier(MPI_COMM_WORLD);
 
   /* Unpack buffer */
   for (const auto &entry : geo->fpt_buffer_map)

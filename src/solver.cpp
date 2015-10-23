@@ -1069,8 +1069,6 @@ void FRSolver::report_residuals(std::ofstream &f, unsigned int iter,
             &eles->divF_spts(0, 0, n+1, nStages-1), 0.0, square<double>());
   }
 
-  /* Note: Keeping nDoF as unsigned int, which might cause issues with MPI_Reduce using MPI_INT type? 
-   * Works now though. */
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
 
 #ifdef _MPI
@@ -1126,7 +1124,8 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
   force_conv.fill(0.0); force_visc.fill(0.0); taun.fill(0.0);
 
   std::stringstream ss;
-  ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter + restart_iter << ".cp";
+  ss << prefix << "_p" << std::setw(3) << std::setfill('0') << input->rank;
+  ss << "_" << std::setw(9) << std::setfill('0') << iter + restart_iter<< ".cp";
   auto cpfile = ss.str();
   std::ofstream g(cpfile);
 
@@ -1142,7 +1141,7 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
 
   unsigned int count = 0;
   /* Loop over boundary faces */
-  for (unsigned int fpt = geo.nGfpts_int; fpt < geo.nGfpts; fpt++)
+  for (unsigned int fpt = geo.nGfpts_int; fpt < geo.nGfpts_int + geo.nGfpts_bnd; fpt++)
   {
     /* Get boundary ID */
     unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
@@ -1236,31 +1235,47 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
 
   /* Compute lift and drag coefficients */
   double CL_conv, CD_conv, CL_visc, CD_visc;
-  if (eles->nDims == 2)
+
+#ifdef _MPI
+  if (input->rank == 0)
   {
-    CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
-    CD_conv = force_conv[0] * std::cos(aoa) + force_conv[1] * std::sin(aoa);
-    CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
-    CD_visc = force_visc[0] * std::cos(aoa) + force_visc[1] * std::sin(aoa);
+    MPI_Reduce(MPI_IN_PLACE, force_conv.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, force_visc.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   }
   else
   {
-    ThrowException("Under construction!");
+    MPI_Reduce(force_conv.data(), force_conv.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(force_visc.data(), force_visc.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   }
+#endif
 
-  std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
-  f << iter + restart_iter << " ";
-  f << std::scientific << CL_conv << " " << CD_conv;
-
-  if (input->viscous)
+  if (input->rank == 0)
   {
-    std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
-    f << std::scientific << " " << CL_visc << " " << CD_visc;
+    if (eles->nDims == 2)
+    {
+      CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
+      CD_conv = force_conv[0] * std::cos(aoa) + force_conv[1] * std::sin(aoa);
+      CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
+      CD_visc = force_visc[0] * std::cos(aoa) + force_visc[1] * std::sin(aoa);
+    }
+    else
+    {
+      ThrowException("Under construction!");
+    }
+
+    std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
+    f << iter + restart_iter << " ";
+    f << std::scientific << CL_conv << " " << CD_conv;
+
+    if (input->viscous)
+    {
+      std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
+      f << std::scientific << " " << CL_visc << " " << CD_visc;
+    }
+
+    std::cout << std::endl;
+    f << std::endl;
   }
-
-  std::cout << std::endl;
-  f << std::endl;
-
 }
 
 void FRSolver::report_error(std::ofstream &f, unsigned int iter)
