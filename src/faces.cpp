@@ -52,6 +52,19 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   outnorm.assign({nFpts, 2});
   dA.assign({nFpts},0.0);
   jaco.assign({nFpts, nDims, nDims , 2});
+
+#ifdef _MPI
+  /* Allocate memory for send/receive buffers */
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int pairedRank = entry.first;
+    const auto &fpts = entry.second;
+
+    U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0);
+    U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0);
+  }
+#endif
+
 }
 
 void Faces::apply_bcs()
@@ -1310,7 +1323,7 @@ void Faces::central_flux()
 #ifdef _MPI
 void Faces::swap_U()
 {
-  mdvector<double> U_sbuff, U_rbuff;
+  //mdvector<double> U_sbuff, U_rbuff;
   
   /* Stage all the non-blocking receives */
   for (const auto &entry : geo->fpt_buffer_map)
@@ -1318,10 +1331,8 @@ void Faces::swap_U()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    U_rbuff.assign({(unsigned int) fpts.size(), nVars}, 0.0);
-
     MPI_Request req;
-    MPI_Irecv(U_rbuff.data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &req);
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &req);
   }
 
   for (const auto &entry : geo->fpt_buffer_map)
@@ -1330,14 +1341,13 @@ void Faces::swap_U()
     const auto &fpts = entry.second;
     
     /* Pack buffer of solution data at flux points in list */
-    U_sbuff.assign({(unsigned int) fpts.size(), nVars}, 0.0);
-
     unsigned int idx = 0;
     for (auto fpt : fpts)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        U_sbuff(idx, n) = U(fpt, n, 0);
+        //U_sbuff(idx, n) = U(fpt, n, 0);
+        U_sbuffs[sendRank](idx, n) = U(fpt, n, 0);
       }
 
       idx++;
@@ -1345,7 +1355,7 @@ void Faces::swap_U()
 
     /* Send buffer to paired rank */
     MPI_Request req;
-    MPI_Isend(U_sbuff.data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &req);
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &req);
   }
 
 
@@ -1362,7 +1372,7 @@ void Faces::swap_U()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        U(fpt, n, 1) = U_rbuff(idx, n);
+        U(fpt, n, 1) = U_rbuffs[recvRank](idx, n);
       }
       idx++;
     }

@@ -45,6 +45,11 @@ class Faces
     mdvector<double> dA, waveSp;
     mdvector<int> LDG_bias;
 
+#ifdef _MPI
+    /* Send and receive buffers to MPI communication. Keyed by paired rank. */
+    std::map<unsigned int, mdvector<double>> U_sbuffs, U_rbuffs;
+#endif
+
 #ifdef _GPU
     mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, Ucomm_d, P_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
