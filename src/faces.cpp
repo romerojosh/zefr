@@ -63,6 +63,9 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0);
     U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0);
   }
+
+  sreqs.resize(geo->fpt_buffer_map.size());
+  rreqs.resize(geo->fpt_buffer_map.size());
 #endif
 
 }
@@ -697,13 +700,14 @@ void Faces::apply_bcs_dU()
 }
 
 
-void Faces::compute_Fconv()
+void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    //for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -729,7 +733,8 @@ void Faces::compute_Fconv()
     {
 #ifdef _CPU
 #pragma omp parallel for collapse(2)
-      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      //for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
@@ -771,7 +776,7 @@ void Faces::compute_Fconv()
     {
 #ifdef _CPU
 #pragma omp parallel for collapse(2)
-      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
@@ -941,12 +946,12 @@ void Faces::compute_Fvisc()
   }
 }
 
-void Faces::compute_common_F()
+void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 {
   if (input->fconv_type == "Rusanov")
   {
 #ifdef _CPU
-    rusanov_flux();
+    rusanov_flux(startFpt, endFpt);
 #endif
 
 #ifdef _GPU
@@ -1085,7 +1090,7 @@ void Faces::compute_common_U()
 
 }
 
-void Faces::rusanov_flux()
+void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 {
 
   double k = input->rus_k;
@@ -1096,7 +1101,7 @@ void Faces::rusanov_flux()
   std::vector<double> WR(nVars);
 
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
@@ -1321,12 +1326,11 @@ void Faces::central_flux()
 }
 
 #ifdef _MPI
-void Faces::swap_U()
+//void Faces::swap_U()
+void Faces::send_U_data()
 {
-  //mdvector<double> U_sbuff, U_rbuff;
-  std::vector<MPI_Request> sreq, rreq;
-  
   /* Stage all the non-blocking receives */
+  unsigned int ridx = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
@@ -1334,9 +1338,11 @@ void Faces::swap_U()
 
     MPI_Request req;
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &req);
-    rreq.push_back(req);
+    rreqs[ridx] = req;
+    ridx++;
   }
 
+  unsigned int sidx = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
@@ -1348,7 +1354,6 @@ void Faces::swap_U()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        //U_sbuff(idx, n) = U(fpt, n, 0);
         U_sbuffs[sendRank](idx, n) = U(fpt, n, 0);
       }
 
@@ -1358,13 +1363,16 @@ void Faces::swap_U()
     /* Send buffer to paired rank */
     MPI_Request req;
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &req);
-    sreq.push_back(req);
+    sreqs[sidx] = req;
+    sidx++;
   }
+}
 
-
-  MPI_Waitall(rreq.size(), rreq.data(), MPI_STATUSES_IGNORE);
-  MPI_Waitall(sreq.size(), sreq.data(), MPI_STATUSES_IGNORE);
-  //MPI_Barrier(MPI_COMM_WORLD);
+void Faces::recv_U_data()
+{
+  /* Wait for comms to finish */
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
 
   /* Unpack buffer */
   for (const auto &entry : geo->fpt_buffer_map)

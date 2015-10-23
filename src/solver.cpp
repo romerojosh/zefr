@@ -332,14 +332,15 @@ void FRSolver::compute_residual(unsigned int stage)
   }
 
   U_to_faces();
-  
+
 #ifdef _MPI
-  faces->swap_U();
+  /* Commence sending U data to other processes */
+  faces->send_U_data();
 #endif
 
   faces->apply_bcs();
   eles->compute_Fconv();
-  faces->compute_Fconv();
+
 
   if (input->viscous)
   {
@@ -354,7 +355,22 @@ void FRSolver::compute_residual(unsigned int stage)
     faces->compute_Fvisc();
   }
 
-  faces->compute_common_F();
+#ifdef _MPI
+  /* Perform computations on flux points while MPI comm proceeds. */
+  faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
+  faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
+  
+  /* Receive U data to other processes */
+  faces->recv_U_data();
+
+  /* Complete computation on remaning flux points. */
+  faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+  faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+
+#else
+  faces->compute_Fconv(0, geo.nGfpts);
+  faces->compute_common_F(0, geo.nGfpts);
+#endif
 
   eles->transform_flux();
   faces->transform_flux();

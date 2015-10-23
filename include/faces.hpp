@@ -8,6 +8,10 @@
 #include "input.hpp"
 #include "mdvector.hpp"
 
+#ifdef _MPI
+#include "mpi.h"
+#endif
+
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #endif
@@ -30,12 +34,13 @@ class Faces
 
     void apply_bcs();
     void apply_bcs_dU();
-    void rusanov_flux();
+    void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
     void LDG_flux();
     void central_flux();
     void transform_flux();
 #ifdef _MPI
-    void swap_U();
+    void send_U_data();
+    void recv_U_data();
 #endif
 
   protected:
@@ -48,6 +53,9 @@ class Faces
 #ifdef _MPI
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
     std::map<unsigned int, mdvector<double>> U_sbuffs, U_rbuffs;
+
+    /* Vector to store request handles for non-blocking comms. */
+    std::vector<MPI_Request> sreqs, rreqs;
 #endif
 
 #ifdef _GPU
@@ -62,8 +70,9 @@ class Faces
     Faces(GeoStruct *geo, InputStruct *input);
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U();
-    void compute_common_F();
+    void compute_common_F(unsigned int startFpt, unsigned int endFpt);
     void compute_Fconv();
+    void compute_Fconv(unsigned int startFpt, unsigned int endFpt);
     void compute_Fvisc();
     
 };
