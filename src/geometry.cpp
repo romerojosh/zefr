@@ -1036,7 +1036,6 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     /* Process MPI faces, if needed */
 #ifdef _MPI
-    std::map<unsigned int, std::vector<unsigned int>> fpt_buffer_map;
     for (const auto &face : mpi_faces_to_process)
     {
       auto ranks = geo.mpi_faces[face];
@@ -1059,7 +1058,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
         /* Append flux points to fpt_buffer_map in existing order */
         for (auto fpt : fpts)
-          fpt_buffer_map[recvRank].push_back(fpt);
+          geo.fpt_buffer_map[recvRank].push_back(fpt);
 
         /* Send ordered face to paired rank */
         MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
@@ -1100,7 +1099,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             {
               for (unsigned int j = 0; j < nFpts1D; j++)
               {
-                 fpt_buffer_map[sendRank].push_back(fpts[i * nFpts1D + j]);
+                 geo.fpt_buffer_map[sendRank].push_back(fpts[i * nFpts1D + j]);
               }
             } break;
 
@@ -1109,7 +1108,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             {
               for (unsigned int j = 0; j < nFpts1D; j++)
               {
-                fpt_buffer_map[sendRank].push_back(fpts[nFpts1D - i + j * nFpts1D - 1]);
+                geo.fpt_buffer_map[sendRank].push_back(fpts[nFpts1D - i + j * nFpts1D - 1]);
               }
             } break;
 
@@ -1118,7 +1117,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             {
               for (unsigned int j = 0; j < nFpts1D; j++)
               {
-                fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i * nFpts1D - j - 1]);
+                geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i * nFpts1D - j - 1]);
               }
             } break;
 
@@ -1127,14 +1126,14 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
             {
               for (unsigned int j = 0; j < nFpts1D; j++)
               {
-                fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - (j+1) * nFpts1D + i]);
+                geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - (j+1) * nFpts1D + i]);
               }
             } break;
 
           case 4:
             for (unsigned int i = 0; i < nFptsPerFace; i++)
             {
-              fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
+              geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
             } break;
         }
 
@@ -1147,7 +1146,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     sleep(rank);
     std::cout << "RANK: " << rank << std::endl;
-    for (auto entry : fpt_buffer_map)
+    for (auto entry : geo.fpt_buffer_map)
     {
       std::cout << entry.first << ": ";
       for (auto val : entry.second)

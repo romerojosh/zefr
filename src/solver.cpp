@@ -328,6 +328,11 @@ void FRSolver::compute_residual(unsigned int stage)
   }
 
   U_to_faces();
+  
+#ifdef _MPI
+  faces->swap_U();
+#endif
+
   faces->apply_bcs();
   eles->compute_Fconv();
   faces->compute_Fconv();

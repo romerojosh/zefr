@@ -1,9 +1,9 @@
 # Geometry:
 nDims    2
-meshfile meshes/QuadBox_2x2.msh
+meshfile meshes/QuadBox_4x4.msh
 
 # Solver:
-order     1
+order     2
 equation AdvDiff    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -42,7 +42,7 @@ ldg_tau    1.0
 ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Advection-Diffusion
-AdvDiff_Ax 1
-AdvDiff_Ay 0
+AdvDiff_Ax 0
+AdvDiff_Ay 1
 AdvDiff_Az 0
 AdvDiff_D 0.0

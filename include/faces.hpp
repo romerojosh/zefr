@@ -34,6 +34,9 @@ class Faces
     void LDG_flux();
     void central_flux();
     void transform_flux();
+#ifdef _MPI
+    void swap_U();
+#endif
 
   protected:
     mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Fcomm_temp, Ucomm, P;

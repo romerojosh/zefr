@@ -4,6 +4,10 @@
 #include "geometry.hpp"
 #include "input.hpp"
 
+#ifdef _MPI
+#include "mpi.h"
+#endif
+
 #ifdef _GPU
 #include "faces_kernels.h"
 #include "solver_kernels.h"
@@ -1302,6 +1306,71 @@ void Faces::central_flux()
     }
   }
 }
+
+#ifdef _MPI
+void Faces::swap_U()
+{
+  mdvector<double> U_sbuff, U_rbuff;
+  
+  /* Stage all the non-blocking receives */
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    U_rbuff.assign({(unsigned int) fpts.size(), nVars}, 0.0);
+
+    MPI_Request req;
+    MPI_Irecv(U_rbuff.data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &req);
+  }
+
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int sendRank = entry.first;
+    const auto &fpts = entry.second;
+    
+    /* Pack buffer of solution data at flux points in list */
+    U_sbuff.assign({(unsigned int) fpts.size(), nVars}, 0.0);
+
+    unsigned int idx = 0;
+    for (auto fpt : fpts)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        U_sbuff(idx, n) = U(fpt, n, 0);
+      }
+
+      idx++;
+    }
+
+    /* Send buffer to paired rank */
+    MPI_Request req;
+    MPI_Isend(U_sbuff.data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &req);
+  }
+
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  /* Unpack buffer */
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    unsigned int idx = 0;
+    for (auto fpt : fpts)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        U(fpt, n, 1) = U_rbuff(idx, n);
+      }
+      idx++;
+    }
+  }
+
+
+}
+#endif
 
 
 

@@ -34,6 +34,7 @@ struct GeoStruct
     unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
     std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
+    std::map<unsigned int, std::vector<unsigned int>> fpt_buffer_map;
 #endif
 
 #ifdef _GPU
