@@ -20,7 +20,7 @@ restart	      0
 restart_file  fp_pmg_000001000.vtk
 
 # Multigrid:
-p_multi 0
+p_multi 1
 smooth_steps 1
 rel_fac 1.00
 low_order 1

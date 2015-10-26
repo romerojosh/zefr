@@ -931,9 +931,12 @@ void FRSolver::compute_element_dt()
 
   if (input->dt_type == 1) /* Global minimum */
   {
-    //double min_dt = *std::min_element(dt.begin(), dt.end());
     dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
-    //std::fill(dt.begin(), dt.end(), min_dt);
+
+#ifdef _MPI
+    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
+#endif
+
   }
 #endif
 
