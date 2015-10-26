@@ -323,14 +323,17 @@ void FRSolver::solver_data_to_device()
 
 void FRSolver::compute_residual(unsigned int stage)
 {
+  /* Extrapolate solution to flux points */
   eles->extrapolate_U();
 
+  /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
   {
     eles->compute_Uavg();
     eles->poly_squeeze();
   }
 
+  /* Copy flux point data from element local to face local storage */
   U_to_faces();
 
 #ifdef _MPI
@@ -338,29 +341,22 @@ void FRSolver::compute_residual(unsigned int stage)
   faces->send_U_data();
 #endif
 
+  /* Apply boundary conditions to state variables */
   faces->apply_bcs();
+
+  /* Compute convective flux at solution points */
   eles->compute_Fconv();
 
-
-  if (input->viscous)
+  /* If running inviscid, use this scheduling. */
+  if(!input->viscous)
   {
-    faces->compute_common_U();
-    U_from_faces();
-    eles->compute_dU();
-    eles->transform_dU();
-    eles->extrapolate_dU();
-    dU_to_faces();
-    faces->apply_bcs_dU();
-    eles->compute_Fvisc();
-    faces->compute_Fvisc();
-  }
 
 #ifdef _MPI
-  /* Perform computations on flux points while MPI comm proceeds. */
+  /* Compute convective flux and common flux at non-MPI flux points */
   faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
   
-  /* Receive U data to other processes */
+  /* Receive U data */
   faces->recv_U_data();
 
   /* Complete computation on remaning flux points. */
@@ -368,15 +364,95 @@ void FRSolver::compute_residual(unsigned int stage)
   faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
 
 #else
+  /* Compute convective and common fluxes at flux points */
   faces->compute_Fconv(0, geo.nGfpts);
   faces->compute_common_F(0, geo.nGfpts);
 #endif
+  }
 
+  /* If running viscous, use this scheduling */
+  else
+  {
+#ifdef _MPI
+    /* Compute common interface solution at non-MPI flux points */
+    faces->compute_common_U(0, geo.nGfpts_int + geo.nGfpts_bnd);
+
+    /* Receieve U data */
+    faces->recv_U_data();
+
+    /* Finish computation of common interface solution */
+    faces->compute_common_U(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+
+#else
+    /* Compute common interface solution at flux points */
+    faces->compute_common_U(0, geo.nGfpts);
+#endif
+
+    /* Copy solution data at flux points from face local to element local
+     * storage */
+    U_from_faces();
+
+    /* Compute gradient of state variables at solution points */
+    eles->compute_dU();
+
+    /* Transform gradient of state variables to physical space from 
+     * reference space */
+    eles->transform_dU();
+
+    /* Extrapolate solution gradient to flux points */
+    eles->extrapolate_dU();
+
+    /* Copy gradient data from element local to face local storage */
+    dU_to_faces();
+
+#ifdef _MPI
+    /* Commence sending gradient data to other processes */
+    faces->send_dU_data();
+
+    /* Apply boundary conditions to the gradient */
+    faces->apply_bcs_dU();
+
+    /* Compute viscous flux at solution points */
+    eles->compute_Fvisc();
+
+    /* Compute viscous and convective flux and common interface flux 
+     * at non-MPI flux points */
+    faces->compute_Fvisc(0, geo.nGfpts_int + geo.nGfpts_bnd);
+    faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
+    faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
+
+    /* Receive gradient data */
+    faces->recv_dU_data();
+
+    /* Complete computation of fluxes */
+    faces->compute_Fvisc(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+    faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+    faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+
+#else
+    /* Apply boundary conditions to the gradient */
+    faces->apply_bcs_dU();
+
+    /* Compute viscous flux at solution points */
+    eles->compute_Fvisc();
+
+    /* Compute viscous and convective flux and common interface fluxes 
+     * at flux points*/ 
+    faces->compute_Fvisc(0, geo.nGfpts);
+    faces->compute_Fconv(0, geo.nGfpts);
+    faces->compute_common_F(0, geo.nGfpts);
+#endif
+
+  }
+
+  /* Transform fluxes from physical to reference space */
   eles->transform_flux();
   faces->transform_flux();
 
+  /* Copy flux data from face local storage to element local storage */
   F_from_faces();
 
+  /* Compute flux gradients and divergence */
   eles->compute_dF();
   eles->compute_divF(stage);
 }

@@ -14,7 +14,7 @@ CUFLAGS = -arch=sm_20 -O3 -use_fast_math
 # Setting OpenMP flags
 ifeq ($(strip $(OPENMP)),YES)
 	CXXFLAGS += -fopenmp
-	CUFLAGS += Xcompiler -fopenmp
+	CUFLAGS += -Xcompiler -fopenmp
 	FLAGS += -D_OMP
 endif
 

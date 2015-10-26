@@ -60,8 +60,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     int pairedRank = entry.first;
     const auto &fpts = entry.second;
 
-    U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0);
-    U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0);
+    U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0);
+    U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0);
   }
 
   sreqs.resize(geo->fpt_buffer_map.size());
@@ -832,13 +832,13 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 
 }
 
-void Faces::compute_Fvisc()
+void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -863,7 +863,7 @@ void Faces::compute_Fvisc()
   {
 #ifdef _CPU
 #pragma omp parallel for collapse(2)
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       for (unsigned int slot = 0; slot < 2; slot++)
       {
@@ -974,7 +974,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
     if (input->fvisc_type == "LDG")
     {
 #ifdef _CPU
-      LDG_flux();
+      LDG_flux(startFpt, endFpt);
 #endif
 
 #ifdef _GPU
@@ -999,7 +999,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
   //transform_flux();
 }
 
-void Faces::compute_common_U()
+void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 {
   
   double beta = input->ldg_b;
@@ -1009,7 +1009,7 @@ void Faces::compute_common_U()
   {
 #ifdef _CPU
 #pragma omp parallel for 
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       /* Setting sign of beta (from HiFiLES) */
       if (nDims == 2)
@@ -1200,7 +1200,7 @@ void Faces::transform_flux()
 
 }
 
-void Faces::LDG_flux()
+void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 {
   std::vector<double> FL(nVars);
   std::vector<double> FR(nVars);
@@ -1213,7 +1213,7 @@ void Faces::LDG_flux()
   Fcomm_temp.fill(0.0);
 
 #pragma omp parallel for firstprivate(FL, FR, WL, WR, tau, beta)
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
 
     /* Setting sign of beta (from HiFiLES) */
@@ -1336,9 +1336,9 @@ void Faces::send_U_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Request req;
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &req);
-    rreqs[ridx] = req;
+    //MPI_Request req;
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    //rreqs[ridx] = req;
     ridx++;
   }
 
@@ -1349,21 +1349,21 @@ void Faces::send_U_data()
     const auto &fpts = entry.second;
     
     /* Pack buffer of solution data at flux points in list */
-    unsigned int idx = 0;
-    for (auto fpt : fpts)
+    for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      unsigned int idx = 0;
+      for (auto fpt : fpts)
       {
         U_sbuffs[sendRank](idx, n) = U(fpt, n, 0);
+        idx++;
       }
 
-      idx++;
     }
 
     /* Send buffer to paired rank */
-    MPI_Request req;
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &req);
-    sreqs[sidx] = req;
+    //MPI_Request req;
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    //sreqs[sidx] = req;
     sidx++;
   }
 }
@@ -1380,18 +1380,86 @@ void Faces::recv_U_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    unsigned int idx = 0;
-    for (auto fpt : fpts)
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      unsigned int idx = 0;
+      for (auto fpt : fpts)
+      {
+        U(fpt, n, 1) = U_rbuffs[recvRank](idx, n);
+        idx++;
+      }
+    }
+  }
+}
+
+void Faces::send_dU_data()
+{
+  /* Stage all the non-blocking receives */
+  unsigned int ridx = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    //MPI_Request req;
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    //rreqs[ridx] = req;
+    ridx++;
+  }
+
+  unsigned int sidx = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int sendRank = entry.first;
+    const auto &fpts = entry.second;
+    
+    /* Pack buffer of solution data at flux points in list */
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        U(fpt, n, 1) = U_rbuffs[recvRank](idx, n);
+        unsigned int idx = 0;
+        for (auto fpt : fpts)
+        {
+          U_sbuffs[sendRank](idx, n, dim) = dU(fpt, n, dim, 0);
+          idx++;
+        }
       }
-      idx++;
+    }
+
+    /* Send buffer to paired rank */
+    //MPI_Request req;
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    //sreqs[sidx] = req;
+    sidx++;
+  }
+}
+
+void Faces::recv_dU_data()
+{
+  /* Wait for comms to finish */
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+
+  /* Unpack buffer */
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        unsigned int idx = 0;
+        for (auto fpt : fpts)
+        {
+          dU(fpt, n, dim, 1) = U_rbuffs[recvRank](idx, n, dim);
+          idx++;
+        }
+      }
     }
   }
-
-
 }
 #endif
 

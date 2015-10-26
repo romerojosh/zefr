@@ -35,12 +35,14 @@ class Faces
     void apply_bcs();
     void apply_bcs_dU();
     void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
-    void LDG_flux();
+    void LDG_flux(unsigned int startFpt, unsigned int endFpt);
     void central_flux();
     void transform_flux();
 #ifdef _MPI
     void send_U_data();
     void recv_U_data();
+    void send_dU_data();
+    void recv_dU_data();
 #endif
 
   protected:
@@ -69,11 +71,10 @@ class Faces
   public:
     Faces(GeoStruct *geo, InputStruct *input);
     void setup(unsigned int nDims, unsigned int nVars);
-    void compute_common_U();
+    void compute_common_U(unsigned int startFpt, unsigned int endFpt);
     void compute_common_F(unsigned int startFpt, unsigned int endFpt);
-    void compute_Fconv();
     void compute_Fconv(unsigned int startFpt, unsigned int endFpt);
-    void compute_Fvisc();
+    void compute_Fvisc(unsigned int startFpt, unsigned int endFpt);
     
 };
 
