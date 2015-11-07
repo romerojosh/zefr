@@ -1152,14 +1152,12 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
 
     f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
-    f << "<PPointData Scalars=";
+    f << "<PPointData>" << std::endl;
     if (input->equation == AdvDiff)
     {
-      f << "\"u\">" << std::endl;
       f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
       f << std::endl;
 
-      f << "</PPointData>" << std::endl;
     }
     else if (input->equation == EulerNS)
     {
@@ -1171,18 +1169,13 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
-        f << "\"" << var[n] << "\" ";
-      }
-      f << ">" << std::endl;
-
-      for (unsigned int n = 0; n < eles->nVars; n++)
-      {
         f << "<PDataArray type=\"Float32\" Name=\"" << var[n];
         f << "\" format=\"ascii\"/>";
         f << std::endl;
       }
     }
 
+    f << "</PPointData>" << std::endl;
     f << "<PPoints>" << std::endl;
     f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
     f << "format=\"ascii\"/>" << std::endl;
