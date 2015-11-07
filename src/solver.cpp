@@ -946,7 +946,7 @@ void FRSolver::compute_element_dt()
 #endif
 }
 
-void FRSolver::write_solution(std::string prefix, unsigned int nIter)
+void FRSolver::write_solution_vtk(std::string prefix, unsigned int nIter)
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
@@ -1126,6 +1126,281 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
       f << std::endl;
     }
   }
+}
+
+void FRSolver::write_solution(std::string prefix, unsigned int nIter)
+{
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
+  if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
+
+  std::stringstream ss;
+#ifdef _MPI
+
+  /* Write .pvtu file on rank 0 if running in parallel */
+  if (input->rank == 0)
+  {
+    ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
+    ss << ".pvtu";
+   
+    std::ofstream f(ss.str());
+    f << "<?xml version=\"1.0\"?>" << std::endl;
+    f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
+    f << "byte_order=\"LittleEndian\" ";
+    f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+    f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
+    f << "<PPointData Scalars=";
+    if (input->equation == AdvDiff)
+    {
+      f << "\"u\">" << std::endl;
+      f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
+      f << std::endl;
+
+      f << "</PPointData>" << std::endl;
+    }
+    else if (input->equation == EulerNS)
+    {
+      std::vector<std::string> var;
+      if (eles->nDims == 2)
+        var = {"rho", "xmom", "ymom", "energy"};
+      else
+        var = {"rho", "xmom", "ymom", "zmom", "energy"};
+
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        f << "\"" << var[n] << "\" ";
+      }
+      f << ">" << std::endl;
+
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        f << "<PDataArray type=\"Float32\" Name=\"" << var[n];
+        f << "\" format=\"ascii\"/>";
+        f << std::endl;
+      }
+    }
+
+    f << "<PPoints>" << std::endl;
+    f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+    f << "format=\"ascii\"/>" << std::endl;
+    f << "</PPoints>" << std::endl;
+
+    for (unsigned int n = 0; n < input->nRanks; n++)
+    { 
+      ss.str("");
+      ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
+      ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
+      f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
+    }
+
+    f << "</PUnstructuredGrid>" << std::endl;
+    f << "</VTKFile>" << std::endl;
+
+    f.close();
+  }
+#endif
+
+  ss.str("");
+#ifdef _MPI
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
+  ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
+#else
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
+  ss << ".vtu";
+#endif
+
+  auto outputfile = ss.str();
+
+  /* Write parition solution to file in .vtu format */
+  std::ofstream f(outputfile);
+
+  /* Write header */
+  f << "<?xml version=\"1.0\"?>" << std::endl;
+  f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
+  f << "byte_order=\"LittleEndian\" ";
+  f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+  /* TODO: Investigate adding time data to files. */
+  /*
+  f << "FIELD FieldData 2" << std::endl;
+  f << "TIME 1 1 double" << std::endl;
+  f << nIter * input->dt << std::endl;
+  f << "CYCLE 1 1 int" << std::endl;
+  f << nIter + restart_iter << std::endl;
+  f << std::endl;
+  */
+
+  f << "<UnstructuredGrid>" << std::endl;
+  f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";
+  f << "NumberOfCells=\"" << eles->nSubelements * eles->nEles << "\">";
+  f << std::endl;
+
+  
+  /* Write plot point coordinates */
+  f << "<Points>" << std::endl;
+  f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+  f << "format=\"ascii\">" << std::endl; 
+
+  if (eles->nDims == 2)
+  {
+    // TODO: Change order of ppt structures for better looping 
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << 0.0 << std::endl;
+      }
+    }
+  }
+  else
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+      }
+    }
+  }
+
+  f << "</DataArray>" << std::endl;
+  f << "</Points>" << std::endl;
+
+  /* Write cell information */
+  f << "<Cells>" << std::endl;
+  f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      {
+        f << geo.ppt_connect(i, subele) + ele*eles->nPpts << " ";
+      }
+      f << std::endl;
+    }
+  }
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  unsigned int offset = eles->nNodesPerSubelement;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      f << offset << " ";
+      offset += eles->nNodesPerSubelement;
+    }
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"UInt8\" Name=\"types\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  unsigned int nCells = eles->nSubelements * eles->nEles;
+  if (eles->nDims == 2)
+  {
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 9 << " ";
+  }
+  else
+  {
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 12 << " ";
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+  f << "</Cells>" << std::endl;
+
+  /* Write solution information */
+  f << "<PointData>" << std::endl;
+
+  /* TEST: Write cell average solution */
+  //eles->compute_Uavg();
+
+  /* Extrapolate solution to plot points */
+  auto &A = eles->oppE_ppts(0, 0);
+  auto &B = eles->U_spts(0, 0, 0);
+  auto &C = eles->U_ppts(0, 0, 0);
+
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
+      eles->nSpts, 0.0, &C, eles->nPpts);
+#else
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
+      eles->nSpts, 0.0, &C, eles->nPpts);
+#endif
+
+  /* Apply squeezing if needed */
+  if (input->squeeze)
+  {
+    eles->compute_Uavg();
+
+#ifdef _GPU
+    eles->Uavg = eles->Uavg_d;
+#endif
+
+    eles->poly_squeeze_ppts();
+  }
+
+  if (input->equation == AdvDiff)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"u\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << std::scientific << std::setprecision(16) << eles->U_ppts(ppt, ele, 0);
+        f  << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+  else if(input->equation == EulerNS)
+  {
+    std::vector<std::string> var;
+    if (eles->nDims == 2)
+      var = {"rho", "xmom", "ymom", "energy"};
+    else
+      var = {"rho", "xmom", "ymom", "zmom", "energy"};
+
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
+      f << "format=\"ascii\">"<< std::endl;
+      
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+        {
+          f << std::scientific << std::setprecision(16);
+          f << eles->U_ppts(ppt, ele, n) << " ";
+        }
+
+        f << std::endl;
+      }
+      f << "</DataArray>" << std::endl;
+    }
+  }
+
+  f << "</PointData>" << std::endl;
+  f << "</Piece>" << std::endl;
+  f << "</UnstructuredGrid>" << std::endl;
+  f << "</VTKFile>" << std::endl;
+  f.close();
 }
 
 void FRSolver::report_residuals(std::ofstream &f, unsigned int iter, 
