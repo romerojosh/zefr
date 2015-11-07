@@ -9,7 +9,7 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 100
+n_steps 500
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
@@ -20,6 +20,10 @@ p_multi 0
 smooth_steps 1
 rel_fac 1.00
 low_order 1
+
+# Restart:
+restart 1
+restart_file mpi_test_000000200.pvtu
 
 # Reporting:
 output_prefix mpi_test

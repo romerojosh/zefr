@@ -17,7 +17,7 @@ CFL	  0.20
 
 # Restarting:
 restart	      0
-restart_file  fp_pmg_000001000.vtk
+restart_file  fp_pmg_000001000.pvtu
 
 # Multigrid:
 p_multi 1

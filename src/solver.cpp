@@ -198,56 +198,81 @@ void FRSolver::setup_output()
 
 void FRSolver::restart(std::string restart_file)
 {
+#ifdef _MPI
+  /* From .pvtu, form partition specific filename */
+  auto pos = restart_file.rfind(".pvtu");
+  if (pos == std::string::npos)
+  {
+    ThrowException("Must provide .pvtu file for parallel restart!");
+  }
+
+  restart_file = restart_file.substr(0, pos);
+
+  std::stringstream ss;
+  ss << std::setw(3) << std::setfill('0') << input->rank;
+
+  restart_file += "_" + ss.str() + ".vtu";
+#endif
+
+  /* Open .vtu file */
   std::ifstream f(restart_file);
+  pos = restart_file.rfind(".vtu");
+  if (pos == std::string::npos)
+  {
+    ThrowException("Must provide .vtu file for restart!");
+  }
 
   if (!f.is_open())
-    ThrowException("Could not open specified restart file!");
+  {
+    ThrowException("Could not open restart file " + restart_file + "!");
+  }
 
   std::string param, line;
   double val;
-  unsigned int n = 0;
   unsigned int nPpts1D = eles->nSpts1D + 2;
 
+  /* Load data from restart file */
   while (f >> param)
   {
     if (param == "TIME")
     {
-      std::getline(f,line);
       f >> flow_time;
     }
-    if (param == "CYCLE")
+    if (param == "ITER")
     {
-      std::getline(f,line);
       f >> restart_iter;
     }
-    if (param == "SCALARS")
+
+    if (param == "<PointData>")
     {
-      f >> param;
-      std::cout << "Reading " << param  << std::endl;
-      /* Skip lines */
-      std::getline(f,line);
-      std::getline(f,line);
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int n = 0; n < eles->nVars; n++)
       {
-        unsigned int spt = 0;
-        for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+        std::getline(f,line);
+        std::getline(f,line);
+
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          f >> val;
+          unsigned int spt = 0;
+          for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+          {
+            f >> val;
 
-          /* Logic to deal with extra plot point (corner nodes and flux points). */
-          if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || 
-              (ppt+1)%nPpts1D == 0)
-            continue;
+            /* Logic to deal with extra plot point (corner nodes and flux points). */
+            if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || 
+                (ppt+1)%nPpts1D == 0)
+              continue;
 
-          eles->U_spts(spt, ele, n) = val;
-          spt++;
+            eles->U_spts(spt, ele, n) = val;
+            spt++;
+          }
         }
+        std::getline(f,line);
       }
-      n++;
     }
 
   }
 
+  f.close();
 }
 
 #ifdef _GPU
@@ -946,188 +971,6 @@ void FRSolver::compute_element_dt()
 #endif
 }
 
-void FRSolver::write_solution_vtk(std::string prefix, unsigned int nIter)
-{
-#ifdef _GPU
-  eles->U_spts = eles->U_spts_d;
-#endif
-
-  std::stringstream ss;
-  ss << prefix << "_p" << std::setw(3) << std::setfill('0') << input->rank;
-  ss << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter<< ".vtk";
-
-  auto outputfile = ss.str();
-  if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
-
-  /* Write solution to file in .vtk format */
-  std::ofstream f(outputfile);
-
-  /* Write header */
-  f << "# vtk DataFile Version 3.0" << std::endl;
-  f << "vtk output" << std::endl;
-  f << "ASCII" << std::endl;
-  f << "DATASET UNSTRUCTURED_GRID" << std::endl;
-  f << std::endl;
-
-  /* Write field data */
-  f << "FIELD FieldData 2" << std::endl;
-  f << "TIME 1 1 double" << std::endl;
-  f << nIter * input->dt << std::endl;
-  f << "CYCLE 1 1 int" << std::endl;
-  f << nIter + restart_iter << std::endl;
-  f << std::endl;
-  
-  /* Write plot point coordinates */
-  f << "POINTS " << eles->nPpts*eles->nEles << " double" << std::endl;
-  if (eles->nDims == 2)
-  {
-    // TODO: Change order of ppt structures for better looping 
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << 0.0 << std::endl;
-      }
-    }
-  }
-  else
-  {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
-      }
-    }
-
-    //ThrowException("3D not implemented!");
-  }
-  f << std::endl;
-
-  /* Write cell information */
-  unsigned int nCells = eles->nSubelements * eles->nEles;
-  f << "CELLS " << nCells << " " << (1+eles->nNodesPerSubelement)*nCells << std::endl;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
-    {
-      f << eles->nNodesPerSubelement << " "; 
-      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
-      {
-        f << geo.ppt_connect(i, subele) + ele*eles->nPpts << " ";
-      }
-      f << std::endl;
-    }
-  }
-  f << std::endl;
-
-  f << "CELL_TYPES " << nCells << std::endl;
-  if (eles->nDims == 2)
-  {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 9 << std::endl;
-  }
-  else
-  {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 12 << std::endl;
-  }
-  f << std::endl;
-
-  /* Write solution information */
-
-  /* TEST: Write cell average solution */
-  //eles->compute_Uavg();
-
-  /* Extrapolate solution to plot points */
-  auto &A = eles->oppE_ppts(0, 0);
-  auto &B = eles->U_spts(0, 0, 0);
-  auto &C = eles->U_ppts(0, 0, 0);
-
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
-      eles->nSpts, 0.0, &C, eles->nPpts);
-#else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
-      eles->nSpts, 0.0, &C, eles->nPpts);
-#endif
-
-
-
-  /* Apply squeezing if needed */
-  if (input->squeeze)
-  {
-    eles->compute_Uavg();
-
-#ifdef _GPU
-    eles->Uavg = eles->Uavg_d;
-#endif
-
-    eles->poly_squeeze_ppts();
-  }
-
-  if (input->equation == AdvDiff)
-  {
-    f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
-    f << "SCALARS U double 1" << std::endl;
-    f << "LOOKUP_TABLE default" << std::endl;
-    
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << std::scientific << std::setprecision(12) << eles->U_ppts(ppt, ele, 0) << " ";
-      }
-      f << std::endl;
-    }
-  }
-  else if(input->equation == EulerNS)
-  {
-    std::vector<std::string> var;
-    if (eles->nDims == 2)
-      var = {"rho", "xmom", "ymom", "energy"};
-    else
-      var = {"rho", "xmom", "ymom", "zmom", "energy"};
-
-    f << "POINT_DATA " << eles->nPpts*eles->nEles << std::endl;
-    //f << "CELL_DATA " << nCells << std::endl;
-
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      f << "SCALARS " << var[n] <<" double 1" << std::endl;
-      f << "LOOKUP_TABLE default" << std::endl;
-      
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
-        for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-        {
-          f << std::scientific << std::setprecision(12) << eles->U_ppts(ppt, ele, n) << " ";
-          //f << std::scientific << std::setprecision(12) << eles->Uavg(ele, n) << " ";
-        }
-
-        f << std::endl;
-      }
-
-      /*
-      for (unsigned int cell = 0; cell < nCells; cell++)
-      {
-          f << std::scientific << std::setprecision(12) << eles->Uavg(cell/eles->nSubelements, n) << " ";
-
-        f << std::endl;
-      }
-      */
-
-      f << std::endl;
-    }
-  }
-}
-
 void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 {
 #ifdef _GPU
@@ -1210,21 +1053,16 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   /* Write parition solution to file in .vtu format */
   std::ofstream f(outputfile);
 
+
   /* Write header */
   f << "<?xml version=\"1.0\"?>" << std::endl;
   f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
   f << "byte_order=\"LittleEndian\" ";
   f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
 
-  /* TODO: Investigate adding time data to files. */
-  /*
-  f << "FIELD FieldData 2" << std::endl;
-  f << "TIME 1 1 double" << std::endl;
-  f << nIter * input->dt << std::endl;
-  f << "CYCLE 1 1 int" << std::endl;
-  f << nIter + restart_iter << std::endl;
-  f << std::endl;
-  */
+  /* Write comments for iteration number and flowtime */
+  f << "<!-- TIME " << (nIter + restart_iter) * input->dt << " -->" << std::endl;
+  f << "<!-- ITER " << nIter + restart_iter << " -->" << std::endl;
 
   f << "<UnstructuredGrid>" << std::endl;
   f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";

@@ -30,7 +30,7 @@ void PMGrid::setup(int order, InputStruct *input, FRSolver &solver)
   /* Instantiate coarse grid solvers */
   for (int P = 0; P < order; P++)
   {
-    std::cout << "P = " << P << std::endl;
+    if (input->rank == 0) std::cout << "P = " << P << std::endl;
     grids.push_back(std::make_shared<FRSolver>(input,P));
     grids[P]->setup();
 
