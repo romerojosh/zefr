@@ -24,7 +24,7 @@ class FRSolver
     InputStruct *input = NULL;
     GeoStruct geo;
     int order;
-    int restart_iter = 0;
+    int current_iter = 0;
     double flow_time = 0.;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
@@ -65,10 +65,10 @@ class FRSolver
 #ifdef _GPU
     void update_with_source(mdvector_gpu<double> &source);
 #endif
-    void write_solution(std::string prefix, unsigned int nIter);
-    void report_residuals(std::ofstream &f, unsigned int iter, std::chrono::high_resolution_clock::time_point t1);
-    void report_forces(std::string prefix, std::ofstream &f, unsigned int iter);
-    void report_error(std::ofstream &f, unsigned int iter);
+    void write_solution();
+    void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
+    void report_forces(std::ofstream &f);
+    void report_error(std::ofstream &f);
 
 
 };

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -121,6 +122,13 @@ void FRSolver::setup_update()
 
 void FRSolver::setup_output()
 {
+  /* Create output directory to store data files */
+  if (input->rank == 0)
+  {
+    std::string cmd = "mkdir " + input->output_prefix;
+    system(cmd.c_str());
+  }
+
   if (eles->nDims == 2)
   {
     unsigned int nSubelements1D = eles->nSpts1D+1;
@@ -198,9 +206,10 @@ void FRSolver::setup_output()
 
 void FRSolver::restart(std::string restart_file)
 {
+  size_t pos;
 #ifdef _MPI
   /* From .pvtu, form partition specific filename */
-  auto pos = restart_file.rfind(".pvtu");
+  pos = restart_file.rfind(".pvtu");
   if (pos == std::string::npos)
   {
     ThrowException("Must provide .pvtu file for parallel restart!");
@@ -240,7 +249,7 @@ void FRSolver::restart(std::string restart_file)
     }
     if (param == "ITER")
     {
-      f >> restart_iter;
+      f >> current_iter;
     }
 
     if (param == "<PointData>")
@@ -824,6 +833,7 @@ void FRSolver::update()
 #endif
 
   flow_time += dt(0);
+  current_iter++;
  
 }
 
@@ -971,7 +981,7 @@ void FRSolver::compute_element_dt()
 #endif
 }
 
-void FRSolver::write_solution(std::string prefix, unsigned int nIter)
+void FRSolver::write_solution()
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
@@ -985,8 +995,9 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   /* Write .pvtu file on rank 0 if running in parallel */
   if (input->rank == 0)
   {
-    ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
-    ss << ".pvtu";
+    ss << input->output_prefix << "/";
+    ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0');
+    ss << current_iter << ".pvtu";
    
     std::ofstream f(ss.str());
     f << "<?xml version=\"1.0\"?>" << std::endl;
@@ -1027,7 +1038,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
     for (unsigned int n = 0; n < input->nRanks; n++)
     { 
       ss.str("");
-      ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
+      ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
       ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
       f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
     }
@@ -1041,10 +1052,12 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
 
   ss.str("");
 #ifdef _MPI
-  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
+  ss << input->output_prefix << "/";
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
   ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
 #else
-  ss << prefix << "_" << std::setw(9) << std::setfill('0') << nIter + restart_iter;
+  ss << input->output_prefix << "/";
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
   ss << ".vtu";
 #endif
 
@@ -1061,8 +1074,8 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
 
   /* Write comments for iteration number and flowtime */
-  f << "<!-- TIME " << (nIter + restart_iter) * input->dt << " -->" << std::endl;
-  f << "<!-- ITER " << nIter + restart_iter << " -->" << std::endl;
+  f << "<!-- TIME " << flow_time << " -->" << std::endl;
+  f << "<!-- ITER " << current_iter << " -->" << std::endl;
 
   f << "<UnstructuredGrid>" << std::endl;
   f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";
@@ -1234,8 +1247,7 @@ void FRSolver::write_solution(std::string prefix, unsigned int nIter)
   f.close();
 }
 
-void FRSolver::report_residuals(std::ofstream &f, unsigned int iter, 
-    std::chrono::high_resolution_clock::time_point t1)
+void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1)
 {
 
   /* If running on GPU, copy out divergence */
@@ -1294,7 +1306,7 @@ void FRSolver::report_residuals(std::ofstream &f, unsigned int iter,
         val = std::sqrt(val);
     }
 
-    std::cout << iter + restart_iter << " ";
+    std::cout << current_iter << " ";
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 
@@ -1304,7 +1316,7 @@ void FRSolver::report_residuals(std::ofstream &f, unsigned int iter,
     /* Write to history file */
     auto t2 = std::chrono::high_resolution_clock::now();
     auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
-    f << iter + restart_iter << " " << current_runtime.count() << " ";
+    f << current_iter << " " << current_runtime.count() << " ";
 
     for (auto val : res)
       f << std::scientific << val / nDoF << " ";
@@ -1312,7 +1324,7 @@ void FRSolver::report_residuals(std::ofstream &f, unsigned int iter,
   }
 }
 
-void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int iter)
+void FRSolver::report_forces(std::ofstream &f)
 {
   /* If using GPU, copy out solution, gradient and pressure */
 #ifdef _GPU
@@ -1325,8 +1337,9 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
   force_conv.fill(0.0); force_visc.fill(0.0); taun.fill(0.0);
 
   std::stringstream ss;
-  ss << prefix << "_p" << std::setw(3) << std::setfill('0') << input->rank;
-  ss << "_" << std::setw(9) << std::setfill('0') << iter + restart_iter<< ".cp";
+  ss << input->output_prefix << "/";
+  ss << input->output_prefix << "_p" << std::setw(3) << std::setfill('0') << input->rank;
+  ss << "_" << std::setw(9) << std::setfill('0') << current_iter << ".cp";
   auto cpfile = ss.str();
   std::ofstream g(cpfile);
 
@@ -1465,13 +1478,13 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
     }
 
     std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
-    f << iter + restart_iter << " ";
-    f << std::scientific << CL_conv << " " << CD_conv;
+    f << current_iter << " ";
+    f << std::scientific << std::setprecision(16) << CL_conv << " " << CD_conv;
 
     if (input->viscous)
     {
       std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
-      f << std::scientific << " " << CL_visc << " " << CD_visc;
+      f << std::scientific << std::setprecision(16) << " " << CL_visc << " " << CD_visc;
     }
 
     std::cout << std::endl;
@@ -1479,7 +1492,7 @@ void FRSolver::report_forces(std::string prefix, std::ofstream &f, unsigned int 
   }
 }
 
-void FRSolver::report_error(std::ofstream &f, unsigned int iter)
+void FRSolver::report_error(std::ofstream &f)
 {
   /* If using GPU, copy out solution */
 #ifdef _GPU
@@ -1607,16 +1620,32 @@ void FRSolver::report_error(std::ofstream &f, unsigned int iter)
       }
   }
 
-  /* Print to terminal */
-  std::cout << "l2_error: ";
-  for (auto &val : l2_error)
-    std::cout << std::scientific << std::setprecision(12) << std::sqrt(val) << " ";
-  std::cout << std::endl;
+#ifdef _MPI
+  if (input->rank == 0)
+  {
+    MPI_Reduce(MPI_IN_PLACE, l2_error.data(), 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  }
+  else
+  {
+    MPI_Reduce(l2_error.data(), l2_error.data(), 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  }
 
-  /* Write to file */
-  f << iter + restart_iter << " ";
-  for (auto &val : l2_error)
-    f << std::scientific << std::setprecision(12) << std::sqrt(val) << " ";
-  f << std::endl;
+#endif
+
+
+  /* Print to terminal */
+  if (input->rank == 0)
+  {
+    std::cout << "l2_error: ";
+    for (auto &val : l2_error)
+      std::cout << std::scientific << std::sqrt(val) << " ";
+    std::cout << std::endl;
+
+    /* Write to file */
+    f << current_iter << " ";
+    for (auto &val : l2_error)
+      f << std::scientific << std::setprecision(16) << std::sqrt(val) << " ";
+    f << std::endl;
+  }
 
 }

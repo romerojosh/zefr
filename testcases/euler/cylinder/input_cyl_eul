@@ -3,7 +3,7 @@ nDims    2
 meshfile full_cyl_quad.msh
 
 # Solver:
-order     3
+order     2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre

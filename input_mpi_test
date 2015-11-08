@@ -22,7 +22,7 @@ rel_fac 1.00
 low_order 1
 
 # Restart:
-restart 1
+restart 0
 restart_file mpi_test_000000200.pvtu
 
 # Reporting:

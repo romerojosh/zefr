@@ -630,10 +630,13 @@ void set_face_nodes(GeoStruct &geo)
   {
     /* Face 0: Bottom */
     geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
+
     /* Face 1: Right */
     geo.face_nodes(1, 0) = 1; geo.face_nodes(1, 1) = 2;
+
     /* Face 2: Top */
     geo.face_nodes(2, 0) = 2; geo.face_nodes(2, 1) = 3;
+
     /* Face 3: Left */
     geo.face_nodes(3, 0) = 3; geo.face_nodes(3, 1) = 0;
 
@@ -641,16 +644,27 @@ void set_face_nodes(GeoStruct &geo)
   else if (geo.nDims == 3)
   {
     /* Face 0: Bottom */
+    geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
     geo.face_nodes(0, 2) = 2; geo.face_nodes(0, 3) = 3;
+
     /* Face 1: Top */
+    geo.face_nodes(1, 0) = 5; geo.face_nodes(1, 1) = 4;
     geo.face_nodes(1, 2) = 7; geo.face_nodes(1, 3) = 6;
+
     /* Face 2: Left */
+    geo.face_nodes(2, 0) = 0; geo.face_nodes(2, 1) = 3;
     geo.face_nodes(2, 2) = 7; geo.face_nodes(2, 3) = 4;
+
     /* Face 3: Right */
+    geo.face_nodes(3, 0) = 2; geo.face_nodes(3, 1) = 1;
     geo.face_nodes(3, 2) = 5; geo.face_nodes(3, 3) = 6;
+
     /* Face 4: Front */
+    geo.face_nodes(4, 0) = 1; geo.face_nodes(4, 1) = 0;
     geo.face_nodes(4, 2) = 4; geo.face_nodes(4, 3) = 5;
+
     /* Face 5: Back */
+    geo.face_nodes(5, 0) = 3; geo.face_nodes(5, 1) = 2;
     geo.face_nodes(5, 2) = 6; geo.face_nodes(5, 3) = 7;
   }
 }
@@ -1082,6 +1096,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         if (geo.nDims == 3)
         {
           while (face_ordered[rot] != face_ordered_mpi[0])
+          //while (face_ordered_mpi[rot] != face_ordered[0])
           {
             rot++;
           }
@@ -1297,12 +1312,12 @@ void partition_geometry(GeoStruct &geo)
   /* TODO: Should just not call this entire function if nRanks == 1 */
   if (nRanks > 1) 
   {
-    int nDims = geo.nDims;
+    int nNodesPerFace = geo.nNodesPerFace; // TODO: What should this be?
     int nEles = geo.nEles;
     int nNodes = geo.nNodes;
 
     METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), nullptr, 
-        nullptr, &nDims, &nRanks, nullptr, options, &objval, epart.data(), 
+        nullptr, &nNodesPerFace, &nRanks, nullptr, options, &objval, epart.data(), 
         npart.data());  
   }
 

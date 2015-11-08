@@ -78,23 +78,23 @@ int main(int argc, char* argv[])
 
   if (input.restart) /* If restarted, append to existing file */
   {
-    hist_file.open(input.output_prefix + "_hist.dat", std::ios::app);
-    force_file.open(input.output_prefix + "_forces.dat", std::ios::app);
-    error_file.open(input.output_prefix + "_error.dat", std::ios::app);
+    hist_file.open(input.output_prefix + "/" + input.output_prefix + "_hist.dat", std::ios::app);
+    force_file.open(input.output_prefix + "/" + input.output_prefix + "_forces.dat", std::ios::app);
+    error_file.open(input.output_prefix + "/" + input.output_prefix + "_error.dat", std::ios::app);
   }
   else
   {
-    hist_file.open(input.output_prefix + "_hist.dat");
-    force_file.open(input.output_prefix + "_forces.dat");
-    error_file.open(input.output_prefix + "_error.dat");
+    hist_file.open(input.output_prefix + "/" + input.output_prefix + "_hist.dat");
+    force_file.open(input.output_prefix + "/" + input.output_prefix + "_forces.dat");
+    error_file.open(input.output_prefix + "/" + input.output_prefix + "_error.dat");
   }
 
   /* Write initial solution */
-  solver.write_solution(input.output_prefix, 0);
+  solver.write_solution();
 
   /* Write initial error (if required) */
   if (input.error_freq != 0)
-    solver.report_error(error_file, 0);
+    solver.report_error(error_file);
 
   auto t1 = std::chrono::high_resolution_clock::now();
   /* Main iteration loop */
@@ -109,22 +109,22 @@ int main(int argc, char* argv[])
     /* Write output if required */
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
     {
-      solver.report_residuals(hist_file , n, t1);
+      solver.report_residuals(hist_file, t1);
     }
 
     if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps))
     {
-      solver.write_solution(input.output_prefix,n);
+      solver.write_solution();
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps))
     {
-      solver.report_forces(input.output_prefix, force_file, n);
+      solver.report_forces(force_file);
     }
 
     if (input.error_freq != 0 && (n%input.error_freq == 0 || n == input.n_steps))
     {
-      solver.report_error(error_file, n);
+      solver.report_error(error_file);
     }
   }
   auto t2 = std::chrono::high_resolution_clock::now();
