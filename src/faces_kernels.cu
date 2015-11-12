@@ -1298,5 +1298,54 @@ void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int>
 
   unpack_U<<<blocks,threads>>>(U_rbuffs, fpts, U, nVars, fpts.size());
 }
+__global__
+void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts, unsigned int nDims)
+{
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    U_sbuffs(i, var, dim) = dU(fpts(i), var, dim, 0);
+  }
+}
+
+void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims)
+{
+  dim3 threads(32,4);
+  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  pack_dU<<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size(), nDims);
+}
+
+__global__
+void unpack_dU(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts, unsigned int nDims)
+{
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    dU(fpts(i), var, dim, 1) = U_rbuffs(i, var, dim);
+  }
+}
+
+void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims)
+{
+  dim3 threads(32,4);
+  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  unpack_dU<<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size(), nDims);
+}
 
 #endif
