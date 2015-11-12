@@ -7,13 +7,10 @@ void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F,
     mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims,
     mdvector_gpu<double> &AdvDiff_A);
 
-void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
-    mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, unsigned int nFpts, 
-    double gamma);
-
 void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
     mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
-    unsigned int nFpts, unsigned int nDims, double gamma);
+    unsigned int nFpts, unsigned int nDims, double gamma,
+    unsigned int startFpt, unsigned int endFpt);
 
 void compute_Fvisc_fpts_AdvDiff_wrapper(mdvector_gpu<double> &Fvisc, 
     mdvector_gpu<double> &dU, unsigned int nFpts, unsigned int nDims, 
@@ -38,7 +35,7 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation);
+    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
 
 void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,

@@ -763,14 +763,6 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
       }
 #endif
 
-/*
-#ifdef _GPU
-
-      compute_Fconv_fpts_2D_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, input->gamma);
-      check_error();
-#endif
-*/
-
     }
     else if (nDims == 3)
     {
@@ -825,7 +817,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
     }
 
 #ifdef _GPU
-      compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma);
+      compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma, 
+          startFpt, endFpt);
       check_error();
 #endif
   }
@@ -956,7 +949,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, 
-        input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation);
+        input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
 

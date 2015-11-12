@@ -37,11 +37,11 @@ void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F,
 }
 __global__
 void compute_Fconv_fpts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, mdvector_gpu<double> P, 
-    unsigned int nFpts, double gamma)
+    unsigned int nFpts, double gamma, unsigned int startFpt, unsigned int endFpt)
 {
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
-  if (fpt >= nFpts)
+  if (fpt >= endFpt)
     return;
 
    for (unsigned int slot = 0; slot < 2; slot ++)
@@ -72,23 +72,13 @@ void compute_Fconv_fpts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
    }
 }
 
-void compute_Fconv_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
-    mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
-    unsigned int nFpts, double gamma)
-{
-  unsigned int threads = 192;
-  unsigned int blocks = (nFpts + threads - 1)/threads;
-
-  compute_Fconv_fpts_2D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma);
-}
-
 __global__
 void compute_Fconv_fpts_3D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, mdvector_gpu<double> P, 
-    unsigned int nFpts, double gamma)
+    unsigned int nFpts, double gamma, unsigned int startFpt, unsigned int endFpt)
 {
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
-  if (fpt >= nFpts)
+  if (fpt >= endFpt)
     return;
 
    for (unsigned int slot = 0; slot < 2; slot ++)
@@ -130,15 +120,19 @@ void compute_Fconv_fpts_3D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
 
 void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
     mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
-    unsigned int nFpts, unsigned int nDims, double gamma)
+    unsigned int nFpts, unsigned int nDims, double gamma,
+    unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 192;
-  unsigned int blocks = (nFpts + threads - 1)/threads;
+  //unsigned int blocks = (nFpts + threads - 1)/threads;
+  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
   if (nDims == 2)
-    compute_Fconv_fpts_2D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma);
+    compute_Fconv_fpts_2D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma,
+        startFpt, endFpt);
   else 
-    compute_Fconv_fpts_3D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma);
+    compute_Fconv_fpts_3D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma, 
+        startFpt, endFpt);
 }
 
 template <unsigned int nDims>
@@ -913,11 +907,12 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<int> outnorm_gfpts, 
     mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
-    double gamma, double rus_k, unsigned int nFpts)
+    double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
+    unsigned int endFpt)
 {
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
-  if (fpt >= nFpts)
+  if (fpt >= endFpt)
     return;
 
   double FL[nVars]; double FR[nVars];
@@ -1016,10 +1011,11 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation)
+    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 256;
-  unsigned int blocks = (nFpts + threads - 1)/threads;
+  //unsigned int blocks = (nFpts + threads - 1)/threads;
+  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
   //int threads; int minBlocks; int blocks;
 
   //cudaOccupancyMaxPotentialBlockSize(&minBlocks, &threads, (const void*)rusanov_flux, 0, nFpts);
@@ -1030,19 +1026,19 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   {
     if (nDims == 2)
       rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
-          waveSp, LDG_bias, gamma, rus_k, nFpts);
+          waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
     else
       rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
-          waveSp, LDG_bias, gamma, rus_k, nFpts);
+          waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
-          waveSp, LDG_bias, gamma, rus_k, nFpts);
+          waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
     else
       rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
-          waveSp, LDG_bias, gamma, rus_k, nFpts);
+          waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
 
   }
 }
