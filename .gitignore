@@ -1,4 +1,6 @@
 *.vtk
+*.vtu
+*.pvtu
 *.o
 *.cp
 *.dat

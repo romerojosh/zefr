@@ -32,6 +32,7 @@ ifeq ($(strip $(BLAS)),$(strip ATLAS))
 endif
 
 INCS = -I$(strip $(BLAS_DIR))/include 
+INCS += -I$(strip $(BLAS_DIR))/include/openblas
 
 # Setting MPI/METIS flags
 ifeq ($(strip $(MPI)),YES)

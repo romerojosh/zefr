@@ -413,17 +413,17 @@ void Faces::apply_bcs()
 
         for (unsigned int dim = 0; dim < nDims; dim++)
           /* Set boundary state to cancelled normal velocity (strong)*/
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+          //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
           /* Set boundary state to reflect normal velocity */
-          //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
         /* Set energy */
-        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-        //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+        //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
         /* Set LDG bias */
-        LDG_bias(fpt) = -1;
-        //LDG_bias(fpt) = 0;
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
 
         break;
       }
@@ -1343,12 +1343,12 @@ void Faces::send_U_data()
   }
 #endif
 #ifdef _GPU
-  for (const auto &entry : geo->fpt_buffer_map_d)
+  for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs_d[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
     ridx++;
   }
 #endif
@@ -1386,14 +1386,19 @@ void Faces::send_U_data()
     pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars);
   }
 
-  /* May need to sync device here */
+  /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
+  for (auto &entry : geo->fpt_buffer_map) 
+  {
+    int pairedRank = entry.first;
+    U_sbuffs[pairedRank] = U_sbuffs_d[pairedRank];
+  }
 
-  for (auto &entry : geo->fpt_buffer_map_d)
+  for (auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs_d[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
     sidx++;
   }
 #endif
@@ -1423,6 +1428,13 @@ void Faces::recv_U_data()
 #endif
 
 #ifdef _GPU
+  /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
+  for (auto &entry : geo->fpt_buffer_map) 
+  {
+    int pairedRank = entry.first;
+    U_rbuffs_d[pairedRank] = U_rbuffs[pairedRank];
+  }
+
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int recvRank = entry.first;
