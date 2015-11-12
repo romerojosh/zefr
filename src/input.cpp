@@ -15,6 +15,7 @@ InputStruct read_input_file(std::string inputfile)
 
   read_param(f, "nDims", input.nDims);
   read_param(f, "meshfile", input.meshfile);
+  read_param(f, "serendipity", input.serendipity, false);
 
   read_param(f, "order", input.order);
   read_param(f, "equation", str);

@@ -41,7 +41,7 @@ FRSolver::FRSolver(InputStruct *input, int order)
 void FRSolver::setup()
 {
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
-  geo = process_mesh(input->meshfile, order, input->nDims);
+  geo = process_mesh(input, order, input->nDims);
 
   if (input->rank == 0) std::cout << "Setting up elements and faces..." << std::endl;
 
@@ -351,6 +351,19 @@ void FRSolver::solver_data_to_device()
   input->V_wall_d = input->V_wall;
   input->norm_fs_d = input->norm_fs;
   input->AdvDiff_A_d = input->AdvDiff_A;
+
+#ifdef _MPI
+  /* MPI data */
+  for (auto &entry : geo.fpt_buffer_map) 
+  {
+    int pairedRank = entry.first;
+    auto &fpts = entry.second;
+    geo.fpt_buffer_map_d[pairedRank] = fpts;
+    faces->U_sbuffs_d[pairedRank] = faces->U_sbuffs[pairedRank];
+    faces->U_rbuffs_d[pairedRank] = faces->U_rbuffs[pairedRank];
+  }
+
+#endif
 
 }
 #endif

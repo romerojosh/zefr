@@ -52,4 +52,11 @@ void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc,
 void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars);
 
+#ifdef _MPI
+void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars);
+void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars);
+#endif
+
 #endif /* faces_kernels_h */

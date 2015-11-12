@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "input.hpp"
 #include "mdvector.hpp"
 
 #ifdef _GPU
@@ -34,20 +35,23 @@ struct GeoStruct
     unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
     std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
-    std::map<unsigned int, std::vector<unsigned int>> fpt_buffer_map;
+    std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
 #endif
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
     mdvector_gpu<unsigned int> gfpt2bnd_d, per_fpt_list_d;
+#ifdef _MPI
+    std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
+#endif
 #endif
 };
 
-GeoStruct process_mesh(std::string meshfile, unsigned int order, int nDims);
-void load_mesh_data(std::string meshfile, GeoStruct &geo);
+GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims);
+void load_mesh_data(InputStruct *input, GeoStruct &geo);
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo);
 void read_node_coords(std::ifstream &f, GeoStruct &geo);
-void read_element_connectivity(std::ifstream &f, GeoStruct &geo);
+void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input);
 void read_boundary_faces(std::ifstream &f, GeoStruct &geo);
 void set_face_nodes(GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);

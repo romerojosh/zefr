@@ -47,6 +47,9 @@ class mdvector
     //! Fill operator
     void fill(T value);
 
+    //! Size operator
+    unsigned int size() const;
+
     //! Method to return vector shape
     std::array<unsigned int,4> shape(void) const;
 
@@ -122,6 +125,12 @@ template <typename T>
 void mdvector<T>::fill(T value)
 {
   std::fill(values.begin(), values.end(), value);
+}
+
+template <typename T>
+unsigned int mdvector<T>::size() const
+{
+  return values.size();
 }
 
 template <typename T>

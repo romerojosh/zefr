@@ -6,9 +6,13 @@
 
 #ifdef _MPI
 #include "mpi.h"
+#ifdef _GPU
+#include "cuda_runtime.h"
+#endif
 #endif
 
 #include "input.hpp"
+#include "macros.hpp"
 #include "multigrid.hpp"
 #include "solver.hpp"
 #include "solver_kernels.h"
@@ -20,6 +24,19 @@ int main(int argc, char* argv[])
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+
+#ifdef _GPU
+  int nDevices;
+  cudaGetDeviceCount(&nDevices);
+
+  if (nDevices < nRanks)
+  {
+    ThrowException("Not enough GPUs for this run. Allocate more!");
+  }
+
+  cudaSetDevice(rank);
+#endif
+
 #endif
 
   if (argc != 2)

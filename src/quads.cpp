@@ -27,8 +27,10 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   /* Generic quadrilateral geometry */
   nDims = 2;
   nFaces = 4;
-  //nNodes = (shape_order+1)*(shape_order+1); // Lagrange Elements
-  nNodes = 4*(shape_order); // Serendipity Elements
+  if (!input->serendipity)
+    nNodes = (shape_order+1)*(shape_order+1); // Lagrange Elements
+  else
+    nNodes = 4*(shape_order); // Serendipity Elements
   
   /* If order argument is not provided, use order in input file */
   if (order == -1)
@@ -552,27 +554,60 @@ double Quads::calc_shape(unsigned int shape_order, unsigned int idx,
     val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta);
   }
 
-  /* 8-node Serendipity Element */
   if (shape_order == 2)
   {
-    switch(idx)
+    if (input->serendipity)
     {
-      case 0:
-        val = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi); break;
-      case 4:
-        val = 0.5*(1.-xi)*(1.+xi)*(1.-eta); break;
-      case 1:
-        val = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi); break;
-      case 5:
-        val = 0.5*(1.+xi)*(1.+eta)*(1.-eta); break;
-      case 2:
-        val = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi); break;
-      case 6:
-        val = 0.5*(1.-xi)*(1.+xi)*(1.+eta); break;
-      case 3:
-        val = -0.25*(1.-xi)*(1.+eta)*(1.-eta+xi); break;
-      case 7:
-        val = 0.5*(1.-xi)*(1.+eta)*(1.-eta); break;
+      /* 8-node Serendipity Element */
+      switch(idx)
+      {
+        case 0:
+          val = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi); break;
+        case 4:
+          val = 0.5*(1.-xi)*(1.+xi)*(1.-eta); break;
+        case 1:
+          val = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi); break;
+        case 5:
+          val = 0.5*(1.+xi)*(1.+eta)*(1.-eta); break;
+        case 2:
+          val = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi); break;
+        case 6:
+          val = 0.5*(1.-xi)*(1.+xi)*(1.+eta); break;
+        case 3:
+          val = -0.25*(1.-xi)*(1.+eta)*(1.-eta+xi); break;
+        case 7:
+          val = 0.5*(1.-xi)*(1.+eta)*(1.-eta); break;
+      }
+    
+    }
+    else
+    {
+      unsigned int i = 0;
+      unsigned int j = 0;
+
+      switch(idx)
+      {
+        case 0:
+          i = 0; j = 0; break;
+        case 1:
+          i = 2; j = 0; break;
+        case 2:
+          i = 2; j = 2; break;
+        case 3:
+          i = 0; j = 2; break;
+        case 4:
+          i = 1; j = 0; break;
+        case 5:
+          i = 2; j = 1; break;
+        case 6:
+          i = 1; j = 2; break;
+        case 7:
+          i = 0; j = 1; break;
+        case 8:
+          i = 1; j = 1; break;
+      }
+
+      val = Lagrange({-1., 0., 1.}, i, xi) * Lagrange({-1., 0., 1.}, j, eta);
     }
   }
 
@@ -613,50 +648,86 @@ double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
   /* 8-node Serendipity Element */
   else if (shape_order == 2)
   {
-    if (dim == 0)
+    if (input->serendipity)
     {
-      switch(idx)
+      if (dim == 0)
       {
-        case 0:
-          val = -0.25*(-1.+eta)*(2.*xi+eta); break;
-        case 4:
-          val = xi*(-1.+eta); break;
-        case 1:
-          val = 0.25*(-1.+eta)*(eta - 2.*xi); break;
-        case 5:
-          val = -0.5*(1+eta)*(-1.+eta); break;
-        case 2:
-          val = 0.25*(1.+eta)*(2.*xi+eta); break;
-        case 6:
-          val = -xi*(1.+eta); break;
-        case 3:
-          val = -0.25*(1.+eta)*(eta-2.*xi); break;
-        case 7:
-          val = 0.5*(1+eta)*(-1.+eta); break;
+        switch(idx)
+        {
+          case 0:
+            val = -0.25*(-1.+eta)*(2.*xi+eta); break;
+          case 4:
+            val = xi*(-1.+eta); break;
+          case 1:
+            val = 0.25*(-1.+eta)*(eta - 2.*xi); break;
+          case 5:
+            val = -0.5*(1+eta)*(-1.+eta); break;
+          case 2:
+            val = 0.25*(1.+eta)*(2.*xi+eta); break;
+          case 6:
+            val = -xi*(1.+eta); break;
+          case 3:
+            val = -0.25*(1.+eta)*(eta-2.*xi); break;
+          case 7:
+            val = 0.5*(1+eta)*(-1.+eta); break;
+        }
+      }
+
+      else if (dim == 1)
+      {
+        switch(idx)
+        {
+          case 0:
+            val = -0.25*(-1.+xi)*(2.*eta+xi); break;
+          case 4:
+            val = 0.5*(1.+xi)*(-1.+xi); break;
+          case 1:
+            val = 0.25*(1.+xi)*(2.*eta - xi); break;
+          case 5:
+            val = -eta*(1.+xi); break;
+          case 2:
+            val = 0.25*(1.+xi)*(2.*eta+xi); break;
+          case 6:
+            val = -0.5*(1.+xi)*(-1.+xi); break;
+          case 3:
+            val = -0.25*(-1.+xi)*(2.*eta-xi); break;
+          case 7:
+            val = eta*(-1.+xi); break;
+        }
       }
     }
-
-    else if (dim == 1)
+    else
     {
+      unsigned int i = 0;
+      unsigned int j = 0;
+
       switch(idx)
       {
         case 0:
-          val = -0.25*(-1.+xi)*(2.*eta+xi); break;
-        case 4:
-          val = 0.5*(1.+xi)*(-1.+xi); break;
+          i = 0; j = 0; break;
         case 1:
-          val = 0.25*(1.+xi)*(2.*eta - xi); break;
-        case 5:
-          val = -eta*(1.+xi); break;
+          i = 2; j = 0; break;
         case 2:
-          val = 0.25*(1.+xi)*(2.*eta+xi); break;
-        case 6:
-          val = -0.5*(1.+xi)*(-1.+xi); break;
+          i = 2; j = 2; break;
         case 3:
-          val = -0.25*(-1.+xi)*(2.*eta-xi); break;
+          i = 0; j = 2; break;
+        case 4:
+          i = 1; j = 0; break;
+        case 5:
+          i = 2; j = 1; break;
+        case 6:
+          i = 1; j = 2; break;
         case 7:
-          val = eta*(-1.+xi); break;
+          i = 0; j = 1; break;
+        case 8:
+          i = 1; j = 1; break;
       }
+
+      if (dim == 0)
+        val = Lagrange_d1({-1, 0, 1}, i, xi) * Lagrange({-1, 0, 1}, j, eta);
+      else
+        val = Lagrange({-1, 0, 1}, i, xi) * Lagrange_d1({-1, 0, 1}, j, eta);
+
     }
 
   }

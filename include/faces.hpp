@@ -66,6 +66,10 @@ class Faces
     mdvector_gpu<int> outnorm_d;
     mdvector_gpu<double> dA_d, waveSp_d;
     mdvector_gpu<int> LDG_bias_d;
+
+#ifdef _MPI
+    std::map<unsigned int, mdvector_gpu<double>> U_sbuffs_d, U_rbuffs_d;
+#endif
 #endif
 
   public:

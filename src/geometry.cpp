@@ -18,12 +18,12 @@
 #include "macros.hpp"
 #include "mdvector.hpp"
 
-GeoStruct process_mesh(std::string meshfile, unsigned int order, int nDims)
+GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 {
   GeoStruct geo;
   geo.nDims = nDims;
 
-  load_mesh_data(meshfile, geo);
+  load_mesh_data(input, geo);
 
 #ifdef _MPI
   partition_geometry(geo);
@@ -36,9 +36,9 @@ GeoStruct process_mesh(std::string meshfile, unsigned int order, int nDims)
 
 }
 
-void load_mesh_data(std::string meshfile, GeoStruct &geo)
+void load_mesh_data(InputStruct *input, GeoStruct &geo)
 {
-  std::ifstream f(meshfile);
+  std::ifstream f(input->meshfile);
 
   if (!f.is_open())
     ThrowException("Could not open specified mesh file!");
@@ -59,7 +59,7 @@ void load_mesh_data(std::string meshfile, GeoStruct &geo)
     /* Load element connectivity data */
     if (param == "$Elements")
     {
-      read_element_connectivity(f, geo);
+      read_element_connectivity(f, geo, input);
       read_boundary_faces(f, geo);
     }
   }
@@ -160,7 +160,7 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo)
  
 }
 
-void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
+void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input)
 { 
   /* Get total number of elements and boundaries */
   unsigned int nElesBnds;
@@ -185,7 +185,11 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
       else if (val == 9 || val == 10)
       {
         geo.nEles++; 
-        geo.shape_order = 2; geo.nNodesPerEle = 8;
+        geo.shape_order = 2; 
+        if (input->serendipity)
+          geo.nNodesPerEle = 8;
+        else
+          geo.nNodesPerEle = 9;
       }
       else if (val == 1 || val == 8)
       {
@@ -265,12 +269,22 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo)
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele); 
           f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(7,ele);
           geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele); geo.nd2gnd(6,ele) = geo.nd2gnd(2,ele);
+
+          if (!input->serendipity)
+          {
+            //TODO set geo.nd2gnd(8,ele) to centroid
+          }
+
           ele++; break;
 
         case 10: /* 9-node Quadilateral (read as 8-node) */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
           f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
-          f >> vint;
+          if (!input->serendipity)
+            f >> geo.nd2gnd(8,ele);
+          else
+            f >> vint;
+
           ele++; break;
 
         default:

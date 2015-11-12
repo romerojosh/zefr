@@ -42,6 +42,8 @@ class mdvector_gpu
     //! Method to return number of values (with padding)
     unsigned int get_nvals() const;
 
+    unsigned int size() const;
+
     //! Method to return starting data pointer
     T* data();
 
@@ -111,6 +113,12 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
 
 template <typename T>
 unsigned int mdvector_gpu<T>::get_nvals() const
+{
+  return nvals;
+}
+
+template <typename T>
+unsigned int mdvector_gpu<T>::size() const
 {
   return nvals;
 }

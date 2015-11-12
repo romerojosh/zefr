@@ -607,16 +607,16 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       for (unsigned int dim = 0; dim < nDims; dim++)
         /* Set boundary state to cancelled normal velocity (strong)*/
-        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+        //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
         /* Set boundary state to reflect normal velocity */
-        //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
-      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
-      //LDG_bias(fpt) = 0;
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
 
       break;
     }
@@ -849,19 +849,19 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
     double dv_dy = (momy_dy - rho_dy * v) / rho;
 
     /* Option 1: Extrapolate momentum gradients */
-    //dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
-    //dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
-    //dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
-    //dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+    dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+    dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+    dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+    dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
 
     /* Option 2: Enforce constraint on tangential velocity gradient */
-    double du_dn = du_dx * norm[0] + du_dy * norm[1];
-    double dv_dn = dv_dx * norm[0] + dv_dy * norm[1];
+    //double du_dn = du_dx * norm[0] + du_dy * norm[1];
+    //double dv_dn = dv_dx * norm[0] + dv_dy * norm[1];
 
-    dU(fpt, 1, 0, 1) = rho * du_dn * norm[0];
-    dU(fpt, 1, 1, 1) = rho * du_dn * norm[1];
-    dU(fpt, 2, 0, 1) = rho * dv_dn * norm[0];
-    dU(fpt, 2, 1, 1) =  rho * dv_dn * norm[1];
+    //dU(fpt, 1, 0, 1) = rho * du_dn * norm[0];
+    //dU(fpt, 1, 1, 1) = rho * du_dn * norm[1];
+    //dU(fpt, 2, 0, 1) = rho * dv_dn * norm[0];
+    //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm[1];
 
    // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
    // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
@@ -874,12 +874,12 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
     double dT_dn = dT_dx * norm[0] + dT_dy * norm[1];
 
     /* Option 1: Simply remove contribution of dT from total energy gradient */
-    //dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm[0]; 
-    //dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm[1]; 
+    dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm[0]; 
+    dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm[1]; 
 
     /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
-    dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 3, 1) / rho; 
-    dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 3, 1) / rho; 
+    //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 3, 1) / rho; 
+    //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 3, 1) / rho; 
 
   }
   else
@@ -1257,3 +1257,50 @@ void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<doub
   transform_flux_faces<<<blocks,threads>>>(Fcomm, dA, nFpts, nVars);
 
 }
+
+#ifdef _MPI
+__global__
+void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts)
+{
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  U_sbuffs(i, var) = U(fpts(i), var, 0);
+}
+
+void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars)
+{
+  dim3 threads(32,4);
+  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  pack_U<<<blocks,threads>>>(U_sbuffs, fpts, U, nVars, fpts.size());
+}
+
+__global__
+void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts)
+{
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  U(fpts(i), var, 1) = U_rbuffs(i, var);
+}
+
+void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars)
+{
+  dim3 threads(32,4);
+  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  unpack_U<<<blocks,threads>>>(U_rbuffs, fpts, U, nVars, fpts.size());
+}
+
+#endif
