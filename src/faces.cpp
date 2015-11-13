@@ -572,9 +572,9 @@ void Faces::apply_bcs()
 #endif
 
 #ifdef _GPU
-  apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, nVars, nDims, input->rho_fs, input->V_fs_d, input->P_fs, input->gamma, 
-      input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, input->norm_fs_d, 
-      norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d);
+  apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
+      input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
+      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d);
 
   check_error();
 
@@ -690,8 +690,8 @@ void Faces::apply_bcs_dU()
 #endif
 
 #ifdef _GPU
-  apply_bcs_dU_wrapper(dU_d, U_d, norm_d, nFpts, geo->nGfpts_int, nVars, nDims,
-      geo->gfpt2bnd_d, geo->per_fpt_list_d);
+  apply_bcs_dU_wrapper(dU_d, U_d, norm_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, 
+      nDims, geo->gfpt2bnd_d, geo->per_fpt_list_d);
 
   check_error();
   
@@ -723,7 +723,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, nFpts, nDims, input->AdvDiff_A_d);
+    compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, nFpts, nDims, input->AdvDiff_A_d,
+        startFpt, endFpt);
     check_error();
 #endif
   }
@@ -838,7 +839,8 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_Fvisc_fpts_AdvDiff_wrapper(Fvisc_d, dU_d, nFpts, nDims, input->AdvDiff_D);
+    compute_Fvisc_fpts_AdvDiff_wrapper(Fvisc_d, dU_d, nFpts, nDims, input->AdvDiff_D,
+        startFpt, endFpt);
     check_error();
 #endif
 
@@ -922,7 +924,8 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_Fvisc_fpts_2D_EulerNS_wrapper(Fvisc_d, U_d, dU_d, nFpts, input->gamma, 
-        input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
+        input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
+        startFpt, endFpt);
     check_error();
 
     //Fvisc = Fvisc_d;
@@ -963,7 +966,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
       LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, outnorm_d, LDG_bias_d, input->ldg_b,
-          input->ldg_tau, nFpts, nVars, nDims, input->equation);
+          input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
       check_error();
 
@@ -1041,7 +1044,8 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars, nDims, LDG_bias_d);
+    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars, nDims, LDG_bias_d, 
+        startFpt, endFpt);
 
     check_error();
 
