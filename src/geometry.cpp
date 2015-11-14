@@ -176,6 +176,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     if (geo.nDims == 2)
     {
       geo.nFacesPerEle = 4; geo.nNodesPerFace = 2;
+      geo.nCornerNodes = 4;
 
       if (val == 2 || val == 3)
       {
@@ -203,6 +204,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     else if (geo.nDims == 3)
     {
       geo.nFacesPerEle = 6; geo.nNodesPerFace = 4;
+      geo.nCornerNodes = 8;
       if (val == 2 || val == 3 || val == 9 || val == 10)
       {
         geo.nBnds++;
@@ -273,6 +275,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           if (!input->serendipity)
           {
             //TODO set geo.nd2gnd(8,ele) to centroid
+            ThrowException("Biquadratic quad to triangles not implemented yet! Set serendipity = 1!");
           }
 
           ele++; break;
@@ -1305,19 +1308,30 @@ void partition_geometry(GeoStruct &geo)
 
   /* Form eptr and eind arrays */
   std::vector<int> eptr(geo.nEles + 1); 
-  std::vector<int> eind(geo.nEles * geo.nNodesPerEle); 
+  std::vector<int> eind(geo.nEles * geo.nCornerNodes); 
+  std::set<unsigned int> nodes;
 
   int n = 0;
   eptr[0] = 0;
   for (unsigned int i = 0; i < geo.nEles; i++)
   {
-    for (unsigned int j = 0; j < geo.nNodesPerEle; j++)
+    for (unsigned int j = 0; j < geo.nCornerNodes;  j++)
     {
       eind[j + n] = geo.nd2gnd(j, i);
+      nodes.insert(geo.nd2gnd(j,i));
     } 
 
-    n += geo.nNodesPerEle;
+    /* Check for collapsed edge (not fully general yet)*/
+    if (nodes.size() < geo.nCornerNodes)
+    {
+      n += geo.nCornerNodes - 1;
+    }
+    else
+    {
+      n += geo.nCornerNodes;
+    }
     eptr[i + 1] = n;
+    nodes.clear();
   }
 
   int objval;

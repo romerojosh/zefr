@@ -382,7 +382,6 @@ void FRSolver::compute_residual(unsigned int stage)
 
   /* Copy flux point data from element local to face local storage */
   U_to_faces();
-  std::cout << "1" << std::endl;
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
@@ -395,7 +394,6 @@ void FRSolver::compute_residual(unsigned int stage)
   /* Compute convective flux at solution points */
   eles->compute_Fconv();
 
-  std::cout << "2" << std::endl;
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
@@ -428,7 +426,6 @@ void FRSolver::compute_residual(unsigned int stage)
 
     /* Receieve U data */
     faces->recv_U_data();
-  std::cout << "3" << std::endl;
 
     /* Finish computation of common interface solution */
     faces->compute_common_U(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
@@ -456,7 +453,6 @@ void FRSolver::compute_residual(unsigned int stage)
     dU_to_faces();
 
 #ifdef _MPI
-  std::cout << "4" << std::endl;
     /* Commence sending gradient data to other processes */
     faces->send_dU_data();
 
@@ -465,7 +461,6 @@ void FRSolver::compute_residual(unsigned int stage)
 
     /* Compute viscous flux at solution points */
     eles->compute_Fvisc();
-  std::cout << "5" << std::endl;
 
     /* Compute viscous and convective flux and common interface flux 
      * at non-MPI flux points */

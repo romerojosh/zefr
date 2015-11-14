@@ -19,7 +19,7 @@ struct GeoStruct
     unsigned int nEles = 0; 
     unsigned int nBnds = 0;
     unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace;
-    unsigned int nGfpts, nGfpts_int, nGfpts_bnd;
+    unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
     bool per_bnd_flag = false;
     std::vector<unsigned int> bnd_ids;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;

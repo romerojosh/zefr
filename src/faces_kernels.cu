@@ -781,8 +781,11 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
   unsigned int threads = 192;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
-  apply_bcs<<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, nVars, nDims, rho_fs, V_fs, P_fs, 
-      gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+  if (blocks != 0)
+  {
+    apply_bcs<<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, nVars, nDims, rho_fs, V_fs, P_fs, 
+        gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+  }
 }
 
 __global__
@@ -904,8 +907,11 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdv
   unsigned int threads = 192;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
-  apply_bcs_dU<<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd, nVars, nDims, 
-      gfpt2bnd, per_fpt_list);
+  if (blocks != 0)
+  {
+    apply_bcs_dU<<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd, nVars, nDims, 
+        gfpt2bnd, per_fpt_list);
+  }
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
