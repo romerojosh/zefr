@@ -1360,8 +1360,11 @@ void FRSolver::report_forces(std::ofstream &f)
   auto cpfile = ss.str();
   std::ofstream g(cpfile);
 
-  /* Get angle of attack */
+  /* Get angle of attack (and sideslip) */
   double aoa = std::atan2(input->V_fs(1), input->V_fs(0)); 
+  double aos = 0.0;
+  if (eles->nDims == 3)
+    aos = std::atan2(input->V_fs(2), input->V_fs(0));
 
   /* Compute factor for non-dimensional coefficients */
   double Vsq = 0.0;
@@ -1385,8 +1388,9 @@ void FRSolver::report_forces(std::ofstream &f)
       double CP = (PL - input->P_fs) * fac;
 
       /* Write CP distrubtion to file */
-      g << std:: scientific << faces->coord(fpt, 0) << " " << faces->coord(fpt, 1) << " " << 
-        CP << std::endl;
+      for(unsigned int dim = 0; dim < eles->nDims; dim++)
+        g << std::scientific << faces->coord(fpt, dim) << " ";
+      g << std::scientific << CP << std::endl;
 
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
@@ -1454,9 +1458,81 @@ void FRSolver::report_forces(std::ofstream &f)
               faces->dA(fpt) * fac;
 
         }
-        else
+        else if (eles->nDims == 3)
         {
-          ThrowException("Under construction!");
+          /* Setting variables for convenience */
+          /* States */
+          double rho = faces->U(fpt, 0, 0);
+          double momx = faces->U(fpt, 1, 0);
+          double momy = faces->U(fpt, 2, 0);
+          double momz = faces->U(fpt, 3, 0);
+          double e = faces->U(fpt, 4, 0);
+
+          double u = momx / rho;
+          double v = momy / rho;
+          double w = momz / rho;
+          double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
+
+           /* Gradients */
+          double rho_dx = faces->dU(fpt, 0, 0, 0);
+          double momx_dx = faces->dU(fpt, 1, 0, 0);
+          double momy_dx = faces->dU(fpt, 2, 0, 0);
+          double momz_dx = faces->dU(fpt, 3, 0, 0);
+          
+          double rho_dy = faces->dU(fpt, 0, 1, 0);
+          double momx_dy = faces->dU(fpt, 1, 1, 0);
+          double momy_dy = faces->dU(fpt, 2, 1, 0);
+          double momz_dy = faces->dU(fpt, 3, 1, 0);
+
+          double rho_dz = faces->dU(fpt, 0, 2, 0);
+          double momx_dz = faces->dU(fpt, 1, 2, 0);
+          double momy_dz = faces->dU(fpt, 2, 2, 0);
+          double momz_dz = faces->dU(fpt, 3, 2, 0);
+
+          /* Set viscosity */
+          double mu;
+          if (input->fix_vis)
+          {
+            mu = input->mu;
+          }
+          /* If desired, use Sutherland's law */
+          else
+          {
+            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + 
+                input->c_sth);
+          }
+
+          double du_dx = (momx_dx - rho_dx * u) / rho;
+          double du_dy = (momx_dy - rho_dy * u) / rho;
+          double du_dz = (momx_dz - rho_dz * u) / rho;
+
+          double dv_dx = (momy_dx - rho_dx * v) / rho;
+          double dv_dy = (momy_dy - rho_dy * v) / rho;
+          double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+          double dw_dx = (momz_dx - rho_dx * w) / rho;
+          double dw_dy = (momz_dy - rho_dy * w) / rho;
+          double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+          double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+
+          double tauxx = 2.0 * mu * (du_dx - diag);
+          double tauyy = 2.0 * mu * (dv_dy - diag);
+          double tauzz = 2.0 * mu * (dw_dz - diag);
+          double tauxy = mu * (du_dy + dv_dx);
+          double tauxz = mu * (du_dz + dw_dx);
+          double tauyz = mu * (dv_dz + dw_dy);
+
+          /* Get viscous normal stress */
+          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0) + tauxz * faces->norm(fpt, 2, 0);
+          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0) + tauyz * faces->norm(fpt, 2, 0);
+          taun[3] = tauxz * faces->norm(fpt, 0, 0) + tauyz * faces->norm(fpt, 1, 0) + tauzz * faces->norm(fpt, 2, 0);
+
+          for (unsigned int dim = 0; dim < eles->nDims; dim++)
+            force_visc[dim] -= eles->weights_spts(count%eles->nSpts1D) * taun[dim] * 
+              faces->dA(fpt) * fac;
+
         }
         
       }
@@ -1489,9 +1565,14 @@ void FRSolver::report_forces(std::ofstream &f)
       CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
       CD_visc = force_visc[0] * std::cos(aoa) + force_visc[1] * std::sin(aoa);
     }
-    else
+    else if (eles->nDims == 3)
     {
-      ThrowException("Under construction!");
+      CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
+      CD_conv = force_conv[0] * std::cos(aoa) * std::cos(aos) + force_conv[1] * std::sin(aoa) + 
+        force_conv[2] * std::sin(aoa) * std::cos(aos);
+      CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
+      CD_visc = force_visc[0] * std::cos(aoa) * std::cos(aos) + force_visc[1] * std::sin(aoa) + 
+        force_visc[2] * std::sin(aoa) * cos(aos);
     }
 
     std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;

@@ -80,8 +80,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "rho_fs", input.rho_fs, 1.0);
   input.V_fs.assign({3});
   read_param(f, "u_fs", input.V_fs(0), 0.2);
-  read_param(f, "v_fs", input.V_fs(1), 0.2);
-  read_param(f, "w_fs", input.V_fs(2), 0.2);
+  read_param(f, "v_fs", input.V_fs(1), 0.0);
+  read_param(f, "w_fs", input.V_fs(2), 0.0); 
   read_param(f, "P_fs", input.P_fs, .71428571428);
 
 

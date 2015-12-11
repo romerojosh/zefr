@@ -981,9 +981,9 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
           double dv_dy = (momy_dy - rho_dy * v) / rho;
           double dv_dz = (momy_dz - rho_dz * v) / rho;
 
-          double dw_dx = (momz_dx - rho_dx * v) / rho;
-          double dw_dy = (momz_dy - rho_dy * v) / rho;
-          double dw_dz = (momz_dz - rho_dz * v) / rho;
+          double dw_dx = (momz_dx - rho_dx * w) / rho;
+          double dw_dy = (momz_dy - rho_dy * w) / rho;
+          double dw_dz = (momz_dz - rho_dz * w) / rho;
 
           double dke_dx = 0.5 * (u*u + v*v + w*w) * rho_dx + rho * (u * du_dx + v * dv_dx + w * dw_dx);
           double dke_dy = 0.5 * (u*u + v*v + w*w) * rho_dy + rho * (u * du_dy + v * dv_dy + w * dw_dy);
@@ -999,7 +999,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
           double tauyy = 2.0 * mu * (dv_dy - diag);
           double tauzz = 2.0 * mu * (dw_dz - diag);
           double tauxy = mu * (du_dy + dv_dx);
-          double tauxz = mu * (du_dz + dv_dx);
+          double tauxz = mu * (du_dz + dw_dx);
           double tauyz = mu * (dv_dz + dw_dy);
 
           /* Set viscous flux values */
