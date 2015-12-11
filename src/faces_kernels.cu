@@ -272,7 +272,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
     mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
     mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, 
-    mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias)
+    mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias, unsigned int equation)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -297,17 +297,25 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
   
     case 2: /* Farfield and Supersonic Inlet */
     {
-      /* Set boundaries to freestream values */
-      U(fpt, 0, 1) = rho_fs;
-
-      double Vsq = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
+      if (equation == AdvDiff)
       {
-        U(fpt, dim+1, 1) = rho_fs * V_fs(dim);
-        Vsq += V_fs(dim) * V_fs(dim);
+        /* Set boundaries to zero */
+        U(fpt, 0, 1) = 0;
       }
+      else
+      {
+        /* Set boundaries to freestream values */
+        U(fpt, 0, 1) = rho_fs;
 
-      U(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5*rho_fs * Vsq; 
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          U(fpt, dim+1, 1) = rho_fs * V_fs(dim);
+          Vsq += V_fs(dim) * V_fs(dim);
+        }
+
+        U(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5*rho_fs * Vsq; 
+      }
 
       /* Set LDG bias */
       //LDG_bias(fpt) = -1;
@@ -776,7 +784,7 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &norm_fs, 
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, 
-    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias)
+    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
@@ -784,7 +792,7 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
   if (blocks != 0)
   {
     apply_bcs<<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, nVars, nDims, rho_fs, V_fs, P_fs, 
-        gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+        gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, equation); 
   }
 }
 

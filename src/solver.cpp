@@ -1298,14 +1298,18 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
 
 #ifdef _MPI
+  MPI_Op oper = MPI_SUM;
+  if (input->res_type == 0)
+    oper = MPI_MAX;
+
   if (input->rank == 0)
   {
-    MPI_Reduce(MPI_IN_PLACE, res.data(), eles->nVars, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, res.data(), eles->nVars, MPI_DOUBLE, oper, 0, MPI_COMM_WORLD);
     MPI_Reduce(MPI_IN_PLACE, &nDoF, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
   }
   else
   {
-    MPI_Reduce(res.data(), res.data(), eles->nVars, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(res.data(), res.data(), eles->nVars, MPI_DOUBLE, oper, 0, MPI_COMM_WORLD);
     MPI_Reduce(&nDoF, &nDoF, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
   }
 #endif

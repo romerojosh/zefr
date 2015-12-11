@@ -6,6 +6,10 @@
 #include <thrust/device_vector.h>
 #include <thrust/extrema.h>
 
+#ifdef _MPI
+#include "mpi.h"
+#endif
+
 #include "input.hpp"
 #include "macros.hpp"
 #include "mdvector_gpu.h"
@@ -551,8 +555,16 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
     /* Get min dt using thrust (pretty slow) */
     thrust::device_ptr<double> dt_ptr = thrust::device_pointer_cast(dt.data());
     thrust::device_ptr<double> min_ptr = thrust::min_element(dt_ptr, dt_ptr + nEles);
-    //dt_ptr[0] = min_ptr[0];
-    thrust::copy(min_ptr, min_ptr+1, dt_ptr);
+
+#ifdef _MPI
+    double min_dt = min_ptr[0];
+    MPI_Allreduce(MPI_IN_PLACE, &min_dt, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    dt_ptr[0] = min_dt;
+#else
+    dt_ptr[0] = min_ptr[0];
+    //thrust::copy(min_ptr, min_ptr+1, dt_ptr);
+#endif
+
   }
 
 }

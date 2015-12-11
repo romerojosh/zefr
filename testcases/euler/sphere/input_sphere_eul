@@ -27,7 +27,7 @@ output_prefix sphere_eul
 write_freq    1000
 report_freq   10
 res_type      1
-force_freq    1000
+force_freq    0
 error_freq    0
 nQpts1D       10
 
