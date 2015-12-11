@@ -3,13 +3,13 @@ nDims    2
 meshfile couette_quad_4x8.msh
 
 # Solver:
-order     2
+order     3
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 25000
+n_steps 10000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
@@ -23,9 +23,9 @@ low_order 0
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix couette_p2_4x8
+output_prefix couette
 write_freq    5000
-report_freq   100
+report_freq   1000
 res_type      2
 force_freq    0
 error_freq    5000

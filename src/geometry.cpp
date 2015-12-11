@@ -1084,8 +1084,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         auto face_ordered = geo.face2ordered[face];
 
         /* Convert face_ordered node indexing to global indexing */
-        for (auto &fpt : face_ordered)
-          fpt = geo.node_map_p2g[fpt];
+        for (auto &nd : face_ordered)
+          nd = geo.node_map_p2g[nd];
 
         /* Append flux points to fpt_buffer_map in existing order */
         for (auto fpt : fpts)
@@ -1105,8 +1105,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, MPI_COMM_WORLD, &temp);
 
         /* Convert received face_ordered node indexing to partition local indexing */
-        for (auto &fpt : face_ordered_mpi)
-          fpt = geo.node_map_g2p[fpt];
+        for (auto &nd : face_ordered_mpi)
+          nd = geo.node_map_g2p[nd];
 
         /* Determine rotation using ordered faces*/
         unsigned int rot = 0;
@@ -1127,36 +1127,36 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         switch (rot)
         {
           case 0:
-            for (unsigned int i = 0; i < nFpts1D; i++)
+            for (unsigned int j = 0; j < nFpts1D; j++)
             {
-              for (unsigned int j = 0; j < nFpts1D; j++)
+              for (unsigned int i = 0; i < nFpts1D; i++)
               {
                  geo.fpt_buffer_map[sendRank].push_back(fpts[i * nFpts1D + j]);
               }
             } break;
 
           case 1:
-            for (unsigned int i = 0; i < nFpts1D; i++)
+            for (unsigned int j = 0; j < nFpts1D; j++)
             {
-              for (unsigned int j = 0; j < nFpts1D; j++)
+              for (unsigned int i = 0; i < nFpts1D; i++)
               {
                 geo.fpt_buffer_map[sendRank].push_back(fpts[nFpts1D - i + j * nFpts1D - 1]);
               }
             } break;
 
           case 2:
-            for (unsigned int i = 0; i < nFpts1D; i++)
+            for (unsigned int j = 0; j < nFpts1D; j++)
             {
-              for (unsigned int j = 0; j < nFpts1D; j++)
+              for (unsigned int i = 0; i < nFpts1D; i++)
               {
                 geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i * nFpts1D - j - 1]);
               }
             } break;
 
           case 3:
-            for (unsigned int i = 0; i < nFpts1D; i++)
+            for (unsigned int j = 0; j < nFpts1D; j++)
             {
-              for (unsigned int j = 0; j < nFpts1D; j++)
+              for (unsigned int i = 0; i < nFpts1D; i++)
               {
                 geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - (j+1) * nFpts1D + i]);
               }

@@ -3,20 +3,20 @@ nDims    2
 meshfile full_cyl_quad.msh
 
 # Solver:
-order     2
+order     3
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 10000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
-CFL	  0.4
+CFL	  0.5
 
 # Multigrid:
-p_multi 0
+p_multi 1
 smooth_steps 1
 rel_fac 1.00
 low_order 0

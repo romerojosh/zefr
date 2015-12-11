@@ -9,11 +9,14 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 300000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.000001
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.0001
 CFL	  0.6
+
+restart 0
+restart_file cyl_uquad/cyl_uquad_000220000.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
