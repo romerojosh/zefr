@@ -1,0 +1,43 @@
+# Geometry:
+nDims    2
+meshfile QuadBox_32x32.msh
+
+# Solver:
+order     3
+equation AdvDiff    (AdvDiff, EulerNS)
+viscous  1
+spt_type Legendre
+squeeze  0
+s_factor  0.0
+
+# Timestepping:
+n_steps 5000
+dt_scheme RK44      (Euler, RK44, RK54)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.0001
+CFL	  0.5
+
+# Reporting:
+# Note: You can suppress output by setting freq to zero. 
+output_prefix sines
+write_freq    1000
+report_freq   100
+res_type      1
+force_freq    0
+error_freq    1000
+nQpts1D       10
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.0
+ldg_tau    1.0
+
+# Equation Specific Parameters:
+ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+
+# Advection-Diffusion
+AdvDiff_Ax 1
+AdvDiff_Ay 1
+AdvDiff_D 0.1
