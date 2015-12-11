@@ -8,10 +8,6 @@ void compute_Fconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &F_spts,
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
     unsigned int nDims, mdvector_gpu<double> &AdvDiff_A);
 
-void compute_Fconv_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
-    mdvector_gpu<double> &U_spts, unsigned int nSpts,  unsigned int nEles, 
-    double gamma);
-
 void compute_Fconv_spts_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
     unsigned int nDims, double gamma);
@@ -20,9 +16,9 @@ void compute_Fvisc_spts_AdvDiff_wrapper(mdvector_gpu<double> &F_spts,
     mdvector_gpu<double> &dU_spts, unsigned int nSpts, unsigned int nEles, 
     unsigned int nDims, double AdvDiff_D);
 
-void compute_Fvisc_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
+void compute_Fvisc_spts_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts, 
-    unsigned int nSpts, unsigned int nEles, double gamma,
+    unsigned int nSpts, unsigned int nEles, unsigned int nDims, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis);
 
 void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts, 

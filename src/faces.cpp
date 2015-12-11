@@ -1029,7 +1029,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_Fvisc_fpts_2D_EulerNS_wrapper(Fvisc_d, U_d, dU_d, nFpts, input->gamma, 
+    compute_Fvisc_fpts_EulerNS_wrapper(Fvisc_d, U_d, dU_d, nFpts, nDims, input->gamma, 
         input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
         startFpt, endFpt);
     check_error();
@@ -1075,8 +1075,6 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
           input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
       check_error();
-
-      //Fcomm = Fcomm_d;
 #endif
     }
     /*

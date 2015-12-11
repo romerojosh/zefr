@@ -17,8 +17,8 @@ void compute_Fvisc_fpts_AdvDiff_wrapper(mdvector_gpu<double> &Fvisc,
     mdvector_gpu<double> &dU, unsigned int nFpts, unsigned int nDims, 
     double AdvDiff_D, unsigned int startFpt, unsigned int endFpt);
 
-void compute_Fvisc_fpts_2D_EulerNS_wrapper(mdvector_gpu<double> &Fvisc, 
-    mdvector_gpu<double> &U, mdvector_gpu<double> &dU, unsigned int nFpts, double gamma, 
+void compute_Fvisc_fpts_EulerNS_wrapper(mdvector_gpu<double> &Fvisc, 
+    mdvector_gpu<double> &U, mdvector_gpu<double> &dU, unsigned int nFpts, unsigned int nDims, double gamma, 
         double prandtl, double mu_in, double c_sth, double rt, bool fix_vis,
         unsigned int startFpt, unsigned int endFpt);
 

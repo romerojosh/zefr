@@ -239,6 +239,7 @@ void FRSolver::restart(std::string restart_file)
   std::string param, line;
   double val;
   unsigned int nPpts1D = eles->nSpts1D + 2;
+  unsigned int nPpts2D = nPpts1D * nPpts1D;
 
   /* Load data from restart file */
   while (f >> param)
@@ -267,9 +268,19 @@ void FRSolver::restart(std::string restart_file)
             f >> val;
 
             /* Logic to deal with extra plot point (corner nodes and flux points). */
-            if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || 
-                (ppt+1)%nPpts1D == 0)
-              continue;
+            if (input->nDims == 2)
+            {
+              if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || 
+                  (ppt+1)%nPpts1D == 0)
+                continue;
+            }
+            else
+            {
+              int shift = (ppt / nPpts2D) * nPpts2D;
+              if (ppt < nPpts2D || ppt < nPpts1D + shift || ppt > nPpts1D * (nPpts1D-1) + shift || 
+                  (ppt-shift) % nPpts1D== 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts2D - 1))
+                continue;
+            }
 
             eles->U_spts(spt, ele, n) = val;
             spt++;
