@@ -529,20 +529,9 @@ void Elements::compute_Fconv()
           F_spts(spt, ele, 3, 1) = U_spts(spt, ele, 2) * H;
         }
       }
-#endif
-
-      /*
-#ifdef _GPU
-      compute_Fconv_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, input->gamma);
-      check_error();
-
-#endif
-      */
-
     }
     else if (nDims == 3)
     {
-#ifdef _CPU
 #pragma omp parallel for collapse(2)
       for (unsigned int ele = 0; ele < nEles; ele++)
       {
@@ -580,23 +569,13 @@ void Elements::compute_Fconv()
           F_spts(spt, ele, 4, 2) = U_spts(spt, ele, 3) * H;
         }
       }
-#endif
-
-      /*
-#ifdef _GPU
-      compute_Fconv_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, input->gamma);
-      check_error();
-#endif
-*/
-
-
     }
+#endif
 
 #ifdef _GPU
     compute_Fconv_spts_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma);
     check_error();
 #endif
-
 
   }
 
@@ -633,74 +612,178 @@ void Elements::compute_Fvisc()
   else if (input->equation == EulerNS)
   {
 #ifdef _CPU
-#pragma omp parallel for collapse(2)
-    for (unsigned int ele = 0; ele < nEles; ele++)
+    if (nDims == 2)
     {
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+#pragma omp parallel for collapse(2)
+      for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        /* Setting variables for convenience */
-        /* States */
-        double rho = U_spts(spt, ele, 0);
-        double momx = U_spts(spt, ele, 1);
-        double momy = U_spts(spt, ele, 2);
-        double e = U_spts(spt, ele, 3);
-
-        double u = momx / rho;
-        double v = momy / rho;
-        double e_int = e / rho - 0.5 * (u*u + v*v);
-
-        /* Gradients */
-        double rho_dx = dU_spts(spt, ele, 0, 0);
-        double momx_dx = dU_spts(spt, ele, 1, 0);
-        double momy_dx = dU_spts(spt, ele, 2, 0);
-        double e_dx = dU_spts(spt, ele, 3, 0);
-        
-        double rho_dy = dU_spts(spt, ele, 0, 1);
-        double momx_dy = dU_spts(spt, ele, 1, 1);
-        double momy_dy = dU_spts(spt, ele, 2, 1);
-        double e_dy = dU_spts(spt, ele, 3, 1);
-
-        /* Set viscosity */
-        double mu;
-        if (input->fix_vis)
+        for (unsigned int spt = 0; spt < nSpts; spt++)
         {
-          mu = input->mu;
+          /* Setting variables for convenience */
+          /* States */
+          double rho = U_spts(spt, ele, 0);
+          double momx = U_spts(spt, ele, 1);
+          double momy = U_spts(spt, ele, 2);
+          double e = U_spts(spt, ele, 3);
+
+          double u = momx / rho;
+          double v = momy / rho;
+          double e_int = e / rho - 0.5 * (u*u + v*v);
+
+          /* Gradients */
+          double rho_dx = dU_spts(spt, ele, 0, 0);
+          double momx_dx = dU_spts(spt, ele, 1, 0);
+          double momy_dx = dU_spts(spt, ele, 2, 0);
+          double e_dx = dU_spts(spt, ele, 3, 0);
+          
+          double rho_dy = dU_spts(spt, ele, 0, 1);
+          double momx_dy = dU_spts(spt, ele, 1, 1);
+          double momy_dy = dU_spts(spt, ele, 2, 1);
+          double e_dy = dU_spts(spt, ele, 3, 1);
+
+          /* Set viscosity */
+          double mu;
+          if (input->fix_vis)
+          {
+            mu = input->mu;
+          }
+          else
+          {
+            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
+          }
+
+          double du_dx = (momx_dx - rho_dx * u) / rho;
+          double du_dy = (momx_dy - rho_dy * u) / rho;
+
+          double dv_dx = (momy_dx - rho_dx * v) / rho;
+          double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+          double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+          double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+
+          double de_dx = (e_dx - dke_dx - rho_dx * e_int) / rho;
+          double de_dy = (e_dy - dke_dy - rho_dy * e_int) / rho;
+
+          double diag = (du_dx + dv_dy) / 3.0;
+
+          double tauxx = 2.0 * mu * (du_dx - diag);
+          double tauxy = mu * (du_dy + dv_dx);
+          double tauyy = 2.0 * mu * (dv_dy - diag);
+
+          /* Set viscous flux values */
+          F_spts(spt, ele, 1, 0) -= tauxx;
+          F_spts(spt, ele, 2, 0) -= tauxy;
+          F_spts(spt, ele, 3, 0) -= (u * tauxx + v * tauxy + (mu / input->prandtl) *
+              input-> gamma * de_dx);
+
+          F_spts(spt, ele, 1, 1) -= tauxy;
+          F_spts(spt, ele, 2, 1) -= tauyy;
+          F_spts(spt, ele, 3, 1) -= (u * tauxy + v * tauyy + (mu / input->prandtl) *
+              input->gamma * de_dy);
         }
-        else
-        {
-          double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-          mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
-        }
-
-        double du_dx = (momx_dx - rho_dx * u) / rho;
-        double du_dy = (momx_dy - rho_dy * u) / rho;
-
-        double dv_dx = (momy_dx - rho_dx * v) / rho;
-        double dv_dy = (momy_dy - rho_dy * v) / rho;
-
-        double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
-        double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
-
-        double de_dx = (e_dx - dke_dx - rho_dx * e_int) / rho;
-        double de_dy = (e_dy - dke_dy - rho_dy * e_int) / rho;
-
-        double diag = (du_dx + dv_dy) / 3.0;
-
-        double tauxx = 2.0 * mu * (du_dx - diag);
-        double tauxy = mu * (du_dy + dv_dx);
-        double tauyy = 2.0 * mu * (dv_dy - diag);
-
-        /* Set viscous flux values */
-        F_spts(spt, ele, 1, 0) -= tauxx;
-        F_spts(spt, ele, 2, 0) -= tauxy;
-        F_spts(spt, ele, 3, 0) -= (u * tauxx + v * tauxy + (mu / input->prandtl) *
-            input-> gamma * de_dx);
-
-        F_spts(spt, ele, 1, 1) -= tauxy;
-        F_spts(spt, ele, 2, 1) -= tauyy;
-        F_spts(spt, ele, 3, 1) -= (u * tauxy + v * tauyy + (mu / input->prandtl) *
-            input->gamma * de_dy);
       }
+    }
+    else if (nDims == 3)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          /* Setting variables for convenience */
+          /* States */
+          double rho = U_spts(spt, ele, 0);
+          double momx = U_spts(spt, ele, 1);
+          double momy = U_spts(spt, ele, 2);
+          double momz = U_spts(spt, ele, 3);
+          double e = U_spts(spt, ele, 4);
+
+          double u = momx / rho;
+          double v = momy / rho;
+          double w = momz / rho;
+          double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
+
+          /* Gradients */
+          double rho_dx = dU_spts(spt, ele, 0, 0);
+          double momx_dx = dU_spts(spt, ele, 1, 0);
+          double momy_dx = dU_spts(spt, ele, 2, 0);
+          double momz_dx = dU_spts(spt, ele, 3, 0);
+          double e_dx = dU_spts(spt, ele, 4, 0);
+          
+          double rho_dy = dU_spts(spt, ele, 0, 1);
+          double momx_dy = dU_spts(spt, ele, 1, 1);
+          double momy_dy = dU_spts(spt, ele, 2, 1);
+          double momz_dy = dU_spts(spt, ele, 3, 1);
+          double e_dy = dU_spts(spt, ele, 4, 1);
+
+          double rho_dz = dU_spts(spt, ele, 0, 2);
+          double momx_dz = dU_spts(spt, ele, 1, 2);
+          double momy_dz = dU_spts(spt, ele, 2, 2);
+          double momz_dz = dU_spts(spt, ele, 3, 2);
+          double e_dz = dU_spts(spt, ele, 4, 2);
+
+          /* Set viscosity */
+          double mu;
+          if (input->fix_vis)
+          {
+            mu = input->mu;
+          }
+          else
+          {
+            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
+          }
+
+          double du_dx = (momx_dx - rho_dx * u) / rho;
+          double du_dy = (momx_dy - rho_dy * u) / rho;
+          double du_dz = (momx_dz - rho_dz * u) / rho;
+
+          double dv_dx = (momy_dx - rho_dx * v) / rho;
+          double dv_dy = (momy_dy - rho_dy * v) / rho;
+          double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+          double dw_dx = (momz_dx - rho_dx * v) / rho;
+          double dw_dy = (momz_dy - rho_dy * v) / rho;
+          double dw_dz = (momz_dz - rho_dz * v) / rho;
+
+          double dke_dx = 0.5 * (u*u + v*v + w*w) * rho_dx + rho * (u * du_dx + v * dv_dx + w * dw_dx);
+          double dke_dy = 0.5 * (u*u + v*v + w*w) * rho_dy + rho * (u * du_dy + v * dv_dy + w * dw_dy);
+          double dke_dz = 0.5 * (u*u + v*v + w*w) * rho_dz + rho * (u * du_dz + v * dv_dz + w * dw_dz);
+
+          double de_dx = (e_dx - dke_dx - rho_dx * e_int) / rho;
+          double de_dy = (e_dy - dke_dy - rho_dy * e_int) / rho;
+          double de_dz = (e_dz - dke_dz - rho_dz * e_int) / rho;
+
+          double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+
+          double tauxx = 2.0 * mu * (du_dx - diag);
+          double tauyy = 2.0 * mu * (dv_dy - diag);
+          double tauzz = 2.0 * mu * (dw_dz - diag);
+          double tauxy = mu * (du_dy + dv_dx);
+          double tauxz = mu * (du_dz + dv_dx);
+          double tauyz = mu * (dv_dz + dw_dy);
+
+          /* Set viscous flux values */
+          F_spts(spt, ele, 1, 0) -= tauxx;
+          F_spts(spt, ele, 2, 0) -= tauxy;
+          F_spts(spt, ele, 3, 0) -= tauxz;
+          F_spts(spt, ele, 4, 0) -= (u * tauxx + v * tauxy + w * tauxz + (mu / input->prandtl) *
+              input-> gamma * de_dx);
+
+          F_spts(spt, ele, 1, 1) -= tauxy;
+          F_spts(spt, ele, 2, 1) -= tauyy;
+          F_spts(spt, ele, 3, 1) -= tauyz;
+          F_spts(spt, ele, 4, 1) -= (u * tauxy + v * tauyy + w * tauyz + (mu / input->prandtl) *
+              input->gamma * de_dy);
+
+          F_spts(spt, ele, 1, 2) -= tauxz;
+          F_spts(spt, ele, 2, 2) -= tauyz;
+          F_spts(spt, ele, 3, 2) -= tauzz;
+          F_spts(spt, ele, 4, 2) -= (u * tauxz + v * tauyz + w * tauzz + (mu / input->prandtl) *
+              input->gamma * de_dz);
+        }
+      }
+
     }
 #endif
 
@@ -708,8 +791,6 @@ void Elements::compute_Fvisc()
       compute_Fvisc_spts_2D_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, 
           input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
       check_error();
-
-      //F_spts = F_spts_d;
 #endif
 
   }
