@@ -388,13 +388,15 @@ void compute_Fvisc_fpts_EulerNS_wrapper(mdvector_gpu<double> &Fvisc,
         prandtl, mu_in, c_sth, rt, fix_vis, startFpt, endFpt);
   }
 }
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
-    unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
+    unsigned int nGfpts_bnd, double rho_fs, 
     mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
     mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, 
-    mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias, unsigned int equation)
+    mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -913,15 +915,32 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
 
   if (blocks != 0)
   {
-    apply_bcs<<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, nVars, nDims, rho_fs, V_fs, P_fs, 
-        gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, equation); 
+    if (equation == AdvDiff)
+    {
+      if (nDims == 2)
+        apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+      else
+        apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+    }
+    else if (equation == EulerNS)
+    {
+      if (nDims == 2)
+        apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+      else
+        apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+    }
   }
 }
 
+template<unsigned int nVars, unsigned int nDims>
 __global__
 void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<double> norm_gfpt,
-    unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
-    unsigned int nDims, mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
+    unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
+    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -944,10 +963,10 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
   }
   else if(bnd_id == 11 || bnd_id == 12) /* Adibatic Wall */
   {
-    double norm[2];
+    double norm[nDims];
 
-    norm[0] = norm_gfpt(fpt, 0, 0);
-    norm[1] = norm_gfpt(fpt, 1, 0);
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      norm[dim] = norm_gfpt(fpt, dim, 0);
 
     /* Extrapolate density gradient */
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -955,65 +974,164 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
       dU(fpt, 0, dim, 1) = dU(fpt, 0, dim, 0);
     }
 
-    /* Compute energy gradient */
-    /* Get right states and velocity gradients*/
-    double rho = U(fpt, 0, 0);
-    double momx = U(fpt, 1, 0);
-    double momy = U(fpt, 2, 0);
-    double E = U(fpt, 3, 0);
+    if (nDims == 2)
+    {
+      /* Compute energy gradient */
+      /* Get right states and velocity gradients*/
+      double rho = U(fpt, 0, 0);
+      double momx = U(fpt, 1, 0);
+      double momy = U(fpt, 2, 0);
+      double E = U(fpt, 3, 0);
 
-    double u = momx / rho;
-    double v = momy / rho;
-    //double e_int = e / rho - 0.5 * (u*u + v*v);
+      double u = momx / rho;
+      double v = momy / rho;
+      //double e_int = e / rho - 0.5 * (u*u + v*v);
 
-    double rho_dx = dU(fpt, 0, 0, 0);
-    double momx_dx = dU(fpt, 1, 0, 0);
-    double momy_dx = dU(fpt, 2, 0, 0);
-    double E_dx = dU(fpt, 3, 0, 0);
-    
-    double rho_dy = dU(fpt, 0, 1, 0);
-    double momx_dy = dU(fpt, 1, 1, 0);
-    double momy_dy = dU(fpt, 2, 1, 0);
-    double E_dy = dU(fpt, 3, 1, 0);
+      double rho_dx = dU(fpt, 0, 0, 0);
+      double momx_dx = dU(fpt, 1, 0, 0);
+      double momy_dx = dU(fpt, 2, 0, 0);
+      double E_dx = dU(fpt, 3, 0, 0);
+      
+      double rho_dy = dU(fpt, 0, 1, 0);
+      double momx_dy = dU(fpt, 1, 1, 0);
+      double momy_dy = dU(fpt, 2, 1, 0);
+      double E_dy = dU(fpt, 3, 1, 0);
 
-    double du_dx = (momx_dx - rho_dx * u) / rho;
-    double du_dy = (momx_dy - rho_dy * u) / rho;
+      double du_dx = (momx_dx - rho_dx * u) / rho;
+      double du_dy = (momx_dy - rho_dy * u) / rho;
 
-    double dv_dx = (momy_dx - rho_dx * v) / rho;
-    double dv_dy = (momy_dy - rho_dy * v) / rho;
+      double dv_dx = (momy_dx - rho_dx * v) / rho;
+      double dv_dy = (momy_dy - rho_dy * v) / rho;
 
-    /* Option 1: Extrapolate momentum gradients */
-    dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
-    dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
-    dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
-    dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+      /* Option 1: Extrapolate momentum gradients */
+      dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+      dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+      dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+      dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
 
-    /* Option 2: Enforce constraint on tangential velocity gradient */
-    //double du_dn = du_dx * norm[0] + du_dy * norm[1];
-    //double dv_dn = dv_dx * norm[0] + dv_dy * norm[1];
+      /* Option 2: Enforce constraint on tangential velocity gradient */
+      //double du_dn = du_dx * norm[0] + du_dy * norm[1];
+      //double dv_dn = dv_dx * norm[0] + dv_dy * norm[1];
 
-    //dU(fpt, 1, 0, 1) = rho * du_dn * norm[0];
-    //dU(fpt, 1, 1, 1) = rho * du_dn * norm[1];
-    //dU(fpt, 2, 0, 1) = rho * dv_dn * norm[0];
-    //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm[1];
+      //dU(fpt, 1, 0, 1) = rho * du_dn * norm[0];
+      //dU(fpt, 1, 1, 1) = rho * du_dn * norm[1];
+      //dU(fpt, 2, 0, 1) = rho * dv_dn * norm[0];
+      //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm[1];
 
-   // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
-   // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+     // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+     // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
 
-    /* Compute temperature gradient (actually C_v * rho * dT) */
-    double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx);
-    double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
+      /* Compute temperature gradient (actually C_v * rho * dT) */
+      double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx);
+      double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
 
-    /* Compute wall normal temperature gradient */
-    double dT_dn = dT_dx * norm[0] + dT_dy * norm[1];
+      /* Compute wall normal temperature gradient */
+      double dT_dn = dT_dx * norm[0] + dT_dy * norm[1];
 
-    /* Option 1: Simply remove contribution of dT from total energy gradient */
-    dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm[0]; 
-    dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm[1]; 
+      /* Option 1: Simply remove contribution of dT from total energy gradient */
+      dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm[0]; 
+      dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm[1]; 
 
-    /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
-    //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 3, 1) / rho; 
-    //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 3, 1) / rho; 
+      /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
+      //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 3, 1) / rho; 
+      //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 3, 1) / rho; 
+    }
+    else
+    {
+      /* Compute energy gradient */
+      /* Get right states and velocity gradients*/
+      double rho = U(fpt, 0, 0);
+      double momx = U(fpt, 1, 0);
+      double momy = U(fpt, 2, 0);
+      double momz = U(fpt, 3, 0);
+      double E = U(fpt, 4, 0);
+
+      double u = momx / rho;
+      double v = momy / rho;
+      double w = momz / rho;
+
+      /* Gradients */
+      double rho_dx = dU(fpt, 0, 0, 0);
+      double momx_dx = dU(fpt, 1, 0, 0);
+      double momy_dx = dU(fpt, 2, 0, 0);
+      double momz_dx = dU(fpt, 3, 0, 0);
+      double E_dx = dU(fpt, 4, 0, 0);
+
+      double rho_dy = dU(fpt, 0, 1, 0);
+      double momx_dy = dU(fpt, 1, 1, 0);
+      double momy_dy = dU(fpt, 2, 1, 0);
+      double momz_dy = dU(fpt, 3, 1, 0);
+      double E_dy = dU(fpt, 4, 1, 0);
+
+      double rho_dz = dU(fpt, 0, 2, 0);
+      double momx_dz = dU(fpt, 1, 2, 0);
+      double momy_dz = dU(fpt, 2, 2, 0);
+      double momz_dz = dU(fpt, 3, 2, 0);
+      double E_dz = dU(fpt, 4, 2, 0);
+
+      double du_dx = (momx_dx - rho_dx * u) / rho;
+      double du_dy = (momx_dy - rho_dy * u) / rho;
+      double du_dz = (momx_dz - rho_dz * u) / rho;
+
+      double dv_dx = (momy_dx - rho_dx * v) / rho;
+      double dv_dy = (momy_dy - rho_dy * v) / rho;
+      double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+      double dw_dx = (momz_dx - rho_dx * w) / rho;
+      double dw_dy = (momz_dy - rho_dy * w) / rho;
+      double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+      /* Option 1: Extrapolate momentum gradients */
+      dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+      dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+      dU(fpt, 1, 2, 1) = dU(fpt, 1, 2, 0);
+
+      dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+      dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+      dU(fpt, 2, 2, 1) = dU(fpt, 2, 2, 0);
+
+      dU(fpt, 3, 0, 1) = dU(fpt, 3, 0, 0);
+      dU(fpt, 3, 1, 1) = dU(fpt, 3, 1, 0);
+      dU(fpt, 3, 2, 1) = dU(fpt, 3, 2, 0);
+
+      /* Option 2: Enforce constraint on tangential velocity gradient */
+      //double du_dn = du_dx * norm[0] + du_dy * norm[1] + du_dz * norm[2];
+      //double dv_dn = dv_dx * norm[0] + dv_dy * norm[1] + dv_dz * norm[2];
+      //double dw_dn = dw_dx * norm[0] + dw_dy * norm[1] + dw_dz * norm[2];
+
+      //dU(fpt, 1, 0, 1) = rho * du_dn * norm[0];
+      //dU(fpt, 1, 1, 1) = rho * du_dn * norm[1];
+      //dU(fpt, 1, 2, 1) = rho * du_dn * norm[2];
+      //dU(fpt, 2, 0, 1) = rho * dv_dn * norm[0];
+      //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm[1];
+      //dU(fpt, 2, 2, 1) =  rho * dv_dn * norm[2];
+      //dU(fpt, 3, 0, 1) = rho * dw_dn * norm[0];
+      //dU(fpt, 3, 1, 1) =  rho * dw_dn * norm[1];
+      //dU(fpt, 3, 2, 1) =  rho * dw_dn * norm[2];
+
+     // double dke_dx = 0.5 * (u*u + v*v + w*w) * rho_dx + rho * (u * du_dx + v * dv_dx + w * dw_dx);
+     // double dke_dy = 0.5 * (u*u + v*v + w*w) * rho_dy + rho * (u * du_dy + v * dv_dy + w * dw_dy);
+     // double dke_dz = 0.5 * (u*u + v*v + w*w) * rho_dz + rho * (u * du_dz + v * dv_dz + w * dw_dz);
+
+      /* Compute temperature gradient (actually C_v * rho * dT) */
+      double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx + w * dw_dx);
+      double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy + w * dw_dy);
+      double dT_dz = E_dz - rho_dz * E/rho - rho * (u * du_dz + v * dv_dz + w * dw_dz);
+
+      /* Compute wall normal temperature gradient */
+      double dT_dn = dT_dx * norm[0] + dT_dy * norm[1] + dT_dz * norm[2];
+
+      /* Option 1: Simply remove contribution of dT from total energy gradient */
+      dU(fpt, 4, 0, 1) = E_dx - dT_dn * norm[0]; 
+      dU(fpt, 4, 1, 1) = E_dy - dT_dn * norm[1]; 
+      dU(fpt, 4, 2, 1) = E_dz - dT_dn * norm[2]; 
+
+      /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
+      //dU(fpt, 4, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 4, 1) / rho; 
+      //dU(fpt, 4, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 4, 1) / rho; 
+      //dU(fpt, 4, 2, 1) = (dT_dz - dT_dn * norm[2]) + rho_dz * U(fpt, 4, 1) / rho; 
+
+    }
 
   }
   else
@@ -1039,8 +1157,12 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdv
 
   if (blocks != 0)
   {
-    apply_bcs_dU<<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd, nVars, nDims, 
-        gfpt2bnd, per_fpt_list);
+    if (nDims == 2)
+      apply_bcs_dU<4, 2><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
+          gfpt2bnd, per_fpt_list);
+    else
+      apply_bcs_dU<5, 3><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
+          gfpt2bnd, per_fpt_list);
   }
 }
 
@@ -1346,8 +1468,9 @@ void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm,
 
     if (LDG_bias(fpt) == 0)
     {
-      Ucomm(fpt, var, 0) = 0.5*(UL + UR) - beta*(UL - UR);
-      Ucomm(fpt, var, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+      double UC = 0.5*(UL + UR) - beta*(UL - UR);
+      Ucomm(fpt, var, 0) = UC;
+      Ucomm(fpt, var, 1) = UC;
     }
     /* If on boundary, don't use beta (this is from HiFILES. Need to check) */
     else
@@ -1443,9 +1566,11 @@ void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int>
 
   unpack_U<<<blocks,threads>>>(U_rbuffs, fpts, U, nVars, fpts.size());
 }
+
+template<unsigned int nDims>
 __global__
 void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts, unsigned int nDims)
+    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
 {
   const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
@@ -1465,12 +1590,16 @@ void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> 
   dim3 threads(32,4);
   dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
 
-  pack_dU<<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size(), nDims);
+  if (nDims == 2)
+    pack_dU<2><<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+  else
+    pack_dU<3><<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
 }
 
+template<unsigned int nDims>
 __global__
 void unpack_dU(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts, unsigned int nDims)
+    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
 {
   const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
@@ -1490,7 +1619,10 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
   dim3 threads(32,4);
   dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
 
-  unpack_dU<<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size(), nDims);
+  if (nDims == 2)
+    unpack_dU<2><<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size());
+  else 
+    unpack_dU<3><<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size());
 }
 
 #endif

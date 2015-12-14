@@ -614,66 +614,163 @@ void Faces::apply_bcs_dU()
         dU(fpt, 0, dim, 1) = dU(fpt, 0, dim, 0);
       }
 
-      /* Compute energy gradient */
-      /* TODO : Generalize for 3D */
-      /* Get left states and velocity gradients*/
-      double rho = U(fpt, 0, 0);
-      double momx = U(fpt, 1, 0);
-      double momy = U(fpt, 2, 0);
-      double E = U(fpt, 3, 0);
+      if (nDims == 2)
+      {
+        /* Compute energy gradient */
+        /* Get left states and velocity gradients*/
+        double rho = U(fpt, 0, 0);
+        double momx = U(fpt, 1, 0);
+        double momy = U(fpt, 2, 0);
+        double E = U(fpt, 3, 0);
 
-      double u = momx / rho;
-      double v = momy / rho;
+        double u = momx / rho;
+        double v = momy / rho;
 
 
-      double rho_dx = dU(fpt, 0, 0, 0);
-      double momx_dx = dU(fpt, 1, 0, 0);
-      double momy_dx = dU(fpt, 2, 0, 0);
-      double E_dx = dU(fpt, 3, 0, 0);
-      
-      double rho_dy = dU(fpt, 0, 1, 0);
-      double momx_dy = dU(fpt, 1, 1, 0);
-      double momy_dy = dU(fpt, 2, 1, 0);
-      double E_dy = dU(fpt, 3, 1, 0);
+        double rho_dx = dU(fpt, 0, 0, 0);
+        double momx_dx = dU(fpt, 1, 0, 0);
+        double momy_dx = dU(fpt, 2, 0, 0);
+        double E_dx = dU(fpt, 3, 0, 0);
+        
+        double rho_dy = dU(fpt, 0, 1, 0);
+        double momx_dy = dU(fpt, 1, 1, 0);
+        double momy_dy = dU(fpt, 2, 1, 0);
+        double E_dy = dU(fpt, 3, 1, 0);
 
-      double du_dx = (momx_dx - rho_dx * u) / rho;
-      double du_dy = (momx_dy - rho_dy * u) / rho;
+        double du_dx = (momx_dx - rho_dx * u) / rho;
+        double du_dy = (momx_dy - rho_dy * u) / rho;
 
-      double dv_dx = (momy_dx - rho_dx * v) / rho;
-      double dv_dy = (momy_dy - rho_dy * v) / rho;
+        double dv_dx = (momy_dx - rho_dx * v) / rho;
+        double dv_dy = (momy_dy - rho_dy * v) / rho;
 
-      /* Option 1: Extrapolate momentum gradients */
-      dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
-      dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
-      dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
-      dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+        /* Option 1: Extrapolate momentum gradients */
+        dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+        dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+        dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+        dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
 
-      /* Option 2: Enforce constraint on tangential velocity gradient */
-      //double du_dn = du_dx * norm(fpt, 0, 0) + du_dy * norm(fpt, 1, 0);
-      //double dv_dn = dv_dx * norm(fpt, 0, 0) + dv_dy * norm(fpt, 1, 0);
+        /* Option 2: Enforce constraint on tangential velocity gradient */
+        //double du_dn = du_dx * norm(fpt, 0, 0) + du_dy * norm(fpt, 1, 0);
+        //double dv_dn = dv_dx * norm(fpt, 0, 0) + dv_dy * norm(fpt, 1, 0);
 
-      //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
-      //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
-      //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
-      //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm(fpt, 1, 0);
+        //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
+        //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
+        //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
+        //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm(fpt, 1, 0);
 
-      // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
-      // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
+        // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
+        // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
 
-      /* Compute temperature gradient (actually C_v * rho * dT) */
-      double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx);
-      double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
+        /* Compute temperature gradient (actually C_v * rho * dT) */
+        double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx);
+        double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
 
-      /* Compute wall normal temperature gradient */
-      double dT_dn = dT_dx * norm(fpt, 0, 0) + dT_dy * norm(fpt, 1, 0);
+        /* Compute wall normal temperature gradient */
+        double dT_dn = dT_dx * norm(fpt, 0, 0) + dT_dy * norm(fpt, 1, 0);
 
-      /* Option 1: Simply remove contribution of dT from total energy gradient */
-      dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm(fpt, 0, 0);
-      dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm(fpt, 1, 0);
+        /* Option 1: Simply remove contribution of dT from total energy gradient */
+        dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm(fpt, 0, 0);
+        dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm(fpt, 1, 0);
 
-      /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
-      //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
-      //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 3, 1) / rho; 
+        /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
+        //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
+        //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 3, 1) / rho; 
+      }
+      else
+      {
+        /* Compute energy gradient */
+        /* Get right states and velocity gradients*/
+        double rho = U(fpt, 0, 0);
+        double momx = U(fpt, 1, 0);
+        double momy = U(fpt, 2, 0);
+        double momz = U(fpt, 3, 0);
+        double E = U(fpt, 4, 0);
+
+        double u = momx / rho;
+        double v = momy / rho;
+        double w = momz / rho;
+
+        /* Gradients */
+        double rho_dx = dU(fpt, 0, 0, 0);
+        double momx_dx = dU(fpt, 1, 0, 0);
+        double momy_dx = dU(fpt, 2, 0, 0);
+        double momz_dx = dU(fpt, 3, 0, 0);
+        double E_dx = dU(fpt, 4, 0, 0);
+
+        double rho_dy = dU(fpt, 0, 1, 0);
+        double momx_dy = dU(fpt, 1, 1, 0);
+        double momy_dy = dU(fpt, 2, 1, 0);
+        double momz_dy = dU(fpt, 3, 1, 0);
+        double E_dy = dU(fpt, 4, 1, 0);
+
+        double rho_dz = dU(fpt, 0, 2, 0);
+        double momx_dz = dU(fpt, 1, 2, 0);
+        double momy_dz = dU(fpt, 2, 2, 0);
+        double momz_dz = dU(fpt, 3, 2, 0);
+        double E_dz = dU(fpt, 4, 2, 0);
+
+        double du_dx = (momx_dx - rho_dx * u) / rho;
+        double du_dy = (momx_dy - rho_dy * u) / rho;
+        double du_dz = (momx_dz - rho_dz * u) / rho;
+
+        double dv_dx = (momy_dx - rho_dx * v) / rho;
+        double dv_dy = (momy_dy - rho_dy * v) / rho;
+        double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+        double dw_dx = (momz_dx - rho_dx * w) / rho;
+        double dw_dy = (momz_dy - rho_dy * w) / rho;
+        double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+        /* Option 1: Extrapolate momentum gradients */
+        dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
+        dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
+        dU(fpt, 1, 2, 1) = dU(fpt, 1, 2, 0);
+
+        dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
+        dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+        dU(fpt, 2, 2, 1) = dU(fpt, 2, 2, 0);
+
+        dU(fpt, 3, 0, 1) = dU(fpt, 3, 0, 0);
+        dU(fpt, 3, 1, 1) = dU(fpt, 3, 1, 0);
+        dU(fpt, 3, 2, 1) = dU(fpt, 3, 2, 0);
+
+        /* Option 2: Enforce constraint on tangential velocity gradient */
+        //double du_dn = du_dx * norm(fpt, 0, 0) + du_dy * norm(fpt, 1, 0) + du_dz * norm(fpt, 2, 0);
+        //double dv_dn = dv_dx * norm(fpt, 0, 0) + dv_dy * norm(fpt, 1, 0) + dv_dz * norm(fpt, 2, 0);
+        //double dw_dn = dw_dx * norm(fpt, 0, 0) + dw_dy * norm(fpt, 1, 0) + dw_dz * norm(fpt, 2, 0);
+
+        //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
+        //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
+        //dU(fpt, 1, 2, 1) = rho * du_dn * norm(fpt, 2, 0);
+        //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
+        //dU(fpt, 2, 1, 1) = rho * dv_dn * norm(fpt, 1, 0);
+        //dU(fpt, 2, 2, 1) = rho * dv_dn * norm(fpt, 2, 0);
+        //dU(fpt, 3, 0, 1) = rho * dw_dn * norm(fpt, 0, 0);
+        //dU(fpt, 3, 1, 1) = rho * dw_dn * norm(fpt, 1, 0);
+        //dU(fpt, 3, 2, 1) = rho * dw_dn * norm(fpt, 2, 0);
+
+       // double dke_dx = 0.5 * (u*u + v*v + w*w) * rho_dx + rho * (u * du_dx + v * dv_dx + w * dw_dx);
+       // double dke_dy = 0.5 * (u*u + v*v + w*w) * rho_dy + rho * (u * du_dy + v * dv_dy + w * dw_dy);
+       // double dke_dz = 0.5 * (u*u + v*v + w*w) * rho_dz + rho * (u * du_dz + v * dv_dz + w * dw_dz);
+
+        /* Compute temperature gradient (actually C_v * rho * dT) */
+        double dT_dx = E_dx - rho_dx * E/rho - rho * (u * du_dx + v * dv_dx + w * dw_dx);
+        double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy + w * dw_dy);
+        double dT_dz = E_dz - rho_dz * E/rho - rho * (u * du_dz + v * dv_dz + w * dw_dz);
+
+        /* Compute wall normal temperature gradient */
+        double dT_dn = dT_dx * norm(fpt, 0, 0) + dT_dy * norm(fpt, 1, 0) + dT_dz * norm(fpt, 2, 0);
+
+        /* Option 1: Simply remove contribution of dT from total energy gradient */
+        dU(fpt, 4, 0, 1) = E_dx - dT_dn * norm(fpt, 0, 0);
+        dU(fpt, 4, 1, 1) = E_dy - dT_dn * norm(fpt, 1, 0);
+        dU(fpt, 4, 2, 1) = E_dz - dT_dn * norm(fpt, 2, 0);
+
+        /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
+        //dU(fpt, 4, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 4, 1) / rho; 
+        //dU(fpt, 4, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 4, 1) / rho; 
+        //dU(fpt, 4, 2, 1) = (dT_dz - dT_dn * norm(fpt, 2, 0)) + rho_dz * U(fpt, 4, 1) / rho; 
+      }
 
     }
     else /* Otherwise, right state gradient equals left state gradient */
