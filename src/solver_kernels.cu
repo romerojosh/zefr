@@ -14,6 +14,7 @@
 #include "macros.hpp"
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
+#include "funcs_kernels.cu"
 
 void check_error()
 {
@@ -485,32 +486,6 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
   }
 }
 
-__device__
-double get_cfl_limit_dev(int order)
-{
-  switch(order)
-  {
-    case 0:
-      return 1.393;
-
-    case 1:
-      return 0.464; 
-
-    case 2:
-      return 0.235;
-
-    case 3:
-      return 0.139;
-
-    case 4:
-      return 0.100;
-
-    case 5:
-      return 0.068;
-  }
-}
-
-
 __global__
 void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfpts, 
     mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
@@ -567,4 +542,58 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
 
   }
 
+}
+
+template<unsigned int nVars, unsigned int nDims>
+__global__
+void add_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int equation, 
+    double flow_time, unsigned int stage)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  double x = coord_spts(spt, ele, 0);
+  double y = coord_spts(spt, ele, 1);
+  double z = 0;
+  if (nDims == 3)
+    z = coord_spts(spt, ele, 2);
+
+  double jaco_det = jaco_det_spts(spt, ele);
+
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    divF_spts(spt, ele, n, stage) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
+  }
+}
+
+void add_source_wrapper(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    double flow_time, unsigned int stage)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
+      threads.y);
+
+  if (nDims == 2)
+  {
+    if (equation == AdvDiff)
+      add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+    else
+      add_source<4, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+  }
+  else
+  {
+    if (equation == AdvDiff)
+      add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+    else
+      add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+  }
 }

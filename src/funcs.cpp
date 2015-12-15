@@ -13,6 +13,7 @@
 #endif
 
 #include "input.hpp"
+#include "funcs.hpp"
 
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
 {
@@ -23,16 +24,22 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   {
     if (input->nDims == 2)
     {
+      /*
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
+      */
+      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y);
     }
     else if (input->nDims == 3)
     {
+      /*
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t))*
              std::sin(M_PI * (z - input->AdvDiff_A(2) * t));
+      */
+      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
     }
   }
   else if (input->equation == EulerNS)
@@ -144,6 +151,32 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
   else
   {
     ThrowException("Under construction!");
+  }
+
+  return val;
+}
+
+
+double compute_source_term(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
+{
+  double val = 0.;
+  if (input->equation == AdvDiff)
+  {
+    if (input->nDims == 2)
+    {
+      val =  -M_PI * (std::cos(M_PI * x) + M_PI * std::sin(M_PI * x) + 
+             std::cos(M_PI * y) + M_PI * std::sin(M_PI * y));
+    }
+    else
+    {
+      val =  -M_PI * (std::cos(M_PI * x) + M_PI * std::sin(M_PI * x) + 
+             std::cos(M_PI * y) + M_PI * std::sin(M_PI * y) + 
+             std::cos(M_PI * z) + M_PI * std::sin(M_PI * z));
+    }
+  }
+  else
+  {
+    ThrowException("No source defined for EulerNS!");
   }
 
   return val;

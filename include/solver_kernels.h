@@ -64,4 +64,8 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 
     unsigned int dt_type, unsigned int nFpts, unsigned int nEles);
 
+void add_source_wrapper(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    double flow_time, unsigned int stage);
+
 #endif /* solver_kernels_h */

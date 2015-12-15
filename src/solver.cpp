@@ -356,6 +356,7 @@ void FRSolver::solver_data_to_device()
   geo.fpt2gfpt_slot_d = geo.fpt2gfpt_slot;
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
+  geo.coord_spts_d = geo.coord_spts;
 
   /* Input parameters */
   input->V_fs_d = input->V_fs;
@@ -513,6 +514,10 @@ void FRSolver::compute_residual(unsigned int stage)
   /* Compute flux gradients and divergence */
   eles->compute_dF();
   eles->compute_divF(stage);
+
+  /* Add source term (if required) */
+  if (input->source)
+    add_source(stage);
 }
 
 void FRSolver::initialize_U()
@@ -760,6 +765,38 @@ void FRSolver::F_from_faces()
 #endif
 }
 
+void FRSolver::add_source(unsigned int stage)
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele =0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+          double x = geo.coord_spts(spt, ele, 0);
+          double y = geo.coord_spts(spt, ele, 1);
+          double z = 0;
+          if (eles->nDims == 3)
+            z = geo.coord_spts(spt, ele, 2);
+
+          eles->divF_spts(spt, ele, n, stage) += compute_source_term(x, y, z, flow_time, n, input) * 
+            eles->jaco_det_spts(spt, ele);
+      }
+    }
+  }
+
+#endif
+
+#ifdef _GPU
+  add_source_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, geo.coord_spts_d, eles->nSpts, eles->nEles,
+      eles->nVars, eles->nDims, input->equation, flow_time, stage);
+  check_error();
+#endif
+
+}
+
 void FRSolver::update()
 {
   
@@ -795,12 +832,12 @@ void FRSolver::update()
           if (input->dt_type != 2)
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-              eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt, ele, n, stage);
+              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
           }
           else
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-              eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt, ele, n, stage);
+              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
           }
         }
 #endif

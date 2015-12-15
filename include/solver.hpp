@@ -60,6 +60,7 @@ class FRSolver
     FRSolver(InputStruct *input, int order = -1);
     void setup();
     void compute_residual(unsigned int stage);
+    void add_source(unsigned int stage);
     void update();
     void update_with_source(mdvector<double> &source);
 #ifdef _GPU

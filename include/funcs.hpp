@@ -9,13 +9,17 @@
 #include "mdvector.hpp"
 
 /* Computes solution at specified time and location */
-//double compute_U_true(double x, double y, double t, unsigned int var, const InputStruct *input);
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input);
 double compute_dU_true(double x, double y, double z, double t, unsigned int var, 
     unsigned int dim, const InputStruct *input);
 
+/* Computes source term as specified time and location */
+double compute_source_term(double x, double y, double z, double t, unsigned int var, const InputStruct *input);
+
+/* Compute maximum CFL */
 double get_cfl_limit(int order);
 
+/* Blocked gemm operation using OpenMP */
 #ifdef _OMP
 void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA, 
     CBLAS_TRANSPOSE transB, int M, int N, int K, double alpha, double* A, int lda, 

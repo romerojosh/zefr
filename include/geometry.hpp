@@ -41,6 +41,7 @@ struct GeoStruct
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
     mdvector_gpu<unsigned int> gfpt2bnd_d, per_fpt_list_d;
+    mdvector_gpu<double> coord_spts_d;
 #ifdef _MPI
     std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif
