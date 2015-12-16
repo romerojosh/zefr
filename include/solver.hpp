@@ -10,9 +10,11 @@
 #include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
+#include "spmatrix.hpp"
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
+#include "spmatrix_gpu.h"
 #endif
 
 class PMGrid;
@@ -34,8 +36,12 @@ class FRSolver
     mdvector<double> dt;
     mdvector<double> U_ini;
 
+    spmatrix<double> A; // Sparse matrix for implicit system
+
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
+    spmatrix_gpu<double> A_d;
+    mdvector_gpu<double> b_d;
 #endif
 
     void initialize_U();

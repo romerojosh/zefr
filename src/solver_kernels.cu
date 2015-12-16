@@ -3,6 +3,12 @@
 #include "cuda_runtime.h"
 #include "cublas_v2.h"
 
+#include <cusp/krylov/gmres.h>
+#include <cusp/krylov/cg.h>
+#include <cusp/krylov/bicgstab.h>
+#include <cusp/csr_matrix.h>
+#include <cusp/monitor.h>
+#include <cusp/print.h>
 #include <thrust/device_vector.h>
 #include <thrust/extrema.h>
 
@@ -13,6 +19,7 @@
 #include "input.hpp"
 #include "macros.hpp"
 #include "mdvector_gpu.h"
+#include "spmatrix_gpu.h"
 #include "solver_kernels.h"
 #include "funcs_kernels.cu"
 
@@ -570,7 +577,7 @@ void add_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_sp
   }
 }
 
-void add_source_wrapper(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
     double flow_time, unsigned int stage)
 {
@@ -596,4 +603,76 @@ void add_source_wrapper(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jac
       add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
           flow_time, stage);
   }
+}
+
+__global__
+void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
+    mdvector_gpu<double> b, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    b(spt, ele, n) = -(dt(0) * divF_spts(spt, ele, n))/jaco_det_spts(spt, ele);
+    //b(spt, ele, n) = 0;
+  }
+}
+
+void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &b, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y);
+
+  compute_RHS<<<blocks, threads>>>(divF_spts, jaco_det_spts, dt, b, nSpts, nEles, nVars);
+}
+
+void imp_update_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &U_spts, mdvector_gpu<double> &b) 
+{
+  /* Experiment: Use CUSP library to solve system */
+  /* First, wrap device arrays using Thrust */
+  thrust::device_ptr<double> vals_w = thrust::device_pointer_cast(A.getVals());
+  thrust::device_ptr<int> row_ptr_w = thrust::device_pointer_cast(A.getRowPtr());
+  thrust::device_ptr<int> col_idx_w = thrust::device_pointer_cast(A.getColIdx());
+  thrust::device_ptr<double> U_w = thrust::device_pointer_cast(U_spts.data());
+  thrust::device_ptr<double> b_w = thrust::device_pointer_cast(b.data());
+
+  /* Next, create CSR array view using CUSP */
+  typedef typename cusp::array1d_view<thrust::device_ptr<int>> IntArray;
+  typedef typename cusp::array1d_view<thrust::device_ptr<double>> DoubleArray;
+  IntArray row_ptr(row_ptr_w, row_ptr_w + A.getNrows() + 1);
+  IntArray col_idx(col_idx_w, col_idx_w + A.getNnonzeros());
+  DoubleArray vals(vals_w, vals_w + A.getNnonzeros());
+  DoubleArray U(U_w, U_w + A.getNrows());
+  DoubleArray RHS(b_w, b_w + A.getNrows());
+
+  /* Create cusp CSR view */
+  typedef cusp::csr_matrix_view<IntArray, IntArray, DoubleArray> CSRMat;
+  CSRMat Acsr(A.getNrows(), A.getNrows(), A.getNnonzeros(), row_ptr, col_idx, vals);
+
+  //std::cout << "\nA" << std::endl;
+  //cusp::print(Acsr);
+  //std::cout << "\nU"<< std::endl;
+  //cusp::print(U);
+  //std::cout << "\nRHS" << std::endl;
+  //cusp::print(RHS);
+
+
+  /* Setup linear solver */
+  // set stopping criteria:
+  //  iteration_limit    = 100
+  //  relative_tolerance = 1e-6
+  cusp::monitor<double> monitor(RHS, 100, 1e-6, 0, true);
+  int restart = 50;
+  // set preconditioner (identity)
+  cusp::identity_operator<double, cusp::device_memory> M(Acsr.num_rows, Acsr.num_rows);
+
+  // solve the linear system A U = RHS
+  //cusp::krylov::gmres(Acsr, U, RHS, restart, monitor, M);
+  cusp::krylov::bicgstab(Acsr, U, RHS, monitor, M);
+
 }

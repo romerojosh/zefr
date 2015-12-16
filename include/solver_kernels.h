@@ -4,6 +4,8 @@
 
 template<typename T>
 class mdvector_gpu;
+template<typename T>
+class spmatrix_gpu;
 
 /* TODO: Move these general operators to a different file (aux_kernels.h/cu) */
 void check_error();
@@ -64,8 +66,13 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 
     unsigned int dt_type, unsigned int nFpts, unsigned int nEles);
 
-void add_source_wrapper(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
     double flow_time, unsigned int stage);
+
+void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &b, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
+
+void imp_update_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &U_spts,  mdvector_gpu<double> &b);
 
 #endif /* solver_kernels_h */

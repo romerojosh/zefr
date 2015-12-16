@@ -17,6 +17,7 @@
 #include "input.hpp"
 #include "mdvector.hpp"
 #include "solver.hpp"
+#include "spmatrix.hpp"
 
 #ifdef _MPI
 #include "mpi.h"
@@ -24,6 +25,7 @@
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
+#include "spmatrix_gpu.h"
 #include "solver_kernels.h"
 #include "cublas_v2.h"
 #endif
@@ -109,6 +111,28 @@ void FRSolver::setup_update()
     rk_beta(0) = 0.149659021999229; rk_beta(1) = 0.379210312999627; 
     rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
     rk_beta(4) = 0.153057247968152;
+  }
+  else if (input->dt_scheme == "BDF1")
+  {
+    nStages = 1;
+    /* Temporary setup of system matrix A */
+    //std::fstream f("Imat.dat", std::fstream::in);
+    std::fstream f("Amat.dat", std::fstream::in);
+    if (!f.is_open())
+      ThrowException("Could not open system matrix file.");
+    int i, j;
+    double val;
+    while (f >> i >> j >> val)
+      A.addEntry(i-1, j-1, val);
+
+    f.close();
+
+    A.toCSR();
+
+#ifdef _GPU
+    A_d = A;
+#endif
+
   }
   else
   {
@@ -318,6 +342,7 @@ void FRSolver::solver_data_to_device()
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
   dt_d = dt;
+  b_d = eles->divF_spts; // Implicit RHS vector */
 
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
@@ -799,99 +824,125 @@ void FRSolver::add_source(unsigned int stage)
 
 void FRSolver::update()
 {
+
+  if (input->dt_scheme != "BDF1")
+  {
   
 #ifdef _CPU
-  U_ini = eles->U_spts;
+    U_ini = eles->U_spts;
 #endif
 
 #ifdef _GPU
-  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
+    device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 #endif
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
-  {
-    compute_residual(stage);
-
-    /* If in first stage, compute stable timestep */
-    if (stage == 0)
+    /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
+    for (unsigned int stage = 0; stage < (nStages-1); stage++)
     {
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
+      compute_residual(stage);
+
+      /* If in first stage, compute stable timestep */
+      if (stage == 0)
       {
-        compute_element_dt();
+        // TODO: Revisit this as it is kind of expensive.
+        if (input->dt_type != 0)
+        {
+          compute_element_dt();
+        }
       }
-    }
 
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            }
           }
-          else
-          {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
-          }
-        }
 #endif
 
 #ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
-    check_error();
+      RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+          rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+          input->equation, stage, nStages, false);
+      check_error();
 #endif
 
-  }
+    }
 
-  /* Final stage */
-  compute_residual(nStages-1);
+    /* Final stage */
+    compute_residual(nStages-1);
 #ifdef _CPU
-  eles->U_spts = U_ini;
+    eles->U_spts = U_ini;
 #endif
 #ifdef _GPU
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
 #endif
 
 #ifdef _CPU
-  for (unsigned int stage = 0; stage < nStages; stage++)
-  {
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
+    for (unsigned int stage = 0; stage < nStages; stage++)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < eles->nVars; n++)
       {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          if (input->dt_type != 2)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
-              eles->divF_spts(spt, ele, n, stage);
-          }
-          else
-          {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
-              eles->divF_spts(spt, ele, n, stage);
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
+                eles->divF_spts(spt, ele, n, stage);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
+                eles->divF_spts(spt, ele, n, stage);
+            }
           }
         }
       }
     }
-  }
 #endif
 
 #ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-        input->equation, 0, nStages, true);
-    check_error();
+      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+          rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+          input->equation, 0, nStages, true);
+      check_error();
 #endif
+  }
+  else
+  {
+    /* Implicit Method */
+#ifdef _CPU
+    ThrowException("Implicit system solve not implemented on CPU yet.");
+#endif
+
+#ifdef _GPU
+    compute_residual(0);
+
+    if (input->dt_type != 0)
+    {
+      compute_element_dt();
+    }
+
+    /* Prepare RHS (b) vector */
+    compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);
+
+    /* Solve system */
+    imp_update_wrapper(A_d, eles->U_spts_d, b_d);
+#endif
+  }
 
   flow_time += dt(0);
   current_iter++;
