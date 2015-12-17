@@ -343,6 +343,7 @@ void FRSolver::solver_data_to_device()
   rk_beta_d = rk_beta;
   dt_d = dt;
   b_d = eles->divF_spts; // Implicit RHS vector */
+  deltaU_d = eles->U_spts; // Implicit deltaU vector */
 
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
@@ -939,8 +940,11 @@ void FRSolver::update()
     /* Prepare RHS (b) vector */
     compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);
 
-    /* Solve system */
-    imp_update_wrapper(A_d, eles->U_spts_d, b_d);
+    /* Solve system for deltaU */
+    compute_deltaU_wrapper(A_d, deltaU_d, b_d);
+
+    /* Add deltaU to solution */
+    device_add(eles->U_spts_d, deltaU_d, eles->U_spts_d.size());
 #endif
   }
 

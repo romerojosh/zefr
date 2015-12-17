@@ -16,15 +16,15 @@ rel_factor 1.0
 low_order 0
 
 # Timestepping:
-n_steps 10000
+n_steps 50000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.00001
+dt	  3.6509074404042332
 CFL	  0.001
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix ss_gpu
+output_prefix ss_rkmg
 write_freq    1000
 report_freq   100
 res_type      1

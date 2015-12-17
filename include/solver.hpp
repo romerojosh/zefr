@@ -42,6 +42,7 @@ class FRSolver
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
     spmatrix_gpu<double> A_d;
     mdvector_gpu<double> b_d;
+    mdvector_gpu<double> deltaU_d;
 #endif
 
     void initialize_U();

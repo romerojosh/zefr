@@ -24,9 +24,9 @@ void copy_to_device(T* device_data, const T* host_data, unsigned int size);
 template<typename T>
 void copy_from_device(T* host_data, const T* device_data, unsigned int size);
 
-void device_copy(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
-void device_add(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
-void device_subtract(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size);
+void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
+void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
+void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
@@ -73,6 +73,6 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
 void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
     mdvector_gpu<double> &b, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 
-void imp_update_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &U_spts,  mdvector_gpu<double> &b);
+void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU,  mdvector_gpu<double> &b);
 
 #endif /* solver_kernels_h */

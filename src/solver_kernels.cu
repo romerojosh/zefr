@@ -96,7 +96,7 @@ void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned 
 
 }
 
-void device_copy(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
   unsigned int blocks = (size + threads - 1) /threads;
@@ -114,7 +114,7 @@ void add_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned i
   vec1(idx) += vec2(idx);
 }
 
-void device_add(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
   unsigned int blocks = (size + threads - 1) /threads;
@@ -131,7 +131,7 @@ void subtract_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsig
 
   vec1(idx) -= vec2(idx);
 }
-void device_subtract(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
+void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
   unsigned int blocks = (size + threads - 1) /threads;
@@ -631,14 +631,14 @@ void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &
   compute_RHS<<<blocks, threads>>>(divF_spts, jaco_det_spts, dt, b, nSpts, nEles, nVars);
 }
 
-void imp_update_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &U_spts, mdvector_gpu<double> &b) 
+void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU, mdvector_gpu<double> &b) 
 {
   /* Experiment: Use CUSP library to solve system */
   /* First, wrap device arrays using Thrust */
   thrust::device_ptr<double> vals_w = thrust::device_pointer_cast(A.getVals());
   thrust::device_ptr<int> row_ptr_w = thrust::device_pointer_cast(A.getRowPtr());
   thrust::device_ptr<int> col_idx_w = thrust::device_pointer_cast(A.getColIdx());
-  thrust::device_ptr<double> U_w = thrust::device_pointer_cast(U_spts.data());
+  thrust::device_ptr<double> deltaU_w = thrust::device_pointer_cast(deltaU.data());
   thrust::device_ptr<double> b_w = thrust::device_pointer_cast(b.data());
 
   /* Next, create CSR array view using CUSP */
@@ -647,7 +647,7 @@ void imp_update_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &U_spts, m
   IntArray row_ptr(row_ptr_w, row_ptr_w + A.getNrows() + 1);
   IntArray col_idx(col_idx_w, col_idx_w + A.getNnonzeros());
   DoubleArray vals(vals_w, vals_w + A.getNnonzeros());
-  DoubleArray U(U_w, U_w + A.getNrows());
+  DoubleArray delU(deltaU_w, deltaU_w + A.getNrows());
   DoubleArray RHS(b_w, b_w + A.getNrows());
 
   /* Create cusp CSR view */
@@ -666,13 +666,15 @@ void imp_update_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &U_spts, m
   // set stopping criteria:
   //  iteration_limit    = 100
   //  relative_tolerance = 1e-6
-  cusp::monitor<double> monitor(RHS, 100, 1e-6, 0, true);
+  //  absolute_tolerance = 0
+  //  print = false
+  cusp::monitor<double> monitor(RHS, 1000, 1e-6, 0, false);
   int restart = 50;
   // set preconditioner (identity)
   cusp::identity_operator<double, cusp::device_memory> M(Acsr.num_rows, Acsr.num_rows);
 
   // solve the linear system A U = RHS
-  //cusp::krylov::gmres(Acsr, U, RHS, restart, monitor, M);
-  cusp::krylov::bicgstab(Acsr, U, RHS, monitor, M);
+  cusp::krylov::gmres(Acsr, delU, RHS, restart, monitor, M);
+  //cusp::krylov::bicgstab(Acsr, delU, RHS, monitor, M);
 
 }
