@@ -20,6 +20,7 @@ class Elements
 {
   friend class FRSolver;
   friend class PMGrid;
+	friend class Filter;
   protected:
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;

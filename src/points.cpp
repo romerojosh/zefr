@@ -6,6 +6,7 @@
 
 #include "macros.hpp"
 
+// TODO: Can get open-source scripts for generating quadrature points for arbitrary P>0
 std::vector<double> Gauss_Legendre_pts(unsigned int P)
 {
   std::vector<double> zeros(P,0.0);
@@ -79,6 +80,7 @@ std::vector<double> DFRsp_pts(unsigned int P, double z1)
 
 }
 
+// TODO: Can get open-source scripts for generating quadrature weights for arbitrary P>0
 std::vector<double> Gauss_Legendre_weights(unsigned int n)
 {
   std::vector<double> weights(n,0.0);

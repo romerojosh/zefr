@@ -14,6 +14,9 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
+#include <memory>
+#include "tnt.h"
+#include <jama_lu.h>
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
@@ -32,6 +35,7 @@ class mdvector
     std::array<unsigned int,4> dims; 
     std::array<unsigned int,4> strides;
     std::vector<T> values;
+    std::shared_ptr<LU> LUptr;
 
   public:
     //! Constructors
@@ -39,10 +43,10 @@ class mdvector
     mdvector(std::vector<unsigned int> dims, T value = 0, unsigned int padding = 0);
 
     //! Setup operator
-    void assign(std::vector<unsigned int> dims, T value = 0, unsigned int padding = 0);
+    void assign(std::vector<unsigned int> dims, T value = 0, unsigned int padding = 0); // 
 
     //! Push back operator (for compatibility)
-    void push_back(T value);
+    void push_back(T value); 
 
     //! Fill operator
     void fill(T value);
@@ -55,6 +59,18 @@ class mdvector
 
     //! Method to return starting data pointer
     T* data();
+    
+    //! Method to return max element
+    T max_val();
+    
+    //! Method to return min element
+    T min_val();
+    
+    //! Method to calculate LU factors
+    void calc_LU();
+    
+    //! Method to solve L U x = B for x
+    void solve(mdvector<T> x, mdvector<T> B);
 
     //! Method to return number of values (with padding)
     unsigned int get_nvals() const;
@@ -79,6 +95,8 @@ class mdvector
 template <typename T>
 mdvector<T>::mdvector(){};
 
+// KA: Padding not used as yet
+// KA: Edge case - dims = {}
 template <typename T>
 mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, unsigned int padding)
 {
@@ -100,6 +118,8 @@ mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, unsigned int padd
   values.assign(nvals, (T)value);
 }
 
+// KA: Padding not used as yet
+// KA: Edge case - dims = {}
 template <typename T>
 void mdvector<T>::assign(std::vector<unsigned int> dims, T value, unsigned int padding)
 {
@@ -133,6 +153,7 @@ unsigned int mdvector<T>::size() const
   return values.size();
 }
 
+// TODO: Must update dims and strides
 template <typename T>
 void mdvector<T>::push_back(T value)
 {
@@ -150,6 +171,70 @@ template <typename T>
 T* mdvector<T>::data(void)
 {
   return values.data();
+}
+
+template <typename T>
+T mdvector<T>::max_val(void) const
+{
+  return *std::max_element(values.begin(), values.end());
+}
+
+template <typename T>
+T mdvector<T>::min_val(void) const
+{
+  return *std::min_element(values.begin(), values.end());
+}
+
+template <typename T>
+void mdvector<T>::calc_LU()
+{
+  // Check for consistency
+  if (ndims != 2 || dims[0] != dims[1])
+  {
+    std::cout << ">>> mdvector.calc_LU: LU factorization requires a square matrix" << std::endl;
+    return;
+  }
+  
+  // Copy mdvector into TNT object
+  unsigned int m = dims[0];
+  Array2D<double> A(m, m);
+  for (unsigned int i = 0; i < m; i++)
+    for (unsigned int j = 0; j < m; j++)
+      A[i][j] = *this(i,j);
+      
+  // Calculate and store LU object
+  LUptr = new LU(A);
+}
+
+template <typename T>
+void mdvector<T>::solve(mdvector<T>& x, const mdvector<T>& B)
+{
+  // Check for consistency
+  std::array<unsigned int, 4> B_dims = B.shape();
+  if (dims[0] != B_dims[0])
+  {
+    std::cout << ">>> mdvector.solve: A and B must have the same number of rows" << std::endl;
+    return;
+  }
+  
+  // Assign memory for x
+  unsigned int m = dims[0];
+  unsigned int n = B_dims[1];
+  x.assign({m, n});
+  
+  // Copy mdvector into TNT object
+  Array2D<double> bArr(m, n);
+  for (unsigned int i = 0; i < m; i++)
+    for (unsigned int j = 0; j < n; j++)
+      bArr[i][j] = b(i,j);
+  
+  // Solve for B
+  Array2D<double> xArr = LUptr->solve(BArr);
+      
+  // Convert back to mdvector format
+  for (unsigned int i = 0; i < m; i++)
+    for (unsigned int j = 0; j < n; j++)
+      x(i,j) = xArr[i][j];
 }
 
 template <typename T>

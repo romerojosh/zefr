@@ -26,6 +26,7 @@ class Faces
   friend class Elements;
   friend class Quads;
   friend class Hexas;
+	friend class Filter;
 
   private:
     InputStruct *input = NULL;

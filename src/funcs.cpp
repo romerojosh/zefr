@@ -94,6 +94,7 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   return val;
 }
 
+// TODO: Complete implementation of derivative for Euler vortex
 double compute_dU_true(double x, double y, double z, double t, unsigned int var, 
     unsigned int dim, const InputStruct *input)
 {
@@ -149,6 +150,7 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
   return val;
 }
 
+// TODO: Can have a best-fit curve for higher P of the form 'a + b/P + c/P^2'
 double get_cfl_limit(int order)
 {
   switch(order)
