@@ -546,6 +546,33 @@ void FRSolver::compute_residual(unsigned int stage)
     add_source(stage);
 }
 
+void FRSolver::compute_LHS()
+{
+  /* Compute derivative of convective flux with respect to state variables 
+   * at solution and flux points */
+  eles->compute_dFdUconv();
+  faces->compute_dFdUconv(0, geo.nGfpts);
+
+  if(input->viscous)
+  {
+    /* Compute derivative of viscous flux with respect to state variables 
+     * at solution and flux points */
+    eles->compute_dFdUvisc();
+    faces->compute_dFdUvisc(0, geo.nGfpts);
+
+    /* Compute derivative of viscous flux with respect to the gradient of 
+     * state variables at solution and flux points */
+    eles->compute_dFddUvisc();
+    faces->compute_dFddUvisc(0, geo.nGfpts);
+  }
+
+  /* Compute normal flux derivative data at flux points */
+  faces->compute_dFndU(0, geo.nGfpts);
+
+  /* Copy normal flux derivative data from face local storage to element local storage */
+  dFndU_from_faces();
+}
+
 void FRSolver::initialize_U()
 {
   /* Allocate memory for solution data structures */
@@ -567,6 +594,28 @@ void FRSolver::initialize_U()
   eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
+
+  /* Allocate memory for implicit method data structures */
+  if (input->dt_scheme == "BDF1")
+  {
+    eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+
+    eles->dFndULconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+    eles->dFndURconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+
+    if(input->viscous)
+    {
+      eles->dFdUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+      eles->dFddUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+
+      eles->dFndULvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+      eles->dFndURvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+      eles->dFnddULvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+      eles->dFnddURvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+      eles->taunL_fpts.assign({eles->nFpts, eles->nEles});
+      eles->taunR_fpts.assign({eles->nFpts, eles->nEles});
+    }
+  }
 
   /* Initialize solution */
   if (input->equation == AdvDiff)
@@ -791,6 +840,57 @@ void FRSolver::F_from_faces()
 #endif
 }
 
+void FRSolver::dFndU_from_faces()
+{
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++) 
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      {
+        int gfpt = geo.fpt2gfpt(fpt,ele);
+        /* Check if flux point is on ghost edge */
+        if (gfpt == -1)
+          continue;
+        int slot = geo.fpt2gfpt_slot(fpt,ele);
+
+        eles->dFndULconv_fpts(fpt, ele, n) = faces->dFndULconv(gfpt, n, slot);
+        eles->dFndURconv_fpts(fpt, ele, n) = faces->dFndURconv(gfpt, n, slot);
+      }
+    }
+  }
+
+  if(input->viscous)
+  {
+#pragma omp parallel for collapse(3)
+    for (unsigned int n = 0; n < eles->nVars; n++) 
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+        {
+          int gfpt = geo.fpt2gfpt(fpt,ele);
+          /* Check if flux point is on ghost edge */
+          if (gfpt == -1)
+            continue;
+          int slot = geo.fpt2gfpt_slot(fpt,ele);
+
+          eles->dFndULvisc_fpts(fpt, ele, n) = faces->dFndULvisc(gfpt, n, slot);
+          eles->dFndURvisc_fpts(fpt, ele, n) = faces->dFndURvisc(gfpt, n, slot);
+
+          eles->dFnddULvisc_fpts(fpt, ele, n) = faces->dFnddULvisc(gfpt, n, slot);
+          eles->dFnddURvisc_fpts(fpt, ele, n) = faces->dFnddURvisc(gfpt, n, slot);
+
+          /* TODO: Move outside var loop */
+          eles->taunL_fpts(fpt, ele) = faces->taunL(gfpt, slot);
+          eles->taunR_fpts(fpt, ele) = faces->taunR(gfpt, slot);
+        }
+      }
+    }
+  }
+}
+
 void FRSolver::add_source(unsigned int stage)
 {
 #ifdef _CPU
@@ -936,6 +1036,9 @@ void FRSolver::update()
     {
       compute_element_dt();
     }
+
+    /* Compute LHS implicit Jacobian */
+    compute_LHS();
 
     /* Prepare RHS (b) vector */
     compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);

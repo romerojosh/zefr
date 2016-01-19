@@ -54,6 +54,11 @@ class Elements
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;
 
+    /* Element structures for implicit method */
+    mdvector<double> dFdUconv_spts, dFdUvisc_spts, dFddUvisc_spts;
+    mdvector<double> dFndULconv_fpts, dFndULvisc_fpts, dFnddULvisc_fpts, taunL_fpts;
+    mdvector<double> dFndURconv_fpts, dFndURvisc_fpts, dFnddURvisc_fpts, taunR_fpts;
+
 #ifdef _GPU
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d;
@@ -108,6 +113,10 @@ class Elements
     void poly_squeeze();
     void poly_squeeze_ppts();
 
+    /* Routines for implicit method */
+    void compute_dFdUconv();
+    void compute_dFdUvisc();
+    void compute_dFddUvisc();
 };
 
 #endif /* elements_hpp */

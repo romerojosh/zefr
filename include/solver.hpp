@@ -78,6 +78,9 @@ class FRSolver
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
 
+    /* Routines for implicit method */
+    void compute_LHS();
+    void dFndU_from_faces();
 
 };
 

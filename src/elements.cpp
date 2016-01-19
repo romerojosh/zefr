@@ -1029,3 +1029,79 @@ void Elements::poly_squeeze_ppts()
   }
 
 }
+
+void Elements::compute_dFdUconv()
+{
+  if (input->equation == AdvDiff)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            dFdUconv_spts(spt, ele, n, dim) = input->AdvDiff_A(dim);
+          }
+        }
+      }
+    }
+  }
+
+  else if (input->equation == EulerNS)
+  {
+    ThrowException("compute_dFdUconv for EulerNS not implemented yet!");
+  }
+}
+
+void Elements::compute_dFdUvisc()
+{
+  if (input->equation == AdvDiff)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            dFdUvisc_spts(spt, ele, n, dim) = 0;
+          }
+        }
+      }
+    }
+  }
+
+  else if (input->equation == EulerNS)
+  {
+    ThrowException("compute_dFdUvisc for EulerNS not implemented yet!");
+  }
+}
+
+void Elements::compute_dFddUvisc()
+{
+  if (input->equation == AdvDiff)
+  {
+#pragma omp parallel for collapse(4)
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            dFddUvisc_spts(spt, ele, n, dim) = -input->AdvDiff_D;
+          }
+        }
+      }
+    }
+  }
+
+  else if (input->equation == EulerNS)
+  {
+    ThrowException("compute_dFddUvisc for EulerNS not implemented yet!");
+  }
+}
