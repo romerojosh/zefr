@@ -1283,7 +1283,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-    geo.ele_adjacency.assign({geo.nFacesPerEle, geo.nEles});
+    geo.ele_adj.assign({geo.nFacesPerEle, geo.nEles});
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
     {
@@ -1305,9 +1305,9 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         std::sort(face.begin(), face.end());
 
         if (face2eles[face].empty() or face2eles[face].back() == ele)
-          geo.ele_adjacency(n, ele) = -1;
+          geo.ele_adj(n, ele) = -1;
         else
-          geo.ele_adjacency(n, ele) = face2eles[face].back();
+          geo.ele_adj(n, ele) = face2eles[face].back();
 
         face2eles[face].pop_back();
 
