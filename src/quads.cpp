@@ -526,6 +526,52 @@ void Quads::transform_flux()
 #endif
 }
 
+void Quads::transform_dFdU()
+{
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        double dFdUtemp = dFdUconv_spts(spt, ele, n, 0);
+
+        dFdUconv_spts(spt, ele, n, 0) = dFdUconv_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
+                                        dFdUconv_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
+        dFdUconv_spts(spt, ele, n, 1) = dFdUconv_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
+                                        dFdUtemp * jaco_spts(1, 0, spt, ele);
+      }
+    }
+  }
+
+  if (input->viscous)
+  {
+#pragma omp parallel for collapse(3)
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          double dFdUtemp = dFdUvisc_spts(spt, ele, n, 0);
+          double dFddUtemp = dFddUvisc_spts(spt, ele, n, 0);
+
+          dFdUvisc_spts(spt, ele, n, 0) = dFdUvisc_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
+                                          dFdUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
+          dFdUvisc_spts(spt, ele, n, 1) = dFdUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
+                                          dFdUtemp * jaco_spts(1, 0, spt, ele);
+
+          dFddUvisc_spts(spt, ele, n, 0) = dFddUvisc_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
+                                           dFddUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
+          dFddUvisc_spts(spt, ele, n, 1) = dFddUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
+                                           dFddUtemp * jaco_spts(1, 0, spt, ele);
+        }
+      }
+    }
+  }
+}
+
 double Quads::calc_shape(unsigned int shape_order, unsigned int idx, 
                          std::vector<double> &loc)
 {

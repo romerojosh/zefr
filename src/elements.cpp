@@ -1,3 +1,4 @@
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -797,6 +798,711 @@ void Elements::compute_Fvisc()
   }
 }
 
+void Elements::compute_dFdUconv()
+{
+  if (input->equation == AdvDiff)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            dFdUconv_spts(spt, ele, n, dim) = input->AdvDiff_A(dim);
+          }
+        }
+      }
+    }
+  }
+
+  else if (input->equation == EulerNS)
+  {
+    ThrowException("compute_dFdUconv for EulerNS not implemented yet!");
+  }
+}
+
+void Elements::compute_dFdUvisc()
+{
+  if (input->equation == AdvDiff)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            dFdUvisc_spts(spt, ele, n, dim) = 0;
+          }
+        }
+      }
+    }
+  }
+
+  else if (input->equation == EulerNS)
+  {
+    ThrowException("compute_dFdUvisc for EulerNS not implemented yet!");
+  }
+}
+
+void Elements::compute_dFddUvisc()
+{
+  if (input->equation == AdvDiff)
+  {
+#pragma omp parallel for collapse(4)
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            dFddUvisc_spts(spt, ele, n, dim) = -input->AdvDiff_D;
+          }
+        }
+      }
+    }
+  }
+
+  else if (input->equation == EulerNS)
+  {
+    ThrowException("compute_dFddUvisc for EulerNS not implemented yet!");
+  }
+}
+
+void Elements::compute_LHS()
+{
+  /* TODO: Move setup */
+  unsigned int n = 0;
+  mdvector<double> CtempSS, CvtempSS, CtempFS, CtempFS2;
+  CtempSS.assign({nSpts, nSpts});
+  CvtempSS.assign({nSpts, nSpts});
+  CtempFS.assign({nFpts, nSpts});
+  CtempFS2.assign({nFpts, nSpts});
+
+  mdvector<double> CtempFSN, CtempFSN2;
+  CtempFSN.assign({nSpts1D, nSpts});
+  CtempFSN2.assign({nSpts1D, nSpts});
+
+  /* structs for jacobian (consider storing jaco inverse) */
+  int dim_jaco[2] = {1, 0};
+  int posneg[2] = {1, -1};
+  int negpos[2] = {-1, 1};
+
+  /* Compute LHS */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    /* Compute inviscid LHS implicit Jacobians */
+    Cconv0.fill(0.0); CconvN.fill(0.0);
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      /* (Center) */
+      CtempFS.fill(0.0);
+      for (unsigned int j = 0; j < nSpts; j++)
+      {
+        for (unsigned int i = 0; i < nFpts; i++)
+        {
+          CtempFS(i, j) = dFndUconv_fpts(i, ele, n) * oppE(i, j);
+        }
+      }
+
+      for (unsigned int j = 0; j < nSpts; j++)
+      {
+        for (unsigned int i = 0; i < nSpts; i++)
+        {
+          Cconv0(i, j) += oppD(i, j, dim) * dFdUconv_spts(j, ele, n, dim);
+          for (unsigned int k = 0; k < nFpts; k++)
+          {
+            Cconv0(i, j) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+          }
+        }
+      }
+
+      /* (Neighbors) */
+      for (unsigned int face = 0; face < nFaces; face++)
+      {
+        /* Neighbor Face */
+        // TODO: Needs fixing for unstructured case
+        unsigned int faceN = face + 2;
+        if (faceN >= nFaces)
+        {
+          faceN = face - 2;
+        }
+
+        CtempFSN.fill(0.0);
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts1D; i++)
+          {
+            unsigned int ind = faceN * nSpts1D + i;
+            CtempFSN(i, j) = dFndUconv_fpts(ind, ele, n) * oppE(ind, j); // Needs eleN
+          }
+        }
+
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            for (unsigned int k = 0; k < nSpts1D; k++)
+            {
+              unsigned int ind = (face+1) * nSpts1D - (k+1); // backwards ordering may only work for opposite faces
+              CconvN(i, j, face) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+            }
+          }
+        }
+      }
+    }
+
+    /* Compute viscous LHS implicit Jacobians */
+    Cvisc0.fill(0.0); Bvisc0.fill(0.0);
+    CviscN.fill(0.0); BviscN.fill(0.0); BviscN2.fill(0.0);
+    if (input->viscous)
+    {
+      /* Compute viscous supplementary matrices */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        /* (Center) */
+        CtempFS.fill(0.0);
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nFpts; i++)
+          {
+            CtempFS(i, j) = beta_Ucomm_fpts(i, ele) * oppE(i, j);
+          }
+        }
+
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            Cvisc0(i, j, dim) += oppD(i, j, dim);
+            for (unsigned int k = 0; k < nFpts; k++)
+            {
+              Cvisc0(i, j, dim) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+            }
+          }
+        }
+
+        /* (Neighbors) */
+        for (unsigned int face = 0; face < nFaces; face++)
+        {
+          /* Neighbor Face */
+          // TODO: Needs fixing for unstructured case
+          unsigned int faceN = face + 2;
+          if (faceN >= nFaces)
+          {
+            faceN = face - 2;
+          }
+
+          CtempFSN.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              unsigned int ind = faceN * nSpts1D + i;
+              CtempFSN(i, j) = beta_Ucomm_fpts(ind, ele) * oppE(ind, j); // Needs eleN
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              for (unsigned int k = 0; k < nSpts1D; k++)
+              {
+                unsigned int ind = (face+1) * nSpts1D - (k+1); // backwards ordering may only work for opposite faces
+                CviscN(i, j, dim, face) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+              }
+            }
+          }
+        }
+      }
+
+      /* Compute inviscid LHS implicit Jacobians */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        /* (Center) Term 1 */
+        CvtempSS.fill(0.0);
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            CvtempSS(i, j) += posneg[dim] * jaco_spts(dim_jaco[dim], 1, i, ele) / jaco_det_spts(i, ele) * Cvisc0(i, j, 0) +
+                              negpos[dim] * jaco_spts(dim_jaco[dim], 0, i, ele) / jaco_det_spts(i, ele) * Cvisc0(i, j, 1);
+          }
+        }
+
+        CtempSS.fill(0.0);
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          CtempSS(j, j) += dFdUvisc_spts(j, ele, n, dim);
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            CtempSS(i, j) += dFddUvisc_spts(i, ele, n, dim) * CvtempSS(i, j);
+          }
+        }
+
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            for (unsigned int k = 0; k < nSpts; k++)
+            {
+              Bvisc0(i, j) += oppD(i, k, dim) * CtempSS(k, j);
+            }
+          }
+        }
+
+        /* (Center) Term 2 */
+        CtempFS.fill(0.0); CtempFS2.fill(0.0);
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nFpts; i++)
+          {
+            CtempFS(i, j) += dFndUvisc_fpts(i, ele, n) * oppE(i, j);
+          }
+        }
+
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nFpts; i++)
+          {
+            CtempFS2(i, j) += dFnddUvisc_fpts(i, ele, n) * oppE(i, j);
+          }
+        }
+
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nFpts; i++)
+          {
+            for (unsigned int k = 0; k < nSpts; k++)
+            {
+              CtempFS(i, j) += CtempFS2(i, k) * CvtempSS(k, j);
+            }
+          }
+        }
+
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            for (unsigned int k = 0; k < nFpts; k++)
+            {
+              Bvisc0(i, j) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+            }
+          }
+        }
+
+        /* (Center) Term 3 (Neighbors) */
+        for (unsigned int face = 0; face < nFaces; face++)
+        {
+          /* Neighbor Face */
+          // TODO: Needs fixing for unstructured case
+          unsigned int faceN = face + 2;
+          if (faceN >= nFaces)
+          {
+            faceN = face - 2;
+          }
+
+          CvtempSS.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              CvtempSS(i, j) += posneg[dim] * jaco_spts(dim_jaco[dim], 1, i, ele) / jaco_det_spts(i, ele) * CviscN(i, j, 0, faceN) +
+                                negpos[dim] * jaco_spts(dim_jaco[dim], 0, i, ele) / jaco_det_spts(i, ele) * CviscN(i, j, 1, faceN); // Needs eleN
+            }
+          }
+
+          CtempFSN.fill(0.0); CtempFSN2.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              unsigned int ind = faceN * nSpts1D + i;
+              CtempFSN2(i, j) += dFnddUvisc_fpts(ind, ele, n) * oppE(ind, j); // Needs eleN
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              for (unsigned int k = 0; k < nSpts; k++)
+              {
+                CtempFSN(i, j) += CtempFSN2(i, k) * CvtempSS(k, j);
+              }
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              for (unsigned int k = 0; k < nSpts1D; k++)
+              {
+                unsigned int ind = (face+1) * nSpts1D - (k+1); // backwards ordering may only work for opposite faces
+                Bvisc0(i, j) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+              }
+            }
+          }
+        }
+
+        /* (Center) Term 4 */
+        CtempFS.fill(0.0);
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nFpts; i++)
+          {
+            CtempFS(i, j) += taun_fpts(i, ele) * oppE(i, j);
+          }
+        }
+
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            for (unsigned int k = 0; k < nFpts; k++)
+            {
+              Bvisc0(i, j) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+            }
+          }
+        }
+
+        /* (Neighbors) */
+        for (unsigned int face = 0; face < nFaces; face++)
+        {
+          /* Neighbor Face */
+          // TODO: Needs fixing for unstructured case
+          unsigned int faceN = face + 2;
+          if (faceN >= nFaces)
+          {
+            faceN = face - 2;
+          }
+
+          /* (2nd Neighbors) */
+          // TODO: Needs to be changed. Will need to loop through all 2nd Neighbors (e.g. corners).
+          /* (2nd Neighbor) */
+          CvtempSS.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              CvtempSS(i, j) += posneg[dim] * jaco_spts(dim_jaco[dim], 1, i, ele) / jaco_det_spts(i, ele) * CviscN(i, j, 0, face) +
+                                negpos[dim] * jaco_spts(dim_jaco[dim], 0, i, ele) / jaco_det_spts(i, ele) * CviscN(i, j, 1, face);
+            }
+          }
+
+          CtempFSN.fill(0.0); CtempFSN2.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              unsigned int ind = faceN * nSpts1D + i;
+              CtempFSN2(i, j) += dFnddUvisc_fpts(ind, ele, n) * oppE(ind, j); // Needs eleN
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              for (unsigned int k = 0; k < nSpts; k++)
+              {
+                CtempFSN(i, j) += CtempFSN2(i, k) * CvtempSS(k, j);
+              }
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              for (unsigned int k = 0; k < nSpts1D; k++)
+              {
+                unsigned int ind = (face+1) * nSpts1D - (k+1); // backwards ordering may only work for opposite faces
+                BviscN2(i, j, face) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+              }
+            }
+          }
+
+          /* (Neighbors) Term 1 */
+          CtempSS.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              CtempSS(i, j) += dFddUvisc_spts(i, ele, n, dim) * CvtempSS(i, j);
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              for (unsigned int k = 0; k < nSpts; k++)
+              {
+                BviscN(i, j, face) += oppD(i, k, dim) * CtempSS(k, j);
+              }
+            }
+          }
+
+          /* (Neighbor) Term 2 */
+          CtempFS.fill(0.0); CtempFS2.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nFpts; i++)
+            {
+              CtempFS2(i, j) += dFnddUvisc_fpts(i, ele, n) * oppE(i, j);
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nFpts; i++)
+            {
+              for (unsigned int k = 0; k < nSpts; k++)
+              {
+                CtempFS(i, j) += CtempFS2(i, k) * CvtempSS(k, j);
+              }
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              for (unsigned int k = 0; k < nFpts; k++)
+              {
+                BviscN(i, j, face) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+              }
+            }
+          }
+
+          /* (Neighbor) Term 3 */
+          CvtempSS.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              CvtempSS(i, j) += posneg[dim] * jaco_spts(dim_jaco[dim], 1, i, ele) / jaco_det_spts(i, ele) * Cvisc0(i, j, 0) +
+                                negpos[dim] * jaco_spts(dim_jaco[dim], 0, i, ele) / jaco_det_spts(i, ele) * Cvisc0(i, j, 1); // Needs eleN
+            }
+          }
+
+          CtempFSN.fill(0.0); CtempFSN2.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              unsigned int ind = faceN * nSpts1D + i;
+              CtempFSN(i, j) += dFndUvisc_fpts(ind, ele, n) * oppE(ind, j); // Needs eleN
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              unsigned int ind = faceN * nSpts1D + i;
+              CtempFSN2(i, j) += dFnddUvisc_fpts(ind, ele, n) * oppE(ind, j); // Needs eleN
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              for (unsigned int k = 0; k < nSpts; k++)
+              {
+                CtempFSN(i, j) += CtempFSN2(i, k) * CvtempSS(k, j);
+              }
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              for (unsigned int k = 0; k < nSpts1D; k++)
+              {
+                unsigned int ind = (face+1) * nSpts1D - (k+1); // backwards ordering may only work for opposite faces
+                BviscN(i, j, face) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+              }
+            }
+          }
+
+          /* (Neighbor) Term 4 */
+          CtempFSN.fill(0.0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              unsigned int ind = faceN * nSpts1D + i;
+              CtempFSN(i, j) += taun_fpts(ind, ele) * oppE(ind, j); // Needs eleN
+            }
+          }
+
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              for (unsigned int k = 0; k < nSpts1D; k++)
+              {
+                unsigned int ind = (face+1) * nSpts1D - (k+1); // backwards ordering may only work for opposite faces
+                BviscN(i, j, face) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    /*
+    std::cout << "jaco_det_spts, Element: " << ele << std::endl;
+    for (unsigned int j = 0; j < nSpts; j++)
+    {
+      std::cout << std::setprecision(12) << std::setw(15) << jaco_det_spts(j, ele) << " ";
+    }
+    std::cout << std::endl;
+    */
+
+    /*
+    std::cout << "dFddUvisc_spts, Element: " << ele << std::endl;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int j = 0; j < nSpts; j++)
+      {
+        std::cout << std::setprecision(12) << std::setw(15) << dFddUvisc_spts(j, ele, n, dim) << " ";
+      }
+      std::cout << std::endl;
+    }
+    std::cout << std::endl;
+    */
+
+    /*
+    std::cout << "dFndUconv_fpts, Element: " << ele << std::endl;
+    for (unsigned int j = 0; j < nFpts; j++)
+    {
+      std::cout << std::setprecision(12) << std::setw(15) << dFndUconv_fpts(j, ele, n, 0) << " ";
+    }
+    std::cout << std::endl;
+    */
+
+    /*
+    std::cout << "Cconv0, Element: " << ele << std::endl;
+    for (unsigned int i = 0; i < nSpts; i++)
+    {
+      for (unsigned int j = 0; j < nSpts; j++)
+      {
+        std::cout << std::setprecision(12) << std::setw(15) << Cconv0(i, j) / jaco_det_spts(i, ele) << " ";
+      }
+      std::cout << std::endl;
+    }
+    std::cout << std::endl;
+
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      std::cout << "CconvN, Element: " << ele << " Neighbor: " << face << std::endl;
+      for (unsigned int i = 0; i < nSpts; i++)
+      {
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          std::cout << std::setprecision(12) << std::setw(15) << CconvN(i, j, face) / jaco_det_spts(i, ele) << " ";
+        }
+        std::cout << std::endl;
+      }
+      std::cout << std::endl;
+    }
+    std::cout << std::endl;
+    */
+
+    /*
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      std::cout << "Cvisc0, Element: " << ele << " Dim: " << dim << std::endl;
+      for (unsigned int i = 0; i < nSpts; i++)
+      {
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          std::cout << std::setprecision(12) << std::setw(15) << Cvisc0(i, j, dim) << " ";
+        }
+        std::cout << std::endl;
+      }
+      std::cout << std::endl;
+    }
+    std::cout << std::endl;
+
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        std::cout << "CviscN, Element: " << ele << " Dim: " << dim << " Face: " << face << std::endl;
+        for (unsigned int i = 0; i < nSpts; i++)
+        {
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            std::cout << std::setprecision(12) << std::setw(15) << CviscN(i, j, dim, face) << " ";
+          }
+          std::cout << std::endl;
+        }
+        std::cout << std::endl;
+      }
+    std::cout << std::endl;
+    }
+    */
+
+    /*
+    std::cout << "Bvisc0, Element: " << ele << std::endl;
+    for (unsigned int i = 0; i < nSpts; i++)
+    {
+      for (unsigned int j = 0; j < nSpts; j++)
+      {
+        std::cout << std::setprecision(12) << std::setw(15) << Bvisc0(i, j) / jaco_det_spts(i, ele) << " ";
+      }
+      std::cout << std::endl;
+    }
+
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      std::cout << "BviscN, Element: " << ele << " Neighbor: " << face << std::endl;
+      for (unsigned int i = 0; i < nSpts; i++)
+      {
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          std::cout << std::setprecision(12) << std::setw(15) << BviscN(i, j, face) / jaco_det_spts(i, ele) << " ";
+        }
+        std::cout << std::endl;
+      }
+      std::cout << std::endl;
+    }
+    std::cout << std::endl;
+
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      std::cout << "BviscN2, Element: " << ele << " Neighbor: " << face << std::endl;
+      for (unsigned int i = 0; i < nSpts; i++)
+      {
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          std::cout << std::setprecision(12) << std::setw(15) << BviscN2(i, j, face) / jaco_det_spts(i, ele) << " ";
+        }
+        std::cout << std::endl;
+      }
+      std::cout << std::endl;
+    }
+    std::cout << std::endl;
+    */
+
+    /* Stop */
+    // ThrowException("Stopping program to read matrix");
+  }
+}
+
 void Elements::compute_Uavg()
 {
 #ifdef _CPU
@@ -1030,78 +1736,3 @@ void Elements::poly_squeeze_ppts()
 
 }
 
-void Elements::compute_dFdUconv()
-{
-  if (input->equation == AdvDiff)
-  {
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = 0; ele < nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            dFdUconv_spts(spt, ele, n, dim) = input->AdvDiff_A(dim);
-          }
-        }
-      }
-    }
-  }
-
-  else if (input->equation == EulerNS)
-  {
-    ThrowException("compute_dFdUconv for EulerNS not implemented yet!");
-  }
-}
-
-void Elements::compute_dFdUvisc()
-{
-  if (input->equation == AdvDiff)
-  {
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = 0; ele < nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            dFdUvisc_spts(spt, ele, n, dim) = 0;
-          }
-        }
-      }
-    }
-  }
-
-  else if (input->equation == EulerNS)
-  {
-    ThrowException("compute_dFdUvisc for EulerNS not implemented yet!");
-  }
-}
-
-void Elements::compute_dFddUvisc()
-{
-  if (input->equation == AdvDiff)
-  {
-#pragma omp parallel for collapse(4)
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = 0; ele < nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            dFddUvisc_spts(spt, ele, n, dim) = -input->AdvDiff_D;
-          }
-        }
-      }
-    }
-  }
-
-  else if (input->equation == EulerNS)
-  {
-    ThrowException("compute_dFddUvisc for EulerNS not implemented yet!");
-  }
-}

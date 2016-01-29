@@ -36,6 +36,8 @@ class Hexas: public Elements
     void transform_dU();
     void transform_flux();
 
+    /* Routines for implicit method */
+    void transform_dFdU();
 };
 
 #endif /* hexas_hpp */

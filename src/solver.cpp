@@ -553,7 +553,7 @@ void FRSolver::compute_LHS()
   eles->compute_dFdUconv();
   faces->compute_dFdUconv(0, geo.nGfpts);
 
-  if(input->viscous)
+  if (input->viscous)
   {
     /* Compute derivative of viscous flux with respect to state variables 
      * at solution and flux points */
@@ -569,8 +569,18 @@ void FRSolver::compute_LHS()
   /* Compute normal flux derivative data at flux points */
   faces->compute_dFndU(0, geo.nGfpts);
 
+  /* Transform flux derivative data from physical to reference space */
+  eles->transform_dFdU();
+  faces->transform_dFndU();
+
   /* Copy normal flux derivative data from face local storage to element local storage */
   dFndU_from_faces();
+
+  /* Compute LHS implicit Jacobian */
+  eles->compute_LHS();
+
+  /* Copy to GPU */
+  //A_d = eles->A;
 }
 
 void FRSolver::initialize_U()
@@ -598,22 +608,27 @@ void FRSolver::initialize_U()
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "BDF1")
   {
-    eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+    eles->Cconv0.assign({eles->nSpts, eles->nSpts});
+    eles->CconvN.assign({eles->nSpts, eles->nSpts, eles->nFaces});
 
-    eles->dFndULconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-    eles->dFndURconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+    eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+    eles->dFndUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
 
     if(input->viscous)
     {
+      eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+      eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
+      eles->Bvisc0.assign({eles->nSpts, eles->nSpts});
+      eles->BviscN.assign({eles->nSpts, eles->nSpts, eles->nFaces});
+      eles->BviscN2.assign({eles->nSpts, eles->nSpts, eles->nFaces});
+
       eles->dFdUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
       eles->dFddUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
 
-      eles->dFndULvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-      eles->dFndURvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-      eles->dFnddULvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-      eles->dFnddURvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-      eles->taunL_fpts.assign({eles->nFpts, eles->nEles});
-      eles->taunR_fpts.assign({eles->nFpts, eles->nEles});
+      eles->dFndUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+      eles->dFnddUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+      eles->beta_Ucomm_fpts.assign({eles->nFpts, eles->nEles});
+      eles->taun_fpts.assign({eles->nFpts, eles->nEles});
     }
   }
 
@@ -855,8 +870,7 @@ void FRSolver::dFndU_from_faces()
           continue;
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-        eles->dFndULconv_fpts(fpt, ele, n) = faces->dFndULconv(gfpt, n, slot);
-        eles->dFndURconv_fpts(fpt, ele, n) = faces->dFndURconv(gfpt, n, slot);
+        eles->dFndUconv_fpts(fpt, ele, n) = faces->dFndUconv(gfpt, n, slot);
       }
     }
   }
@@ -876,15 +890,10 @@ void FRSolver::dFndU_from_faces()
             continue;
           int slot = geo.fpt2gfpt_slot(fpt,ele);
 
-          eles->dFndULvisc_fpts(fpt, ele, n) = faces->dFndULvisc(gfpt, n, slot);
-          eles->dFndURvisc_fpts(fpt, ele, n) = faces->dFndURvisc(gfpt, n, slot);
-
-          eles->dFnddULvisc_fpts(fpt, ele, n) = faces->dFnddULvisc(gfpt, n, slot);
-          eles->dFnddURvisc_fpts(fpt, ele, n) = faces->dFnddURvisc(gfpt, n, slot);
-
-          /* TODO: Move outside var loop */
-          eles->taunL_fpts(fpt, ele) = faces->taunL(gfpt, slot);
-          eles->taunR_fpts(fpt, ele) = faces->taunR(gfpt, slot);
+          eles->dFndUvisc_fpts(fpt, ele, n) = faces->dFndUvisc(gfpt, n, slot);
+          eles->dFnddUvisc_fpts(fpt, ele, n) = faces->dFnddUvisc(gfpt, n, slot);
+          eles->beta_Ucomm_fpts(fpt, ele) = faces->beta_Ucomm(gfpt, slot);
+          eles->taun_fpts(fpt, ele) = faces->taun(gfpt, slot);
         }
       }
     }

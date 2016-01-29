@@ -54,7 +54,6 @@ class FRSolver
     void solver_data_to_device();
 #endif
 
-
     /* Routines to communicate data between faces and elements */
     void U_to_faces();
     void U_from_faces();
@@ -81,7 +80,6 @@ class FRSolver
     /* Routines for implicit method */
     void compute_LHS();
     void dFndU_from_faces();
-
 };
 
 #endif /* solver_hpp */

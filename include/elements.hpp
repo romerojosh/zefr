@@ -9,9 +9,11 @@
 #include "geometry.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
+#include "spmatrix.hpp"
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
+#include "spmatrix_gpu.h"
 #endif
 
 class FRSolver;
@@ -55,9 +57,11 @@ class Elements
     mdvector<double> oppPro, oppRes;
 
     /* Element structures for implicit method */
+    spmatrix<double> A; // Sparse matrix for implicit system
+    mdvector<double> Cconv0, Cvisc0, Bvisc0;
+    mdvector<double> CconvN, CviscN, BviscN, BviscN2;
     mdvector<double> dFdUconv_spts, dFdUvisc_spts, dFddUvisc_spts;
-    mdvector<double> dFndULconv_fpts, dFndULvisc_fpts, dFnddULvisc_fpts, taunL_fpts;
-    mdvector<double> dFndURconv_fpts, dFndURvisc_fpts, dFnddURvisc_fpts, taunR_fpts;
+    mdvector<double> dFndUconv_fpts, dFndUvisc_fpts, dFnddUvisc_fpts, beta_Ucomm_fpts, taun_fpts;
 
 #ifdef _GPU
     /* GPU data */
@@ -108,15 +112,17 @@ class Elements
     virtual void transform_flux() = 0;
     virtual void transform_dU() = 0;
 
+    /* Routines for implicit method */
+    void compute_LHS();
+    void compute_dFdUconv();
+    void compute_dFdUvisc();
+    void compute_dFddUvisc();
+    virtual void transform_dFdU() = 0;
+
     /* Polynomial squeeze methods */
     void compute_Uavg();
     void poly_squeeze();
     void poly_squeeze_ppts();
-
-    /* Routines for implicit method */
-    void compute_dFdUconv();
-    void compute_dFdUvisc();
-    void compute_dFddUvisc();
 };
 
 #endif /* elements_hpp */

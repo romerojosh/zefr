@@ -679,6 +679,11 @@ void Hexas::transform_flux()
 #endif
 }
 
+void Hexas::transform_dFdU()
+{
+  ThrowException("Implicit method not implemented for Hex element type yet!");
+}
+
 double Hexas::calc_shape(unsigned int shape_order, unsigned int idx, 
                          std::vector<double> &loc)
 {

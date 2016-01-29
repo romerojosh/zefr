@@ -42,6 +42,7 @@ class Faces
     /* Routines for implicit method */
     void rusanov_dFndU(unsigned int startFpt, unsigned int endFpt);
     void LDG_dFndU(unsigned int startFpt, unsigned int endFpt);
+    void transform_dFndU();
 
 #ifdef _MPI
     void send_U_data();
@@ -59,10 +60,8 @@ class Faces
 
     /* Structures for implicit method */
     mdvector<double> dFdUconv, dFdUvisc, dFddUvisc; 
-    mdvector<double> dFndULconv, dFndULvisc, dFnddULvisc, taunL;
-    mdvector<double> dFndURconv, dFndURvisc, dFnddURvisc, taunR;
-    mdvector<double> dFndUL_temp, dFnddUL_temp, taunL_temp;
-    mdvector<double> dFndUR_temp, dFnddUR_temp, taunR_temp;
+    mdvector<double> dFndUconv, dFndUvisc, dFnddUvisc, beta_Ucomm, taun;
+    mdvector<double> dFndU_temp, dFnddU_temp, taun_temp;
 
 #ifdef _MPI
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
