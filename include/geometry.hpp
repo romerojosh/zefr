@@ -30,6 +30,7 @@ struct GeoStruct
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
     mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
     mdvector<unsigned int> face_nodes;
+    mdvector<int> ele_adjacency;
 
 #ifdef _MPI
     unsigned int nGfpts_mpi;

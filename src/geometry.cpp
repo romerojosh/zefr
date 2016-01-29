@@ -836,6 +836,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
     std::vector<std::vector<int>> ele2fpts(geo.nEles);
     std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
+    std::map<std::vector<unsigned int>, std::vector<unsigned int>> face2eles;
 
     std::vector<unsigned int> face(geo.nNodesPerFace,0);
 
@@ -875,6 +876,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         }
 
         std::sort(face.begin(), face.end());
+        face2eles[face].push_back(ele);
+
 
         /* Check if face is has not been previously encountered */
         if (!unique_faces.count(face))
@@ -906,6 +909,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     unsigned int gfpt_mpi = geo.nGfpts_int + geo.nGfpts_bnd;
     std::set<std::vector<unsigned int>> mpi_faces_to_process;
 #endif
+
 
     /* Begin loop through faces */
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -1204,6 +1208,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
         auto fpts2 = bndface2fpts[face2];
         auto face2_ordered = geo.face2ordered[face2];
 
+        face2eles[face1].push_back(face2eles[face2][0]);
+
         /* Determine rotation using ordered faces*/
         unsigned int rot = 0;
         if (geo.nDims == 3)
@@ -1277,6 +1283,7 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+    geo.ele_adjacency.assign({geo.nFacesPerEle, geo.nEles});
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
     {
@@ -1284,6 +1291,26 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
       {
         geo.fpt2gfpt(fpt,ele) = ele2fpts[ele][fpt];
         geo.fpt2gfpt_slot(fpt,ele) = ele2fpts_slot[ele][fpt];
+      }
+
+      for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+      {
+        face.assign(geo.nNodesPerFace, 0);
+
+        for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+        {
+          face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+        }
+
+        std::sort(face.begin(), face.end());
+
+        if (face2eles[face].empty() or face2eles[face].back() == ele)
+          geo.ele_adjacency(n, ele) = -1;
+        else
+          geo.ele_adjacency(n, ele) = face2eles[face].back();
+
+        face2eles[face].pop_back();
+
       }
     }
 
