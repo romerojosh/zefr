@@ -2,6 +2,9 @@
 #define spmatrix_hpp
 
 #include <algorithm>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <vector>
 
 /* spmatrix - Sparse matrix class. 
@@ -40,6 +43,12 @@ class spmatrix
 
     /* Method to perform in-place conversion of COO formatted matrix to CSR format */ 
     void toCSR();
+
+    /* Method to clear sparse matrix */
+    void clear();
+
+    /* Method to print all values to file */
+    void print();
 };
 
 /* Helper function for CSR conversion to sort rows */
@@ -205,6 +214,34 @@ void spmatrix<T>::toCSR()
   nNonzeros = row_ptr[nRows];
  
   isCSR = true;
+}
+
+template <typename T>
+void spmatrix<T>::clear()
+{
+  row_ptr.clear();
+  col_idx.clear();
+  vals.clear();
+  isCSR = false;
+  nNonzeros = 0;
+  nRows = 0;
+}
+
+template <typename T>
+void spmatrix<T>::print()
+{
+  std::ofstream spMat;
+  spMat.open("spMat.dat");
+  int k = 0;
+  for (int i = 0; i < nRows; i++)
+  {
+    for (int j = row_ptr[i]; j < row_ptr[i+1]; j++)
+    {
+      spMat << i << " " << col_idx[k] << " " << std::setprecision(16) << std::scientific << vals[k] << std::endl;
+      k++;
+    }
+  }
+  spMat.close();
 }
 
 #endif /* spmatrix_hpp */

@@ -115,24 +115,6 @@ void FRSolver::setup_update()
   else if (input->dt_scheme == "BDF1")
   {
     nStages = 1;
-    /* Temporary setup of system matrix A */
-    //std::fstream f("Imat.dat", std::fstream::in);
-    std::fstream f("Amat.dat", std::fstream::in);
-    if (!f.is_open())
-      ThrowException("Could not open system matrix file.");
-    int i, j;
-    double val;
-    while (f >> i >> j >> val)
-      A.addEntry(i-1, j-1, val);
-
-    f.close();
-
-    A.toCSR();
-
-#ifdef _GPU
-    A_d = A;
-#endif
-
   }
   else
   {
@@ -580,7 +562,9 @@ void FRSolver::compute_LHS()
   eles->compute_LHS();
 
   /* Copy to GPU */
-  //A_d = eles->A;
+#ifdef _GPU
+  A_d = eles->A;
+#endif
 }
 
 void FRSolver::initialize_U()
