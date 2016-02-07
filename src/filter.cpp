@@ -36,7 +36,6 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
   setup_threshold();
   setup_reshapeOp(); 
 	sensor.assign({eles->nEles});
-  u.assign({eles->nSpts});
 	
 #ifdef _GPU
 	sensor_d = sensor;
@@ -116,13 +115,8 @@ void Filter::setup_threshold()
   auto &B = uh_canon(0, 0);
   auto &C = KS(0, 0);
   
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-    eles->nSpts1D, 2, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
-#else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
     eles->nSpts1D, 2, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
-#endif
   
   // Apply non-linear enhancement
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
@@ -148,9 +142,6 @@ void Filter::setup_reshapeOp()
   if (input->nDims == 2) // Quads
   {
     reshapeOp.assign({eles->nSpts1D, 2 * eles->nSpts1D});
-    u_lines.assign({eles->nSpts1D, 2 * eles->nSpts1D});
-    uh_lines.assign({eles->nSpts1D, 2 * eles->nSpts1D});
-    KS_lines.assign({eles->nSpts1D, 2 * eles->nSpts1D});
     
     unsigned int cnt = 0;
     for (unsigned int j = 0; j < eles->nSpts1D; j++)
@@ -172,8 +163,22 @@ void Filter::setup_reshapeOp()
 
 void Filter::apply_sensor_ele(unsigned int ele)
 {
+  // Local arrays 
+  mdvector<double> u, u_lines, uh_lines, KS_lines;
+  u.assign({eles->nSpts});
+  if (input->nDims == 2) // Quads
+  {
+    u_lines.assign({eles->nSpts1D, 2 * eles->nSpts1D});
+    uh_lines.assign({eles->nSpts1D, 2 * eles->nSpts1D});
+    KS_lines.assign({eles->nSpts1D, 2 * eles->nSpts1D});
+  }
+  else // Hexes   
+  {
+    if (input->rank == 0) std::cout << "Sensor on hexes not yet implemented." << std::endl;
+    exit(EXIT_FAILURE);
+  }  
+
   // Loop over conservative variables
-#pragma omp parallel for 
   for (unsigned int var = 0; var < eles->nVars; var++)
   {
     // Copy data to local memory

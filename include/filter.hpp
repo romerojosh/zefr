@@ -26,7 +26,6 @@ class Filter
 		mdvector<double> Vander, Vander_d1, Conc, Fop;
     mdvector<unsigned int> reshapeOp;
 		double threshJ, Delta;
-    mdvector<double> u, u_lines, uh_lines, KS_lines;
 	
 		void setup_vandermonde_matrices();
 		void setup_concentration_matrix();
