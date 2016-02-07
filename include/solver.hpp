@@ -16,19 +16,21 @@
 #endif
 
 class PMGrid;
+class Filter;
+
 class FRSolver
 {
   friend class PMGrid;
-
+  friend class Filter;
+  
   private:
     InputStruct *input = NULL;
     GeoStruct geo;
     int order;
-    int current_iter = 0;
-    double flow_time = 0.;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
-
+    int current_iter = 0;
+    double flow_time = 0.;
     unsigned int nStages;
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> dt;
@@ -65,7 +67,7 @@ class FRSolver
 #ifdef _GPU
     void update_with_source(mdvector_gpu<double> &source);
 #endif
-    void write_solution();
+    void write_solution(const mdvector<double>& sensor);
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);

@@ -100,6 +100,10 @@ InputStruct read_input_file(std::string inputfile)
   input.V_wall.assign({3});
   read_param(f, "nx_wall", input.norm_wall(0), 1.0);
   read_param(f, "ny_wall", input.norm_wall(1), 0.0);
+  
+  read_param(f, "filt_on", input.filt_on, (unsigned int) 0);
+  read_param(f, "sen_write", input.sen_write, (unsigned int) 0);
+  read_param(f, "sen_Jfac", input.sen_Jfac, 1.0);
 
   f.close();
 

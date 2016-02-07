@@ -83,3 +83,8 @@ T_wall 300    # Used for isothermal wall boundary only.
 mach_wall 0.0           
 nx_wall 1
 ny_wall 0
+
+# Filter
+filt_on 0     # 1: enable filtering
+sen_write 1   # 1: write sensor values for each element
+sen_Jfac 1    # Sensor threshold \in [0,1]: 0 for ramp, 1 for step

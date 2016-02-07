@@ -32,6 +32,8 @@ struct InputStruct
   double T_ref, P_ref, rho_ref, mu_ref, time_ref, R_ref, c_sth, rt;
   double exps0, s_factor;
   unsigned int rank, nRanks;
+  unsigned int filt_on, sen_write;
+  double sen_Jfac;
 
 #ifdef _GPU
   mdvector_gpu<double> AdvDiff_A_d, V_fs_d, norm_fs_d, V_wall_d, norm_wall_d;

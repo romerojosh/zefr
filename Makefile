@@ -53,8 +53,12 @@ ifeq ($(strip $(ARCH)),GPU)
 	INCS += -I$(strip $(CUDA_DIR))/include
 endif
 
+# Including TNT and JAMA headers
+INCS += -I ../tnt_126/
+INCS += -I ../jama125/
+
 TARGET = zefr
-OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/zefr.o 
+OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/filter.o  bin/zefr.o 
 
 ifeq ($(strip $(ARCH)),GPU)
 	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o 

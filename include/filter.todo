@@ -1,0 +1,9 @@
+ToDO
+
+1. zefr: main loop sensor & filter call
+2. zefr: initialization of sensor and filter
+4. sensor:
+	b. Sensor operator
+5. filter:
+	a. 
+6. GPU kernels

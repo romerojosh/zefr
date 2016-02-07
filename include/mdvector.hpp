@@ -35,7 +35,7 @@ class mdvector
     std::array<unsigned int,4> dims; 
     std::array<unsigned int,4> strides;
     std::vector<T> values;
-    std::shared_ptr<LU> LUptr;
+    std::shared_ptr<JAMA::LU<double>> LUptr;
 
   public:
     //! Constructors
@@ -61,16 +61,16 @@ class mdvector
     T* data();
     
     //! Method to return max element
-    T max_val();
+    T max_val() const;
     
     //! Method to return min element
-    T min_val();
+    T min_val() const;
     
     //! Method to calculate LU factors
     void calc_LU();
     
     //! Method to solve L U x = B for x
-    void solve(mdvector<T> x, mdvector<T> B);
+    void solve(mdvector<T>& x, const mdvector<T>& B) const;
 
     //! Method to return number of values (with padding)
     unsigned int get_nvals() const;
@@ -81,6 +81,7 @@ class mdvector
     //! Overloaded methods to access data
     T operator()(unsigned int idx0) const;
     T& operator()(unsigned int idx0);
+    T operator()(unsigned int idx0, unsigned int idx1) const;
     T& operator()(unsigned int idx0, unsigned int idx1);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
@@ -188,52 +189,34 @@ T mdvector<T>::min_val(void) const
 template <typename T>
 void mdvector<T>::calc_LU()
 {
-  // Check for consistency
-  if (ndims != 2 || dims[0] != dims[1])
-  {
-    std::cout << ">>> mdvector.calc_LU: LU factorization requires a square matrix" << std::endl;
-    return;
-  }
-  
   // Copy mdvector into TNT object
-  unsigned int m = dims[0];
-  Array2D<double> A(m, m);
-  for (unsigned int i = 0; i < m; i++)
-    for (unsigned int j = 0; j < m; j++)
-      A[i][j] = *this(i,j);
+  unsigned int m = dims[0], n = dims[1];
+  TNT::Array2D<double> A(m, n);
+  for (unsigned int j = 0; j < n; j++)
+    for (unsigned int i = 0; i < m; i++)
+      A[i][j] = (*this)(i,j);
       
   // Calculate and store LU object
-  LUptr = new LU(A);
+  LUptr = std::make_shared<JAMA::LU<double>>(A);
 }
 
 template <typename T>
-void mdvector<T>::solve(mdvector<T>& x, const mdvector<T>& B)
+void mdvector<T>::solve(mdvector<T>& x, const mdvector<T>& B) const
 {
-  // Check for consistency
-  std::array<unsigned int, 4> B_dims = B.shape();
-  if (dims[0] != B_dims[0])
-  {
-    std::cout << ">>> mdvector.solve: A and B must have the same number of rows" << std::endl;
-    return;
-  }
-  
-  // Assign memory for x
-  unsigned int m = dims[0];
-  unsigned int n = B_dims[1];
-  x.assign({m, n});
-  
   // Copy mdvector into TNT object
-  Array2D<double> bArr(m, n);
-  for (unsigned int i = 0; i < m; i++)
-    for (unsigned int j = 0; j < n; j++)
-      bArr[i][j] = b(i,j);
+  std::array<unsigned int, 4> B_dims = B.shape();
+  unsigned int n = B_dims[0], p = B_dims[1];
+  TNT::Array2D<double> BArr(n, p);
+  for (unsigned int j = 0; j < p; j++)
+    for (unsigned int i = 0; i < n; i++)
+      BArr[i][j] = B(i,j);
   
-  // Solve for B
-  Array2D<double> xArr = LUptr->solve(BArr);
+  // Solve for x
+  TNT::Array2D<double> xArr = LUptr->solve(BArr);
       
   // Convert back to mdvector format
-  for (unsigned int i = 0; i < m; i++)
-    for (unsigned int j = 0; j < n; j++)
+  for (unsigned int j = 0; j < p; j++)
+    for (unsigned int i = 0; i < n; i++)
       x(i,j) = xArr[i][j];
 }
 
@@ -253,6 +236,13 @@ T mdvector<T>::operator() (unsigned int idx0)const
 
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) 
+{
+  //assert(ndims == 2);
+  return values[idx1 * strides[0] + idx0];
+}
+
+template <typename T>
+T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) const
 {
   //assert(ndims == 2);
   return values[idx1 * strides[0] + idx0];

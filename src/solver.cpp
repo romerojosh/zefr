@@ -1005,7 +1005,7 @@ void FRSolver::compute_element_dt()
 #endif
 }
 
-void FRSolver::write_solution()
+void FRSolver::write_solution(const mdvector<double>& sensor)
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
@@ -1051,6 +1051,11 @@ void FRSolver::write_solution()
         f << "\" format=\"ascii\"/>";
         f << std::endl;
       }
+    }
+    if (input->filt_on && input->sen_write)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+      f << std::endl;
     }
 
     f << "</PPointData>" << std::endl;
@@ -1263,6 +1268,20 @@ void FRSolver::write_solution()
       f << "</DataArray>" << std::endl;
     }
   }
+  if (input->filt_on && input->sen_write)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << sensor(ele) << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+
 
   f << "</PointData>" << std::endl;
   f << "</Piece>" << std::endl;
