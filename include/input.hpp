@@ -32,7 +32,7 @@ struct InputStruct
   double T_ref, P_ref, rho_ref, mu_ref, time_ref, R_ref, c_sth, rt;
   double exps0, s_factor;
   unsigned int rank, nRanks;
-  unsigned int filt_on, sen_write;
+  unsigned int filt_on, sen_write, sen_norm;
   double sen_Jfac;
 
 #ifdef _GPU

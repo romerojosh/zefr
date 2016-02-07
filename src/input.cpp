@@ -103,6 +103,7 @@ InputStruct read_input_file(std::string inputfile)
   
   read_param(f, "filt_on", input.filt_on, (unsigned int) 0);
   read_param(f, "sen_write", input.sen_write, (unsigned int) 0);
+  read_param(f, "sen_norm", input.sen_norm, (unsigned int) 0);
   read_param(f, "sen_Jfac", input.sen_Jfac, 1.0);
 
   f.close();

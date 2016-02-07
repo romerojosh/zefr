@@ -12,6 +12,7 @@
 #include "omp.h"
 #endif
 
+#include "funcs.hpp"
 #include "input.hpp"
 
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
@@ -23,9 +24,10 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   {
     if (input->nDims == 2)
     {
-      val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
-             std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
-             std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
+      //val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
+      //       std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
+      //       std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
+      val =  step((x - input->AdvDiff_A(0) * t));
     }
     else if (input->nDims == 3)
     {
@@ -172,6 +174,21 @@ double get_cfl_limit(int order)
 
     case 5:
       return 0.068;
+      
+    case 6:
+      return 0.048639193282486;
+    
+    case 7:
+      return 0.034554530245757;
+    
+    case 8:
+      return 0.023910375650672;
+    
+    case 9:
+      return 0.015583791814472;
+      
+    case 10:
+      return 0.008892412680298;
 
     default:
       ThrowException("CFL limit no available for this order!");

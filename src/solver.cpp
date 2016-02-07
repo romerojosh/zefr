@@ -1270,7 +1270,7 @@ void FRSolver::write_solution(const mdvector<double>& sensor)
   }
   if (input->filt_on && input->sen_write)
   {
-    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)

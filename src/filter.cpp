@@ -115,19 +115,20 @@ void Filter::setup_threshold()
   auto &A = Conc(0, 0);
   auto &B = uh_canon(0, 0);
   auto &C = KS(0, 0);
+  
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts1D, 
-      2, order + 1, 1.0, &A, order + 1, &B, 2, 0.0, &C, 2);
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    eles->nSpts1D, 2, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts1D, 
-      2, order + 1, 1.0, &A, order + 1, &B, 2, 0.0, &C, 2);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    eles->nSpts1D, 2, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
 #endif
-    
+  
   // Apply non-linear enhancement
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
   {
-    KS_step(spt, 0) = order * (KS(spt, 0) * KS(spt, 0));
-    KS_ramp(spt, 1) = order * (KS(spt, 1) * KS(spt, 1));
+    KS_step(spt) = order * (KS(spt, 0) * KS(spt, 0));
+    KS_ramp(spt) = order * (KS(spt, 1) * KS(spt, 1));
   }
     
   // Calculate threshold
@@ -172,19 +173,24 @@ void Filter::setup_reshapeOp()
 void Filter::apply_sensor_ele(unsigned int ele)
 {
   // Loop over conservative variables
+#pragma omp parallel for 
   for (unsigned int var = 0; var < eles->nVars; var++)
   {
     // Copy data to local memory
     for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       u(spt) = eles->U_spts(spt, ele, var);
   
-    // Normalize data
-    double uMax = u.max_val();
-    double uMin = u.min_val();
-    for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-      u(spt) = (u(spt) - uMin) / (uMax - uMin + 1e-10);
+    // Normalize data 
+    if (input->sen_norm)
+    {
+      double uMax = u.max_val();
+      double uMin = u.min_val();
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        u(spt) = (u(spt) - uMin) / (uMax - uMin + 1e-10);
+    }
   
     // Reshape solution
+#pragma omp parallel for collapse(2)
     for (unsigned int j = 0; j < 2 * eles->nSpts1D; j++)
       for (unsigned int i = 0; i < eles->nSpts1D; i++)
         u_lines(i,j) = u(reshapeOp(i,j));
@@ -197,16 +203,17 @@ void Filter::apply_sensor_ele(unsigned int ele)
     auto &B = uh_lines(0, 0);
     auto &C = KS_lines(0, 0);
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts1D, 
-      2*eles->nSpts1D, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, 2*eles->nSpts1D, 
-      0.0, &C, 2*eles->nSpts1D);
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+      eles->nSpts1D, 2*eles->nSpts1D, eles->nSpts1D, 1.0, &A, eles->nSpts1D, 
+      &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts1D, 
-      2*eles->nSpts1D, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, 2*eles->nSpts1D, 
-      0.0, &C, 2*eles->nSpts1D);
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+      eles->nSpts1D, 2*eles->nSpts1D, eles->nSpts1D, 1.0, &A, eles->nSpts1D, 
+      &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
 #endif
     
     // Apply non-linear enhancement
+#pragma omp parallel for collapse(2)    
     for (unsigned int j = 0; j < 2 * eles->nSpts1D; j++)
       for (unsigned int i = 0; i < eles->nSpts1D; i++)
         KS_lines(i, j) = order * (KS_lines(i, j) * KS_lines(i, j));
@@ -220,6 +227,7 @@ void Filter::apply_sensor_ele(unsigned int ele)
 void Filter::apply_sensor()
 {
   sensor.fill(0.0); 
+#pragma omp parallel for 
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
       apply_sensor_ele(ele);
 }
