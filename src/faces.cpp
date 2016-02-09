@@ -36,19 +36,21 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   if (input->dt_scheme == "BDF1")
   {
     dFdUconv.assign({nFpts, nVars, nDims, 2});
-    dFndUconv.assign({nFpts, nVars, 2});
+    dFndUconv.assign({nFpts, nVars, 2, 2});
 
     if(input->viscous)
     {
       dFdUvisc.assign({nFpts, nVars, nDims, 2});
       dFddUvisc.assign({nFpts, nVars, nDims, 2});
-      dFndUvisc.assign({nFpts, nVars, 2});
-      dFnddUvisc.assign({nFpts, nVars, 2});
+      dFndUvisc.assign({nFpts, nVars, 2, 2});
+      dFnddUviscL.assign({nFpts, nVars, nDims, 2});
+      dFnddUviscR.assign({nFpts, nVars, nDims, 2});
       beta_Ucomm.assign({nFpts, 2});
-      taun.assign({nFpts, 2});
+      taun.assign({nFpts, 2, 2});
 
       dFndU_temp.assign({nFpts, nVars, nDims, 2});
-      dFnddU_temp.assign({nFpts, nVars, nDims, 2});
+      dFnddUL_temp.assign({nFpts, nVars, nDims, nDims}); // nDims1: Fx, Fy, nDims2: dUx, dUy
+      dFnddUR_temp.assign({nFpts, nVars, nDims, nDims}); // nDims1: Fx, Fy, nDims2: dUx, dUy
       taun_temp.assign({nFpts, nDims, 2});
     }
   }
@@ -1663,8 +1665,11 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        dFndUconv(fpt, n, 0) = dFndUR[n] * outnorm(fpt, 0);
-        dFndUconv(fpt, n, 1) = dFndUR[n] * -outnorm(fpt, 1);
+        dFndUconv(fpt, n, 0, 0) = 0;
+        dFndUconv(fpt, n, 1, 0) = dFndUR[n] * outnorm(fpt, 0);
+
+        dFndUconv(fpt, n, 0, 1) = 0;
+        dFndUconv(fpt, n, 1, 1) = dFndUR[n] * -outnorm(fpt, 1);
       }
       continue;
     }
@@ -1707,8 +1712,11 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
     /* Compute normal dFdU */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      dFndUconv(fpt, n, 0) = 0.5 * (dFndUL[n] + std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
-      dFndUconv(fpt, n, 1) = 0.5 * (dFndUR[n] - std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+      dFndUconv(fpt, n, 0, 0) = 0.5 * (dFndUL[n] + std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+      dFndUconv(fpt, n, 1, 0) = 0.5 * (dFndUR[n] - std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+
+      dFndUconv(fpt, n, 0, 1) = 0.5 * (dFndUL[n] + std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+      dFndUconv(fpt, n, 1, 1) = 0.5 * (dFndUR[n] - std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
     }
   }
 }
@@ -1717,18 +1725,15 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
 {
   std::vector<double> dFndUL(nVars);
   std::vector<double> dFndUR(nVars);
-  std::vector<double> dFnddUL(nVars);
-  std::vector<double> dFnddUR(nVars);
-  std::vector<double> WL(nVars);
-  std::vector<double> WR(nVars);
    
   double tau = input->ldg_tau;
   double beta = input->ldg_b;
 
   dFndU_temp.fill(0.0);
-  dFnddU_temp.fill(0.0);
+  dFnddUL_temp.fill(0.0);
+  dFnddUR_temp.fill(0.0);
 
-#pragma omp parallel for firstprivate(dFndUL, dFndUR, WL, WR, tau, beta)
+#pragma omp parallel for firstprivate(dFndUL, dFndUR, tau, beta)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     /* Setting sign of beta (from HiFiLES) */
@@ -1743,21 +1748,17 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
         beta = -beta;
     }
 
-    /* Initialize dFndUL, dFndUR, dFnddUL, dFnddUR */
+    /* Initialize dFndUL, dFndUR */
     std::fill(dFndUL.begin(), dFndUL.end(), 0.0);
     std::fill(dFndUR.begin(), dFndUR.end(), 0.0);
-    std::fill(dFnddUL.begin(), dFnddUL.end(), 0.0);
-    std::fill(dFnddUR.begin(), dFnddUR.end(), 0.0);
 
-    /* Get interface-normal dFndU and dFnddU components (from L to R) */
+    /* Get interface-normal dFndU components (from L to R) */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
         dFndUL[n] += dFdUvisc(fpt, n, dim, 0) * norm(fpt, dim, 0);
         dFndUR[n] += dFdUvisc(fpt, n, dim, 1) * norm(fpt, dim, 0);
-        dFnddUL[n] += dFddUvisc(fpt, n, dim, 0) * norm(fpt, dim, 0);
-        dFnddUR[n] += dFddUvisc(fpt, n, dim, 1) * norm(fpt, dim, 0);
       }
     }
 
@@ -1774,13 +1775,23 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
         {
           dFndU_temp(fpt, n, dim, 0) += 0.5 * dFdUvisc(fpt, n, dim, 0) + beta * norm(fpt, dim, 0) * dFndUL[n];
           dFndU_temp(fpt, n, dim, 1) += 0.5 * dFdUvisc(fpt, n, dim, 1) - beta * norm(fpt, dim, 0) * dFndUR[n];
-
-          dFnddU_temp(fpt, n, dim, 0) += 0.5 * dFddUvisc(fpt, n, dim, 0) + beta * norm(fpt, dim, 0) * dFnddUL[n];
-          dFnddU_temp(fpt, n, dim, 1) += 0.5 * dFddUvisc(fpt, n, dim, 1) - beta * norm(fpt, dim, 0) * dFnddUR[n];
         }
 
         taun_temp(fpt, dim, 0) += tau * norm(fpt, dim, 0);
         taun_temp(fpt, dim, 1) -= tau * norm(fpt, dim, 0);
+      }
+
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        dFnddUL_temp(fpt, n, 0, 0) = 0.5 * dFddUvisc(fpt, n, 0, 0) + beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 0, 0) * norm(fpt, 0, 0);
+        dFnddUL_temp(fpt, n, 1, 0) = beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 0, 0) * norm(fpt, 0, 0);
+        dFnddUL_temp(fpt, n, 0, 1) = beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 1, 0) * norm(fpt, 1, 0);
+        dFnddUL_temp(fpt, n, 1, 1) = 0.5 * dFddUvisc(fpt, n, 1, 0) + beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 1, 0) * norm(fpt, 1, 0);
+
+        dFnddUR_temp(fpt, n, 0, 0) = 0.5 * dFddUvisc(fpt, n, 0, 1) - beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 0, 1) * norm(fpt, 0, 0);
+        dFnddUR_temp(fpt, n, 1, 0) = -beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 0, 1) * norm(fpt, 0, 0);
+        dFnddUR_temp(fpt, n, 0, 1) = -beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 1, 1) * norm(fpt, 1, 0);
+        dFnddUR_temp(fpt, n, 1, 1) = 0.5 * dFddUvisc(fpt, n, 1, 1) - beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 1, 1) * norm(fpt, 1, 0);
       }
     }
     /* If Neumann boundary, use right state only */
@@ -1796,8 +1807,6 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
         for (unsigned int n = 0; n < nVars; n++)
         {
           dFndU_temp(fpt, n, dim, 1) += dFdUvisc(fpt, n, dim, 1);
-
-          dFnddU_temp(fpt, n, dim, 1) += dFddUvisc(fpt, n, dim, 1);
         }
 
         taun_temp(fpt, dim, 0) += tau * norm(fpt, dim, 0);
@@ -1807,25 +1816,41 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
 
     for (unsigned int n = 0; n < nVars; n++)
     {
-      dFndUvisc(fpt, n, 0) = 0;  dFndUvisc(fpt, n, 1) = 0;
-      dFnddUvisc(fpt, n, 0) = 0; dFnddUvisc(fpt, n, 1) = 0;
-
+      dFndUvisc(fpt, n, 0, 0) = 0;  dFndUvisc(fpt, n, 1, 0) = 0;
+      dFndUvisc(fpt, n, 0, 1) = 0;  dFndUvisc(fpt, n, 1, 1) = 0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        dFndUvisc(fpt, n, 0) += (dFndU_temp(fpt, n, dim, 0) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-        dFndUvisc(fpt, n, 1) += (dFndU_temp(fpt, n, dim, 1) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+        dFndUvisc(fpt, n, 0, 0) += (dFndU_temp(fpt, n, dim, 0) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
+        dFndUvisc(fpt, n, 1, 0) += (dFndU_temp(fpt, n, dim, 1) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
 
-        dFnddUvisc(fpt, n, 0) += (dFnddU_temp(fpt, n, dim, 0) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-        dFnddUvisc(fpt, n, 1) += (dFnddU_temp(fpt, n, dim, 1) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+        dFndUvisc(fpt, n, 0, 1) += (dFndU_temp(fpt, n, dim, 0) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+        dFndUvisc(fpt, n, 1, 1) += (dFndU_temp(fpt, n, dim, 1) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
       }
 
+      for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+      {
+        dFnddUviscL(fpt, n, dim2, 0) = 0; dFnddUviscR(fpt, n, dim2, 0) = 0;
+        dFnddUviscL(fpt, n, dim2, 1) = 0; dFnddUviscR(fpt, n, dim2, 1) = 0;
+        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+        {
+          dFnddUviscL(fpt, n, dim2, 0) += (dFnddUL_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * outnorm(fpt, 0);
+          dFnddUviscR(fpt, n, dim2, 0) += (dFnddUR_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * outnorm(fpt, 0);
+
+          dFnddUviscL(fpt, n, dim2, 1) += (dFnddUL_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * -outnorm(fpt, 1);
+          dFnddUviscR(fpt, n, dim2, 1) += (dFnddUR_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * -outnorm(fpt, 1);
+        }
+      }
     }
 
-    taun(fpt, 0) = 0; taun(fpt, 1) = 0;
+    taun(fpt, 0, 0) = 0; taun(fpt, 1, 0) = 0;
+    taun(fpt, 0, 1) = 0; taun(fpt, 1, 1) = 0;
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      taun(fpt, 0) += (taun_temp(fpt, dim, 0) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-      taun(fpt, 1) += (taun_temp(fpt, dim, 1) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+      taun(fpt, 0, 0) += (taun_temp(fpt, dim, 0) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
+      taun(fpt, 1, 0) += (taun_temp(fpt, dim, 1) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
+
+      taun(fpt, 0, 1) += (taun_temp(fpt, dim, 0) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+      taun(fpt, 1, 1) += (taun_temp(fpt, dim, 1) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
     }
   }
 }
@@ -1837,8 +1862,10 @@ void Faces::transform_dFndU()
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      dFndUconv(fpt, n, 0) *= dA(fpt);
-      dFndUconv(fpt, n, 1) *= dA(fpt);
+      dFndUconv(fpt, n, 0, 0) *= dA(fpt);
+      dFndUconv(fpt, n, 1, 0) *= dA(fpt);
+      dFndUconv(fpt, n, 0, 1) *= dA(fpt);
+      dFndUconv(fpt, n, 1, 1) *= dA(fpt);
     }
   }
 
@@ -1849,19 +1876,28 @@ void Faces::transform_dFndU()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        dFndUvisc(fpt, n, 0) *= dA(fpt);
-        dFndUvisc(fpt, n, 1) *= dA(fpt);
+        dFndUvisc(fpt, n, 0, 0) *= dA(fpt);
+        dFndUvisc(fpt, n, 1, 0) *= dA(fpt);
+        dFndUvisc(fpt, n, 0, 1) *= dA(fpt);
+        dFndUvisc(fpt, n, 1, 1) *= dA(fpt);
 
-        dFnddUvisc(fpt, n, 0) *= dA(fpt);
-        dFnddUvisc(fpt, n, 1) *= dA(fpt);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          dFnddUviscL(fpt, n, dim, 0) *= dA(fpt);
+          dFnddUviscR(fpt, n, dim, 0) *= dA(fpt);
+          dFnddUviscL(fpt, n, dim, 1) *= dA(fpt);
+          dFnddUviscR(fpt, n, dim, 1) *= dA(fpt);
+        }
       }
     }
 
 #pragma omp parallel for
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      taun(fpt, 0) *= dA(fpt);
-      taun(fpt, 1) *= dA(fpt);
+      taun(fpt, 0, 0) *= dA(fpt);
+      taun(fpt, 1, 0) *= dA(fpt);
+      taun(fpt, 0, 1) *= dA(fpt);
+      taun(fpt, 1, 1) *= dA(fpt);
     }
   }
 }

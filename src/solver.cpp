@@ -592,28 +592,26 @@ void FRSolver::initialize_U()
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "BDF1")
   {
-    eles->Cconv0.assign({eles->nSpts, eles->nSpts});
-    eles->CconvN.assign({eles->nSpts, eles->nSpts, eles->nFaces});
+    /* Maximum number of unique matrices possible per element */
+    unsigned int nMat = eles->nFaces + 1;
 
     eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-    eles->dFndUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+    eles->dFndUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, 2});
 
     if(input->viscous)
     {
-      eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
-      eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
-      eles->Bvisc0.assign({eles->nSpts, eles->nSpts});
-      eles->BviscN.assign({eles->nSpts, eles->nSpts, eles->nFaces});
-      eles->BviscN2.assign({eles->nSpts, eles->nSpts, eles->nFaces});
+      nMat += eles->nFaces * (eles->nFaces - 1);
 
       eles->dFdUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
       eles->dFddUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
 
-      eles->dFndUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-      eles->dFnddUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-      eles->beta_Ucomm_fpts.assign({eles->nFpts, eles->nEles});
-      eles->taun_fpts.assign({eles->nFpts, eles->nEles});
+      eles->dFndUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, 2});
+      eles->dFnddUviscL_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
+      eles->dFnddUviscR_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
+      eles->beta_Ucomm_fpts.assign({eles->nFpts, eles->nEles, 2});
+      eles->taun_fpts.assign({eles->nFpts, eles->nEles, 2});
     }
+    eles->B.assign({eles->nSpts, eles->nSpts, nMat});
   }
 
   /* Initialize solution */
@@ -853,8 +851,14 @@ void FRSolver::dFndU_from_faces()
         if (gfpt == -1)
           continue;
         int slot = geo.fpt2gfpt_slot(fpt,ele);
+        int notslot = 1;
+        if (slot == 1)
+        {
+          notslot = 0;
+        }
 
-        eles->dFndUconv_fpts(fpt, ele, n) = faces->dFndUconv(gfpt, n, slot);
+        eles->dFndUconv_fpts(fpt, ele, n, 0) = faces->dFndUconv(gfpt, n, slot, slot);
+        eles->dFndUconv_fpts(fpt, ele, n, 1) = faces->dFndUconv(gfpt, n, notslot, slot);
       }
     }
   }
@@ -873,11 +877,25 @@ void FRSolver::dFndU_from_faces()
           if (gfpt == -1)
             continue;
           int slot = geo.fpt2gfpt_slot(fpt,ele);
+          int notslot = 1;
+          if (slot == 1)
+          {
+            notslot = 0;
+          }
 
-          eles->dFndUvisc_fpts(fpt, ele, n) = faces->dFndUvisc(gfpt, n, slot);
-          eles->dFnddUvisc_fpts(fpt, ele, n) = faces->dFnddUvisc(gfpt, n, slot);
-          eles->beta_Ucomm_fpts(fpt, ele) = faces->beta_Ucomm(gfpt, slot);
-          eles->taun_fpts(fpt, ele) = faces->taun(gfpt, slot);
+          eles->dFndUvisc_fpts(fpt, ele, n, 0) = faces->dFndUvisc(gfpt, n, slot, slot);
+          eles->beta_Ucomm_fpts(fpt, ele, 0) = faces->beta_Ucomm(gfpt, slot);
+          eles->taun_fpts(fpt, ele, 0) = faces->taun(gfpt, slot, slot);
+
+          eles->dFndUvisc_fpts(fpt, ele, n, 1) = faces->dFndUvisc(gfpt, n, notslot, slot);
+          eles->beta_Ucomm_fpts(fpt, ele, 1) = faces->beta_Ucomm(gfpt, notslot);
+          eles->taun_fpts(fpt, ele, 1) = faces->taun(gfpt, notslot, slot);
+
+          for (unsigned int dim = 0; dim < eles->nDims; dim++)
+          {
+            eles->dFnddUviscL_fpts(fpt, ele, n, dim) = faces->dFnddUviscL(gfpt, n, dim, slot);
+            eles->dFnddUviscR_fpts(fpt, ele, n, dim) = faces->dFnddUviscR(gfpt, n, dim, slot);
+          }
         }
       }
     }

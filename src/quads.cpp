@@ -555,17 +555,11 @@ void Quads::transform_dFdU()
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
           double dFdUtemp = dFdUvisc_spts(spt, ele, n, 0);
-          double dFddUtemp = dFddUvisc_spts(spt, ele, n, 0);
 
           dFdUvisc_spts(spt, ele, n, 0) = dFdUvisc_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
                                           dFdUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
           dFdUvisc_spts(spt, ele, n, 1) = dFdUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
                                           dFdUtemp * jaco_spts(1, 0, spt, ele);
-
-          dFddUvisc_spts(spt, ele, n, 0) = dFddUvisc_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
-                                           dFddUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
-          dFddUvisc_spts(spt, ele, n, 1) = dFddUvisc_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
-                                           dFddUtemp * jaco_spts(1, 0, spt, ele);
         }
       }
     }

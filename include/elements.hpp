@@ -58,10 +58,9 @@ class Elements
 
     /* Element structures for implicit method */
     spmatrix<double> A; // Sparse matrix for implicit system
-    mdvector<double> Cconv0, Cvisc0, Bvisc0;
-    mdvector<double> CconvN, CviscN, BviscN, BviscN2;
+    mdvector<double> B; // Element local matrices for implicit system
     mdvector<double> dFdUconv_spts, dFdUvisc_spts, dFddUvisc_spts;
-    mdvector<double> dFndUconv_fpts, dFndUvisc_fpts, dFnddUvisc_fpts, beta_Ucomm_fpts, taun_fpts;
+    mdvector<double> dFndUconv_fpts, dFndUvisc_fpts, dFnddUviscL_fpts, dFnddUviscR_fpts, beta_Ucomm_fpts, taun_fpts;
 
 #ifdef _GPU
     /* GPU data */

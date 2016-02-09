@@ -232,13 +232,23 @@ void spmatrix<T>::print()
 {
   std::ofstream spMat;
   spMat.open("spMat.dat");
-  int k = 0;
-  for (int i = 0; i < nRows; i++)
+  if (isCSR)
   {
-    for (int j = row_ptr[i]; j < row_ptr[i+1]; j++)
+    int k = 0;
+    for (int i = 0; i < nRows; i++)
     {
-      spMat << i << " " << col_idx[k] << " " << std::setprecision(16) << std::scientific << vals[k] << std::endl;
-      k++;
+      for (int j = row_ptr[i]; j < row_ptr[i+1]; j++)
+      {
+        spMat << i << " " << col_idx[k] << " " << std::setprecision(16) << std::scientific << vals[k] << std::endl;
+        k++;
+      }
+    }
+  }
+  else
+  {
+    for (int i = 0; i < vals.size(); i++)
+    {
+      spMat << row_ptr[i] << " " << col_idx[i] << " " << std::setprecision(16) << std::scientific << vals[i] << std::endl;
     }
   }
   spMat.close();
