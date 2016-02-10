@@ -18,7 +18,8 @@ class PMGrid
     InputStruct *input = NULL;
     int order;
     std::vector<mdvector<double>> corrections, sources, solutions;
-    std::vector<std::shared_ptr<FRSolver>> grids;
+    std::vector<mdvector<double>> hcorrections, hsources, hsolutions;
+    std::vector<std::shared_ptr<FRSolver>> grids, hgrids;
 
 #ifdef _GPU
     std::vector<mdvector_gpu<double>> corrections_d, sources_d, solutions_d;
@@ -36,7 +37,7 @@ class PMGrid
 #endif
 
   public:
-    void setup(int order, InputStruct *input, FRSolver &solver);
+    void setup(InputStruct *input, FRSolver &solver);
     void cycle(FRSolver &solver);
 };
 

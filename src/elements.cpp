@@ -446,6 +446,8 @@ void Elements::compute_dF()
 void Elements::compute_divF(unsigned int stage)
 {
 #ifdef _CPU
+
+  /* Compute parent space divergence of flux */
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < nVars; n++)
     for (unsigned int ele =0; ele < nEles; ele++)
@@ -459,6 +461,13 @@ void Elements::compute_divF(unsigned int stage)
         for (unsigned int spt = 0; spt < nSpts; spt++)
           divF_spts(spt, ele, n, stage) += dF_spts(spt, ele, n, dim);
 
+  /* Transform to physical space */
+  for (unsigned int n = 0; n < nVars; n++)
+#pragma omp parallel for collapse(2)
+    for (unsigned int ele =0; ele < nEles; ele++)
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+        divF_spts(spt, ele, n, stage) /= jaco_det_spts(spt, ele);
+
 #endif
 
 #ifdef _GPU
@@ -467,6 +476,35 @@ void Elements::compute_divF(unsigned int stage)
   check_error();
 #endif
 }
+
+void Elements::compute_intF(unsigned int stage)
+{
+#ifdef _CPU
+
+  /* Compute integrated flux */
+  for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
+      divF_spts(0, ele, n, stage) = -2*Fcomm(0, ele, n);
+
+  for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int fpt = 1; fpt < nFpts; fpt++)
+      {
+        if (fpt == 3)
+          divF_spts(0, ele, n, stage) -= 2*Fcomm(fpt, ele, n);
+        else
+          divF_spts(0, ele, n, stage) += 2*Fcomm(fpt, ele, n);
+      }
+
+#endif
+
+#ifdef _GPU
+  compute_divF_wrapper(divF_spts_d, dF_spts_d, nSpts, nVars, nEles, 
+      nDims, input->equation, stage);
+  check_error();
+#endif
+}
+
 
 
 void Elements::compute_Fconv()

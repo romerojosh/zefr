@@ -3,9 +3,9 @@ nDims    2
 meshfile QuadBox_32x32.msh
 
 # Solver:
-order     3
+order     0
 equation AdvDiff    (AdvDiff, EulerNS)
-viscous  1
+viscous  0
 spt_type Legendre
 squeeze  0
 s_factor  0.0
@@ -40,4 +40,4 @@ ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 # Advection-Diffusion
 AdvDiff_Ax 1
 AdvDiff_Ay 1
-AdvDiff_D 0.1
+AdvDiff_D 0.0

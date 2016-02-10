@@ -13,13 +13,21 @@
 #endif
 
 //void PMGrid::setup(int order, const InputStruct *input, FRSolver &solver)
-void PMGrid::setup(int order, InputStruct *input, FRSolver &solver)
+void PMGrid::setup(InputStruct *input, FRSolver &solver)
 {
-  this-> order = order;
   this-> input = input;
+  this-> order = input->order;
   corrections.resize(order + 1);
   sources.resize(order);
   solutions.resize(order);
+
+  //TODO: Add check for h_multigrid levels
+  if (input->hmg_levels > 0)
+  {
+    hcorrections.resize(input->hmg_levels);
+    hsources.resize(input->hmg_levels);
+    hsolutions.resize(input->hmg_levels);
+  }
 
 #ifdef _GPU
   corrections_d.resize(order + 1);
@@ -50,6 +58,7 @@ void PMGrid::setup(int order, InputStruct *input, FRSolver &solver)
 #endif
   }
 
+
   /* Allocate memory for fine grid correction and initialize to zero */
   corrections[order] = solver.eles->U_spts;
   corrections[order].fill(0.0);
@@ -57,6 +66,30 @@ void PMGrid::setup(int order, InputStruct *input, FRSolver &solver)
 #ifdef _GPU
   corrections_d[order] = corrections[order];
 #endif
+
+  /* Instantiate h multigrid levels (if required) */
+  if (input->hmg_levels > 0)
+  {
+    for (unsigned int H = 0; H < input->hmg_levels; H++)
+    {
+      unsigned int nElesFV = grids[0]->eles->nEles / (unsigned int) std::pow(2, input->hmg_levels - H);
+
+      if (input->rank == 0) std::cout << "h_level = " << nElesFV << std::endl;
+
+      hgrids.push_back(std::make_shared<FRSolver>(input,0));
+      hgrids[H]->setup();
+
+      /* Allocate memory for corrections and source terms */
+      hcorrections[H] = hgrids[H]->eles->U_spts;
+      hsources[H] = hgrids[H]->eles->U_spts;
+      hsolutions[H] = hgrids[H]->eles->U_spts;
+      hcorrections[H].fill(0.0);
+      hsources[H].fill(0.0);
+      hsolutions[H].fill(0.0);
+
+    }
+  }
+
 }
 
 void PMGrid::cycle(FRSolver &solver)
@@ -121,6 +154,25 @@ void PMGrid::cycle(FRSolver &solver)
       restrict_pmg(*grids[P], *grids[P-1]);
     }
   }
+
+  //TODO: Advance down and up h-levels here.
+  ///* Restrict P0 solution to first FV level via averaging */
+  // 1. Update residual on P0 and add source
+  // 2. RESTRICT: Compute partition average solution and residual value
+  //              Set solution point values to associated partition values
+  // 3. Compute source term (need to be careful with what I define as the residual)
+  // 4. Update using new FV style update method (with source):
+  //    - Run step as normal up until dF/divF computation
+  //    - Set "divF" in each element as flux integral around faces
+  //    - Sum "divF" over partitions to get total residual for each partition
+  //    - Update solution using total residual (will update average over entire partition)
+  //
+  //
+  //for(int H = (int) input->hmg_levels - 1; H >= 0; H--)
+  //{
+  //
+  //} 
+
 
   for (int P = (int) input->low_order; P <= order-1; P++)
   {

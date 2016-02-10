@@ -59,9 +59,10 @@ class FRSolver
   public:
     FRSolver(InputStruct *input, int order = -1);
     void setup();
-    void compute_residual(unsigned int stage);
+    void compute_residual(unsigned int stage, bool FV_mode = false);
     void add_source(unsigned int stage);
     void update();
+    void update_FV(std::vector<int> &epart, mdvector<double> &intF_FV, std::vector<double> &vol);
     void update_with_source(mdvector<double> &source);
 #ifdef _GPU
     void update_with_source(mdvector_gpu<double> &source);

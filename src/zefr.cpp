@@ -81,7 +81,7 @@ int main(int argc, char* argv[])
   if (input.p_multi)
   {
     if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
-    pmg.setup(input.order, &input, solver);
+    pmg.setup(&input, solver);
   }
 
 #ifdef _GPU
@@ -114,10 +114,21 @@ int main(int argc, char* argv[])
     solver.report_error(error_file);
 
   auto t1 = std::chrono::high_resolution_clock::now();
+
+  //TESTING:
+  std::vector<int> epart(32*32, 0);
+  for (unsigned int i = 0; i < 32*32; i++)
+    epart[i] = i;
+
+  std::vector<double> vol(32*32, 4./(32*32));
+  mdvector<double> intF_FV({1, 32*32, 4});
+
   /* Main iteration loop */
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
-    solver.update();
+    //solver.update();
+    solver.update_FV(epart, intF_FV, vol);
+    intF_FV.fill(0.0);
 
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)
