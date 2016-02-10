@@ -75,7 +75,8 @@ int main(int argc, char* argv[])
 
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   FRSolver solver(&input);
-  solver.setup();
+  //solver.setup();
+  solver.setup(true);
 
   PMGrid pmg;
   if (input.p_multi)
@@ -116,19 +117,22 @@ int main(int argc, char* argv[])
   auto t1 = std::chrono::high_resolution_clock::now();
 
   //TESTING:
-  std::vector<int> epart(32*32, 0);
-  for (unsigned int i = 0; i < 32*32; i++)
-    epart[i] = i;
+  /*
+  int N = 32;
+  int fac = 16;
+  std::vector<int> epart(N*N, 0);
+  for (unsigned int i = 0; i < N*N; i++)
+    epart[i] = i/fac;
 
-  std::vector<double> vol(32*32, 4./(32*32));
-  mdvector<double> intF_FV({1, 32*32, 4});
+  std::vector<double> vol(N*N/fac, 4./(N*N/fac));
+  mdvector<double> intF_FV({1, N*N/fac, 4});
+  */
 
   /* Main iteration loop */
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     //solver.update();
-    solver.update_FV(epart, intF_FV, vol);
-    intF_FV.fill(0.0);
+    solver.update_FV(0);
 
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)

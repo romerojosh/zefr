@@ -32,7 +32,9 @@ class FRSolver
     unsigned int nStages;
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> dt;
-    mdvector<double> U_ini;
+    mdvector<double> U_ini, U_avg;
+    mdvector<int> eparts;
+    std::vector<std::vector<double>> vols;
 
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
@@ -42,6 +44,7 @@ class FRSolver
     void restart(std::string restart_file);
     void setup_update();
     void setup_output();
+    void setup_h_levels();
 
 #ifdef _GPU
     void solver_data_to_device();
@@ -58,16 +61,17 @@ class FRSolver
 
   public:
     FRSolver(InputStruct *input, int order = -1);
-    void setup();
+    void setup(bool FV_mode = false);
     void compute_residual(unsigned int stage, bool FV_mode = false);
     void add_source(unsigned int stage);
     void update();
-    void update_FV(std::vector<int> &epart, mdvector<double> &intF_FV, std::vector<double> &vol);
+    void update_FV(int level);
     void update_with_source(mdvector<double> &source);
 #ifdef _GPU
     void update_with_source(mdvector_gpu<double> &source);
 #endif
     void write_solution();
+    void write_partition_file();
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);

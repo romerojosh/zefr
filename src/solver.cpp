@@ -22,6 +22,8 @@
 #include "mpi.h"
 #endif
 
+#include "metis.h"
+
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
@@ -38,7 +40,8 @@ FRSolver::FRSolver(InputStruct *input, int order)
     this->order = order;
 }
 
-void FRSolver::setup()
+void FRSolver::setup(bool FV_mode)
+//void FRSolver::setup()
 {
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
   geo = process_mesh(input, order, input->nDims);
@@ -63,6 +66,12 @@ void FRSolver::setup()
 
   if (input->rank == 0) std::cout << "Initializing solution..." << std::endl;
   initialize_U();
+
+  if (FV_mode)
+  {
+    setup_h_levels();
+    write_partition_file();
+  }
 
   if (input->restart)
   {
@@ -202,6 +211,74 @@ void FRSolver::setup_output()
 
   }
 
+}
+
+void FRSolver::setup_h_levels()
+{
+  //Allocate space for partition average storage, eparts
+  eparts.assign({eles->nEles, input->hmg_levels});
+  U_avg.assign({eles->nEles, eles->nVars});
+  vols.resize(input->hmg_levels);
+
+  //Setup partitions using METIS
+  /* Setup METIS */
+  idx_t options[METIS_NOPTIONS];
+  METIS_SetDefaultOptions(options);
+
+  /* Form eptr and eind arrays */
+  std::vector<int> eptr(geo.nEles + 1); 
+  std::vector<int> eind(geo.nEles * geo.nCornerNodes); 
+  std::set<unsigned int> nodes;
+
+  int n = 0;
+  eptr[0] = 0;
+  for (unsigned int i = 0; i < geo.nEles; i++)
+  {
+    for (unsigned int j = 0; j < geo.nCornerNodes;  j++)
+    {
+      eind[j + n] = geo.nd2gnd(j, i);
+      nodes.insert(geo.nd2gnd(j,i));
+    } 
+
+    /* Check for collapsed edge (not fully general yet)*/
+    if (nodes.size() < geo.nCornerNodes)
+    {
+      n += geo.nCornerNodes - 1;
+    }
+    else
+    {
+      n += geo.nCornerNodes;
+    }
+    eptr[i + 1] = n;
+    nodes.clear();
+  }
+
+  for (unsigned int H = 0; H < input->hmg_levels; H++)
+  {
+    int nPartitions = eles->nEles / (unsigned int) std::pow(2, input->hmg_levels - H);
+    vols[H].assign(nPartitions, 0);
+
+    int objval;
+    std::vector<int> npart(geo.nNodes);
+    int nNodesPerFace = geo.nNodesPerFace; // TODO: What should this be?
+    int nEles = geo.nEles;
+    int nNodes = geo.nNodes;
+
+    METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), nullptr, 
+        nullptr, &nNodesPerFace, &nPartitions, nullptr, options, &objval, &eparts(0,H), 
+        npart.data());  
+
+    double sum = 0;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      vols[H][eparts(ele)] += 4 * eles->jaco_det_spts(0, ele);
+      sum += 4 * eles->jaco_det_spts(0,ele);
+    }
+    std::cout << sum << std::endl;
+
+  }
+  
+  
 }
 
 void FRSolver::restart(std::string restart_file)
@@ -902,8 +979,27 @@ void FRSolver::update()
  
 }
 
-void FRSolver::update_FV(std::vector<int>& epart, mdvector<double>& intF_FV, std::vector<double> &vol)
+void FRSolver::update_FV(int level)
 {
+  /* Compute partition average solution and set subelement solutions*/
+  U_avg.fill(0.0);
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      int part = eparts(ele, level);
+      U_avg(part, n) += eles->U_spts(0, ele, n) * (4 * eles->jaco_det_spts(0, ele));
+    }
+  }
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      int part = eparts(ele, level);
+      eles->U_spts(0, ele, n) = U_avg(part, n)/vols[level][part];
+    }
+  }
+
   
 #ifdef _CPU
   U_ini = eles->U_spts;
@@ -932,27 +1028,39 @@ void FRSolver::update_FV(std::vector<int>& epart, mdvector<double>& intF_FV, std
 
 #ifdef _CPU
     /* Accumulate partition updates */
+    U_avg.fill(0.0);
     for (unsigned int n = 0; n < eles->nVars; n++)
+    {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        int part = epart[ele];
-        intF_FV(n, part, stage) += eles->divF_spts(0, ele, n, stage);
+        int part = eparts(ele, level);
+        U_avg(part, n) += eles->divF_spts(0, ele, n, stage);
       }
-
+    }
 
     for (unsigned int n = 0; n < eles->nVars; n++)
+    {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        int part = epart[ele];
+        int part = eparts(ele, level);
+        eles->divF_spts(0, ele, n, stage) = U_avg(part, n) / vols[level][part];
+      }
+    }
+
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
         if (input->dt_type != 2)
         {
-          eles->U_spts(0, ele, n) = U_ini(0, ele, n) - rk_alpha(stage) * dt(0) * intF_FV(n, part, stage) / vol[part];
+          eles->U_spts(0, ele, n) = U_ini(0, ele, n) - rk_alpha(stage) * dt(0) * eles->divF_spts(0, ele, n, stage);
         }
         else
         {
-          eles->U_spts(0, ele, n) = U_ini(0, ele, n) - rk_alpha(stage) * dt(ele) * intF_FV(n, part, stage) / vol[part];
+          eles->U_spts(0, ele, n) = U_ini(0, ele, n) - rk_alpha(stage) * dt(ele) * eles->divF_spts(0, ele, n, stage);
         }
       }
+    }
 #endif
 
 #ifdef _GPU
@@ -969,12 +1077,26 @@ void FRSolver::update_FV(std::vector<int>& epart, mdvector<double>& intF_FV, std
   /* Final stage */
   compute_residual(nStages-1, true);
 
+  U_avg.fill(0.0);
   for (unsigned int n = 0; n < eles->nVars; n++)
+  {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      int part = epart[ele];
-      intF_FV(n, part, nStages-1) += eles->divF_spts(0, ele, n, nStages-1);
+      int part = eparts(ele, level);
+      U_avg(part, n) += eles->divF_spts(0, ele, n, nStages-1);
     }
+  }
+
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      int part = eparts(ele, level);
+      eles->divF_spts(0, ele, n, nStages-1) = U_avg(part, n) / vols[level][part];
+    }
+  }
+
+
 
 #ifdef _CPU
   eles->U_spts = U_ini;
@@ -990,14 +1112,13 @@ void FRSolver::update_FV(std::vector<int>& epart, mdvector<double>& intF_FV, std
     {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        int part = epart[ele];
         if (input->dt_type != 2)
         {
-          eles->U_spts(0, ele, n) -= rk_beta(stage) * dt(0) * intF_FV(n, part, stage) / vol[part];
+          eles->U_spts(0, ele, n) -= rk_beta(stage) * dt(0) * eles->divF_spts(0, ele, n, stage);
         }
         else
         {
-          eles->U_spts(0, ele, n) -= rk_beta(stage) * dt(ele) * intF_FV(n, part, stage) / vol[part];
+          eles->U_spts(0, ele, n) -= rk_beta(stage) * dt(ele) * eles->divF_spts(0, ele, n, stage);
         }
       }
     }
@@ -1414,6 +1535,199 @@ void FRSolver::write_solution()
       }
       f << "</DataArray>" << std::endl;
     }
+  }
+
+  f << "</PointData>" << std::endl;
+  f << "</Piece>" << std::endl;
+  f << "</UnstructuredGrid>" << std::endl;
+  f << "</VTKFile>" << std::endl;
+  f.close();
+}
+
+void FRSolver::write_partition_file()
+{
+
+  if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
+
+  std::stringstream ss;
+#ifdef _MPI
+
+  /* Write .pvtu file on rank 0 if running in parallel */
+  if (input->rank == 0)
+  {
+    ss << input->output_prefix << "/";
+    ss << "partitions.pvtu";
+   
+    std::ofstream f(ss.str());
+    f << "<?xml version=\"1.0\"?>" << std::endl;
+    f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
+    f << "byte_order=\"LittleEndian\" ";
+    f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+    f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
+    f << "<PPointData>" << std::endl;
+
+    for (unsigned int H = 0; H < input->hmg_levels; h++)
+    {
+      f << "<PDataArray type=\"Int32\" Name=\"" << H;
+      f << "\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+
+    f << "</PPointData>" << std::endl;
+    f << "<PPoints>" << std::endl;
+    f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+    f << "format=\"ascii\"/>" << std::endl;
+    f << "</PPoints>" << std::endl;
+
+    for (unsigned int n = 0; n < input->nRanks; n++)
+    { 
+      ss.str("");
+      ss << "partitions_" << std::setw(3) << std::setfill('0') << n << ".vtu";
+      f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
+    }
+
+    f << "</PUnstructuredGrid>" << std::endl;
+    f << "</VTKFile>" << std::endl;
+
+    f.close();
+  }
+#endif
+
+  ss.str("");
+#ifdef _MPI
+  ss << input->output_prefix << "/";
+  ss << "partitions_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
+#else
+  ss << input->output_prefix << "/";
+  ss << "partitions.vtu";
+#endif
+
+  auto outputfile = ss.str();
+
+  /* Write parition solution to file in .vtu format */
+  std::ofstream f(outputfile);
+
+
+  /* Write header */
+  f << "<?xml version=\"1.0\"?>" << std::endl;
+  f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
+  f << "byte_order=\"LittleEndian\" ";
+  f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+  /* Write comments for iteration number and flowtime */
+  f << "<!-- TIME " << flow_time << " -->" << std::endl;
+  f << "<!-- ITER " << current_iter << " -->" << std::endl;
+
+  f << "<UnstructuredGrid>" << std::endl;
+  f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";
+  f << "NumberOfCells=\"" << eles->nSubelements * eles->nEles << "\">";
+  f << std::endl;
+
+  
+  /* Write plot point coordinates */
+  f << "<Points>" << std::endl;
+  f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+  f << "format=\"ascii\">" << std::endl; 
+
+  if (eles->nDims == 2)
+  {
+    // TODO: Change order of ppt structures for better looping 
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << 0.0 << std::endl;
+      }
+    }
+  }
+  else
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+      }
+    }
+  }
+
+  f << "</DataArray>" << std::endl;
+  f << "</Points>" << std::endl;
+
+  /* Write cell information */
+  f << "<Cells>" << std::endl;
+  f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      {
+        f << geo.ppt_connect(i, subele) + ele*eles->nPpts << " ";
+      }
+      f << std::endl;
+    }
+  }
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  unsigned int offset = eles->nNodesPerSubelement;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      f << offset << " ";
+      offset += eles->nNodesPerSubelement;
+    }
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"UInt8\" Name=\"types\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  unsigned int nCells = eles->nSubelements * eles->nEles;
+  if (eles->nDims == 2)
+  {
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 9 << " ";
+  }
+  else
+  {
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 12 << " ";
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+  f << "</Cells>" << std::endl;
+
+  /* Write solution information */
+  f << "<PointData>" << std::endl;
+
+  /* TEST: Write cell average solution */
+  //eles->compute_Uavg();
+
+  for (unsigned int H = 0; H < input->hmg_levels; H++)
+  {
+    f << "<DataArray type=\"Int32\" Name=\"" << H << "\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << eparts(ele, H) << " ";
+      }
+
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
   }
 
   f << "</PointData>" << std::endl;

@@ -38,9 +38,11 @@ INCS += -I$(strip $(BLAS_DIR))/include/openblas
 ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
-	INCS += -I$(strip $(METIS_DIR))/include
-	LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
+#	INCS += -I$(strip $(METIS_DIR))/include
+	#LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
 endif
+INCS += -I$(strip $(METIS_DIR))/include
+LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
 
 # Setting Architecture flags
 ifeq ($(strip $(ARCH)),CPU)
