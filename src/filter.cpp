@@ -129,15 +129,15 @@ void Filter::setup_threshold()
     KS_step(spt) = order * (KS(spt, 0) * KS(spt, 0));
     KS_ramp(spt) = order * (KS(spt, 1) * KS(spt, 1));
   }
-    
+  
   // Calculate threshold
   threshJ = (1.0 - input->sen_Jfac) *KS_ramp.max_val() + input->sen_Jfac *KS_step.max_val();
     
   // Print results
   if (input->rank == 0) 
   {
-    std::cout << " Sensor threshold values: " << std::endl;
-    std::cout << " Step: " << KS_step.max_val() << " \t Ramp: " << KS_ramp.max_val() << " \t Weighted: " << threshJ << std::endl;
+    std::cout << " Sensor threshold values:   ";
+    std::cout << " Step = " << KS_step.max_val() << "  Ramp = " << KS_ramp.max_val() << "  Weighted = " << threshJ << std::endl;
   }
 }
 
@@ -162,7 +162,7 @@ void Filter::setup_reshapeOp()
   {
     if (input->rank == 0) std::cout << "Sensor on hexes havn't been implemented yet." << std::endl;
     exit(EXIT_FAILURE);
-  }  
+  }
 }
 
 
@@ -253,17 +253,17 @@ void Filter::setup_DeltaHat()
 { 
   // Determine filter width in parent space
   if (input->dt_type) // CFL based time step
-    DeltaHat = input->filt_gamma * std::sqrt(input->CFL) * 2.0 / std::pow(order + 1, 0.25);
+    DeltaHat = input->filt_gamma * std::sqrt(input->CFL) * 2.0 / std::pow(order + 1.0, 0.25);
   else // Exogenously fixed time step
-    DeltaHat = input->filt_gamma * 2.0 / std::pow(order + 1, 0.25);
+    DeltaHat = input->filt_gamma * std::sqrt(0.25) * 2.0 / std::pow(order + 1.0, 0.25);
     
   // Check for kernel positivity
   double DeltaHatMax = 2.0 / (order + 1.0);
   if (DeltaHat <= 0  || DeltaHat > DeltaHatMax)
   {
-    if (input->rank == 0) std::cout << "Negative filter kernel! Filter gamma must be small and positive." << std::endl;
-      exit(EXIT_FAILURE);
-  }   
+    if (input->rank == 0) std::cout << " \n WARNING: Negative filter kernel! Gamma should be small and positive. \n" << std::endl;
+      // exit(EXIT_FAILURE);
+  }
 }
 
 
@@ -305,7 +305,7 @@ void Filter::setup_Fop()
       unity(spt) += Fop(spt, i);
     tol += std::abs(unity(spt) - 1.0);
   }
-  if (input->rank == 0) std::cout << "L1 norm of tolerance for 1D filter matrix = " << tol << std::endl;
+  if (input->rank == 0) std::cout << "  L1 norm of tolerance for 1D filter matrix = " << tol << std::endl;
 }
 
 
@@ -318,19 +318,19 @@ void Filter::setup_appendOp()
     
     // Bottom edge
     for (unsigned int j = eles->nSpts1D; j < 2 * eles->nSpts1D; j++)
-      appendOp(1,j) = cnt++;
+      appendOp(0,j) = cnt++;
     
     // Right edge
     for (unsigned int j = 0; j < eles->nSpts1D; j++)
-      appendOp(2,j) = cnt++;
+      appendOp(1,j) = cnt++;
       
     // Top edge
     for (unsigned int j = 2 * eles->nSpts1D - 1; j >= eles->nSpts1D; j--)
-      appendOp(2,j) = cnt++;
+      appendOp(1,j) = cnt++;
     
     // Left edge
     for (int j = eles->nSpts1D - 1; j >= 0; j--)
-      appendOp(1,j) = cnt++;
+      appendOp(0,j) = cnt++;
   } 
   else // Hexes   
   {
@@ -366,8 +366,8 @@ void Filter::apply_filter(unsigned int ele, unsigned int var)
 
 #pragma omp parallel for collapse(2)      
   for (unsigned int j = 0; j < 2 * eles->nSpts1D; j++)
-    for (unsigned int i = eles->nSpts1D; i < eles->nSpts1D + 2; i++)
-      u_lines(i,j) = eles->U_fpts(appendOp(i - eles->nSpts1D, j), ele, var);
+    for (unsigned int i = 0; i < 2; i++)
+      u_lines(i + eles->nSpts1D, j) = eles->U_fpts(appendOp(i,j), ele, var);
     
   // Evaluate filtered solution
   auto &A = Fop(0, 0);
@@ -385,7 +385,7 @@ void Filter::apply_filter(unsigned int ele, unsigned int var)
     
   // Overwrite solution with averaged values
 #pragma omp parallel for collapse(2)    
-  for (unsigned int j = 0; j < 2 * eles->nSpts1D; j++)
+  for (unsigned int j = 0; j < eles->nSpts1D; j++)
     for (unsigned int i = 0; i < eles->nSpts1D; i++)
       eles->U_spts(reshapeOp(i,j), ele, var) = 0.5 * (u_lines_spt(i,j) + u_lines_spt(j, i + eles->nSpts1D));
 }
@@ -406,8 +406,8 @@ void Filter::apply_filter()
 #else
   faces->compute_common_U(0, geo->nGfpts); 
 #endif 
-  solver->U_from_faces(); // Copy solution data at flux points from face local to element local storage
-  
+  solver->U_from_faces(); // Copy solution data at flux points from face local to element local storage  
+   
   // Filter each element
 #pragma omp parallel for collapse(2)
   // Loop over elements
