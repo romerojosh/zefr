@@ -131,6 +131,7 @@ int main(int argc, char* argv[])
     if (input.filt_on) 
     {
       filt.apply_sensor();
+      filt.apply_filter();
     }
     
     /* If using multigrid, perform correction cycle */
