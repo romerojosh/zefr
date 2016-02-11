@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile wild_quad_adv.msh
+meshfile QuadBox_32x32.msh
 
 # Solver:
 order     0
@@ -11,13 +11,13 @@ squeeze  0
 s_factor  0.0
 
 # Timestepping:
-n_steps 5000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
 CFL	  0.5
 
-hmg_levels 3
+hmg_levels 5
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 

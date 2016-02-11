@@ -23,6 +23,7 @@ class FRSolver
   private:
     InputStruct *input = NULL;
     GeoStruct geo;
+    bool FV_mode;
     int order;
     int current_iter = 0;
     double flow_time = 0.;
@@ -60,12 +61,13 @@ class FRSolver
     void compute_element_dt();
 
   public:
-    FRSolver(InputStruct *input, int order = -1);
-    void setup(bool FV_mode = false);
-    void compute_residual(unsigned int stage, bool FV_mode = false);
+    FRSolver(InputStruct *input, int order = -1, bool FV_mode = false);
+    void setup();
+    void compute_residual(unsigned int stage, int level = 0);
     void add_source(unsigned int stage);
-    void update();
-    void update_FV(int level);
+    void accumulate_partition_U(int level);
+    void accumulate_partition_divF(unsigned int stage, int level);
+    void update(int level = 0);
     void update_with_source(mdvector<double> &source);
 #ifdef _GPU
     void update_with_source(mdvector_gpu<double> &source);

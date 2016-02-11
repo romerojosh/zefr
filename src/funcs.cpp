@@ -31,13 +31,11 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     }
     else if (input->nDims == 3)
     {
-      /*
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t))*
              std::sin(M_PI * (z - input->AdvDiff_A(2) * t));
-      */
-      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
+      //val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
     }
   }
   else if (input->equation == EulerNS)

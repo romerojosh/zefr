@@ -482,19 +482,39 @@ void Elements::compute_intF(unsigned int stage)
 #ifdef _CPU
 
   /* Compute integrated flux */
-  for (unsigned int n = 0; n < nVars; n++)
-    for (unsigned int ele = 0; ele < nEles; ele++)
-      divF_spts(0, ele, n, stage) = -2*Fcomm(0, ele, n);
+  if (geo->nDims == 2)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+        divF_spts(0, ele, n, stage) = -2*Fcomm(0, ele, n);
 
-  for (unsigned int n = 0; n < nVars; n++)
-    for (unsigned int ele = 0; ele < nEles; ele++)
-      for (unsigned int fpt = 1; fpt < nFpts; fpt++)
-      {
-        if (fpt == 3)
-          divF_spts(0, ele, n, stage) -= 2*Fcomm(fpt, ele, n);
-        else
-          divF_spts(0, ele, n, stage) += 2*Fcomm(fpt, ele, n);
-      }
+    for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int fpt = 1; fpt < nFpts; fpt++)
+        {
+          if (fpt == 3)
+            divF_spts(0, ele, n, stage) -= 2*Fcomm(fpt, ele, n);
+          else
+            divF_spts(0, ele, n, stage) += 2*Fcomm(fpt, ele, n);
+        }
+  }
+  else
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+        divF_spts(0, ele, n, stage) = -4*Fcomm(0, ele, n);
+
+    for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int fpt = 1; fpt < nFpts; fpt++)
+        {
+          if (fpt%2 == 0)
+            divF_spts(0, ele, n, stage) -= 4*Fcomm(fpt, ele, n);
+          else
+            divF_spts(0, ele, n, stage) += 4*Fcomm(fpt, ele, n);
+        }
+
+  }
 
 #endif
 
