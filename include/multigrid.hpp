@@ -19,7 +19,8 @@ class PMGrid
     int order;
     std::vector<mdvector<double>> corrections, sources, solutions;
     std::vector<mdvector<double>> hcorrections, hsources, hsolutions;
-    std::vector<std::shared_ptr<FRSolver>> grids, hgrids;
+    std::vector<std::shared_ptr<FRSolver>> grids;
+    std::shared_ptr<FRSolver> hgrid;
 
 #ifdef _GPU
     std::vector<mdvector_gpu<double>> corrections_d, sources_d, solutions_d;

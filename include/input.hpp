@@ -17,7 +17,7 @@ enum EQN {AdvDiff = 0, EulerNS = 1};
 
 struct InputStruct
 {
-  unsigned int equation, dt_type, ic_type, nDims, nQpts1D, n_steps, order, low_order, smooth_steps, hmg_levels;
+  unsigned int equation, dt_type, ic_type, nDims, nQpts1D, n_steps, order, low_order, smooth_steps, p_smooth_steps, hmg_levels;
   unsigned int report_freq, write_freq, force_freq, res_type, error_freq, test_case, err_field;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file;
   bool viscous, p_multi, restart, fix_vis, squeeze, serendipity, source;

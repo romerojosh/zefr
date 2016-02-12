@@ -64,17 +64,20 @@ class FRSolver
     FRSolver(InputStruct *input, int order = -1, bool FV_mode = false);
     void setup();
     void compute_residual(unsigned int stage, int level = 0);
-    void add_source(unsigned int stage);
+    void add_source(unsigned int stage, int level = 0);
+    void add_source(unsigned int stage, mdvector<double> &source);
     void accumulate_partition_U(int level);
     void accumulate_partition_divF(unsigned int stage, int level);
-    void update(int level = 0);
+    void update();
+    void update_FV(int level);
     void update_with_source(mdvector<double> &source);
 #ifdef _GPU
     void update_with_source(mdvector_gpu<double> &source);
 #endif
-    void write_solution();
+    void update_with_source_FV(mdvector<double> &source, int level);
+    void write_solution(std::string prefix);
     void write_partition_file();
-    void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
+    void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1, int level = 0);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
 

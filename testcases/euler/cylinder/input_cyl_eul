@@ -1,6 +1,7 @@
 # Geometry:
 nDims    2
 meshfile full_cyl_quad.msh
+serendipity 0
 
 # Solver:
 order     2
@@ -9,17 +10,18 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 10000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
-CFL	  0.4
+CFL	  0.5
 
 # Multigrid:
 p_multi 1
 smooth_steps 1
 rel_fac 1.00
 low_order 0
+hmg_levels 1
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 

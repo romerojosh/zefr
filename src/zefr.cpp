@@ -74,10 +74,11 @@ int main(int argc, char* argv[])
   input.nRanks = nRanks;
 
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
-  FRSolver solver(&input, 0, true);
-  //solver.setup();
+  FRSolver solver(&input);
+  //FRSolver solverFV(&input, 0, true);
   solver.setup();
-  solver.accumulate_partition_U(0);
+  //solverFV.setup();
+  //solverFV.accumulate_partition_U(0);
 
   PMGrid pmg;
   if (input.p_multi)
@@ -109,7 +110,8 @@ int main(int argc, char* argv[])
   }
 
   /* Write initial solution */
-  solver.write_solution();
+  solver.write_solution(input.output_prefix);
+  //solverFV.write_solution(input.output_prefix + "FV");
 
   /* Write initial error (if required) */
   if (input.error_freq != 0)
@@ -132,9 +134,8 @@ int main(int argc, char* argv[])
   /* Main iteration loop */
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
-    //solver.update();
-    //solver.update_FV(0);
-    solver.update(0);
+    solver.update();
+    //solverFV.update_FV(0);
 
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)
@@ -144,11 +145,13 @@ int main(int argc, char* argv[])
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
     {
       solver.report_residuals(hist_file, t1);
+      //solverFV.report_residuals(hist_file, t1, 0);
     }
 
     if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps))
     {
-      solver.write_solution();
+      solver.write_solution(input.output_prefix);
+      //solverFV.write_solution(input.output_prefix + "FV");
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps))

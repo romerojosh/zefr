@@ -3,7 +3,7 @@ nDims    2
 meshfile QuadBox_32x32.msh
 
 # Solver:
-order     0
+order     2
 equation AdvDiff    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -13,17 +13,18 @@ s_factor  0.0
 # Timestepping:
 n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.0001
-CFL	  0.5
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.001
+CFL	  0.3
 
-hmg_levels 5
+p_multi 1
+hmg_levels 1
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix sines
 write_freq    100
-report_freq   100
+report_freq   10
 res_type      1
 force_freq    0
 error_freq    1000

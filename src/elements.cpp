@@ -462,11 +462,13 @@ void Elements::compute_divF(unsigned int stage)
           divF_spts(spt, ele, n, stage) += dF_spts(spt, ele, n, dim);
 
   /* Transform to physical space */
+  /*
   for (unsigned int n = 0; n < nVars; n++)
 #pragma omp parallel for collapse(2)
     for (unsigned int ele =0; ele < nEles; ele++)
       for (unsigned int spt = 0; spt < nSpts; spt++)
         divF_spts(spt, ele, n, stage) /= jaco_det_spts(spt, ele);
+        */
 
 #endif
 
