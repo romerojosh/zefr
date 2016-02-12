@@ -130,8 +130,12 @@ int main(int argc, char* argv[])
     /* Sense discontinuities and filter solution */
     if (input.filt_on) 
     {
-      filt.apply_sensor();
-      filt.apply_filter();
+      unsigned int status = 1;
+      for (unsigned int level = 0; level < input.filt_maxLevels && status; level++)
+      {
+        filt.apply_sensor();
+        status = filt.apply_filter(level);
+      }
     }
     
     /* If using multigrid, perform correction cycle */

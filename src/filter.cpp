@@ -38,8 +38,13 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
 	sensor.assign({eles->nEles});
   
   /* Setup filter */
-  setup_DeltaHat();
-  setup_Fop();
+  DeltaHat.resize(input->filt_maxLevels);
+  Fop.resize(input->filt_maxLevels);
+  for (unsigned int level = 0; level < input->filt_maxLevels; level++)
+  {
+    setup_DeltaHat(level);
+    setup_Fop(level);
+  }
   setup_appendOp();
 	
 #ifdef _GPU
@@ -136,8 +141,7 @@ void Filter::setup_threshold()
   // Print results
   if (input->rank == 0) 
   {
-    std::cout << " Sensor threshold values:   ";
-    std::cout << " Step = " << KS_step.max_val() << "  Ramp = " << KS_ramp.max_val() << "  Weighted = " << threshJ << std::endl;
+    std::cout << " Sensor threshold = " << threshJ << std::endl;
   }
 }
 
@@ -249,28 +253,35 @@ void Filter::apply_sensor()
 }
     
   
-void Filter::setup_DeltaHat()
+void Filter::setup_DeltaHat(unsigned int level)
 { 
   // Determine filter width in parent space
+  double DH;
   if (input->dt_type) // CFL based time step
-    DeltaHat = input->filt_gamma * std::sqrt(input->CFL) * 2.0 / std::pow(order + 1.0, 0.25);
+    DH = input->filt_gamma * std::sqrt(input->CFL) * 2.0 / std::pow(order + 1.0, 0.25);
   else // Exogenously fixed time step
-    DeltaHat = input->filt_gamma * std::sqrt(0.25) * 2.0 / std::pow(order + 1.0, 0.25);
+    DH = input->filt_gamma * std::sqrt(0.25) * 2.0 / std::pow(order + 1.0, 0.25);
+  
+  // Level scaling
+  DH *= (level + 1);
     
   // Check for kernel positivity
   double DeltaHatMax = 2.0 / (order + 1.0);
-  if (DeltaHat <= 0  || DeltaHat > DeltaHatMax)
+  if (DH <= 0  || DH > DeltaHatMax)
   {
-    if (input->rank == 0) std::cout << " \n WARNING: Negative filter kernel! Gamma should be small and positive. \n" << std::endl;
-      // exit(EXIT_FAILURE);
+    if (input->rank == 0) std::cout << " WARNING: Negative filter kernel at level " << level << ". > Reduce gamma or maxLevels. " << std::endl;
   }
+  
+  // Assign
+  DeltaHat[level] = DH;
 }
 
 
-void Filter::setup_Fop()
+void Filter::setup_Fop(unsigned int level)
 {   
   // Assign filter matrix
-  Fop.assign({eles->nSpts1D, eles->nSpts1D + 2});
+  Fop[level].assign({eles->nSpts1D, eles->nSpts1D + 2});
+  double DH = DeltaHat[level];
 
   // Loop over solution points - rows
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
@@ -279,21 +290,21 @@ void Filter::setup_Fop()
     for (unsigned int i = 0; i < eles->nSpts1D; i++)
     {
       // Set integration limits
-      double xiL = std::max(-1.0, eles->loc_spts_1D[spt] - 0.5*DeltaHat);
-      double xiR = std::min(1.0, eles->loc_spts_1D[spt] + 0.5*DeltaHat);
+      double xiL = std::max(-1.0, eles->loc_spts_1D[spt] - 0.5*DH);
+      double xiR = std::min(1.0, eles->loc_spts_1D[spt] + 0.5*DH);
 
       // Evaluate integral through quadrature
       for (unsigned int j = 0; j < eles->nSpts1D; j++)
       {
         double xi = xiL + (xiR - xiL) * (eles->loc_spts_1D[j] + 1.0) / 2.0;
-        double fun = 0.5 * (xiR-xiL)* Lagrange(eles->loc_spts_1D, i, xi) / DeltaHat;
-        Fop(spt, i) += fun * eles->weights_spts(j);
+        double fun = 0.5 * (xiR-xiL)* Lagrange(eles->loc_spts_1D, i, xi) / DH;
+        Fop[level](spt, i) += fun * eles->weights_spts(j);
       }
     }
     
     // Boundary weights
-    Fop(spt, eles->nSpts1D) = std::max(0.0, 0.5*DeltaHat -1.0 -eles->loc_spts_1D[spt]) / DeltaHat;
-    Fop(spt, eles->nSpts1D + 1) = std::max(0.0, eles->loc_spts_1D[spt] +0.5*DeltaHat -1) / DeltaHat;
+    Fop[level](spt, eles->nSpts1D) = std::max(0.0, 0.5*DH -1.0 -eles->loc_spts_1D[spt]) / DH;
+    Fop[level](spt, eles->nSpts1D + 1) = std::max(0.0, eles->loc_spts_1D[spt] +0.5*DH -1) / DH;
   }
   
   // Evaluate error measure for matrix entries
@@ -302,10 +313,10 @@ void Filter::setup_Fop()
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
   {
     for (unsigned int i = 0; i < eles->nSpts1D + 2; i++)
-      unity(spt) += Fop(spt, i);
+      unity(spt) += Fop[level](spt, i);
     tol += std::abs(unity(spt) - 1.0);
   }
-  if (input->rank == 0) std::cout << "  L1 norm of tolerance for 1D filter matrix = " << tol << std::endl;
+  if (tol > 1e-10 && input->rank == 0) std::cout << " WARNING: Filter matrix elements are not converged! Tolerance = " << tol << std::endl;
 }
 
 
@@ -340,10 +351,10 @@ void Filter::setup_appendOp()
 }
 
 
-void Filter::apply_filter(unsigned int ele, unsigned int var)
+unsigned int Filter::apply_filter(unsigned int ele, unsigned int var, unsigned int level)
 {
   // Check for sensor value
-  if (sensor(ele) < threshJ) return;
+  if (sensor(ele) < threshJ) return 0;
   
   // Local arrays with accommodation for flux points
   mdvector<double> u_lines_spt, u_lines;
@@ -370,7 +381,7 @@ void Filter::apply_filter(unsigned int ele, unsigned int var)
       u_lines(i + eles->nSpts1D, j) = eles->U_fpts(appendOp(i,j), ele, var);
     
   // Evaluate filtered solution
-  auto &A = Fop(0, 0);
+  auto &A = Fop[level](0, 0);
   auto &B = u_lines(0, 0);
   auto &C = u_lines_spt(0, 0);
 #ifdef _OMP
@@ -388,13 +399,17 @@ void Filter::apply_filter(unsigned int ele, unsigned int var)
   for (unsigned int j = 0; j < eles->nSpts1D; j++)
     for (unsigned int i = 0; i < eles->nSpts1D; i++)
       eles->U_spts(reshapeOp(i,j), ele, var) = 0.5 * (u_lines_spt(i,j) + u_lines_spt(j, i + eles->nSpts1D));
+    
+  // Check if the element, variable pair are now truncated  
+  // return apply_sensor(ele, var) < threshJ;
+  return 1;
 }
 
 
-void Filter::apply_filter()
+unsigned int Filter::apply_filter(unsigned int level)
 {
   // Check if filtering is required
-  if (sensor.max_val() < threshJ) return;
+  if (sensor.max_val() < threshJ) return 0;
   
   // Transfer information to flux points
   eles->extrapolate_U(); // Extrapolate solution to flux points
@@ -415,6 +430,10 @@ void Filter::apply_filter()
   {
     // Loop over conservative variables
     for (unsigned int var = 0; var < eles->nVars; var++)
-      apply_filter(ele, var);
-  }    
+    {
+        apply_filter(ele, var, level);
+    }
+  }
+  
+  return 1;
 }

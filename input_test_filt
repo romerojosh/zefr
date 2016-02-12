@@ -3,7 +3,7 @@ nDims    2
 meshfile meshes/QuadBox_10x10.msh
 
 # Solver:
-order     6
+order     8
 equation AdvDiff    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -45,6 +45,8 @@ AdvDiff_D 0
 # Filter
 filt_on 1         # 1: enable filtering
 sen_write 1       # 1: write sensor values for each element
-sen_norm 0        # 1: normalize solution within each element
-sen_Jfac 0.5      # Sensor threshold \in [0,1]: 0 for ramp, 1 for step
-filt_gamma 0.4    # Filter width parameter (increase to strengthen filtering)
+sen_norm 1        # 1: normalize solution within each element
+sen_Jfac 1        # Sensor threshold \in [0,1]: 0 for ramp, 1 for step
+filt_gamma 0.1    # Filter width parameter (increase to strengthen filtering)
+filt_maxLevels 5  # Maximum number of filter levels
+

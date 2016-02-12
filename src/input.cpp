@@ -102,10 +102,11 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "ny_wall", input.norm_wall(1), 0.0);
   
   read_param(f, "filt_on", input.filt_on, (unsigned int) 0);
-  read_param(f, "sen_write", input.sen_write, (unsigned int) 0);
-  read_param(f, "sen_norm", input.sen_norm, (unsigned int) 0);
+  read_param(f, "sen_write", input.sen_write, (unsigned int) 1);
+  read_param(f, "sen_norm", input.sen_norm, (unsigned int) 1);
   read_param(f, "sen_Jfac", input.sen_Jfac, 1.0);
-  read_param(f, "filt_gamma", input.filt_gamma, 0.333);
+  read_param(f, "filt_gamma", input.filt_gamma, 0.1);
+  read_param(f, "filt_maxLevels", input.filt_maxLevels, (unsigned int) 1);
 
   f.close();
 
