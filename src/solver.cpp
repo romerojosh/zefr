@@ -261,6 +261,7 @@ void FRSolver::setup_h_levels()
   for (unsigned int H = 0; H < input->hmg_levels; H++)
   {
     int nPartitions = eles->nEles / (unsigned int) std::pow(2, H + 1);
+    std::cout << nPartitions << std::endl;
     //int nPartitions = eles->nEles / (unsigned int) std::pow(2, H);
     vols[H].assign(nPartitions, 0);
 
