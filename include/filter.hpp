@@ -12,7 +12,6 @@
 #include "geometry.hpp"
 #include "elements.hpp"
 #include "faces.hpp"
-#include "solver.hpp"
 
 /* Sensor threshold:
  * After each iteration, the filter is applied recursively till each element has a senor value less than the threshold.
@@ -21,7 +20,7 @@
  * For each inner iteration, the troubled cells are filtered using a fixed filter width.
  */
 
-
+class FRSolver;
 class Filter
 {
   private:

@@ -10,13 +10,13 @@
 #include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
+#include "filter.hpp"
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #endif
 
 class PMGrid;
-class Filter;
 
 class FRSolver
 {
@@ -35,6 +35,7 @@ class FRSolver
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> dt;
     mdvector<double> U_ini;
+    Filter filt;
 
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
@@ -67,11 +68,11 @@ class FRSolver
 #ifdef _GPU
     void update_with_source(mdvector_gpu<double> &source);
 #endif
-    void write_solution(const mdvector<double>& sensor);
+    void write_solution();
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
-
+    void filter_solution();
 
 };
 

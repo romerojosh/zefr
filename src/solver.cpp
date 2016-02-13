@@ -70,6 +70,11 @@ void FRSolver::setup()
     restart(input->restart_file);
   }
 
+  if (input->filt_on)
+  {
+    if (input->rank == 0) std::cout << "Setting up filter..." << std::endl;
+    filt.setup(input, *this);
+  }
   
 #ifdef _GPU
   solver_data_to_device();
@@ -1005,7 +1010,7 @@ void FRSolver::compute_element_dt()
 #endif
 }
 
-void FRSolver::write_solution(const mdvector<double>& sensor)
+void FRSolver::write_solution()
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
@@ -1275,7 +1280,7 @@ void FRSolver::write_solution(const mdvector<double>& sensor)
     {
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << sensor(ele) << " ";
+        f << filt.sensor(ele) << " ";
       }
       f << std::endl;
     }
@@ -1776,4 +1781,18 @@ void FRSolver::report_error(std::ofstream &f)
     f << std::endl;
   }
 
+}
+
+
+void FRSolver::filter_solution()
+{
+  if (!input->filt_on) return; 
+  
+  /* Sense discontinuities and filter solution */
+  unsigned int status = 1;
+  for (unsigned int level = 0; level < input->filt_maxLevels && status; level++)
+  {
+    filt.apply_sensor();
+    status = filt.apply_filter(level);
+  }
 }

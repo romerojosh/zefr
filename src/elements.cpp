@@ -799,6 +799,7 @@ void Elements::compute_Fvisc()
 void Elements::compute_Uavg()
 {
 #ifdef _CPU
+#pragma omp parallel for collapse(2)
   /* Compute average solution using quadrature */
   for (unsigned int n = 0; n < nVars; n++)
   {

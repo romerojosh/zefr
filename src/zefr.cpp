@@ -78,13 +78,6 @@ int main(int argc, char* argv[])
   FRSolver solver(&input);
   solver.setup();
   
-  Filter filt;
-  if (input.filt_on)
-  {
-    if (rank == 0) std::cout << "Setting up filter..." << std::endl;
-    filt.setup(&input, solver);
-  }
-
   PMGrid pmg;
   if (input.p_multi)
   {
@@ -115,7 +108,7 @@ int main(int argc, char* argv[])
   }
 
   /* Write initial solution */
-  solver.write_solution(filt.sensor);
+  solver.write_solution();
 
   /* Write initial error (if required) */
   if (input.error_freq != 0)
@@ -126,17 +119,7 @@ int main(int argc, char* argv[])
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
-    
-    /* Sense discontinuities and filter solution */
-    if (input.filt_on) 
-    {
-      unsigned int status = 1;
-      for (unsigned int level = 0; level < input.filt_maxLevels && status; level++)
-      {
-        filt.apply_sensor();
-        status = filt.apply_filter(level);
-      }
-    }
+    solver.filter_solution();
     
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)
@@ -150,7 +133,7 @@ int main(int argc, char* argv[])
 
     if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps))
     {
-      solver.write_solution(filt.sensor);
+      solver.write_solution();
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps))
