@@ -837,6 +837,7 @@ void Elements::poly_squeeze()
 
   /* For each element, check for negative density at solution and flux points */
   double tol = 1e-10;
+#pragma omp parallel for 
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     bool negRho = false;
@@ -875,6 +876,8 @@ void Elements::poly_squeeze()
     }
   }
 
+
+#pragma omp parallel for 
   /* For each element, check for entropy loss */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
@@ -958,6 +961,7 @@ void Elements::poly_squeeze_ppts()
 
   /* For each element, check for negative density at plot points */
   double tol = 1e-10;
+#pragma omp parallel for 
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     bool negRho = false;
@@ -982,6 +986,7 @@ void Elements::poly_squeeze_ppts()
     }
   }
 
+#pragma omp parallel for 
   /* For each element, check for entropy loss */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
