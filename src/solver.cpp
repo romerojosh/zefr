@@ -227,6 +227,11 @@ void FRSolver::setup_h_levels()
   /* Setup METIS */
   idx_t options[METIS_NOPTIONS];
   METIS_SetDefaultOptions(options);
+  options[METIS_OPTION_MINCONN] = 1;
+  options[METIS_OPTION_CONTIG] = 1;
+  options[METIS_OPTION_NCUTS] = 5;
+  options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_NODE;
+
 
   /* Form eptr and eind arrays */
   std::vector<int> eptr(geo.nEles + 1); 
@@ -260,7 +265,8 @@ void FRSolver::setup_h_levels()
 
   for (unsigned int H = 0; H < input->hmg_levels; H++)
   {
-    int nPartitions = eles->nEles / (unsigned int) std::pow(2, H + 1);
+    int nPartitions = eles->nEles / (unsigned int) std::pow(2, eles->nDims*(H + 1));
+    //int nPartitions = eles->nEles / (unsigned int) std::pow(2, H + 1);
     std::cout << nPartitions << std::endl;
     //int nPartitions = eles->nEles / (unsigned int) std::pow(2, H);
     vols[H].assign(nPartitions, 0);
@@ -605,7 +611,7 @@ void FRSolver::compute_residual(unsigned int stage, int level)
 
     /* Add source term (if required) */
     if (input->source)
-      add_source(stage, level);
+      add_source(stage);
 
     accumulate_partition_divF(stage, level);
   }
@@ -866,7 +872,7 @@ void FRSolver::F_from_faces()
 #endif
 }
 
-void FRSolver::add_source(unsigned int stage, int level)
+void FRSolver::add_source(unsigned int stage)
 {
   int scale_fac = 1;
   if (FV_mode)
@@ -1300,6 +1306,9 @@ void FRSolver::update_with_source_FV(mdvector<double> &source, int level)
       {
         compute_element_dt();
       }
+
+      //TEST:
+      //dt(0) = 2.0*(level + 1)*dt(0);
     }
 
     for (unsigned int n = 0; n < eles->nVars; n++)

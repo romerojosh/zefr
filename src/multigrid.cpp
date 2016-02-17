@@ -76,7 +76,8 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
 
     for (unsigned int H = 0; H < input->hmg_levels; H++)
     {
-      unsigned int nElesFV = grids[0]->eles->nEles / (unsigned int) std::pow(2, H + 1);
+      unsigned int nElesFV = grids[0]->eles->nEles / (unsigned int) std::pow(2, grids[0]->eles->nDims * (H + 1));
+      //unsigned int nElesFV = grids[0]->eles->nEles / (unsigned int) std::pow(2, H + 1);
       //unsigned int nElesFV = grids[0]->eles->nEles / (unsigned int) std::pow(2, H);
 
       if (input->rank == 0) std::cout << "h_level = " << nElesFV << std::endl;
@@ -98,7 +99,6 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
 
 void PMGrid::cycle(FRSolver &solver)
 {
-
   /* --- Downward cycle--- */
   /* Update residual on finest grid level and restrict */
   solver.compute_residual(0);
@@ -213,7 +213,8 @@ void PMGrid::cycle(FRSolver &solver)
       //hgrid->write_solution("HD_"+std::to_string(H));
 
       /* Update solution on coarse level */
-      hgrid->update_with_source_FV(hsources[H], H);
+      for (unsigned int step = 0; step < input->smooth_steps; step++)
+        hgrid->update_with_source_FV(hsources[H], H);
       //hgrid->write_solution("HD_"+std::to_string(H));
       
       /* Store updated solution */
@@ -233,7 +234,8 @@ void PMGrid::cycle(FRSolver &solver)
       if (H < input->hmg_levels - 1)
       {
         /* Update residual on current H level and add source */
-        hgrid->compute_residual(0, H);
+        for (unsigned int step = 0; step < input->p_smooth_steps; step++)
+          hgrid->compute_residual(0, H);
 #pragma omp parallel for collapse(3)
         for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
           for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)

@@ -4,7 +4,7 @@ meshfile full_cyl_quad.msh
 serendipity 0
 
 # Solver:
-order     1
+order     3
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -12,23 +12,24 @@ spt_type Legendre
 # Timestepping:
 n_steps 10000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
-CFL	  0.1
+CFL	  0.5
 
 # Multigrid:
 p_multi 1
 smooth_steps 1
+p_smooth_steps 1
 rel_fac 1.00
 low_order 0
-hmg_levels 4
+hmg_levels 1
 
 restart 0
 restart_file cyl_eul_pmg/cyl_eul_pmg_000010000.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix cyl_eul_hmg_2h
+output_prefix cyl_eul_pmg
 write_freq    1000
 report_freq   100
 res_type      1

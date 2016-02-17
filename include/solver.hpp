@@ -64,7 +64,7 @@ class FRSolver
     FRSolver(InputStruct *input, int order = -1, bool FV_mode = false);
     void setup();
     void compute_residual(unsigned int stage, int level = 0);
-    void add_source(unsigned int stage, int level = 0);
+    void add_source(unsigned int stage);
     void add_source(unsigned int stage, mdvector<double> &source);
     void accumulate_partition_U(int level);
     void accumulate_partition_divF(unsigned int stage, int level);
