@@ -617,7 +617,7 @@ void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_s
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    b(spt, ele, n) = -(dt(0) * divF_spts(spt, ele, n))/jaco_det_spts(spt, ele);
+    b(spt, ele, n) = -(dt(0) * divF_spts(spt, ele, n, 0))/jaco_det_spts(spt, ele);
     //b(spt, ele, n) = 0;
   }
 }
@@ -677,4 +677,16 @@ void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &delta
   cusp::krylov::gmres(Acsr, delU, RHS, restart, monitor, M);
   //cusp::krylov::bicgstab(Acsr, delU, RHS, monitor, M);
 
+  /*
+  if (monitor.converged())
+  {
+    std::cout << "Solver converged to " << monitor.relative_tolerance() << " relative tolerance";
+    std::cout << " after " << monitor.iteration_count() << " iterations" << std::endl;
+  }
+  else
+  {
+    std::cout << "Solver reached iteration limit " << monitor.iteration_limit() << " before converging";
+    std::cout << " to " << monitor.relative_tolerance() << " relative tolerance " << std::endl;
+  }
+  */
 }

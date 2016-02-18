@@ -114,7 +114,8 @@ void FRSolver::setup_update()
   }
   else if (input->dt_scheme == "BDF1")
   {
-    nStages = 1;
+    // HACK: (nStages = 1) doesn't work, fix later
+    nStages = 2;
   }
   else
   {
@@ -324,8 +325,7 @@ void FRSolver::solver_data_to_device()
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
   dt_d = dt;
-  b_d = eles->divF_spts; // Implicit RHS vector */
-  deltaU_d = eles->U_spts; // Implicit deltaU vector */
+  b_d = b; // Implicit RHS vector */
 
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
@@ -384,6 +384,7 @@ void FRSolver::solver_data_to_device()
   }
 
 #endif
+
 
 }
 #endif
@@ -595,6 +596,8 @@ void FRSolver::initialize_U()
     /* Maximum number of unique matrices possible per element */
     unsigned int nMat = eles->nFaces + 1;
 
+    eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
+    eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
     eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dFndUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, 2});
 
@@ -612,6 +615,7 @@ void FRSolver::initialize_U()
       eles->taun_fpts.assign({eles->nFpts, eles->nEles, 2});
     }
     eles->B.assign({eles->nSpts, eles->nSpts, nMat});
+    b.assign({eles->nSpts, eles->nEles, eles->nVars});
   }
 
   /* Initialize solution */
@@ -893,8 +897,16 @@ void FRSolver::dFndU_from_faces()
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
           {
-            eles->dFnddUviscL_fpts(fpt, ele, n, dim) = faces->dFnddUviscL(gfpt, n, dim, slot);
-            eles->dFnddUviscR_fpts(fpt, ele, n, dim) = faces->dFnddUviscR(gfpt, n, dim, slot);
+            if (slot == 0)
+            {
+              eles->dFnddUviscL_fpts(fpt, ele, n, dim) = faces->dFnddUviscL(gfpt, n, dim, slot);
+              eles->dFnddUviscR_fpts(fpt, ele, n, dim) = faces->dFnddUviscR(gfpt, n, dim, slot);
+            }
+            else
+            {
+              eles->dFnddUviscL_fpts(fpt, ele, n, dim) = faces->dFnddUviscR(gfpt, n, dim, slot);
+              eles->dFnddUviscR_fpts(fpt, ele, n, dim) = faces->dFnddUviscL(gfpt, n, dim, slot);
+            }
           }
         }
       }
@@ -1041,7 +1053,43 @@ void FRSolver::update()
 #endif
 
 #ifdef _GPU
+    // Print U initial
+    /*
+    std::ofstream Uini_file;
+    Uini_file.open("Uini.dat");
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          Uini_file << std::setprecision(16) << std::scientific << eles->U_spts(spt, ele, n) << std::endl;
+        }
+      }
+    }
+    Uini_file.close();
+    */
+
     compute_residual(0);
+
+    // Print divF
+    /*
+    eles->divF_spts = eles->divF_spts_d;
+    std::ofstream divF_file;
+    divF_file.open("divF.dat");
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          divF_file << std::setprecision(16) << std::scientific << eles->divF_spts(spt, ele, n, 1) << std::endl;
+        }
+      }
+    }
+    divF_file.close();
+    ThrowException("Stopping program to read divF from BDF1");
+    */
 
     if (input->dt_type != 0)
     {
@@ -1054,8 +1102,48 @@ void FRSolver::update()
     /* Prepare RHS (b) vector */
     compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);
 
+    // Print RHS
+    /*
+    eles->RHS = b_d;
+    std::ofstream RHS_file;
+    RHS_file.open("RHS.dat");
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          RHS_file << std::setprecision(16) << std::scientific << eles->RHS(spt, ele, n) << std::endl;
+        }
+      }
+    }
+    RHS_file.close();
+    */
+    //ThrowException("Stopping program to read RHS");
+
     /* Solve system for deltaU */
+    eles->deltaU.fill(0);
+    deltaU_d = eles->deltaU;
     compute_deltaU_wrapper(A_d, deltaU_d, b_d);
+
+    // Print dU
+    /*
+    eles->deltaU = deltaU_d;
+    std::ofstream deltaU_file;
+    deltaU_file.open("deltaU.dat");
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          deltaU_file << std::setprecision(16) << std::scientific << eles->deltaU(spt, ele, n) << std::endl;
+        }
+      }
+    }
+    deltaU_file.close();
+    ThrowException("Stopping program to read deltaU");
+    */
 
     /* Add deltaU to solution */
     device_add(eles->U_spts_d, deltaU_d, eles->U_spts_d.size());
@@ -1486,6 +1574,12 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   dt = dt_d;
 #endif
 
+  // HACK: Change nStages to compute the correct residual
+  if (input->dt_scheme == "BDF1")
+  {
+    nStages = 1;
+  }
+
   std::vector<double> res(eles->nVars,0.0);
 
 #pragma omp parallel for collapse(3)
@@ -1513,6 +1607,12 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   }
 
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
+
+  // HACK: Change nStages back
+  if (input->dt_scheme == "BDF1")
+  {
+    nStages = 2;
+  }
 
 #ifdef _MPI
   MPI_Op oper = MPI_SUM;

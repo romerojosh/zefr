@@ -37,6 +37,7 @@ class FRSolver
     mdvector<double> U_ini;
 
     spmatrix<double> A; // Sparse matrix for implicit system
+    mdvector<double> b;
 
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
