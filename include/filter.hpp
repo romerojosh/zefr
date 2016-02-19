@@ -31,29 +31,22 @@ class Filter
     FRSolver* solver;
 		unsigned int order;
 
-    mdvector<double> Vander, Vander_d1, Conc;
-    mdvector<unsigned int> reshapeOp;
-    double threshJ;
-    mdvector<unsigned int> appendOp;
-    std::vector<mdvector<double>> Fop;
-		std::vector<double> DeltaHat;
+    mdvector<double> Vander, VanderInv, Vander_d1, Conc, oppS_1D, oppS;
+    mdvector<double> KS, U_spts;
+    double threshJ, normalTol;
+    std::vector<mdvector<double>> oppF_1D, oppF_spts, oppF_fpts;
+    std::vector<double> DeltaHat;
 	
 		void setup_vandermonde_matrices();
 		void setup_concentration_matrix();
 		void setup_threshold();
-		void setup_reshapeOp();
+    void setup_oppS();
     void setup_DeltaHat(unsigned int level);
-    void setup_Fop(unsigned int level);
-    void setup_appendOp();
-    double apply_sensor(unsigned int ele, unsigned int var);
-    unsigned int apply_filter(unsigned int ele, unsigned int var, unsigned int level);
+    void setup_oppF_1D(unsigned int level);
+    void setup_oppF(unsigned int level);
 
   public:
-		mdvector<double> sensor;
-#ifdef _GPU
-    mdvector_gpu<double> sensor_d;
-#endif
-  
+		mdvector<double> sensor; 
     void setup(InputStruct *input, FRSolver &solver);
 		void apply_sensor();
     unsigned int apply_filter(unsigned int level);
