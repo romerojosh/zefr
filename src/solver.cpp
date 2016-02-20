@@ -1089,12 +1089,12 @@ void FRSolver::update()
     }
     divF_file.close();
     ThrowException("Stopping program to read divF from BDF1");
+    */
 
     if (input->dt_type != 0)
     {
       compute_element_dt();
     }
-    */
 
     /* Compute LHS implicit Jacobian */
     compute_LHS();
