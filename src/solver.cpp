@@ -1083,18 +1083,18 @@ void FRSolver::update()
       {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
-          divF_file << std::setprecision(16) << std::scientific << eles->divF_spts(spt, ele, n, 1) << std::endl;
+          divF_file << std::setprecision(16) << std::scientific << eles->divF_spts(spt, ele, n, 0) << std::endl;
         }
       }
     }
     divF_file.close();
     ThrowException("Stopping program to read divF from BDF1");
-    */
 
     if (input->dt_type != 0)
     {
       compute_element_dt();
     }
+    */
 
     /* Compute LHS implicit Jacobian */
     compute_LHS();

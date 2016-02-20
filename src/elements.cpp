@@ -896,12 +896,6 @@ void Elements::compute_LHS()
   CtempFSN.assign({nSpts1D, nSpts});
   CtempFSN2.assign({nSpts1D, nSpts});
 
-  /* Print element list */
-  /*
-  std::ofstream ele_file;
-  ele_file.open("ele_list.dat");
-  */
-
   /* Compute LHS */
   A.clear();
   for (unsigned int ele = 0; ele < nEles; ele++)
@@ -1620,23 +1614,10 @@ void Elements::compute_LHS()
         }
       }
     }
-
-    /* Print element list */
-    /*
-    ele_file << "Size: " << ele_list.size() << " Elements: ";
-    for (unsigned int i = 0; i < ele_list.size(); i++)
-    {
-      ele_file << ele_list[i] << " ";
-    }
-    ele_file << std::endl;
-    */
   }
-  //ele_file.close();
-  //ThrowException("Stopping program to read ele_list");
 
   //A.print();
   A.toCSR();
-  //A.print();
   //ThrowException("Stopping program to read matrix");
 }
 

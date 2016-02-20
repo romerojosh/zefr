@@ -1223,6 +1223,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       /* Setting sign of beta (from HiFiLES) */
+      beta = input->ldg_b;
       if (nDims == 2)
       {
         if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
@@ -1420,15 +1421,15 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
   std::vector<double> WR(nVars);
    
   double tau = input->ldg_tau;
-  double beta = input->ldg_b;
 
   Fcomm_temp.fill(0.0);
 
-#pragma omp parallel for firstprivate(FL, FR, WL, WR, tau, beta)
+#pragma omp parallel for firstprivate(FL, FR, WL, WR, tau)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
 
     /* Setting sign of beta (from HiFiLES) */
+    double beta = input->ldg_b;
     if (nDims == 2)
     {
       if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
@@ -1727,16 +1728,16 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
   std::vector<double> dFndUR(nVars);
    
   double tau = input->ldg_tau;
-  double beta = input->ldg_b;
 
   dFndU_temp.fill(0.0);
   dFnddUL_temp.fill(0.0);
   dFnddUR_temp.fill(0.0);
 
-#pragma omp parallel for firstprivate(dFndUL, dFndUR, tau, beta)
+#pragma omp parallel for firstprivate(dFndUL, dFndUR, tau)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     /* Setting sign of beta (from HiFiLES) */
+    double beta = input->ldg_b;
     if (nDims == 2)
     {
       if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
@@ -1798,6 +1799,8 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
     /* TODO: Needs revision */
     else
     {
+      ThrowException("Neumann boundary not implemented");
+
       // No beta on the boundary, grab right boundary?
       beta_Ucomm(fpt, 0) = 0;
       beta_Ucomm(fpt, 1) = 1;

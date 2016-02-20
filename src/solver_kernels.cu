@@ -677,7 +677,6 @@ void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &delta
   cusp::krylov::gmres(Acsr, delU, RHS, restart, monitor, M);
   //cusp::krylov::bicgstab(Acsr, delU, RHS, monitor, M);
 
-  /*
   if (monitor.converged())
   {
     std::cout << "Solver converged to " << monitor.relative_tolerance() << " relative tolerance";
@@ -688,5 +687,4 @@ void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &delta
     std::cout << "Solver reached iteration limit " << monitor.iteration_limit() << " before converging";
     std::cout << " to " << monitor.relative_tolerance() << " relative tolerance " << std::endl;
   }
-  */
 }
