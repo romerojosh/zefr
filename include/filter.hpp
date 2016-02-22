@@ -36,6 +36,10 @@ class Filter
     double threshJ, normalTol;
     std::vector<mdvector<double>> oppF_1D, oppF_spts, oppF_fpts;
     std::vector<double> DeltaHat;
+
+#ifdef _GPU
+    mdvector_gpu<double> oppS_d, KS_d, U_spts_d, sensor_d;
+#endif
 	
 		void setup_vandermonde_matrices();
 		void setup_concentration_matrix();

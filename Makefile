@@ -53,15 +53,15 @@ ifeq ($(strip $(ARCH)),GPU)
 	INCS += -I$(strip $(CUDA_DIR))/include
 endif
 
-# Including TNT and JAMA headers
-INCS += -I ../tnt_126/
-INCS += -I ../jama125/
+# Including external template libraries
+INCS += -I external/tnt/
+INCS += -I external/jama/
 
 TARGET = zefr
 OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/filter.o  bin/zefr.o 
 
 ifeq ($(strip $(ARCH)),GPU)
-	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o 
+	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o  bin/filter_kernels.o
 endif
 
 INCS += -I include
@@ -75,8 +75,9 @@ bin/%.o: src/%.cpp  include/*.hpp include/*.h
 
 ifeq ($(strip $(ARCH)),GPU)
 bin/%.o: src/%.cu include/*.hpp include/*.h
-	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS)
+	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS) -D_NO_TNT
 endif
 
 clean:
 	rm bin/$(TARGET) bin/*.o
+

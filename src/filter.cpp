@@ -17,6 +17,7 @@
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
 #include "cublas_v2.h"
+#include "filter_kernels.h"
 #endif
 
 
@@ -37,6 +38,7 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
   setup_threshold();
   U_spts.assign({eles->nSpts, eles->nEles, eles->nVars});
 	sensor.assign({eles->nEles});
+
   
   /* Setup filter */
   DeltaHat.resize(input->filt_maxLevels);
@@ -49,6 +51,14 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
     setup_oppF_1D(level);
     setup_oppF(level);
   }
+
+  /* Copy data to GPU */
+#ifdef _GPU
+  U_spts_d = U_spts;
+  oppS_d = oppS;
+  KS_d = KS;
+  sensor_d = sensor;
+#endif
 }
 
 
@@ -193,11 +203,10 @@ void Filter::apply_sensor()
   // Copy data to local structure
   U_spts = eles->U_spts;
   
-  // Loop over variables
-  for (unsigned int var = 0; var < eles->nVars; var++)
+  // Normalize data
+  if (input->sen_norm)
   {
-    // Normalize data
-    if (input->sen_norm)
+    for (unsigned int var = 0; var < eles->nVars; var++)
     {
       // Find element maximum and minimum
 #pragma omp parallel for 
@@ -219,8 +228,11 @@ void Filter::apply_sensor()
         }
       }
     }
+  }
   
-    // Calculate KS
+  // Calculate KS
+  for (unsigned int var = 0; var < eles->nVars; var++)
+  {
     auto &A = oppS(0,0);
     auto &B = U_spts(0, 0, var);
     auto &C = KS(0, 0, var);
@@ -232,8 +244,11 @@ void Filter::apply_sensor()
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
       2 * eles->nSpts, eles->nEles, eles->nSpts, 1.0, &A, 2 * eles->nSpts, &B, eles->nSpts, 0.0, &C, 2 * eles->nSpts);
 #endif
+  }
     
     // Apply non-liqnear enhancement and store sensor values
+  for (unsigned int var = 0; var < eles->nVars; var++)
+  {
 #pragma omp parallel for
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
@@ -250,7 +265,30 @@ void Filter::apply_sensor()
 #endif
 
 #ifdef _GPU
-    // TODO
+  
+  // Copy data to local structure
+  device_copy(U_spts_d, eles->U_spts_d, U_spts_d.get_nvals());
+  
+  // Normalize data
+  if (input->sen_norm)
+  {
+    normalize_data_wrapper(U_spts_d, normalTol, eles->nSpts, eles->nEles, eles->nVars);
+  }
+  
+  // Calculate KS
+  for (unsigned int var = 0; var < eles->nVars; var++)
+  {
+    cublasDGEMM_wrapper(2 * eles->nSpts, eles->nEles, eles->nSpts, 1.0,
+      oppS_d.data(), 2 * eles->nSpts, U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts, 0.0,
+      KS_d.data() + var * eles->nEles * 2 * eles->nSpts, 2 * eles->nSpts);
+  }
+    
+  // Apply non-linear enhancement and store sensor values
+  compute_max_sensor_wrapper(KS_d, sensor_d, order, eles->nSpts, eles->nEles, eles->nVars);
+
+  // TESTING: Copy out sensor for now.
+  sensor = sensor_d;
+
 #endif
 }
     

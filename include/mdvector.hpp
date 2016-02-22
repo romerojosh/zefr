@@ -15,8 +15,11 @@
 #include <iostream>
 #include <vector>
 #include <memory>
+
+#ifndef _NO_TNT
 #include "tnt.h"
 #include <jama_lu.h>
+#endif
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
@@ -35,7 +38,9 @@ class mdvector
     std::array<unsigned int,4> dims; 
     std::array<unsigned int,4> strides;
     std::vector<T> values;
+#ifndef _NO_TNT
     std::shared_ptr<JAMA::LU<double>> LUptr;
+#endif
 
   public:
     //! Constructors
@@ -189,6 +194,7 @@ T mdvector<T>::min_val(void) const
 template <typename T>
 void mdvector<T>::calc_LU()
 {
+#ifndef _NO_TNT
   // Copy mdvector into TNT object
   unsigned int m = dims[0], n = dims[1];
   TNT::Array2D<double> A(m, n);
@@ -198,11 +204,13 @@ void mdvector<T>::calc_LU()
       
   // Calculate and store LU object
   LUptr = std::make_shared<JAMA::LU<double>>(A);
+#endif
 }
 
 template <typename T>
 void mdvector<T>::solve(mdvector<T>& x, const mdvector<T>& B) const
 {
+#ifndef _NO_TNT
   // Copy mdvector into TNT object
   std::array<unsigned int, 4> B_dims = B.shape();
   unsigned int n = B_dims[0], p = B_dims[1];
@@ -218,6 +226,7 @@ void mdvector<T>::solve(mdvector<T>& x, const mdvector<T>& B) const
   for (unsigned int j = 0; j < p; j++)
     for (unsigned int i = 0; i < n; i++)
       x(i,j) = xArr[i][j];
+#endif
 }
 
 template <typename T>
