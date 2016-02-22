@@ -1275,6 +1275,9 @@ void FRSolver::write_solution()
   }
   if (input->filt_on && input->sen_write)
   {
+#ifdef _GPU
+    filt.sensor = filt.sensor_d;
+#endif
     f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {

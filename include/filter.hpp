@@ -38,7 +38,9 @@ class Filter
     std::vector<double> DeltaHat;
 
 #ifdef _GPU
-    mdvector_gpu<double> oppS_d, KS_d, U_spts_d, sensor_d;
+    mdvector_gpu<double> oppS_d, KS_d, U_spts_d;
+    std::vector<mdvector_gpu<double>> oppF_spts_d, oppF_fpts_d;
+    double max_sensor_d;
 #endif
 	
 		void setup_vandermonde_matrices();
@@ -51,6 +53,9 @@ class Filter
 
   public:
 		mdvector<double> sensor; 
+#ifdef _GPU
+    mdvector_gpu<double> sensor_d;
+#endif
     void setup(InputStruct *input, FRSolver &solver);
 		void apply_sensor();
     unsigned int apply_filter(unsigned int level);

@@ -58,6 +58,14 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
   oppS_d = oppS;
   KS_d = KS;
   sensor_d = sensor;
+
+  oppF_spts_d.resize(input->filt_maxLevels);
+  oppF_fpts_d.resize(input->filt_maxLevels);
+  for (unsigned int level = 0; level < input->filt_maxLevels; level++)
+  {
+    oppF_spts_d[level] = oppF_spts[level];
+    oppF_fpts_d[level] = oppF_fpts[level];
+  }
 #endif
 }
 
@@ -284,10 +292,7 @@ void Filter::apply_sensor()
   }
     
   // Apply non-linear enhancement and store sensor values
-  compute_max_sensor_wrapper(KS_d, sensor_d, order, eles->nSpts, eles->nEles, eles->nVars);
-
-  // TESTING: Copy out sensor for now.
-  sensor = sensor_d;
+  compute_max_sensor_wrapper(KS_d, sensor_d, order, max_sensor_d, eles->nSpts, eles->nEles, eles->nVars);
 
 #endif
 }
@@ -495,7 +500,38 @@ unsigned int Filter::apply_filter(unsigned int level)
 #endif
 
 #ifdef _GPU
-    // TODO
+  // Check if filtering is required
+  if (max_sensor_d < threshJ) return 0;
+  
+  // Transfer information to flux points
+  eles->extrapolate_U(); 
+  solver->U_to_faces(); 
+#ifdef _MPI 
+  faces->send_U_data();
+  faces->recv_U_data();
+  faces->compute_common_U(geo->nGfpts_int + geo->nGfpts_bnd, geo->nGfpts);
+#else
+  faces->compute_common_U(0, geo->nGfpts); 
+#endif 
+  solver->U_from_faces(); 
+ 
+  // Loop over variables
+  for (unsigned int var = 0; var < eles->nVars; var++)
+  {
+    // Contribution from solution points
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles, eles->nSpts, 1.0,
+      oppF_spts_d[level].data(), eles->nSpts, eles->U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts, 0.0,
+      U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts);
+
+    // Contribution from flux points
+    cublasDGEMM_wrapper(eles->nSpts, eles->nEles, eles->nFpts, 1.0,
+      oppF_fpts_d[level].data(), eles->nSpts, eles->U_fpts_d.data() + var * eles->nEles * eles->nFpts, eles->nFpts, 1.0,
+      U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts);
+  }
+   
+  // Copy back filtered values
+  copy_filtered_solution_wrapper(U_spts_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars);
+
 #endif
   
   return 1;
