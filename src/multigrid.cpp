@@ -99,6 +99,7 @@ void PMGrid::cycle(FRSolver &solver)
 
 #ifdef _GPU
       grids[P]->update_with_source(sources_d[P]);
+      grids[P]->filter_solution();
 #endif
     }
 
@@ -138,6 +139,7 @@ void PMGrid::cycle(FRSolver &solver)
 
 #ifdef _GPU
         grids[P]->update_with_source(sources_d[P]);
+        grids[P]->filter_solution();
 #endif
       }
     }
@@ -152,6 +154,7 @@ void PMGrid::cycle(FRSolver &solver)
 
 #ifdef _GPU
         grids[P]->update_with_source(sources_d[P]);
+        grids[P]->filter_solution();
 #endif
       }
 

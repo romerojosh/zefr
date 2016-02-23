@@ -125,7 +125,7 @@ void Filter::setup_concentration_matrix()
 void Filter::setup_threshold()
 {
   // Normalization tolerance
-  normalTol = 1e-1;
+  normalTol = 0.1;
   
   // Local arrays
   mdvector<double> u_canon, KS_canon, KS_step, KS_ramp;
