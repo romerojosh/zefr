@@ -13,7 +13,7 @@
 #include "mdvector_gpu.h"
 #endif
 
-enum EQN {AdvDiff = 0, EulerNS = 1};
+enum EQN {AdvDiff = 0, EulerNS = 1, Burgers = 2};
 
 struct InputStruct
 {

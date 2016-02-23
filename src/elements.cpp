@@ -498,6 +498,31 @@ void Elements::compute_Fconv()
 #endif
   }
 
+  else if (input->equation == Burgers)
+  {
+#ifdef _CPU
+#pragma omp parallel for collapse(4)
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            F_spts(spt, ele, n, dim) = 0.5 * U_spts(spt, ele, n) * U_spts(spt, ele, n);
+          }
+        }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    compute_Fconv_spts_Burgers_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims);
+    check_error();
+#endif
+  }
+
   else if (input->equation == EulerNS)
   {
 #ifdef _CPU
@@ -586,7 +611,7 @@ void Elements::compute_Fconv()
 
 void Elements::compute_Fvisc()
 {
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
 #ifdef _CPU
 #pragma omp parallel for collapse(4)
@@ -818,6 +843,23 @@ void Elements::compute_dFdUconv()
     }
   }
 
+  else if (input->equation == Burgers)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            dFdUconv_spts(spt, ele, n, dim) = U_spts(spt, ele, n);
+          }
+        }
+      }
+    }
+  }
+
   else if (input->equation == EulerNS)
   {
     ThrowException("compute_dFdUconv for EulerNS not implemented yet!");
@@ -826,8 +868,9 @@ void Elements::compute_dFdUconv()
 
 void Elements::compute_dFdUvisc()
 {
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
+#pragma omp parallel for collapse(4)
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
@@ -851,7 +894,7 @@ void Elements::compute_dFdUvisc()
 
 void Elements::compute_dFddUvisc()
 {
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
 #pragma omp parallel for collapse(4)
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1616,8 +1659,8 @@ void Elements::compute_LHS()
     }
   }
 
-  //A.print();
   A.toCSR();
+  //A.print();
   //ThrowException("Stopping program to read matrix");
 }
 

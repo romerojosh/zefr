@@ -531,6 +531,11 @@ void FRSolver::compute_residual(unsigned int stage)
 
 void FRSolver::compute_LHS()
 {
+  /* Copy new solution from GPU */
+  // TODO: Temporary until placed in GPU
+  eles->U_spts = eles->U_spts_d;
+  faces->U = faces->U_d;
+
   /* Compute derivative of convective flux with respect to state variables 
    * at solution and flux points */
   eles->compute_dFdUconv();
@@ -619,7 +624,7 @@ void FRSolver::initialize_U()
   }
 
   /* Initialize solution */
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
     if (input->ic_type == 0)
     {
@@ -1325,7 +1330,7 @@ void FRSolver::write_solution()
 
     f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
     f << "<PPointData>" << std::endl;
-    if (input->equation == AdvDiff)
+    if (input->equation == AdvDiff || input->equation == Burgers)
     {
       f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
       f << std::endl;
@@ -1516,7 +1521,7 @@ void FRSolver::write_solution()
     eles->poly_squeeze_ppts();
   }
 
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
     f << "<DataArray type=\"Float32\" Name=\"u\" ";
     f << "format=\"ascii\">"<< std::endl;

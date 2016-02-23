@@ -41,6 +41,44 @@ void compute_Fconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &F_spts,
   }
 }
 
+template <unsigned int nDims>
+__global__
+void compute_Fconv_spts_Burgers(mdvector_gpu<double> F_spts, 
+    mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    F_spts(spt, ele, 0, dim) = 0.5 * U_spts(spt, ele, 0) * U_spts(spt, ele, 0);
+  }
+}
+
+void compute_Fconv_spts_Burgers_wrapper(mdvector_gpu<double> &F_spts, 
+    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
+    unsigned int nDims)
+{
+
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+      threads.y);
+
+  if (nDims == 2)
+  {
+    compute_Fconv_spts_Burgers<2><<<blocks, threads>>>(F_spts, U_spts, nSpts, 
+      nEles);
+  }
+  else
+  {
+    compute_Fconv_spts_Burgers<3><<<blocks, threads>>>(F_spts, U_spts, nSpts, 
+      nEles);
+  }
+}
+
 __global__
 void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, 
     unsigned int nSpts, unsigned int nEles, double gamma)
@@ -434,7 +472,7 @@ void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts,
   unsigned int threads= 192;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     transform_dU_quad<1><<<blocks, threads>>>(dU_spts, jaco_spts, jaco_det_spts,
         nSpts, nEles);
@@ -502,7 +540,7 @@ void transform_dU_hexa_wrapper(mdvector_gpu<double> &dU_spts,
   unsigned int threads= 192;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     transform_dU_hexa<1><<<blocks, threads>>>(dU_spts, inv_jaco_spts, jaco_det_spts,
         nSpts, nEles);
@@ -553,7 +591,7 @@ void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts,
   unsigned int threads= 192;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     transform_flux_quad<1><<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles);
   }
@@ -616,7 +654,7 @@ void transform_flux_hexa_wrapper(mdvector_gpu<double> &F_spts,
   unsigned int threads= 192;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     transform_flux_hexa<1><<<blocks, threads>>>(F_spts, inv_jaco_spts, nSpts, nEles);
   }

@@ -182,7 +182,7 @@ void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gf
   unsigned int threads= 192;
   unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     U_to_faces<1><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
   }
@@ -226,7 +226,7 @@ void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double
   unsigned int threads= 192;
   unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     U_from_faces<1><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
   }
@@ -277,7 +277,7 @@ void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU
   unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
   
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     if (nDims == 2)
       dU_to_faces<1, 2><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
@@ -326,7 +326,7 @@ void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_s
   unsigned int threads= 192;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     if (nDims == 2)
       compute_divF<1,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
@@ -401,7 +401,7 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
       threads.y);
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
       RK_update<1><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
@@ -477,7 +477,7 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
       threads.y);
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
       RK_update_source<1><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
@@ -587,7 +587,7 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
 
   if (nDims == 2)
   {
-    if (equation == AdvDiff)
+    if (equation == AdvDiff || equation == Burgers)
       add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
           flow_time, stage);
     else
@@ -596,7 +596,7 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
   }
   else
   {
-    if (equation == AdvDiff)
+    if (equation == AdvDiff || equation == Burgers)
       add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
           flow_time, stage);
     else

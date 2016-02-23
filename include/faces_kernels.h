@@ -8,6 +8,10 @@ void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F,
     mdvector_gpu<double> &AdvDiff_A, unsigned int startFpt,
     unsigned int endFpt);
 
+void compute_Fconv_fpts_Burgers_wrapper(mdvector_gpu<double> &F, 
+    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims,
+    unsigned int startFpt, unsigned int endFpt);
+
 void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
     mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
     unsigned int nFpts, unsigned int nDims, double gamma,

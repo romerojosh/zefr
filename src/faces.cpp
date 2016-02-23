@@ -122,7 +122,7 @@ void Faces::apply_bcs()
     
       case 2: /* Farfield and Supersonic Inlet */
       {
-        if (input->equation == AdvDiff)
+        if (input->equation == AdvDiff || input->equation == Burgers)
         {
           /* Set boundaries to zero */
           U(fpt, 0, 1) = 0;
@@ -848,6 +848,32 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
     check_error();
 #endif
   }
+
+  else if (input->equation == Burgers)
+  {
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          Fconv(fpt, n, dim, 0) = 0.5 * U(fpt, n, 0) * U(fpt, n, 0);
+
+          Fconv(fpt, n, dim, 1) = 0.5 * U(fpt, n, 1) * U(fpt, n, 1);
+
+        }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    compute_Fconv_fpts_Burgers_wrapper(Fconv_d, U_d, nFpts, nDims, startFpt, endFpt);
+    check_error();
+#endif
+  }
+
   else if (input->equation == EulerNS)
   {
     if (nDims == 2)
@@ -939,7 +965,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 {  
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
@@ -1358,6 +1384,19 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
       waveSp(fpt) = An;
     }
+    else if (input->equation == Burgers)
+    {
+      double AnL = 0;
+      double AnR = 0;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        AnL += WL[0] * norm(fpt, dim, 0);
+        AnR += WR[0] * norm(fpt, dim, 0);
+      }
+
+      waveSp(fpt) = std::max(std::abs(AnL), std::abs(AnR));
+    }
     else if (input->equation == EulerNS)
     {
       /* Compute speed of sound */
@@ -1557,6 +1596,22 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
     }
   }
 
+  else if (input->equation == Burgers)
+  {
+#pragma omp parallel for collapse(3)
+    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          dFdUconv(fpt, n, dim, 0) = U(fpt, n, 0);
+          dFdUconv(fpt, n, dim, 1) = U(fpt, n, 1);
+        }
+      }
+    }
+  }
+
   else if (input->equation == EulerNS)
   {
     ThrowException("compute_dFdUconv for EulerNS not implemented yet!");
@@ -1565,7 +1620,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
 {  
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -1589,7 +1644,7 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
 {  
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -1682,6 +1737,7 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
     }
 
     /* Get numerical wavespeed */
+    // TODO: May be able to remove once waveSp is stored
     if (input->equation == AdvDiff)
     {
       double An = 0.;
@@ -1692,6 +1748,19 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
       }
 
       waveSp(fpt) = An;
+    }
+    else if (input->equation == Burgers)
+    {
+      double AnL = 0;
+      double AnR = 0;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        AnL += WL[0] * norm(fpt, dim, 0);
+        AnR += WR[0] * norm(fpt, dim, 0);
+      }
+
+      waveSp(fpt) = std::max(std::abs(AnL), std::abs(AnR));
     }
     else if (input->equation == EulerNS)
     {

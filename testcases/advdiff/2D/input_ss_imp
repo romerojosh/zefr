@@ -17,15 +17,15 @@ low_order 0
 
 # Timestepping:
 n_steps 20
-dt_scheme BDF1      (Euler, RK44, RK54)
+dt_scheme BDF1      (Euler, RK44, RK54, BDF1)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  8.2347788257312899e+00
+dt	  1.0
 CFL	  0.001
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix ss_imp
-write_freq    5
+write_freq    1
 report_freq   1
 res_type      1
 force_freq    0

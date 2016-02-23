@@ -20,7 +20,7 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
    
   double val = 0.0;
 
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
     if (input->nDims == 2)
     {
@@ -130,6 +130,10 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
       ThrowException("Under construction!");
     }
   }
+  else if (input->equation == Burgers)
+  {
+    val = 0.0; // Just a placeholder value for now.
+  }
   else if (input->equation == EulerNS)
   {
     if (!input->viscous)
@@ -160,7 +164,7 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
 double compute_source_term(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
 {
   double val = 0.;
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
     if (input->nDims == 2)
     {

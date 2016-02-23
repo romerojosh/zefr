@@ -38,6 +38,40 @@ void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F,
         startFpt, endFpt);
 
 }
+
+template <unsigned int nDims>
+__global__
+void compute_Fconv_fpts_Burgers(mdvector_gpu<double> F, mdvector_gpu<double> U, 
+    unsigned int nFpts, unsigned int startFpt, unsigned int endFpt)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
+
+  if (fpt >= endFpt)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+      F(fpt, 0, dim, 0) = 0.5 * U(fpt, 0, 0) * U(fpt, 0, 0);
+
+      F(fpt, 0, dim, 1) = 0.5 * U(fpt, 0, 1) * U(fpt, 0, 1);
+  }
+
+}
+
+void compute_Fconv_fpts_Burgers_wrapper(mdvector_gpu<double> &F, 
+    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims, 
+    unsigned int startFpt, unsigned int endFpt)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
+
+  if (nDims == 2)
+    compute_Fconv_fpts_Burgers<2><<<blocks, threads>>>(F, U, nFpts, startFpt, endFpt);
+  else 
+    compute_Fconv_fpts_Burgers<3><<<blocks, threads>>>(F, U, nFpts, startFpt, endFpt);
+
+}
+
 __global__
 void compute_Fconv_fpts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, mdvector_gpu<double> P, 
     unsigned int nFpts, double gamma, unsigned int startFpt, unsigned int endFpt)
@@ -421,7 +455,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
   
     case 2: /* Farfield and Supersonic Inlet */
     {
-      if (equation == AdvDiff)
+      if (equation == AdvDiff || equation == Burgers)
       {
         /* Set boundaries to zero */
         U(fpt, 0, 1) = 0;
@@ -924,6 +958,15 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
         apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
             gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
     }
+    else if (equation == Burgers)
+    {
+      if (nDims == 2)
+        apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+      else
+        apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+    }
     else if (equation == EulerNS)
     {
       if (nDims == 2)
@@ -1240,6 +1283,23 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
     waveSp = std::abs(waveSp);
   }
+  else if (equation == Burgers) 
+  {
+    double AnL = 0;
+    double AnR = 0;
+
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      AnL += WL[0] * norm[dim];
+      AnR += WR[0] * norm[dim];
+    }
+
+    waveSp = max(std::abs(AnL), std::abs(AnR));
+
+    // NOTE: Can I just store absolute of waveSp?
+    waveSp_gfpts(fpt) = waveSp;
+    waveSp = std::abs(waveSp);
+  }
   else if (equation == EulerNS)
   {
     /* Compute speed of sound */
@@ -1294,6 +1354,15 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
           waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
     else
       rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+          waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
+  }
+  else if (equation == Burgers)
+  {
+    if (nDims == 2)
+      rusanov_flux<1, 2, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+          waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
+    else
+      rusanov_flux<1, 3, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
           waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
   }
   else if (equation == EulerNS)
@@ -1420,7 +1489,7 @@ void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc,
   unsigned int threads = 256;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
-  if (equation == AdvDiff)
+  if (equation == AdvDiff || equation == Burgers)
   {
     if (nDims == 2)
       LDG_flux<1, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 

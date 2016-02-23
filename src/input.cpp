@@ -22,6 +22,8 @@ InputStruct read_input_file(std::string inputfile)
 
   if (str == "AdvDiff")
     input.equation = AdvDiff;
+  else if (str == "Burgers")
+    input.equation = Burgers;
   else if (str == "EulerNS")
     input.equation = EulerNS;
   else

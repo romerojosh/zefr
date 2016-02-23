@@ -50,7 +50,7 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   nFpts = (nSpts1D * nSpts1D) * nFaces;
   nPpts = (nSpts1D + 2) * (nSpts1D + 2) * (nSpts1D + 2);
   
-  if (input->equation == AdvDiff)
+  if (input->equation == AdvDiff || input->equation == Burgers)
   {
     nVars = 1;
   }
