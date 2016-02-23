@@ -410,7 +410,7 @@ void Filter::setup_oppF(unsigned int level)
     for (unsigned int spt = 0; spt < eles->nSpts; spt++)
     {
       half(spt, spt) = 0.5;
-      half(spt, eles->nSpts + (spt % eles->nSpts1D) *eles->nSpts1D) = 0.5;
+      half(spt, eles->nSpts + (spt / eles->nSpts1D) + (spt % eles->nSpts1D) *eles->nSpts1D) = 0.5;
     }
       
     // Composition
