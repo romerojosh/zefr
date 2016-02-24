@@ -413,7 +413,7 @@ void Faces::apply_bcs()
 
           double Vsq = 0.0;
           for (unsigned int dim = 0; dim < nDims; dim++)
-            Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoL * rhoL) ;
+            Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoR * rhoR) ;
           
           U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq; 
         }
@@ -1242,8 +1242,6 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 {
   
-  double beta = input->ldg_b;
-
   /* Compute common solution */
   if (input->fvisc_type == "LDG")
   {
@@ -1251,6 +1249,8 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for 
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
+      double beta = input->ldg_b;
+
       /* Setting sign of beta (from HiFiLES) */
       beta = input->ldg_b;
       if (nDims == 2)
@@ -1466,9 +1466,10 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
   Fcomm_temp.fill(0.0);
 
-#pragma omp parallel for firstprivate(FL, FR, WL, WR, tau)
+#pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    double beta = input->ldg_b;
 
     /* Setting sign of beta (from HiFiLES) */
     double beta = input->ldg_b;
