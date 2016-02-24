@@ -37,12 +37,17 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "dt_type", input.dt_type);
   read_param(f, "dt", input.dt);
   read_param(f, "CFL", input.CFL);
+  read_param(f, "CFL_fv", input.CFL_fv, 0.0);
 
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
 
   read_param(f, "p_multi", input.p_multi, false);
   read_param(f, "hmg_levels", input.hmg_levels, (unsigned int) 0);
+  read_param(f, "coarse_mode", input.coarse_mode, (unsigned int) 0);
+  read_param(f, "nElesX", input.nElesX, (unsigned int) 0);
+  read_param(f, "nElesY", input.nElesY, (unsigned int) 0);
+  read_param(f, "coarse_mode", input.coarse_mode, (unsigned int) 0);
   read_param(f, "smooth_steps", input.smooth_steps, (unsigned int) 1);
   read_param(f, "p_smooth_steps", input.p_smooth_steps, (unsigned int) 1);
   read_param(f, "rel_fac", input.rel_fac, 1.0);

@@ -32,7 +32,7 @@ class FRSolver
 
     unsigned int nStages;
     mdvector<double> rk_alpha, rk_beta;
-    mdvector<double> dt;
+    mdvector<double> dt, dt_part;
     mdvector<double> U_ini, U_avg;
     mdvector<int> eparts;
     std::vector<std::vector<double>> vols;
@@ -58,7 +58,7 @@ class FRSolver
     void dU_to_faces();
     void F_from_faces();
 
-    void compute_element_dt();
+    void compute_element_dt(int level = 0);
 
   public:
     FRSolver(InputStruct *input, int order = -1, bool FV_mode = false);

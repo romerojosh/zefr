@@ -42,7 +42,6 @@ FRSolver::FRSolver(InputStruct *input, int order, bool FV_mode)
   this->FV_mode = FV_mode;
 }
 
-//void FRSolver::setup(bool FV_mode)
 void FRSolver::setup()
 {
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
@@ -129,6 +128,8 @@ void FRSolver::setup_update()
 
   U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
   dt.assign({eles->nEles},input->dt);
+  if (FV_mode)
+    dt_part.assign({eles->nEles},input->dt);
 
 }
 
@@ -271,16 +272,53 @@ void FRSolver::setup_h_levels()
     //int nPartitions = eles->nEles / (unsigned int) std::pow(2, H);
     vols[H].assign(nPartitions, 0);
 
-    int objval;
-    std::vector<int> npart(geo.nNodes);
-    int nNodesPerFace = geo.nNodesPerFace; // TODO: What should this be?
-    int nEles = geo.nEles;
-    int nNodes = geo.nNodes;
+    /* Coarsening using METIS (not too great) */
+    if (input->coarse_mode == 0)
+    {
+      int objval;
+      std::vector<int> npart(geo.nNodes);
+      int nNodesPerFace = geo.nNodesPerFace; // TODO: What should this be?
+      int nEles = geo.nEles;
+      int nNodes = geo.nNodes;
 
-    METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), nullptr, 
-        nullptr, &nNodesPerFace, &nPartitions, nullptr, options, &objval, &eparts(0,H), 
-        npart.data());  
+      METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), nullptr, 
+          nullptr, &nNodesPerFace, &nPartitions, nullptr, options, &objval, &eparts(0,H), 
+          npart.data());  
 
+
+    }
+    /* Coarsening using structured blocking (better, but specific) */
+    else if (input->coarse_mode == 1)
+    {
+      if (eles->nDims != 2)
+        ThrowException("Structured coarsening not supported in 3D yet!");
+      unsigned int nElesX = input->nElesX;
+      unsigned int nElesY = input->nElesY;
+      unsigned int nSegmentsX = nElesX / (1 << (H+1));
+      unsigned int nSegmentsY = nElesY / (1 << (H+1));
+      unsigned int segmentWidthX = nElesX / nSegmentsX;
+      unsigned int segmentWidthY = nElesY / nSegmentsY;
+      unsigned int part = 0;
+
+      for (unsigned int I = 0; I < nSegmentsX; I++)
+      {
+        for (unsigned int J = 0; J < nSegmentsY; J++)
+        {
+          for (unsigned int i = 0; i < segmentWidthX; i++)
+          {
+            for (unsigned int j = 0; j < segmentWidthY; j++)
+            {
+              eparts((I*segmentWidthX + i) * nElesY + (J*segmentWidthY +j), H) = part;
+            }
+          }
+          part++;
+        }
+      }
+    }
+    else
+    {
+      ThrowException("coarse_mode not recognized!");
+    }
 
     double sum = 0;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -1106,7 +1144,7 @@ void FRSolver::update_FV(int level)
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
       {
-        compute_element_dt();
+        compute_element_dt(level);
       }
     }
 
@@ -1120,11 +1158,11 @@ void FRSolver::update_FV(int level)
         {
           if (input->dt_type != 2)
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(0) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
           }
           else
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(part) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
           }
         }
       }
@@ -1161,11 +1199,11 @@ void FRSolver::update_FV(int level)
         {
           if (input->dt_type != 2)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
           }
           else
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
           }
         }
       }
@@ -1304,11 +1342,8 @@ void FRSolver::update_with_source_FV(mdvector<double> &source, int level)
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
       {
-        compute_element_dt();
+        compute_element_dt(level);
       }
-
-      //TEST:
-      //dt(0) = 2.0*(level + 1)*dt(0);
     }
 
     for (unsigned int n = 0; n < eles->nVars; n++)
@@ -1320,12 +1355,12 @@ void FRSolver::update_with_source_FV(mdvector<double> &source, int level)
         {
           if (input->dt_type != 2)
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) * (eles->divF_spts(spt, ele, n, stage)
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(0) * (eles->divF_spts(spt, ele, n, stage)
                 + source(spt, ele, n)) / vols[level][part];
           }
           else
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) * (eles->divF_spts(spt, ele, n, stage)
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(part) * (eles->divF_spts(spt, ele, n, stage)
                 + source(spt, ele, n)) / vols[level][part];
           }
         }
@@ -1348,12 +1383,12 @@ void FRSolver::update_with_source_FV(mdvector<double> &source, int level)
         {
           if (input->dt_type != 2)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) * (eles->divF_spts(spt, ele, n, stage)
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) * (eles->divF_spts(spt, ele, n, stage)
                 + source(spt, ele, n))  / vols[level][part];
           }
           else
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) * (eles->divF_spts(spt, ele, n, stage)
+            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) * (eles->divF_spts(spt, ele, n, stage)
                 + source(spt, ele, n))  / vols[level][part];
           }
         }
@@ -1365,10 +1400,13 @@ void FRSolver::update_with_source_FV(mdvector<double> &source, int level)
 
 }
 
-void FRSolver::compute_element_dt()
+void FRSolver::compute_element_dt(int level)
 {
 #ifdef _CPU
-#pragma omp parallel for
+  if (FV_mode)
+    dt_part.fill(100);
+
+//#pragma omp parallel for
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   { 
     double waveSp_max = 0.0;
@@ -1381,18 +1419,38 @@ void FRSolver::compute_element_dt()
       if (gfpt == -1)
         continue;
 
-      double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
+      double waveSp = faces->waveSp(gfpt);
+
+      //if (!FV_mode)
+        waveSp /= faces->dA(gfpt);
 
       waveSp_max = std::max(waveSp, waveSp_max);
     }
 
     /* Note: CFL is applied to parent space element with width 2 */
-    dt(ele) = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
+   // if (!FV_mode)
+      dt(ele) = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
+    //else
+   //   dt(ele) = (input->CFL_fv) * (vols[level][eparts(ele,level)]) / (waveSp_max+1.e-10);
+
+    if (FV_mode)
+      dt_part(eparts(ele,level)) = std::min(dt_part(eparts(ele, level)), dt(ele));
   }
+
 
   if (input->dt_type == 1) /* Global minimum */
   {
-    dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
+    if (!FV_mode)
+    {
+      dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
+      //std::cout << eles->order << " " << dt(0) << std::endl;
+    }
+    if (FV_mode)
+    {
+      dt_part(0) = *std::min_element(dt_part.data(), dt_part.data() + vols[level].size());
+      //std::cout << level << " " << dt_part(0) << std::endl;
+    }
+
 
 #ifdef _MPI
     MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
