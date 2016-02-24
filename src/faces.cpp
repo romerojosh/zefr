@@ -1245,7 +1245,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, beta, nFpts, nVars, nDims, LDG_bias_d, 
+    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, input->ldg_b, nFpts, nVars, nDims, LDG_bias_d, 
         startFpt, endFpt);
 
     check_error();
