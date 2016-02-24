@@ -53,6 +53,8 @@ void spmatrix_gpu<T>::free_data()
     free_device_data(vals);
     free_device_data(col_idx);
     free_device_data(row_ptr);
+
+    allocated = false;
   }
 }
 

@@ -569,6 +569,7 @@ void FRSolver::compute_LHS()
 
   /* Copy to GPU */
 #ifdef _GPU
+  A_d.free_data();
   A_d = eles->A;
 #endif
 }
@@ -603,8 +604,8 @@ void FRSolver::initialize_U()
 
     eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
     eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
-    eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-    eles->dFndUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, 2});
+    eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
+    eles->dFndUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
     if(input->viscous)
     {
@@ -619,6 +620,7 @@ void FRSolver::initialize_U()
       eles->beta_Ucomm_fpts.assign({eles->nFpts, eles->nEles, 2});
       eles->taun_fpts.assign({eles->nFpts, eles->nEles, 2});
     }
+
     eles->B.assign({eles->nSpts, eles->nSpts, nMat});
     b.assign({eles->nSpts, eles->nEles, eles->nVars});
   }
@@ -849,25 +851,28 @@ void FRSolver::F_from_faces()
 void FRSolver::dFndU_from_faces()
 {
 #pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < eles->nVars; n++) 
+  for (unsigned int nj = 0; nj < eles->nVars; nj++) 
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ni = 0; ni < eles->nVars; ni++) 
     {
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        int gfpt = geo.fpt2gfpt(fpt,ele);
-        /* Check if flux point is on ghost edge */
-        if (gfpt == -1)
-          continue;
-        int slot = geo.fpt2gfpt_slot(fpt,ele);
-        int notslot = 1;
-        if (slot == 1)
+        for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
-          notslot = 0;
-        }
+          int gfpt = geo.fpt2gfpt(fpt,ele);
+          /* Check if flux point is on ghost edge */
+          if (gfpt == -1)
+            continue;
+          int slot = geo.fpt2gfpt_slot(fpt,ele);
+          int notslot = 1;
+          if (slot == 1)
+          {
+            notslot = 0;
+          }
 
-        eles->dFndUconv_fpts(fpt, ele, n, 0) = faces->dFndUconv(gfpt, n, slot, slot);
-        eles->dFndUconv_fpts(fpt, ele, n, 1) = faces->dFndUconv(gfpt, n, notslot, slot);
+          eles->dFndUconv_fpts(fpt, ele, ni, nj, 0) = faces->dFndUconv(gfpt, ni, nj, slot, slot);
+          eles->dFndUconv_fpts(fpt, ele, ni, nj, 1) = faces->dFndUconv(gfpt, ni, nj, notslot, slot);
+        }
       }
     }
   }

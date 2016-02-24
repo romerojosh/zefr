@@ -35,8 +35,11 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "BDF1")
   {
-    dFdUconv.assign({nFpts, nVars, nDims, 2});
-    dFndUconv.assign({nFpts, nVars, 2, 2});
+    dFdUconv.assign({nFpts, nVars, nVars, nDims, 2});
+    dFndUconv.assign({nFpts, nVars, nVars, 2, 2});
+
+    dFndUL_temp.assign({nFpts, nVars, nVars});
+    dFndUR_temp.assign({nFpts, nVars, nVars});
 
     if(input->viscous)
     {
@@ -1582,15 +1585,18 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(4)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          dFdUconv(fpt, n, dim, 0) = input->AdvDiff_A(dim);
-          dFdUconv(fpt, n, dim, 1) = input->AdvDiff_A(dim);
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFdUconv(fpt, ni, nj, dim, 0) = input->AdvDiff_A(dim);
+            dFdUconv(fpt, ni, nj, dim, 1) = input->AdvDiff_A(dim);
+          }
         }
       }
     }
@@ -1598,15 +1604,18 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 
   else if (input->equation == Burgers)
   {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(4)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          dFdUconv(fpt, n, dim, 0) = U(fpt, n, 0);
-          dFdUconv(fpt, n, dim, 1) = U(fpt, n, 1);
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFdUconv(fpt, ni, nj, dim, 0) = U(fpt, 0, 0);
+            dFdUconv(fpt, ni, nj, dim, 1) = U(fpt, 0, 1);
+          }
         }
       }
     }
@@ -1614,7 +1623,68 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 
   else if (input->equation == EulerNS)
   {
-    ThrowException("compute_dFdUconv for EulerNS not implemented yet!");
+    if (nDims == 2)
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+      {
+        for (unsigned int slot = 0; slot < 2; slot++)
+        {
+          /* Primitive Variables */
+          double rho = U(fpt, 0, slot);
+          double u = U(fpt, 1, slot) / U(fpt, 0, slot);
+          double v = U(fpt, 2, slot) / U(fpt, 0, slot);
+          double e = U(fpt, 3, slot);
+          double gam = input->gamma;
+
+          /* Set convective dFdU values in the x-direction */
+          dFdUconv(fpt, 0, 0, 0, slot) = 0;
+          dFdUconv(fpt, 0, 1, 0, slot) = 1;
+          dFdUconv(fpt, 0, 2, 0, slot) = 0;
+          dFdUconv(fpt, 0, 3, 0, slot) = 0;
+
+          dFdUconv(fpt, 1, 0, 0, slot) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * v*v);
+          dFdUconv(fpt, 1, 1, 0, slot) = (3.0-gam) * u;
+          dFdUconv(fpt, 1, 2, 0, slot) = (1.0-gam) * v;
+          dFdUconv(fpt, 1, 3, 0, slot) = (gam-1.0);
+
+          dFdUconv(fpt, 2, 0, 0, slot) = -u * v;
+          dFdUconv(fpt, 2, 1, 0, slot) = v;
+          dFdUconv(fpt, 2, 2, 0, slot) = u;
+          dFdUconv(fpt, 2, 3, 0, slot) = 0;
+
+          dFdUconv(fpt, 3, 0, 0, slot) = -gam * e * u / rho + (gam-1.0) * u * (u*u + v*v);
+          dFdUconv(fpt, 3, 1, 0, slot) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
+          dFdUconv(fpt, 3, 2, 0, slot) = (1.0-gam) * u * v;
+          dFdUconv(fpt, 3, 3, 0, slot) = gam * u;
+
+          /* Set convective dFdU values in the y-direction */
+          dFdUconv(fpt, 0, 0, 1, slot) = 0;
+          dFdUconv(fpt, 0, 1, 1, slot) = 0;
+          dFdUconv(fpt, 0, 2, 1, slot) = 1;
+          dFdUconv(fpt, 0, 3, 1, slot) = 0;
+
+          dFdUconv(fpt, 1, 0, 1, slot) = -u * v;
+          dFdUconv(fpt, 1, 1, 1, slot) = v;
+          dFdUconv(fpt, 1, 2, 1, slot) = u;
+          dFdUconv(fpt, 1, 3, 1, slot) = 0;
+
+          dFdUconv(fpt, 2, 0, 1, slot) = 0.5 * ((gam-1.0) * u*u + (gam-3.0) * v*v);
+          dFdUconv(fpt, 2, 1, 1, slot) = (1.0-gam) * u;
+          dFdUconv(fpt, 2, 2, 1, slot) = (3.0-gam) * v;
+          dFdUconv(fpt, 2, 3, 1, slot) = (gam-1.0);
+
+          dFdUconv(fpt, 3, 0, 1, slot) = -gam * e * v / rho + (gam-1.0) * v * (u*u + v*v);
+          dFdUconv(fpt, 3, 1, 1, slot) = (1.0-gam) * u * v;
+          dFdUconv(fpt, 3, 2, 1, slot) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
+          dFdUconv(fpt, 3, 3, 1, slot) = gam * v;
+        }
+      }
+    }
+    else if (nDims == 3)
+    {
+      ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
+    }
   }
 }
 
@@ -1695,37 +1765,40 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
 
   double k = input->rus_k;
 
-  std::vector<double> dFndUL(nVars);
-  std::vector<double> dFndUR(nVars);
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
 
-#pragma omp parallel for firstprivate(dFndUL, dFndUR, WL, WR)
+  dFndUL_temp.fill(0.0);
+  dFndUR_temp.fill(0.0);
+
+#pragma omp parallel for firstprivate(WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    /* Initialize dFndUL, dFndUR */
-    std::fill(dFndUL.begin(), dFndUL.end(), 0.0);
-    std::fill(dFndUR.begin(), dFndUR.end(), 0.0);
-
     /* Get interface-normal dFdU components  (from L to R)*/
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int nj = 0; nj < nVars; nj++)
       {
-        dFndUL[n] += dFdUconv(fpt, n, dim, 0) * norm(fpt, dim, 0);
-        dFndUR[n] += dFdUconv(fpt, n, dim, 1) * norm(fpt, dim, 0);
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFndUL_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 0) * norm(fpt, dim, 0);
+          dFndUR_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
+        }
       }
     }
 
     if (LDG_bias(fpt) != 0)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int nj = 0; nj < nVars; nj++)
       {
-        dFndUconv(fpt, n, 0, 0) = 0;
-        dFndUconv(fpt, n, 1, 0) = dFndUR[n] * outnorm(fpt, 0);
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFndUconv(fpt, ni, nj, 0, 0) = 0;
+          dFndUconv(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
 
-        dFndUconv(fpt, n, 0, 1) = 0;
-        dFndUconv(fpt, n, 1, 1) = dFndUR[n] * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 0, 1) = 0;
+          dFndUconv(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+        }
       }
       continue;
     }
@@ -1780,13 +1853,16 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
     }
 
     /* Compute normal dFdU */
-    for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int nj = 0; nj < nVars; nj++)
     {
-      dFndUconv(fpt, n, 0, 0) = 0.5 * (dFndUL[n] + std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
-      dFndUconv(fpt, n, 1, 0) = 0.5 * (dFndUR[n] - std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+      for (unsigned int ni = 0; ni < nVars; ni++)
+      {
+        dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+        dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
 
-      dFndUconv(fpt, n, 0, 1) = 0.5 * (dFndUL[n] + std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
-      dFndUconv(fpt, n, 1, 1) = 0.5 * (dFndUR[n] - std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+        dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+        dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+      }
     }
   }
 }
@@ -1932,12 +2008,15 @@ void Faces::transform_dFndU()
 #pragma omp parallel for collapse(2)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
-    for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int nj = 0; nj < nVars; nj++)
     {
-      dFndUconv(fpt, n, 0, 0) *= dA(fpt);
-      dFndUconv(fpt, n, 1, 0) *= dA(fpt);
-      dFndUconv(fpt, n, 0, 1) *= dA(fpt);
-      dFndUconv(fpt, n, 1, 1) *= dA(fpt);
+      for (unsigned int ni = 0; ni < nVars; ni++)
+      {
+        dFndUconv(fpt, ni, nj, 0, 0) *= dA(fpt);
+        dFndUconv(fpt, ni, nj, 1, 0) *= dA(fpt);
+        dFndUconv(fpt, ni, nj, 0, 1) *= dA(fpt);
+        dFndUconv(fpt, ni, nj, 1, 1) *= dA(fpt);
+      }
     }
   }
 
