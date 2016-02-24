@@ -84,6 +84,8 @@ void mdvector_gpu<T>::free_data()
     free_device_data(values);
     free_device_data(dims);
     free_device_data(strides);
+
+    allocated = false;
   }
 }
 
