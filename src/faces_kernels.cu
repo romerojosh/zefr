@@ -715,7 +715,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
         double Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
-          Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoL * rhoL) ;
+          Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoR * rhoR) ;
         
         U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * rhoR * Vsq; 
       }
