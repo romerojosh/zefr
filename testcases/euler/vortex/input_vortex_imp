@@ -9,17 +9,17 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 10
 dt_scheme BDF1      (Euler, RK44, RK54, BDF1)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.01
+dt	  0.5
 CFL	  0.05
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix vortex_imp
-write_freq    10
-report_freq   10
+write_freq    1
+report_freq   1
 res_type      1
 force_freq    0
 error_freq    0

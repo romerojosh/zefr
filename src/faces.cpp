@@ -1252,7 +1252,6 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
       double beta = input->ldg_b;
 
       /* Setting sign of beta (from HiFiLES) */
-      beta = input->ldg_b;
       if (nDims == 2)
       {
         if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
@@ -1472,7 +1471,6 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     double beta = input->ldg_b;
 
     /* Setting sign of beta (from HiFiLES) */
-    double beta = input->ldg_b;
     if (nDims == 2)
     {
       if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
@@ -1838,6 +1836,20 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
     }
     else if (input->equation == EulerNS)
     {
+      // TODO: May be able to remove once pressure is stored
+      for (unsigned int slot = 0; slot < 2; slot ++)
+      {
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim ++)
+        {
+          momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
+        }
+
+        momF /= U(fpt, 0, slot);
+
+        P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, 3, slot) - 0.5 * momF);
+      }
+
       /* Compute speed of sound */
       double aL = std::sqrt(std::abs(input->gamma * P(fpt, 0) / WL[0]));
       double aR = std::sqrt(std::abs(input->gamma * P(fpt, 1) / WR[0]));
@@ -1858,11 +1870,22 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int ni = 0; ni < nVars; ni++)
       {
-        dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
-        dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+        if (ni == nj)
+        {
+          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
 
-        dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
-        dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+        }
+        else
+        {
+          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * dFndUL_temp(fpt, ni, nj) * outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
+
+          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * dFndUL_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+        }
       }
     }
   }
