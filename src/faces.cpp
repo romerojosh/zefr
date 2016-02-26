@@ -63,6 +63,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   //{
     Fcomm_temp.assign({nFpts, nVars, nDims});
     LDG_bias.assign({nFpts}, 0);
+    bc_bias.assign({nFpts}, 0);
   //}
 
   Ucomm.assign({nFpts, nVars, 2});
@@ -148,6 +149,7 @@ void Faces::apply_bcs()
         /* Set LDG bias */
         //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
+        bc_bias(fpt) = 1;
 
         break;
       }
@@ -450,6 +452,7 @@ void Faces::apply_bcs()
         /* Set LDG bias */
         //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
+        bc_bias(fpt) = 1;
 
         break;
       }
@@ -600,7 +603,7 @@ void Faces::apply_bcs()
 #ifdef _GPU
   apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
       input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
-      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation);
+      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, bc_bias_d, input->equation);
 
   check_error();
 
@@ -879,6 +882,7 @@ void Faces::apply_bcs_dFdU()
         dFdUconv(fpt, 3, 2, 1, 1) = 0;
         dFdUconv(fpt, 3, 3, 1, 1) = 0;
 
+        bc_bias(fpt) = 1;
         break;
       }
       case 8: /* Slip Wall */
@@ -938,6 +942,7 @@ void Faces::apply_bcs_dFdU()
         dFdUconv(fpt, 3, 2, 1, 1) = 0;
         dFdUconv(fpt, 3, 3, 1, 1) = gam * v;
 
+        bc_bias(fpt) = 1;
         break;
       }
     }
@@ -1319,7 +1324,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, 
+    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, bc_bias_d, 
         input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1455,9 +1460,6 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 {
-
-  double k = input->rus_k;
-
   std::vector<double> FL(nVars);
   std::vector<double> FR(nVars);
   std::vector<double> WL(nVars);
@@ -1466,6 +1468,13 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    /* Apply central flux at boundaries */
+    double k = input->rus_k;
+    if (bc_bias(fpt))
+    {
+      k = 1.0;
+    }
+
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
     std::fill(FR.begin(), FR.end(), 0.0);
@@ -1883,9 +1892,6 @@ void Faces::compute_dFndU(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
 {
-
-  double k = input->rus_k;
-
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
 
@@ -1895,6 +1901,13 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    /* Apply central flux at boundaries */
+    double k = input->rus_k;
+    if (bc_bias(fpt))
+    {
+      k = 1.0;
+    }
+
     /* Get interface-normal dFdU components  (from L to R)*/
     for (unsigned int dim = 0; dim < nDims; dim++)
     {

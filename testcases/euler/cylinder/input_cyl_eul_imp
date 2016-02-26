@@ -9,7 +9,7 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 100
+n_steps 1000
 dt_scheme BDF1      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.1
@@ -27,10 +27,10 @@ restart_file cyl_eul/cyl_eul_000001000.vtu
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix cyl_eul_imp
-write_freq    1
-report_freq   1
+write_freq    10
+report_freq   10
 res_type      1
-force_freq    1
+force_freq    10
 error_freq    0
 nQpts1D       10
 

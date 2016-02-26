@@ -420,6 +420,7 @@ void FRSolver::solver_data_to_device()
   faces->dA_d = faces->dA;
   faces->waveSp_d = faces->waveSp;
   faces->LDG_bias_d = faces->LDG_bias;
+  faces->bc_bias_d = faces->bc_bias;
 
   /* Additional data */
   /* Geometry */
