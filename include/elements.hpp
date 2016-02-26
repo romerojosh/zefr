@@ -79,10 +79,10 @@ class Elements
     virtual void set_locs() = 0;
     virtual void set_transforms(std::shared_ptr<Faces> faces) = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
-    virtual double calc_shape(unsigned int shape_order, unsigned int idx,
+    virtual mdvector<double> calc_shape(unsigned int shape_order,
                             std::vector<double> &loc) = 0;
-    virtual double calc_d_shape(unsigned int shape_order, unsigned int idx,
-                            std::vector<double> &loc, unsigned int dim) = 0;
+    virtual mdvector<double> calc_d_shape(unsigned int shape_order,
+                            std::vector<double> &loc) = 0;
 
     virtual double calc_nodal_basis(unsigned int spt, std::vector<double> &loc) = 0;
     virtual double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
