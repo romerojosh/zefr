@@ -823,6 +823,128 @@ void Faces::apply_bcs_dU()
 }
 
 
+void Faces::apply_bcs_dFdU()
+{
+  /* Loop over boundary flux points */
+#pragma omp parallel for
+  for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
+  {
+    unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
+
+    /* Apply specified boundary condition */
+    // HACK: Needs to be changed to be more general
+    switch(bnd_id)
+    {
+      case 2: /* Farfield and Supersonic Inlet */
+      {
+        /* Set convective dFdU values in the x-direction */
+        dFdUconv(fpt, 0, 0, 0, 1) = 0;
+        dFdUconv(fpt, 0, 1, 0, 1) = 0;
+        dFdUconv(fpt, 0, 2, 0, 1) = 0;
+        dFdUconv(fpt, 0, 3, 0, 1) = 0;
+
+        dFdUconv(fpt, 1, 0, 0, 1) = 0;
+        dFdUconv(fpt, 1, 1, 0, 1) = 0;
+        dFdUconv(fpt, 1, 2, 0, 1) = 0;
+        dFdUconv(fpt, 1, 3, 0, 1) = 0;
+
+        dFdUconv(fpt, 2, 0, 0, 1) = 0;
+        dFdUconv(fpt, 2, 1, 0, 1) = 0;
+        dFdUconv(fpt, 2, 2, 0, 1) = 0;
+        dFdUconv(fpt, 2, 3, 0, 1) = 0;
+
+        dFdUconv(fpt, 3, 0, 0, 1) = 0;
+        dFdUconv(fpt, 3, 1, 0, 1) = 0;
+        dFdUconv(fpt, 3, 2, 0, 1) = 0;
+        dFdUconv(fpt, 3, 3, 0, 1) = 0;
+
+        /* Set convective dFdU values in the y-direction */
+        dFdUconv(fpt, 0, 0, 1, 1) = 0;
+        dFdUconv(fpt, 0, 1, 1, 1) = 0;
+        dFdUconv(fpt, 0, 2, 1, 1) = 0;
+        dFdUconv(fpt, 0, 3, 1, 1) = 0;
+
+        dFdUconv(fpt, 1, 0, 1, 1) = 0;
+        dFdUconv(fpt, 1, 1, 1, 1) = 0;
+        dFdUconv(fpt, 1, 2, 1, 1) = 0;
+        dFdUconv(fpt, 1, 3, 1, 1) = 0;
+
+        dFdUconv(fpt, 2, 0, 1, 1) = 0;
+        dFdUconv(fpt, 2, 1, 1, 1) = 0;
+        dFdUconv(fpt, 2, 2, 1, 1) = 0;
+        dFdUconv(fpt, 2, 3, 1, 1) = 0;
+
+        dFdUconv(fpt, 3, 0, 1, 1) = 0;
+        dFdUconv(fpt, 3, 1, 1, 1) = 0;
+        dFdUconv(fpt, 3, 2, 1, 1) = 0;
+        dFdUconv(fpt, 3, 3, 1, 1) = 0;
+
+        break;
+      }
+      case 8: /* Slip Wall */
+      {
+        /* Compute wall normal momentum */
+        double momN = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+
+        /* Primitive variables at the wall */
+        double u = (U(fpt, 1, 0) - 2.0 * momN * norm(fpt, 0, 0)) / U(fpt, 0, 0);
+        double v = (U(fpt, 2, 0) - 2.0 * momN * norm(fpt, 1, 0)) / U(fpt, 0, 0);
+
+        double gam = input->gamma;
+        double nx = norm(fpt, 0, 0);
+        double ny = norm(fpt, 1, 0);
+
+        /* Set convective dFdU values in the x-direction */
+        dFdUconv(fpt, 0, 0, 0, 1) = 0;
+        dFdUconv(fpt, 0, 1, 0, 1) = 0;
+        dFdUconv(fpt, 0, 2, 0, 1) = 0;
+        dFdUconv(fpt, 0, 3, 0, 1) = 0;
+
+        dFdUconv(fpt, 1, 0, 0, 1) = 0;
+        dFdUconv(fpt, 1, 1, 0, 1) = (1.0-2.0*nx*nx) * (3.0-gam) * u;
+        dFdUconv(fpt, 1, 2, 0, 1) = -2.0 * nx * ny * (1.0-gam) * v;
+        dFdUconv(fpt, 1, 3, 0, 1) = 0;
+
+        dFdUconv(fpt, 2, 0, 0, 1) = 0;
+        dFdUconv(fpt, 2, 1, 0, 1) = -2.0 * nx * ny * v;
+        dFdUconv(fpt, 2, 2, 0, 1) = (1.0-2.0*ny*ny) * u;
+        dFdUconv(fpt, 2, 3, 0, 1) = 0;
+
+        dFdUconv(fpt, 3, 0, 0, 1) = 0;
+        dFdUconv(fpt, 3, 1, 0, 1) = 0;
+        dFdUconv(fpt, 3, 2, 0, 1) = 0;
+        dFdUconv(fpt, 3, 3, 0, 1) = gam * u;
+
+        /* Set convective dFdU values in the y-direction */
+        dFdUconv(fpt, 0, 0, 1, 1) = 0;
+        dFdUconv(fpt, 0, 1, 1, 1) = 0;
+        dFdUconv(fpt, 0, 2, 1, 1) = 0;
+        dFdUconv(fpt, 0, 3, 1, 1) = 0;
+
+        dFdUconv(fpt, 1, 0, 1, 1) = 0;
+        dFdUconv(fpt, 1, 1, 1, 1) = (1.0-2.0*nx*nx) * v;
+        dFdUconv(fpt, 1, 2, 1, 1) = -2.0 * nx * ny * u;
+        dFdUconv(fpt, 1, 3, 1, 1) = 0;
+
+        dFdUconv(fpt, 2, 0, 1, 1) = 0;
+        dFdUconv(fpt, 2, 1, 1, 1) = -2.0 * nx * ny * (1.0-gam) * u;
+        dFdUconv(fpt, 2, 2, 1, 1) = (1.0-2.0*ny*ny) * (3.0-gam) * v;
+        dFdUconv(fpt, 2, 3, 1, 1) = 0;
+
+        dFdUconv(fpt, 3, 0, 1, 1) = 0;
+        dFdUconv(fpt, 3, 1, 1, 1) = 0;
+        dFdUconv(fpt, 3, 2, 1, 1) = 0;
+        dFdUconv(fpt, 3, 3, 1, 1) = gam * v;
+
+        break;
+      }
+    }
+  }
+}
+
+
 void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
@@ -1810,6 +1932,7 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
 
     /* Get numerical wavespeed */
     // TODO: May be able to remove once waveSp is stored
+    std::vector<double> dwSdU(nVars);
     if (input->equation == AdvDiff)
     {
       double An = 0.;
@@ -1862,7 +1985,32 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
         VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      /* Compute wavespeed */
+      double gam = input->gamma;
+      double wSL = std::abs(VnL) + aL;
+      double wSR = std::abs(VnR) + aR;
+      if (wSL > wSR)
+      {
+        double rho = WL[0];
+        double u = WL[1]/WL[0];
+        double v = WL[2]/WL[0];
+        waveSp(fpt) = wSL;
+        dwSdU[0] = -VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
+        dwSdU[1] = norm(fpt, 0, 0)/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
+        dwSdU[2] = norm(fpt, 1, 0)/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
+        dwSdU[3] = gam * (gam-1.0) / (2.0*aL*rho);
+      }
+      else
+      {
+        double rho = WR[0];
+        double u = WR[1]/WR[0];
+        double v = WR[2]/WR[0];
+        waveSp(fpt) = wSR;
+        dwSdU[0] = -VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
+        dwSdU[1] = norm(fpt, 0, 0)/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
+        dwSdU[2] = norm(fpt, 1, 0)/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
+        dwSdU[3] = gam * (gam-1.0) / (2.0*aR*rho);
+      }
     }
 
     /* Compute normal dFdU */
@@ -1872,11 +2020,11 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
       {
         if (ni == nj)
         {
-          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
-          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (std::abs(dwSdU[ni]*WL[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (std::abs(dwSdU[ni]*WR[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
 
-          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
-          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - std::abs(waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (std::abs(dwSdU[ni]*WL[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (std::abs(dwSdU[ni]*WR[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
         }
         else
         {

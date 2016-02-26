@@ -1058,32 +1058,64 @@ void Elements::compute_LHS()
         {
           /* Neighbor element and face */
           // TODO: Include boundary condition case
-          unsigned int eleN = geo->ele_adj(face, ele);
-          unsigned int faceN = 0;
-          while (geo->ele_adj(faceN, eleN) != (int)ele)
-            faceN++;
-
-          CtempFSN.fill(0);
-          for (unsigned int j = 0; j < nSpts; j++)
+          int eleN = geo->ele_adj(face, ele);
+          if (eleN == -1)
           {
-            for (unsigned int i = 0; i < nSpts1D; i++)
-            {
-              unsigned int ind = face * nSpts1D + i;
-              unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-              CtempFSN(i, j) = dFndUconv_fpts(ind, ele, ni, nj, 1) * oppE(indN, j);
-            }
-          }
-
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          {
+            /* Neighbor is on the Boundary */
+            CtempFSN.fill(0);
             for (unsigned int j = 0; j < nSpts; j++)
             {
-              for (unsigned int i = 0; i < nSpts; i++)
+              for (unsigned int i = 0; i < nSpts1D; i++)
               {
-                for (unsigned int k = 0; k < nSpts1D; k++)
+                unsigned int ind = face * nSpts1D + i;
+                CtempFSN(i, j) = dFndUconv_fpts(ind, ele, ni, nj, 1) * oppE(ind, j);
+              }
+            }
+
+            for (unsigned int dim = 0; dim < nDims; dim++)
+            {
+              for (unsigned int j = 0; j < nSpts; j++)
+              {
+                for (unsigned int i = 0; i < nSpts; i++)
                 {
-                  unsigned int ind = face * nSpts1D + k;
-                  B(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                  for (unsigned int k = 0; k < nSpts1D; k++)
+                  {
+                    unsigned int ind = face * nSpts1D + k;
+                    B(i, j, 0) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                  }
+                }
+              }
+            }
+          }
+          else
+          {
+            /* Neighbor is interior element */
+            unsigned int faceN = 0;
+            while (geo->ele_adj(faceN, eleN) != (int)ele)
+              faceN++;
+
+            CtempFSN.fill(0);
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nSpts1D; i++)
+              {
+                unsigned int ind = face * nSpts1D + i;
+                unsigned int indN = (faceN+1) * nSpts1D - (i+1);
+                CtempFSN(i, j) = dFndUconv_fpts(ind, ele, ni, nj, 1) * oppE(indN, j);
+              }
+            }
+
+            for (unsigned int dim = 0; dim < nDims; dim++)
+            {
+              for (unsigned int j = 0; j < nSpts; j++)
+              {
+                for (unsigned int i = 0; i < nSpts; i++)
+                {
+                  for (unsigned int k = 0; k < nSpts1D; k++)
+                  {
+                    unsigned int ind = face * nSpts1D + k;
+                    B(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                  }
                 }
               }
             }
@@ -1710,22 +1742,25 @@ void Elements::compute_LHS()
         for (unsigned int mat = 1; mat < ele_list.size(); mat++)
         {
           // TODO: Include boundary condition case
-          unsigned int eleN = ele_list[mat];
-          for (unsigned int j = 0; j < nSpts; j++)
+          int eleN = ele_list[mat];
+          if (eleN != -1)
           {
-            for (unsigned int i = 0; i < nSpts; i++)
+            for (unsigned int j = 0; j < nSpts; j++)
             {
-              /* Determine index */
-              int Ai = ni*nEles*nSpts + ele*nSpts + i;
-              int Aj = nj*nEles*nSpts + eleN*nSpts + j;
-
-              /* Compute val and fill */
-              double Aval = input->dt*B(i, j, mat)/jaco_det_spts(i, ele);
-
-              /* Fill Jacobian */
-              if (Aval != 0)
+              for (unsigned int i = 0; i < nSpts; i++)
               {
-                A.addEntry(Ai, Aj, Aval);
+                /* Determine index */
+                int Ai = ni*nEles*nSpts + ele*nSpts + i;
+                int Aj = nj*nEles*nSpts + eleN*nSpts + j;
+
+                /* Compute val and fill */
+                double Aval = input->dt*B(i, j, mat)/jaco_det_spts(i, ele);
+
+                /* Fill Jacobian */
+                if (Aval != 0)
+                {
+                  A.addEntry(Ai, Aj, Aval);
+                }
               }
             }
           }

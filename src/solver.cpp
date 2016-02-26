@@ -554,6 +554,9 @@ void FRSolver::compute_LHS()
     faces->compute_dFddUvisc(0, geo.nGfpts);
   }
 
+  /* Apply boundary conditions for flux derivative data */
+  faces->apply_bcs_dFdU();
+
   /* Compute normal flux derivative data at flux points */
   faces->compute_dFndU(0, geo.nGfpts);
 

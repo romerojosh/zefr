@@ -1,27 +1,36 @@
 # Geometry:
 nDims    2
-meshfile QuadBox_32x32_eul.msh
+meshfile full_cyl_quad.msh
 
 # Solver:
 order     3
-equation EulerNS    (AdvDiff, EulerNS)
+equation EulerNS    (AdvDiff, Burgers, EulerNS)
 viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 10
-dt_scheme BDF1      (Euler, RK44, RK54, BDF1)
+n_steps 100
+dt_scheme BDF1      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  1.0
-CFL	  0.05
+dt	  0.1
+CFL	  0.5
+
+# Multigrid:
+p_multi 0
+smooth_steps 0
+rel_fac 1.00
+low_order 0
+
+restart 1
+restart_file cyl_eul/cyl_eul_000001000.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix vortex_imp
+output_prefix cyl_eul_imp
 write_freq    1
 report_freq   1
 res_type      1
-force_freq    0
+force_freq    1
 error_freq    0
 nQpts1D       10
 
@@ -33,7 +42,7 @@ ldg_b      0.0
 ldg_tau    1.0
 
 # Equation Specific Parameters:
-ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 
 # Euler/Navier-Stokes
 T_gas 291.15
@@ -45,7 +54,8 @@ S       120
 
 # Euler specific
 rho_fs 1
-u_fs 0.35
+u_fs 0.38
 v_fs 0.0
 w_fs 0.0
 P_fs .71428571428
+

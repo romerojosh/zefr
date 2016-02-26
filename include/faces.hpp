@@ -40,6 +40,7 @@ class Faces
     void transform_flux();
 
     /* Routines for implicit method */
+    void apply_bcs_dFdU();
     void rusanov_dFndU(unsigned int startFpt, unsigned int endFpt);
     void LDG_dFndU(unsigned int startFpt, unsigned int endFpt);
     void transform_dFndU();
