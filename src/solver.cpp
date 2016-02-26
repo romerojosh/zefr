@@ -13,6 +13,8 @@
 #include "funcs.hpp"
 #include "geometry.hpp"
 #include "hexas.hpp"
+#include "points.hpp"
+#include "polynomials.hpp"
 #include "quads.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
@@ -245,8 +247,8 @@ void FRSolver::restart(std::string restart_file)
 
   std::string param, line;
   double val;
-  unsigned int nPpts1D = eles->nSpts1D + 2;
-  unsigned int nPpts2D = nPpts1D * nPpts1D;
+  unsigned int order_restart;
+  mdvector<double> U_restart, oppRestart;
 
   /* Load data from restart file */
   while (f >> param)
@@ -259,9 +261,55 @@ void FRSolver::restart(std::string restart_file)
     {
       f >> current_iter;
     }
+    if (param == "ORDER")
+    {
+      f >> order_restart;
+    }
 
     if (param == "<PointData>")
     {
+
+      unsigned int nSpts1D_restart = order_restart + 1;
+      unsigned int nSpts2D_restart = nSpts1D_restart * nSpts1D_restart;
+      unsigned int nPpts1D = nSpts1D_restart + 2;
+      unsigned int nPpts2D = nPpts1D * nPpts1D;
+
+      unsigned int nSpts_restart = (unsigned int) std::pow(nSpts1D_restart, input->nDims);
+      unsigned int nPpts = (unsigned int) std::pow(nPpts1D, input->nDims);
+
+      U_restart.assign({nSpts_restart, eles->nEles, eles->nVars});
+
+      /* Setup extrapolation operator from restart points */
+      oppRestart.assign({eles->nSpts, nSpts_restart});
+      auto loc_spts_restart_1D = Gauss_Legendre_pts(order_restart + 1); 
+
+      std::vector<double> loc(input->nDims);
+      for (unsigned int rpt = 0; rpt < nSpts_restart; rpt++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          for (unsigned int dim = 0; dim < input->nDims; dim++)
+            loc[dim] = eles->loc_spts(spt , dim);
+
+          if (input->nDims == 2)
+          {
+            int i = rpt % nSpts1D_restart;
+            int j = rpt / nSpts1D_restart;
+            oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) * 
+                                  Lagrange(loc_spts_restart_1D, j, loc[1]);
+          }
+          else
+          {
+            int i = rpt % nSpts1D_restart;
+            int j = (rpt / nSpts1D_restart) % nSpts1D_restart;
+            int k = rpt / nSpts2D_restart;
+            oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) * 
+                                  Lagrange(loc_spts_restart_1D, j, loc[1]) *
+                                  Lagrange(loc_spts_restart_1D, k, loc[2]);
+          }
+        }
+      }
+
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
         std::getline(f,line);
@@ -270,7 +318,7 @@ void FRSolver::restart(std::string restart_file)
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
           unsigned int spt = 0;
-          for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+          for (unsigned int ppt = 0; ppt < nPpts; ppt++)
           {
             f >> val;
 
@@ -285,18 +333,33 @@ void FRSolver::restart(std::string restart_file)
             {
               int shift = (ppt / nPpts2D) * nPpts2D;
               if (ppt < nPpts2D || ppt < nPpts1D + shift || ppt > nPpts1D * (nPpts1D-1) + shift || 
-                  (ppt-shift) % nPpts1D== 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts2D - 1))
+                  (ppt-shift) % nPpts1D == 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts2D - 1))
                 continue;
             }
 
-            eles->U_spts(spt, ele, n) = val;
+            U_restart(spt, ele, n) = val;
             spt++;
           }
         }
         std::getline(f,line);
       }
-    }
 
+      /* Extrapolate values from restart points to solution points */
+      auto &A = oppRestart(0, 0);
+      auto &B = U_restart(0, 0, 0);
+      auto &C = eles->U_spts(0, 0, 0);
+
+#ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
+          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, eles->nSpts, &B, 
+          nSpts_restart, 0.0, &C, eles->nSpts);
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
+          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, eles->nSpts, &B, 
+          nSpts_restart, 0.0, &C, eles->nSpts);
+#endif
+
+    }
   }
 
   f.close();
@@ -1404,8 +1467,9 @@ void FRSolver::write_solution()
   f << "byte_order=\"LittleEndian\" ";
   f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
 
-  /* Write comments for iteration number and flowtime */
-  f << "<!-- TIME " << flow_time << " -->" << std::endl;
+  /* Write comments for solution order, iteration number and flowtime */
+  f << "<!-- ORDER " << input->order << " -->" << std::endl;
+  f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
   f << "<!-- ITER " << current_iter << " -->" << std::endl;
 
   f << "<UnstructuredGrid>" << std::endl;
@@ -1684,9 +1748,16 @@ void FRSolver::report_forces(std::ofstream &f)
   force_conv.fill(0.0); force_visc.fill(0.0); taun.fill(0.0);
 
   std::stringstream ss;
+#ifdef _MPI
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_p" << std::setw(3) << std::setfill('0') << input->rank;
-  ss << "_" << std::setw(9) << std::setfill('0') << current_iter << ".cp";
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".cp";
+#else
+  ss << input->output_prefix << "/";
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << ".cp";
+#endif
+
   auto cpfile = ss.str();
   std::ofstream g(cpfile);
 
