@@ -1154,6 +1154,19 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
     //waveSp = waveSp_d;
 #endif
   }
+  else if (input->fconv_type == "Roe")
+  {
+#ifdef _CPU
+    roe_flux(startFpt, endFpt);
+#endif
+
+#ifdef _GPU
+    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, outnorm_d, waveSp_d, input->gamma, 
+        nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+
+    check_error();
+#endif
+  }
   else
   {
     ThrowException("Numerical convective flux type not recognized!");
@@ -1359,6 +1372,114 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       /* Correct for positive parent space sign convention */
       Fcomm(fpt, n, 0) = F * outnorm(fpt, 0);
       Fcomm(fpt, n, 1) = F * -outnorm(fpt, 1);
+    }
+  }
+}
+
+void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
+{
+  if (nDims != 2)
+  {
+    ThrowException("Roe Flux only implemented for 2D!");
+  }
+
+  std::vector<double> FL(nVars);
+  std::vector<double> FR(nVars);
+  std::vector<double> F(nVars);
+  std::vector<double> dW(nVars);
+
+#pragma omp parallel for firstprivate(FL, FR, F, dW)
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+  {
+    /* Initialize FL, FR */
+    std::fill(FL.begin(), FL.end(), 0.0);
+    std::fill(FR.begin(), FR.end(), 0.0);
+
+    /* Get interface-normal flux components  (from L to R)*/
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        FL[n] += Fconv(fpt, n, dim, 0) * norm(fpt, dim, 0);
+        FR[n] += Fconv(fpt, n, dim, 1) * norm(fpt, dim, 0);
+      }
+    }
+
+    /* Get difference in state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      dW[n] = U(fpt, n, 1) - U(fpt, n, 0);
+    }
+
+    /* Get numerical wavespeed */
+    if (input->equation == EulerNS)
+    {
+      /* Primitive Variables */
+      double gam = input->gamma;
+      double rhoL = U(fpt, 0, 0);
+      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+      double pL = (gam-1.0) * (U(fpt, 3, 0) - 0.5 * rhoL * (uL*uL + vL*vL));
+      double hL = (U(fpt, 3, 0) + pL) / rhoL;
+
+      double rhoR = U(fpt, 0, 1);
+      double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+      double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+      double pR = (gam-1.0) * (U(fpt, 3, 1) - 0.5 * rhoR * (uR*uR + vR*vR));
+      double hR = (U(fpt, 3, 0) + pL) / rhoL;
+
+      /* Compute averaged values */
+      double sq_rho = std::sqrt(rhoR / rhoL);
+      double rrho = 1.0 / (sq_rho + 1.0);
+      double um = rrho * (uL + sq_rho * uR);
+      double vm = rrho * (vL + sq_rho * vR);
+      double hm = rrho * (hL + sq_rho * hR);
+
+      double Vmsq = 0.5 * (um*um + vm*vm);
+      double am = std::sqrt((gam-1.0) * (hm - Vmsq));
+      double Vnm = um * norm(fpt, 0, 0) + vm * norm(fpt, 1, 0);
+
+      /* Compute Wavespeeds */
+      double lambda0 = std::abs(Vnm);
+      double lambdaP = std::abs(Vnm + am);
+      double lambdaM = std::abs(Vnm - am);
+
+      /* Entropy fix */
+      double eps = 0.5 * (std::abs(FL[0] / rhoL - FR[0] / rhoR) + std::abs(std::sqrt(gam*pL/rhoL) - std::sqrt(gam*pR/rhoR)));
+      if (lambda0 < 2.0 * eps)
+        lambda0 = 0.25 * lambda0*lambda0 / eps + eps;
+      if (lambdaP < 2.0 * eps)
+        lambdaP = 0.25 * lambdaP*lambdaP / eps + eps;
+      if (lambdaM < 2.0 * eps)
+        lambdaM = 0.25 * lambdaM*lambdaM / eps + eps;
+
+      /* Matrix terms */
+      double a2 = 0.5 * (lambdaP + lambdaM) - lambda0;
+      double a3 = 0.5 * (lambdaP - lambdaM) / am;
+      double a1 = a2 * (gam-1.0) / (am*am);
+      double a4 = a3 * (gam-1.0);
+      double a5 = Vmsq * dW[0] - um * dW[1] - vm * dW[2] + dW[3];
+      double a6 = Vnm * dW[0] - norm(fpt, 0, 0) * dW[1] - norm(fpt, 1, 0) * dW[2];
+      double aL1 = a1 * a5 - a3 * a6;
+      double bL1 = a4 * a5 - a2 * a6;
+
+      F[0] = 0.5 * (FR[0] + FL[0]) - (lambda0 * dW[0] + aL1);
+      F[1] = 0.5 * (FR[1] + FL[1]) - (lambda0 * dW[1] + aL1 * um + bL1 * norm(fpt, 0, 0));
+      F[2] = 0.5 * (FR[2] + FL[2]) - (lambda0 * dW[2] + aL1 * vm + bL1 * norm(fpt, 1, 0));
+      F[3] = 0.5 * (FR[3] + FL[3]) - (lambda0 * dW[3] + aL1 * hm + bL1 * Vnm);
+
+      waveSp(fpt) = std::max(std::max(lambda0, lambdaP), lambdaM);
+    }
+    else
+    {
+      ThrowException("Roe flux not implemented for this equation type!");
+    }
+
+    /* Correct for positive parent space sign convention */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm(fpt, n, 0) = F[n] * outnorm(fpt, 0);
+      Fcomm(fpt, n, 1) = F[n] * -outnorm(fpt, 1);
     }
   }
 }
