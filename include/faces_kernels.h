@@ -43,6 +43,11 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
     mdvector_gpu<int> &LDG_bias, mdvector_gpu<int> &bc_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
 
+void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, 
+    mdvector_gpu<double> &waveSp, double gamma, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
+
 void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,
     unsigned int nDims, mdvector_gpu<int> &LDG_bias, unsigned int startFpt, unsigned int endFpt);
