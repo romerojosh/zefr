@@ -679,10 +679,10 @@ void Hexas::transform_flux()
 #endif
 }
 
-double Hexas::calc_shape(unsigned int shape_order, unsigned int idx, 
+mdvector<double> Hexas::calc_shape(unsigned int shape_order, 
                          std::vector<double> &loc)
 {
-  double val = 0.0;
+  mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
   double eta = loc[1];
   double mu = loc[2];
@@ -694,87 +694,55 @@ double Hexas::calc_shape(unsigned int shape_order, unsigned int idx,
   /* Trilinear hexahedral/8-node Serendipity */
   if (shape_order == 1)
   {
-    switch(idx)
-    {
-      case 0:
-        i = 0; j = 0; k = 0; break;
-      case 1:
-        i = 1; j = 0; k = 0; break;
-      case 2:
-        i = 1; j = 1; k = 0; break;
-      case 3:
-        i = 0; j = 1; k = 0; break;
-      case 4:
-        i = 0; j = 0; k = 1; break;
-      case 5:
-        i = 1; j = 0; k = 1; break;
-      case 6:
-        i = 1; j = 1; k = 1; break;
-      case 7:
-        i = 0; j = 1; k = 1; break;
-    }
-
-    val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta) * Lagrange({-1.,1.}, k, mu);
+    shape_val(0) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
+    shape_val(1) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
+    shape_val(2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
+    shape_val(3) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
+    shape_val(5) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    shape_val(6) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    shape_val(7) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    shape_val(8) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
   }
   /* 20-node Seredipity */
-  else if (shape_order == 2)
+  else if (shape_order == 2 and input->serendipity)
   {
-    switch(idx)
-    {
-      /* Corner Nodes */
-      case 0:
-        val = 0.125 * (1. - xi) * (1. - eta) * (1. - mu) * (-xi - eta - mu - 2.); break;
-      case 1:
-        val = 0.125 * (1. + xi) * (1. - eta) * (1. - mu) * (xi - eta - mu - 2.); break;
-      case 2:
-        val = 0.125 * (1. + xi) * (1. + eta) * (1. - mu) * (xi + eta - mu - 2.); break;
-      case 3:
-        val = 0.125 * (1. - xi) * (1. + eta) * (1. - mu) * (-xi + eta - mu - 2.); break;
-      case 4:
-        val = 0.125 * (1. - xi) * (1. - eta) * (1. + mu) * (-xi - eta + mu - 2.); break;
-      case 5:
-        val = 0.125 * (1. + xi) * (1. - eta) * (1. + mu) * (xi - eta + mu - 2.); break;
-      case 6:
-        val = 0.125 * (1. + xi) * (1. + eta) * (1. + mu) * (xi + eta + mu - 2.); break;
-      case 7:
-        val = 0.125 * (1. - xi) * (1. + eta) * (1. + mu) * (-xi + eta + mu - 2.); break;
+    /* Corner Nodes */
+    shape_val(0) = 0.125 * (1. - xi) * (1. - eta) * (1. - mu) * (-xi - eta - mu - 2.); 
+    shape_val(1) = 0.125 * (1. + xi) * (1. - eta) * (1. - mu) * (xi - eta - mu - 2.);
+    shape_val(2) = 0.125 * (1. + xi) * (1. + eta) * (1. - mu) * (xi + eta - mu - 2.);
+    shape_val(3) = 0.125 * (1. - xi) * (1. + eta) * (1. - mu) * (-xi + eta - mu - 2.);
+    shape_val(4) = 0.125 * (1. - xi) * (1. - eta) * (1. + mu) * (-xi - eta + mu - 2.);
+    shape_val(5) = 0.125 * (1. + xi) * (1. - eta) * (1. + mu) * (xi - eta + mu - 2.);
+    shape_val(6) = 0.125 * (1. + xi) * (1. + eta) * (1. + mu) * (xi + eta + mu - 2.);
+    shape_val(7) = 0.125 * (1. - xi) * (1. + eta) * (1. + mu) * (-xi + eta + mu - 2.);
 
-      /* Edge Nodes */
-      case 8:
-        val = 0.25 * (1. - xi*xi) * (1. - eta) * (1. - mu); break;
-      case 9:
-        val = 0.25 * (1. + xi) * (1. - eta*eta) * (1. - mu); break;
-      case 10:
-        val = 0.25 * (1. - xi*xi) * (1. + eta) * (1. - mu); break;
-      case 11:
-        val = 0.25 * (1. - xi) * (1. - eta*eta) * (1. - mu); break;
-      case 12:
-        val = 0.25 * (1. - xi) * (1. - eta) * (1. - mu*mu); break;
-      case 13:
-        val = 0.25 * (1. + xi) * (1. - eta) * (1. - mu*mu); break;
-      case 14:
-        val = 0.25 * (1. + xi) * (1. + eta) * (1. - mu*mu); break;
-      case 15:
-        val = 0.25 * (1. - xi) * (1. + eta) * (1. - mu*mu); break;
-      case 16:
-        val = 0.25 * (1. - xi*xi) * (1. - eta) * (1. + mu); break;
-      case 17:
-        val = 0.25 * (1. + xi) * (1. - eta*eta) * (1. + mu); break;
-      case 18:
-        val = 0.25 * (1. - xi*xi) * (1. + eta) * (1. + mu); break;
-      case 19:
-        val = 0.25 * (1. - xi) * (1. - eta*eta) * (1. + mu); break;
-    }
- 
+    /* Edge Nodes */
+    shape_val(8) = 0.25 * (1. - xi*xi) * (1. - eta) * (1. - mu);
+    shape_val(9) = 0.25 * (1. + xi) * (1. - eta*eta) * (1. - mu);
+    shape_val(10) = 0.25 * (1. - xi*xi) * (1. + eta) * (1. - mu);
+    shape_val(11) = 0.25 * (1. - xi) * (1. - eta*eta) * (1. - mu);
+    shape_val(12) = 0.25 * (1. - xi) * (1. - eta) * (1. - mu*mu);
+    shape_val(13) = 0.25 * (1. + xi) * (1. - eta) * (1. - mu*mu);
+    shape_val(14) = 0.25 * (1. + xi) * (1. + eta) * (1. - mu*mu);
+    shape_val(15) = 0.25 * (1. - xi) * (1. + eta) * (1. - mu*mu);
+    shape_val(16) = 0.25 * (1. - xi*xi) * (1. - eta) * (1. + mu);
+    shape_val(17) = 0.25 * (1. + xi) * (1. - eta*eta) * (1. + mu);
+    shape_val(18) = 0.25 * (1. - xi*xi) * (1. + eta) * (1. + mu);
+    shape_val(19) = 0.25 * (1. - xi) * (1. - eta*eta) * (1. + mu);
+
+  }
+  else
+  {
+    ThrowException("Element shape type for hexas given not supported!");
   }
 
-  return val;
+  return shape_val;
 }
 
-double Hexas::calc_d_shape(unsigned int shape_order, unsigned int idx,
-                          std::vector<double> &loc, unsigned int dim)
+mdvector<double> Hexas::calc_d_shape(unsigned int shape_order,
+                          std::vector<double> &loc)
 {
-  double val = 0.0;
+  mdvector<double> dshape_val({nNodes, nDims}, 0);
   double xi = loc[0];
   double eta = loc[1];
   double mu = loc[2];
@@ -786,180 +754,102 @@ double Hexas::calc_d_shape(unsigned int shape_order, unsigned int idx,
   /* Bilinear hexahedral/8-node Serendipity */
   if (shape_order == 1)
   {
-    switch(idx)
-    {
-      case 0:
-        i = 0; j = 0; k = 0; break;
-      case 1:
-        i = 1; j = 0; k = 0; break;
-      case 2:
-        i = 1; j = 1; k = 0; break;
-      case 3:
-        i = 0; j = 1; k = 0; break;
-      case 4:
-        i = 0; j = 0; k = 1; break;
-      case 5:
-        i = 1; j = 0; k = 1; break;
-      case 6:
-        i = 1; j = 1; k = 1; break;
-      case 7:
-        i = 0; j = 1; k = 1; break;
-    }
+    dshape_val(0, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(1, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(2, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(3, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(5, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(6, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(7, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(8, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
 
-    if (dim == 0)
-      val = Lagrange_d1({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange({-1,1}, k, mu);
-    else if (dim == 1)
-      val = Lagrange({-1,1}, i, xi) * Lagrange_d1({-1,1}, j, eta) * Lagrange({-1,1}, k, mu);
-    else
-      val = Lagrange({-1,1}, i, xi) * Lagrange({-1,1}, j, eta) * Lagrange_d1({-1,1}, k, mu);
+    dshape_val(0, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(1, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(2, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(3, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
+    dshape_val(5, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(6, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(7, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(8, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+
+    dshape_val(0, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 0, mu);
+    dshape_val(1, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 0, mu);
+    dshape_val(2, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 0, mu);
+    dshape_val(3, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 0, mu);
+    dshape_val(5, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 1, mu);
+    dshape_val(6, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 1, mu);
+    dshape_val(7, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 1, mu);
+    dshape_val(8, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 1, mu);
   }
   /* 20-node Serendipity */
   else if (shape_order == 2)
   {
-    if (dim == 0)
-    {
-      switch(idx)
-      {
-        case 0:
-          val = -0.125 * (1. - eta) * (1. - mu) * (-2.*xi - eta - mu - 1.); break;
-        case 1:
-          val = 0.125 * (1. - eta) * (1. - mu) * (2.*xi - eta - mu - 1.); break;
-        case 2:
-          val = 0.125 * (1. + eta) * (1. - mu) * (2.*xi + eta - mu - 1.); break;
-        case 3:
-          val = -0.125 * (1. + eta) * (1. - mu) * (-2.*xi + eta - mu - 1.); break;
-        case 4:
-          val = -0.125 * (1. - eta) * (1. + mu) * (-2.*xi - eta + mu - 1.); break;
-        case 5:
-          val = 0.125 * (1. - eta) * (1. + mu) * (2.*xi - eta + mu - 1.); break;
-        case 6:
-          val = 0.125 * (1. + eta) * (1. + mu) * (2.*xi + eta + mu - 1.); break;
-        case 7:
-          val = -0.125 * (1. + eta) * (1. + mu) * (-2.*xi + eta + mu - 1.); break;
+    dshape_val(0, 0) = -0.125 * (1. - eta) * (1. - mu) * (-2.*xi - eta - mu - 1.); 
+    dshape_val(1, 0) = 0.125 * (1. - eta) * (1. - mu) * (2.*xi - eta - mu - 1.); 
+    dshape_val(2, 0) = 0.125 * (1. + eta) * (1. - mu) * (2.*xi + eta - mu - 1.); 
+    dshape_val(3, 0) = -0.125 * (1. + eta) * (1. - mu) * (-2.*xi + eta - mu - 1.); 
+    dshape_val(4, 0) = -0.125 * (1. - eta) * (1. + mu) * (-2.*xi - eta + mu - 1.); 
+    dshape_val(5, 0) = 0.125 * (1. - eta) * (1. + mu) * (2.*xi - eta + mu - 1.); 
+    dshape_val(6, 0) = 0.125 * (1. + eta) * (1. + mu) * (2.*xi + eta + mu - 1.); 
+    dshape_val(7, 0) = -0.125 * (1. + eta) * (1. + mu) * (-2.*xi + eta + mu - 1.); 
+    dshape_val(8, 0) = -0.5 * xi * (1. - eta) * (1. - mu); 
+    dshape_val(9, 0) = 0.25 * (1. - eta*eta) * (1. - mu); 
+    dshape_val(10, 0) = -0.5 * xi * (1. + eta) * (1. - mu); 
+    dshape_val(11, 0) = -0.25 * (1. - eta*eta) * (1. - mu); 
+    dshape_val(12, 0) = -0.25 * (1. - eta) * (1. - mu*mu); 
+    dshape_val(13, 0) = 0.25 * (1. - eta) * (1. - mu*mu); 
+    dshape_val(14, 0) = 0.25 * (1. + eta) * (1. - mu*mu); 
+    dshape_val(15, 0) = -0.25 * (1. + eta) * (1. - mu*mu); 
+    dshape_val(16, 0) = -0.5 * xi * (1. - eta) * (1. + mu); 
+    dshape_val(17, 0) = 0.25 * (1. - eta*eta) * (1. + mu); 
+    dshape_val(18, 0) = -0.5 * xi * (1. + eta) * (1. + mu); 
+    dshape_val(19, 0) = -0.25 * (1. - eta*eta) * (1. + mu); 
 
-        case 8:
-          val = -0.5 * xi * (1. - eta) * (1. - mu); break;
-        case 9:
-          val = 0.25 * (1. - eta*eta) * (1. - mu); break;
-        case 10:
-          val = -0.5 * xi * (1. + eta) * (1. - mu); break;
-        case 11:
-          val = -0.25 * (1. - eta*eta) * (1. - mu); break;
-        case 12:
-          val = -0.25 * (1. - eta) * (1. - mu*mu); break;
-        case 13:
-          val = 0.25 * (1. - eta) * (1. - mu*mu); break;
-        case 14:
-          val = 0.25 * (1. + eta) * (1. - mu*mu); break;
-        case 15:
-          val = -0.25 * (1. + eta) * (1. - mu*mu); break;
-        case 16:
-          val = -0.5 * xi * (1. - eta) * (1. + mu); break;
-        case 17:
-          val = 0.25 * (1. - eta*eta) * (1. + mu); break;
-        case 18:
-          val = -0.5 * xi * (1. + eta) * (1. + mu); break;
-        case 19:
-          val = -0.25 * (1. - eta*eta) * (1. + mu); break;
-      }
-    }
-    else if (dim == 1)
-    {
-      switch(idx)
-      {
-        case 0:
-          val = -0.125 * (1. - xi) * (1. - mu) * (-xi -2.*eta - mu - 1.); break;
-        case 1:
-          val = -0.125 * (1. + xi) * (1. - mu) * (xi - 2.*eta - mu - 1.); break;
-        case 2:
-          val = 0.125 * (1. + xi) * (1. - mu) * (xi + 2.*eta - mu - 1.); break;
-        case 3:
-          val = 0.125 * (1. - xi) * (1. - mu) * (-xi + 2.*eta - mu - 1.); break;
-        case 4:
-          val = -0.125 * (1. - xi) * (1. + mu) * (-xi - 2.*eta + mu - 1.); break;
-        case 5:
-          val = -0.125 * (1. + xi) * (1. + mu) * (xi - 2.*eta + mu - 1.); break;
-        case 6:
-          val = 0.125 * (1. + xi) * (1. + mu) * (xi + 2.*eta + mu - 1.); break;
-        case 7:
-          val = 0.125 * (1. - xi) * (1. + mu) * (-xi + 2.*eta + mu - 1.); break;
+    dshape_val(0, 1) = -0.125 * (1. - xi) * (1. - mu) * (-xi -2.*eta - mu - 1.); 
+    dshape_val(1, 1) = -0.125 * (1. + xi) * (1. - mu) * (xi - 2.*eta - mu - 1.); 
+    dshape_val(2, 1) = 0.125 * (1. + xi) * (1. - mu) * (xi + 2.*eta - mu - 1.); 
+    dshape_val(3, 1) = 0.125 * (1. - xi) * (1. - mu) * (-xi + 2.*eta - mu - 1.); 
+    dshape_val(4, 1) = -0.125 * (1. - xi) * (1. + mu) * (-xi - 2.*eta + mu - 1.); 
+    dshape_val(5, 1) = -0.125 * (1. + xi) * (1. + mu) * (xi - 2.*eta + mu - 1.); 
+    dshape_val(6, 1) = 0.125 * (1. + xi) * (1. + mu) * (xi + 2.*eta + mu - 1.); 
+    dshape_val(7, 1) = 0.125 * (1. - xi) * (1. + mu) * (-xi + 2.*eta + mu - 1.); 
+    dshape_val(8, 1) = -0.25 * (1. - xi*xi) * (1. - mu); 
+    dshape_val(9, 1) = -0.5 * eta * (1. + xi) * (1. - mu); 
+    dshape_val(10, 1) = 0.25 * (1. - xi*xi) * (1. - mu); 
+    dshape_val(11, 1) = -0.5 * eta * (1. - xi) * (1. - mu); 
+    dshape_val(12, 1) = -0.25 * (1. - xi) * (1. - mu*mu); 
+    dshape_val(13, 1) = -0.25 * (1. + xi) * (1. - mu*mu); 
+    dshape_val(14, 1) = 0.25 * (1. + xi) * (1. - mu*mu); 
+    dshape_val(15, 1) = 0.25 * (1. - xi) * (1. - mu*mu); 
+    dshape_val(16, 1) = -0.25 * (1. - xi*xi) * (1. + mu); 
+    dshape_val(17, 1) = -0.5 * eta * (1. + xi) * (1. + mu); 
+    dshape_val(18, 1) = 0.25 * (1. - xi*xi) * (1. + mu); 
+    dshape_val(19, 1) = -0.5 * eta * (1. - xi) * (1. + mu); 
 
-        case 8:
-          val = -0.25 * (1. - xi*xi) * (1. - mu); break;
-        case 9:
-          val = -0.5 * eta * (1. + xi) * (1. - mu); break;
-        case 10:
-          val = 0.25 * (1. - xi*xi) * (1. - mu); break;
-        case 11:
-          val = -0.5 * eta * (1. - xi) * (1. - mu); break;
-        case 12:
-          val = -0.25 * (1. - xi) * (1. - mu*mu); break;
-        case 13:
-          val = -0.25 * (1. + xi) * (1. - mu*mu); break;
-        case 14:
-          val = 0.25 * (1. + xi) * (1. - mu*mu); break;
-        case 15:
-          val = 0.25 * (1. - xi) * (1. - mu*mu); break;
-        case 16:
-          val = -0.25 * (1. - xi*xi) * (1. + mu); break;
-        case 17:
-          val = -0.5 * eta * (1. + xi) * (1. + mu); break;
-        case 18:
-          val = 0.25 * (1. - xi*xi) * (1. + mu); break;
-        case 19:
-          val = -0.5 * eta * (1. - xi) * (1. + mu); break;
-      }
-    }
-    else if (dim == 2)
-    {
-      switch(idx)
-      {
-        case 0:
-          val = -0.125 * (1. - xi) * (1. - eta) * (-xi - eta - 2.*mu - 1.); break;
-        case 1:
-          val = -0.125 * (1. + xi) * (1. - eta) * (xi - eta - 2.*mu - 1.); break;
-        case 2:
-          val = -0.125 * (1. + xi) * (1. + eta) * (xi + eta - 2.*mu - 1.); break;
-        case 3:
-          val = -0.125 * (1. - xi) * (1. + eta) * (-xi + eta - 2.*mu - 1.); break;
-        case 4:
-          val = 0.125 * (1. - xi) * (1. - eta) * (-xi - eta + 2.*mu - 1.); break;
-        case 5:
-          val = 0.125 * (1. + xi) * (1. - eta) * (xi - eta + 2.*mu - 1.); break;
-        case 6:
-          val = 0.125 * (1. + xi) * (1. + eta) * (xi + eta + 2.*mu - 1.); break;
-        case 7:
-          val = 0.125 * (1. - xi) * (1. + eta) * (-xi + eta + 2.*mu - 1.); break;
-        case 8:
-          val = -0.25 * (1. - xi*xi) * (1. - eta); break;
-        case 9:
-          val = -0.25 * (1. + xi) * (1. - eta*eta); break;
-        case 10:
-          val = -0.25 * (1. - xi*xi) * (1. + eta); break;
-        case 11:
-          val = -0.25 * (1. - xi) * (1. - eta*eta); break;
-        case 12:
-          val = -0.5 * mu * (1. - xi) * (1. - eta); break;
-        case 13:
-          val = -0.5 * mu * (1. + xi) * (1. - eta); break;
-        case 14:
-          val = -0.5 * mu * (1. + xi) * (1. + eta); break;
-        case 15:
-          val = -0.5 * mu * (1. - xi) * (1. + eta); break;
-        case 16:
-          val = 0.25 * (1. - xi*xi) * (1. - eta); break;
-        case 17:
-          val = 0.25 * (1. + xi) * (1. - eta*eta); break;
-        case 18:
-          val = 0.25 * (1. - xi*xi) * (1. + eta); break;
-        case 19:
-          val = 0.25 * (1. - xi) * (1. - eta*eta); break;
-      }
-    }
+    dshape_val(0, 2) = -0.125 * (1. - xi) * (1. - eta) * (-xi - eta - 2.*mu - 1.); 
+    dshape_val(1, 2) = -0.125 * (1. + xi) * (1. - eta) * (xi - eta - 2.*mu - 1.); 
+    dshape_val(2, 2) = -0.125 * (1. + xi) * (1. + eta) * (xi + eta - 2.*mu - 1.); 
+    dshape_val(3, 2) = -0.125 * (1. - xi) * (1. + eta) * (-xi + eta - 2.*mu - 1.); 
+    dshape_val(4, 2) = 0.125 * (1. - xi) * (1. - eta) * (-xi - eta + 2.*mu - 1.); 
+    dshape_val(5, 2) = 0.125 * (1. + xi) * (1. - eta) * (xi - eta + 2.*mu - 1.); 
+    dshape_val(6, 2) = 0.125 * (1. + xi) * (1. + eta) * (xi + eta + 2.*mu - 1.); 
+    dshape_val(7, 2) = 0.125 * (1. - xi) * (1. + eta) * (-xi + eta + 2.*mu - 1.); 
+    dshape_val(8, 2) = -0.25 * (1. - xi*xi) * (1. - eta); 
+    dshape_val(9, 2) = -0.25 * (1. + xi) * (1. - eta*eta); 
+    dshape_val(10, 2) = -0.25 * (1. - xi*xi) * (1. + eta); 
+    dshape_val(11, 2) = -0.25 * (1. - xi) * (1. - eta*eta); 
+    dshape_val(12, 2) = -0.5 * mu * (1. - xi) * (1. - eta); 
+    dshape_val(13, 2) = -0.5 * mu * (1. + xi) * (1. - eta); 
+    dshape_val(14, 2) = -0.5 * mu * (1. + xi) * (1. + eta); 
+    dshape_val(15, 2) = -0.5 * mu * (1. - xi) * (1. + eta); 
+    dshape_val(16, 2) = 0.25 * (1. - xi*xi) * (1. - eta); 
+    dshape_val(17, 2) = 0.25 * (1. + xi) * (1. - eta*eta); 
+    dshape_val(18, 2) = 0.25 * (1. - xi*xi) * (1. + eta); 
+    dshape_val(19, 2) = 0.25 * (1. - xi) * (1. - eta*eta); 
 
   }
 
 
-  return val;
+  return dshape_val;
 
 }
