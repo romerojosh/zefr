@@ -640,7 +640,7 @@ mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
         dshape_val(node + 3*nEdgeNodes + j, 1) = Lagrange(loc_nodes, i, xi) * Lagrange_d1(loc_nodes, i2 - 1 - j, eta);
       }
 
-      node += nEdgeNodes;
+      node += 4 * nEdgeNodes;
     }
     /* Add center node in odd case */
     if (nNodes1D % 2 != 0)

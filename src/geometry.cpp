@@ -46,23 +46,46 @@ void load_mesh_data(InputStruct *input, GeoStruct &geo)
   std::string param;
 
   /* Process file information */
+  /* Load boundary tags */
   while (f >> param)
   {
-    /* Load boundary tags (must be before $Elements) */
     if (param == "$PhysicalNames")
-      read_boundary_ids(f, geo);
-    /* Load node coordinate data */
+    {
+      read_boundary_ids(f, geo); break;
+    }
+  }
+
+  if (f.eof()) ThrowException("Meshfile missing $PhysicalNames tag");
+
+  f.clear();
+  f.seekg(0, f.beg);
+
+  /* Load node coordinate data */
+  while (f >> param)
+  {
     if (param == "$Nodes")
-      read_node_coords(f, geo);
+    {
+      read_node_coords(f, geo); break;
+    }
+  }
 
+  if (f.eof()) ThrowException("Meshfile missing $Nodes tag");
 
+  f.clear();
+  f.seekg(0, f.beg);
+
+  while (f >> param)
+  {
     /* Load element connectivity data */
     if (param == "$Elements")
     {
       read_element_connectivity(f, geo, input);
       read_boundary_faces(f, geo);
+      break;
     }
   }
+
+  if (f.eof()) ThrowException("Meshfile missing $Elements tag");
 
   set_face_nodes(geo);
 
@@ -138,7 +161,7 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     }
     else
     {
-      ThrowException("Boundary type not recognized!");
+      ThrowException("Boundary type " + bnd_id + " not recognized!");
     }
   }
 }
@@ -178,50 +201,79 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       geo.nFacesPerEle = 4; geo.nNodesPerFace = 2;
       geo.nCornerNodes = 4;
 
-      if (val == 2 || val == 3)
+      switch(val)
       {
-        geo.nEles++; 
-        geo.shape_order = 1; geo.nNodesPerEle = 4;
-      }
-      else if (val == 9 || val == 10)
-      {
-        geo.nEles++; 
-        geo.shape_order = 2; 
-        if (input->serendipity)
-          geo.nNodesPerEle = 8;
-        else
-          geo.nNodesPerEle = 9;
-      }
-      else if (val == 1 || val == 8)
-      {
-        geo.nBnds++;
-      }
-      else
-      {
-        ThrowException("Inconsistent Element/Face type detected! Is nDims set correctly?");
+        /* Linear quad/tri */
+        case 2:
+        case 3:
+          geo.nEles++; 
+          geo.shape_order = 1; geo.nNodesPerEle = 4; break;
+
+        /* Biquadratic quad/tri */
+        case 9:
+        case 10:
+          geo.nEles++; 
+          geo.shape_order = 2; 
+          if (input->serendipity)
+            geo.nNodesPerEle = 8;
+          else
+            geo.nNodesPerEle = 9;
+          break;
+
+        /* Bicubic quad */
+        case 36:
+          geo.nEles++; 
+          geo.shape_order = 3; geo.nNodesPerEle = 16; break;
+
+        /* Biquartic quad */
+        case 37:
+          geo.nEles++; 
+          geo.shape_order = 4; geo.nNodesPerEle = 25; break;
+
+        /* Biquintic quad */
+        case 38:
+          geo.nEles++; 
+          geo.shape_order = 5; geo.nNodesPerEle = 36; break;
+
+        case 1:
+        case 8:
+        case 26:
+        case 27:
+        case 28:
+          geo.nBnds++; break;
+
+        default:
+          ThrowException("Inconsistent Element/Face type detected! Is nDims set correctly?");
       }
     }
     else if (geo.nDims == 3)
     {
       geo.nFacesPerEle = 6; geo.nNodesPerFace = 4;
       geo.nCornerNodes = 8;
-      if (val == 2 || val == 3 || val == 9 || val == 10)
+
+      switch(val)
       {
-        geo.nBnds++;
-      }
-      else if (val == 4 || val == 5 || val == 6 || val == 7)
-      {
-        geo.nEles++;
-        geo.shape_order = 1; geo.nNodesPerEle = 8;
-      }
-      else if (val == 11 || val == 12)
-      {
-        geo.nEles++;
-        geo.shape_order = 2; geo.nNodesPerEle = 20;
-      }
-      else
-      {
-        ThrowException("Inconsistent Element/Face type detected! Is nDims set correctly?");
+        /* Trilinear Hex/Tet/Prism/Pyramid */
+        case 4:
+        case 5:
+        case 6:
+        case 7:
+          geo.nEles++;
+          geo.shape_order = 1; geo.nNodesPerEle = 8; break;
+
+        case 11:
+        case 12:
+          geo.nEles++;
+          geo.shape_order = 2; geo.nNodesPerEle = 20; break;
+
+        case 2:
+        case 3:
+        case 9:
+        case 10:
+          geo.nBnds++; break;
+
+        default:
+          ThrowException("Inconsistent Element/Face type detected! Is nDims set correctly?");
       }
     }
     std::getline(f,line);
@@ -251,8 +303,11 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       switch(ele_type)
       {
         case 1: /* 2-node Line (skip) */
-          f >> vint >> vint;
-          break;
+        case 8: /* 3-node Line (skip) */
+        case 26: /* 4-node Line (skip) */
+        case 27: /* 5-node Line (skip) */
+        case 28: /* 6-node Line (skip) */
+          std::getline(f,line); break;
 
         case 2: /* 3-node Triangle */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
@@ -262,10 +317,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 3: /* 4-node Quadrilateral */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
           ele++; break;
-
-        case 8: /* 3-node Line (skip) */
-          f >> vint >> vint >> vint;
-          break;
 
         case 9: /* 6-node Triangle */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele); 
@@ -280,14 +331,28 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
           ele++; break;
 
-        case 10: /* 9-node Quadilateral (read as 8-node) */
+        case 10: /* 9-node Quadilateral */
           f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
           f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
           if (!input->serendipity)
             f >> geo.nd2gnd(8,ele);
           else
             f >> vint;
+          ele++; break;
 
+        case 36: /* 16-node Quadilateral */
+          for (int n = 0; n < 16; n++)
+            f >> geo.nd2gnd(n, ele);
+          ele++; break;
+
+        case 37: /* 25-node Quadilateral */
+          for (int n = 0; n < 25; n++)
+            f >> geo.nd2gnd(n, ele);
+          ele++; break;
+
+        case 38: /* 36-node Quadilateral */
+          for (int n = 0; n < 36; n++)
+            f >> geo.nd2gnd(n, ele);
           ele++; break;
 
         default:
@@ -530,25 +595,21 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       f >> vint >> ele_type;
 
       /* Get boundary id and face nodes */
+      f >> nTags;
+      f >> bnd_id;
+
+      for (unsigned int i = 0; i < nTags - 1; i++)
+        f >> vint;
+
       switch (ele_type)
       {
         case 1: /* 2-node line */
-          f >> nTags;
-          f >> bnd_id;
-
-          for (unsigned int i = 0; i < nTags - 1; i++)
-            f >> vint;
-
-          f >> face[0] >> face[1]; break;
-
         case 8: /* 3-node Line */
-          f >> nTags;
-          f >> bnd_id;
-
-          for (unsigned int i = 0; i < nTags - 1; i++)
-            f >> vint;
-
-          f >> face[0] >> face[1] >> vint; break;
+        case 26: /* 4-node Line (skip) */
+        case 27: /* 5-node Line (skip) */
+        case 28: /* 6-node Line (skip) */
+          f >> face[0] >> face[1]; 
+          std::getline(f,line); break;
 
         default:
           std::getline(f,line); continue; break;
