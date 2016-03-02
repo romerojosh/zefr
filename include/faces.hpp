@@ -43,6 +43,7 @@ class Faces
     /* Routines for implicit method */
     void apply_bcs_dFdU();
     void rusanov_dFndU(unsigned int startFpt, unsigned int endFpt);
+    void roe_dFndU(unsigned int startFpt, unsigned int endFpt);
     void LDG_dFndU(unsigned int startFpt, unsigned int endFpt);
     void transform_dFndU();
 

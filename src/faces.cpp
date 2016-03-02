@@ -840,47 +840,16 @@ void Faces::apply_bcs_dFdU()
     {
       case 2: /* Farfield and Supersonic Inlet */
       {
-        /* Set convective dFdU values in the x-direction */
-        dFdUconv(fpt, 0, 0, 0, 1) = 0;
-        dFdUconv(fpt, 0, 1, 0, 1) = 0;
-        dFdUconv(fpt, 0, 2, 0, 1) = 0;
-        dFdUconv(fpt, 0, 3, 0, 1) = 0;
-
-        dFdUconv(fpt, 1, 0, 0, 1) = 0;
-        dFdUconv(fpt, 1, 1, 0, 1) = 0;
-        dFdUconv(fpt, 1, 2, 0, 1) = 0;
-        dFdUconv(fpt, 1, 3, 0, 1) = 0;
-
-        dFdUconv(fpt, 2, 0, 0, 1) = 0;
-        dFdUconv(fpt, 2, 1, 0, 1) = 0;
-        dFdUconv(fpt, 2, 2, 0, 1) = 0;
-        dFdUconv(fpt, 2, 3, 0, 1) = 0;
-
-        dFdUconv(fpt, 3, 0, 0, 1) = 0;
-        dFdUconv(fpt, 3, 1, 0, 1) = 0;
-        dFdUconv(fpt, 3, 2, 0, 1) = 0;
-        dFdUconv(fpt, 3, 3, 0, 1) = 0;
-
-        /* Set convective dFdU values in the y-direction */
-        dFdUconv(fpt, 0, 0, 1, 1) = 0;
-        dFdUconv(fpt, 0, 1, 1, 1) = 0;
-        dFdUconv(fpt, 0, 2, 1, 1) = 0;
-        dFdUconv(fpt, 0, 3, 1, 1) = 0;
-
-        dFdUconv(fpt, 1, 0, 1, 1) = 0;
-        dFdUconv(fpt, 1, 1, 1, 1) = 0;
-        dFdUconv(fpt, 1, 2, 1, 1) = 0;
-        dFdUconv(fpt, 1, 3, 1, 1) = 0;
-
-        dFdUconv(fpt, 2, 0, 1, 1) = 0;
-        dFdUconv(fpt, 2, 1, 1, 1) = 0;
-        dFdUconv(fpt, 2, 2, 1, 1) = 0;
-        dFdUconv(fpt, 2, 3, 1, 1) = 0;
-
-        dFdUconv(fpt, 3, 0, 1, 1) = 0;
-        dFdUconv(fpt, 3, 1, 1, 1) = 0;
-        dFdUconv(fpt, 3, 2, 1, 1) = 0;
-        dFdUconv(fpt, 3, 3, 1, 1) = 0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int nj = 0; nj < nVars; nj++)
+          {
+            for (unsigned int ni = 0; ni < nVars; ni++)
+            {
+              dFdUconv(fpt, ni, nj, dim, 1) = 0;
+            }
+          }
+        }
 
         bc_bias(fpt) = 1;
         break;
@@ -893,53 +862,61 @@ void Faces::apply_bcs_dFdU()
           momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
 
         /* Primitive variables at the wall */
+        double rho = U(fpt, 0, 0);
         double u = (U(fpt, 1, 0) - 2.0 * momN * norm(fpt, 0, 0)) / U(fpt, 0, 0);
         double v = (U(fpt, 2, 0) - 2.0 * momN * norm(fpt, 1, 0)) / U(fpt, 0, 0);
-
+        double e = U(fpt, 3, 0);
         double gam = input->gamma;
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
+
+        /* Matrix values */
+        double n1 = (1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0));
+        double n2 = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
+        double n3 = (1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0));
+
+        double c1 = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
+        double c2 = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
 
         /* Set convective dFdU values in the x-direction */
         dFdUconv(fpt, 0, 0, 0, 1) = 0;
-        dFdUconv(fpt, 0, 1, 0, 1) = 0;
-        dFdUconv(fpt, 0, 2, 0, 1) = 0;
+        dFdUconv(fpt, 0, 1, 0, 1) = n1;
+        dFdUconv(fpt, 0, 2, 0, 1) = n2;
         dFdUconv(fpt, 0, 3, 0, 1) = 0;
 
-        dFdUconv(fpt, 1, 0, 0, 1) = 0;
-        dFdUconv(fpt, 1, 1, 0, 1) = (1.0-2.0*nx*nx) * (3.0-gam) * u;
-        dFdUconv(fpt, 1, 2, 0, 1) = -2.0 * nx * ny * (1.0-gam) * v;
-        dFdUconv(fpt, 1, 3, 0, 1) = 0;
+        dFdUconv(fpt, 1, 0, 0, 1) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * v*v);
+        dFdUconv(fpt, 1, 1, 0, 1) = n1 * (3.0-gam) * u + n2 * (1.0-gam) * v;
+        dFdUconv(fpt, 1, 2, 0, 1) = n2 * (3.0-gam) * u + n3 * (1.0-gam) * v;
+        dFdUconv(fpt, 1, 3, 0, 1) = (gam-1.0);
 
-        dFdUconv(fpt, 2, 0, 0, 1) = 0;
-        dFdUconv(fpt, 2, 1, 0, 1) = -2.0 * nx * ny * v;
-        dFdUconv(fpt, 2, 2, 0, 1) = (1.0-2.0*ny*ny) * u;
+        dFdUconv(fpt, 2, 0, 0, 1) = -u * v;
+        dFdUconv(fpt, 2, 1, 0, 1) = n2 * u + n1 * v;
+        dFdUconv(fpt, 2, 2, 0, 1) = n3 * u + n2 * v;
         dFdUconv(fpt, 2, 3, 0, 1) = 0;
 
-        dFdUconv(fpt, 3, 0, 0, 1) = 0;
-        dFdUconv(fpt, 3, 1, 0, 1) = 0;
-        dFdUconv(fpt, 3, 2, 0, 1) = 0;
+        dFdUconv(fpt, 3, 0, 0, 1) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * u;
+        dFdUconv(fpt, 3, 1, 0, 1) = n2 * (1.0-gam) * u * v + n1 * c1;
+        dFdUconv(fpt, 3, 2, 0, 1) = n3 * (1.0-gam) * u * v + n2 * c1;
         dFdUconv(fpt, 3, 3, 0, 1) = gam * u;
 
         /* Set convective dFdU values in the y-direction */
         dFdUconv(fpt, 0, 0, 1, 1) = 0;
-        dFdUconv(fpt, 0, 1, 1, 1) = 0;
-        dFdUconv(fpt, 0, 2, 1, 1) = 0;
+        dFdUconv(fpt, 0, 1, 1, 1) = n1;
+        dFdUconv(fpt, 0, 2, 1, 1) = n2;
         dFdUconv(fpt, 0, 3, 1, 1) = 0;
 
-        dFdUconv(fpt, 1, 0, 1, 1) = 0;
-        dFdUconv(fpt, 1, 1, 1, 1) = (1.0-2.0*nx*nx) * v;
-        dFdUconv(fpt, 1, 2, 1, 1) = -2.0 * nx * ny * u;
+        dFdUconv(fpt, 1, 0, 1, 1) = -u * v;
+        dFdUconv(fpt, 1, 1, 1, 1) = n2 * u + n1 * v;
+        dFdUconv(fpt, 1, 2, 1, 1) = n3 * u + n2 * v;
         dFdUconv(fpt, 1, 3, 1, 1) = 0;
 
-        dFdUconv(fpt, 2, 0, 1, 1) = 0;
-        dFdUconv(fpt, 2, 1, 1, 1) = -2.0 * nx * ny * (1.0-gam) * u;
-        dFdUconv(fpt, 2, 2, 1, 1) = (1.0-2.0*ny*ny) * (3.0-gam) * v;
-        dFdUconv(fpt, 2, 3, 1, 1) = 0;
+        dFdUconv(fpt, 2, 0, 1, 1) = 0.5 * ((gam-1.0) * u*u + (gam-3.0) * v*v);
+        dFdUconv(fpt, 2, 1, 1, 1) = n1 * (1.0-gam) * u + n2 * (3.0-gam) * v;
+        dFdUconv(fpt, 2, 2, 1, 1) = n2 * (1.0-gam) * u + n3 * (3.0-gam) * v;
+        dFdUconv(fpt, 2, 3, 1, 1) = (gam-1.0);
 
-        dFdUconv(fpt, 3, 0, 1, 1) = 0;
-        dFdUconv(fpt, 3, 1, 1, 1) = 0;
-        dFdUconv(fpt, 3, 2, 1, 1) = 0;
+
+        dFdUconv(fpt, 3, 0, 1, 1) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * v;
+        dFdUconv(fpt, 3, 1, 1, 1) = n1 * (1.0-gam) * u * v + n2 * c2;
+        dFdUconv(fpt, 3, 2, 1, 1) = n2 * (1.0-gam) * u * v + n3 * c2;
         dFdUconv(fpt, 3, 3, 1, 1) = gam * v;
 
         bc_bias(fpt) = 1;
@@ -1340,7 +1317,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, outnorm_d, waveSp_d, input->gamma, 
+    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, outnorm_d, waveSp_d, bc_bias_d, input->gamma, 
         nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1587,6 +1564,13 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, F, dW)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    /* Apply central flux at boundaries */
+    double k = 0;
+    if (bc_bias(fpt))
+    {
+      k = 1.0;
+    }
+
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
     std::fill(FR.begin(), FR.end(), 0.0);
@@ -1659,10 +1643,10 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
       double aL1 = a1 * a5 - a3 * a6;
       double bL1 = a4 * a5 - a2 * a6;
 
-      F[0] = 0.5 * (FR[0] + FL[0]) - (lambda0 * dW[0] + aL1);
-      F[1] = 0.5 * (FR[1] + FL[1]) - (lambda0 * dW[1] + aL1 * um + bL1 * norm(fpt, 0, 0));
-      F[2] = 0.5 * (FR[2] + FL[2]) - (lambda0 * dW[2] + aL1 * vm + bL1 * norm(fpt, 1, 0));
-      F[3] = 0.5 * (FR[3] + FL[3]) - (lambda0 * dW[3] + aL1 * hm + bL1 * Vnm);
+      F[0] = 0.5 * (FR[0] + FL[0]) - (1.0-k) * (lambda0 * dW[0] + aL1);
+      F[1] = 0.5 * (FR[1] + FL[1]) - (1.0-k) * (lambda0 * dW[1] + aL1 * um + bL1 * norm(fpt, 0, 0));
+      F[2] = 0.5 * (FR[2] + FL[2]) - (1.0-k) * (lambda0 * dW[2] + aL1 * vm + bL1 * norm(fpt, 1, 0));
+      F[3] = 0.5 * (FR[3] + FL[3]) - (1.0-k) * (lambda0 * dW[3] + aL1 * hm + bL1 * Vnm);
 
       waveSp(fpt) = std::max(std::max(lambda0, lambdaP), lambdaM);
     }
@@ -1904,7 +1888,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
           dFdUconv(fpt, 2, 2, 0, slot) = u;
           dFdUconv(fpt, 2, 3, 0, slot) = 0;
 
-          dFdUconv(fpt, 3, 0, 0, slot) = -gam * e * u / rho + (gam-1.0) * u * (u*u + v*v);
+          dFdUconv(fpt, 3, 0, 0, slot) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * u;
           dFdUconv(fpt, 3, 1, 0, slot) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
           dFdUconv(fpt, 3, 2, 0, slot) = (1.0-gam) * u * v;
           dFdUconv(fpt, 3, 3, 0, slot) = gam * u;
@@ -1925,7 +1909,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
           dFdUconv(fpt, 2, 2, 1, slot) = (3.0-gam) * v;
           dFdUconv(fpt, 2, 3, 1, slot) = (gam-1.0);
 
-          dFdUconv(fpt, 3, 0, 1, slot) = -gam * e * v / rho + (gam-1.0) * v * (u*u + v*v);
+          dFdUconv(fpt, 3, 0, 1, slot) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * v;
           dFdUconv(fpt, 3, 1, 1, slot) = (1.0-gam) * u * v;
           dFdUconv(fpt, 3, 2, 1, slot) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
           dFdUconv(fpt, 3, 3, 1, slot) = gam * v;
@@ -1992,6 +1976,10 @@ void Faces::compute_dFndU(unsigned int startFpt, unsigned int endFpt)
   if (input->fconv_type == "Rusanov")
   {
     rusanov_dFndU(startFpt, endFpt);
+  }
+  else if (input->fconv_type == "Roe")
+  {
+    roe_dFndU(startFpt, endFpt);
   }
   else
   {
@@ -2119,6 +2107,18 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
         VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
       }
 
+      /* Determine direction */
+      int pnL = 1;
+      if (VnL < 0)
+      {
+        pnL = -1;
+      }
+      int pnR = 1;
+      if (VnR < 0)
+      {
+        pnR = -1;
+      }
+
       /* Compute wavespeed */
       double gam = input->gamma;
       double wSL = std::abs(VnL) + aL;
@@ -2129,10 +2129,10 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
         double u = WL[1]/WL[0];
         double v = WL[2]/WL[0];
         waveSp(fpt) = wSL;
-        dwSdU[0] = -VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
-        dwSdU[1] = norm(fpt, 0, 0)/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
-        dwSdU[2] = norm(fpt, 1, 0)/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
-        dwSdU[3] = gam * (gam-1.0) / (2.0*aL*rho);
+        dwSdU[0] = -VnL/rho - pnL*aL/(2.0*rho) + pnL*gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
+        dwSdU[1] = norm(fpt, 0, 0)/rho - pnL*gam * (gam-1.0) * u / (2.0*aL*rho);
+        dwSdU[2] = norm(fpt, 1, 0)/rho - pnL*gam * (gam-1.0) * v / (2.0*aL*rho);
+        dwSdU[3] = pnL*gam * (gam-1.0) / (2.0*aL*rho);
       }
       else
       {
@@ -2140,10 +2140,10 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
         double u = WR[1]/WR[0];
         double v = WR[2]/WR[0];
         waveSp(fpt) = wSR;
-        dwSdU[0] = -VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
-        dwSdU[1] = norm(fpt, 0, 0)/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
-        dwSdU[2] = norm(fpt, 1, 0)/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
-        dwSdU[3] = gam * (gam-1.0) / (2.0*aR*rho);
+        dwSdU[0] = -VnR/rho - pnR*aR/(2.0*rho) + pnR*gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
+        dwSdU[1] = norm(fpt, 0, 0)/rho - pnR*gam * (gam-1.0) * u / (2.0*aR*rho);
+        dwSdU[2] = norm(fpt, 1, 0)/rho - pnR*gam * (gam-1.0) * v / (2.0*aR*rho);
+        dwSdU[3] = pnR*gam * (gam-1.0) / (2.0*aR*rho);
       }
     }
 
@@ -2167,6 +2167,171 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
 
           dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * dFndUL_temp(fpt, ni, nj) * -outnorm(fpt, 1);
           dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+        }
+      }
+    }
+  }
+}
+
+void Faces::roe_dFndU(unsigned int startFpt, unsigned int endFpt)
+{
+  if (nDims != 2)
+  {
+    ThrowException("Roe Flux only implemented for 2D!");
+  }
+
+  dFndUL_temp.fill(0.0);
+  dFndUR_temp.fill(0.0);
+
+#pragma omp parallel for
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+  {
+    /* Apply central flux at boundaries */
+    double k = 0;
+    if (bc_bias(fpt))
+    {
+      k = 1.0;
+    }
+
+    /* Get interface-normal dFdU components  (from L to R)*/
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFndUL_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 0) * norm(fpt, dim, 0);
+          dFndUR_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
+        }
+      }
+    }
+
+    /* Get numerical wavespeed */
+    if (input->equation == EulerNS)
+    {
+      /* Primitive Variables */
+      double gam = input->gamma;
+      double rhoL = U(fpt, 0, 0);
+      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+      double pL = (gam-1.0) * (U(fpt, 3, 0) - 0.5 * rhoL * (uL*uL + vL*vL));
+      double hL = (U(fpt, 3, 0) + pL) / rhoL;
+
+      double rhoR = U(fpt, 0, 1);
+      double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+      double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+      double pR = (gam-1.0) * (U(fpt, 3, 1) - 0.5 * rhoR * (uR*uR + vR*vR));
+      double hR = (U(fpt, 3, 0) + pL) / rhoL;
+
+      /* Compute averaged values */
+      double sq_rho = std::sqrt(rhoR / rhoL);
+      double rrho = 1.0 / (sq_rho + 1.0);
+      double um = rrho * (uL + sq_rho * uR);
+      double vm = rrho * (vL + sq_rho * vR);
+      double hm = rrho * (hL + sq_rho * hR);
+
+      double Vmsq = 0.5 * (um*um + vm*vm);
+      double am = std::sqrt((gam-1.0) * (hm - Vmsq));
+      double Vnm = um * norm(fpt, 0, 0) + vm * norm(fpt, 1, 0);
+
+      /* Compute Wavespeeds */
+      double lambda0 = std::abs(Vnm);
+      double lambdaP = std::abs(Vnm + am);
+      double lambdaM = std::abs(Vnm - am);
+
+      /* Entropy fix */
+      double FL0 = 0; double FR0 = 0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        FL0 += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+        FR0 += U(fpt, dim+1, 1) * norm(fpt, dim, 0);
+      }
+      double eps = 0.5 * (std::abs(FL0 / rhoL - FR0 / rhoR) + std::abs(std::sqrt(gam*pL/rhoL) - std::sqrt(gam*pR/rhoR)));
+      if (lambda0 < 2.0 * eps)
+        lambda0 = 0.25 * lambda0*lambda0 / eps + eps;
+      if (lambdaP < 2.0 * eps)
+        lambdaP = 0.25 * lambdaP*lambdaP / eps + eps;
+      if (lambdaM < 2.0 * eps)
+        lambdaM = 0.25 * lambdaM*lambdaM / eps + eps;
+
+      /* Matrix terms */
+      double a2 = 0.5 * (lambdaP + lambdaM) - lambda0;
+      double a3 = 0.5 * (lambdaP - lambdaM) / am;
+      double a1 = a2 * (gam-1.0) / (am*am);
+      double a4 = a3 * (gam-1.0);
+
+      std::vector<double> aL1(nVars);
+      aL1[0] = a1 * Vmsq - a3 * Vnm;
+      aL1[1] = a1 * (-um) - a3 * (-norm(fpt, 0, 0));
+      aL1[2] = a1 * (-vm) - a3 * (-norm(fpt, 1, 0));
+      aL1[3] = a1;
+
+      std::vector<double> bL1(nVars);
+      bL1[0] = a4 * Vmsq - a2 * Vnm;
+      bL1[1] = a4 * (-um) - a2 * (-norm(fpt, 0, 0));
+      bL1[2] = a4 * (-vm) - a2 * (-norm(fpt, 1, 0));
+      bL1[3] = a4;
+
+      for (unsigned int slot = 0; slot < 2; slot++)
+      {
+        dFndUconv(fpt, 0, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 0) + (1.0-k) * (lambda0 + aL1[0]);
+        dFndUconv(fpt, 0, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 1) + (1.0-k) * (aL1[1]);
+        dFndUconv(fpt, 0, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 2) + (1.0-k) * (aL1[2]);
+        dFndUconv(fpt, 0, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 3) + (1.0-k) * (aL1[3]);
+
+        dFndUconv(fpt, 1, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 0) + (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
+        dFndUconv(fpt, 1, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 1) + (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
+        dFndUconv(fpt, 1, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 2) + (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
+        dFndUconv(fpt, 1, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 3) + (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
+
+        dFndUconv(fpt, 2, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 0) + (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
+        dFndUconv(fpt, 2, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 1) + (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
+        dFndUconv(fpt, 2, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 2) + (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
+        dFndUconv(fpt, 2, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 3) + (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
+
+        dFndUconv(fpt, 3, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 0) + (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
+        dFndUconv(fpt, 3, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 1) + (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
+        dFndUconv(fpt, 3, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 2) + (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
+        dFndUconv(fpt, 3, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 3) + (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
+
+
+        dFndUconv(fpt, 0, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 0) - (1.0-k) * (lambda0 + aL1[0]);
+        dFndUconv(fpt, 0, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 1) - (1.0-k) * (aL1[1]);
+        dFndUconv(fpt, 0, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 2) - (1.0-k) * (aL1[2]);
+        dFndUconv(fpt, 0, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 3) - (1.0-k) * (aL1[3]);
+
+        dFndUconv(fpt, 1, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 0) - (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
+        dFndUconv(fpt, 1, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 1) - (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
+        dFndUconv(fpt, 1, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 2) - (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
+        dFndUconv(fpt, 1, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 3) - (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
+
+        dFndUconv(fpt, 2, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 0) - (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
+        dFndUconv(fpt, 2, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 1) - (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
+        dFndUconv(fpt, 2, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 2) - (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
+        dFndUconv(fpt, 2, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 3) - (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
+
+        dFndUconv(fpt, 3, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 0) - (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
+        dFndUconv(fpt, 3, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 1) - (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
+        dFndUconv(fpt, 3, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 2) - (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
+        dFndUconv(fpt, 3, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 3) - (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
+      }
+
+      waveSp(fpt) = std::max(std::max(lambda0, lambdaP), lambdaM);
+    }
+    else
+    {
+      ThrowException("Roe flux not implemented for this equation type!");
+    }
+
+    /* Correct for positive parent space sign convention */
+    for (unsigned int side = 0; side < 2; side++)
+    {
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFndUconv(fpt, ni, nj, side, 0) *= outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, side, 1) *= -outnorm(fpt, 0);
         }
       }
     }

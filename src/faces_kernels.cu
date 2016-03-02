@@ -1390,13 +1390,20 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void roe_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> norm_gfpts, 
-    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, 
+    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> bc_bias,
     double gamma, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
   if (fpt >= endFpt)
     return;
+
+  /* Apply central flux at boundaries */
+  double k = 0;
+  if (bc_bias(fpt))
+  {
+    k = 1.0;
+  }
 
   double FL[nVars]; double FR[nVars]; 
   double F[nVars]; double dW[nVars];
@@ -1485,10 +1492,10 @@ void roe_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     double aL1 = a1 * a5 - a3 * a6;
     double bL1 = a4 * a5 - a2 * a6;
 
-    F[0] = 0.5 * (FR[0] + FL[0]) - (lambda0 * dW[0] + aL1);
-    F[1] = 0.5 * (FR[1] + FL[1]) - (lambda0 * dW[1] + aL1 * um + bL1 * norm[0]);
-    F[2] = 0.5 * (FR[2] + FL[2]) - (lambda0 * dW[2] + aL1 * vm + bL1 * norm[1]);
-    F[3] = 0.5 * (FR[3] + FL[3]) - (lambda0 * dW[3] + aL1 * hm + bL1 * Vnm);
+    F[0] = 0.5 * (FR[0] + FL[0]) - (1.0-k) * (lambda0 * dW[0] + aL1);
+    F[1] = 0.5 * (FR[1] + FL[1]) - (1.0-k) * (lambda0 * dW[1] + aL1 * um + bL1 * norm[0]);
+    F[2] = 0.5 * (FR[2] + FL[2]) - (1.0-k) * (lambda0 * dW[2] + aL1 * vm + bL1 * norm[1]);
+    F[3] = 0.5 * (FR[3] + FL[3]) - (1.0-k) * (lambda0 * dW[3] + aL1 * hm + bL1 * Vnm);
 
     waveSp_gfpts(fpt) = max(max(lambda0, lambdaP), lambdaM);
   }
@@ -1503,7 +1510,7 @@ void roe_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
 void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, 
-    mdvector_gpu<double> &waveSp, double gamma, unsigned int nFpts, unsigned int nVars, 
+    mdvector_gpu<double> &waveSp, mdvector_gpu<int> &bc_bias, double gamma, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 256;
@@ -1513,7 +1520,7 @@ void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   {
     if (nDims == 2)
       roe_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, norm, outnorm, 
-          waveSp, gamma, nFpts, startFpt, endFpt);
+          waveSp, bc_bias, gamma, nFpts, startFpt, endFpt);
     else
       ThrowException("Roe flux only implemented for 2D!");
   }
