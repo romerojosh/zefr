@@ -3,6 +3,8 @@
 
 #include <memory>
 #include <vector>
+#include <chrono>
+#include <fstream>
 
 #include "input.hpp"
 #include "mdvector.hpp"
@@ -29,6 +31,7 @@ class PMGrid
     void restrict_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
     void prolong_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
     void prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSolver &grid_f);
+    void prolong_U(FRSolver &grid_c, FRSolver &grid_f);
     void compute_source_term(FRSolver &grid, mdvector<double> &source, int level = 0);
 
     /* Overloaded methods for GPU */
@@ -39,7 +42,9 @@ class PMGrid
 
   public:
     void setup(InputStruct *input, FRSolver &solver);
-    void cycle(FRSolver &solver);
+    //void cycle(FRSolver &solver);
+    void cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_resolution_clock::time_point t1);
+    void v_cycle(FRSolver &solver, int fine_order);
 };
 
 #endif /* multigrid_hpp */

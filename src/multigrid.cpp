@@ -97,14 +97,17 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
 
 }
 
-void PMGrid::cycle(FRSolver &solver)
+void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 {
   /* --- Downward cycle--- */
   /* Update residual on finest grid level and restrict */
-  solver.compute_residual(0);
-  restrict_pmg(solver, *grids[order-1]);
+  if (fine_order != (int) input->low_order)
+  {
+    solver.compute_residual(0);
+    restrict_pmg(solver, *grids[fine_order-1]);
+  }
 
-  for (int P = order-1; P >= (int) input->low_order; P--)
+  for (int P = fine_order-1; P >= (int) input->low_order; P--)
   {
     /* Generate source term */
 #ifdef _CPU
@@ -324,7 +327,7 @@ void PMGrid::cycle(FRSolver &solver)
     }
   }
 
-  for (int P = (int) input->low_order; P <= order-1; P++)
+  for (int P = (int) input->low_order; P <= fine_order-1; P++)
   {
     //grids[P]->write_solution("PU_"+std::to_string(P));
 
@@ -376,7 +379,7 @@ void PMGrid::cycle(FRSolver &solver)
 #endif
 
     /* Prolong error and add to fine grid solution */
-    if (P < order-1)
+    if (P < fine_order-1)
     {
 #ifdef _CPU
       prolong_err(*grids[P], corrections[P], *grids[P+1]);
@@ -389,13 +392,129 @@ void PMGrid::cycle(FRSolver &solver)
   }
 
   /* Prolong correction and add to finest grid solution */
+  if (fine_order != (int) input->low_order)
+  {
 #ifdef _CPU
-  prolong_err(*grids[order-1], corrections[order-1], solver);
+    prolong_err(*grids[fine_order-1], corrections[fine_order-1], solver);
 #endif
 
 #ifdef _GPU
-  prolong_err(*grids[order-1], corrections_d[order-1], solver);
+    prolong_err(*grids[fine_order-1], corrections_d[fine_order-1], solver);
 #endif
+  }
+
+
+}
+
+void PMGrid::cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_resolution_clock::time_point t1)
+{
+  if (input->mg_cycle == "V")
+  {
+    v_cycle(solver, order);
+  }
+  else if (input->mg_cycle == "FMG")
+  {
+    /* Restrict solution down to lowest_order */
+    /*
+    restrict_pmg(solver, *grids[order-1]);
+    for (int P = order - 1; P > (int) input->low_order; P--)
+    {
+      restrict_pmg(*grids[P], *grids[P-1]);
+    }
+    */
+
+    /* Copy initial low_order solution to storage */
+    /*
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < grids[input->low_order]->eles->nVars; n++)
+        for (unsigned int ele = 0; ele < grids[input->low_order]->eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < grids[input->low_order]->eles->nSpts; spt++)
+            solutions[input->low_order](spt, ele, n) = grids[input->low_order]->eles->U_spts(spt, ele, n);
+#endif
+
+#ifdef _GPU
+    device_copy(solutions_d[input->low_order], grids[input->low_order]->eles->U_spts_d, solutions_d[input->low_order].get_nvals());
+#endif
+*/
+
+    /* Perform FMG cycle*/
+    for (int P = (int) input->low_order; P < order; P++)
+    {
+      std::cout << "FMG P: " << P << std::endl;
+      for (unsigned int cycle = 0; cycle < input->FMG_vcycles; cycle++)
+      {
+        /* Update current level */
+        grids[P]->update();
+
+        /* Do a v-cycle on current level */
+        v_cycle(*grids[P], P); //Loop this?
+
+        if (cycle == 0 or cycle % input->report_freq == 0)
+          grids[P]->report_residuals(histfile, t1);
+      }
+
+      /* Update before prolongation */
+      grids[P]->update();
+
+
+      /* Compute correction on current level */
+      /*
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
+        for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
+            corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - 
+              solutions[P](spt, ele, n);
+#endif
+
+#ifdef _GPU
+      device_subtract(grids[P]->eles->U_spts_d, solutions_d[P], solutions_d[P].get_nvals());
+      device_copy(corrections_d[P], grids[P]->eles->U_spts_d, corrections_d[P].get_nvals());
+#endif
+      */
+
+
+      /* Prolong and apply correction to next level */
+      /* Prolong solution to next level */
+      if (P < order - 1)
+      {
+#ifdef _CPU
+        //prolong_err(*grids[P], corrections[P], *grids[P+1]);
+        prolong_U(*grids[P], *grids[P+1]);
+#endif
+
+#ifdef _GPU
+        //prolong_err(*grids[P], corrections_d[P], *grids[P+1]);
+        prolong_U(*grids[P], *grids[P+1]);
+#endif
+        grids[P+1]->write_solution("FMG_prolong_"+std::to_string(P));
+      }
+
+    }
+
+    /* Prolong and apply correction to finest level */
+    /* Prolong solution to finest level */
+#ifdef _CPU
+    //prolong_err(*grids[order-1], corrections[order-1], solver);
+    prolong_U(*grids[order-1], solver);
+#endif
+
+#ifdef _GPU
+    //prolong_err(*grids[order-1], corrections_d[order-1], solver);
+    prolong_U(*grids[order-1], solver);
+#endif
+
+    /* Set solver to use v_cycle */
+    input->mg_cycle = std::string("V");
+    solver.write_solution("FMG_prolong_"+std::to_string(order));
+
+  }
+  else
+  {
+    ThrowException("Multigrid cycle type unknown!");
+  }
 
 }
 
@@ -491,6 +610,24 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSol
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
       grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
       &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+#endif
+}
+
+void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
+{
+  auto &A = grid_c.eles->oppPro(0, 0);
+  auto &B = grid_c.eles->U_spts(0, 0, 0);
+  auto &C = grid_f.eles->U_spts(0, 0, 0);
+
+  /* Prolong error */
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
+      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+#else
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
+      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
 #endif
 }
 

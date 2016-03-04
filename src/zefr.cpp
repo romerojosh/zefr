@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
 
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)
-      pmg.cycle(solver);
+      pmg.cycle(solver, hist_file, t1);
 
     /* Write output if required */
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
