@@ -41,6 +41,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
 
+  read_param(f, "mg_cycle", input.mg_cycle, std::string("FMG"));
+  read_param(f, "FMG_vcycles", input.FMG_vcycles, (unsigned int) 1);
   read_param(f, "p_multi", input.p_multi, false);
   read_param(f, "smooth_steps", input.smooth_steps, (unsigned int) 1);
   read_param(f, "rel_fac", input.rel_fac, 1.0);
