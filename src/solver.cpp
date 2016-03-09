@@ -123,6 +123,19 @@ void FRSolver::setup_update()
     rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
     rk_beta(4) = 0.153057247968152;
   }
+  else if (input->dt_scheme == "RKj")
+  {
+    nStages = 4;
+    rk_alpha.assign({nStages});
+    rk_alpha(0) = 1./4.; rk_alpha(1) = 1./3.; rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
+    //rk_alpha(0) = 1./4.; rk_alpha(1) = 1./2.; rk_alpha(2) = 0.55; rk_alpha(3) = 1.0;
+    /*
+    rk_alpha(0) = 0.038631946268902;
+    rk_alpha(1) = 0.279767066975738;
+    rk_alpha(2) = 0.613275407706588;
+    rk_alpha(3) = 1.0;
+    */
+  }
   else
   {
     ThrowException("dt_scheme not recognized!");
@@ -1142,43 +1155,74 @@ void FRSolver::update()
 
   /* Final stage */
   compute_residual(nStages-1);
-#ifdef _CPU
-  eles->U_spts = U_ini;
-#endif
-#ifdef _GPU
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
-#endif
 
-#ifdef _CPU
-  for (unsigned int stage = 0; stage < nStages; stage++)
+  if (input->dt_scheme == "RKj")
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
-    {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
           if (input->dt_type != 2)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) * eles->divF_spts(spt, ele, n, stage) / eles->jaco_det_spts(spt, ele);
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt(0) * eles->divF_spts(spt, ele, n, nStages - 1) / eles->jaco_det_spts(spt, ele);
           }
           else
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) * eles->divF_spts(spt, ele, n, stage) / eles->jaco_det_spts(spt, ele);
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt(ele) * eles->divF_spts(spt, ele, n, nStages - 1) / eles->jaco_det_spts(spt, ele);
+          }
+        }
+#endif
+
+#ifdef _GPU
+    RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+        input->equation, nStages - 1, nStages, false);
+    check_error();
+#endif
+
+  }
+  else
+  {
+#ifdef _CPU
+    eles->U_spts = U_ini;
+#endif
+#ifdef _GPU
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+#endif
+
+#ifdef _CPU
+    for (unsigned int stage = 0; stage < nStages; stage++)
+    {
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) * eles->divF_spts(spt, ele, n, stage) / eles->jaco_det_spts(spt, ele);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) * eles->divF_spts(spt, ele, n, stage) / eles->jaco_det_spts(spt, ele);
+            }
           }
         }
       }
     }
-  }
 #endif
 
 #ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-        input->equation, 0, nStages, true);
-    check_error();
+      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+          rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+          input->equation, 0, nStages, true);
+      check_error();
 #endif
+  }
 
   flow_time += dt(0);
   current_iter++;
@@ -1243,43 +1287,78 @@ void FRSolver::update_FV(int level)
 
   /* Final stage */
   compute_residual(nStages-1, level);
-#ifdef _CPU
-  eles->U_spts = U_ini;
-#endif
-#ifdef _GPU
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
-#endif
 
-#ifdef _CPU
-  for (unsigned int stage = 0; stage < nStages; stage++)
+  if (input->dt_scheme == "RKj")
   {
+#ifdef _CPU
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        int part = eparts(ele, level);
+        int part = eparts(ele, level); 
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
           if (input->dt_type != 2)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt_part(0) * eles->divF_spts(spt, ele, n, nStages - 1) / vols[level][part];
           }
           else
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt_part(part) * eles->divF_spts(spt, ele, n, nStages - 1) / vols[level][part];
           }
         }
       }
     }
-  }
 #endif
 
 #ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-        input->equation, 0, nStages, true);
+    RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+        input->equation, nStages - 1, nStages, false);
     check_error();
 #endif
+
+  }
+  else
+  {
+#ifdef _CPU
+    eles->U_spts = U_ini;
+#endif
+#ifdef _GPU
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+#endif
+
+#ifdef _CPU
+    for (unsigned int stage = 0; stage < nStages; stage++)
+    {
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          int part = eparts(ele, level);
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) * eles->divF_spts(spt, ele, n, stage) / vols[level][part];
+            }
+          }
+        }
+      }
+    }
+#endif
+
+#ifdef _GPU
+      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+          rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+          input->equation, 0, nStages, true);
+      check_error();
+#endif
+  }
 
   flow_time += dt(0);
   current_iter++;
@@ -1326,9 +1405,9 @@ void FRSolver::update_with_source(mdvector<double> &source)
 
   /* Final stage */
   compute_residual(nStages-1);
-  eles->U_spts = U_ini;
 
-  for (unsigned int stage = 0; stage < nStages; stage++)
+  if (input->dt_scheme == "RKj")
+  {
 #pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -1336,15 +1415,38 @@ void FRSolver::update_with_source(mdvector<double> &source)
         {
           if (input->dt_type != 2)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) * (eles->divF_spts(spt, ele, n, stage) 
-                + source(spt, ele, n))  / eles->jaco_det_spts(spt, ele);
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt(0) * (eles->divF_spts(spt, ele, n, nStages - 1)
+                + source(spt, ele, n))/ eles->jaco_det_spts(spt, ele);
           }
           else
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) * (eles->divF_spts(spt, ele, n, stage)
+            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt(ele) * (eles->divF_spts(spt, ele, n, nStages - 1)
                 + source(spt, ele, n))  / eles->jaco_det_spts(spt, ele);
           }
         }
+  }
+  else
+  {
+    eles->U_spts = U_ini;
+
+    for (unsigned int stage = 0; stage < nStages; stage++)
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) * (eles->divF_spts(spt, ele, n, stage) 
+                  + source(spt, ele, n))  / eles->jaco_det_spts(spt, ele);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) * (eles->divF_spts(spt, ele, n, stage)
+                  + source(spt, ele, n))  / eles->jaco_det_spts(spt, ele);
+            }
+          }
+  }
 
   current_iter++;
 
@@ -1433,26 +1535,54 @@ void FRSolver::update_with_source_FV(mdvector<double> &source, int level)
 
   /* Final stage */
   compute_residual(nStages-1, level);
-  eles->U_spts = U_ini;
 
-  for (unsigned int stage = 0; stage < nStages; stage++)
+  if (input->dt_scheme == "RKj")
   {
     for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        int part = eparts(ele, level);
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          if (input->dt_type != 2)
+          int part = eparts(ele, level);
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) * (eles->divF_spts(spt, ele, n, stage)
-                + source(spt, ele, n))  / vols[level][part];
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt_part(0) * (eles->divF_spts(spt, ele, n, nStages - 1)
+                  + source(spt, ele, n)) / vols[level][part];
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(nStages - 1) * dt_part(part) * (eles->divF_spts(spt, ele, n, nStages - 1)
+                  + source(spt, ele, n)) / vols[level][part];
+            }
           }
-          else
+        }
+      }
+
+  }
+  else
+  {
+    eles->U_spts = U_ini;
+
+    for (unsigned int stage = 0; stage < nStages; stage++)
+    {
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          int part = eparts(ele, level);
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) * (eles->divF_spts(spt, ele, n, stage)
-                + source(spt, ele, n))  / vols[level][part];
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) * (eles->divF_spts(spt, ele, n, stage)
+                  + source(spt, ele, n))  / vols[level][part];
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) * (eles->divF_spts(spt, ele, n, stage)
+                  + source(spt, ele, n))  / vols[level][part];
+            }
           }
         }
       }
@@ -2008,12 +2138,14 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
       {
         if (!FV_mode)
         {
-          eles->divF_spts(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
+          //eles->divF_spts(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
+          eles->divF_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
         }
         else
         {
           int part = eparts(ele, level);
-          eles->divF_spts(spt, ele, n, nStages-1) /= vols[level][part];
+          //eles->divF_spts(spt, ele, n, nStages-1) /= vols[level][part];
+          eles->divF_spts(spt, ele, n, 0) /= vols[level][part];
         }
       }
     }
@@ -2023,18 +2155,18 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   {
     /* Infinity norm */
     if (input->res_type == 0)
-      res[n] =*std::max_element(&eles->divF_spts(0, 0, n, nStages-1), 
-          &eles->divF_spts(0, 0, n+1, nStages-1));
+      res[n] =*std::max_element(&eles->divF_spts(0, 0, n, 0), 
+          &eles->divF_spts(0, 0, n+1, 1));
 
     /* L1 norm */
     else if (input->res_type == 1)
-      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, nStages-1), 
-          &eles->divF_spts(0, 0, n+1, nStages-1), 0.0, abs_sum<double>());
+      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
+          &eles->divF_spts(0, 0, n+1, 1), 0.0, abs_sum<double>());
 
     /* L2 norm */
     else if (input->res_type == 2)
-      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, nStages-1), 
-            &eles->divF_spts(0, 0, n+1, nStages-1), 0.0, square<double>());
+      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
+            &eles->divF_spts(0, 0, n+1, 1), 0.0, square<double>());
   }
 
   unsigned int nDoF =  (eles->nSpts * eles->nEles);

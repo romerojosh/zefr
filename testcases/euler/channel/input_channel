@@ -10,7 +10,7 @@ spt_type Legendre
 
 # Timestepping:
 n_steps 10000
-dt_scheme RK44      (Euler, RK44, RK54)
+dt_scheme RKj      (Euler, RK44, RK54)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
 CFL	  0.6
@@ -19,14 +19,14 @@ restart 0
 restart_file channel_pmg_p0/channel_pmg_p0_000012000.vtu
 
 # Multigrid:
-mg_cycle FMG
+mg_cycle V
 FMG_vcycles 1000
 p_multi 1
 p_smooth_steps 1
 rel_fac 1.00
 low_order 0
 
-hmg_levels 2
+hmg_levels 0
 CFL_fv 0.8
 smooth_steps 1
 coarse_mode 1      (0 = METIS, 1 = structured)
@@ -35,7 +35,7 @@ nElesY 16
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix channel_hmg_fmg1000
+output_prefix channel_pmg_rkj_2
 write_freq    500
 report_freq   100
 res_type      1
