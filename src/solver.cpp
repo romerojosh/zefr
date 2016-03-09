@@ -118,6 +118,7 @@ void FRSolver::setup_update()
   {
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
+    init_flag = 1;
   }
   else
   {
@@ -1130,47 +1131,57 @@ void FRSolver::update()
 #endif
 
 #ifdef _GPU
-    // Print U initial
-    /*
-    std::ofstream Uini_file;
-    Uini_file.open("Uini.dat");
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          Uini_file << std::setprecision(16) << std::scientific << eles->U_spts(spt, ele, n) << std::endl;
-        }
-      }
-    }
-    Uini_file.close();
-    */
-
     compute_residual(0);
 
-    // Print divF
-    /*
+    /* Compute norm of residual */
+    // TODO: Create norm function to eliminate repetition, add other norms
+    unsigned int nDoF = (eles->nSpts * eles->nEles * eles->nVars);
     eles->divF_spts = eles->divF_spts_d;
-    std::ofstream divF_file;
-    divF_file.open("divF.dat");
+    res_norm[1] = res_norm[0];
+    res_norm[0] = 0;
+
+#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int ele =0; ele < eles->nEles; ele++)
       {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
-          divF_file << std::setprecision(16) << std::scientific << eles->divF_spts(spt, ele, n, 0) << std::endl;
+          res_norm[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
+                         (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele));
         }
       }
     }
-    divF_file.close();
-    ThrowException("Stopping program to read divF from BDF1");
-    */
+    res_norm[0] = std::sqrt(res_norm[0]) / nDoF;
 
-    if (input->dt_type != 0)
+    /* Compute SER time step growth */
+    if (init_flag == 0)
     {
-      compute_element_dt();
+      /* Clipping */
+      double omg = res_norm[1] / res_norm[0];
+      if (omg < 0.1)
+        omg = 0.1;
+      else if (omg > 2.0)
+        omg = 2.0;
+
+      /* Relax Growth */
+      if (omg > 1.0)
+        omg = std::sqrt(omg);
+
+      /* Relax if GMRES did not converge */
+      if (!GMRES_conv)
+      {
+        omg = 0.9;
+      }
+
+      /* Compute new time step */
+      input->dt *= omg;
+      dt(0) = input->dt;
+      dt_d = dt;
+    }
+    else
+    {
+      init_flag = 0;
     }
 
     /* Compute LHS implicit Jacobian */
@@ -1179,51 +1190,14 @@ void FRSolver::update()
     /* Prepare RHS (b) vector */
     compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);
 
-    // Print RHS
-    /*
-    eles->RHS = b_d;
-    std::ofstream RHS_file;
-    RHS_file.open("RHS.dat");
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          RHS_file << std::setprecision(16) << std::scientific << eles->RHS(spt, ele, n) << std::endl;
-        }
-      }
-    }
-    RHS_file.close();
-    */
-    //ThrowException("Stopping program to read RHS");
-
     /* Solve system for deltaU */
     eles->deltaU.fill(0);
     deltaU_d = eles->deltaU;
-    compute_deltaU_wrapper(A_d, deltaU_d, b_d);
-
-    // Print dU
-    /*
-    eles->deltaU = deltaU_d;
-    std::ofstream deltaU_file;
-    deltaU_file.open("deltaU.dat");
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          deltaU_file << std::setprecision(16) << std::scientific << eles->deltaU(spt, ele, n) << std::endl;
-        }
-      }
-    }
-    deltaU_file.close();
-    ThrowException("Stopping program to read deltaU");
-    */
+    compute_deltaU_wrapper(A_d, deltaU_d, b_d, GMRES_conv);
 
     /* Add deltaU to solution */
     device_add(eles->U_spts_d, deltaU_d, eles->U_spts_d.size());
+
 #endif
   }
 

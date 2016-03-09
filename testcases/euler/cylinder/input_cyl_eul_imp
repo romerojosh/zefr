@@ -3,16 +3,16 @@ nDims    2
 meshfile full_cyl_quad.msh
 
 # Solver:
-order     3
+order     1
 equation EulerNS    (AdvDiff, Burgers, EulerNS)
 viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 10000
 dt_scheme BDF1      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.1
+dt	  0.01
 CFL	  0.5
 
 # Multigrid:
@@ -21,16 +21,16 @@ smooth_steps 0
 rel_fac 1.00
 low_order 0
 
-restart 1
+restart 0
 restart_file cyl_eul/cyl_eul_000001000.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix cyl_eul_imp
-write_freq    10
+write_freq    100
 report_freq   10
 res_type      1
-force_freq    10
+force_freq    100
 error_freq    0
 nQpts1D       10
 

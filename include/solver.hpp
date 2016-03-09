@@ -36,6 +36,9 @@ class FRSolver
     mdvector<double> dt;
     mdvector<double> U_ini;
 
+    unsigned int init_flag;
+    double res_norm[2];
+    bool GMRES_conv;
     spmatrix<double> A; // Sparse matrix for implicit system
     mdvector<double> b;
 

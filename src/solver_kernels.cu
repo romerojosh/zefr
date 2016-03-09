@@ -631,7 +631,7 @@ void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &
   compute_RHS<<<blocks, threads>>>(divF_spts, jaco_det_spts, dt, b, nSpts, nEles, nVars);
 }
 
-void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU, mdvector_gpu<double> &b) 
+void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU, mdvector_gpu<double> &b, bool &GMRES_conv) 
 {
   /* Experiment: Use CUSP library to solve system */
   /* First, wrap device arrays using Thrust */
@@ -676,9 +676,10 @@ void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &delta
   // solve the linear system A U = RHS
   cusp::krylov::gmres(Acsr, delU, RHS, restart, monitor, M);
   //cusp::krylov::bicgstab(Acsr, delU, RHS, monitor, M);
+  GMRES_conv = monitor.converged();
 
   /*
-  if (monitor.converged())
+  if (GMRES_conv)
   {
     std::cout << "Solver converged to " << monitor.relative_tolerance() << " relative tolerance";
     std::cout << " after " << monitor.iteration_count() << " iterations" << std::endl;

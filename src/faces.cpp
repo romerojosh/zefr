@@ -2107,43 +2107,59 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
         VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
       }
 
-      /* Determine direction */
-      int pnL = 1;
-      if (VnL < 0)
-      {
-        pnL = -1;
-      }
-      int pnR = 1;
-      if (VnR < 0)
-      {
-        pnR = -1;
-      }
-
       /* Compute wavespeed */
+      double nx = norm(fpt, 0, 0);
+      double ny = norm(fpt, 1, 0);
       double gam = input->gamma;
       double wSL = std::abs(VnL) + aL;
       double wSR = std::abs(VnR) + aR;
       if (wSL > wSR)
       {
+        /* Determine direction */
+        int pmL = 0;
+        if (VnL > 0)
+        {
+          pmL = 1;
+        }
+        else if (VnL < 0)
+        {
+          pmL = -1;
+        }
+
+        /* Compute derivative of wavespeed */
         double rho = WL[0];
         double u = WL[1]/WL[0];
         double v = WL[2]/WL[0];
+
         waveSp(fpt) = wSL;
-        dwSdU[0] = -VnL/rho - pnL*aL/(2.0*rho) + pnL*gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
-        dwSdU[1] = norm(fpt, 0, 0)/rho - pnL*gam * (gam-1.0) * u / (2.0*aL*rho);
-        dwSdU[2] = norm(fpt, 1, 0)/rho - pnL*gam * (gam-1.0) * v / (2.0*aL*rho);
-        dwSdU[3] = pnL*gam * (gam-1.0) / (2.0*aL*rho);
+        dwSdU[0] = -pmL*VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
+        dwSdU[1] = pmL*nx/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
+        dwSdU[2] = pmL*ny/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
+        dwSdU[3] = gam * (gam-1.0) / (2.0*aL*rho);
       }
       else
       {
+        /* Determine direction */
+        int pmR = 0;
+        if (VnR > 0)
+        {
+          pmR = 1;
+        }
+        else if (VnR < 0)
+        {
+          pmR = -1;
+        }
+
+        /* Compute derivative of wavespeed */
         double rho = WR[0];
         double u = WR[1]/WR[0];
         double v = WR[2]/WR[0];
+
         waveSp(fpt) = wSR;
-        dwSdU[0] = -VnR/rho - pnR*aR/(2.0*rho) + pnR*gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
-        dwSdU[1] = norm(fpt, 0, 0)/rho - pnR*gam * (gam-1.0) * u / (2.0*aR*rho);
-        dwSdU[2] = norm(fpt, 1, 0)/rho - pnR*gam * (gam-1.0) * v / (2.0*aR*rho);
-        dwSdU[3] = pnR*gam * (gam-1.0) / (2.0*aR*rho);
+        dwSdU[0] = -pmR*VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
+        dwSdU[1] = pmR*nx/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
+        dwSdU[2] = pmR*ny/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
+        dwSdU[3] = gam * (gam-1.0) / (2.0*aR*rho);
       }
     }
 
@@ -2154,19 +2170,27 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
       {
         if (ni == nj)
         {
-          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (std::abs(dwSdU[ni]*WL[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
-          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (std::abs(dwSdU[ni]*WR[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
 
-          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (std::abs(dwSdU[ni]*WL[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
-          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (std::abs(dwSdU[ni]*WR[ni]) + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
         }
         else
         {
+          /*
           dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * dFndUL_temp(fpt, ni, nj) * outnorm(fpt, 0);
           dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
 
           dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * dFndUL_temp(fpt, ni, nj) * -outnorm(fpt, 1);
           dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+          */
+
+          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * outnorm(fpt, 0);
+
+          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * -outnorm(fpt, 1);
+          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * -outnorm(fpt, 1);
         }
       }
     }
