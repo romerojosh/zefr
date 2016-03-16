@@ -207,6 +207,124 @@ double get_cfl_limit(int order)
   }
 }
 
+mdvector<double> get_alpha_opt(int order, int nStages, double CFLfac)
+{
+  mdvector<double> rk_alpha({nStages});
+  rk_alpha(nStages - 1) = 1.0;
+
+  switch(order)
+  {
+    case 0:
+      switch(nStages)
+      {
+        case 4:
+          // r = 0.5 
+          //rk_alpha(0) = 0.301; rk_alpha(1) = 0.0; rk_alpha(2) = 0.294; break; //trapz(rho)
+          //rk_alpha(0) = 1.0; rk_alpha(1) = 0.212; rk_alpha(2) = 0.238; break; //trapz(rho*k)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.0490; rk_alpha(2) = 0.446; break; //trapz(rho/k)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.236; rk_alpha(2) = 1.0; break; //trapz(rho/k^2)
+
+          rk_alpha(0) = 1./4.; rk_alpha(1) = 1./3.; rk_alpha(2) = 1./2.; break; //standard
+          //rk_alpha(0) = 0.2266; rk_alpha(1) = 0.2352; rk_alpha(2) = 0.6596; break; //sum(rho<0.6)
+
+        default:
+          ThrowException("Optimized alpha not computed for this case!");
+      } break;
+
+    case 1:
+      switch(nStages)
+      {
+        case 4:
+          // r = 0.5 
+          rk_alpha(0) = 0.0; rk_alpha(1) = 0.248; rk_alpha(2) = 0.680; break; //trapz(rho)
+          //rk_alpha(0) = 0.00258; rk_alpha(1) = 0.172; rk_alpha(2) = 0.5; break; //trapz(rho*k)
+          //rk_alpha(0) = 0.164; rk_alpha(1) = 0.393; rk_alpha(2) = 1.0; break; //trapz(rho/k)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.288; rk_alpha(2) = 1.0; break; //trapz(rho/k^2)
+          
+          //rk_alpha(0) = 0.2070; rk_alpha(1) = 0.4763; rk_alpha(2) = 0.9695; break; //sum(rho < 0.6)
+
+        default:
+          ThrowException("Optimized alpha not computed for this case!");
+      } break;
+
+    case 2:
+      switch(nStages)
+      {
+        case 3:
+          // r = 0.5
+          rk_alpha(0) = 0.346; rk_alpha(1) = 0.866; break; //trapz(rho)
+        case 4:
+          // r = 0.5 
+          rk_alpha(0) = 0.153; rk_alpha(1) = 0.442; rk_alpha(2) = 0.931; break; //trapz(rho)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.258; rk_alpha(2) = 0.611; break; //trapz(rho*k)
+          //rk_alpha(0) = 0.0776; rk_alpha(1) = 0.389; rk_alpha(2) = 1.0; break; //trapz(rho/k)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.336; rk_alpha(2) = 1.0; break; //trapz(rho/k^2)
+          
+          //rk_alpha(0) = 0.0181; rk_alpha(1) = 0.469; rk_alpha(2) = 1.0; break; //trapz(rho)
+          //rk_alpha(0) = 0.1894; rk_alpha(1) = 0.5262; rk_alpha(2) = 1.0; break; //sum(rho < 0.6)
+          //rk_alpha(0) = 0.001; rk_alpha(1) = 0.3870; rk_alpha(2) = 0.975; break; //sum(rho < 0.7)
+          // r = 0.8
+          //
+          //
+          //rk_alpha(0) = 0.184; rk_alpha(1) = 0.421; rk_alpha(2) = 0.776; break; //trapz(rho)
+          //
+          
+        default:
+          ThrowException("Optimized alpha not computed for this case!");
+      } break;
+
+    case 3:
+      switch(nStages)
+      {
+        case 4:
+          // r = 0.5 
+          rk_alpha(0) = 0.158; rk_alpha(1) = 0.477; rk_alpha(2) = 1.0; break; //trapz(rho)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.303; rk_alpha(2) = 0.694; break; //trapz(rho*k)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.368; rk_alpha(2) = 1.0; break; //trapz(rho/k)
+          //rk_alpha(0) = 0.0392; rk_alpha(1) = 0.389; rk_alpha(2) = 1.0; break; //trapz(rho/k^2)
+
+        default:
+          ThrowException("Optimized alpha not computed for this case!");
+      } break;
+
+    case 4:
+      switch(nStages)
+      {
+        case 4:
+          // r = 0.5 
+          rk_alpha(0) = 0.182; rk_alpha(1) = 0.497; rk_alpha(2) = 1.0; break; //trapz(rho)
+          //rk_alpha(0) = 0.0626; rk_alpha(1) = 0.361; rk_alpha(2) = 0.763; break; //trapz(rho*k)
+          //rk_alpha(0) = 0.0801; rk_alpha(1) = 0.411; rk_alpha(2) = 1.0; break; //trapz(rho/k)
+          //rk_alpha(0) = 0.176; rk_alpha(1) = 0.475; rk_alpha(2) = 1.0; break; //trapz(rho/k^2)
+
+        default:
+          ThrowException("Optimized alpha not computed for this case!");
+      } break;
+
+    case 5:
+      switch(nStages)
+      {
+        case 4:
+          // r = 0.5 
+          rk_alpha(0) = 0.123; rk_alpha(1) = 0.461; rk_alpha(2) = 1.0; break; //trapz(rho)
+          //rk_alpha(0) = 0.0365; rk_alpha(1) = 0.372; rk_alpha(2) = 0.815; break; //trapz(rho*k)
+          //rk_alpha(0) = 0.0; rk_alpha(1) = 0.376; rk_alpha(2) = 1.0; break; //trapz(rho/k)
+          //rk_alpha(0) = 0.258; rk_alpha(1) = 0.446; rk_alpha(2) = 1.0; break; //trapz(rho/k^2)
+
+        default:
+          ThrowException("Optimized alpha not computed for this case!");
+      } break;
+
+
+
+    default:
+      ThrowException("Optimized alpha not computed for this case!");
+  }
+
+  return rk_alpha;
+
+}
+
 #ifdef _OMP
 void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA, 
     CBLAS_TRANSPOSE transB, int M, int N, int K, double alpha, double* A, int lda, 

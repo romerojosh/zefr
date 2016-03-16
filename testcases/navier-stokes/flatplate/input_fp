@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile flatplate.msh
+meshfile flatplate_32x32.msh
 
 # Solver:
 order     2
@@ -9,13 +9,14 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 1000
+n_steps 5000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.000001
 CFL	  0.3
 
 # Multigrid:
+mg_cycle V
 p_multi 1
 smooth_steps 1
 rel_fac 1.00
@@ -23,7 +24,7 @@ low_order 0
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix fp_pmg
+output_prefix fp_32x32_p2b1_pmg_rk4
 write_freq    1000
 report_freq   100
 res_type      1
@@ -36,7 +37,7 @@ fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
 ldg_b      0.0
-ldg_tau    0.0
+ldg_tau    1.0
 
 # Equation Specific Parameters:
 ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
@@ -50,9 +51,9 @@ prandtl 0.72
 S       120
 
 # Navier-Stokes specific
-fix_vis 0
-mach_fs 0.1
-Re_fs 200
+fix_vis 1
+mach_fs 0.5
+Re_fs 10000
 L_fs 1
 T_fs 300
 nx_fs 1

@@ -125,9 +125,10 @@ void FRSolver::setup_update()
   }
   else if (input->dt_scheme == "RKj")
   {
+    //nStages = 3;
     nStages = 4;
     rk_alpha.assign({nStages});
-    rk_alpha(0) = 1./4.; rk_alpha(1) = 1./3.; rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
+    //rk_alpha(0) = 1./4.; rk_alpha(1) = 1./3.; rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
     //rk_alpha(0) = 1./4.; rk_alpha(1) = 1./2.; rk_alpha(2) = 0.55; rk_alpha(3) = 1.0;
     /*
     rk_alpha(0) = 0.038631946268902;
@@ -135,6 +136,8 @@ void FRSolver::setup_update()
     rk_alpha(2) = 0.613275407706588;
     rk_alpha(3) = 1.0;
     */
+    rk_alpha = get_alpha_opt(input->order, nStages, input->CFL);
+    //rk_alpha = get_alpha_opt(order, nStages, input->CFL);
   }
   else
   {

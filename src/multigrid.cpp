@@ -284,7 +284,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 #endif
 
 #ifdef _GPU
-          grids[P]->update_with_source(sources_d[P]);
+          //grids[P]->update_with_source(sources_d[P]);
 #endif
           //hgrid->write_solution("HU_"+std::to_string(H));
         }

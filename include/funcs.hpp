@@ -19,6 +19,9 @@ double compute_source_term(double x, double y, double z, double t, unsigned int 
 /* Compute maximum CFL */
 double get_cfl_limit(int order);
 
+/* Get optimized rk coefficients */
+mdvector<double> get_alpha_opt(int order, int nStages, double CFLfac);
+
 /* Blocked gemm operation using OpenMP */
 #ifdef _OMP
 void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA, 
