@@ -987,7 +987,7 @@ void Elements::compute_dFddUvisc()
   }
 }
 
-void Elements::compute_LHS()
+void Elements::compute_LHS(double dt)
 {
   /* TODO: Move setup */
   unsigned int n = 0;
@@ -1724,7 +1724,7 @@ void Elements::compute_LHS()
             int Aj = nj*nEles*nSpts + ele*nSpts + j;
 
             /* Compute val */
-            double Aval = input->dt*B(i, j, 0)/jaco_det_spts(i, ele);
+            double Aval = dt*B(i, j, 0)/jaco_det_spts(i, ele);
             if (i == j && ni == nj)
             {
               Aval += 1;
@@ -1754,7 +1754,7 @@ void Elements::compute_LHS()
                 int Aj = nj*nEles*nSpts + eleN*nSpts + j;
 
                 /* Compute val and fill */
-                double Aval = input->dt*B(i, j, mat)/jaco_det_spts(i, ele);
+                double Aval = dt*B(i, j, mat)/jaco_det_spts(i, ele);
 
                 /* Fill Jacobian */
                 if (Aval != 0)

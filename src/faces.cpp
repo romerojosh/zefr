@@ -2178,14 +2178,6 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
         }
         else
         {
-          /*
-          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * dFndUL_temp(fpt, ni, nj) * outnorm(fpt, 0);
-          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
-
-          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * dFndUL_temp(fpt, ni, nj) * -outnorm(fpt, 1);
-          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
-          */
-
           dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * outnorm(fpt, 0);
           dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * outnorm(fpt, 0);
 

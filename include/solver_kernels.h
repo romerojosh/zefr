@@ -73,6 +73,9 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
 void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt,
     mdvector_gpu<double> &b, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 
+void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt,
+    mdvector_gpu<double> &b, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
+
 void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU,  mdvector_gpu<double> &b, bool &GMRES_conv);
 
 #endif /* solver_kernels_h */

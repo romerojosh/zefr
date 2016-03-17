@@ -594,6 +594,7 @@ void FRSolver::compute_residual(unsigned int stage)
     add_source(stage);
 }
 
+#ifdef _GPU
 void FRSolver::compute_LHS()
 {
   /* Copy new solution from GPU */
@@ -633,14 +634,13 @@ void FRSolver::compute_LHS()
   dFndU_from_faces();
 
   /* Compute LHS implicit Jacobian */
-  eles->compute_LHS();
+  eles->compute_LHS(dt(0));
 
   /* Copy to GPU */
-#ifdef _GPU
   A_d.free_data();
   A_d = eles->A;
-#endif
 }
+#endif
 
 void FRSolver::initialize_U()
 {
@@ -1026,7 +1026,6 @@ void FRSolver::add_source(unsigned int stage)
 
 void FRSolver::update()
 {
-
   if (input->dt_scheme != "BDF1")
   {
   
@@ -1175,8 +1174,7 @@ void FRSolver::update()
       }
 
       /* Compute new time step */
-      input->dt *= omg;
-      dt(0) = input->dt;
+      dt(0) *= omg;
       dt_d = dt;
     }
     else
@@ -1271,40 +1269,60 @@ void FRSolver::update_with_source(mdvector<double> &source)
 #ifdef _GPU
 void FRSolver::update_with_source(mdvector_gpu<double> &source)
 {
-  
-  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
-
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  if (input->dt_scheme != "BDF1")
   {
-    compute_residual(stage);
+    device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 
-    /* If in first stage, compute stable timestep */
-    if (stage == 0)
+    /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
+    for (unsigned int stage = 0; stage < (nStages-1); stage++)
     {
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
+      compute_residual(stage);
+
+      /* If in first stage, compute stable timestep */
+      if (stage == 0)
       {
-        compute_element_dt();
+        // TODO: Revisit this as it is kind of expensive.
+        if (input->dt_type != 0)
+        {
+          compute_element_dt();
+        }
       }
+
+      RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
+          rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+          input->equation, stage, nStages, false);
+      check_error();
+
     }
 
-    RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
+    /* Final stage */
+    compute_residual(nStages-1);
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+
+    RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
+        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+        input->equation, 0, nStages, true);
     check_error();
-
   }
+  else
+  {
+    /* Implicit Method */
+    compute_residual(0);
 
-  /* Final stage */
-  compute_residual(nStages-1);
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+    /* Compute LHS implicit Jacobian */
+    compute_LHS();
 
-  RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-      rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-      input->equation, 0, nStages, true);
-  check_error();
+    /* Prepare RHS (b) vector */
+    compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);
 
+    /* Solve system for deltaU */
+    eles->deltaU.fill(0);
+    deltaU_d = eles->deltaU;
+    compute_deltaU_wrapper(A_d, deltaU_d, b_d, GMRES_conv);
+
+    /* Add deltaU to solution */
+    device_add(eles->U_spts_d, deltaU_d, eles->U_spts_d.size());
+  }
 }
 #endif
 
