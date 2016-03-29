@@ -17,7 +17,7 @@ CFL	  0.5
 
 # Multigrid:
 p_multi 1
-smooth_steps 3
+smooth_steps 1
 rel_fac 1.00
 low_order 0
 

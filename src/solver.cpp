@@ -119,6 +119,7 @@ void FRSolver::setup_update()
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
     init_flag = 1;
+    SER_flag = 1;
   }
   else
   {
@@ -1154,7 +1155,7 @@ void FRSolver::update()
     res_norm[0] = std::sqrt(res_norm[0]) / nDoF;
 
     /* Compute SER time step growth */
-    if (init_flag == 0)
+    if (init_flag == 0 && SER_flag == 1)
     {
       /* Clipping */
       double omg = res_norm[1] / res_norm[0];
@@ -1170,7 +1171,8 @@ void FRSolver::update()
       /* Relax if GMRES did not converge */
       if (!GMRES_conv)
       {
-        omg = 0.9;
+        omg = 0.5;
+        SER_flag = 0;
       }
 
       /* Compute new time step */

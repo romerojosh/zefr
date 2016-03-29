@@ -834,6 +834,26 @@ void Faces::apply_bcs_dFdU()
   {
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
+    /* TODO: Move setup */
+    mdvector<double> dFdUR, dURdUL;
+    dFdUR.assign({nVars, nVars, nDims});
+    dURdUL.assign({nVars, nVars});
+
+    /* Copy dFdUconv */
+    if (bnd_id != 2)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFdUR(ni, nj, dim) = dFdUconv(fpt, ni, nj, dim, 1);
+          }
+        }
+      }
+    }
+
     /* Apply specified boundary condition */
     // HACK: Needs to be changed to be more general
     switch(bnd_id)
@@ -856,68 +876,42 @@ void Faces::apply_bcs_dFdU()
       }
       case 8: /* Slip Wall */
       {
-        /* Compute wall normal momentum */
-        double momN = 0.0;
+        /* Compute dURdUL */
+        dURdUL(0, 0) = 1.0;
+        dURdUL(0, 1) = 0;
+        dURdUL(0, 2) = 0;
+        dURdUL(0, 3) = 0;
+
+        dURdUL(1, 0) = 0;
+        dURdUL(1, 1) = 1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0);
+        dURdUL(1, 2) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
+        dURdUL(1, 3) = 0;
+
+        dURdUL(2, 0) = 0;
+        dURdUL(2, 1) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
+        dURdUL(2, 2) = 1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0);
+        dURdUL(2, 3) = 0;
+        
+        dURdUL(3, 0) = 0;
+        dURdUL(3, 1) = 0;
+        dURdUL(3, 2) = 0;
+        dURdUL(3, 3) = 1.0;
+
+        /* Compute dFdUL for right state */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
-
-        /* Primitive variables at the wall */
-        double rho = U(fpt, 0, 0);
-        double u = (U(fpt, 1, 0) - 2.0 * momN * norm(fpt, 0, 0)) / U(fpt, 0, 0);
-        double v = (U(fpt, 2, 0) - 2.0 * momN * norm(fpt, 1, 0)) / U(fpt, 0, 0);
-        double e = U(fpt, 3, 0);
-        double gam = input->gamma;
-
-        /* Matrix values */
-        double n1 = (1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0));
-        double n2 = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
-        double n3 = (1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0));
-
-        double c1 = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
-        double c2 = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
-
-        /* Set convective dFdU values in the x-direction */
-        dFdUconv(fpt, 0, 0, 0, 1) = 0;
-        dFdUconv(fpt, 0, 1, 0, 1) = n1;
-        dFdUconv(fpt, 0, 2, 0, 1) = n2;
-        dFdUconv(fpt, 0, 3, 0, 1) = 0;
-
-        dFdUconv(fpt, 1, 0, 0, 1) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * v*v);
-        dFdUconv(fpt, 1, 1, 0, 1) = n1 * (3.0-gam) * u + n2 * (1.0-gam) * v;
-        dFdUconv(fpt, 1, 2, 0, 1) = n2 * (3.0-gam) * u + n3 * (1.0-gam) * v;
-        dFdUconv(fpt, 1, 3, 0, 1) = (gam-1.0);
-
-        dFdUconv(fpt, 2, 0, 0, 1) = -u * v;
-        dFdUconv(fpt, 2, 1, 0, 1) = n2 * u + n1 * v;
-        dFdUconv(fpt, 2, 2, 0, 1) = n3 * u + n2 * v;
-        dFdUconv(fpt, 2, 3, 0, 1) = 0;
-
-        dFdUconv(fpt, 3, 0, 0, 1) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * u;
-        dFdUconv(fpt, 3, 1, 0, 1) = n2 * (1.0-gam) * u * v + n1 * c1;
-        dFdUconv(fpt, 3, 2, 0, 1) = n3 * (1.0-gam) * u * v + n2 * c1;
-        dFdUconv(fpt, 3, 3, 0, 1) = gam * u;
-
-        /* Set convective dFdU values in the y-direction */
-        dFdUconv(fpt, 0, 0, 1, 1) = 0;
-        dFdUconv(fpt, 0, 1, 1, 1) = n1;
-        dFdUconv(fpt, 0, 2, 1, 1) = n2;
-        dFdUconv(fpt, 0, 3, 1, 1) = 0;
-
-        dFdUconv(fpt, 1, 0, 1, 1) = -u * v;
-        dFdUconv(fpt, 1, 1, 1, 1) = n2 * u + n1 * v;
-        dFdUconv(fpt, 1, 2, 1, 1) = n3 * u + n2 * v;
-        dFdUconv(fpt, 1, 3, 1, 1) = 0;
-
-        dFdUconv(fpt, 2, 0, 1, 1) = 0.5 * ((gam-1.0) * u*u + (gam-3.0) * v*v);
-        dFdUconv(fpt, 2, 1, 1, 1) = n1 * (1.0-gam) * u + n2 * (3.0-gam) * v;
-        dFdUconv(fpt, 2, 2, 1, 1) = n2 * (1.0-gam) * u + n3 * (3.0-gam) * v;
-        dFdUconv(fpt, 2, 3, 1, 1) = (gam-1.0);
-
-
-        dFdUconv(fpt, 3, 0, 1, 1) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * v;
-        dFdUconv(fpt, 3, 1, 1, 1) = n1 * (1.0-gam) * u * v + n2 * c2;
-        dFdUconv(fpt, 3, 2, 1, 1) = n2 * (1.0-gam) * u * v + n3 * c2;
-        dFdUconv(fpt, 3, 3, 1, 1) = gam * v;
+        {
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dFdUconv(fpt, i, j, dim, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dFdUconv(fpt, i, j, dim, 1) += dFdUR(i, k, dim) * dURdUL(k, j);
+              }
+            }
+          }
+        }
 
         bc_bias(fpt) = 1;
         break;
