@@ -758,6 +758,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       /* Set LDG bias */
       //LDG_bias(fpt) = -1;
       LDG_bias(fpt) = 0;
+      bc_bias(fpt) = 1;
 
       break;
 

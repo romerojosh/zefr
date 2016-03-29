@@ -423,7 +423,7 @@ void Faces::apply_bcs()
         /* Set LDG bias */
         //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
-
+        bc_bias(fpt) = 1;
  
         break;
 
@@ -867,6 +867,167 @@ void Faces::apply_bcs_dFdU()
             for (unsigned int ni = 0; ni < nVars; ni++)
             {
               dFdUconv(fpt, ni, nj, dim, 1) = 0;
+            }
+          }
+        }
+
+        bc_bias(fpt) = 1;
+        break;
+      }
+      case 6: /* Characteristic (from HiFiLES) */
+      {
+        double nx = norm(fpt, 0, 0);
+        double ny = norm(fpt, 1, 0);
+        double gam = input->gamma;
+
+        /* Primitive Variables */
+        double rhoL = U(fpt, 0, 0);
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+
+        double rhoR = U(fpt, 0, 1);
+        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+
+        /* Compute wall normal velocities */
+        double VnL = 0.0; double VnR = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+          VnR += input->V_fs(dim) * norm(fpt, dim, 0);
+        }
+
+        /* Compute pressure. TODO: Compute pressure once!*/
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+        double PR = input->P_fs;
+
+        double cL = std::sqrt(gam * PL / rhoL);
+
+        /* Compute Riemann Invariants */
+        double Rp = VnL + 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PL / 
+            U(fpt, 0,0));
+        double Rn = VnR - 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PR / 
+            input->rho_fs);
+
+        double cstar = 0.25 * (input->gamma - 1) * (Rp - Rn);
+        double ustarn = 0.5 * (Rp + Rn);
+
+        if (VnL < 0.0) /* Case 1: Inflow */
+        {
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            Vsq += input->V_fs(dim) * input->V_fs(dim);
+
+          double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs +
+              0.5 * Vsq;
+
+          /* Matrix Parameters */
+          double a1 = 0.5 * rhoR / cstar;
+          double a2 = gam / (rhoL * cL);
+          
+          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+          double b2 = nx / rhoL - a2 * uL;
+          double b3 = ny / rhoL - a2 * vL;
+          double b4 = a2 / cstar;
+
+          double c1 = H_fs - cstar * cstar / gam;
+          double c2 = (gam-1.0)/(2.0*gam) * rhoR * cstar;
+
+          /* Compute dURdUL */
+          dURdUL(0, 0) = a1 * b1;
+          dURdUL(0, 1) = a1 * b2;
+          dURdUL(0, 2) = a1 * b3;
+          dURdUL(0, 3) = 0.5 * rhoR * b4;
+
+          dURdUL(1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+          dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+          dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+          dURdUL(1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
+
+          dURdUL(2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+          dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+          dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+          dURdUL(2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
+          
+          dURdUL(3, 0) = a1 * b1 * c1 - b1 * c2;
+          dURdUL(3, 1) = a1 * b2 * c1 - b2 * c2;
+          dURdUL(3, 2) = a1 * b3 * c1 - b3 * c2;
+          dURdUL(3, 3) = 0.5 * rhoR * b4 * c1 - a2 * c2;
+        }
+
+        else  /* Case 2: Outflow */
+        {
+          /* Matrix Parameters */
+          double a1 = gam * rhoR / (gam-1.0);
+          double a2 = gam / (rhoL * cL);
+          double a3 = (gam-1.0) / (gam * PL);
+          double a4 = (gam-1.0) / (2.0 * gam * cstar);
+          double a5 = rhoR * cstar * cstar / (gam-1.0) / (gam-1.0);
+          double a6 = rhoR * cstar / (2.0 * gam);
+
+          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+          double b2 = nx / rhoL - a2 * uL;
+          double b3 = ny / rhoL - a2 * vL;
+
+          double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
+          double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
+          double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
+          double c4 = ustarn * nx + uL - VnL * nx;
+
+          double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
+          double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
+          double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
+          double d4 = ustarn * ny + vL - VnL * ny;
+
+          double e1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
+          double e2 = a3 * uL + a4 * b2;
+          double e3 = a3 * vL + a4 * b3;
+          double e4 = a3 + a2 * a4;
+
+          double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
+
+          /* Compute dURdUL */
+          dURdUL(0, 0) = a1 * e1;
+          dURdUL(0, 1) = a1 * e2;
+          dURdUL(0, 2) = a1 * e3;
+          dURdUL(0, 3) = a1 * e4;
+
+          dURdUL(1, 0) = a1 * e1 * c4 + rhoR * c1;
+          dURdUL(1, 1) = a1 * e2 * c4 + rhoR * c2;
+          dURdUL(1, 2) = a1 * e3 * c4 + rhoR * c3;
+          dURdUL(1, 3) = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
+
+          dURdUL(2, 0) = a1 * e1 * d4 + rhoR * d1;
+          dURdUL(2, 1) = a1 * e2 * d4 + rhoR * d2;
+          dURdUL(2, 2) = a1 * e3 * d4 + rhoR * d3;
+          dURdUL(2, 3) = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
+          
+          dURdUL(3, 0) = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
+          dURdUL(3, 1) = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
+          dURdUL(3, 2) = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
+          dURdUL(3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
+        }
+
+        /* Compute dFdUL for right state */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dFdUconv(fpt, i, j, dim, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dFdUconv(fpt, i, j, dim, 1) += dFdUR(i, k, dim) * dURdUL(k, j);
+              }
             }
           }
         }

@@ -1172,7 +1172,7 @@ void FRSolver::update()
       if (!GMRES_conv)
       {
         omg = 0.5;
-        SER_flag = 0;
+        //SER_flag = 0;
       }
 
       /* Compute new time step */
