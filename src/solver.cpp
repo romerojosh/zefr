@@ -114,7 +114,7 @@ void FRSolver::setup_update()
     rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
     rk_beta(4) = 0.153057247968152;
   }
-  else if (input->dt_scheme == "BDF1")
+  else if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
   {
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
@@ -390,7 +390,10 @@ void FRSolver::solver_data_to_device()
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
   dt_d = dt;
-  b_d = b; // Implicit RHS vector */
+
+  /* Implicit solver data structures */
+  eles->deltaU_d = eles->deltaU;
+  eles->RHS_d = eles->RHS;
 
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
@@ -595,13 +598,14 @@ void FRSolver::compute_residual(unsigned int stage)
     add_source(stage);
 }
 
-#ifdef _GPU
 void FRSolver::compute_LHS()
 {
+#ifdef _GPU
   /* Copy new solution from GPU */
   // TODO: Temporary until placed in GPU
   eles->U_spts = eles->U_spts_d;
   faces->U = faces->U_d;
+#endif
 
   /* Compute derivative of convective flux with respect to state variables 
    * at solution and flux points */
@@ -635,13 +639,21 @@ void FRSolver::compute_LHS()
   dFndU_from_faces();
 
   /* Compute LHS implicit Jacobian */
-  eles->compute_LHS(dt(0));
+  if (input->dt_scheme == "BDF1")
+  {
+    eles->compute_globalLHS(dt(0));
+  }
+  else if (input->dt_scheme == "LUSGS")
+  {
+    eles->compute_localLHS(dt(0));
+  }
 
+#ifdef _GPU
   /* Copy to GPU */
-  A_d.free_data();
-  A_d = eles->A;
-}
+  eles->GLHS_d.free_data();
+  eles->GLHS_d = eles->GLHS;
 #endif
+}
 
 void FRSolver::initialize_U()
 {
@@ -666,13 +678,11 @@ void FRSolver::initialize_U()
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "BDF1")
+  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
   {
     /* Maximum number of unique matrices possible per element */
     unsigned int nMat = eles->nFaces + 1;
 
-    eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
-    eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
     eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
     eles->dFndUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
@@ -690,8 +700,19 @@ void FRSolver::initialize_U()
       eles->taun_fpts.assign({eles->nFpts, eles->nEles, 2});
     }
 
-    eles->B.assign({eles->nSpts, eles->nSpts, nMat});
-    b.assign({eles->nSpts, eles->nEles, eles->nVars});
+    if (input->dt_scheme == "BDF1")
+    {
+      eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
+      eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
+      eles->LHS.assign({eles->nSpts, eles->nSpts, nMat});
+    }
+
+    else if (input->dt_scheme == "LUSGS")
+    {
+      eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
+      eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
+      eles->LHS.assign({eles->nSpts * eles->nVars, eles->nSpts * eles->nVars, eles->nEles});
+    }
   }
 
   /* Initialize solution */
@@ -1027,9 +1048,8 @@ void FRSolver::add_source(unsigned int stage)
 
 void FRSolver::update()
 {
-  if (input->dt_scheme != "BDF1")
+  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUSGS")
   {
-  
 #ifdef _CPU
     U_ini = eles->U_spts;
 #endif
@@ -1123,11 +1143,10 @@ void FRSolver::update()
       check_error();
 #endif
   }
-  else
+  else if (input->dt_scheme == "BDF1")
   {
-    /* Implicit Method */
 #ifdef _CPU
-    ThrowException("Implicit system solve not implemented on CPU yet.");
+    ThrowException("BDF1 not implemented on CPU yet.");
 #endif
 
 #ifdef _GPU
@@ -1187,91 +1206,114 @@ void FRSolver::update()
     /* Compute LHS implicit Jacobian */
     compute_LHS();
 
-    /* Prepare RHS (b) vector */
-    compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);
+    /* Prepare RHS vector */
+    compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
 
     /* Solve system for deltaU */
     eles->deltaU.fill(0);
-    deltaU_d = eles->deltaU;
-    compute_deltaU_wrapper(A_d, deltaU_d, b_d, GMRES_conv);
+    eles->deltaU_d = eles->deltaU;
+    compute_deltaU_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
 
     /* Add deltaU to solution */
-    device_add(eles->U_spts_d, deltaU_d, eles->U_spts_d.size());
+    device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
 
+#endif
+  }
+
+  else if (input->dt_scheme == "LUSGS")
+  {
+#ifdef _CPU
+    compute_residual(0);
+
+    /* Compute LHS implicit Jacobian */
+    compute_LHS();
+#endif
+
+#ifdef _GPU
+    ThrowException("LUSGS not implemented on GPU yet.");
 #endif
   }
 
   flow_time += dt(0);
   current_iter++;
- 
 }
 
 void FRSolver::update_with_source(mdvector<double> &source)
 {
-  
+  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUSGS")
+  {
     U_ini = eles->U_spts;
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
-  {
-    compute_residual(stage);
-
-    /* If in first stage, compute stable timestep */
-    if (stage == 0)
+    /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
+    for (unsigned int stage = 0; stage < (nStages-1); stage++)
     {
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
+      compute_residual(stage);
+
+      /* If in first stage, compute stable timestep */
+      if (stage == 0)
       {
-        compute_element_dt();
+        // TODO: Revisit this as it is kind of expensive.
+        if (input->dt_type != 0)
+        {
+          compute_element_dt();
+        }
       }
+
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
+                eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
+                eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+          }
     }
 
+    /* Final stage */
+    compute_residual(nStages-1);
+    eles->U_spts = U_ini;
+
+    for (unsigned int stage = 0; stage < nStages; stage++)
 #pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-              eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
           }
-          else
-          {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-              eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-          }
-        }
   }
 
-  /* Final stage */
-  compute_residual(nStages-1);
-  eles->U_spts = U_ini;
+  else if (input->dt_scheme == "BDF1")
+  {
+    ThrowException("BDF1 not implemented on CPU yet.");
+  }
 
-  for (unsigned int stage = 0; stage < nStages; stage++)
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
-          {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
-              (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-          }
-          else
-          {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
-              (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-          }
-        }
-
+  else if (input->dt_scheme == "LUSGS")
+  {
+  }
 }
 
 #ifdef _GPU
 void FRSolver::update_with_source(mdvector_gpu<double> &source)
 {
-  if (input->dt_scheme != "BDF1")
+  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUSGS")
   {
     device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 
@@ -1314,16 +1356,16 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
     /* Compute LHS implicit Jacobian */
     compute_LHS();
 
-    /* Prepare RHS (b) vector */
-    compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, b_d, eles->nSpts, eles->nEles, eles->nVars);
+    /* Prepare RHS vector */
+    compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
 
     /* Solve system for deltaU */
     eles->deltaU.fill(0);
-    deltaU_d = eles->deltaU;
-    compute_deltaU_wrapper(A_d, deltaU_d, b_d, GMRES_conv);
+    eles->deltaU_d = eles->deltaU;
+    compute_deltaU_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
 
     /* Add deltaU to solution */
-    device_add(eles->U_spts_d, deltaU_d, eles->U_spts_d.size());
+    device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
   }
 }
 #endif
@@ -1647,7 +1689,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #endif
 
   // HACK: Change nStages to compute the correct residual
-  if (input->dt_scheme == "BDF1")
+  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
   {
     nStages = 1;
   }
@@ -1681,7 +1723,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
 
   // HACK: Change nStages back
-  if (input->dt_scheme == "BDF1")
+  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
   {
     nStages = 2;
   }

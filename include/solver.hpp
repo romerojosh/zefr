@@ -36,18 +36,14 @@ class FRSolver
     mdvector<double> dt;
     mdvector<double> U_ini;
 
+    /* Implicit method parameters */
     unsigned int init_flag;
     unsigned int SER_flag;
     double res_norm[2];
     bool GMRES_conv;
-    spmatrix<double> A; // Sparse matrix for implicit system
-    mdvector<double> b;
 
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
-    spmatrix_gpu<double> A_d;
-    mdvector_gpu<double> b_d;
-    mdvector_gpu<double> deltaU_d;
 #endif
 
     void initialize_U();

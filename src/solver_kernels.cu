@@ -607,7 +607,7 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
 
 __global__
 void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
-    mdvector_gpu<double> b, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double> RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
@@ -617,22 +617,22 @@ void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_s
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    b(spt, ele, n) = -(dt(0) * divF_spts(spt, ele, n, 0))/jaco_det_spts(spt, ele);
+    RHS(spt, ele, n) = -(dt(0) * divF_spts(spt, ele, n, 0))/jaco_det_spts(spt, ele);
   }
 }
 
 void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &b, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double> &RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   dim3 threads(16,12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y);
 
-  compute_RHS<<<blocks, threads>>>(divF_spts, jaco_det_spts, dt, b, nSpts, nEles, nVars);
+  compute_RHS<<<blocks, threads>>>(divF_spts, jaco_det_spts, dt, RHS, nSpts, nEles, nVars);
 }
 
 __global__
 void compute_RHS_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> source, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt, 
-    mdvector_gpu<double> b, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double> RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
@@ -642,17 +642,17 @@ void compute_RHS_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> sou
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    b(spt, ele, n) = -(dt(0) * (divF_spts(spt, ele, n, 0) + source(spt, ele, n)))/jaco_det_spts(spt, ele);
+    RHS(spt, ele, n) = -(dt(0) * (divF_spts(spt, ele, n, 0) + source(spt, ele, n)))/jaco_det_spts(spt, ele);
   }
 }
 
 void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &b, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double> &RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   dim3 threads(16,12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y);
 
-  compute_RHS_source<<<blocks, threads>>>(divF_spts, source, jaco_det_spts, dt, b, nSpts, nEles, nVars);
+  compute_RHS_source<<<blocks, threads>>>(divF_spts, source, jaco_det_spts, dt, RHS, nSpts, nEles, nVars);
 }
 
 void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU, mdvector_gpu<double> &b, bool &GMRES_conv) 

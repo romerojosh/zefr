@@ -57,8 +57,8 @@ class Elements
     mdvector<double> oppPro, oppRes;
 
     /* Element structures for implicit method */
-    spmatrix<double> A; // Sparse matrix for implicit system
-    mdvector<double> B; // Element local matrices for implicit system
+    spmatrix<double> GLHS; // Sparse matrix for global implicit system
+    mdvector<double> LHS;  // Element local matrices for implicit system
     mdvector<double> dFdUconv_spts, dFdUvisc_spts, dFddUvisc_spts;
     mdvector<double> dFndUconv_fpts, dFndUvisc_fpts, dFnddUviscL_fpts, dFnddUviscR_fpts, beta_Ucomm_fpts, taun_fpts;
     mdvector<double> deltaU;
@@ -78,6 +78,11 @@ class Elements
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
+
+    /* Element structures for implicit method */
+    spmatrix_gpu<double> GLHS_d;
+    mdvector_gpu<double> deltaU_d;
+    mdvector_gpu<double> RHS_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);
@@ -114,7 +119,8 @@ class Elements
     virtual void transform_dU() = 0;
 
     /* Routines for implicit method */
-    void compute_LHS(double dt);
+    void compute_globalLHS(double dt);
+    void compute_localLHS(double dt);
     void compute_dFdUconv();
     void compute_dFdUvisc();
     void compute_dFddUvisc();

@@ -987,7 +987,7 @@ void Elements::compute_dFddUvisc()
   }
 }
 
-void Elements::compute_LHS(double dt)
+void Elements::compute_globalLHS(double dt)
 {
   /* TODO: Move setup */
   unsigned int n = 0;
@@ -1009,7 +1009,7 @@ void Elements::compute_LHS(double dt)
   CtempFSN2.assign({nSpts1D, nSpts});
 
   /* Compute LHS */
-  A.clear();
+  GLHS.clear();
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
     for (unsigned int ni = 0; ni < nVars; ni++)
@@ -1017,7 +1017,7 @@ void Elements::compute_LHS(double dt)
       for (unsigned int ele = 0; ele < nEles; ele++)
       {
         /* Fill element list with center and neighbors */
-        B.fill(0);
+        LHS.fill(0);
         ele_list.clear();
         ele_list.push_back((int)ele);
         for (unsigned int face = 0; face < nFaces; face++)
@@ -1044,10 +1044,10 @@ void Elements::compute_LHS(double dt)
           {
             for (unsigned int i = 0; i < nSpts; i++)
             {
-              B(i, j, 0) += oppD(i, j, dim) * dFdUconv_spts(j, ele, ni, nj, dim);
+              LHS(i, j, 0) += oppD(i, j, dim) * dFdUconv_spts(j, ele, ni, nj, dim);
               for (unsigned int k = 0; k < nFpts; k++)
               {
-                B(i, j, 0) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                LHS(i, j, 0) += oppD_fpts(i, k, dim) * CtempFS(k, j);
               }
             }
           }
@@ -1061,7 +1061,7 @@ void Elements::compute_LHS(double dt)
           int eleN = geo->ele_adj(face, ele);
           if (eleN == -1)
           {
-            /* Neighbor is on the Boundary */
+            /* Neighbor is on the boundary */
             CtempFSN.fill(0);
             for (unsigned int j = 0; j < nSpts; j++)
             {
@@ -1081,7 +1081,7 @@ void Elements::compute_LHS(double dt)
                   for (unsigned int k = 0; k < nSpts1D; k++)
                   {
                     unsigned int ind = face * nSpts1D + k;
-                    B(i, j, 0) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                    LHS(i, j, 0) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
                   }
                 }
               }
@@ -1114,7 +1114,7 @@ void Elements::compute_LHS(double dt)
                   for (unsigned int k = 0; k < nSpts1D; k++)
                   {
                     unsigned int ind = face * nSpts1D + k;
-                    B(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                    LHS(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
                   }
                 }
               }
@@ -1316,7 +1316,7 @@ void Elements::compute_LHS(double dt)
               {
                 for (unsigned int k = 0; k < nSpts; k++)
                 {
-                  B(i, j, 0) += oppD(i, k, dim) * CtempSS(k, j);
+                  LHS(i, j, 0) += oppD(i, k, dim) * CtempSS(k, j);
                 }
               }
             }
@@ -1363,7 +1363,7 @@ void Elements::compute_LHS(double dt)
               {
                 for (unsigned int k = 0; k < nFpts; k++)
                 {
-                  B(i, j, 0) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                  LHS(i, j, 0) += oppD_fpts(i, k, dim) * CtempFS(k, j);
                 }
               }
             }
@@ -1387,7 +1387,7 @@ void Elements::compute_LHS(double dt)
               {
                 for (unsigned int k = 0; k < nFpts; k++)
                 {
-                  B(i, j, 0) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                  LHS(i, j, 0) += oppD_fpts(i, k, dim) * CtempFS(k, j);
                 }
               }
             }
@@ -1407,7 +1407,7 @@ void Elements::compute_LHS(double dt)
                 {
                   for (unsigned int k = 0; k < nSpts; k++)
                   {
-                    B(i, j, face+1) += oppD(i, k, dim) * CdFddUN(k, j, dim, face);
+                    LHS(i, j, face+1) += oppD(i, k, dim) * CdFddUN(k, j, dim, face);
                   }
                 }
               }
@@ -1446,7 +1446,7 @@ void Elements::compute_LHS(double dt)
                 {
                   for (unsigned int k = 0; k < nFpts; k++)
                   {
-                    B(i, j, face+1) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                    LHS(i, j, face+1) += oppD_fpts(i, k, dim) * CtempFS(k, j);
                   }
                 }
               }
@@ -1615,7 +1615,7 @@ void Elements::compute_LHS(double dt)
                   for (unsigned int k = 0; k < nSpts1D; k++)
                   {
                     unsigned int ind = face * nSpts1D + k;
-                    B(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                    LHS(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
                   }
                 }
               }
@@ -1642,7 +1642,7 @@ void Elements::compute_LHS(double dt)
                   for (unsigned int k = 0; k < nSpts1D; k++)
                   {
                     unsigned int ind = face * nSpts1D + k;
-                    B(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                    LHS(i, j, face+1) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
                   }
                 }
               }
@@ -1704,7 +1704,7 @@ void Elements::compute_LHS(double dt)
                     for (unsigned int k = 0; k < nSpts1D; k++)
                     {
                       unsigned int ind = face * nSpts1D + k;
-                      B(i, j, mat) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                      LHS(i, j, mat) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
                     }
                   }
                 }
@@ -1720,20 +1720,20 @@ void Elements::compute_LHS(double dt)
           for (unsigned int i = 0; i < nSpts; i++)
           {
             /* Determine index */
-            int Ai = ni*nEles*nSpts + ele*nSpts + i;
-            int Aj = nj*nEles*nSpts + ele*nSpts + j;
+            int Gi = ni*nEles*nSpts + ele*nSpts + i;
+            int Gj = nj*nEles*nSpts + ele*nSpts + j;
 
             /* Compute val */
-            double Aval = dt*B(i, j, 0)/jaco_det_spts(i, ele);
+            double Gval = dt*LHS(i, j, 0)/jaco_det_spts(i, ele);
             if (i == j && ni == nj)
             {
-              Aval += 1;
+              Gval += 1;
             }
 
             /* Fill Jacobian */
-            if (Aval != 0)
+            if (Gval != 0)
             {
-              A.addEntry(Ai, Aj, Aval);
+              GLHS.addEntry(Gi, Gj, Gval);
             }
           }
         }
@@ -1750,16 +1750,16 @@ void Elements::compute_LHS(double dt)
               for (unsigned int i = 0; i < nSpts; i++)
               {
                 /* Determine index */
-                int Ai = ni*nEles*nSpts + ele*nSpts + i;
-                int Aj = nj*nEles*nSpts + eleN*nSpts + j;
+                int Gi = ni*nEles*nSpts + ele*nSpts + i;
+                int Gj = nj*nEles*nSpts + eleN*nSpts + j;
 
                 /* Compute val and fill */
-                double Aval = dt*B(i, j, mat)/jaco_det_spts(i, ele);
+                double Gval = dt*LHS(i, j, mat)/jaco_det_spts(i, ele);
 
                 /* Fill Jacobian */
-                if (Aval != 0)
+                if (Gval != 0)
                 {
-                  A.addEntry(Ai, Aj, Aval);
+                  GLHS.addEntry(Gi, Gj, Gval);
                 }
               }
             }
@@ -1768,10 +1768,400 @@ void Elements::compute_LHS(double dt)
       }
     }
   }
+  GLHS.toCSR();
+}
 
-  A.toCSR();
-  //A.print();
-  //ThrowException("Stopping program to read matrix");
+void Elements::compute_localLHS(double dt)
+{
+  /* TODO: Move setup */
+  unsigned int n = 0;
+
+  mdvector<double> Cvisc0, CviscN, CdFddU0;
+  Cvisc0.assign({nSpts, nSpts, nDims});
+  CviscN.assign({nSpts, nSpts, nDims, nFaces});
+  CdFddU0.assign({nSpts, nSpts, nDims});
+
+  mdvector<double> CtempSS, CtempFS, CtempFS2;
+  CtempSS.assign({nSpts, nSpts});
+  CtempFS.assign({nFpts, nSpts});
+  CtempFS2.assign({nFpts, nSpts});
+
+  mdvector<double> CtempFSN, CtempFSN2;
+  CtempFSN.assign({nSpts1D, nSpts});
+  CtempFSN2.assign({nSpts1D, nSpts});
+
+  /* Compute LHS */
+  LHS.fill(0);
+  for (unsigned int nj = 0; nj < nVars; nj++)
+  {
+    for (unsigned int ni = 0; ni < nVars; ni++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        /* Compute center inviscid LHS implicit Jacobian */
+        CtempFS.fill(0);
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nFpts; i++)
+          {
+            CtempFS(i, j) = dFndUconv_fpts(i, ele, ni, nj, 0) * oppE(i, j);
+          }
+        }
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              LHS(i, j, ele, ni, nj) += oppD(i, j, dim) * dFdUconv_spts(j, ele, ni, nj, dim);
+              for (unsigned int k = 0; k < nFpts; k++)
+              {
+                LHS(i, j, ele, ni, nj) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+              }
+            }
+          }
+        }
+
+        /* Add contribution from boundary conditions */
+        for (unsigned int face = 0; face < nFaces; face++)
+        {
+          /* Neighbor element and face */
+          int eleN = geo->ele_adj(face, ele);
+          if (eleN == -1)
+          {
+            /* Neighbor is on the boundary */
+            CtempFSN.fill(0);
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nSpts1D; i++)
+              {
+                unsigned int ind = face * nSpts1D + i;
+                CtempFSN(i, j) = dFndUconv_fpts(ind, ele, ni, nj, 1) * oppE(ind, j);
+              }
+            }
+
+            for (unsigned int dim = 0; dim < nDims; dim++)
+            {
+              for (unsigned int j = 0; j < nSpts; j++)
+              {
+                for (unsigned int i = 0; i < nSpts; i++)
+                {
+                  for (unsigned int k = 0; k < nSpts1D; k++)
+                  {
+                    unsigned int ind = face * nSpts1D + k;
+                    LHS(i, j, ele, ni, nj) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        /* Compute center viscous LHS implicit Jacobian */
+        if (input->viscous)
+        {
+          /* Compute center viscous supplementary matrix */
+          Cvisc0.fill(0);       
+          CtempFS.fill(0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nFpts; i++)
+            {
+              CtempFS(i, j) = beta_Ucomm_fpts(i, ele, 0) * oppE(i, j);
+            }
+          }
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nSpts; i++)
+              {
+                Cvisc0(i, j, dim) += oppD(i, j, dim);
+                for (unsigned int k = 0; k < nFpts; k++)
+                {
+                  Cvisc0(i, j, dim) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                }
+              }
+            }
+          }
+
+          /* Transform center viscous supplementary matrices (2D) */
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              double Cvisc0temp = Cvisc0(i, j, 0);
+
+              Cvisc0(i, j, 0) = Cvisc0(i, j, 0) * jaco_spts(1, 1, i, ele) -
+                                Cvisc0(i, j, 1) * jaco_spts(1, 0, i, ele);
+
+              Cvisc0(i, j, 1) = Cvisc0(i, j, 1) * jaco_spts(0, 0, i, ele) -
+                                Cvisc0temp * jaco_spts(0, 1, i, ele);
+
+              Cvisc0(i, j, 0) /= jaco_det_spts(i, ele);
+              Cvisc0(i, j, 1) /= jaco_det_spts(i, ele);
+            }
+          }
+
+          /* Compute center dFddU */
+          CdFddU0.fill(0);       
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nSpts; i++)
+              {
+                CdFddU0(i, j, dim) += dFddUvisc_spts(i, ele, n, dim) * Cvisc0(i, j, dim);
+              }
+            }
+          }
+
+          /* Transform center dFddU (2D) */
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nSpts; i++)
+            {
+              double CdFddU0temp = CdFddU0(i, j, 0);
+
+              CdFddU0(i, j, 0) = CdFddU0(i, j, 0) * jaco_spts(1, 1, i, ele) -
+                                 CdFddU0(i, j, 1) * jaco_spts(0, 1, i, ele);
+
+              CdFddU0(i, j, 1) = CdFddU0(i, j, 1) * jaco_spts(0, 0, i, ele) -
+                                 CdFddU0temp * jaco_spts(1, 0, i, ele);
+            }
+          }
+
+          /* Term 1 */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            CtempSS.fill(0);
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              CtempSS(j, j) += dFdUvisc_spts(j, ele, n, dim);
+              for (unsigned int i = 0; i < nSpts; i++)
+              {
+                CtempSS(i, j) += CdFddU0(i, j, dim);
+              }
+            }
+
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nSpts; i++)
+              {
+                for (unsigned int k = 0; k < nSpts; k++)
+                {
+                  LHS(i, j, ele, ni, nj) += oppD(i, k, dim) * CtempSS(k, j);
+                }
+              }
+            }
+          }
+
+          /* Term 2 */
+          CtempFS.fill(0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nFpts; i++)
+            {
+              CtempFS(i, j) += dFndUvisc_fpts(i, ele, n, 0) * oppE(i, j);
+            }
+          }
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            CtempFS2.fill(0);
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nFpts; i++)
+              {
+                CtempFS2(i, j) += dFnddUviscL_fpts(i, ele, n, dim) * oppE(i, j);
+              }
+            }
+
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nFpts; i++)
+              {
+                for (unsigned int k = 0; k < nSpts; k++)
+                {
+                  CtempFS(i, j) += CtempFS2(i, k) * Cvisc0(k, j, dim);
+                }
+              }
+            }
+          }
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nSpts; i++)
+              {
+                for (unsigned int k = 0; k < nFpts; k++)
+                {
+                  LHS(i, j, ele, ni, nj) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                }
+              }
+            }
+          }
+
+          /* Term 3 */
+          CtempFS.fill(0);
+          for (unsigned int j = 0; j < nSpts; j++)
+          {
+            for (unsigned int i = 0; i < nFpts; i++)
+            {
+              CtempFS(i, j) += taun_fpts(i, ele, 0) * oppE(i, j);
+            }
+          }
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nSpts; j++)
+            {
+              for (unsigned int i = 0; i < nSpts; i++)
+              {
+                for (unsigned int k = 0; k < nFpts; k++)
+                {
+                  LHS(i, j, ele, ni, nj) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                }
+              }
+            }
+          }
+
+          /* Add center contribution to Neighbor gradient */
+          for (unsigned int face = 0; face < nFaces; face++)
+          {
+            /* Neighbor element and face */
+            // TODO: Include boundary condition case
+            unsigned int eleN = geo->ele_adj(face, ele);
+            unsigned int faceN = 0;
+            while (geo->ele_adj(faceN, eleN) != (int)ele)
+              faceN++;
+
+            /* (2nd Neighbors) */
+            for (unsigned int face2 = 0; face2 < nFaces; face2++)
+            {
+              /* 2nd Neighbor element */
+              // TODO: Include boundary condition case
+              unsigned int eleN2 = geo->ele_adj(face2, eleN);
+              if (eleN2 == ele)
+              {
+                /* 2nd Neighbor face */
+                // TODO: Include boundary condition case
+                unsigned int faceN2 = 0;
+                while (geo->ele_adj(faceN2, eleN2) != (int)eleN)
+                  faceN2++;
+                // unsigned int faceN2 = face;
+
+                /* Compute 2nd Neighbor viscous supplementary matrix */
+                CviscN.fill(0); // TODO: Only zero out face2
+                CtempFSN.fill(0);
+                for (unsigned int j = 0; j < nSpts; j++)
+                {
+                  for (unsigned int i = 0; i < nSpts1D; i++)
+                  {
+                    unsigned int ind = face2 * nSpts1D + i;
+                    unsigned int indN = (faceN2+1) * nSpts1D - (i+1);
+                    CtempFSN(i, j) = beta_Ucomm_fpts(ind, eleN, 1) * oppE(indN, j);
+                  }
+                }
+
+                for (unsigned int dim = 0; dim < nDims; dim++)
+                {
+                  for (unsigned int j = 0; j < nSpts; j++)
+                  {
+                    for (unsigned int i = 0; i < nSpts; i++)
+                    {
+                      for (unsigned int k = 0; k < nSpts1D; k++)
+                      {
+                        unsigned int ind = face2 * nSpts1D + k;
+                        CviscN(i, j, dim, face2) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                      }
+                    }
+                  }
+                }
+
+                /* Transform 2nd Neighbor viscous supplementary matrices (2D) */
+                for (unsigned int j = 0; j < nSpts; j++)
+                {
+                  for (unsigned int i = 0; i < nSpts; i++)
+                  {
+                    double CviscNtemp = CviscN(i, j, 0, face2);
+
+                    CviscN(i, j, 0, face2) = CviscN(i, j, 0, face2) * jaco_spts(1, 1, i, eleN) -
+                                             CviscN(i, j, 1, face2) * jaco_spts(1, 0, i, eleN);
+
+                    CviscN(i, j, 1, face2) = CviscN(i, j, 1, face2) * jaco_spts(0, 0, i, eleN) -
+                                             CviscNtemp * jaco_spts(0, 1, i, eleN);
+
+                    CviscN(i, j, 0, face2) /= jaco_det_spts(i, eleN);
+                    CviscN(i, j, 1, face2) /= jaco_det_spts(i, eleN);
+                  }
+                }
+
+                /* Term 1 */
+                CtempFSN.fill(0);
+                for (unsigned int dim = 0; dim < nDims; dim++)
+                {
+                  CtempFSN2.fill(0);
+                  for (unsigned int j = 0; j < nSpts; j++)
+                  {
+                    for (unsigned int i = 0; i < nSpts1D; i++)
+                    {
+                      unsigned int ind = face * nSpts1D + i;
+                      unsigned int indN = (faceN+1) * nSpts1D - (i+1);
+                      CtempFSN2(i, j) += dFnddUviscR_fpts(ind, ele, n, dim) * oppE(indN, j);
+                    }
+                  }
+
+                  for (unsigned int j = 0; j < nSpts; j++)
+                  {
+                    for (unsigned int i = 0; i < nSpts1D; i++)
+                    {
+                      for (unsigned int k = 0; k < nSpts; k++)
+                      {
+                        CtempFSN(i, j) += CtempFSN2(i, k) * CviscN(k, j, dim, face2);
+                      }
+                    }
+                  }
+                }
+
+                for (unsigned int dim = 0; dim < nDims; dim++)
+                {
+                  for (unsigned int j = 0; j < nSpts; j++)
+                  {
+                    for (unsigned int i = 0; i < nSpts; i++)
+                    {
+                      for (unsigned int k = 0; k < nSpts1D; k++)
+                      {
+                        unsigned int ind = face * nSpts1D + k;
+                        LHS(i, j, ele, ni, nj) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        /* Compute center LHS implicit Jacobian */
+        for (unsigned int j = 0; j < nSpts; j++)
+        {
+          for (unsigned int i = 0; i < nSpts; i++)
+          {
+            LHS(i, j, ele, ni, nj) = dt*LHS(i, j, ele, ni, nj)/jaco_det_spts(i, ele);
+            if (i == j && ni == nj)
+            {
+              LHS(i, j, ele, ni, nj) += 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
 }
 
 void Elements::compute_Uavg()
