@@ -2161,7 +2161,6 @@ void Elements::compute_localLHS(double dt)
       }
     }
   }
-
 }
 
 void Elements::compute_Uavg()

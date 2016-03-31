@@ -32,6 +32,11 @@
 #include "cublas_v2.h"
 #endif
 
+#ifndef _NO_TNT
+#include "tnt.h"
+#include <jama_lu.h>
+#endif
+
 //FRSolver::FRSolver(const InputStruct *input, int order)
 FRSolver::FRSolver(InputStruct *input, int order)
 {
@@ -655,6 +660,105 @@ void FRSolver::compute_LHS()
 #endif
 }
 
+void FRSolver::compute_RHS()
+{
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        eles->RHS(spt, ele, n) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+      }
+    }
+  }
+}
+
+void FRSolver::compute_RHS_source(mdvector<double> &source)
+{
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        eles->RHS(spt, ele, n) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+      }
+    }
+  }
+}
+
+void FRSolver::compute_deltaU()
+{
+#ifndef _NO_TNT
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    /* Copy LHS into TNT object */
+    unsigned int N = eles->nSpts * eles->nVars;
+    TNT::Array2D<double> A(N, N);
+    for (unsigned int nj = 0; nj < eles->nVars; nj++)
+    {
+      for (unsigned int ni = 0; ni < eles->nVars; ni++)
+      {
+        for (unsigned int sj = 0; sj < eles->nSpts; sj++)
+        {
+          for (unsigned int si = 0; si < eles->nSpts; si++)
+          {
+            unsigned int i = ni * eles->nSpts + si;
+            unsigned int j = nj * eles->nSpts + sj;
+            A[i][j] = eles->LHS(si, sj, ele, ni, nj);
+          }
+        }
+      }
+    }
+
+    /* Calculate and store LU object */
+    LUptr = std::make_shared<JAMA::LU<double>>(A);
+
+    /* Copy RHS into TNT object */
+    TNT::Array1D<double> b(N);
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        unsigned int i = n * eles->nSpts + spt;
+        b[i] = eles->RHS(spt, ele, n);
+      }
+    }
+
+    /* Solve for deltaU */
+    TNT::Array1D<double> x = LUptr->solve(b);
+
+    /* Copy TNT object into deltaU */
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        unsigned int i = n * eles->nSpts + spt;
+        eles->deltaU(spt, ele, n) = x[i];
+      }
+    }
+  }
+#endif
+}
+
+void FRSolver::compute_U()
+{
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        eles->U_spts(spt, ele, n) += eles->deltaU(spt, ele, n);
+      }
+    }
+  }
+}
+
 void FRSolver::initialize_U()
 {
   /* Allocate memory for solution data structures */
@@ -702,17 +806,15 @@ void FRSolver::initialize_U()
 
     if (input->dt_scheme == "BDF1")
     {
-      eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
-      eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
       eles->LHS.assign({eles->nSpts, eles->nSpts, nMat});
     }
 
     else if (input->dt_scheme == "LUSGS")
     {
-      eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
-      eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
-      eles->LHS.assign({eles->nSpts * eles->nVars, eles->nSpts * eles->nVars, eles->nEles});
+      eles->LHS.assign({eles->nSpts, eles->nSpts, eles->nEles, eles->nVars, eles->nVars});
     }
+    eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
+    eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
   }
 
   /* Initialize solution */
@@ -1216,7 +1318,6 @@ void FRSolver::update()
 
     /* Add deltaU to solution */
     device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
-
 #endif
   }
 
@@ -1225,8 +1326,59 @@ void FRSolver::update()
 #ifdef _CPU
     compute_residual(0);
 
+    /* Compute norm of residual */
+    // TODO: Create norm function to eliminate repetition, add other norms
+    unsigned int nDoF = (eles->nSpts * eles->nEles * eles->nVars);
+    res_norm[1] = res_norm[0];
+    res_norm[0] = 0;
+
+#pragma omp parallel for collapse(3)
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele =0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          res_norm[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
+                         (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele));
+        }
+      }
+    }
+    res_norm[0] = std::sqrt(res_norm[0]) / nDoF;
+
+    /* Compute SER time step growth */
+    if (init_flag == 0 && SER_flag == 1)
+    {
+      /* Clipping */
+      double omg = res_norm[1] / res_norm[0];
+      if (omg < 0.1)
+        omg = 0.1;
+      else if (omg > 2.0)
+        omg = 2.0;
+
+      /* Relax Growth */
+      if (omg > 1.0)
+        omg = std::sqrt(omg);
+
+      /* Compute new time step */
+      dt(0) *= omg;
+    }
+    else
+    {
+      init_flag = 0;
+    }
+
     /* Compute LHS implicit Jacobian */
     compute_LHS();
+
+    /* Prepare RHS vector */
+    compute_RHS();
+
+    /* Solve system for deltaU */
+    compute_deltaU();
+
+    /* Add deltaU to solution */
+    compute_U();
 #endif
 
 #ifdef _GPU
@@ -1307,6 +1459,19 @@ void FRSolver::update_with_source(mdvector<double> &source)
 
   else if (input->dt_scheme == "LUSGS")
   {
+    compute_residual(0);
+
+    /* Compute LHS implicit Jacobian */
+    compute_LHS();
+
+    /* Prepare RHS vector */
+    compute_RHS_source(source);
+
+    /* Solve system for deltaU */
+    compute_deltaU();
+
+    /* Add deltaU to solution */
+    compute_U();
   }
 }
 
@@ -1348,9 +1513,9 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
         input->equation, 0, nStages, true);
     check_error();
   }
-  else
+
+  else if (input->dt_scheme == "BDF1")
   {
-    /* Implicit Method */
     compute_residual(0);
 
     /* Compute LHS implicit Jacobian */
@@ -1366,6 +1531,11 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
 
     /* Add deltaU to solution */
     device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
+  }
+
+  else if (input->dt_scheme == "LUSGS")
+  {
+    ThrowException("LUSGS not implemented on GPU yet.");
   }
 }
 #endif

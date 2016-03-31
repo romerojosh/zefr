@@ -17,6 +17,11 @@
 #include "spmatrix_gpu.h"
 #endif
 
+#ifndef _NO_TNT
+#include "tnt.h"
+#include <jama_lu.h>
+#endif
+
 class PMGrid;
 class FRSolver
 {
@@ -41,6 +46,9 @@ class FRSolver
     unsigned int SER_flag;
     double res_norm[2];
     bool GMRES_conv;
+#ifndef _NO_TNT
+    std::shared_ptr<JAMA::LU<double>> LUptr;
+#endif
 
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
@@ -80,6 +88,10 @@ class FRSolver
 
     /* Routines for implicit method */
     void compute_LHS();
+    void compute_RHS();
+    void compute_RHS_source(mdvector<double> &source);
+    void compute_deltaU();
+    void compute_U();
     void dFndU_from_faces();
 };
 
