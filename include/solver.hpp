@@ -42,9 +42,9 @@ class FRSolver
     mdvector<double> U_ini;
 
     /* Implicit method parameters */
-    unsigned int init_flag;
+    double SER = 1;
     unsigned int SER_flag;
-    double res_norm[2];
+    double res_norm[2] = {0};
     bool GMRES_conv;
 #ifndef _NO_TNT
     std::shared_ptr<JAMA::LU<double>> LUptr;
@@ -93,6 +93,7 @@ class FRSolver
     void compute_deltaU();
     void compute_U();
     void dFndU_from_faces();
+    void compute_SER_dt();
 };
 
 #endif /* solver_hpp */

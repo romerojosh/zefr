@@ -123,8 +123,7 @@ void FRSolver::setup_update()
   {
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
-    init_flag = 1;
-    SER_flag = 1;
+    SER_flag = 0;
   }
   else
   {
@@ -646,11 +645,11 @@ void FRSolver::compute_LHS()
   /* Compute LHS implicit Jacobian */
   if (input->dt_scheme == "BDF1")
   {
-    eles->compute_globalLHS(dt(0));
+    eles->compute_globalLHS(dt);
   }
   else if (input->dt_scheme == "LUSGS")
   {
-    eles->compute_localLHS(dt(0));
+    eles->compute_localLHS(dt);
   }
 
 #ifdef _GPU
@@ -669,7 +668,14 @@ void FRSolver::compute_RHS()
     {
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-        eles->RHS(spt, ele, n) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+        if (input->dt_type != 2)
+        {
+          eles->RHS(spt, ele, n) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+        }
+        else
+        {
+          eles->RHS(spt, ele, n) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+        }
       }
     }
   }
@@ -684,7 +690,14 @@ void FRSolver::compute_RHS_source(mdvector<double> &source)
     {
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-        eles->RHS(spt, ele, n) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+        if (input->dt_type != 2)
+        {
+          eles->RHS(spt, ele, n) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+        }
+        else
+        {
+          eles->RHS(spt, ele, n) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+        }
       }
     }
   }
@@ -730,6 +743,10 @@ void FRSolver::compute_deltaU()
 
     /* Solve for deltaU */
     TNT::Array1D<double> x = LUptr->solve(b);
+    if (x.dim() == 0)
+    {
+      ThrowException("LU solve failed!");
+    }
 
     /* Copy TNT object into deltaU */
     for (unsigned int n = 0; n < eles->nVars; n++)
@@ -1254,62 +1271,26 @@ void FRSolver::update()
 #ifdef _GPU
     compute_residual(0);
 
-    /* Compute norm of residual */
-    // TODO: Create norm function to eliminate repetition, add other norms
-    unsigned int nDoF = (eles->nSpts * eles->nEles * eles->nVars);
-    eles->divF_spts = eles->divF_spts_d;
-    res_norm[1] = res_norm[0];
-    res_norm[0] = 0;
-
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
+    // TODO: Revisit this as it is kind of expensive.
+    if (input->dt_type != 0)
     {
-      for (unsigned int ele =0; ele < eles->nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          res_norm[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
-                         (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele));
-        }
-      }
+      compute_element_dt();
     }
-    res_norm[0] = std::sqrt(res_norm[0]) / nDoF;
+    dt = dt_d;
 
     /* Compute SER time step growth */
-    if (init_flag == 0 && SER_flag == 1)
+    if (SER_flag == 1)
     {
-      /* Clipping */
-      double omg = res_norm[1] / res_norm[0];
-      if (omg < 0.1)
-        omg = 0.1;
-      else if (omg > 2.0)
-        omg = 2.0;
-
-      /* Relax Growth */
-      if (omg > 1.0)
-        omg = std::sqrt(omg);
-
-      /* Relax if GMRES did not converge */
-      if (!GMRES_conv)
-      {
-        omg = 0.5;
-        //SER_flag = 0;
-      }
-
-      /* Compute new time step */
-      dt(0) *= omg;
+      eles->divF_spts = eles->divF_spts_d;
+      compute_SER_dt();
       dt_d = dt;
-    }
-    else
-    {
-      init_flag = 0;
     }
 
     /* Compute LHS implicit Jacobian */
     compute_LHS();
 
     /* Prepare RHS vector */
-    compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
+    compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
 
     /* Solve system for deltaU */
     eles->deltaU.fill(0);
@@ -1326,46 +1307,16 @@ void FRSolver::update()
 #ifdef _CPU
     compute_residual(0);
 
-    /* Compute norm of residual */
-    // TODO: Create norm function to eliminate repetition, add other norms
-    unsigned int nDoF = (eles->nSpts * eles->nEles * eles->nVars);
-    res_norm[1] = res_norm[0];
-    res_norm[0] = 0;
-
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
+    // TODO: Revisit this as it is kind of expensive.
+    if (input->dt_type != 0)
     {
-      for (unsigned int ele =0; ele < eles->nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          res_norm[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
-                         (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele));
-        }
-      }
+      compute_element_dt();
     }
-    res_norm[0] = std::sqrt(res_norm[0]) / nDoF;
 
     /* Compute SER time step growth */
-    if (init_flag == 0 && SER_flag == 1)
+    if (SER_flag == 1)
     {
-      /* Clipping */
-      double omg = res_norm[1] / res_norm[0];
-      if (omg < 0.1)
-        omg = 0.1;
-      else if (omg > 2.0)
-        omg = 2.0;
-
-      /* Relax Growth */
-      if (omg > 1.0)
-        omg = std::sqrt(omg);
-
-      /* Compute new time step */
-      dt(0) *= omg;
-    }
-    else
-    {
-      init_flag = 0;
+      compute_SER_dt();
     }
 
     /* Compute LHS implicit Jacobian */
@@ -1461,6 +1412,12 @@ void FRSolver::update_with_source(mdvector<double> &source)
   {
     compute_residual(0);
 
+    // TODO: Revisit this as it is kind of expensive.
+    if (input->dt_type != 0)
+    {
+      compute_element_dt();
+    }
+
     /* Compute LHS implicit Jacobian */
     compute_LHS();
 
@@ -1518,11 +1475,18 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
   {
     compute_residual(0);
 
+    // TODO: Revisit this as it is kind of expensive.
+    if (input->dt_type != 0)
+    {
+      compute_element_dt();
+    }
+    dt = dt_d;
+
     /* Compute LHS implicit Jacobian */
     compute_LHS();
 
     /* Prepare RHS vector */
-    compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
+    compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
 
     /* Solve system for deltaU */
     eles->deltaU.fill(0);
@@ -1580,6 +1544,66 @@ void FRSolver::compute_element_dt()
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->dA_d, geo.fpt2gfpt_d, 
       input->CFL, order, input->dt_type, eles->nFpts, eles->nEles);
 #endif
+}
+
+void FRSolver::compute_SER_dt()
+{
+  /* Compute norm of residual */
+  // TODO: Create norm function to eliminate repetition, add other norms
+  res_norm[1] = res_norm[0];
+  res_norm[0] = 0;
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele =0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        res_norm[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
+                       (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele));
+      }
+    }
+  }
+  res_norm[0] = std::sqrt(res_norm[0]);
+
+  /* Compute SER time step growth */
+  double omg = res_norm[1] / res_norm[0];
+  if (omg != 0)
+  {
+    /* Clipping */
+    if (omg < 0.1)
+      omg = 0.1;
+    else if (omg > 2.0)
+      omg = 2.0;
+
+    /* Relax Growth */
+    if (omg > 1.0)
+      omg = std::sqrt(omg);
+
+    /* Relax if GMRES did not converge */
+    if (input->dt_scheme == "BDF1" && !GMRES_conv)
+    {
+      omg = 0.5;
+    }
+
+    /* Compute new time step */
+    SER *= omg;
+    if (input->dt_type == 0)
+    {
+      dt(0) *= omg;
+    }
+    else if(input->dt_type == 1)
+    {
+      dt(0) *= SER;
+    }
+    else if (input->dt_type == 2)
+    {
+#pragma omp parallel for
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        dt(ele) *= SER;
+      }
+    }
+  }
 }
 
 void FRSolver::write_solution()

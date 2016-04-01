@@ -987,7 +987,7 @@ void Elements::compute_dFddUvisc()
   }
 }
 
-void Elements::compute_globalLHS(double dt)
+void Elements::compute_globalLHS(mdvector<double> &dt)
 {
   /* TODO: Move setup */
   unsigned int n = 0;
@@ -1724,7 +1724,16 @@ void Elements::compute_globalLHS(double dt)
             int Gj = nj*nEles*nSpts + ele*nSpts + j;
 
             /* Compute val */
-            double Gval = dt*LHS(i, j, 0)/jaco_det_spts(i, ele);
+            double Gval;
+            if (input->dt_type != 2)
+            {
+              Gval = dt(0) * LHS(i, j, 0) / jaco_det_spts(i, ele);
+            }
+            else
+            {
+              Gval = dt(ele) * LHS(i, j, 0) / jaco_det_spts(i, ele);
+            }
+
             if (i == j && ni == nj)
             {
               Gval += 1;
@@ -1754,7 +1763,15 @@ void Elements::compute_globalLHS(double dt)
                 int Gj = nj*nEles*nSpts + eleN*nSpts + j;
 
                 /* Compute val and fill */
-                double Gval = dt*LHS(i, j, mat)/jaco_det_spts(i, ele);
+                double Gval;
+                if (input->dt_type != 2)
+                {
+                  Gval = dt(0) * LHS(i, j, mat) / jaco_det_spts(i, ele);
+                }
+                else
+                {
+                  Gval = dt(ele) * LHS(i, j, mat) / jaco_det_spts(i, ele);
+                }
 
                 /* Fill Jacobian */
                 if (Gval != 0)
@@ -1771,7 +1788,7 @@ void Elements::compute_globalLHS(double dt)
   GLHS.toCSR();
 }
 
-void Elements::compute_localLHS(double dt)
+void Elements::compute_localLHS(mdvector<double> &dt)
 {
   /* TODO: Move setup */
   unsigned int n = 0;
@@ -2151,7 +2168,16 @@ void Elements::compute_localLHS(double dt)
         {
           for (unsigned int i = 0; i < nSpts; i++)
           {
-            LHS(i, j, ele, ni, nj) = dt*LHS(i, j, ele, ni, nj)/jaco_det_spts(i, ele);
+            if (input->dt_type != 2)
+            {
+              LHS(i, j, ele, ni, nj) = dt(0) * LHS(i, j, ele, ni, nj) / jaco_det_spts(i, ele);
+            }
+
+            else
+            {
+              LHS(i, j, ele, ni, nj) = dt(ele) * LHS(i, j, ele, ni, nj) / jaco_det_spts(i, ele);
+            }
+
             if (i == j && ni == nj)
             {
               LHS(i, j, ele, ni, nj) += 1;

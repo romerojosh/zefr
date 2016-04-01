@@ -119,8 +119,8 @@ class Elements
     virtual void transform_dU() = 0;
 
     /* Routines for implicit method */
-    void compute_globalLHS(double dt);
-    void compute_localLHS(double dt);
+    void compute_globalLHS(mdvector<double> &dt);
+    void compute_localLHS(mdvector<double> &dt);
     void compute_dFdUconv();
     void compute_dFdUvisc();
     void compute_dFddUvisc();
