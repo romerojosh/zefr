@@ -42,6 +42,7 @@ class FRSolver
     mdvector<double> U_ini;
 
     /* Implicit method parameters */
+    mdvector<unsigned int> ele_color;
     double SER = 1;
     unsigned int SER_flag;
     double res_norm[2] = {0};
@@ -94,6 +95,7 @@ class FRSolver
     void compute_U();
     void dFndU_from_faces();
     void compute_SER_dt();
+    void write_color();
 };
 
 #endif /* solver_hpp */

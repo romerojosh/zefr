@@ -5,6 +5,7 @@
 #include <iostream>
 #include <iomanip>
 #include <memory>
+#include <queue>
 
 #include "cblas.h"
 
@@ -129,6 +130,47 @@ void FRSolver::setup_update()
   {
     ThrowException("dt_scheme not recognized!");
   }
+
+  /* Setup LUSGS element colors */
+  ele_color.assign({eles->nEles});
+  ele_color(0) = 1;
+  std::queue<unsigned int> Q;
+  Q.push(0);
+  while (!Q.empty())
+  {
+    unsigned int ele1 = Q.front();
+    Q.pop();
+
+    /* Determine opposite color */
+    unsigned int color = ele_color(ele1);
+    if (color == 1)
+    {
+      color = 2;
+    }
+    else
+    {
+      color = 1;
+    }
+
+    /* Color neighbors */
+    for (unsigned int face = 0; face < eles->nFaces; face++)
+    {
+      int ele2 = geo.ele_adj(face, ele1);
+      if (ele2 != -1 && ele_color(ele2) == 0)
+      {
+        ele_color(ele2) = color;
+        Q.push(ele2);
+      }
+    }
+  }
+
+  /* Print colors */
+  /*
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    std::cout << "Ele: " << ele << " Color: " << ele_color(ele) << std::endl;
+  }
+  */
 
   U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
   dt.assign({eles->nEles},input->dt);
@@ -1866,6 +1908,132 @@ void FRSolver::write_solution()
     }
   }
 
+  f << "</PointData>" << std::endl;
+  f << "</Piece>" << std::endl;
+  f << "</UnstructuredGrid>" << std::endl;
+  f << "</VTKFile>" << std::endl;
+  f.close();
+}
+
+void FRSolver::write_color()
+{
+  std::cout << "Writing colors to file..." << std::endl;
+  std::stringstream ss;
+  ss.str("");
+  ss << input->output_prefix << "/";
+  ss << input->output_prefix << "_color";
+  ss << ".vtu";
+
+  auto outputfile = ss.str();
+
+  /* Write parition solution to file in .vtu format */
+  std::ofstream f(outputfile);
+
+  /* Write header */
+  f << "<?xml version=\"1.0\"?>" << std::endl;
+  f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
+  f << "byte_order=\"LittleEndian\" ";
+  f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+  f << "<UnstructuredGrid>" << std::endl;
+  f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";
+  f << "NumberOfCells=\"" << eles->nSubelements * eles->nEles << "\">";
+  f << std::endl;
+  
+  /* Write plot point coordinates */
+  f << "<Points>" << std::endl;
+  f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+  f << "format=\"ascii\">" << std::endl; 
+
+  if (eles->nDims == 2)
+  {
+    // TODO: Change order of ppt structures for better looping 
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << 0.0 << std::endl;
+      }
+    }
+  }
+  else
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+      }
+    }
+  }
+  f << "</DataArray>" << std::endl;
+  f << "</Points>" << std::endl;
+
+  /* Write cell information */
+  f << "<Cells>" << std::endl;
+  f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      {
+        f << geo.ppt_connect(i, subele) + ele*eles->nPpts << " ";
+      }
+      f << std::endl;
+    }
+  }
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  unsigned int offset = eles->nNodesPerSubelement;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      f << offset << " ";
+      offset += eles->nNodesPerSubelement;
+    }
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"UInt8\" Name=\"types\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  unsigned int nCells = eles->nSubelements * eles->nEles;
+  if (eles->nDims == 2)
+  {
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 9 << " ";
+  }
+  else
+  {
+    for (unsigned int cell = 0; cell < nCells; cell++)
+      f << 12 << " ";
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+  f << "</Cells>" << std::endl;
+
+  /* Write color information */
+  f << "<PointData>" << std::endl;
+  f << "<DataArray type=\"Float32\" Name=\"color\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+    {
+      f << std::scientific << std::setprecision(16) << ele_color(ele);
+      f  << " ";
+    }
+    f << std::endl;
+  }
+  f << "</DataArray>" << std::endl;
   f << "</PointData>" << std::endl;
   f << "</Piece>" << std::endl;
   f << "</UnstructuredGrid>" << std::endl;
