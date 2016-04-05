@@ -108,7 +108,10 @@ int main(int argc, char* argv[])
 
   /* Write initial solution */
   solver.write_solution();
-  solver.write_color();
+  if (input.dt_scheme == "LUSGS")
+  {
+    solver.write_color();
+  }
 
   /* Write initial error (if required) */
   if (input.error_freq != 0)

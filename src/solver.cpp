@@ -120,61 +120,61 @@ void FRSolver::setup_update()
     rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
     rk_beta(4) = 0.153057247968152;
   }
-  else if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
     SER_flag = 0;
+
+    /* Setup element colors */
+    ele_color.assign({eles->nEles});
+    if (input->dt_scheme == "LUJac")
+    {
+      nColors = 1;
+      ele_color.fill(1);
+    }
+    else if (input->dt_scheme == "LUSGS")
+    {
+      nColors = 2;
+      ele_color(0) = 1;
+      std::queue<unsigned int> Q;
+      Q.push(0);
+      while (!Q.empty())
+      {
+        unsigned int ele1 = Q.front();
+        Q.pop();
+
+        /* Determine opposite color */
+        unsigned int color = ele_color(ele1);
+        if (color == 1)
+        {
+          color = 2;
+        }
+        else
+        {
+          color = 1;
+        }
+
+        /* Color neighbors */
+        for (unsigned int face = 0; face < eles->nFaces; face++)
+        {
+          int ele2 = geo.ele_adj(face, ele1);
+          if (ele2 != -1 && ele_color(ele2) == 0)
+          {
+            ele_color(ele2) = color;
+            Q.push(ele2);
+          }
+        }
+      }
+    }
   }
   else
   {
     ThrowException("dt_scheme not recognized!");
   }
 
-  /* Setup LUSGS element colors */
-  ele_color.assign({eles->nEles});
-  ele_color(0) = 1;
-  std::queue<unsigned int> Q;
-  Q.push(0);
-  while (!Q.empty())
-  {
-    unsigned int ele1 = Q.front();
-    Q.pop();
-
-    /* Determine opposite color */
-    unsigned int color = ele_color(ele1);
-    if (color == 1)
-    {
-      color = 2;
-    }
-    else
-    {
-      color = 1;
-    }
-
-    /* Color neighbors */
-    for (unsigned int face = 0; face < eles->nFaces; face++)
-    {
-      int ele2 = geo.ele_adj(face, ele1);
-      if (ele2 != -1 && ele_color(ele2) == 0)
-      {
-        ele_color(ele2) = color;
-        Q.push(ele2);
-      }
-    }
-  }
-
-  /* Print colors */
-  /*
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    std::cout << "Ele: " << ele << " Color: " << ele_color(ele) << std::endl;
-  }
-  */
-
   U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
   dt.assign({eles->nEles},input->dt);
-
 }
 
 void FRSolver::setup_output()
@@ -689,7 +689,7 @@ void FRSolver::compute_LHS()
   {
     eles->compute_globalLHS(dt);
   }
-  else if (input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     eles->compute_localLHS(dt);
   }
@@ -745,74 +745,79 @@ void FRSolver::compute_RHS_source(mdvector<double> &source)
   }
 }
 
-void FRSolver::compute_deltaU()
+void FRSolver::compute_deltaU(unsigned int color)
 {
 #ifndef _NO_TNT
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    /* Copy LHS into TNT object */
-    unsigned int N = eles->nSpts * eles->nVars;
-    TNT::Array2D<double> A(N, N);
-    for (unsigned int nj = 0; nj < eles->nVars; nj++)
+    if (ele_color(ele) == color)
     {
-      for (unsigned int ni = 0; ni < eles->nVars; ni++)
+      /* Copy LHS into TNT object */
+      unsigned int N = eles->nSpts * eles->nVars;
+      TNT::Array2D<double> A(N, N);
+      for (unsigned int nj = 0; nj < eles->nVars; nj++)
       {
-        for (unsigned int sj = 0; sj < eles->nSpts; sj++)
+        for (unsigned int ni = 0; ni < eles->nVars; ni++)
         {
-          for (unsigned int si = 0; si < eles->nSpts; si++)
+          for (unsigned int sj = 0; sj < eles->nSpts; sj++)
           {
-            unsigned int i = ni * eles->nSpts + si;
-            unsigned int j = nj * eles->nSpts + sj;
-            A[i][j] = eles->LHS(si, sj, ele, ni, nj);
+            for (unsigned int si = 0; si < eles->nSpts; si++)
+            {
+              unsigned int i = ni * eles->nSpts + si;
+              unsigned int j = nj * eles->nSpts + sj;
+              A[i][j] = eles->LHS(si, sj, ele, ni, nj);
+            }
           }
         }
       }
-    }
 
-    /* Calculate and store LU object */
-    LUptr = std::make_shared<JAMA::LU<double>>(A);
+      /* Calculate and store LU object */
+      LUptr = std::make_shared<JAMA::LU<double>>(A);
 
-    /* Copy RHS into TNT object */
-    TNT::Array1D<double> b(N);
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      /* Copy RHS into TNT object */
+      TNT::Array1D<double> b(N);
+      for (unsigned int n = 0; n < eles->nVars; n++)
       {
-        unsigned int i = n * eles->nSpts + spt;
-        b[i] = eles->RHS(spt, ele, n);
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          unsigned int i = n * eles->nSpts + spt;
+          b[i] = eles->RHS(spt, ele, n);
+        }
       }
-    }
 
-    /* Solve for deltaU */
-    TNT::Array1D<double> x = LUptr->solve(b);
-    if (x.dim() == 0)
-    {
-      ThrowException("LU solve failed!");
-    }
-
-    /* Copy TNT object into deltaU */
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      /* Solve for deltaU */
+      TNT::Array1D<double> x = LUptr->solve(b);
+      if (x.dim() == 0)
       {
-        unsigned int i = n * eles->nSpts + spt;
-        eles->deltaU(spt, ele, n) = x[i];
+        ThrowException("LU solve failed!");
+      }
+
+      /* Copy TNT object into deltaU */
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          unsigned int i = n * eles->nSpts + spt;
+          eles->deltaU(spt, ele, n) = x[i];
+        }
       }
     }
   }
 #endif
 }
 
-void FRSolver::compute_U()
+void FRSolver::compute_U(unsigned int color)
 {
-#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      if (ele_color(ele) == color)
       {
-        eles->U_spts(spt, ele, n) += eles->deltaU(spt, ele, n);
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          eles->U_spts(spt, ele, n) += eles->deltaU(spt, ele, n);
+        }
       }
     }
   }
@@ -841,7 +846,7 @@ void FRSolver::initialize_U()
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     /* Maximum number of unique matrices possible per element */
     unsigned int nMat = eles->nFaces + 1;
@@ -867,8 +872,7 @@ void FRSolver::initialize_U()
     {
       eles->LHS.assign({eles->nSpts, eles->nSpts, nMat});
     }
-
-    else if (input->dt_scheme == "LUSGS")
+    else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
       eles->LHS.assign({eles->nSpts, eles->nSpts, eles->nEles, eles->nVars, eles->nVars});
     }
@@ -1209,7 +1213,7 @@ void FRSolver::add_source(unsigned int stage)
 
 void FRSolver::update()
 {
-  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUSGS")
+  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUJac" && input->dt_scheme != "LUSGS")
   {
 #ifdef _CPU
     U_ini = eles->U_spts;
@@ -1304,6 +1308,7 @@ void FRSolver::update()
       check_error();
 #endif
   }
+
   else if (input->dt_scheme == "BDF1")
   {
 #ifdef _CPU
@@ -1344,38 +1349,41 @@ void FRSolver::update()
 #endif
   }
 
-  else if (input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
 #ifdef _CPU
-    compute_residual(0);
-
-    // TODO: Revisit this as it is kind of expensive.
-    if (input->dt_type != 0)
+    for (unsigned int color = 1; color <= nColors; color++)
     {
-      compute_element_dt();
+      compute_residual(0);
+
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+
+      /* Compute SER time step growth */
+      if (SER_flag == 1)
+      {
+        compute_SER_dt();
+      }
+
+      /* Compute LHS implicit Jacobian */
+      compute_LHS();
+
+      /* Prepare RHS vector */
+      compute_RHS();
+
+      /* Solve system for deltaU */
+      compute_deltaU(color);
+
+      /* Add deltaU to solution */
+      compute_U(color);
     }
-
-    /* Compute SER time step growth */
-    if (SER_flag == 1)
-    {
-      compute_SER_dt();
-    }
-
-    /* Compute LHS implicit Jacobian */
-    compute_LHS();
-
-    /* Prepare RHS vector */
-    compute_RHS();
-
-    /* Solve system for deltaU */
-    compute_deltaU();
-
-    /* Add deltaU to solution */
-    compute_U();
 #endif
 
 #ifdef _GPU
-    ThrowException("LUSGS not implemented on GPU yet.");
+    ThrowException("LUJac/LUSGS not implemented on GPU yet.");
 #endif
   }
 
@@ -1385,7 +1393,7 @@ void FRSolver::update()
 
 void FRSolver::update_with_source(mdvector<double> &source)
 {
-  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUSGS")
+  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUJac" && input->dt_scheme != "LUSGS")
   {
     U_ini = eles->U_spts;
 
@@ -1450,34 +1458,37 @@ void FRSolver::update_with_source(mdvector<double> &source)
     ThrowException("BDF1 not implemented on CPU yet.");
   }
 
-  else if (input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    compute_residual(0);
-
-    // TODO: Revisit this as it is kind of expensive.
-    if (input->dt_type != 0)
+    for (unsigned int color = 1; color <= nColors; color++)
     {
-      compute_element_dt();
+      compute_residual(0);
+
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+
+      /* Compute LHS implicit Jacobian */
+      compute_LHS();
+
+      /* Prepare RHS vector */
+      compute_RHS_source(source);
+
+      /* Solve system for deltaU */
+      compute_deltaU(color);
+
+      /* Add deltaU to solution */
+      compute_U(color);
     }
-
-    /* Compute LHS implicit Jacobian */
-    compute_LHS();
-
-    /* Prepare RHS vector */
-    compute_RHS_source(source);
-
-    /* Solve system for deltaU */
-    compute_deltaU();
-
-    /* Add deltaU to solution */
-    compute_U();
   }
 }
 
 #ifdef _GPU
 void FRSolver::update_with_source(mdvector_gpu<double> &source)
 {
-  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUSGS")
+  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUJac" && input->dt_scheme != "LUSGS")
   {
     device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 
@@ -1539,9 +1550,9 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
     device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
   }
 
-  else if (input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    ThrowException("LUSGS not implemented on GPU yet.");
+    ThrowException("LUJac/LUSGS not implemented on GPU yet.");
   }
 }
 #endif
@@ -2051,7 +2062,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #endif
 
   // HACK: Change nStages to compute the correct residual
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     nStages = 1;
   }
@@ -2085,7 +2096,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
 
   // HACK: Change nStages back
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     nStages = 2;
   }

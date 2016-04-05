@@ -33,7 +33,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   Fcomm.assign({nFpts, nVars, 2});
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     dFdUconv.assign({nFpts, nVars, nVars, nDims, 2});
     dFndUconv.assign({nFpts, nVars, nVars, 2, 2});
