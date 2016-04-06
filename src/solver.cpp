@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <memory>
 #include <queue>
+#include <vector>
 
 #include "cblas.h"
 
@@ -124,7 +125,6 @@ void FRSolver::setup_update()
   {
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
-    SER_flag = 0;
 
     /* Setup element colors */
     ele_color.assign({eles->nEles});
@@ -308,6 +308,7 @@ void FRSolver::restart(std::string restart_file)
     if (param == "ITER")
     {
       f >> current_iter;
+      restart_iter = current_iter;
     }
     if (param == "ORDER")
     {
@@ -692,6 +693,7 @@ void FRSolver::compute_LHS()
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     eles->compute_localLHS(dt);
+    compute_LHS_LU();
   }
 
 #ifdef _GPU
@@ -701,44 +703,81 @@ void FRSolver::compute_LHS()
 #endif
 }
 
-void FRSolver::compute_RHS()
+void FRSolver::compute_LHS_LU()
+{
+#ifndef _NO_TNT
+  LUptrs.clear();
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    /* Copy LHS into TNT object */
+    unsigned int N = eles->nSpts * eles->nVars;
+    TNT::Array2D<double> A(N, N);
+    for (unsigned int nj = 0; nj < eles->nVars; nj++)
+    {
+      for (unsigned int ni = 0; ni < eles->nVars; ni++)
+      {
+        for (unsigned int sj = 0; sj < eles->nSpts; sj++)
+        {
+          for (unsigned int si = 0; si < eles->nSpts; si++)
+          {
+            unsigned int i = ni * eles->nSpts + si;
+            unsigned int j = nj * eles->nSpts + sj;
+            A[i][j] = eles->LHS(si, sj, ele, ni, nj);
+          }
+        }
+      }
+    }
+
+    /* Calculate and store LU object */
+    LUptrs.push_back(std::make_shared<JAMA::LU<double>>(A));
+  }
+#endif
+}
+
+void FRSolver::compute_RHS(unsigned int color)
 {
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      if (ele_color(ele) == color)
       {
-        if (input->dt_type != 2)
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
-          eles->RHS(spt, ele, n) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
-        }
-        else
-        {
-          eles->RHS(spt, ele, n) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+          if (input->dt_type != 2)
+          {
+            eles->RHS(spt, ele, n) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+          }
+          else
+          {
+            eles->RHS(spt, ele, n) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+          }
         }
       }
     }
   }
 }
 
-void FRSolver::compute_RHS_source(mdvector<double> &source)
+void FRSolver::compute_RHS_source(mdvector<double> &source, unsigned int color)
 {
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      if (ele_color(ele) == color)
       {
-        if (input->dt_type != 2)
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
-          eles->RHS(spt, ele, n) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
-        }
-        else
-        {
-          eles->RHS(spt, ele, n) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+          if (input->dt_type != 2)
+          {
+            eles->RHS(spt, ele, n) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+          }
+          else
+          {
+            eles->RHS(spt, ele, n) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+          }
         }
       }
     }
@@ -752,29 +791,8 @@ void FRSolver::compute_deltaU(unsigned int color)
   {
     if (ele_color(ele) == color)
     {
-      /* Copy LHS into TNT object */
-      unsigned int N = eles->nSpts * eles->nVars;
-      TNT::Array2D<double> A(N, N);
-      for (unsigned int nj = 0; nj < eles->nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < eles->nVars; ni++)
-        {
-          for (unsigned int sj = 0; sj < eles->nSpts; sj++)
-          {
-            for (unsigned int si = 0; si < eles->nSpts; si++)
-            {
-              unsigned int i = ni * eles->nSpts + si;
-              unsigned int j = nj * eles->nSpts + sj;
-              A[i][j] = eles->LHS(si, sj, ele, ni, nj);
-            }
-          }
-        }
-      }
-
-      /* Calculate and store LU object */
-      LUptr = std::make_shared<JAMA::LU<double>>(A);
-
       /* Copy RHS into TNT object */
+      unsigned int N = eles->nSpts * eles->nVars;
       TNT::Array1D<double> b(N);
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
@@ -786,7 +804,7 @@ void FRSolver::compute_deltaU(unsigned int color)
       }
 
       /* Solve for deltaU */
-      TNT::Array1D<double> x = LUptr->solve(b);
+      TNT::Array1D<double> x = LUptrs[ele]->solve(b);
       if (x.dim() == 0)
       {
         ThrowException("LU solve failed!");
@@ -1326,7 +1344,7 @@ void FRSolver::update()
     dt = dt_d;
 
     /* Compute SER time step growth */
-    if (SER_flag == 1)
+    if (input->SER)
     {
       eles->divF_spts = eles->divF_spts_d;
       compute_SER_dt();
@@ -1363,16 +1381,20 @@ void FRSolver::update()
       }
 
       /* Compute SER time step growth */
-      if (SER_flag == 1)
+      if (input->SER)
       {
         compute_SER_dt();
       }
 
       /* Compute LHS implicit Jacobian */
-      compute_LHS();
+      int iter = current_iter - restart_iter;
+      if (color == 1 && iter%input->Jfreeze_freq == 0)
+      {
+        compute_LHS();
+      }
 
       /* Prepare RHS vector */
-      compute_RHS();
+      compute_RHS(color);
 
       /* Solve system for deltaU */
       compute_deltaU(color);
@@ -1471,10 +1493,14 @@ void FRSolver::update_with_source(mdvector<double> &source)
       }
 
       /* Compute LHS implicit Jacobian */
-      compute_LHS();
+      int iter = (current_iter - restart_iter);
+      if (color == 1 && iter%(2*input->Jfreeze_freq) == 0)
+      {
+        compute_LHS();
+      }
 
       /* Prepare RHS vector */
-      compute_RHS_source(source);
+      compute_RHS_source(source, color);
 
       /* Solve system for deltaU */
       compute_deltaU(color);
@@ -1483,6 +1509,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
       compute_U(color);
     }
   }
+  current_iter++;
 }
 
 #ifdef _GPU
@@ -1554,6 +1581,7 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
   {
     ThrowException("LUJac/LUSGS not implemented on GPU yet.");
   }
+  current_iter++;
 }
 #endif
 
@@ -1603,23 +1631,23 @@ void FRSolver::compute_SER_dt()
 {
   /* Compute norm of residual */
   // TODO: Create norm function to eliminate repetition, add other norms
-  res_norm[1] = res_norm[0];
-  res_norm[0] = 0;
+  SER_res[1] = SER_res[0];
+  SER_res[0] = 0;
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele =0; ele < eles->nEles; ele++)
     {
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-        res_norm[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
+        SER_res[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
                        (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele));
       }
     }
   }
-  res_norm[0] = std::sqrt(res_norm[0]);
+  SER_res[0] = std::sqrt(SER_res[0]);
 
   /* Compute SER time step growth */
-  double omg = res_norm[1] / res_norm[0];
+  double omg = SER_res[1] / SER_res[0];
   if (omg != 0)
   {
     /* Clipping */
@@ -1639,21 +1667,21 @@ void FRSolver::compute_SER_dt()
     }
 
     /* Compute new time step */
-    SER *= omg;
+    SER_omg *= omg;
     if (input->dt_type == 0)
     {
       dt(0) *= omg;
     }
     else if(input->dt_type == 1)
     {
-      dt(0) *= SER;
+      dt(0) *= SER_omg;
     }
     else if (input->dt_type == 2)
     {
 #pragma omp parallel for
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        dt(ele) *= SER;
+        dt(ele) *= SER_omg;
       }
     }
   }

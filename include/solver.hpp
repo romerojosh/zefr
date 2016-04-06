@@ -5,6 +5,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "elements.hpp"
 #include "faces.hpp"
@@ -32,6 +33,7 @@ class FRSolver
     GeoStruct geo;
     int order;
     int current_iter = 0;
+    int restart_iter = 0;
     double flow_time = 0.;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
@@ -42,14 +44,13 @@ class FRSolver
     mdvector<double> U_ini;
 
     /* Implicit method parameters */
-    unsigned int SER_flag;
-    double SER = 1;
-    double res_norm[2] = {0};
+    double SER_omg = 1;
+    double SER_res[2] = {0};
     bool GMRES_conv;
     unsigned int nColors;
     mdvector<unsigned int> ele_color;
 #ifndef _NO_TNT
-    std::shared_ptr<JAMA::LU<double>> LUptr;
+    std::vector<std::shared_ptr<JAMA::LU<double>>> LUptrs;
 #endif
 
 #ifdef _GPU
@@ -90,8 +91,9 @@ class FRSolver
 
     /* Routines for implicit method */
     void compute_LHS();
-    void compute_RHS();
-    void compute_RHS_source(mdvector<double> &source);
+    void compute_LHS_LU();
+    void compute_RHS(unsigned int color);
+    void compute_RHS_source(mdvector<double> &source, unsigned int color);
     void compute_deltaU(unsigned int color);
     void compute_U(unsigned int color);
     void dFndU_from_faces();
