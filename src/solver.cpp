@@ -1352,7 +1352,11 @@ void FRSolver::update()
     }
 
     /* Compute LHS implicit Jacobian */
-    compute_LHS();
+    int iter = current_iter - restart_iter;
+    if (iter%input->Jfreeze_freq == 0)
+    {
+      compute_LHS();
+    }
 
     /* Prepare RHS vector */
     compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
@@ -1493,8 +1497,8 @@ void FRSolver::update_with_source(mdvector<double> &source)
       }
 
       /* Compute LHS implicit Jacobian */
-      int iter = (current_iter - restart_iter);
-      if (color == 1 && iter%(2*input->Jfreeze_freq) == 0)
+      int iter = current_iter - restart_iter;
+      if (color == 1 && iter%(2*input->Jfreeze_freq*input->smooth_steps) == 0)
       {
         compute_LHS();
       }
@@ -1563,7 +1567,11 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
     dt = dt_d;
 
     /* Compute LHS implicit Jacobian */
-    compute_LHS();
+    int iter = current_iter - restart_iter;
+    if (iter%(2*input->Jfreeze_freq*input->smooth_steps) == 0)
+    {
+      compute_LHS();
+    }
 
     /* Prepare RHS vector */
     compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
