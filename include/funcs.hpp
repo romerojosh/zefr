@@ -17,7 +17,8 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
 double compute_source_term(double x, double y, double z, double t, unsigned int var, const InputStruct *input);
 
 /* Compute maximum CFL */
-double get_cfl_limit(int order);
+double get_cfl_limit_adv(int order);
+double get_cfl_limit_diff(double beta, int order);
 
 /* Blocked gemm operation using OpenMP */
 #ifdef _OMP

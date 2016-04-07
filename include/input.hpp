@@ -24,6 +24,7 @@ struct InputStruct
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
   double AdvDiff_D, dt, CFL, rel_fac;
+  bool CFLadvdiff;
   mdvector<double> AdvDiff_A, V_fs, norm_fs, V_wall, norm_wall;
   double T_gas, gamma, prandtl, mu, R, S;
   double rho_fs, u_fs, v_fs, P_fs;

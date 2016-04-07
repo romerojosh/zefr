@@ -519,7 +519,7 @@ void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfp
   }
 
   /* Note: CFL is applied to parent space element with width 2 */
-  dt(ele) = (CFL) * get_cfl_limit_dev(order) * (2.0 / (waveSp_max+1.e-10));
+  dt(ele) = (CFL) * get_cfl_limit_adv_dev(order) * (2.0 / (waveSp_max+1.e-10));
 }
 
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp, 

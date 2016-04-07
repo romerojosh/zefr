@@ -1596,26 +1596,59 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
 void FRSolver::compute_element_dt()
 {
 #ifdef _CPU
+  if (input->CFLadvdiff)
+  {
+    double CFLadv = get_cfl_limit_adv(order);
+    double CFLdiff = get_cfl_limit_diff(input->ldg_b, order);
 #pragma omp parallel for
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  { 
-    double waveSp_max = 0.0;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    { 
+      double waveSp_max = 0.0;
+      double diffCo_max = 0.0;
 
-    /* Compute maximum wavespeed */
-    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-    {
-      /* Skip if on ghost edge. */
-      int gfpt = geo.fpt2gfpt(fpt,ele);
-      if (gfpt == -1)
-        continue;
+      /* Compute maximum wavespeed and diffusion coefficient */
+      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      {
+        /* Skip if on ghost edge. */
+        int gfpt = geo.fpt2gfpt(fpt,ele);
+        if (gfpt == -1)
+          continue;
 
-      double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
+        double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
+        double diffCo = faces->diffCo(gfpt) / (faces->dA(gfpt) * faces->dA(gfpt));
 
-      waveSp_max = std::max(waveSp, waveSp_max);
+        waveSp_max = std::max(waveSp, waveSp_max);
+        diffCo_max = std::max(diffCo, diffCo_max);
+      }
+
+      /* Note: CFL is applied to parent space element with width 2 */
+      dt(ele) = input->CFL / (waveSp_max / (2.0 * CFLadv) + diffCo_max / (4.0 * CFLdiff) + 1e-10);
     }
+  }
+  else
+  {
+    double CFLadv = get_cfl_limit_adv(order);
+#pragma omp parallel for
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    { 
+      double waveSp_max = 0.0;
 
-    /* Note: CFL is applied to parent space element with width 2 */
-    dt(ele) = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
+      /* Compute maximum wavespeed */
+      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      {
+        /* Skip if on ghost edge. */
+        int gfpt = geo.fpt2gfpt(fpt,ele);
+        if (gfpt == -1)
+          continue;
+
+        double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
+
+        waveSp_max = std::max(waveSp, waveSp_max);
+      }
+
+      /* Note: CFL is applied to parent space element with width 2 */
+      dt(ele) = (input->CFL) * CFLadv * (2.0 / (waveSp_max+1.e-10));
+    }
   }
 
   if (input->dt_type == 1) /* Global minimum */

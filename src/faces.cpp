@@ -73,6 +73,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     P.assign({nFpts, 2});
 
   waveSp.assign({nFpts}, 0.0);
+  diffCo.assign({nFpts}, 0.0);
 
   /* Allocate memory for geometry structures */
   norm.assign({nFpts, nDims, 2});
@@ -1893,6 +1894,19 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
     }
 
+    /* Get numerical diffusion coefficient */
+    if (input->equation == AdvDiff || input->equation == Burgers)
+    {
+      diffCo(fpt) = input->AdvDiff_D;
+    }
+    else if (input->equation == EulerNS)
+    {
+      // TODO: Add or store mu from Sutherland's law
+      double diffCoL = std::max(input->mu / WL[0], input->gamma * input->mu / (input->prandtl * WL[0]));
+      double diffCoR = std::max(input->mu / WR[0], input->gamma * input->mu / (input->prandtl * WR[0]));
+      diffCo(fpt) = std::max(diffCoL, diffCoR);
+    }
+
     /* Compute common normal viscous flux and accumulate */
     /* If interior, use central */
     if (LDG_bias(fpt) == 0)
@@ -1927,7 +1941,6 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
         Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
       }
     }
-
   }
 }
 
@@ -2208,7 +2221,7 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
     }
 
     /* Get numerical wavespeed */
-    // TODO: May be able to remove once waveSp is stored
+    // TODO: This can be removed when NK implemented on CPU
     std::vector<double> dwSdU(nVars);
     if (input->equation == AdvDiff)
     {
@@ -2548,6 +2561,20 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
         dFndUL[n] += dFdUvisc(fpt, n, dim, 0) * norm(fpt, dim, 0);
         dFndUR[n] += dFdUvisc(fpt, n, dim, 1) * norm(fpt, dim, 0);
       }
+    }
+
+    /* Get numerical diffusion coefficient */
+    // TODO: This can be removed when NK implemented on CPU
+    if (input->equation == AdvDiff || input->equation == Burgers)
+    {
+      diffCo(fpt) = input->AdvDiff_D;
+    }
+    else if (input->equation == EulerNS)
+    {
+      // TODO: Add or store mu from Sutherland's law
+      double diffCoL = std::max(input->mu / U(fpt, 0, 0), input->gamma * input->mu / (input->prandtl * U(fpt, 0, 0)));
+      double diffCoR = std::max(input->mu / U(fpt, 0, 1), input->gamma * input->mu / (input->prandtl * U(fpt, 0, 1)));
+      diffCo(fpt) = std::max(diffCoL, diffCoR);
     }
 
     /* Compute common normal viscous flux and accumulate */

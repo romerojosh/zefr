@@ -29,28 +29,81 @@ double compute_source_term_dev(double x, double y, double z, double t, unsigned 
 }
 
 __device__
-double get_cfl_limit_dev(int order)
+double get_cfl_limit_adv_dev(int order)
 {
+  /* Upwinded */
   switch(order)
   {
     case 0:
-      return 1.393;
+      return 1.392;
 
     case 1:
-      return 0.464; 
+      return 0.4642; 
 
     case 2:
-      return 0.235;
+      return 0.2351;
 
     case 3:
-      return 0.139;
+      return 0.14539;
 
     case 4:
-      return 0.100;
+      return 0.10003;
 
     case 5:
-      return 0.068;
+      return 0.07363;
   }
 }
 
+__device__
+double get_cfl_limit_diff_dev(double beta, int order)
+{
+  /* Centered */
+  if (beta == 0)
+  {
+    switch(order)
+    {
+      case 0:
+        return 2.785;
 
+      case 1:
+        return 0.17408; 
+
+      case 2:
+        return 0.04264;
+
+      case 3:
+        return 0.015800;
+
+      case 4:
+        return 0.007193;
+
+      case 5:
+        return 0.003730;
+    }
+  }
+
+  /* Upwinded */
+  else
+  {
+    switch(order)
+    {
+      case 0:
+        return 0.6963;
+
+      case 1:
+        return 0.07736; 
+
+      case 2:
+        return 0.018786;
+
+      case 3:
+        return 0.006345;
+
+      case 4:
+        return 0.002664;
+
+      case 5:
+        return 0.0012999;
+    }
+  }
+}

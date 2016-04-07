@@ -58,7 +58,7 @@ class Faces
     mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Fcomm_temp, Ucomm, P;
     mdvector<double> norm, jaco, coord;
     mdvector<int> outnorm;
-    mdvector<double> dA, waveSp;
+    mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
     mdvector<int> bc_bias;
 
