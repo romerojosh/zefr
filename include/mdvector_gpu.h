@@ -58,7 +58,8 @@ class mdvector_gpu
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
     __device__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4);
-
+    __device__
+    T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5);
 };
 
 template <typename T>
@@ -98,9 +99,9 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
   {
     nvals = vec.get_nvals();
     allocate_device_data(values, nvals);
-    allocate_device_data(strides, 5);
+    allocate_device_data(strides, 6);
 
-    copy_to_device(strides, vec.strides_ptr(), 5);
+    copy_to_device(strides, vec.strides_ptr(), 6);
     allocated = true;
   }
 
@@ -173,6 +174,15 @@ T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned i
 {
   //assert(ndims == 5);
   return values[(((idx4 * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template <typename T>
+__device__
+T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3, unsigned int idx4, unsigned int idx5) 
+{
+  //assert(ndims == 6);
+  return values[((((idx5 * strides[4] + idx4) * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
 }
 
 #endif /* mdvector_gpu_hpp */

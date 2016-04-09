@@ -876,12 +876,12 @@ void FRSolver::initialize_U()
     {
       nMat += eles->nFaces * (eles->nFaces - 1);
 
-      eles->dFdUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-      eles->dFddUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+      // nDimsi: Fx, Fy // nDimsj: dUx, dUy
+      eles->dFdUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
+      eles->dFddUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
 
-      eles->dFndUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, 2});
-      eles->dFnddUviscL_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
-      eles->dFnddUviscR_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
+      eles->dFndUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
+      eles->dFnddUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
       eles->beta_Ucomm_fpts.assign({eles->nFpts, eles->nEles, 2});
       eles->taun_fpts.assign({eles->nFpts, eles->nEles, 2});
     }
@@ -1123,7 +1123,7 @@ void FRSolver::F_from_faces()
 
 void FRSolver::dFndU_from_faces()
 {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(4)
   for (unsigned int nj = 0; nj < eles->nVars; nj++) 
   {
     for (unsigned int ni = 0; ni < eles->nVars; ni++) 
@@ -1152,44 +1152,40 @@ void FRSolver::dFndU_from_faces()
 
   if(input->viscous)
   {
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++) 
+#pragma omp parallel for collapse(4)
+    for (unsigned int nj = 0; nj < eles->nVars; nj++) 
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int ni = 0; ni < eles->nVars; ni++) 
       {
-        for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          int gfpt = geo.fpt2gfpt(fpt,ele);
-          /* Check if flux point is on ghost edge */
-          if (gfpt == -1)
-            continue;
-          int slot = geo.fpt2gfpt_slot(fpt,ele);
-          int notslot = 1;
-          if (slot == 1)
+          for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
           {
-            notslot = 0;
-          }
-
-          eles->dFndUvisc_fpts(fpt, ele, n, 0) = faces->dFndUvisc(gfpt, n, slot, slot);
-          eles->beta_Ucomm_fpts(fpt, ele, 0) = faces->beta_Ucomm(gfpt, slot);
-          eles->taun_fpts(fpt, ele, 0) = faces->taun(gfpt, slot, slot);
-
-          eles->dFndUvisc_fpts(fpt, ele, n, 1) = faces->dFndUvisc(gfpt, n, notslot, slot);
-          eles->beta_Ucomm_fpts(fpt, ele, 1) = faces->beta_Ucomm(gfpt, notslot);
-          eles->taun_fpts(fpt, ele, 1) = faces->taun(gfpt, notslot, slot);
-
-          for (unsigned int dim = 0; dim < eles->nDims; dim++)
-          {
-            if (slot == 0)
+            int gfpt = geo.fpt2gfpt(fpt,ele);
+            /* Check if flux point is on ghost edge */
+            if (gfpt == -1)
+              continue;
+            int slot = geo.fpt2gfpt_slot(fpt,ele);
+            int notslot = 1;
+            if (slot == 1)
             {
-              eles->dFnddUviscL_fpts(fpt, ele, n, dim) = faces->dFnddUviscL(gfpt, n, dim, slot);
-              eles->dFnddUviscR_fpts(fpt, ele, n, dim) = faces->dFnddUviscR(gfpt, n, dim, slot);
+              notslot = 0;
             }
-            else
+
+            eles->beta_Ucomm_fpts(fpt, ele, 0) = faces->beta_Ucomm(gfpt, slot);
+            eles->beta_Ucomm_fpts(fpt, ele, 1) = faces->beta_Ucomm(gfpt, notslot);
+
+            eles->dFndUvisc_fpts(fpt, ele, ni, nj, 0) = faces->dFndUvisc(gfpt, ni, nj, slot, slot);
+            eles->dFndUvisc_fpts(fpt, ele, ni, nj, 1) = faces->dFndUvisc(gfpt, ni, nj, notslot, slot);
+
+            for (unsigned int dim = 0; dim < eles->nDims; dim++)
             {
-              eles->dFnddUviscL_fpts(fpt, ele, n, dim) = faces->dFnddUviscR(gfpt, n, dim, slot);
-              eles->dFnddUviscR_fpts(fpt, ele, n, dim) = faces->dFnddUviscL(gfpt, n, dim, slot);
+              eles->dFnddUvisc_fpts(fpt, ele, ni, nj, dim, 0) = faces->dFnddUvisc(gfpt, ni, nj, dim, slot, slot);
+              eles->dFnddUvisc_fpts(fpt, ele, ni, nj, dim, 1) = faces->dFnddUvisc(gfpt, ni, nj, dim, notslot, slot);
             }
+
+            eles->taun_fpts(fpt, ele, 0) = faces->taun(gfpt, slot, slot);
+            eles->taun_fpts(fpt, ele, 1) = faces->taun(gfpt, notslot, slot);
           }
         }
       }

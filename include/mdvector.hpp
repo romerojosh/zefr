@@ -29,8 +29,8 @@ class mdvector
   private:
     int ndims = 0;
     unsigned int nvals = 0;
-    std::array<unsigned int,5> dims; 
-    std::array<unsigned int,5> strides;
+    std::array<unsigned int,6> dims; 
+    std::array<unsigned int,6> strides;
     std::vector<T> values;
 
   public:
@@ -51,7 +51,7 @@ class mdvector
     unsigned int size() const;
 
     //! Method to return vector shape
-    std::array<unsigned int,5> shape(void) const;
+    std::array<unsigned int,6> shape(void) const;
 
     //! Method to return starting data pointer
     T* data();
@@ -69,6 +69,7 @@ class mdvector
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4);
+    T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5);
 
 #ifdef _GPU
     //! Assignment (copy from GPU)
@@ -142,7 +143,7 @@ void mdvector<T>::push_back(T value)
 }
 
 template <typename T>
-std::array<unsigned int,5> mdvector<T>::shape(void) const
+std::array<unsigned int,6> mdvector<T>::shape(void) const
 {
   return dims;
 }
@@ -195,6 +196,14 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
 {
   //assert(ndims == 5);
   return values[(((idx4 * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template <typename T>
+T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3, unsigned int idx4, unsigned int idx5) 
+{
+  //assert(ndims == 6);
+  return values[((((idx5 * strides[4] + idx4) * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
 }
 
 template <typename T>

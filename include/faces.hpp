@@ -64,8 +64,9 @@ class Faces
 
     /* Structures for implicit method */
     mdvector<double> dFdUconv, dFdUvisc, dFddUvisc; 
-    mdvector<double> dFndUconv, dFndUvisc, dFnddUviscL, dFnddUviscR, beta_Ucomm, taun;
-    mdvector<double> dFndU_temp, dFndUL_temp, dFndUR_temp, dFnddUL_temp, dFnddUR_temp, taun_temp;
+    mdvector<double> dFndUconv, dFndUvisc, dFnddUvisc, beta_Ucomm, taun;
+    mdvector<double> dFndUL_temp, dFndUR_temp, dFnddUL_temp, dFnddUR_temp;
+    mdvector<double> dFndU_temp, dFnddU_temp, taun_temp;
 
 #ifdef _MPI
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */

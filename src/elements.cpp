@@ -939,16 +939,20 @@ void Elements::compute_dFdUvisc()
 {
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(5)
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int nj = 0; nj < nVars; nj++)
       {
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
+          for (unsigned int ele = 0; ele < nEles; ele++)
           {
-            dFdUvisc_spts(spt, ele, n, dim) = 0;
+            for (unsigned int spt = 0; spt < nSpts; spt++)
+            {
+              // TODO: Can be removed if initialized to zero
+              dFdUvisc_spts(spt, ele, ni, nj, dim) = 0;
+            }
           }
         }
       }
@@ -957,7 +961,89 @@ void Elements::compute_dFdUvisc()
 
   else if (input->equation == EulerNS)
   {
-    ThrowException("compute_dFdUvisc for EulerNS not implemented yet!");
+    if (nDims == 2)
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          /* Setting variables for convenience */
+          /* States */
+          double rho = U_spts(spt, ele, 0);
+          double momx = U_spts(spt, ele, 1);
+          double momy = U_spts(spt, ele, 2);
+          double e = U_spts(spt, ele, 3);
+
+          double u = momx / rho;
+          double v = momy / rho;
+          double e_int = e / rho - 0.5 * (u*u + v*v);
+
+          /* Gradients */
+          double rho_dx = dU_spts(spt, ele, 0, 0);
+          double momx_dx = dU_spts(spt, ele, 1, 0);
+          double momy_dx = dU_spts(spt, ele, 2, 0);
+          
+          double rho_dy = dU_spts(spt, ele, 0, 1);
+          double momx_dy = dU_spts(spt, ele, 1, 1);
+          double momy_dy = dU_spts(spt, ele, 2, 1);
+
+          /* Set viscosity */
+          // TODO: Store mu in array
+          double mu;
+          if (input->fix_vis)
+          {
+            mu = input->mu;
+          }
+          else
+          {
+            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
+          }
+
+          double du_dx = (momx_dx - rho_dx * u) / rho;
+          double du_dy = (momx_dy - rho_dy * u) / rho;
+
+          double dv_dx = (momy_dx - rho_dx * v) / rho;
+          double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+          double diag = (du_dx + dv_dy) / 3.0;
+
+          double tauxx = 2.0 * mu * (du_dx - diag);
+          double tauxy = mu * (du_dy + dv_dx);
+          double tauyy = 2.0 * mu * (dv_dy - diag);
+
+          /* Set viscous dFdU values to zero */
+          // TODO: Can be removed if initialized to zero
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int nj = 0; nj < nVars; nj++)
+            {
+              for (unsigned int ni = 0; ni < nVars-1; ni++)
+              {
+                dFdUvisc_spts(spt, ele, ni, nj, dim) = 0;
+              }
+            }
+          }
+
+          /* Set viscous dFdU values in the x-direction */
+          dFdUvisc_spts(spt, ele, 3, 0, 0) = -(u * tauxx + v * tauxy) / rho;
+          dFdUvisc_spts(spt, ele, 3, 1, 0) = tauxx / rho;
+          dFdUvisc_spts(spt, ele, 3, 2, 0) = tauxy / rho;
+          dFdUvisc_spts(spt, ele, 3, 3, 0) = 0;
+
+          /* Set viscous dFdU values in the y-direction */
+          dFdUvisc_spts(spt, ele, 3, 0, 1) = -(u * tauxy + v * tauyy) / rho;
+          dFdUvisc_spts(spt, ele, 3, 1, 1) = tauxy / rho;
+          dFdUvisc_spts(spt, ele, 3, 2, 1) = tauyy / rho;
+          dFdUvisc_spts(spt, ele, 3, 3, 1) = 0;
+        }
+      }
+    }
+    else if (nDims == 3)
+    {
+      ThrowException("compute_dFdUvisc for 3D EulerNS not implemented yet!");
+    }
   }
 }
 
@@ -966,15 +1052,18 @@ void Elements::compute_dFddUvisc()
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
 #pragma omp parallel for collapse(4)
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int nj = 0; nj < nVars; nj++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int ni = 0; ni < nVars; ni++)
       {
         for (unsigned int ele = 0; ele < nEles; ele++)
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
-            dFddUvisc_spts(spt, ele, n, dim) = -input->AdvDiff_D;
+            dFddUvisc_spts(spt, ele, ni, nj, 0, 0) = -input->AdvDiff_D;
+            dFddUvisc_spts(spt, ele, ni, nj, 1, 0) = 0;
+            dFddUvisc_spts(spt, ele, ni, nj, 0, 1) = 0;
+            dFddUvisc_spts(spt, ele, ni, nj, 1, 1) = -input->AdvDiff_D;
           }
         }
       }
@@ -983,14 +1072,119 @@ void Elements::compute_dFddUvisc()
 
   else if (input->equation == EulerNS)
   {
-    ThrowException("compute_dFddUvisc for EulerNS not implemented yet!");
+    if (nDims == 2)
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          /* Primitive Variables */
+          double rho = U_spts(spt, ele, 0);
+          double u = U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
+          double v = U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+          double e = U_spts(spt, ele, 3);
+
+          // TODO: Add or store mu from Sutherland's law
+          double diffCo1 = input->mu / rho;
+          double diffCo2 = input->gamma * input->mu / (input->prandtl * rho);
+
+          /* Set viscous dFxddUx values */
+          dFddUvisc_spts(spt, ele, 0, 0, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 0, 0, 0) = -4.0/3.0 * u * diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 0, 0, 0) = -v * diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 0, 0, 0) = -(4.0/3.0 * u*u + v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+
+          dFddUvisc_spts(spt, ele, 0, 1, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 1, 0, 0) = 4.0/3.0 * diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 1, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 3, 1, 0, 0) = u * (4.0/3.0 * diffCo1 - diffCo2);
+
+          dFddUvisc_spts(spt, ele, 0, 2, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 2, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 2, 2, 0, 0) = diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 2, 0, 0) = v * (diffCo1 - diffCo2);
+
+          dFddUvisc_spts(spt, ele, 0, 3, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 3, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 2, 3, 0, 0) = 0;
+          dFddUvisc_spts(spt, ele, 3, 3, 0, 0) = diffCo2;
+
+          /* Set viscous dFyddUx values */
+          dFddUvisc_spts(spt, ele, 0, 0, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 0, 1, 0) = -v * diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 0, 1, 0) = 2.0/3.0 * u * diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 0, 1, 0) = -1.0/3.0 * u * v * diffCo1;
+
+          dFddUvisc_spts(spt, ele, 0, 1, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 1, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 2, 1, 1, 0) = -2.0/3.0 * diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 1, 1, 0) = -2.0/3.0 * v * diffCo1;
+
+          dFddUvisc_spts(spt, ele, 0, 2, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 2, 1, 0) = diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 2, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 3, 2, 1, 0) = u * diffCo1;
+
+          dFddUvisc_spts(spt, ele, 0, 3, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 1, 3, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 2, 3, 1, 0) = 0;
+          dFddUvisc_spts(spt, ele, 3, 3, 1, 0) = 0;
+
+          /* Set viscous dFxddUy values */
+          dFddUvisc_spts(spt, ele, 0, 0, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 0, 0, 1) = 2.0/3.0 * v * diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 0, 0, 1) = -u * diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 0, 0, 1) = -1.0/3.0 * u * v * diffCo1;
+
+          dFddUvisc_spts(spt, ele, 0, 1, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 1, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 2, 1, 0, 1) = diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 1, 0, 1) = v * diffCo1;
+
+          dFddUvisc_spts(spt, ele, 0, 2, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 2, 0, 1) = -2.0/3.0 * diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 2, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 3, 2, 0, 1) = -2.0/3.0 * u * diffCo1;
+
+          dFddUvisc_spts(spt, ele, 0, 3, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 3, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 2, 3, 0, 1) = 0;
+          dFddUvisc_spts(spt, ele, 3, 3, 0, 1) = 0;
+
+          /* Set viscous dFyddUy values */
+          dFddUvisc_spts(spt, ele, 0, 0, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 0, 1, 1) = -u * diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 0, 1, 1) = -4.0/3.0 * v * diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 0, 1, 1) = -(u*u + 4.0/3.0 * v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+
+          dFddUvisc_spts(spt, ele, 0, 1, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 1, 1, 1) = diffCo1;
+          dFddUvisc_spts(spt, ele, 2, 1, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 3, 1, 1, 1) = u * (diffCo1 - diffCo2);
+
+          dFddUvisc_spts(spt, ele, 0, 2, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 2, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 2, 2, 1, 1) = 4.0/3.0 * diffCo1;
+          dFddUvisc_spts(spt, ele, 3, 2, 1, 1) = v * (4.0/3.0 * diffCo1 - diffCo2);
+
+          dFddUvisc_spts(spt, ele, 0, 3, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 1, 3, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 2, 3, 1, 1) = 0;
+          dFddUvisc_spts(spt, ele, 3, 3, 1, 1) = diffCo2;
+        }
+      }
+    }
+    else if (nDims == 3)
+    {
+      ThrowException("compute_dFddUvisc for 3D EulerNS not implemented yet!");
+    }
   }
 }
 
 void Elements::compute_globalLHS(mdvector<double> &dt)
 {
   /* TODO: Move setup */
-  unsigned int n = 0;
   std::vector<int> ele_list;
 
   mdvector<double> Cvisc0, CviscN, CdFddU0, CdFddUN;
@@ -1233,14 +1427,17 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
 
           /* Compute dFddU */
           /* (Center) */
-          CdFddU0.fill(0);       
-          for (unsigned int dim = 0; dim < nDims; dim++)
+          CdFddU0.fill(0);
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {
-            for (unsigned int j = 0; j < nSpts; j++)
+            for (unsigned int dimi = 0; dimi < nDims; dimi++)
             {
-              for (unsigned int i = 0; i < nSpts; i++)
+              for (unsigned int j = 0; j < nSpts; j++)
               {
-                CdFddU0(i, j, dim) += dFddUvisc_spts(i, ele, n, dim) * Cvisc0(i, j, dim);
+                for (unsigned int i = 0; i < nSpts; i++)
+                {
+                  CdFddU0(i, j, dimi) += dFddUvisc_spts(i, ele, ni, nj, dimi, dimj) * Cvisc0(i, j, dimj);
+                }
               }
             }
           }
@@ -1250,13 +1447,16 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
           for (unsigned int face = 0; face < nFaces; face++)
           {
             // TODO: Include boundary condition case
-            for (unsigned int dim = 0; dim < nDims; dim++)
+            for (unsigned int dimj = 0; dimj < nDims; dimj++)
             {
-              for (unsigned int j = 0; j < nSpts; j++)
+              for (unsigned int dimi = 0; dimi < nDims; dimi++)
               {
-                for (unsigned int i = 0; i < nSpts; i++)
+                for (unsigned int j = 0; j < nSpts; j++)
                 {
-                  CdFddUN(i, j, dim, face) += dFddUvisc_spts(i, ele, n, dim) * CviscN(i, j, dim, face);
+                  for (unsigned int i = 0; i < nSpts; i++)
+                  {
+                    CdFddUN(i, j, dimi, face) += dFddUvisc_spts(i, ele, ni, nj, dimi, dimj) * CviscN(i, j, dimj, face);
+                  }
                 }
               }
             }
@@ -1303,7 +1503,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
             CtempSS.fill(0);
             for (unsigned int j = 0; j < nSpts; j++)
             {
-              CtempSS(j, j) += dFdUvisc_spts(j, ele, n, dim);
+              CtempSS(j, j) += dFdUvisc_spts(j, ele, ni, nj, dim);
               for (unsigned int i = 0; i < nSpts; i++)
               {
                 CtempSS(i, j) += CdFddU0(i, j, dim);
@@ -1328,7 +1528,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
           {
             for (unsigned int i = 0; i < nFpts; i++)
             {
-              CtempFS(i, j) += dFndUvisc_fpts(i, ele, n, 0) * oppE(i, j);
+              CtempFS(i, j) += dFndUvisc_fpts(i, ele, ni, nj, 0) * oppE(i, j);
             }
           }
 
@@ -1339,7 +1539,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
             {
               for (unsigned int i = 0; i < nFpts; i++)
               {
-                CtempFS2(i, j) += dFnddUviscL_fpts(i, ele, n, dim) * oppE(i, j);
+                CtempFS2(i, j) += dFnddUvisc_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
               }
             }
 
@@ -1422,7 +1622,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
               {
                 for (unsigned int i = 0; i < nFpts; i++)
                 {
-                  CtempFS2(i, j) += dFnddUviscL_fpts(i, ele, n, dim) * oppE(i, j);
+                  CtempFS2(i, j) += dFnddUvisc_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
                 }
               }
 
@@ -1577,7 +1777,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
               {
                 unsigned int ind = face * nSpts1D + i;
                 unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                CtempFSN(i, j) += dFndUvisc_fpts(ind, ele, n, 1) * oppE(indN, j);
+                CtempFSN(i, j) += dFndUvisc_fpts(ind, ele, ni, nj, 1) * oppE(indN, j);
               }
             }
 
@@ -1590,7 +1790,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
                 {
                   unsigned int ind = face * nSpts1D + i;
                   unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                  CtempFSN2(i, j) += dFnddUviscR_fpts(ind, ele, n, dim) * oppE(indN, j);
+                  CtempFSN2(i, j) += dFnddUvisc_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
                 }
               }
 
@@ -1679,7 +1879,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
                   {
                     unsigned int ind = face * nSpts1D + i;
                     unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                    CtempFSN2(i, j) += dFnddUviscR_fpts(ind, ele, n, dim) * oppE(indN, j);
+                    CtempFSN2(i, j) += dFnddUvisc_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
                   }
                 }
 
@@ -1791,8 +1991,6 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
 void Elements::compute_localLHS(mdvector<double> &dt)
 {
   /* TODO: Move setup */
-  unsigned int n = 0;
-
   mdvector<double> Cvisc0, CviscN, CdFddU0;
   Cvisc0.assign({nSpts, nSpts, nDims});
   CviscN.assign({nSpts, nSpts, nDims, nFaces});
@@ -1923,14 +2121,17 @@ void Elements::compute_localLHS(mdvector<double> &dt)
           }
 
           /* Compute center dFddU */
-          CdFddU0.fill(0);       
-          for (unsigned int dim = 0; dim < nDims; dim++)
+          CdFddU0.fill(0);
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {
-            for (unsigned int j = 0; j < nSpts; j++)
+            for (unsigned int dimi = 0; dimi < nDims; dimi++)
             {
-              for (unsigned int i = 0; i < nSpts; i++)
+              for (unsigned int j = 0; j < nSpts; j++)
               {
-                CdFddU0(i, j, dim) += dFddUvisc_spts(i, ele, n, dim) * Cvisc0(i, j, dim);
+                for (unsigned int i = 0; i < nSpts; i++)
+                {
+                  CdFddU0(i, j, dimi) += dFddUvisc_spts(i, ele, ni, nj, dimi, dimj) * Cvisc0(i, j, dimj);
+                }
               }
             }
           }
@@ -1956,7 +2157,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             CtempSS.fill(0);
             for (unsigned int j = 0; j < nSpts; j++)
             {
-              CtempSS(j, j) += dFdUvisc_spts(j, ele, n, dim);
+              CtempSS(j, j) += dFdUvisc_spts(j, ele, ni, nj, dim);
               for (unsigned int i = 0; i < nSpts; i++)
               {
                 CtempSS(i, j) += CdFddU0(i, j, dim);
@@ -1981,7 +2182,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
           {
             for (unsigned int i = 0; i < nFpts; i++)
             {
-              CtempFS(i, j) += dFndUvisc_fpts(i, ele, n, 0) * oppE(i, j);
+              CtempFS(i, j) += dFndUvisc_fpts(i, ele, ni, nj, 0) * oppE(i, j);
             }
           }
 
@@ -1992,7 +2193,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             {
               for (unsigned int i = 0; i < nFpts; i++)
               {
-                CtempFS2(i, j) += dFnddUviscL_fpts(i, ele, n, dim) * oppE(i, j);
+                CtempFS2(i, j) += dFnddUvisc_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
               }
             }
 
@@ -2128,7 +2329,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
                     {
                       unsigned int ind = face * nSpts1D + i;
                       unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                      CtempFSN2(i, j) += dFnddUviscR_fpts(ind, ele, n, dim) * oppE(indN, j);
+                      CtempFSN2(i, j) += dFnddUvisc_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
                     }
                   }
 

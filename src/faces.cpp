@@ -36,6 +36,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     dFdUconv.assign({nFpts, nVars, nVars, nDims, 2});
+
     dFndUconv.assign({nFpts, nVars, nVars, 2, 2});
 
     dFndUL_temp.assign({nFpts, nVars, nVars});
@@ -43,18 +44,21 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
     if(input->viscous)
     {
-      dFdUvisc.assign({nFpts, nVars, nDims, 2});
-      dFddUvisc.assign({nFpts, nVars, nDims, 2});
-      dFndUvisc.assign({nFpts, nVars, 2, 2});
-      dFnddUviscL.assign({nFpts, nVars, nDims, 2});
-      dFnddUviscR.assign({nFpts, nVars, nDims, 2});
+      // nDimsi: Fx, Fy // nDimsj: dUx, dUy
+      dFdUvisc.assign({nFpts, nVars, nVars, nDims, 2});
+      dFddUvisc.assign({nFpts, nVars, nVars, nDims, nDims, 2});
+
+      dFndUvisc.assign({nFpts, nVars, nVars, 2, 2});
+      dFnddUvisc.assign({nFpts, nVars, nVars, nDims, 2, 2});
       beta_Ucomm.assign({nFpts, 2});
       taun.assign({nFpts, 2, 2});
 
-      dFndU_temp.assign({nFpts, nVars, nDims, 2});
-      dFnddUL_temp.assign({nFpts, nVars, nDims, nDims}); // nDims1: Fx, Fy, nDims2: dUx, dUy
-      dFnddUR_temp.assign({nFpts, nVars, nDims, nDims}); // nDims1: Fx, Fy, nDims2: dUx, dUy
-      taun_temp.assign({nFpts, nDims, 2});
+      dFnddUL_temp.assign({nFpts, nVars, nVars, nDims});
+      dFnddUR_temp.assign({nFpts, nVars, nVars, nDims});
+
+      dFndU_temp.assign({nFpts, nVars, nVars, 2});
+      dFnddU_temp.assign({nFpts, nVars, nVars, nDims, 2});
+      taun_temp.assign({nFpts, 2});
     }
   }
 
@@ -1988,17 +1992,19 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
-#pragma omp parallel for collapse(4)
-    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-    {
+#pragma omp parallel for collapse(5)
+    for (unsigned int slot = 0; slot < 2; slot++)
+    { 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         for (unsigned int nj = 0; nj < nVars; nj++)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFdUconv(fpt, ni, nj, dim, 0) = input->AdvDiff_A(dim);
-            dFdUconv(fpt, ni, nj, dim, 1) = input->AdvDiff_A(dim);
+            for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+            {
+              dFdUconv(fpt, ni, nj, dim, slot) = input->AdvDiff_A(dim);
+            }
           }
         }
       }
@@ -2007,8 +2013,8 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 
   else if (input->equation == Burgers)
   {
-#pragma omp parallel for collapse(4)
-    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+#pragma omp parallel for collapse(5)
+    for (unsigned int slot = 0; slot < 2; slot++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -2016,8 +2022,10 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFdUconv(fpt, ni, nj, dim, 0) = U(fpt, 0, 0);
-            dFdUconv(fpt, ni, nj, dim, 1) = U(fpt, 0, 1);
+            for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+            {
+              dFdUconv(fpt, ni, nj, dim, slot) = U(fpt, 0, slot);
+            }
           }
         }
       }
@@ -2029,9 +2037,9 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
     if (nDims == 2)
     {
 #pragma omp parallel for collapse(2)
-      for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+      for (unsigned int slot = 0; slot < 2; slot++)
       {
-        for (unsigned int slot = 0; slot < 2; slot++)
+        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
           /* Primitive Variables */
           double rho = U(fpt, 0, slot);
@@ -2095,15 +2103,21 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
-#pragma omp parallel for collapse(3)
-    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+#pragma omp parallel for collapse(5)
+    for (unsigned int slot = 0; slot < 2; slot++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          dFdUvisc(fpt, n, dim, 0) = 0;
-          dFdUvisc(fpt, n, dim, 1) = 0;
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+            {
+              // TODO: Can be removed if initialized to zero
+              dFdUvisc(fpt, ni, nj, dim, slot) = 0;
+            }
+          }
         }
       }
     }
@@ -2111,7 +2125,90 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
 
   else if (input->equation == EulerNS)
   {
-    ThrowException("compute_dFdUvisc for EulerNS not implemented yet!");
+    if (nDims == 2)
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int slot = 0; slot < 2; slot++)
+      {
+        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+        {
+          /* Setting variables for convenience */
+          /* States */
+          double rho = U(fpt, 0, slot);
+          double momx = U(fpt, 1, slot);
+          double momy = U(fpt, 2, slot);
+          double e = U(fpt, 3, slot);
+
+          double u = momx / rho;
+          double v = momy / rho;
+          double e_int = e / rho - 0.5 * (u*u + v*v);
+
+          /* Gradients */
+          double rho_dx = dU(fpt, 0, 0, slot);
+          double momx_dx = dU(fpt, 1, 0, slot);
+          double momy_dx = dU(fpt, 2, 0, slot);
+          
+          double rho_dy = dU(fpt, 0, 1, slot);
+          double momx_dy = dU(fpt, 1, 1, slot);
+          double momy_dy = dU(fpt, 2, 1, slot);
+
+          /* Set viscosity */
+          // TODO: Store mu in array
+          double mu;
+          if (input->fix_vis)
+          {
+            mu = input->mu;
+          }
+          /* If desired, use Sutherland's law */
+          else
+          {
+            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
+          }
+
+          double du_dx = (momx_dx - rho_dx * u) / rho;
+          double du_dy = (momx_dy - rho_dy * u) / rho;
+
+          double dv_dx = (momy_dx - rho_dx * v) / rho;
+          double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+          double diag = (du_dx + dv_dy) / 3.0;
+
+          double tauxx = 2.0 * mu * (du_dx - diag);
+          double tauxy = mu * (du_dy + dv_dx);
+          double tauyy = 2.0 * mu * (dv_dy - diag);
+
+          /* Set viscous dFdU values to zero */
+          // TODO: Can be removed if initialized to zero
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int nj = 0; nj < nVars; nj++)
+            {
+              for (unsigned int ni = 0; ni < nVars-1; ni++)
+              {
+                dFdUvisc(fpt, ni, nj, dim, slot) = 0;
+              }
+            }
+          }
+
+          /* Set viscous dFdU values in the x-direction */
+          dFdUvisc(fpt, 3, 0, 0, slot) = -(u * tauxx + v * tauxy) / rho;
+          dFdUvisc(fpt, 3, 1, 0, slot) = tauxx / rho;
+          dFdUvisc(fpt, 3, 2, 0, slot) = tauxy / rho;
+          dFdUvisc(fpt, 3, 3, 0, slot) = 0;
+
+          /* Set viscous dFdU values in the y-direction */
+          dFdUvisc(fpt, 3, 0, 1, slot) = -(u * tauxy + v * tauyy) / rho;
+          dFdUvisc(fpt, 3, 1, 1, slot) = tauxy / rho;
+          dFdUvisc(fpt, 3, 2, 1, slot) = tauyy / rho;
+          dFdUvisc(fpt, 3, 3, 1, slot) = 0;
+        }
+      }
+    }
+    else if (nDims == 3)
+    {
+      ThrowException("compute_dFdUvisc for 3D EulerNS not implemented yet!");
+    }
   }
 }
 
@@ -2119,15 +2216,21 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
-#pragma omp parallel for collapse(3)
-    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+#pragma omp parallel for collapse(4)
+    for (unsigned int slot = 0; slot < 2; slot++)
     {
-      for (unsigned int dim = 0; dim < nDims; dim++)
+      for (unsigned int nj = 0; nj < nVars; nj++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFddUvisc(fpt, n, dim, 0) = -input->AdvDiff_D;
-          dFddUvisc(fpt, n, dim, 1) = -input->AdvDiff_D;
+          for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+          {
+            // TODO: Can be changed if initialized to zero
+            dFddUvisc(fpt, ni, nj, 0, 0, slot) = -input->AdvDiff_D;
+            dFddUvisc(fpt, ni, nj, 1, 0, slot) = 0;
+            dFddUvisc(fpt, ni, nj, 0, 1, slot) = 0;
+            dFddUvisc(fpt, ni, nj, 1, 1, slot) = -input->AdvDiff_D;
+          }
         }
       }
     }
@@ -2135,7 +2238,113 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
 
   else if (input->equation == EulerNS)
   {
-    ThrowException("compute_dFddUvisc for EulerNS not implemented yet!");
+    if (nDims == 2)
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int slot = 0; slot < 2; slot++)
+      {
+        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+        {
+          /* Primitive Variables */
+          double rho = U(fpt, 0, slot);
+          double u = U(fpt, 1, slot) / U(fpt, 0, slot);
+          double v = U(fpt, 2, slot) / U(fpt, 0, slot);
+          double e = U(fpt, 3, slot);
+
+          // TODO: Add or store mu from Sutherland's law
+          double diffCo1 = input->mu / rho;
+          double diffCo2 = input->gamma * input->mu / (input->prandtl * rho);
+
+          /* Set viscous dFxddUx values */
+          dFddUvisc(fpt, 0, 0, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 0, 0, 0, slot) = -4.0/3.0 * u * diffCo1;
+          dFddUvisc(fpt, 2, 0, 0, 0, slot) = -v * diffCo1;
+          dFddUvisc(fpt, 3, 0, 0, 0, slot) = -(4.0/3.0 * u*u + v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+
+          dFddUvisc(fpt, 0, 1, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 1, 0, 0, slot) = 4.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 2, 1, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 3, 1, 0, 0, slot) = u * (4.0/3.0 * diffCo1 - diffCo2);
+
+          dFddUvisc(fpt, 0, 2, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 2, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 2, 2, 0, 0, slot) = diffCo1;
+          dFddUvisc(fpt, 3, 2, 0, 0, slot) = v * (diffCo1 - diffCo2);
+
+          dFddUvisc(fpt, 0, 3, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 3, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 2, 3, 0, 0, slot) = 0;
+          dFddUvisc(fpt, 3, 3, 0, 0, slot) = diffCo2;
+
+          /* Set viscous dFyddUx values */
+          dFddUvisc(fpt, 0, 0, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 0, 1, 0, slot) = -v * diffCo1;
+          dFddUvisc(fpt, 2, 0, 1, 0, slot) = 2.0/3.0 * u * diffCo1;
+          dFddUvisc(fpt, 3, 0, 1, 0, slot) = -1.0/3.0 * u * v * diffCo1;
+
+          dFddUvisc(fpt, 0, 1, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 1, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 2, 1, 1, 0, slot) = -2.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 3, 1, 1, 0, slot) = -2.0/3.0 * v * diffCo1;
+
+          dFddUvisc(fpt, 0, 2, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 2, 1, 0, slot) = diffCo1;
+          dFddUvisc(fpt, 2, 2, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 3, 2, 1, 0, slot) = u * diffCo1;
+
+          dFddUvisc(fpt, 0, 3, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 1, 3, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 2, 3, 1, 0, slot) = 0;
+          dFddUvisc(fpt, 3, 3, 1, 0, slot) = 0;
+
+          /* Set viscous dFxddUy values */
+          dFddUvisc(fpt, 0, 0, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 0, 0, 1, slot) = 2.0/3.0 * v * diffCo1;
+          dFddUvisc(fpt, 2, 0, 0, 1, slot) = -u * diffCo1;
+          dFddUvisc(fpt, 3, 0, 0, 1, slot) = -1.0/3.0 * u * v * diffCo1;
+
+          dFddUvisc(fpt, 0, 1, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 1, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 2, 1, 0, 1, slot) = diffCo1;
+          dFddUvisc(fpt, 3, 1, 0, 1, slot) = v * diffCo1;
+
+          dFddUvisc(fpt, 0, 2, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 2, 0, 1, slot) = -2.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 2, 2, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 3, 2, 0, 1, slot) = -2.0/3.0 * u * diffCo1;
+
+          dFddUvisc(fpt, 0, 3, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 3, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 2, 3, 0, 1, slot) = 0;
+          dFddUvisc(fpt, 3, 3, 0, 1, slot) = 0;
+
+          /* Set viscous dFyddUy values */
+          dFddUvisc(fpt, 0, 0, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 0, 1, 1, slot) = -u * diffCo1;
+          dFddUvisc(fpt, 2, 0, 1, 1, slot) = -4.0/3.0 * v * diffCo1;
+          dFddUvisc(fpt, 3, 0, 1, 1, slot) = -(u*u + 4.0/3.0 * v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+
+          dFddUvisc(fpt, 0, 1, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 1, 1, 1, slot) = diffCo1;
+          dFddUvisc(fpt, 2, 1, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 3, 1, 1, 1, slot) = u * (diffCo1 - diffCo2);
+
+          dFddUvisc(fpt, 0, 2, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 2, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 2, 2, 1, 1, slot) = 4.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 3, 2, 1, 1, slot) = v * (4.0/3.0 * diffCo1 - diffCo2);
+
+          dFddUvisc(fpt, 0, 3, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 1, 3, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 2, 3, 1, 1, slot) = 0;
+          dFddUvisc(fpt, 3, 3, 1, 1, slot) = diffCo2;
+        }
+      }
+    }
+    else if (nDims == 3)
+    {
+      ThrowException("compute_dFddUvisc for 3D EulerNS not implemented yet!");
+    }
   }
 }
 
@@ -2172,8 +2381,8 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
 
-  dFndUL_temp.fill(0.0);
-  dFndUR_temp.fill(0.0);
+  dFndUL_temp.fill(0);
+  dFndUR_temp.fill(0);
 
 #pragma omp parallel for firstprivate(WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -2508,14 +2717,14 @@ void Faces::roe_dFndU(unsigned int startFpt, unsigned int endFpt)
     }
 
     /* Correct for positive parent space sign convention */
-    for (unsigned int side = 0; side < 2; side++)
+    for (unsigned int slot = 0; slot < 2; slot++)
     {
       for (unsigned int nj = 0; nj < nVars; nj++)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFndUconv(fpt, ni, nj, side, 0) *= outnorm(fpt, 0);
-          dFndUconv(fpt, ni, nj, side, 1) *= -outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, slot, 0) *= outnorm(fpt, 0);
+          dFndUconv(fpt, ni, nj, slot, 1) *= -outnorm(fpt, 1);
         }
       }
     }
@@ -2524,16 +2733,17 @@ void Faces::roe_dFndU(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
 {
-  std::vector<double> dFndUL(nVars);
-  std::vector<double> dFndUR(nVars);
-   
   double tau = input->ldg_tau;
 
-  dFndU_temp.fill(0.0);
-  dFnddUL_temp.fill(0.0);
-  dFnddUR_temp.fill(0.0);
+  dFndUL_temp.fill(0);
+  dFndUR_temp.fill(0);
+  dFnddUL_temp.fill(0);
+  dFnddUR_temp.fill(0);
 
-#pragma omp parallel for firstprivate(dFndUL, dFndUR, tau)
+  dFndU_temp.fill(0.0);
+  dFnddU_temp.fill(0.0);
+  taun_temp.fill(0.0);
+
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     /* Setting sign of beta (from HiFiLES) */
@@ -2547,20 +2757,6 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
     {
       if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
         beta = -beta;
-    }
-
-    /* Initialize dFndUL, dFndUR */
-    std::fill(dFndUL.begin(), dFndUL.end(), 0.0);
-    std::fill(dFndUR.begin(), dFndUR.end(), 0.0);
-
-    /* Get interface-normal dFndU components (from L to R) */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        dFndUL[n] += dFdUvisc(fpt, n, dim, 0) * norm(fpt, dim, 0);
-        dFndUR[n] += dFdUvisc(fpt, n, dim, 1) * norm(fpt, dim, 0);
-      }
     }
 
     /* Get numerical diffusion coefficient */
@@ -2577,36 +2773,79 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
       diffCo(fpt) = std::max(diffCoL, diffCoR);
     }
 
-    /* Compute common normal viscous flux and accumulate */
+    /* Get interface-normal dFdU components (from L to R) */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFndUL_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 0) * norm(fpt, dim, 0);
+          dFndUR_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
+        }
+      }
+    }
+
+    /* Get interface-normal dFddU components (from L to R) */
+    for (unsigned int dimj = 0; dimj < nDims; dimj++)
+    {
+      for (unsigned int dimi = 0; dimi < nDims; dimi++)
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFnddUL_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 0) * norm(fpt, dimi, 0);
+            dFnddUR_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi, 0);
+          }
+        }
+      }
+    }
+
+    /* Compute common interface values */
     /* If interior, use central */
     if (LDG_bias(fpt) == 0)
     {
+      /* Common interface solution */
       beta_Ucomm(fpt, 0) = 0.5 - beta;
       beta_Ucomm(fpt, 1) = 0.5 + beta;
 
+      /* Common interface dFndU */
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          dFndU_temp(fpt, n, dim, 0) += 0.5 * dFdUvisc(fpt, n, dim, 0) + beta * norm(fpt, dim, 0) * dFndUL[n];
-          dFndU_temp(fpt, n, dim, 1) += 0.5 * dFdUvisc(fpt, n, dim, 1) - beta * norm(fpt, dim, 0) * dFndUR[n];
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFndU_temp(fpt, ni, nj, 0) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 0) + beta * norm(fpt, dim, 0) * dFndUL_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
+            dFndU_temp(fpt, ni, nj, 1) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 1) - beta * norm(fpt, dim, 0) * dFndUR_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
+          }
         }
-
-        taun_temp(fpt, dim, 0) += tau * norm(fpt, dim, 0);
-        taun_temp(fpt, dim, 1) -= tau * norm(fpt, dim, 0);
       }
 
-      for (unsigned int n = 0; n < nVars; n++)
+      /* Common interface dFddU */
+      for (unsigned int dimj = 0; dimj < nDims; dimj++)
       {
-        dFnddUL_temp(fpt, n, 0, 0) = 0.5 * dFddUvisc(fpt, n, 0, 0) + beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 0, 0) * norm(fpt, 0, 0);
-        dFnddUL_temp(fpt, n, 1, 0) = beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 0, 0) * norm(fpt, 0, 0);
-        dFnddUL_temp(fpt, n, 0, 1) = beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 1, 0) * norm(fpt, 1, 0);
-        dFnddUL_temp(fpt, n, 1, 1) = 0.5 * dFddUvisc(fpt, n, 1, 0) + beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 1, 0) * norm(fpt, 1, 0);
+        for (unsigned int dimi = 0; dimi < nDims; dimi++)
+        {
+          for (unsigned int nj = 0; nj < nVars; nj++)
+          {
+            for (unsigned int ni = 0; ni < nVars; ni++)
+            {
+              dFnddU_temp(fpt, ni, nj, dimj, 0) += 
+                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 0) + beta * norm(fpt, dimi, 0) * dFnddUL_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi, 0);
+              dFnddU_temp(fpt, ni, nj, dimj, 1) += 
+                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 1) - beta * norm(fpt, dimi, 0) * dFnddUR_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi, 0);
+            }
+          }
+        }
+      }
 
-        dFnddUR_temp(fpt, n, 0, 0) = 0.5 * dFddUvisc(fpt, n, 0, 1) - beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 0, 1) * norm(fpt, 0, 0);
-        dFnddUR_temp(fpt, n, 1, 0) = -beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 0, 1) * norm(fpt, 0, 0);
-        dFnddUR_temp(fpt, n, 0, 1) = -beta * norm(fpt, 0, 0) * dFddUvisc(fpt, n, 1, 1) * norm(fpt, 1, 0);
-        dFnddUR_temp(fpt, n, 1, 1) = 0.5 * dFddUvisc(fpt, n, 1, 1) - beta * norm(fpt, 1, 0) * dFddUvisc(fpt, n, 1, 1) * norm(fpt, 1, 0);
+      /* Common interface tau*delU */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        taun_temp(fpt, 0) += (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
+        taun_temp(fpt, 1) -= (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
       }
     }
     /* If Neumann boundary, use right state only */
@@ -2616,6 +2855,7 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
       ThrowException("Neumann boundary not implemented");
 
       // No beta on the boundary, grab right boundary?
+      /*
       beta_Ucomm(fpt, 0) = 0;
       beta_Ucomm(fpt, 1) = 1;
 
@@ -2629,95 +2869,118 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
         taun_temp(fpt, dim, 0) += tau * norm(fpt, dim, 0);
         taun_temp(fpt, dim, 1) -= tau * norm(fpt, dim, 0);
       }
+      */
     }
 
-    for (unsigned int n = 0; n < nVars; n++)
+    /* Correct for positive parent space sign convention, dFndU */
+    for (unsigned int slot = 0; slot < 2; slot++)
     {
-      dFndUvisc(fpt, n, 0, 0) = 0;  dFndUvisc(fpt, n, 1, 0) = 0;
-      dFndUvisc(fpt, n, 0, 1) = 0;  dFndUvisc(fpt, n, 1, 1) = 0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
+      for (unsigned int nj = 0; nj < nVars; nj++)
       {
-        dFndUvisc(fpt, n, 0, 0) += (dFndU_temp(fpt, n, dim, 0) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-        dFndUvisc(fpt, n, 1, 0) += (dFndU_temp(fpt, n, dim, 1) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-
-        dFndUvisc(fpt, n, 0, 1) += (dFndU_temp(fpt, n, dim, 0) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
-        dFndUvisc(fpt, n, 1, 1) += (dFndU_temp(fpt, n, dim, 1) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
-      }
-
-      for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-      {
-        dFnddUviscL(fpt, n, dim2, 0) = 0; dFnddUviscR(fpt, n, dim2, 0) = 0;
-        dFnddUviscL(fpt, n, dim2, 1) = 0; dFnddUviscR(fpt, n, dim2, 1) = 0;
-        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+        for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFnddUviscL(fpt, n, dim2, 0) += (dFnddUL_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * outnorm(fpt, 0);
-          dFnddUviscR(fpt, n, dim2, 0) += (dFnddUR_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * outnorm(fpt, 0);
-
-          dFnddUviscL(fpt, n, dim2, 1) += (dFnddUL_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * -outnorm(fpt, 1);
-          dFnddUviscR(fpt, n, dim2, 1) += (dFnddUR_temp(fpt, n, dim1, dim2) * norm(fpt, dim1, 0)) * -outnorm(fpt, 1);
+          dFndUvisc(fpt, ni, nj, slot, 0) = dFndU_temp(fpt, ni, nj, slot) * outnorm(fpt, 0);
+          dFndUvisc(fpt, ni, nj, slot, 1) = dFndU_temp(fpt, ni, nj, slot) * -outnorm(fpt, 1);
         }
       }
     }
 
-    taun(fpt, 0, 0) = 0; taun(fpt, 1, 0) = 0;
-    taun(fpt, 0, 1) = 0; taun(fpt, 1, 1) = 0;
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    /* Correct for positive parent space sign convention, dFnddU */
+    for (unsigned int slot = 0; slot < 2; slot++)
     {
-      taun(fpt, 0, 0) += (taun_temp(fpt, dim, 0) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-      taun(fpt, 1, 0) += (taun_temp(fpt, dim, 1) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFnddUvisc(fpt, ni, nj, dim, slot, 0) = dFnddU_temp(fpt, ni, nj, dim, slot) * outnorm(fpt, 0);
+            dFnddUvisc(fpt, ni, nj, dim, slot, 1) = dFnddU_temp(fpt, ni, nj, dim, slot) * -outnorm(fpt, 1);
+          }
+        }
+      }
+    }
 
-      taun(fpt, 0, 1) += (taun_temp(fpt, dim, 0) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
-      taun(fpt, 1, 1) += (taun_temp(fpt, dim, 1) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+    /* Correct for positive parent space sign convention, taun */
+    for (unsigned int slot = 0; slot < 2; slot++)
+    {
+      taun(fpt, slot, 0) = taun_temp(fpt, slot) * outnorm(fpt, 0);
+      taun(fpt, slot, 1) = taun_temp(fpt, slot) * -outnorm(fpt, 1);
     }
   }
 }
 
 void Faces::transform_dFndU()
 {
-#pragma omp parallel for collapse(2)
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+#pragma omp parallel for collapse(5)
+  for (unsigned int slotj = 0; slotj < 2; slotj++)
   {
-    for (unsigned int nj = 0; nj < nVars; nj++)
+    for (unsigned int sloti = 0; sloti < 2; sloti++)
     {
-      for (unsigned int ni = 0; ni < nVars; ni++)
+      for (unsigned int nj = 0; nj < nVars; nj++)
       {
-        dFndUconv(fpt, ni, nj, 0, 0) *= dA(fpt);
-        dFndUconv(fpt, ni, nj, 1, 0) *= dA(fpt);
-        dFndUconv(fpt, ni, nj, 0, 1) *= dA(fpt);
-        dFndUconv(fpt, ni, nj, 1, 1) *= dA(fpt);
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+          {
+            dFndUconv(fpt, ni, nj, sloti, slotj) *= dA(fpt);
+          }
+        }
       }
     }
   }
 
   if (input->viscous)
   {
-#pragma omp parallel for collapse(2)
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+#pragma omp parallel for collapse(5)
+    for (unsigned int slotj = 0; slotj < 2; slotj++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int sloti = 0; sloti < 2; sloti++)
       {
-        dFndUvisc(fpt, n, 0, 0) *= dA(fpt);
-        dFndUvisc(fpt, n, 1, 0) *= dA(fpt);
-        dFndUvisc(fpt, n, 0, 1) *= dA(fpt);
-        dFndUvisc(fpt, n, 1, 1) *= dA(fpt);
-
-        for (unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          dFnddUviscL(fpt, n, dim, 0) *= dA(fpt);
-          dFnddUviscR(fpt, n, dim, 0) *= dA(fpt);
-          dFnddUviscL(fpt, n, dim, 1) *= dA(fpt);
-          dFnddUviscR(fpt, n, dim, 1) *= dA(fpt);
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+            {
+              dFndUvisc(fpt, ni, nj, sloti, slotj) *= dA(fpt);
+            }
+          }
         }
       }
     }
 
-#pragma omp parallel for
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+#pragma omp parallel for collapse(6)
+    for (unsigned int slotj = 0; slotj < 2; slotj++)
     {
-      taun(fpt, 0, 0) *= dA(fpt);
-      taun(fpt, 1, 0) *= dA(fpt);
-      taun(fpt, 0, 1) *= dA(fpt);
-      taun(fpt, 1, 1) *= dA(fpt);
+      for (unsigned int sloti = 0; sloti < 2; sloti++)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int nj = 0; nj < nVars; nj++)
+          {
+            for (unsigned int ni = 0; ni < nVars; ni++)
+            {
+              for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+              {
+                dFnddUvisc(fpt, ni, nj, dim, sloti, slotj) *= dA(fpt);
+              }
+            }
+          }
+        }
+      }
+    }
+
+#pragma omp parallel for collapse(3)
+    for (unsigned int slotj = 0; slotj < 2; slotj++)
+    {
+      for (unsigned int sloti = 0; sloti < 2; sloti++)
+      {
+        for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        {
+          taun(fpt, sloti, slotj) *= dA(fpt);
+        }
+      }
     }
   }
 }
