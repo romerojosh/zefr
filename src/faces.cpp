@@ -37,28 +37,27 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   {
     dFdUconv.assign({nFpts, nVars, nVars, nDims, 2});
 
-    dFndUconv.assign({nFpts, nVars, nVars, 2, 2});
+    dFcdUconv.assign({nFpts, nVars, nVars, 2, 2});
 
     dFndUL_temp.assign({nFpts, nVars, nVars});
     dFndUR_temp.assign({nFpts, nVars, nVars});
 
     if(input->viscous)
     {
-      // nDimsi: Fx, Fy // nDimsj: dUx, dUy
+      // nDimsi: Fx, Fy // nDimsj: dUdx, dUdy
       dFdUvisc.assign({nFpts, nVars, nVars, nDims, 2});
       dFddUvisc.assign({nFpts, nVars, nVars, nDims, nDims, 2});
 
-      dFndUvisc.assign({nFpts, nVars, nVars, 2, 2});
-      dFnddUvisc.assign({nFpts, nVars, nVars, nDims, 2, 2});
-      beta_Ucomm.assign({nFpts, 2});
-      taun.assign({nFpts, 2, 2});
+      dUcdU.assign({nFpts, nVars, nVars, 2});
+      dFcdUvisc.assign({nFpts, nVars, nVars, 2, 2});
+      dFcddUvisc.assign({nFpts, nVars, nVars, nDims, 2, 2});
 
       dFnddUL_temp.assign({nFpts, nVars, nVars, nDims});
       dFnddUR_temp.assign({nFpts, nVars, nVars, nDims});
 
-      dFndU_temp.assign({nFpts, nVars, nVars, 2});
-      dFnddU_temp.assign({nFpts, nVars, nVars, nDims, 2});
-      taun_temp.assign({nFpts, 2});
+      // TODO: May be able to remove these
+      dFcdU_temp.assign({nFpts, nVars, nVars, 2});
+      dFcddU_temp.assign({nFpts, nVars, nVars, nDims, 2});
     }
   }
 
@@ -840,11 +839,11 @@ void Faces::apply_bcs_dFdU()
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* TODO: Move setup */
-    mdvector<double> dFdUR, dURdUL;
-    dFdUR.assign({nVars, nVars, nDims});
+    mdvector<double> dFdURconv, dURdUL;
+    dFdURconv.assign({nVars, nVars, nDims});
     dURdUL.assign({nVars, nVars});
 
-    /* Copy dFdUconv */
+    /* Copy right state dFdUconv */
     if (bnd_id != 2)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -853,18 +852,74 @@ void Faces::apply_bcs_dFdU()
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFdUR(ni, nj, dim) = dFdUconv(fpt, ni, nj, dim, 1);
+            dFdURconv(ni, nj, dim) = dFdUconv(fpt, ni, nj, dim, 1);
+          }
+        }
+      }
+    }
+
+    /* TODO: Move setup */
+    mdvector<double> dUcdUR, dFdURvisc, dFddURvisc, ddURddUL;
+    if (input->viscous)
+    {
+      dUcdUR.assign({nVars, nVars});
+      dFdURvisc.assign({nVars, nVars, nDims});
+      dFddURvisc.assign({nVars, nVars, nDims, nDims}); // nDimsi: Fx, Fy // nDimsj: dUdx, dUdy
+      ddURddUL.assign({nVars, nVars, nDims, nDims}); // nDimsi: dUdxR, dUdyR // nDimsj: dUdxL, dUdyL
+
+      /* Copy right state dUcdU */
+      if (bnd_id != 2)
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dUcdUR(ni, nj) = dUcdU(fpt, ni, nj, 1);
+          }
+        }
+      }
+
+      /* Copy right state dFdUvisc */
+      if (bnd_id != 2)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int nj = 0; nj < nVars; nj++)
+          {
+            for (unsigned int ni = 0; ni < nVars; ni++)
+            {
+              dFdURvisc(ni, nj, dim) = dFdUvisc(fpt, ni, nj, dim, 1);
+            }
+          }
+        }
+      }
+
+      /* Copy right state dFddUvisc */
+      if (bnd_id == 11 || bnd_id == 12) /* Adiabatic Wall */
+      {
+        for (unsigned int dimj = 0; dimj < nDims; dimj++)
+        {
+          for (unsigned int dimi = 0; dimi < nDims; dimi++)
+          {
+            for (unsigned int nj = 0; nj < nVars; nj++)
+            {
+              for (unsigned int ni = 0; ni < nVars; ni++)
+              {
+                dFddURvisc(ni, nj, dimi, dimj) = dFddUvisc(fpt, ni, nj, dimi, dimj, 1);
+              }
+            }
           }
         }
       }
     }
 
     /* Apply specified boundary condition */
-    // HACK: Needs to be changed to be more general
+    // TODO: Needs to be checked to ensure all boundary conditions have the correct cases
     switch(bnd_id)
     {
       case 2: /* Farfield and Supersonic Inlet */
       {
+        /* Compute dFdULconv for right state */
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           for (unsigned int nj = 0; nj < nVars; nj++)
@@ -876,9 +931,37 @@ void Faces::apply_bcs_dFdU()
           }
         }
 
+        if (input->viscous)
+        {
+          /* Compute dUcdUL for right state */
+          for (unsigned int nj = 0; nj < nVars; nj++)
+          {
+            for (unsigned int ni = 0; ni < nVars; ni++)
+            {
+              dUcdU(fpt, ni, nj, 1) = 0;
+            }
+          }
+
+          /* Compute dFdULvisc for right state */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int nj = 0; nj < nVars; nj++)
+            {
+              for (unsigned int ni = 0; ni < nVars; ni++)
+              {
+                dFdUvisc(fpt, ni, nj, dim, 1) = 0;
+              }
+            }
+          }
+
+          /* Compute dFddULvisc for right state */
+          // Stays the same
+        }
+
         bc_bias(fpt) = 1;
         break;
       }
+
       case 6: /* Characteristic (from HiFiLES) */
       {
         double nx = norm(fpt, 0, 0);
@@ -1021,7 +1104,7 @@ void Faces::apply_bcs_dFdU()
           dURdUL(3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
         }
 
-        /* Compute dFdUL for right state */
+        /* Compute dFdULconv for right state */
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           for (unsigned int j = 0; j < nVars; j++)
@@ -1031,7 +1114,7 @@ void Faces::apply_bcs_dFdU()
               dFdUconv(fpt, i, j, dim, 1) = 0;
               for (unsigned int k = 0; k < nVars; k++)
               {
-                dFdUconv(fpt, i, j, dim, 1) += dFdUR(i, k, dim) * dURdUL(k, j);
+                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
               }
             }
           }
@@ -1040,6 +1123,7 @@ void Faces::apply_bcs_dFdU()
         bc_bias(fpt) = 1;
         break;
       }
+
       case 8: /* Slip Wall */
       {
         /* Compute dURdUL */
@@ -1063,7 +1147,7 @@ void Faces::apply_bcs_dFdU()
         dURdUL(3, 2) = 0;
         dURdUL(3, 3) = 1.0;
 
-        /* Compute dFdUL for right state */
+        /* Compute dFdULconv for right state */
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           for (unsigned int j = 0; j < nVars; j++)
@@ -1073,13 +1157,204 @@ void Faces::apply_bcs_dFdU()
               dFdUconv(fpt, i, j, dim, 1) = 0;
               for (unsigned int k = 0; k < nVars; k++)
               {
-                dFdUconv(fpt, i, j, dim, 1) += dFdUR(i, k, dim) * dURdUL(k, j);
+                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
               }
             }
           }
         }
 
         bc_bias(fpt) = 1;
+        break;
+      }
+
+      case 11: /* No-slip Wall (adiabatic) */
+      {
+        double nx = norm(fpt, 0, 0);
+        double ny = norm(fpt, 1, 0);
+
+        /* Primitive Variables */
+        double rhoL = U(fpt, 0, 0);
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+        double eL = U(fpt, 3, 0);
+
+        /* Compute dURdUL */
+        dURdUL(0, 0) = 1.0;
+        dURdUL(0, 1) = 0;
+        dURdUL(0, 2) = 0;
+        dURdUL(0, 3) = 0;
+
+        dURdUL(1, 0) = 0;
+        dURdUL(1, 1) = 0;
+        dURdUL(1, 2) = 0;
+        dURdUL(1, 3) = 0;
+
+        dURdUL(2, 0) = 0;
+        dURdUL(2, 1) = 0;
+        dURdUL(2, 2) = 0;
+        dURdUL(2, 3) = 0;
+        
+        dURdUL(3, 0) = 0.5 * (uL*uL + vL*vL);
+        dURdUL(3, 1) = -uL;
+        dURdUL(3, 2) = -vL;
+        dURdUL(3, 3) = 1.0;
+
+        /* Compute dFdULconv for right state */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dFdUconv(fpt, i, j, dim, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
+              }
+            }
+          }
+        }
+
+        if (input->viscous)
+        {
+          /* Compute dUcdUL for right state */
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dUcdU(fpt, i, j, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
+              }
+            }
+          }
+
+          /* Compute dFdULvisc for right state */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nVars; j++)
+            {
+              for (unsigned int i = 0; i < nVars; i++)
+              {
+                dFdUvisc(fpt, i, j, dim, 1) = 0;
+                for (unsigned int k = 0; k < nVars; k++)
+                {
+                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
+                }
+              }
+            }
+          }
+
+          /* Compute dUxR/dUxL */
+          ddURddUL(0, 0, 0, 0) = 1;
+          ddURddUL(1, 0, 0, 0) = 0;
+          ddURddUL(2, 0, 0, 0) = 0;
+          ddURddUL(3, 0, 0, 0) = nx*nx * (eL / rhoL - (uL*uL + vL*vL));
+
+          ddURddUL(0, 1, 0, 0) = 0;
+          ddURddUL(1, 1, 0, 0) = 1;
+          ddURddUL(2, 1, 0, 0) = 0;
+          ddURddUL(3, 1, 0, 0) = nx*nx * uL;
+
+          ddURddUL(0, 2, 0, 0) = 0;
+          ddURddUL(1, 2, 0, 0) = 0;
+          ddURddUL(2, 2, 0, 0) = 1;
+          ddURddUL(3, 2, 0, 0) = nx*nx * vL;
+
+          ddURddUL(0, 3, 0, 0) = 0;
+          ddURddUL(1, 3, 0, 0) = 0;
+          ddURddUL(2, 3, 0, 0) = 0;
+          ddURddUL(3, 3, 0, 0) = 1.0 - nx*nx;
+
+          /* Compute dUyR/dUxL */
+          ddURddUL(0, 0, 1, 0) = 0;
+          ddURddUL(1, 0, 1, 0) = 0;
+          ddURddUL(2, 0, 1, 0) = 0;
+          ddURddUL(3, 0, 1, 0) = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
+
+          ddURddUL(0, 1, 1, 0) = 0;
+          ddURddUL(1, 1, 1, 0) = 0;
+          ddURddUL(2, 1, 1, 0) = 0;
+          ddURddUL(3, 1, 1, 0) = nx*ny * uL;
+
+          ddURddUL(0, 2, 1, 0) = 0;
+          ddURddUL(1, 2, 1, 0) = 0;
+          ddURddUL(2, 2, 1, 0) = 0;
+          ddURddUL(3, 2, 1, 0) = nx*ny * vL;
+
+          ddURddUL(0, 3, 1, 0) = 0;
+          ddURddUL(1, 3, 1, 0) = 0;
+          ddURddUL(2, 3, 1, 0) = 0;
+          ddURddUL(3, 3, 1, 0) = -nx * ny;
+
+          /* Compute dUxR/dUyL */
+          ddURddUL(0, 0, 0, 1) = 0;
+          ddURddUL(1, 0, 0, 1) = 0;
+          ddURddUL(2, 0, 0, 1) = 0;
+          ddURddUL(3, 0, 0, 1) = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
+
+          ddURddUL(0, 1, 0, 1) = 0;
+          ddURddUL(1, 1, 0, 1) = 0;
+          ddURddUL(2, 1, 0, 1) = 0;
+          ddURddUL(3, 1, 0, 1) = nx*ny * uL;
+
+          ddURddUL(0, 2, 0, 1) = 0;
+          ddURddUL(1, 2, 0, 1) = 0;
+          ddURddUL(2, 2, 0, 1) = 0;
+          ddURddUL(3, 2, 0, 1) = nx*ny * vL;
+
+          ddURddUL(0, 3, 0, 1) = 0;
+          ddURddUL(1, 3, 0, 1) = 0;
+          ddURddUL(2, 3, 0, 1) = 0;
+          ddURddUL(3, 3, 0, 1) = -nx * ny;
+
+          /* Compute dUyR/dUyL */
+          ddURddUL(0, 0, 1, 1) = 1;
+          ddURddUL(1, 0, 1, 1) = 0;
+          ddURddUL(2, 0, 1, 1) = 0;
+          ddURddUL(3, 0, 1, 1) = ny*ny * (eL / rhoL - (uL*uL + vL*vL));
+
+          ddURddUL(0, 1, 1, 1) = 0;
+          ddURddUL(1, 1, 1, 1) = 1;
+          ddURddUL(2, 1, 1, 1) = 0;
+          ddURddUL(3, 1, 1, 1) = ny*ny * uL;
+
+          ddURddUL(0, 2, 1, 1) = 0;
+          ddURddUL(1, 2, 1, 1) = 0;
+          ddURddUL(2, 2, 1, 1) = 1;
+          ddURddUL(3, 2, 1, 1) = ny*ny * vL;
+
+          ddURddUL(0, 3, 1, 1) = 0;
+          ddURddUL(1, 3, 1, 1) = 0;
+          ddURddUL(2, 3, 1, 1) = 0;
+          ddURddUL(3, 3, 1, 1) = 1.0 - ny*ny;
+
+          /* Compute dFddULvisc for right state */
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            for (unsigned int dimi = 0; dimi < nDims; dimi++)
+            {
+              for (unsigned int j = 0; j < nVars; j++)
+              {
+                for (unsigned int i = 0; i < nVars; i++)
+                {
+                  dFddUvisc(fpt, i, j, dimi, dimj, 1) = 0;
+                  for (unsigned int dimk = 0; dimk < nDims; dimk++)
+                  {
+                    for (unsigned int k = 0; k < nVars; k++)
+                    {
+                      dFddUvisc(fpt, i, j, dimi, dimj, 1) += dFddURvisc(i, k, dimi, dimk) * ddURddUL(k, j, dimk, dimj);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
         break;
       }
     }
@@ -1101,9 +1376,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
         for (unsigned int n = 0; n < nVars; n++)
         {
           Fconv(fpt, n, dim, 0) = input->AdvDiff_A(dim) * U(fpt, n, 0);
-
           Fconv(fpt, n, dim, 1) = input->AdvDiff_A(dim) * U(fpt, n, 1);
-
         }
       }
     }
@@ -1127,9 +1400,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
         for (unsigned int n = 0; n < nVars; n++)
         {
           Fconv(fpt, n, dim, 0) = 0.5 * U(fpt, n, 0) * U(fpt, n, 0);
-
           Fconv(fpt, n, dim, 1) = 0.5 * U(fpt, n, 1) * U(fpt, n, 1);
-
         }
       }
     }
@@ -1243,9 +1514,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
         for (unsigned int n = 0; n < nVars; n++)
         {
           Fvisc(fpt, n, dim, 0) = -input->AdvDiff_D * dU(fpt, n, dim, 0);
-
           Fvisc(fpt, n, dim, 1) = -input->AdvDiff_D * dU(fpt, n, dim, 1);
-
         }
       }
     }
@@ -2255,7 +2524,7 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
           double diffCo1 = input->mu / rho;
           double diffCo2 = input->gamma * input->mu / (input->prandtl * rho);
 
-          /* Set viscous dFxddUx values */
+          /* Set viscous dFxdUx values */
           dFddUvisc(fpt, 0, 0, 0, 0, slot) = 0;
           dFddUvisc(fpt, 1, 0, 0, 0, slot) = -4.0/3.0 * u * diffCo1;
           dFddUvisc(fpt, 2, 0, 0, 0, slot) = -v * diffCo1;
@@ -2276,7 +2545,7 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
           dFddUvisc(fpt, 2, 3, 0, 0, slot) = 0;
           dFddUvisc(fpt, 3, 3, 0, 0, slot) = diffCo2;
 
-          /* Set viscous dFyddUx values */
+          /* Set viscous dFydUx values */
           dFddUvisc(fpt, 0, 0, 1, 0, slot) = 0;
           dFddUvisc(fpt, 1, 0, 1, 0, slot) = -v * diffCo1;
           dFddUvisc(fpt, 2, 0, 1, 0, slot) = 2.0/3.0 * u * diffCo1;
@@ -2297,7 +2566,7 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
           dFddUvisc(fpt, 2, 3, 1, 0, slot) = 0;
           dFddUvisc(fpt, 3, 3, 1, 0, slot) = 0;
 
-          /* Set viscous dFxddUy values */
+          /* Set viscous dFxdUy values */
           dFddUvisc(fpt, 0, 0, 0, 1, slot) = 0;
           dFddUvisc(fpt, 1, 0, 0, 1, slot) = 2.0/3.0 * v * diffCo1;
           dFddUvisc(fpt, 2, 0, 0, 1, slot) = -u * diffCo1;
@@ -2318,7 +2587,7 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
           dFddUvisc(fpt, 2, 3, 0, 1, slot) = 0;
           dFddUvisc(fpt, 3, 3, 0, 1, slot) = 0;
 
-          /* Set viscous dFyddUy values */
+          /* Set viscous dFydUy values */
           dFddUvisc(fpt, 0, 0, 1, 1, slot) = 0;
           dFddUvisc(fpt, 1, 0, 1, 1, slot) = -u * diffCo1;
           dFddUvisc(fpt, 2, 0, 1, 1, slot) = -4.0/3.0 * v * diffCo1;
@@ -2348,15 +2617,15 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
-void Faces::compute_dFndU(unsigned int startFpt, unsigned int endFpt)
+void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 {
   if (input->fconv_type == "Rusanov")
   {
-    rusanov_dFndU(startFpt, endFpt);
+    rusanov_dFcdU(startFpt, endFpt);
   }
   else if (input->fconv_type == "Roe")
   {
-    roe_dFndU(startFpt, endFpt);
+    roe_dFcdU(startFpt, endFpt);
   }
   else
   {
@@ -2367,7 +2636,7 @@ void Faces::compute_dFndU(unsigned int startFpt, unsigned int endFpt)
   {
     if (input->fvisc_type == "LDG")
     {
-      LDG_dFndU(startFpt, endFpt);
+      LDG_dFcdU(startFpt, endFpt);
     }
     else
     {
@@ -2376,7 +2645,76 @@ void Faces::compute_dFndU(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
-void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
+void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
+{
+  if (input->fvisc_type == "LDG")
+  {
+    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+    {
+      double beta = input->ldg_b;
+
+      /* Setting sign of beta (from HiFiLES) */
+      if (nDims == 2)
+      {
+        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+          beta = -beta;
+      }
+      else if (nDims == 3)
+      {
+        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+          beta = -beta;
+      }
+
+      /* If interior, allow use of beta factor */
+      if (LDG_bias(fpt) == 0)
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            if (ni == nj)
+            {
+              dUcdU(fpt, ni, nj, 0) = 0.5 - beta;
+              dUcdU(fpt, ni, nj, 1) = 0.5 + beta;
+            }
+            else
+            {
+              dUcdU(fpt, ni, nj, 0) = 0;
+              dUcdU(fpt, ni, nj, 1) = 0;
+            }
+          }
+        }
+      }
+      /* If on (non-periodic) boundary, don't use beta (this is from HiFILES. Need to check) */
+      /* If on (non-periodic) boundary, set right state as common (strong) */
+      else
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            if (ni == nj)
+            {
+              dUcdU(fpt, ni, nj, 0) = 0;
+              dUcdU(fpt, ni, nj, 1) = 1;
+            }
+            else
+            {
+              dUcdU(fpt, ni, nj, 0) = 0;
+              dUcdU(fpt, ni, nj, 1) = 0;
+            }
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    ThrowException("Numerical viscous flux type not recognized!");
+  }
+}
+
+void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 {
   std::vector<double> WL(nVars);
   std::vector<double> WR(nVars);
@@ -2413,11 +2751,11 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFndUconv(fpt, ni, nj, 0, 0) = 0;
-          dFndUconv(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, 0, 0) = 0;
+          dFcdUconv(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
 
-          dFndUconv(fpt, ni, nj, 0, 1) = 0;
-          dFndUconv(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, 0, 1) = 0;
+          dFcdUconv(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
         }
       }
       continue;
@@ -2540,33 +2878,33 @@ void Faces::rusanov_dFndU(unsigned int startFpt, unsigned int endFpt)
       }
     }
 
-    /* Compute normal dFdU */
+    /* Compute common dFdU */
     for (unsigned int nj = 0; nj < nVars; nj++)
     {
       for (unsigned int ni = 0; ni < nVars; ni++)
       {
         if (ni == nj)
         {
-          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
-          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
 
-          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
-          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
         }
         else
         {
-          dFndUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * outnorm(fpt, 0);
-          dFndUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * outnorm(fpt, 0);
 
-          dFndUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * -outnorm(fpt, 1);
-          dFndUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * -outnorm(fpt, 1);
         }
       }
     }
   }
 }
 
-void Faces::roe_dFndU(unsigned int startFpt, unsigned int endFpt)
+void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
 {
   if (nDims != 2)
   {
@@ -2665,48 +3003,49 @@ void Faces::roe_dFndU(unsigned int startFpt, unsigned int endFpt)
       bL1[2] = a4 * (-vm) - a2 * (-norm(fpt, 1, 0));
       bL1[3] = a4;
 
+      /* Compute common dFdU */
       for (unsigned int slot = 0; slot < 2; slot++)
       {
-        dFndUconv(fpt, 0, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 0) + (1.0-k) * (lambda0 + aL1[0]);
-        dFndUconv(fpt, 0, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 1) + (1.0-k) * (aL1[1]);
-        dFndUconv(fpt, 0, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 2) + (1.0-k) * (aL1[2]);
-        dFndUconv(fpt, 0, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 3) + (1.0-k) * (aL1[3]);
+        dFcdUconv(fpt, 0, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 0) + (1.0-k) * (lambda0 + aL1[0]);
+        dFcdUconv(fpt, 0, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 1) + (1.0-k) * (aL1[1]);
+        dFcdUconv(fpt, 0, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 2) + (1.0-k) * (aL1[2]);
+        dFcdUconv(fpt, 0, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 3) + (1.0-k) * (aL1[3]);
 
-        dFndUconv(fpt, 1, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 0) + (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
-        dFndUconv(fpt, 1, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 1) + (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
-        dFndUconv(fpt, 1, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 2) + (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
-        dFndUconv(fpt, 1, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 3) + (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 0) + (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 1) + (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 2) + (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 3) + (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
 
-        dFndUconv(fpt, 2, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 0) + (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
-        dFndUconv(fpt, 2, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 1) + (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
-        dFndUconv(fpt, 2, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 2) + (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
-        dFndUconv(fpt, 2, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 3) + (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 0) + (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 1) + (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 2) + (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 3) + (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
 
-        dFndUconv(fpt, 3, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 0) + (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
-        dFndUconv(fpt, 3, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 1) + (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
-        dFndUconv(fpt, 3, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 2) + (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
-        dFndUconv(fpt, 3, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 3) + (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
+        dFcdUconv(fpt, 3, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 0) + (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
+        dFcdUconv(fpt, 3, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 1) + (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
+        dFcdUconv(fpt, 3, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 2) + (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
+        dFcdUconv(fpt, 3, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 3) + (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
 
 
-        dFndUconv(fpt, 0, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 0) - (1.0-k) * (lambda0 + aL1[0]);
-        dFndUconv(fpt, 0, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 1) - (1.0-k) * (aL1[1]);
-        dFndUconv(fpt, 0, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 2) - (1.0-k) * (aL1[2]);
-        dFndUconv(fpt, 0, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 3) - (1.0-k) * (aL1[3]);
+        dFcdUconv(fpt, 0, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 0) - (1.0-k) * (lambda0 + aL1[0]);
+        dFcdUconv(fpt, 0, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 1) - (1.0-k) * (aL1[1]);
+        dFcdUconv(fpt, 0, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 2) - (1.0-k) * (aL1[2]);
+        dFcdUconv(fpt, 0, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 3) - (1.0-k) * (aL1[3]);
 
-        dFndUconv(fpt, 1, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 0) - (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
-        dFndUconv(fpt, 1, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 1) - (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
-        dFndUconv(fpt, 1, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 2) - (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
-        dFndUconv(fpt, 1, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 3) - (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 0) - (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 1) - (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 2) - (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
+        dFcdUconv(fpt, 1, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 3) - (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
 
-        dFndUconv(fpt, 2, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 0) - (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
-        dFndUconv(fpt, 2, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 1) - (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
-        dFndUconv(fpt, 2, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 2) - (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
-        dFndUconv(fpt, 2, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 3) - (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 0) - (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 1) - (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 2) - (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
+        dFcdUconv(fpt, 2, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 3) - (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
 
-        dFndUconv(fpt, 3, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 0) - (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
-        dFndUconv(fpt, 3, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 1) - (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
-        dFndUconv(fpt, 3, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 2) - (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
-        dFndUconv(fpt, 3, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 3) - (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
+        dFcdUconv(fpt, 3, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 0) - (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
+        dFcdUconv(fpt, 3, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 1) - (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
+        dFcdUconv(fpt, 3, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 2) - (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
+        dFcdUconv(fpt, 3, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 3) - (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
       }
 
       waveSp(fpt) = std::max(std::max(lambda0, lambdaP), lambdaM);
@@ -2723,15 +3062,15 @@ void Faces::roe_dFndU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFndUconv(fpt, ni, nj, slot, 0) *= outnorm(fpt, 0);
-          dFndUconv(fpt, ni, nj, slot, 1) *= -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, slot, 0) *= outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, slot, 1) *= -outnorm(fpt, 1);
         }
       }
     }
   }
 }
 
-void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
+void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 {
   double tau = input->ldg_tau;
 
@@ -2740,9 +3079,8 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
   dFnddUL_temp.fill(0);
   dFnddUR_temp.fill(0);
 
-  dFndU_temp.fill(0.0);
-  dFnddU_temp.fill(0.0);
-  taun_temp.fill(0.0);
+  dFcdU_temp.fill(0.0);
+  dFcddU_temp.fill(0.0);
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
@@ -2806,24 +3144,26 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
     /* If interior, use central */
     if (LDG_bias(fpt) == 0)
     {
-      /* Common interface solution */
-      beta_Ucomm(fpt, 0) = 0.5 - beta;
-      beta_Ucomm(fpt, 1) = 0.5 + beta;
-
-      /* Common interface dFndU */
+      /* Compute common dFdU */
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         for (unsigned int nj = 0; nj < nVars; nj++)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFndU_temp(fpt, ni, nj, 0) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 0) + beta * norm(fpt, dim, 0) * dFndUL_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
-            dFndU_temp(fpt, ni, nj, 1) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 1) - beta * norm(fpt, dim, 0) * dFndUR_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
+            dFcdU_temp(fpt, ni, nj, 0) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 0) + beta * norm(fpt, dim, 0) * dFndUL_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
+            dFcdU_temp(fpt, ni, nj, 1) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 1) - beta * norm(fpt, dim, 0) * dFndUR_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
+
+            if (ni == nj)
+            {
+              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
+              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
+            }
           }
         }
       }
 
-      /* Common interface dFddU */
+      /* Compute common dFddU */
       for (unsigned int dimj = 0; dimj < nDims; dimj++)
       {
         for (unsigned int dimi = 0; dimi < nDims; dimi++)
@@ -2832,60 +3172,66 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
           {
             for (unsigned int ni = 0; ni < nVars; ni++)
             {
-              dFnddU_temp(fpt, ni, nj, dimj, 0) += 
+              dFcddU_temp(fpt, ni, nj, dimj, 0) += 
                 (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 0) + beta * norm(fpt, dimi, 0) * dFnddUL_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi, 0);
-              dFnddU_temp(fpt, ni, nj, dimj, 1) += 
+              dFcddU_temp(fpt, ni, nj, dimj, 1) += 
                 (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 1) - beta * norm(fpt, dimi, 0) * dFnddUR_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi, 0);
             }
           }
         }
       }
-
-      /* Common interface tau*delU */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        taun_temp(fpt, 0) += (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
-        taun_temp(fpt, 1) -= (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
-      }
     }
     /* If Neumann boundary, use right state only */
-    /* TODO: Needs revision */
     else
     {
-      ThrowException("Neumann boundary not implemented");
-
-      // No beta on the boundary, grab right boundary?
-      /*
-      beta_Ucomm(fpt, 0) = 0;
-      beta_Ucomm(fpt, 1) = 1;
-
+      /* Compute common dFdU */
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          dFndU_temp(fpt, n, dim, 1) += dFdUvisc(fpt, n, dim, 1);
-        }
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFcdU_temp(fpt, ni, nj, 1) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
 
-        taun_temp(fpt, dim, 0) += tau * norm(fpt, dim, 0);
-        taun_temp(fpt, dim, 1) -= tau * norm(fpt, dim, 0);
+            if (ni == nj)
+            {
+              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
+              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
+            }
+          }
+        }
       }
-      */
+
+      /* Compute common dFddU */
+      for (unsigned int dimj = 0; dimj < nDims; dimj++)
+      {
+        for (unsigned int dimi = 0; dimi < nDims; dimi++)
+        {
+          for (unsigned int nj = 0; nj < nVars; nj++)
+          {
+            for (unsigned int ni = 0; ni < nVars; ni++)
+            {
+              dFcddU_temp(fpt, ni, nj, dimj, 1) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi, 0);
+            }
+          }
+        }
+      }
     }
 
-    /* Correct for positive parent space sign convention, dFndU */
+    /* Correct for positive parent space sign convention, dFcdU */
     for (unsigned int slot = 0; slot < 2; slot++)
     {
       for (unsigned int nj = 0; nj < nVars; nj++)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFndUvisc(fpt, ni, nj, slot, 0) = dFndU_temp(fpt, ni, nj, slot) * outnorm(fpt, 0);
-          dFndUvisc(fpt, ni, nj, slot, 1) = dFndU_temp(fpt, ni, nj, slot) * -outnorm(fpt, 1);
+          dFcdUvisc(fpt, ni, nj, slot, 0) = dFcdU_temp(fpt, ni, nj, slot) * outnorm(fpt, 0);
+          dFcdUvisc(fpt, ni, nj, slot, 1) = dFcdU_temp(fpt, ni, nj, slot) * -outnorm(fpt, 1);
         }
       }
     }
 
-    /* Correct for positive parent space sign convention, dFnddU */
+    /* Correct for positive parent space sign convention, dFcddU */
     for (unsigned int slot = 0; slot < 2; slot++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -2894,23 +3240,16 @@ void Faces::LDG_dFndU(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFnddUvisc(fpt, ni, nj, dim, slot, 0) = dFnddU_temp(fpt, ni, nj, dim, slot) * outnorm(fpt, 0);
-            dFnddUvisc(fpt, ni, nj, dim, slot, 1) = dFnddU_temp(fpt, ni, nj, dim, slot) * -outnorm(fpt, 1);
+            dFcddUvisc(fpt, ni, nj, dim, slot, 0) = dFcddU_temp(fpt, ni, nj, dim, slot) * outnorm(fpt, 0);
+            dFcddUvisc(fpt, ni, nj, dim, slot, 1) = dFcddU_temp(fpt, ni, nj, dim, slot) * -outnorm(fpt, 1);
           }
         }
       }
     }
-
-    /* Correct for positive parent space sign convention, taun */
-    for (unsigned int slot = 0; slot < 2; slot++)
-    {
-      taun(fpt, slot, 0) = taun_temp(fpt, slot) * outnorm(fpt, 0);
-      taun(fpt, slot, 1) = taun_temp(fpt, slot) * -outnorm(fpt, 1);
-    }
   }
 }
 
-void Faces::transform_dFndU()
+void Faces::transform_dFcdU()
 {
 #pragma omp parallel for collapse(5)
   for (unsigned int slotj = 0; slotj < 2; slotj++)
@@ -2923,7 +3262,7 @@ void Faces::transform_dFndU()
         {
           for (unsigned int fpt = 0; fpt < nFpts; fpt++)
           {
-            dFndUconv(fpt, ni, nj, sloti, slotj) *= dA(fpt);
+            dFcdUconv(fpt, ni, nj, sloti, slotj) *= dA(fpt);
           }
         }
       }
@@ -2943,7 +3282,7 @@ void Faces::transform_dFndU()
           {
             for (unsigned int fpt = 0; fpt < nFpts; fpt++)
             {
-              dFndUvisc(fpt, ni, nj, sloti, slotj) *= dA(fpt);
+              dFcdUvisc(fpt, ni, nj, sloti, slotj) *= dA(fpt);
             }
           }
         }
@@ -2963,22 +3302,10 @@ void Faces::transform_dFndU()
             {
               for (unsigned int fpt = 0; fpt < nFpts; fpt++)
               {
-                dFnddUvisc(fpt, ni, nj, dim, sloti, slotj) *= dA(fpt);
+                dFcddUvisc(fpt, ni, nj, dim, sloti, slotj) *= dA(fpt);
               }
             }
           }
-        }
-      }
-    }
-
-#pragma omp parallel for collapse(3)
-    for (unsigned int slotj = 0; slotj < 2; slotj++)
-    {
-      for (unsigned int sloti = 0; sloti < 2; sloti++)
-      {
-        for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-        {
-          taun(fpt, sloti, slotj) *= dA(fpt);
         }
       }
     }

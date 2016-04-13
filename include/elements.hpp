@@ -60,7 +60,7 @@ class Elements
     spmatrix<double> GLHS; // Sparse matrix for global implicit system
     mdvector<double> LHS;  // Element local matrices for implicit system
     mdvector<double> dFdUconv_spts, dFdUvisc_spts, dFddUvisc_spts;
-    mdvector<double> dFndUconv_fpts, dFndUvisc_fpts, dFnddUvisc_fpts, beta_Ucomm_fpts, taun_fpts;
+    mdvector<double> dFcdUconv_fpts, dUcdU_fpts, dFcdUvisc_fpts, dFcddUvisc_fpts;
     mdvector<double> deltaU;
     mdvector<double> RHS;
 

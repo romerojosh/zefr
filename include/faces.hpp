@@ -42,10 +42,10 @@ class Faces
 
     /* Routines for implicit method */
     void apply_bcs_dFdU();
-    void rusanov_dFndU(unsigned int startFpt, unsigned int endFpt);
-    void roe_dFndU(unsigned int startFpt, unsigned int endFpt);
-    void LDG_dFndU(unsigned int startFpt, unsigned int endFpt);
-    void transform_dFndU();
+    void rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt);
+    void roe_dFcdU(unsigned int startFpt, unsigned int endFpt);
+    void LDG_dFcdU(unsigned int startFpt, unsigned int endFpt);
+    void transform_dFcdU();
 
 #ifdef _MPI
     void send_U_data();
@@ -64,9 +64,9 @@ class Faces
 
     /* Structures for implicit method */
     mdvector<double> dFdUconv, dFdUvisc, dFddUvisc; 
-    mdvector<double> dFndUconv, dFndUvisc, dFnddUvisc, beta_Ucomm, taun;
+    mdvector<double> dFcdUconv, dUcdU, dFcdUvisc, dFcddUvisc;
     mdvector<double> dFndUL_temp, dFndUR_temp, dFnddUL_temp, dFnddUR_temp;
-    mdvector<double> dFndU_temp, dFnddU_temp, taun_temp;
+    mdvector<double> dFcdU_temp, dFcddU_temp;
 
 #ifdef _MPI
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
@@ -101,7 +101,8 @@ class Faces
     void compute_dFdUconv(unsigned int startFpt, unsigned int endFpt);
     void compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt);
     void compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt);
-    void compute_dFndU(unsigned int startFpt, unsigned int endFpt);
+    void compute_dUcdU(unsigned int startFpt, unsigned int endFpt);
+    void compute_dFcdU(unsigned int startFpt, unsigned int endFpt);
 };
 
 #endif /* faces_hpp */

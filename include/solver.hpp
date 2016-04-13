@@ -96,7 +96,7 @@ class FRSolver
     void compute_RHS_source(mdvector<double> &source, unsigned int color);
     void compute_deltaU(unsigned int color);
     void compute_U(unsigned int color);
-    void dFndU_from_faces();
+    void dFcdU_from_faces();
     void compute_SER_dt();
     void write_color();
 };
