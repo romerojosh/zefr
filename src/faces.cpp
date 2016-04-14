@@ -285,62 +285,7 @@ void Faces::apply_bcs()
         /* Set LDG bias */
         //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
-
-        break;
-
-
-        /* Get states for convenience */
-        double rhoL = U(fpt, 0, 0);
-
-        double Vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VL[dim] = U(fpt, dim+1, 0) / rhoL;
-          Vsq += VL[dim] * VL[dim];
-        }
-
-        double eL = U(fpt, nDims + 1, 0);
-        double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
-
-        /* Compute left normal velocity */
-        double VnL = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VnL += VL[dim] * norm(fpt, dim, 0);
-        }
-
-        /* Compute speed of sound */
-        double cL = std::sqrt(input->gamma * PL / rhoL);
-
-        /* Extrapolate Riemann invariant */
-        double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
-
-        /* Extrapolate entropy */
-        double s = PL / std::pow(rhoL, input->gamma);
-
-        /* Fix pressure */
-        double PR = input->P_fs;
-
-        U(fpt, 0, 1) = std::pow(PR / s, 1.0 / input->gamma);
-
-        /* Compute right speed of sound and velocity magnitude */
-        double cR = std::sqrt(input->gamma * PR/ U(fpt, 0, 1));
-
-        double VnR = R_plus - 2.0 * cR / (input->gamma - 1.0);
-
-        Vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VR[dim] = VL[dim] + (VnR - VnL) * norm(fpt, dim, 0);
-          U(fpt, dim+1, 1) = U(fpt, 0, 1) * VR[dim];
-          Vsq += VR[dim] * VR[dim];
-        }
-
-        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
-
-        /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
-        LDG_bias(fpt) = 0;
+        bc_bias(fpt) = 1;
 
         break;
       }
@@ -953,9 +898,86 @@ void Faces::apply_bcs_dFdU()
               }
             }
           }
+        }
 
-          /* Compute dFddULvisc for right state */
-          // Stays the same
+        bc_bias(fpt) = 1;
+        break;
+      }
+
+      case 5: /* Subsonic Outlet */
+      {
+        /* Primitive Variables */
+        double rhoL = U(fpt, 0, 0);
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+
+        /* Compute dURdUL */
+        dURdUL(0, 0) = 1;
+        dURdUL(0, 1) = 0;
+        dURdUL(0, 2) = 0;
+        dURdUL(0, 3) = 0;
+
+        dURdUL(1, 0) = 0;
+        dURdUL(1, 1) = 1;
+        dURdUL(1, 2) = 0;
+        dURdUL(1, 3) = 0;
+
+        dURdUL(2, 0) = 0;
+        dURdUL(2, 1) = 0;
+        dURdUL(2, 2) = 1;
+        dURdUL(2, 3) = 0;
+        
+        dURdUL(3, 0) = -0.5 * (uL*uL + vL*vL);
+        dURdUL(3, 1) = uL;
+        dURdUL(3, 2) = vL;
+        dURdUL(3, 3) = 0;
+
+        /* Compute dFdULconv for right state */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dFdUconv(fpt, i, j, dim, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
+              }
+            }
+          }
+        }
+
+        if (input->viscous)
+        {
+          /* Compute dUcdUL for right state */
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dUcdU(fpt, i, j, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
+              }
+            }
+          }
+
+          /* Compute dFdULvisc for right state */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nVars; j++)
+            {
+              for (unsigned int i = 0; i < nVars; i++)
+              {
+                dFdUvisc(fpt, i, j, dim, 1) = 0;
+                for (unsigned int k = 0; k < nVars; k++)
+                {
+                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
+                }
+              }
+            }
+          }
         }
 
         bc_bias(fpt) = 1;
@@ -1120,6 +1142,38 @@ void Faces::apply_bcs_dFdU()
           }
         }
 
+        if (input->viscous)
+        {
+          /* Compute dUcdUL for right state */
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dUcdU(fpt, i, j, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
+              }
+            }
+          }
+
+          /* Compute dFdULvisc for right state */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nVars; j++)
+            {
+              for (unsigned int i = 0; i < nVars; i++)
+              {
+                dFdUvisc(fpt, i, j, dim, 1) = 0;
+                for (unsigned int k = 0; k < nVars; k++)
+                {
+                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
+                }
+              }
+            }
+          }
+        }
+
         bc_bias(fpt) = 1;
         break;
       }
@@ -1158,6 +1212,38 @@ void Faces::apply_bcs_dFdU()
               for (unsigned int k = 0; k < nVars; k++)
               {
                 dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
+              }
+            }
+          }
+        }
+
+        if (input->viscous)
+        {
+          /* Compute dUcdUL for right state */
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              dUcdU(fpt, i, j, 1) = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
+              }
+            }
+          }
+
+          /* Compute dFdULvisc for right state */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int j = 0; j < nVars; j++)
+            {
+              for (unsigned int i = 0; i < nVars; i++)
+              {
+                dFdUvisc(fpt, i, j, dim, 1) = 0;
+                for (unsigned int k = 0; k < nVars; k++)
+                {
+                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
+                }
               }
             }
           }
