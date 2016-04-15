@@ -907,7 +907,6 @@ void Faces::apply_bcs_dFdU()
       case 5: /* Subsonic Outlet */
       {
         /* Primitive Variables */
-        double rhoL = U(fpt, 0, 0);
         double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
         double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
 

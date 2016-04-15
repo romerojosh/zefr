@@ -610,68 +610,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       /* Set LDG bias */
       //LDG_bias(fpt) = -1;
       LDG_bias(fpt) = 0;
-
-      break;
-
-      /*
-      if (!input->viscous)
-        ThrowException("Subsonic outlet only for viscous flows currently!");
-      */
-
-      double VL[3]; double VR[3];
-
-      /* Get states for convenience */
-      double rhoL = U(fpt, 0, 0);
-
-      double Vsq = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        VL[dim] = U(fpt, dim+1, 0) / rhoL;
-        Vsq += VL[dim] * VL[dim];
-      }
-
-      double eL = U(fpt, nDims + 1, 0);
-      double PL = (gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
-
-      /* Compute left normal velocity */
-      double VnL = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        VnL += VL[dim] * norm(fpt, dim, 0);
-      }
-
-      /* Compute speed of sound */
-      double cL = std::sqrt(gamma * PL / rhoL);
-
-      /* Extrapolate Riemann invariant */
-      double R_plus  = VnL + 2.0 * cL / (gamma - 1.0);
-
-      /* Extrapolate entropy */
-      double s = PL / std::pow(rhoL, gamma);
-
-      /* Fix pressure */
-      double PR = P_fs;
-
-      U(fpt, 0, 1) = std::pow(PR / s, 1.0 / gamma);
-
-      /* Compute right speed of sound and velocity magnitude */
-      double cR = std::sqrt(gamma * PR/ U(fpt, 0, 1));
-
-      double VnR = R_plus - 2.0 * cR / (gamma - 1.0);
-
-      Vsq = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        VR[dim] = VL[dim] + (VnR - VnL) * norm(fpt, dim, 0);
-        U(fpt, dim + 1, 1) = U(fpt, 0, 1) * VR[dim];
-        Vsq += VR[dim] * VR[dim];
-      }
-
-      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
-
-      /* Set LDG bias */
-      //LDG_bias(fpt) = -1;
-      LDG_bias(fpt) = 0;
+      bc_bias(fpt) = 1;
 
       break;
     }
