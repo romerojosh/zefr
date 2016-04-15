@@ -133,7 +133,14 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
     //grids[P]->write_solution("PD_"+std::to_string(P));
 
     /* Update solution on coarse level */
-    for (unsigned int step = 0; step < input->smooth_steps; step++)
+    unsigned int nSteps = input->smooth_steps;
+    if (P == (int) input->low_order)
+    {
+      nSteps = input->c_smooth_steps;
+    }
+
+
+    for (unsigned int step = 0; step < nSteps; step++)
     {
 #ifdef _CPU
       grids[P]->update_with_source(sources[P]);
@@ -214,9 +221,15 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
       }
 
       //hgrid->write_solution("HD_"+std::to_string(H));
+      
+      unsigned int nSteps = input->smooth_steps;
+      if (H == input->hmg_levels - 1)
+      {
+        nSteps = input->c_smooth_steps;
+      }
 
       /* Update solution on coarse level */
-      for (unsigned int step = 0; step < input->smooth_steps; step++)
+      for (unsigned int step = 0; step < nSteps; step++)
         hgrid->update_with_source_FV(hsources[H], H);
       //hgrid->write_solution("HD_"+std::to_string(H));
       
@@ -332,7 +345,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
     //grids[P]->write_solution("PU_"+std::to_string(P));
 
     /* Advance again (v-cycle)*/
-    if (P != (int) input->low_order)
+    if (P != (int) input->low_order or input->hmg_levels != 0)
     {
       for (unsigned int step = 0; step < input->p_smooth_steps; step++)
       {
@@ -345,20 +358,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 #endif
       }
     }
-    else
-    {
-      for (unsigned int step = 0; step < input->p_smooth_steps; step++)
-      {
-#ifdef _CPU
-        grids[P]->update_with_source(sources[P]);
-#endif
 
-#ifdef _GPU
-        grids[P]->update_with_source(sources_d[P]);
-#endif
-      }
-
-    }
     //grids[P]->write_solution("PU_"+std::to_string(P));
 
     /* Generate error */

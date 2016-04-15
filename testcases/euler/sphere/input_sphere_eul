@@ -1,6 +1,7 @@
 # Geometry:
 nDims    3
 meshfile sphere_hex.msh
+serendipity 1
 
 # Solver:
 order     2
@@ -8,24 +9,31 @@ equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
 
+restart 0
+restart_file sphere_eul/sphere_eul_000001500.vtu
+
 # Timestepping:
-n_steps 1000
-dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+n_steps 10000
+dt_scheme RKj      (Euler, RK44, RK54)
+dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
 CFL	  0.5
 
 # Multigrid:
+mg_cycle V
+FMG_vcycles 1000
 p_multi 0
 smooth_steps 1
+p_smooth_steps 1
+c_smooth_steps 2
 rel_fac 1.00
 low_order 0
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix sphere_eul
-write_freq    1000
-report_freq   10
+write_freq    1
+report_freq   1
 res_type      1
 force_freq    0
 error_freq    0

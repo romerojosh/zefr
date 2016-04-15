@@ -192,7 +192,6 @@ double get_cfl_limit(int order)
 
     case 2:
       return 0.235;
-
     case 3:
       return 0.139;
 
@@ -263,11 +262,35 @@ mdvector<double> get_alpha_opt(int order, int nStages, double CFLfac)
           //rk_alpha(0) = 0.0181; rk_alpha(1) = 0.469; rk_alpha(2) = 1.0; break; //trapz(rho)
           //rk_alpha(0) = 0.1894; rk_alpha(1) = 0.5262; rk_alpha(2) = 1.0; break; //sum(rho < 0.6)
           //rk_alpha(0) = 0.001; rk_alpha(1) = 0.3870; rk_alpha(2) = 0.975; break; //sum(rho < 0.7)
-          // r = 0.8
+
+          /* EXPERIMENTAL */
+          //rk_alpha(0) = 0.380; rk_alpha(1) = 0.599; rk_alpha(2) = 0.787; break;
+          //rk_alpha(0) = 0.000; rk_alpha(1) = 0.2294; rk_alpha(2) = 0.6763; break; //sum(rho < 0.5)
+          //rk_alpha(0) = 0.1894; rk_alpha(1) = 0.5262; rk_alpha(2) = 1.0; break; //sum(rho < 0.6)
+          //rk_alpha(0) = 0.0006; rk_alpha(1) = 0.3870; rk_alpha(2) = 0.975; break; //sum(rho < 0.7)
+          //rk_alpha(0) = 0.3983; rk_alpha(1) = 0.7039; rk_alpha(2) = 0.8451; break; //sum(rho_w < 0.7)
+          //rk_alpha(0) = 0.0955; rk_alpha(1) = 0.4272; rk_alpha(2) = 0.9100; break; //trapz(rho_w)
+         
+          //2D
+          //rk_alpha(0) = 0.2582; rk_alpha(1) = 0.5216; rk_alpha(2) = 0.9469; break; //sum(sum(rho(rho>0.5)))
+          //rk_alpha(0) = 0.1322; rk_alpha(1) = 0.5167; rk_alpha(2) = 0.9395; break; //trapz(rho45(>0.5))
+          //rk_alpha(0) = 0.1964; rk_alpha(1) = 0.4784; rk_alpha(2) = 1.00; break; //trapz(rho45(>0.5))
+          //rk_alpha(0) = 0.0941; rk_alpha(1) = 0.3808; rk_alpha(2) = 1.00; break; //trapz(rho(1,:)) + trapz(rho(end,:))
+          //rk_alpha(0) = 0.3202; rk_alpha(1) = 0.5479; rk_alpha(2) = 1.00; break; //sum(sum(rho(rho>0.5)))
+          //rk_alpha(0) = 0.1505; rk_alpha(1) = 0.3712; rk_alpha(2) = 0.6640; break;  r = 1
+          //rk_alpha(0) = 0.1843; rk_alpha(1) = 0.4589; rk_alpha(2) = 0.8323; break; r = 0.7
+          //rk_alpha(0) = 0.1629; rk_alpha(1) = 0.4010; rk_alpha(2) = 0.7182; break; //r = 0.9
+          //rk_alpha(0) = 0.193; rk_alpha(1) = 0.4054; rk_alpha(2) = 0.6351; break; //r = 1.0 deviation from 0.6
           //
-          //
-          //rk_alpha(0) = 0.184; rk_alpha(1) = 0.421; rk_alpha(2) = 0.776; break; //trapz(rho)
-          //
+          //rk_alpha(0) = 0.1449; rk_alpha(1) = 0.3342; rk_alpha(2) = 0.6126; break; //CFL = 0.2525
+
+        case 8:
+          rk_alpha(0) = 0.0522; rk_alpha(1) = 0.1117; rk_alpha(2) = 0.1815; 
+          rk_alpha(3) = 0.2659; rk_alpha(4) = 0.3730; rk_alpha(5) = 0.5185; rk_alpha(6) = 0.7459; break; //r = 1.0, trapz
+          
+          
+
+          
           
         default:
           ThrowException("Optimized alpha not computed for this case!");

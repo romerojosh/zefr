@@ -5,26 +5,41 @@ meshfile QuadBox_32x32.msh
 # Solver:
 order     2
 equation AdvDiff    (AdvDiff, EulerNS)
-viscous  0
+viscous  1
 spt_type Legendre
 squeeze  0
 s_factor  0.0
+source 1
 
 # Timestepping:
-n_steps 1000
-dt_scheme RK44      (Euler, RK44, RK54)
+n_steps 100000
+dt_scheme RKj      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.001
-CFL	  0.3
+CFL	  0.001
 
+# Multigrid:
 p_multi 1
-hmg_levels 1
+mg_cycle V
+FMG_vcycles 1000
+smooth_steps 1
+p_smooth_steps 1
+c_smooth_steps 2
+rel_fac 1.00
+low_order 0
+
+hmg_levels 0
+CFL_fv 0.8
+coarse_mode 1      (0 = METIS, 1 = structured)
+nElesX 48
+nElesY 16
+
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix sines
-write_freq    100
-report_freq   10
+output_prefix sines_rkopt
+write_freq    1000
+report_freq   100
 res_type      1
 force_freq    0
 error_freq    1000
@@ -43,4 +58,4 @@ ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 # Advection-Diffusion
 AdvDiff_Ax 1
 AdvDiff_Ay 1
-AdvDiff_D 0.0
+AdvDiff_D 1.0
