@@ -31,26 +31,30 @@ double compute_source_term_dev(double x, double y, double z, double t, unsigned 
 __device__
 double get_cfl_limit_dev(int order)
 {
-  switch(order)
+ switch(order)
   {
     case 0:
-      return 1.393;
+      return 1.392;
 
     case 1:
-      return 0.464; 
+      return 0.4642; 
 
     case 2:
-      return 0.235;
+      return 0.2351;
 
     case 3:
-      return 0.139;
+      return 0.1453;
 
     case 4:
-      return 0.100;
+      return 0.1000;
 
     case 5:
-      return 0.068;
+      return 0.0736;
+
+    default:
+      return 0.0;
   }
+
 }
 
 

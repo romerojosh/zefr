@@ -39,6 +39,7 @@ class Elements
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts, inv_jaco_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
+    mdvector<double> vol;
     mdvector<double> weights_spts;
     std::vector<double> weights_qpts;
 
@@ -64,6 +65,7 @@ class Elements
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, dF_spts_d, divF_spts_d;
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;
+    mdvector_gpu<double> vol_d;
     mdvector_gpu<double> weights_spts_d;
 
     /* Multigrid operators */
