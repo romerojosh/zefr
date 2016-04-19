@@ -1066,91 +1066,32 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
 void FRSolver::compute_element_dt()
 {
 #ifdef _CPU
-  /* Edge integral based CFL */
-  if (!input->old_CFL)
-  {
 #pragma omp parallel for
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    { 
-      double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  { 
+    double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-      {
-        /* Skip if on ghost edge. */
-        int gfpt = geo.fpt2gfpt(fpt,ele);
-        if (gfpt == -1)
-          continue;
+    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+    {
+      /* Skip if on ghost edge. */
+      int gfpt = geo.fpt2gfpt(fpt,ele);
+      if (gfpt == -1)
+        continue;
 
-        if (eles->nDims == 2)
-        {
-          int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
-        }
-        else
-        {
-          ThrowException("3D wavespeed edge integration not implemented yet!");
-        }
-      
-      }
-
-      /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 added to be 
-       * consistent with 1D CFL estimates. */
-      // TODO: Find factor for 3D
-      dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
-    }
-  }
-
-  /* Option for alternative older CFL estimates for Jerry. */
-  else
-  {
-    std::vector<double> S(eles->nFpts);
-#pragma omp parallel for firstprivate(S)
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    { 
-      //double waveSp_max = 0.0;
-      //dt(ele) = 1000.0; // set to a "large" value. Lame.
-
-      /* Compute maximum wavespeed */
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-      {
-        /* Skip if on ghost edge. */
-        int gfpt = geo.fpt2gfpt(fpt,ele);
-        if (gfpt == -1)
-          continue;
-
-
-        //double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
-        //waveSp_max = std::max(waveSp, waveSp_max);
-        
-        //double dt_curr = (input->CFL) * get_cfl_limit(order) * eles->h_ref(fpt, ele) / (faces->waveSp(gfpt) + 1.e-10);
-        //dt(ele) = std::min(dt_curr, dt(ele));
-      
-        S[fpt] = faces->waveSp(gfpt) / (input->CFL * get_cfl_limit(order) * eles->h_ref(fpt, ele));
-    
-      }
-    
       if (eles->nDims == 2)
       {
-        for (unsigned int face = 0; face < 2*eles->nDims; face++)
-        {
-          for (unsigned int fpt = face * eles->nSpts1D; fpt < (face + 1) * eles->nSpts1D; fpt++)
-          {
-            S[face] = std::max(S[face], S[fpt]);
-          }
-        }
-
-        S[0] = std::max(S[0], S[2]);
-        S[1] = std::max(S[1], S[3]);
+        int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
       }
       else
       {
-        ThrowException("Timestep in 3D under construction!");
+        ThrowException("3D wavespeed edge integration not implemented yet!");
       }
-
-      /* Note: CFL is applied to parent space element with width 2 */
-      //dt(ele) = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
-
-      dt(ele) = 1. / (S[0] + S[1]); 
     }
+
+    /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 added to be 
+     * consistent with 1D CFL estimates. */
+    // TODO: Find factor for 3D
+    dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
   }
 
   if (input->dt_type == 1) /* Global minimum */
