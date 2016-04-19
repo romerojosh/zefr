@@ -397,6 +397,7 @@ void FRSolver::solver_data_to_device()
   eles->jaco_spts_d = eles->jaco_spts;
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
+  eles->vol_d = eles->vol;
 
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
@@ -1084,13 +1085,16 @@ void FRSolver::compute_element_dt()
       }
       else
       {
-        ThrowException("3D wavespeed edge integration not implemented yet!");
+        int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
+        int i = idx % eles->nSpts1D;
+        int j = idx / eles->nSpts1D;
+
+        int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
       }
     }
 
-    /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 added to be 
+    /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
      * consistent with 1D CFL estimates. */
-    // TODO: Find factor for 3D
     dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
   }
 
@@ -1107,7 +1111,8 @@ void FRSolver::compute_element_dt()
 
 #ifdef _GPU
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->dA_d, geo.fpt2gfpt_d, 
-      input->CFL, order, input->dt_type, eles->nFpts, eles->nEles);
+      eles->weights_spts_d, eles->vol_d, eles->nSpts1D, input->CFL, order, 
+      input->dt_type, eles->nFpts, eles->nEles, eles->nDims);
 #endif
 }
 

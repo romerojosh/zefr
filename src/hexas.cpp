@@ -304,7 +304,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
       /* Get quadrature weight */
       unsigned int i = idx_spts(spt,0);
       unsigned int j = idx_spts(spt,1);
-      unsigned int k = idx_spts(spt,3);
+      unsigned int k = idx_spts(spt,2);
 
       double weight = weights_spts(i) * weights_spts(j) * weights_spts(k);
 
@@ -713,10 +713,10 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
     shape_val(1) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
     shape_val(2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
     shape_val(3) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
-    shape_val(5) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    shape_val(6) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    shape_val(7) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
-    shape_val(8) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    shape_val(4) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    shape_val(5) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    shape_val(6) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    shape_val(7) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
   }
   /* 20-node Seredipity */
   else if (shape_order == 2 and input->serendipity)
@@ -773,28 +773,28 @@ mdvector<double> Hexas::calc_d_shape(unsigned int shape_order,
     dshape_val(1, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
     dshape_val(2, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
     dshape_val(3, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
-    dshape_val(5, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    dshape_val(6, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    dshape_val(7, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
-    dshape_val(8, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(4, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(5, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(6, 0) = Lagrange_d1({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(7, 0) = Lagrange_d1({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
 
     dshape_val(0, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
     dshape_val(1, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
     dshape_val(2, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
     dshape_val(3, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
-    dshape_val(5, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    dshape_val(6, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    dshape_val(7, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
-    dshape_val(8, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(4, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(5, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(6, 1) = Lagrange({-1.,1.}, 1, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
+    dshape_val(7, 1) = Lagrange({-1.,1.}, 0, xi) * Lagrange_d1({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
 
     dshape_val(0, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 0, mu);
     dshape_val(1, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 0, mu);
     dshape_val(2, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 0, mu);
     dshape_val(3, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 0, mu);
-    dshape_val(5, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 1, mu);
-    dshape_val(6, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 1, mu);
-    dshape_val(7, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 1, mu);
-    dshape_val(8, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 1, mu);
+    dshape_val(4, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 1, mu);
+    dshape_val(5, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange_d1({-1.,1.}, 1, mu);
+    dshape_val(6, 2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 1, mu);
+    dshape_val(7, 2) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange_d1({-1.,1.}, 1, mu);
   }
   /* 20-node Serendipity */
   else if (shape_order == 2)

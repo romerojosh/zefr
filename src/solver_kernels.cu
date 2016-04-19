@@ -486,9 +486,11 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
   }
 }
 
+template <unsigned int nDims>
 __global__
 void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfpts, 
-    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
+    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, mdvector_gpu<double> weights_spts,
+    mdvector_gpu<double> vol, unsigned int nSpts1D, double CFL, int order, 
     unsigned int nFpts, unsigned int nEles)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
@@ -496,34 +498,53 @@ void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfp
   if (ele >= nEles)
     return;
 
-  double waveSp_max = 0.0;
+  double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-  /* Compute maximum wavespeed */
-  for (unsigned int fpt = 0; fpt <nFpts; fpt++)
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     /* Skip if on ghost edge. */
     int gfpt = fpt2gfpt(fpt,ele);
     if (gfpt == -1)
       continue;
 
-    double waveSp = waveSp_gfpts(gfpt) / dA(gfpt);
+    if (nDims == 2)
+    {
+      int_waveSp += weights_spts(fpt % nSpts1D) * waveSp_gfpts(gfpt) * dA(gfpt);
+    }
+    else
+    {
+      int idx = fpt % (nSpts1D * nSpts1D);
+      int i = idx % nSpts1D;
+      int j = idx / nSpts1D;
 
-    waveSp_max = max(waveSp, waveSp_max);
+      int_waveSp += weights_spts(i) * weights_spts(j) * waveSp_gfpts(gfpt) * dA(gfpt);
+    }
   }
 
-  /* Note: CFL is applied to parent space element with width 2 */
-  dt(ele) = (CFL) * get_cfl_limit_dev(order) * (2.0 / (waveSp_max+1.e-10));
+  /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
+   * consistent with 1D CFL estimates. */
+  dt(ele) = 2.0 * CFL * get_cfl_limit_dev(order) * vol(ele) / int_waveSp;
+  
 }
 
-void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 
-    unsigned int dt_type, unsigned int nFpts, unsigned int nEles)
+void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, 
+    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<double> &weights_spts,
+    mdvector_gpu<double> &vol, unsigned int nSpts1D, double CFL, int order, unsigned int dt_type,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nEles + threads - 1) / threads;
 
-  compute_element_dt<<<blocks, threads>>>(dt, waveSp, dA, fpt2gfpt, CFL, order, 
-      nFpts, nEles);
+  if (nDims == 2)
+  {
+    compute_element_dt<2><<<blocks, threads>>>(dt, waveSp_gfpts, dA, fpt2gfpt, weights_spts, vol,
+        nSpts1D, CFL, order, nFpts, nEles);
+  }
+  else
+  {
+    compute_element_dt<3><<<blocks, threads>>>(dt, waveSp_gfpts, dA, fpt2gfpt, weights_spts, vol, 
+        nSpts1D, CFL, order, nFpts, nEles);
+  }
 
   if (dt_type == 1)
   {
