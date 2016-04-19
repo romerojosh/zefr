@@ -37,6 +37,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "dt_type", input.dt_type);
   read_param(f, "dt", input.dt);
   read_param(f, "CFL", input.CFL);
+  read_param(f, "old_CFL", input.old_CFL, false);
 
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
