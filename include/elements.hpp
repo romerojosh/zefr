@@ -20,6 +20,7 @@ class Elements
 {
   friend class FRSolver;
   friend class PMGrid;
+  friend class ShockCapture;
   protected:
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
@@ -45,7 +46,7 @@ class Elements
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts;
     mdvector<double> oppE_ppts, oppE_qpts;
-    mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
+    mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg, Umodal;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fconv_spts, Fvisc_spts;
     mdvector<double> Fcomm, Ucomm;
@@ -58,7 +59,7 @@ class Elements
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d;
     mdvector_gpu<double> oppE_ppts_d, oppE_qpts_d;
-    mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d, Uavg_d;
+    mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d, Uavg_d, Umodal_d;
     mdvector_gpu<double> F_spts_d, F_fpts_d;
     mdvector_gpu<double> Fconv_spts_d, Fvisc_spts_d;
     mdvector_gpu<double> Fcomm_d, Ucomm_d;

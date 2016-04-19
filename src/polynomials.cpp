@@ -1,7 +1,9 @@
 #include <cassert>
 #include <vector>
+#include <cmath>
 
 #include "polynomials.hpp"
+#include "mdvector.hpp"
 
 
 double Lagrange(std::vector<double> xiGrid, unsigned int mode, double xi)
@@ -46,4 +48,63 @@ double Lagrange_d1(std::vector<double> xiGrid, unsigned int mode, double xi)
   } 
 
   return val/den;
+}
+
+double Legendre(unsigned int P, double xi)
+{
+  if (P == 0)
+    return 1.0;
+  else if (P == 1)
+    return xi;
+
+  return ((2.0 * P - 1.0) / P) *xi *Legendre(P-1, xi) - ((P - 1.0) / P) *Legendre(P-2, xi);
+}
+
+double Legendre_d1(unsigned int P, double xi)
+{
+  if (P == 0)
+    return 0.0;
+  else if (P == 1)
+    return 1.0;
+  
+  return ((2.0 * P - 1.0) / P) * (Legendre(P-1, xi) + xi *Legendre_d1(P-1, xi)) - ((P - 1.0) / P) *Legendre_d1(P-2, xi);
+}
+
+// Evaluate 2D legendre basis
+double Legendre2D(unsigned int in_mode, mdvector<double> loc, unsigned int order)
+{
+  double leg_basis;
+  unsigned int n_dof=(order+1)*(order+1);
+
+  if(in_mode<n_dof)
+  {
+    unsigned int i,j,k;
+    unsigned int mode;
+    double normCi, normCj;
+    mode = 0;
+    #pragma omp parallel for
+    for (k=0;k<order*order+1;k++)
+    {
+      for (j=0;j<k+1;j++)
+      {
+        i = k-j;
+        if(i<=order && j<=order)
+        {
+          if(mode==in_mode) // found the correct mode
+          {
+	          normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
+            normCj = std::sqrt(2.0 / (2.0 * j + 1.0)); 
+            leg_basis = Legendre(i,loc(0))*Legendre(j,loc(1))/(normCi*normCj);
+          }
+          mode++;
+        }
+      }
+    }
+  }
+  else
+  {
+    cout << "ERROR: Invalid mode when evaluating Legendre basis ...." << endl;
+  }
+  
+  return leg_basis;
 }

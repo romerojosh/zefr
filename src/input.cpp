@@ -102,6 +102,12 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "nx_wall", input.norm_wall(0), 1.0);
   read_param(f, "ny_wall", input.norm_wall(1), 0.0);
 
+  read_param(f, "shockcapture", input.shockcapture, (unsigned int) 0);
+  read_param(f, "limiter", input.limiter, (unsigned int) 0);
+  read_param(f, "sen_Jfac", input.sen_Jfac, 1.0);
+  read_param(f, "sen_norm", input.sen_norm, (unsigned int) 1);
+
+
   f.close();
 
   /* If running Navier-Stokes, nondimensionalize */

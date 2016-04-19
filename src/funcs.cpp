@@ -29,7 +29,9 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
       */
-      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y);
+      //val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y);
+      if(x*x + y*y <= 0.09)
+        val = 1;
     }
     else if (input->nDims == 3)
     {

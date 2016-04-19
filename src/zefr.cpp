@@ -16,6 +16,7 @@
 #include "multigrid.hpp"
 #include "solver.hpp"
 #include "solver_kernels.h"
+#include "shockcapture.hpp"
 
 int main(int argc, char* argv[])
 {
@@ -118,6 +119,7 @@ int main(int argc, char* argv[])
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
+    solver.capture_shock();
 
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)

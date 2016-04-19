@@ -44,4 +44,11 @@ struct abs_sum
   }
 };
 
+template <typename T> 
+unsigned int step(const T& val) 
+{
+    return T(0) <= val;
+}
+
+
 #endif /* funcs_hpp */

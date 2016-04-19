@@ -71,7 +71,12 @@ void FRSolver::setup()
     if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
     restart(input->restart_file);
   }
-
+  
+  if (input->shockcapture)
+  {
+    if (input->rank == 0) std::cout << "Setting up shock capturing..." << std::endl;
+    shock.setup(input, *this);
+  }
   
 #ifdef _GPU
   solver_data_to_device();
@@ -398,6 +403,9 @@ void FRSolver::solver_data_to_device()
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
 
+  if(input->shockcapture)
+    eles->Umodal_d = eles->Umodal;
+
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
   faces->dU_d = faces->dU;
@@ -420,6 +428,7 @@ void FRSolver::solver_data_to_device()
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
   geo.coord_spts_d = geo.coord_spts;
+  geo.ele_adj_d = geo.ele_adj;
 
   /* Input parameters */
   input->V_fs_d = input->V_fs;
@@ -604,6 +613,11 @@ void FRSolver::initialize_U()
   eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
+
+  if(input->shockcapture)
+  {
+    eles->Umodal.assign({eles->nDims+1, eles->nEles, eles->nVars});
+  }
 
   /* Initialize solution */
   if (input->equation == AdvDiff)
@@ -911,7 +925,6 @@ void FRSolver::update()
         input->equation, stage, nStages, false);
     check_error();
 #endif
-
   }
 
   /* Final stage */
@@ -1152,6 +1165,12 @@ void FRSolver::write_solution()
         f << std::endl;
       }
     }
+    
+    if (input->shockcapture)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+      f << std::endl;
+    }
 
     f << "</PPointData>" << std::endl;
     f << "<PPoints>" << std::endl;
@@ -1363,6 +1382,23 @@ void FRSolver::write_solution()
       }
       f << "</DataArray>" << std::endl;
     }
+  }
+
+  if (input->shockcapture)
+  {
+#ifdef _GPU
+    shock.sensor = shock.sensor_d;
+#endif
+    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << shock.sensor(ele) << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
   }
 
   f << "</PointData>" << std::endl;
@@ -1865,4 +1901,17 @@ void FRSolver::report_error(std::ofstream &f)
     f << std::endl;
   }
 
+}
+
+void FRSolver::capture_shock()
+{
+  /* Do shock capturing if required */
+  if(input->shockcapture)
+  {
+    shock.apply_sensor();
+    shock.compute_Umodal();
+    if(input->limiter)
+      shock.limiter();
+    shock.compute_Unodal();
+  }
 }

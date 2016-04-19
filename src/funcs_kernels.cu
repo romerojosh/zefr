@@ -12,6 +12,9 @@ double compute_source_term_dev(double x, double y, double z, double t, unsigned 
     {
       val =  -M_PI * (std::cos(M_PI * x) + M_PI * std::sin(M_PI * x) + 
              std::cos(M_PI * y) + M_PI * std::sin(M_PI * y));
+
+      if(x*x + y*y <= 0.09)
+        val = 1;
     }
     else
     {

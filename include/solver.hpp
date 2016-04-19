@@ -10,6 +10,7 @@
 #include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
+#include "shockcapture.hpp"
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
@@ -19,6 +20,7 @@ class PMGrid;
 class FRSolver
 {
   friend class PMGrid;
+  friend class ShockCapture;
 
   private:
     InputStruct *input = NULL;
@@ -33,6 +35,8 @@ class FRSolver
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> dt;
     mdvector<double> U_ini;
+
+    ShockCapture shock;
 
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
@@ -70,6 +74,7 @@ class FRSolver
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
+    void capture_shock();
 
 
 };

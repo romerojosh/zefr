@@ -1,5 +1,5 @@
 ifeq ($(CONFIG),)
-include configfiles/default.config
+include configfiles/icme.mpi.gpu2.config
 else
 include $(CONFIG)
 endif
@@ -38,6 +38,7 @@ INCS += -I$(strip $(BLAS_DIR))/include/openblas
 ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
+	INCS += -I$(strip $(MPI_DIR))/include
 	INCS += -I$(strip $(METIS_DIR))/include
 	LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
 endif
@@ -53,11 +54,15 @@ ifeq ($(strip $(ARCH)),GPU)
 	INCS += -I$(strip $(CUDA_DIR))/include
 endif
 
+# Including external template libraries
+INCS += -I external/tnt/
+INCS += -I external/jama/
+
 TARGET = zefr
-OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/zefr.o 
+OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/shockcapture.o bin/zefr.o 
 
 ifeq ($(strip $(ARCH)),GPU)
-	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o 
+	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o bin/shockcapture_kernels.o
 endif
 
 INCS += -I include
@@ -71,7 +76,7 @@ bin/%.o: src/%.cpp  include/*.hpp include/*.h
 
 ifeq ($(strip $(ARCH)),GPU)
 bin/%.o: src/%.cu include/*.hpp include/*.h
-	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS)
+	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS) -D_NO_TNT
 endif
 
 clean:
