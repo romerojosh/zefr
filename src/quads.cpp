@@ -189,6 +189,7 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
   jaco_qpts.assign({nDims, nDims, nQpts, nEles});
   jaco_det_spts.assign({nSpts, nEles});
   jaco_det_qpts.assign({nQpts, nEles});
+  vol.assign({nEles});
 
   /* Set jacobian matrix and determinant at solution points */
   for (unsigned int ele = 0; ele < nEles; ele++)
@@ -215,7 +216,21 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
         ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
 
     }
+
+    /* Compute element area */
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      /* Get quadrature weight */
+      unsigned int i = idx_spts(spt,0);
+      unsigned int j = idx_spts(spt,1);
+      double weight = weights_spts(i) * weights_spts(j);
+
+      vol(ele) += weight * jaco_det_spts(spt, ele);
+    }
+
   }
+
+
 
   /* Set jacobian matrix at face flux points (do not need the determinant) */
   for (unsigned int ele = 0; ele < nEles; ele++)

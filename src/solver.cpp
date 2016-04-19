@@ -402,6 +402,7 @@ void FRSolver::solver_data_to_device()
   eles->jaco_spts_d = eles->jaco_spts;
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
+  eles->vol_d = eles->vol;
 
   if(input->shockcapture)
     eles->Umodal_d = eles->Umodal;
@@ -1082,9 +1083,8 @@ void FRSolver::compute_element_dt()
 #pragma omp parallel for
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   { 
-    double waveSp_max = 0.0;
+    double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-    /* Compute maximum wavespeed */
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
     {
       /* Skip if on ghost edge. */
@@ -1092,13 +1092,23 @@ void FRSolver::compute_element_dt()
       if (gfpt == -1)
         continue;
 
-      double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
+      if (eles->nDims == 2)
+      {
+        int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
+      }
+      else
+      {
+        int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
+        int i = idx % eles->nSpts1D;
+        int j = idx / eles->nSpts1D;
 
-      waveSp_max = std::max(waveSp, waveSp_max);
+        int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
+      }
     }
 
-    /* Note: CFL is applied to parent space element with width 2 */
-    dt(ele) = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
+    /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
+     * consistent with 1D CFL estimates. */
+    dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
   }
 
   if (input->dt_type == 1) /* Global minimum */
@@ -1114,7 +1124,8 @@ void FRSolver::compute_element_dt()
 
 #ifdef _GPU
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->dA_d, geo.fpt2gfpt_d, 
-      input->CFL, order, input->dt_type, eles->nFpts, eles->nEles);
+      eles->weights_spts_d, eles->vol_d, eles->nSpts1D, input->CFL, order, 
+      input->dt_type, eles->nFpts, eles->nEles, eles->nDims);
 #endif
 }
 
@@ -1475,7 +1486,16 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 
-    std::cout << "dt: " << dt(0);
+    if (input->dt_type == 2)
+    {
+      std::cout << "dt: " <<  *std::min_element(dt.data(), dt.data()+eles->nEles) << " (min) ";
+      std::cout << *std::max_element(dt.data(), dt.data()+eles->nEles) << " (max)";
+    }
+    else
+    {
+      std::cout << "dt: " << dt(0);
+    }
+
     std::cout << std::endl;
     
     /* Write to history file */

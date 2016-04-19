@@ -130,6 +130,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   geo->coord_ppts.assign({nPpts, nEles, nDims});
   geo->coord_qpts.assign({nQpts, nEles, nDims});
 
+
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
@@ -162,7 +163,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         }
       }
 
-      /* Setup physical coordinates at plot points */
+          /* Setup physical coordinates at plot points */
       for (unsigned int ppt = 0; ppt < nPpts; ppt++)
       {
         for (unsigned int node = 0; node < nNodes; node++)

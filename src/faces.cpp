@@ -1345,7 +1345,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = An;
+      waveSp(fpt) = std::abs(An);
     }
     else if (input->equation == EulerNS)
     {
@@ -1367,7 +1367,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     /* Compute common normal flux */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-k) * (WR[n]-WL[n]);
+      double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n]);
 
       /* Correct for positive parent space sign convention */
       Fcomm(fpt, n, 0) = F * outnorm(fpt, 0);
