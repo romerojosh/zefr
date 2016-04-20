@@ -32,6 +32,10 @@ void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, uns
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
     int lda, const double* B, int ldb, const double beta, double *C, int ldc);
 
+void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchSize);
+void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
+    double** Barray, int ldb, int* info, int batchSize);
+
 /* Wrappers for custom kernels */
 void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
     mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 
@@ -76,6 +80,8 @@ void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &
 void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt_in,
     mdvector_gpu<double> &b, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 
-void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU,  mdvector_gpu<double> &b, bool &GMRES_conv);
+void compute_deltaU_globalLHS_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU,  mdvector_gpu<double> &b, bool &GMRES_conv);
+
+void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 
 #endif /* solver_kernels_h */

@@ -442,6 +442,25 @@ void FRSolver::solver_data_to_device()
   eles->deltaU_d = eles->deltaU;
   eles->RHS_d = eles->RHS;
 
+  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  {
+    eles->LHS_d = eles->LHS_copy;
+    eles->LU_pivots_d = eles->LU_pivots;
+    eles->LU_info_d = eles->LU_info;
+
+    /* Setup and transfer array of GPU pointers to LHS matrices and RHS vectors */
+    unsigned int N = eles->nSpts * eles->nVars;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
+      eles->RHS_ptrs(ele) = eles->RHS_d.data() + ele * N;
+    }
+
+    eles->LHS_ptrs_d = eles->LHS_ptrs;
+    eles->RHS_ptrs_d = eles->RHS_ptrs;
+
+  }
+
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
   eles->U_fpts_d = eles->U_fpts;
@@ -693,6 +712,12 @@ void FRSolver::compute_LHS()
   if (input->dt_scheme == "BDF1")
   {
     eles->compute_globalLHS(dt);
+
+#ifdef _GPU
+    /* Copy to GPU */
+    eles->GLHS_d.free_data();
+    eles->GLHS_d = eles->GLHS;
+#endif
   }
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
@@ -700,15 +725,49 @@ void FRSolver::compute_LHS()
     compute_LHS_LU();
   }
 
-#ifdef _GPU
-  /* Copy to GPU */
-  eles->GLHS_d.free_data();
-  eles->GLHS_d = eles->GLHS;
-#endif
 }
 
 void FRSolver::compute_LHS_LU()
 {
+
+#ifdef _GPU
+  /* Reorganize LHS matrices on CPU */
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int nj = 0; nj < eles->nVars; nj++)
+    {
+      for (unsigned int ni = 0; ni < eles->nVars; ni++)
+      {
+        for (unsigned int sj = 0; sj < eles->nSpts; sj++)
+        {
+          for (unsigned int si = 0; si < eles->nSpts; si++)
+          {
+            unsigned int i = ni * eles->nSpts + si;
+            unsigned int j = nj * eles->nSpts + sj;
+            eles->LHS_copy(i, j, ele) = eles->LHS(si, sj, ele, ni, nj); 
+          }
+        }
+      }
+    }
+  }
+
+  /* Transfer LHS data to GPU */
+  eles->LHS_d = eles->LHS_copy;
+
+  unsigned int N = eles->nSpts * eles->nVars;
+
+  /* Create pointer array */
+  //for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  //{
+  //  eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
+  //}
+  //eles->LHS_ptrs_d = eles->LHS_ptrs;
+
+  /* Perform batched LU using cuBLAS */
+  cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), eles->nEles);
+#endif
+
+#ifdef _CPU
 #ifndef _NO_TNT
   LUptrs.clear();
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -736,10 +795,12 @@ void FRSolver::compute_LHS_LU()
     LUptrs.push_back(std::make_shared<JAMA::LU<double>>(A));
   }
 #endif
+#endif
 }
 
 void FRSolver::compute_RHS(unsigned int color)
 {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
@@ -751,85 +812,129 @@ void FRSolver::compute_RHS(unsigned int color)
         {
           if (input->dt_type != 2)
           {
-            eles->RHS(spt, ele, n) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+            eles->RHS(spt, n, ele) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
           }
           else
           {
-            eles->RHS(spt, ele, n) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+            eles->RHS(spt, n, ele) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
           }
-        }
-      }
-    }
-  }
-}
-
-void FRSolver::compute_RHS_source(mdvector<double> &source, unsigned int color)
-{
-#pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < eles->nVars; n++)
-  {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      if (ele_color(ele) == color)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
-          {
-            eles->RHS(spt, ele, n) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
-          }
-          else
-          {
-            eles->RHS(spt, ele, n) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
-          }
-        }
-      }
-    }
-  }
-}
-
-void FRSolver::compute_deltaU(unsigned int color)
-{
-#ifndef _NO_TNT
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    if (ele_color(ele) == color)
-    {
-      /* Copy RHS into TNT object */
-      unsigned int N = eles->nSpts * eles->nVars;
-      TNT::Array1D<double> b(N);
-      for (unsigned int n = 0; n < eles->nVars; n++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          unsigned int i = n * eles->nSpts + spt;
-          b[i] = eles->RHS(spt, ele, n);
-        }
-      }
-
-      /* Solve for deltaU */
-      TNT::Array1D<double> x = LUptrs[ele]->solve(b);
-      if (x.dim() == 0)
-      {
-        ThrowException("LU solve failed!");
-      }
-
-      /* Copy TNT object into deltaU */
-      for (unsigned int n = 0; n < eles->nVars; n++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          unsigned int i = n * eles->nSpts + spt;
-          eles->deltaU(spt, ele, n) = x[i];
         }
       }
     }
   }
 #endif
+
+#ifdef _GPU
+  compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
+#endif
+}
+
+void FRSolver::compute_RHS_source(mdvector<double> &source, unsigned int color)
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      if (ele_color(ele) == color)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          if (input->dt_type != 2)
+          {
+            eles->RHS(spt, n, ele) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+          }
+          else
+          {
+            eles->RHS(spt, n, ele) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+          }
+        }
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  //compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
+#endif
+}
+
+void FRSolver::compute_deltaU(unsigned int color)
+{
+  if (input->dt_scheme == "BDF1")
+  {
+#ifdef _CPU
+    ThrowException("Global BDF1 not supported on CPU.");
+#endif
+
+#ifdef _GPU
+    compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
+#endif
+
+  }
+  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  {
+#ifdef _CPU
+#ifndef _NO_TNT
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      if (ele_color(ele) == color)
+      {
+        /* Copy RHS into TNT object */
+        unsigned int N = eles->nSpts * eles->nVars;
+        TNT::Array1D<double> b(N);
+        for (unsigned int n = 0; n < eles->nVars; n++)
+        {
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            unsigned int i = n * eles->nSpts + spt;
+            b[i] = eles->RHS(spt, n, ele);
+          }
+        }
+
+        /* Solve for deltaU */
+        TNT::Array1D<double> x = LUptrs[ele]->solve(b);
+        if (x.dim() == 0)
+        {
+          ThrowException("LU solve failed!");
+        }
+
+        /* Copy TNT object into deltaU */
+        //std::cout << "ele!: " << ele << std::endl;
+        for (unsigned int n = 0; n < eles->nVars; n++)
+        {
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            unsigned int i = n * eles->nSpts + spt;
+            eles->deltaU(spt, ele, n) = x[i];
+            //std::cout << "spt: " << spt << "   n: " << n << "   dU: " << eles->deltaU(spt, ele, n) << std::endl;
+          }
+        }
+      }
+
+
+    }
+    //ThrowException("PAUSE");
+#endif
+#endif
+
+#ifdef _GPU
+    /* Solve LU systems using batched cublas routine */
+    unsigned int N = eles->nSpts * eles->nVars;
+    int info;
+    cublasDgetrsBatched_wrapper(N, 1, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
+        eles->RHS_ptrs_d.data(), N, &info, eles->nEles);
+
+    if (info)
+      ThrowException("cublasDgetrs failed. info = " + std::to_string(info));
+#endif
+  }
 }
 
 void FRSolver::compute_U(unsigned int color)
 {
+#ifdef _CPU
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -843,6 +948,11 @@ void FRSolver::compute_U(unsigned int color)
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  compute_U_wrapper(eles->U_spts_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
+#endif
 }
 
 void FRSolver::initialize_U()
@@ -896,9 +1006,15 @@ void FRSolver::initialize_U()
     else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
       eles->LHS.assign({eles->nSpts, eles->nSpts, eles->nEles, eles->nVars, eles->nVars});
+      eles->LHS_copy.assign({eles->nSpts * eles->nVars, eles->nSpts * eles->nVars, eles->nEles});
+      eles->LHS_ptrs.assign({eles->nEles});
+      eles->RHS_ptrs.assign({eles->nEles});
+      eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
+      eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
     }
     eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
-    eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
+    eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
+    //eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
   }
 
   /* Initialize solution */
@@ -1358,39 +1474,51 @@ void FRSolver::update()
     compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
 
     /* Solve system for deltaU */
-    eles->deltaU.fill(0);
+    eles->deltaU.fill(0); //TODO: Whoops! We shouldn't be resetting the guess to zero every iteration!
     eles->deltaU_d = eles->deltaU;
-    compute_deltaU_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
+    compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
 
     /* Add deltaU to solution */
+    //TODO: Fix for new RHS ordering
     device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
 #endif
   }
 
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-#ifdef _CPU
+
+#ifdef _GPU
+    if (nColors > 1)
+      ThrowException("Only block-jacobi supported on GPU currently!");
+#endif
+
     for (unsigned int color = 1; color <= nColors; color++)
     {
       compute_residual(0);
 
       // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
-      {
-        compute_element_dt();
-      }
-
-      /* Compute SER time step growth */
-      if (input->SER)
-      {
-        compute_SER_dt();
-      }
-
-      /* Compute LHS implicit Jacobian */
       int iter = current_iter - restart_iter;
       if (color == 1 && iter%input->Jfreeze_freq == 0)
       {
-        compute_LHS();
+        if (input->dt_type != 0)
+        {
+          compute_element_dt();
+#ifdef _GPU
+          dt = dt_d; // Copy timestep out to CPU for LHS computation
+#endif
+        }
+
+        /* Compute SER time step growth */
+        if (input->SER)
+        {
+          compute_SER_dt();
+#ifdef _GPU
+          ThrowException("SER not available on GPU!");
+#endif
+        }
+
+        /* Compute LHS implicit Jacobian */
+          compute_LHS();
       }
 
       /* Prepare RHS vector */
@@ -1402,11 +1530,6 @@ void FRSolver::update()
       /* Add deltaU to solution */
       compute_U(color);
     }
-#endif
-
-#ifdef _GPU
-    ThrowException("LUJac/LUSGS not implemented on GPU yet.");
-#endif
   }
 
   flow_time += dt(0);
@@ -1418,6 +1541,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
   if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUJac" && input->dt_scheme != "LUSGS")
   {
     U_ini = eles->U_spts;
+
 
     /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
     for (unsigned int stage = 0; stage < (nStages-1); stage++)
@@ -1454,7 +1578,9 @@ void FRSolver::update_with_source(mdvector<double> &source)
 
     /* Final stage */
     compute_residual(nStages-1);
+
     eles->U_spts = U_ini;
+
 
     for (unsigned int stage = 0; stage < nStages; stage++)
 #pragma omp parallel for collapse(3)
@@ -1473,6 +1599,7 @@ void FRSolver::update_with_source(mdvector<double> &source)
                 (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
             }
           }
+
   }
 
   else if (input->dt_scheme == "BDF1")
@@ -1575,9 +1702,10 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
     /* Solve system for deltaU */
     eles->deltaU.fill(0);
     eles->deltaU_d = eles->deltaU;
-    compute_deltaU_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
+    compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
 
     /* Add deltaU to solution */
+    //TODO: Cannot use add with reorganized RHS. Need a kernel that adds correctly!
     device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
   }
 

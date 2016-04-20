@@ -59,6 +59,9 @@ class Elements
     /* Element structures for implicit method */
     spmatrix<double> GLHS; // Sparse matrix for global implicit system
     mdvector<double> LHS;  // Element local matrices for implicit system
+    mdvector<double> LHS_copy;
+    mdvector<int> LU_pivots, LU_info; 
+    mdvector<double*> LHS_ptrs, RHS_ptrs; 
     mdvector<double> dFdUconv_spts, dFdUvisc_spts, dFddUvisc_spts;
     mdvector<double> dFcdUconv_fpts, dUcdU_fpts, dFcdUvisc_fpts, dFcddUvisc_fpts;
     mdvector<double> deltaU;
@@ -81,6 +84,9 @@ class Elements
 
     /* Element structures for implicit method */
     spmatrix_gpu<double> GLHS_d;
+    mdvector_gpu<double> LHS_d;
+    mdvector_gpu<int> LU_pivots_d, LU_info_d; 
+    mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d; 
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
 #endif

@@ -46,6 +46,7 @@ void allocate_device_data(T* &device_data, unsigned int size)
 }
 
 template void allocate_device_data<double>(double* &device_data, unsigned int size);
+template void allocate_device_data<double*>(double** &device_data, unsigned int size);
 template void allocate_device_data<unsigned int>(unsigned int* &device_data, unsigned int size);
 template void allocate_device_data<int>(int* &device_data, unsigned int size);
 
@@ -58,6 +59,7 @@ void free_device_data(T* &device_data)
 }
 
 template void free_device_data<double>(double* &device_data);
+template void free_device_data<double*>(double** &device_data);
 template void free_device_data<unsigned int>(unsigned int* &device_data);
 template void free_device_data<int>(int* &device_data);
 
@@ -68,9 +70,11 @@ void copy_to_device(T* device_data, const T* host_data, unsigned int size)
   check_error();
 }
 
+
 template void copy_to_device<double>(double* device_data, const double* host_data, unsigned int size);
+template void copy_to_device<double*>(double** device_data, double* const* host_data, unsigned int size);
 template void copy_to_device<unsigned int>(unsigned int* device_data, const unsigned int* host_data, unsigned int size);
-template void copy_to_device<int>(int* device_data, const int* host_data, unsigned int size);
+template void copy_to_device<int>(int* device_data, const int* host_data,  unsigned int size);
 
 template <typename T>
 void copy_from_device(T* host_data, const T* device_data, unsigned int size)
@@ -80,6 +84,7 @@ void copy_from_device(T* host_data, const T* device_data, unsigned int size)
 }
 
 template void copy_from_device<double>(double* host_data, const double* device_data, unsigned int size);
+template void copy_from_device<double*>(double** host_data, double* const* device_data, unsigned int size);
 template void copy_from_device<unsigned int>(unsigned int* host_data, const unsigned int* device_data, unsigned int size);
 template void copy_from_device<int>(int* host_data, const int* device_data, unsigned int size);
 
@@ -141,7 +146,18 @@ void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, uns
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
     int lda, const double* B, int ldb, const double beta, double *C, int ldc)
 {
-    cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
+  cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
+}
+
+void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchSize)
+{
+  cublasDgetrfBatched(cublas_handle, N, Aarray, lda, PivotArray, InfoArray, batchSize);
+}
+
+void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
+    double** Barray, int ldb, int* info, int batchSize)
+{
+  cublasDgetrsBatched(cublas_handle, CUBLAS_OP_N, N, NRHS, Aarray, lda, PivotArray, Barray, ldb, info, batchSize);
 }
 
 template <unsigned int nVars>
@@ -623,7 +639,7 @@ void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_s
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    RHS(spt, ele, n) = -(dt * divF_spts(spt, ele, n, 0)) / jaco_det_spts(spt, ele);
+    RHS(spt, n, ele) = -(dt * divF_spts(spt, ele, n, 0)) / jaco_det_spts(spt, ele);
   }
 }
 
@@ -654,7 +670,7 @@ void compute_RHS_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> sou
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    RHS(spt, ele, n) = -(dt * (divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / jaco_det_spts(spt, ele);
+    RHS(spt, n, ele) = -(dt * (divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / jaco_det_spts(spt, ele);
   }
 }
 
@@ -667,7 +683,7 @@ void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<do
   compute_RHS_source<<<blocks, threads>>>(divF_spts, source, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars);
 }
 
-void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU, mdvector_gpu<double> &b, bool &GMRES_conv) 
+void compute_deltaU_globalLHS_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU, mdvector_gpu<double> &b, bool &GMRES_conv) 
 {
   /* Experiment: Use CUSP library to solve system */
   /* First, wrap device arrays using Thrust */
@@ -726,4 +742,28 @@ void compute_deltaU_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &delta
     std::cout << " to " << monitor.relative_tolerance() << " relative tolerance " << std::endl;
   }
   */
+}
+
+__global__
+void compute_U(mdvector_gpu<double> U_spts, mdvector_gpu<double> RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+{  
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    U_spts(spt, ele, n) += RHS(spt, n, ele);
+  }
+
+}
+
+void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y);
+
+  compute_U<<<blocks, threads>>>(U_spts, RHS, nSpts, nEles, nVars);
 }
