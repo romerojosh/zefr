@@ -55,12 +55,16 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_spts(spt,dim);
 
+
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_spts(node,spt) = calc_shape(shape_order, node, loc);
+      shape_spts(node,spt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_spts(node,spt,dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_spts(node,spt,dim) = dshape_val(node, dim);
     }
   }
 
@@ -70,12 +74,15 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_fpts(fpt,dim);
 
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_fpts(node, fpt) = calc_shape(shape_order, node, loc);
+      shape_fpts(node, fpt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_fpts(node, fpt, dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_fpts(node, fpt, dim) = dshape_val(node, dim);
     }
   }
 
@@ -85,12 +92,15 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_ppts(ppt,dim);
 
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_ppts(node,ppt) = calc_shape(shape_order, node, loc);
+      shape_ppts(node, ppt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_ppts(node,ppt,dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_ppts(node, ppt, dim) = dshape_val(node, dim);
     }
   }
   
@@ -100,12 +110,15 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_qpts(qpt,dim);
 
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_qpts(node,qpt) = calc_shape(shape_order, node, loc);
+      shape_qpts(node, qpt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_qpts(node,qpt,dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_qpts(node, qpt, dim) = dshape_val(node, dim);
     }
   }
 }

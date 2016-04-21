@@ -1,6 +1,7 @@
 # Geometry:
 nDims    2
 meshfile full_cyl_quad.msh
+serendipity 1
 
 # Solver:
 order     1
