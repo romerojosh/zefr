@@ -368,6 +368,7 @@ void FRSolver::solver_data_to_device()
   eles->oppE_d = eles->oppE;
   eles->oppD_d = eles->oppD;
   eles->oppD_fpts_d = eles->oppD_fpts;
+  eles->oppDiv_fpts_d = eles->oppDiv_fpts;
 
   /* If using multigrid, copy relevant operators */
   if (input->p_multi)

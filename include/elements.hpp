@@ -57,7 +57,7 @@ class Elements
 
 #ifdef _GPU
     /* GPU data */
-    mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d, oppDiv_d, oppDiv_fpt_d;
+    mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d, oppDiv_d, oppDiv_fpts_d;
     mdvector_gpu<double> oppE_ppts_d, oppE_qpts_d;
     mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d, Uavg_d;
     mdvector_gpu<double> F_spts_d, F_fpts_d;

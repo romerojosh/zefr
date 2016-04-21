@@ -464,14 +464,16 @@ void Elements::compute_divF(unsigned int stage)
     /* Compute contribution to derivative from solution at solution points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
         oppD_d.data() + dim * (nSpts * nSpts), nSpts, 
-        U_spts_d.data(), nSpts, fac, divF_spts_d.data() + dim * 
-        (nSpts * nVars * nEles) + stage * (nSpts * nVars * nEles * nDims), nSpts);
+        F_spts_d.data() + dim * (nSpts * nVars * nEles), 
+        nSpts, fac, divF_spts_d.data() + stage * (nSpts * nVars * 
+        nEles), nSpts);
   }
 
   /* Compute contribution to derivative from common solution at flux points */
   cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
-      oppDiv_fpts_d.data(), nSpts,Fcomm_d.data(), nFpts, 1.0, divF_spts_d.data() + dim * 
-      (nSpts * nVars * nEles) + stage * (nSpts * nVars * nEles * nDims), nSpts);
+      oppDiv_fpts_d.data(), nSpts, Fcomm_d.data(), nFpts, 
+      1.0, divF_spts_d.data()  + stage * (nSpts * nVars * 
+      nEles), nSpts);
 
   check_error();
 #endif
