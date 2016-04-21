@@ -83,6 +83,6 @@ void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<do
 
 void compute_deltaU_globalLHS_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU,  mdvector_gpu<double> &b, bool &GMRES_conv);
 
-void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
+void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 
 #endif /* solver_kernels_h */

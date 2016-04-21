@@ -712,6 +712,7 @@ void FRSolver::compute_LHS()
   /* Compute LHS implicit Jacobian */
   if (input->dt_scheme == "BDF1")
   {
+    //TODO: Modify order of LHS matrix to new order
     eles->compute_globalLHS(dt);
 
 #ifdef _GPU
@@ -902,14 +903,12 @@ void FRSolver::compute_deltaU(unsigned int color)
         }
 
         /* Copy TNT object into deltaU */
-        //std::cout << "ele!: " << ele << std::endl;
         for (unsigned int n = 0; n < eles->nVars; n++)
         {
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
             unsigned int i = n * eles->nSpts + spt;
-            eles->deltaU(spt, ele, n) = x[i];
-            //std::cout << "spt: " << spt << "   n: " << n << "   dU: " << eles->deltaU(spt, ele, n) << std::endl;
+            eles->deltaU(spt, n, ele) = x[i];
           }
         }
       }
@@ -944,7 +943,7 @@ void FRSolver::compute_U(unsigned int color)
       {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
-          eles->U_spts(spt, ele, n) += eles->deltaU(spt, ele, n);
+          eles->U_spts(spt, ele, n) += eles->deltaU(spt, n, ele);
         }
       }
     }
@@ -952,7 +951,15 @@ void FRSolver::compute_U(unsigned int color)
 #endif
 
 #ifdef _GPU
-  compute_U_wrapper(eles->U_spts_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
+  if (input->dt_scheme == "BDF1")
+  {
+    compute_U_wrapper(eles->U_spts_d, eles->deltaU_d, eles->nSpts, eles->nEles, eles->nVars);
+  }
+  else if (input->dt_scheme == "LUJac" or input->dt_scheme == "LUSGS")
+  {
+    /* Add RHS (which contains deltaU) to U */
+    compute_U_wrapper(eles->U_spts_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
+  }
 #endif
 }
 
@@ -1013,9 +1020,8 @@ void FRSolver::initialize_U()
       eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
       eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
     }
-    eles->deltaU.assign({eles->nSpts, eles->nEles, eles->nVars});
+    eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nVars});
     eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
-    //eles->RHS.assign({eles->nSpts, eles->nEles, eles->nVars});
   }
 
   /* Initialize solution */
@@ -1481,8 +1487,8 @@ void FRSolver::update()
     compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
 
     /* Add deltaU to solution */
-    //TODO: Fix for new RHS ordering
-    device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
+    //device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
+    compute_U();
 #endif
   }
 
@@ -1716,7 +1722,39 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
 
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    ThrowException("LUJac/LUSGS not implemented on GPU yet.");
+    if (nColors > 1)
+      ThrowException("Only block-jacobi supported on GPU currently!");
+
+    for (unsigned int color = 1; color <= nColors; color++)
+    {
+      compute_residual(0);
+
+      /* Freeze Jacobian */
+      int iter = current_iter - restart_iter;
+      if (color == 1 && iter%(2*input->Jfreeze_freq*input->smooth_steps) == 0)
+      {
+        // TODO: Revisit this as it is kind of expensive.
+        if (input->dt_type != 0)
+        {
+          compute_element_dt();
+        }
+
+        dt = dt_d;
+
+        /* Compute LHS implicit Jacobian */
+        compute_LHS();
+      }
+
+      /* Prepare RHS vector */
+      compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
+
+      /* Solve system for deltaU */
+      compute_deltaU(color);
+
+      /* Add deltaU to solution */
+      compute_U(color);
+    }
+
   }
   current_iter++;
 }

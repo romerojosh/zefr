@@ -765,7 +765,7 @@ void compute_deltaU_globalLHS_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<doub
 }
 
 __global__
-void compute_U(mdvector_gpu<double> U_spts, mdvector_gpu<double> RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+void compute_U(mdvector_gpu<double> U_spts, mdvector_gpu<double> deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {  
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
@@ -775,15 +775,15 @@ void compute_U(mdvector_gpu<double> U_spts, mdvector_gpu<double> RHS, unsigned i
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    U_spts(spt, ele, n) += RHS(spt, n, ele);
+    U_spts(spt, ele, n) += deltaU(spt, n, ele);
   }
 
 }
 
-void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   dim3 threads(16,12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/threads.y);
 
-  compute_U<<<blocks, threads>>>(U_spts, RHS, nSpts, nEles, nVars);
+  compute_U<<<blocks, threads>>>(U_spts, deltaU, nSpts, nEles, nVars);
 }
