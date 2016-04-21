@@ -1020,7 +1020,7 @@ void FRSolver::initialize_U()
       eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
       eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
     }
-    eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nVars});
+    eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
     eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
   }
 
