@@ -41,6 +41,7 @@ class Elements
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts, inv_jaco_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
+    mdvector<double> vol;
     mdvector<double> weights_spts;
     std::vector<double> weights_qpts;
 
@@ -77,6 +78,7 @@ class Elements
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, dF_spts_d, divF_spts_d;
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;
+    mdvector_gpu<double> vol_d;
     mdvector_gpu<double> weights_spts_d;
 
     /* Multigrid operators */
@@ -100,10 +102,10 @@ class Elements
     virtual void set_locs() = 0;
     virtual void set_transforms(std::shared_ptr<Faces> faces) = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
-    virtual double calc_shape(unsigned int shape_order, unsigned int idx,
+    virtual mdvector<double> calc_shape(unsigned int shape_order,
                             std::vector<double> &loc) = 0;
-    virtual double calc_d_shape(unsigned int shape_order, unsigned int idx,
-                            std::vector<double> &loc, unsigned int dim) = 0;
+    virtual mdvector<double> calc_d_shape(unsigned int shape_order,
+                            std::vector<double> &loc) = 0;
 
     virtual double calc_nodal_basis(unsigned int spt, std::vector<double> &loc) = 0;
     virtual double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 

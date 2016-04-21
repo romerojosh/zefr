@@ -24,22 +24,24 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   {
     if (input->nDims == 2)
     {
+      
       /*
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
       */
+      
       val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y);
     }
     else if (input->nDims == 3)
     {
-      /*
+      
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t))*
              std::sin(M_PI * (z - input->AdvDiff_A(2) * t));
-      */
-      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
+      
+      //val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
     }
   }
   else if (input->equation == EulerNS)
@@ -201,13 +203,13 @@ double get_cfl_limit_adv(int order)
       return 0.2351;
 
     case 3:
-      return 0.14539;
+      return 0.1453;
 
     case 4:
-      return 0.10003;
+      return 0.1000;
 
     case 5:
-      return 0.07363;
+      return 0.0736;
 
     default:
       ThrowException("CFL limit no available for this order!");

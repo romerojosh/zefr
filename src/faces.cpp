@@ -2019,7 +2019,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = An;
+      waveSp(fpt) = std::abs(An);
     }
     else if (input->equation == Burgers)
     {
@@ -2054,7 +2054,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     /* Compute common normal flux */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = 0.5 * (FR[n]+FL[n]) - 0.5 * std::abs(waveSp(fpt))*(1.0-k) * (WR[n]-WL[n]);
+      double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n]);
 
       /* Correct for positive parent space sign convention */
       Fcomm(fpt, n, 0) = F * outnorm(fpt, 0);
@@ -2864,7 +2864,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
         An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = An;
+      waveSp(fpt) = std::abs(An);
     }
     else if (input->equation == Burgers)
     {
@@ -2970,11 +2970,11 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         if (ni == nj)
         {
-          dFcdUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
-          dFcdUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+          dFcdUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
 
-          dFcdUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
-          dFcdUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + std::abs(waveSp(fpt)))*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
         }
         else
         {

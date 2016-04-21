@@ -189,6 +189,7 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
   jaco_qpts.assign({nDims, nDims, nQpts, nEles});
   jaco_det_spts.assign({nSpts, nEles});
   jaco_det_qpts.assign({nQpts, nEles});
+  vol.assign({nEles});
 
   /* Set jacobian matrix and determinant at solution points */
   for (unsigned int ele = 0; ele < nEles; ele++)
@@ -215,7 +216,21 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
         ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
 
     }
+
+    /* Compute element area */
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      /* Get quadrature weight */
+      unsigned int i = idx_spts(spt,0);
+      unsigned int j = idx_spts(spt,1);
+      double weight = weights_spts(i) * weights_spts(j);
+
+      vol(ele) += weight * jaco_det_spts(spt, ele);
+    }
+
   }
+
+
 
   /* Set jacobian matrix at face flux points (do not need the determinant) */
   for (unsigned int ele = 0; ele < nEles; ele++)
@@ -572,224 +587,152 @@ void Quads::transform_dFdU()
   }
 }
 
-double Quads::calc_shape(unsigned int shape_order, unsigned int idx, 
-                         std::vector<double> &loc)
+mdvector<double> Quads::calc_shape(unsigned int shape_order, 
+    std::vector<double> &loc)
 {
-  double val = 0.0;
+  mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
   double eta = loc[1];
 
-  /* Bilinear quadrilateral/4-node Serendipity */
-  if (shape_order == 1)
+  /* Lagrange Elements (or linear serendipity) */
+  if (!input->serendipity or (shape_order == 1 and input->serendipity))
   {
-    unsigned int i = 0;
-    unsigned int j = 0;
+    int nNodes1D = shape_order + 1;
+    auto loc_nodes = Shape_pts(shape_order);
 
-    switch(idx)
+    int nLevels = nNodes1D / 2;
+
+    /* Set shape values via recursive strategy (from Flurry) */
+    int node = 0;
+    for (int i = 0; i < nLevels; i++)
     {
-      case 0:
-        i = 0; j = 0; break;
-      case 1:
-        i = 1; j = 0; break;
-      case 2:
-        i = 1; j = 1; break;
-      case 3:
-        i = 0; j = 1; break;
-    }
+      /* Corner Nodes */
+      int i2 = (nNodes1D - 1) - i;
+      shape_val(node) = Lagrange(loc_nodes, i, xi) * Lagrange(loc_nodes, i, eta);
+      shape_val(node + 1) = Lagrange(loc_nodes, i2, xi) * Lagrange(loc_nodes, i, eta);
+      shape_val(node + 2) = Lagrange(loc_nodes, i2, xi) * Lagrange(loc_nodes, i2, eta);
+      shape_val(node + 3) = Lagrange(loc_nodes, i, xi) * Lagrange(loc_nodes, i2, eta);
 
-    val = Lagrange({-1.,1.}, i, xi) * Lagrange({-1.,1.}, j, eta);
-  }
+      node += 4;
 
-  if (shape_order == 2)
-  {
-    if (input->serendipity)
-    {
-      /* 8-node Serendipity Element */
-      switch(idx)
+      int nEdgeNodes = nNodes1D - 2 * (i + 1);
+      for (int j = 0; j < nEdgeNodes; j++)
       {
-        case 0:
-          val = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi); break;
-        case 4:
-          val = 0.5*(1.-xi)*(1.+xi)*(1.-eta); break;
-        case 1:
-          val = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi); break;
-        case 5:
-          val = 0.5*(1.+xi)*(1.+eta)*(1.-eta); break;
-        case 2:
-          val = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi); break;
-        case 6:
-          val = 0.5*(1.-xi)*(1.+xi)*(1.+eta); break;
-        case 3:
-          val = -0.25*(1.-xi)*(1.+eta)*(1.-eta+xi); break;
-        case 7:
-          val = 0.5*(1.-xi)*(1.+eta)*(1.-eta); break;
-      }
-    
-    }
-    else
-    {
-      unsigned int i = 0;
-      unsigned int j = 0;
-
-      switch(idx)
-      {
-        case 0:
-          i = 0; j = 0; break;
-        case 1:
-          i = 2; j = 0; break;
-        case 2:
-          i = 2; j = 2; break;
-        case 3:
-          i = 0; j = 2; break;
-        case 4:
-          i = 1; j = 0; break;
-        case 5:
-          i = 2; j = 1; break;
-        case 6:
-          i = 1; j = 2; break;
-        case 7:
-          i = 0; j = 1; break;
-        case 8:
-          i = 1; j = 1; break;
+        shape_val(node + j) = Lagrange(loc_nodes, i + 1 + j, xi) * Lagrange(loc_nodes, i, eta);
+        shape_val(node + nEdgeNodes + j) = Lagrange(loc_nodes, i2, xi) * Lagrange(loc_nodes, i + 1 + j, eta);
+        shape_val(node + 2*nEdgeNodes + j) = Lagrange(loc_nodes, i2 - 1 - j, xi) * Lagrange(loc_nodes, i2, eta);
+        shape_val(node + 3*nEdgeNodes + j) = Lagrange(loc_nodes, i, xi) * Lagrange(loc_nodes, i2 - 1 - j, eta);
       }
 
-      val = Lagrange({-1., 0., 1.}, i, xi) * Lagrange({-1., 0., 1.}, j, eta);
+      node += 4 * nEdgeNodes;
     }
-  }
-
-  return val;
-}
-
-double Quads::calc_d_shape(unsigned int shape_order, unsigned int idx,
-                          std::vector<double> &loc, unsigned int dim)
-{
-  double val = 0.0;
-  double xi = loc[0];
-  double eta = loc[1];
-
-  /* Bilinear quadrilateral/4-node Serendipity */
-  if (shape_order == 1)
-  {
-    unsigned int i = 0;
-    unsigned int j = 0;
-
-    switch(idx)
+    /* Add center node in odd case */
+    if (nNodes1D % 2 != 0)
     {
-      case 0:
-        i = 0; j = 0; break;
-      case 1:
-        i = 1; j = 0; break;
-      case 2:
-        i = 1; j = 1; break;
-      case 3:
-        i = 0; j = 1; break;
+      shape_val(nNodes - 1) = Lagrange(loc_nodes, nNodes1D/2, xi) * Lagrange(loc_nodes, nNodes1D/2, eta);
     }
-
-    if (dim == 0)
-      val = Lagrange_d1({-1,1}, i, xi) * Lagrange({-1,1}, j, eta);
-    else
-      val = Lagrange({-1,1}, i, xi) * Lagrange_d1({-1,1}, j, eta);
   }
 
   /* 8-node Serendipity Element */
-  else if (shape_order == 2)
+  else if (shape_order == 2 and input->serendipity)
   {
-    if (input->serendipity)
-    {
-      if (dim == 0)
-      {
-        switch(idx)
-        {
-          case 0:
-            val = -0.25*(-1.+eta)*(2.*xi+eta); break;
-          case 4:
-            val = xi*(-1.+eta); break;
-          case 1:
-            val = 0.25*(-1.+eta)*(eta - 2.*xi); break;
-          case 5:
-            val = -0.5*(1+eta)*(-1.+eta); break;
-          case 2:
-            val = 0.25*(1.+eta)*(2.*xi+eta); break;
-          case 6:
-            val = -xi*(1.+eta); break;
-          case 3:
-            val = -0.25*(1.+eta)*(eta-2.*xi); break;
-          case 7:
-            val = 0.5*(1+eta)*(-1.+eta); break;
-        }
-      }
-
-      else if (dim == 1)
-      {
-        switch(idx)
-        {
-          case 0:
-            val = -0.25*(-1.+xi)*(2.*eta+xi); break;
-          case 4:
-            val = 0.5*(1.+xi)*(-1.+xi); break;
-          case 1:
-            val = 0.25*(1.+xi)*(2.*eta - xi); break;
-          case 5:
-            val = -eta*(1.+xi); break;
-          case 2:
-            val = 0.25*(1.+xi)*(2.*eta+xi); break;
-          case 6:
-            val = -0.5*(1.+xi)*(-1.+xi); break;
-          case 3:
-            val = -0.25*(-1.+xi)*(2.*eta-xi); break;
-          case 7:
-            val = eta*(-1.+xi); break;
-        }
-      }
-    }
-    else
-    {
-      unsigned int i = 0;
-      unsigned int j = 0;
-
-      switch(idx)
-      {
-        case 0:
-          i = 0; j = 0; break;
-        case 1:
-          i = 2; j = 0; break;
-        case 2:
-          i = 2; j = 2; break;
-        case 3:
-          i = 0; j = 2; break;
-        case 4:
-          i = 1; j = 0; break;
-        case 5:
-          i = 2; j = 1; break;
-        case 6:
-          i = 1; j = 2; break;
-        case 7:
-          i = 0; j = 1; break;
-        case 8:
-          i = 1; j = 1; break;
-      }
-
-      if (dim == 0)
-        val = Lagrange_d1({-1, 0, 1}, i, xi) * Lagrange({-1, 0, 1}, j, eta);
-      else
-        val = Lagrange({-1, 0, 1}, i, xi) * Lagrange_d1({-1, 0, 1}, j, eta);
-
-    }
-
+    shape_val(0) = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi);
+    shape_val(1) = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi);
+    shape_val(2) = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi);
+    shape_val(3) = -0.25*(1.-xi)*(1.+eta)*(1.-eta+xi);
+    shape_val(4) = 0.5*(1.-xi)*(1.+xi)*(1.-eta);
+    shape_val(5) = 0.5*(1.+xi)*(1.+eta)*(1.-eta);
+    shape_val(6) = 0.5*(1.-xi)*(1.+xi)*(1.+eta);
+    shape_val(7) = 0.5*(1.-xi)*(1.+eta)*(1.-eta);
+  }
+    
+  
+  else
+  {
+    ThrowException("Serendipty element support up to quadratic elements only!");
   }
 
-  return val;
-
+  return shape_val;
 }
-  /*
-  std::cout << "tflux" << std::endl;
-  for (unsigned int i = 0; i < nSpts; i++)
-  {
-    for (unsigned int j = 0; j < nEles; j++)
-    {
-      std::cout << F_spts(0,0,i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-  */
 
+mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
+                          std::vector<double> &loc)
+{
+  mdvector<double> dshape_val({nNodes, nDims}, 0.0);
+  double xi = loc[0];
+  double eta = loc[1];
+
+  /* Lagrange Elements (or linear serendipity) */
+  if (!input->serendipity or (shape_order == 1 and input->serendipity))
+  {
+    int nNodes1D = shape_order + 1;
+    auto loc_nodes = Shape_pts(shape_order);
+
+    int nLevels = nNodes1D / 2;
+
+    /* Set shape values via recursive strategy (from Flurry) */
+    int node = 0;
+    for (int i = 0; i < nLevels; i++)
+    {
+      /* Corner Nodes */
+      int i2 = (nNodes1D - 1) - i;
+      dshape_val(node, 0) = Lagrange_d1(loc_nodes, i, xi) * Lagrange(loc_nodes, i, eta);
+      dshape_val(node + 1, 0) = Lagrange_d1(loc_nodes, i2, xi) * Lagrange(loc_nodes, i, eta);
+      dshape_val(node + 2, 0) = Lagrange_d1(loc_nodes, i2, xi) * Lagrange(loc_nodes, i2, eta);
+      dshape_val(node + 3, 0) = Lagrange_d1(loc_nodes, i, xi) * Lagrange(loc_nodes, i2, eta);
+
+      dshape_val(node, 1) = Lagrange(loc_nodes, i, xi) * Lagrange_d1(loc_nodes, i, eta);
+      dshape_val(node + 1, 1) = Lagrange(loc_nodes, i2, xi) * Lagrange_d1(loc_nodes, i, eta);
+      dshape_val(node + 2, 1) = Lagrange(loc_nodes, i2, xi) * Lagrange_d1(loc_nodes, i2, eta);
+      dshape_val(node + 3, 1) = Lagrange(loc_nodes, i, xi) * Lagrange_d1(loc_nodes, i2, eta);
+      node += 4;
+
+      int nEdgeNodes = nNodes1D - 2 * (i + 1);
+      for (int j = 0; j < nEdgeNodes; j++)
+      {
+        dshape_val(node + j, 0) = Lagrange_d1(loc_nodes, i + 1 + j, xi) * Lagrange(loc_nodes, i, eta);
+        dshape_val(node + nEdgeNodes + j, 0) = Lagrange_d1(loc_nodes, i2, xi) * Lagrange(loc_nodes, i + 1 + j, eta);
+        dshape_val(node + 2*nEdgeNodes + j, 0) = Lagrange_d1(loc_nodes, i2 - 1 - j, xi) * Lagrange(loc_nodes, i2, eta);
+        dshape_val(node + 3*nEdgeNodes + j, 0) = Lagrange_d1(loc_nodes, i, xi) * Lagrange(loc_nodes, i2 - 1 - j, eta);
+
+        dshape_val(node + j, 1) = Lagrange(loc_nodes, i + 1 + j, xi) * Lagrange_d1(loc_nodes, i, eta);
+        dshape_val(node + nEdgeNodes + j, 1) = Lagrange(loc_nodes, i2, xi) * Lagrange_d1(loc_nodes, i + 1 + j, eta);
+        dshape_val(node + 2*nEdgeNodes + j, 1) = Lagrange(loc_nodes, i2 - 1 - j, xi) * Lagrange_d1(loc_nodes, i2, eta);
+        dshape_val(node + 3*nEdgeNodes + j, 1) = Lagrange(loc_nodes, i, xi) * Lagrange_d1(loc_nodes, i2 - 1 - j, eta);
+      }
+
+      node += 4 * nEdgeNodes;
+    }
+    /* Add center node in odd case */
+    if (nNodes1D % 2 != 0)
+    {
+      dshape_val(nNodes - 1, 0) = Lagrange_d1(loc_nodes, nNodes1D/2, xi) * Lagrange(loc_nodes, nNodes1D/2, eta);
+      dshape_val(nNodes - 1, 1) = Lagrange(loc_nodes, nNodes1D/2, xi) * Lagrange_d1(loc_nodes, nNodes1D/2, eta);
+    }
+  }
+
+  /* 8-node Serendipity Element */
+  else if (shape_order == 2 and input->serendipity)
+  {
+      dshape_val(0, 0) = -0.25*(-1.+eta)*(2.*xi+eta);
+      dshape_val(1, 0) = 0.25*(-1.+eta)*(eta - 2.*xi);
+      dshape_val(2, 0) = 0.25*(1.+eta)*(2.*xi+eta);
+      dshape_val(3, 0) = -0.25*(1.+eta)*(eta-2.*xi);
+      dshape_val(4, 0) = xi*(-1.+eta);
+      dshape_val(5, 0) = -0.5*(1+eta)*(-1.+eta);
+      dshape_val(6, 0) = -xi*(1.+eta);
+      dshape_val(7, 0) = 0.5*(1+eta)*(-1.+eta);
+
+      dshape_val(0, 1) = -0.25*(-1.+xi)*(2.*eta+xi);
+      dshape_val(1, 1) = 0.25*(1.+xi)*(2.*eta - xi);
+      dshape_val(2, 1) = 0.25*(1.+xi)*(2.*eta+xi);
+      dshape_val(3, 1) = -0.25*(-1.+xi)*(2.*eta-xi);
+      dshape_val(4, 1) = 0.5*(1.+xi)*(-1.+xi);
+      dshape_val(5, 1) = -eta*(1.+xi);
+      dshape_val(6, 1) = -0.5*(1.+xi)*(-1.+xi);
+      dshape_val(7, 1) = eta*(-1.+xi);
+  }
+
+
+  return dshape_val;
+}
