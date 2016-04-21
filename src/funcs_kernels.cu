@@ -44,13 +44,16 @@ double get_cfl_limit_adv_dev(int order)
       return 0.2351;
 
     case 3:
-      return 0.14539;
+      return 0.1453;
 
     case 4:
-      return 0.10003;
+      return 0.1000;
 
     case 5:
-      return 0.07363;
+      return 0.0736;
+
+    default:
+      return 0.0;
   }
 }
 
@@ -79,6 +82,9 @@ double get_cfl_limit_diff_dev(double beta, int order)
 
       case 5:
         return 0.003730;
+
+      default:
+        return 0.0;
     }
   }
 
@@ -104,6 +110,9 @@ double get_cfl_limit_diff_dev(double beta, int order)
 
       case 5:
         return 0.0012999;
+
+      default:
+        return 0.0;
     }
   }
 }
