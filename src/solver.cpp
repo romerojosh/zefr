@@ -1333,25 +1333,26 @@ void FRSolver::update()
 #ifdef _GPU
     compute_residual(0);
 
-    // TODO: Revisit this as it is kind of expensive.
-    if (input->dt_type != 0)
-    {
-      compute_element_dt();
-    }
-    dt = dt_d;
-
-    /* Compute SER time step growth */
-    if (input->SER)
-    {
-      eles->divF_spts = eles->divF_spts_d;
-      compute_SER_dt();
-      dt_d = dt;
-    }
-
-    /* Compute LHS implicit Jacobian */
+    /* Freeze Jacobian */
     int iter = current_iter - restart_iter;
     if (iter%input->Jfreeze_freq == 0)
     {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+      dt = dt_d;
+
+      /* Compute SER time step growth */
+      if (input->SER)
+      {
+        eles->divF_spts = eles->divF_spts_d;
+        compute_SER_dt();
+        dt_d = dt;
+      }
+
+      /* Compute LHS implicit Jacobian */
       compute_LHS();
     }
 
@@ -1375,22 +1376,23 @@ void FRSolver::update()
     {
       compute_residual(0);
 
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
-      {
-        compute_element_dt();
-      }
-
-      /* Compute SER time step growth */
-      if (input->SER)
-      {
-        compute_SER_dt();
-      }
-
-      /* Compute LHS implicit Jacobian */
+      /* Freeze Jacobian */
       int iter = current_iter - restart_iter;
       if (color == 1 && iter%input->Jfreeze_freq == 0)
       {
+        // TODO: Revisit this as it is kind of expensive.
+        if (input->dt_type != 0)
+        {
+          compute_element_dt();
+        }
+
+        /* Compute SER time step growth */
+        if (input->SER)
+        {
+          compute_SER_dt();
+        }
+
+        /* Compute LHS implicit Jacobian */
         compute_LHS();
       }
 
@@ -1487,16 +1489,17 @@ void FRSolver::update_with_source(mdvector<double> &source)
     {
       compute_residual(0);
 
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
-      {
-        compute_element_dt();
-      }
-
-      /* Compute LHS implicit Jacobian */
+      /* Freeze Jacobian */
       int iter = current_iter - restart_iter;
       if (color == 1 && iter%(2*input->Jfreeze_freq*input->smooth_steps) == 0)
       {
+        // TODO: Revisit this as it is kind of expensive.
+        if (input->dt_type != 0)
+        {
+          compute_element_dt();
+        }
+
+        /* Compute LHS implicit Jacobian */
         compute_LHS();
       }
 
@@ -1556,17 +1559,18 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
   {
     compute_residual(0);
 
-    // TODO: Revisit this as it is kind of expensive.
-    if (input->dt_type != 0)
-    {
-      compute_element_dt();
-    }
-    dt = dt_d;
-
-    /* Compute LHS implicit Jacobian */
+    /* Freeze Jacobian */
     int iter = current_iter - restart_iter;
     if (iter%(2*input->Jfreeze_freq*input->smooth_steps) == 0)
     {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+      dt = dt_d;
+
+      /* Compute LHS implicit Jacobian */
       compute_LHS();
     }
 
