@@ -1706,7 +1706,7 @@ void FRSolver::compute_SER_dt()
   }
 }
 
-void FRSolver::write_solution()
+void FRSolver::write_solution(const std::string &prefix)
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
@@ -1721,7 +1721,7 @@ void FRSolver::write_solution()
   if (input->rank == 0)
   {
     ss << input->output_prefix << "/";
-    ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0');
+    ss << prefix << "_" << std::setw(9) << std::setfill('0');
     ss << current_iter << ".pvtu";
    
     std::ofstream f(ss.str());
@@ -1763,7 +1763,7 @@ void FRSolver::write_solution()
     for (unsigned int n = 0; n < input->nRanks; n++)
     { 
       ss.str("");
-      ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+      ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
       ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
       f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
     }
@@ -1778,11 +1778,11 @@ void FRSolver::write_solution()
   ss.str("");
 #ifdef _MPI
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
   ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
 #else
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
   ss << ".vtu";
 #endif
 
