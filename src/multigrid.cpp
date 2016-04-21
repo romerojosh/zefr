@@ -13,9 +13,9 @@
 #endif
 
 //void PMGrid::setup(int order, const InputStruct *input, FRSolver &solver)
-void PMGrid::setup(int order, InputStruct *input, FRSolver &solver)
+void PMGrid::setup(InputStruct *input, FRSolver &solver)
 {
-  this-> order = order;
+  this-> order = input->order;
   this-> input = input;
   corrections.resize(order + 1);
   sources.resize(order);
@@ -59,13 +59,17 @@ void PMGrid::setup(int order, InputStruct *input, FRSolver &solver)
 #endif
 }
 
-void PMGrid::cycle(FRSolver &solver)
+void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 {
+  /* ---Downward cycle--- */
   /* Update residual on finest grid level and restrict */
-  solver.compute_residual(0);
-  restrict_pmg(solver, *grids[order-1]);
+  if (fine_order != (int) input->low_order)
+  {
+    solver.compute_residual(0);
+    restrict_pmg(solver, *grids[fine_order-1]);
+  }
 
-  for (int P = order-1; P >= (int) input->low_order; P--)
+  for (int P = fine_order-1; P >= (int) input->low_order; P--)
   {
     /* Generate source term */
 #ifdef _CPU
@@ -90,7 +94,12 @@ void PMGrid::cycle(FRSolver &solver)
 #endif
 
     /* Update solution on coarse level */
-    for (unsigned int step = 0; step < input->smooth_steps; step++)
+    unsigned int nSteps = input->smooth_steps;
+    if (P == (int) input->low_order)
+    {
+      nSteps = input->c_smooth_steps;
+    }
+    for (unsigned int step = 0; step < nSteps; step++)
     {
 #ifdef _CPU
       grids[P]->update_with_source(sources[P]);
@@ -100,7 +109,8 @@ void PMGrid::cycle(FRSolver &solver)
       grids[P]->update_with_source(sources_d[P]);
 #endif
     }
-
+    
+    /* If coarser order exits, restrict */
     if (P-1 >= (int) input->low_order)
     {
       /* Update residual and add source */
@@ -122,13 +132,14 @@ void PMGrid::cycle(FRSolver &solver)
     }
   }
 
-  for (int P = (int) input->low_order; P <= order-1; P++)
+  /* ---Upward cycle--- */
+  for (int P = (int) input->low_order; P <= fine_order-1; P++)
   {
 
     /* Advance again (v-cycle)*/
     if (P != (int) input->low_order)
     {
-      for (unsigned int step = 0; step < input->smooth_steps; step++)
+      for (unsigned int step = 0; step < input->p_smooth_steps; step++)
       {
 #ifdef _CPU
         grids[P]->update_with_source(sources[P]);
@@ -138,20 +149,6 @@ void PMGrid::cycle(FRSolver &solver)
         grids[P]->update_with_source(sources_d[P]);
 #endif
       }
-    }
-    else
-    {
-      for (unsigned int step = 0; step < input->smooth_steps; step++)
-      {
-#ifdef _CPU
-        grids[P]->update_with_source(sources[P]);
-#endif
-
-#ifdef _GPU
-        grids[P]->update_with_source(sources_d[P]);
-#endif
-      }
-
     }
 
     /* Generate error */
@@ -172,7 +169,7 @@ void PMGrid::cycle(FRSolver &solver)
 #endif
 
     /* Prolong error and add to fine grid solution */
-    if (P < order-1)
+    if (P < fine_order-1)
     {
 #ifdef _CPU
       prolong_err(*grids[P], corrections[P], *grids[P+1]);
@@ -185,13 +182,81 @@ void PMGrid::cycle(FRSolver &solver)
   }
 
   /* Prolong correction and add to finest grid solution */
+  if (fine_order != (int) input->low_order)
+  {
 #ifdef _CPU
-  prolong_err(*grids[order-1], corrections[order-1], solver);
+    prolong_err(*grids[fine_order-1], corrections[fine_order-1], solver);
 #endif
 
 #ifdef _GPU
-  prolong_err(*grids[order-1], corrections_d[order-1], solver);
+    prolong_err(*grids[fine_order-1], corrections_d[fine_order-1], solver);
 #endif
+  }
+
+
+}
+
+void PMGrid::cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_resolution_clock::time_point t1)
+{
+  if (input->mg_cycle == "V")
+  {
+    v_cycle(solver, order);
+  }
+  else if (input->mg_cycle == "FMG")
+  {
+    /* Perform FMG cycle*/
+    for (int P = (int) input->low_order; P < order; P++)
+    {
+      std::cout << "FMG P: " << P << std::endl;
+      for (unsigned int cycle = 0; cycle < input->FMG_vcycles; cycle++)
+      {
+        /* Update current level */
+        grids[P]->update();
+
+        /* Do a v-cycle on current level */
+        v_cycle(*grids[P], P); //Loop this?
+
+        if (cycle == 0 or cycle % input->report_freq == 0)
+          grids[P]->report_residuals(histfile, t1);
+      }
+
+      /* Update before prolongation */
+      grids[P]->update();
+
+
+      /* Prolong solution to next level */
+      if (P < order - 1)
+      {
+#ifdef _CPU
+        prolong_U(*grids[P], *grids[P+1]);
+#endif
+
+#ifdef _GPU
+        prolong_U(*grids[P], *grids[P+1]);
+#endif
+        grids[P+1]->write_solution("FMG_prolong_"+std::to_string(P));
+      }
+
+    }
+
+    /* Prolong solution to finest level */
+#ifdef _CPU
+    prolong_U(*grids[order-1], solver);
+#endif
+
+#ifdef _GPU
+    prolong_U(*grids[order-1], solver);
+#endif
+
+    /* Set solver to use v_cycle */
+    input->mg_cycle = std::string("V");
+    solver.write_solution("FMG_prolong_"+std::to_string(order));
+
+  }
+  else
+  {
+    ThrowException("Multigrid cycle type unknown!");
+  }
 
 }
 
@@ -287,6 +352,33 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSol
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
       grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
       &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+#endif
+}
+
+void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
+{
+#ifdef _CPU
+  auto &A = grid_c.eles->oppPro(0, 0);
+  auto &B = grid_c.eles->U_spts(0, 0, 0);
+  auto &C = grid_f.eles->U_spts(0, 0, 0);
+
+  /* Prolong error */
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, 1.0, 
+      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+#else
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
+      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, 1.0, 
+      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+#endif
+#endif
+
+#ifdef _GPU
+  cublasDGEMM_wrapper(grid_f.eles->nSpts, grid_c.eles->nEles * grid_c.eles->nVars, 
+      grid_c.eles->nSpts, 1.0, grid_c.eles->oppPro_d.data(), grid_f.eles->nSpts, 
+      grid_c.eles->U_spts_d.data(), grid_c.eles->nSpts, 0.0, grid_f.eles->U_spts_d.data(), 
+      grid_f.eles->nSpts);
 #endif
 }
 
