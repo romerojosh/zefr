@@ -81,7 +81,7 @@ int main(int argc, char* argv[])
   if (input.p_multi)
   {
     if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
-    pmg.setup(input.order, &input, solver);
+    pmg.setup(&input, solver);
   }
 
 #ifdef _GPU
@@ -107,7 +107,7 @@ int main(int argc, char* argv[])
   }
 
   /* Write initial solution */
-  solver.write_solution();
+  solver.write_solution(input.output_prefix);
 
   /* Write initial error (if required) */
   if (input.error_freq != 0)
@@ -131,7 +131,7 @@ int main(int argc, char* argv[])
 
     if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps))
     {
-      solver.write_solution();
+      solver.write_solution(input.output_prefix);
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps))
