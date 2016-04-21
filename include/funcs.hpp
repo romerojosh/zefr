@@ -67,7 +67,7 @@ void gemm(int m, int n, int p, T* A, int lda, T* B, int ldb, T* C, int ldc)
     for (unsigned int i = 0; i < m; i++)
     {
       for (unsigned int k = 0; k < p; k++)
-      
+      {
         C[ldc*j + i] += A[lda*k + i] * B[ldb*j + k];
       }
     }
