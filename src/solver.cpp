@@ -1456,10 +1456,9 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
 #endif
 
+#ifdef _CPU
       for (unsigned int stage = 0; stage < nStages; stage++)
       {
-
-#ifdef _CPU
         if (source.size() == 0)
         {
 #pragma omp parallel for collapse(3)
@@ -1496,25 +1495,25 @@ void FRSolver::update(const mdvector_gpu<double> &source)
                 }
               }
         }
+      }
 #endif
 
 #ifdef _GPU
-        if (source.size() == 0)
-        {
-          RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-              rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-              input->equation, 0, nStages, true);
-        }
-        else
-        {
-          RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-              rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-              input->equation, 0, nStages, true);
-        }
-
-        check_error();
-#endif
+      if (source.size() == 0)
+      {
+        RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+            rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+            input->equation, 0, nStages, true);
       }
+      else
+      {
+        RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
+            rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+            input->equation, 0, nStages, true);
+      }
+
+      check_error();
+#endif
     }
   }
 
