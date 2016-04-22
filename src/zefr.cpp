@@ -16,6 +16,7 @@
 #include "multigrid.hpp"
 #include "solver.hpp"
 #include "solver_kernels.h"
+#include "filter.hpp"
 
 int main(int argc, char* argv[])
 {
@@ -76,7 +77,7 @@ int main(int argc, char* argv[])
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   FRSolver solver(&input);
   solver.setup();
-
+  
   PMGrid pmg;
   if (input.p_multi)
   {
@@ -122,7 +123,8 @@ int main(int argc, char* argv[])
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
-
+    solver.filter_solution();
+    
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)
       pmg.cycle(solver, hist_file, t1);

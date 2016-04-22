@@ -58,10 +58,10 @@ INCS += -I external/tnt/
 INCS += -I external/jama/
 
 TARGET = zefr
-OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/zefr.o 
+OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/filter.o  bin/zefr.o 
 
 ifeq ($(strip $(ARCH)),GPU)
-	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o 
+	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o  bin/filter_kernels.o
 endif
 
 INCS += -I include
@@ -80,3 +80,4 @@ endif
 
 clean:
 	rm bin/$(TARGET) bin/*.o
+

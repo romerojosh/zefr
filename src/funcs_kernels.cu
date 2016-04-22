@@ -52,6 +52,21 @@ double get_cfl_limit_adv_dev(int order)
     case 5:
       return 0.0736;
 
+    case 6:
+      return 0.048639193282486;
+    
+    case 7:
+      return 0.034554530245757;
+    
+    case 8:
+      return 0.023910375650672;
+    
+    case 9:
+      return 0.015583791814472;
+      
+    case 10:
+      return 0.008892412680298;
+
     default:
       return 0.0;
   }

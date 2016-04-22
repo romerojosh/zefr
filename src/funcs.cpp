@@ -12,6 +12,7 @@
 #include "omp.h"
 #endif
 
+#include "funcs.hpp"
 #include "input.hpp"
 #include "funcs.hpp"
 
@@ -32,6 +33,8 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
       */
       
       val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y);
+
+      //val =  step((x - input->AdvDiff_A(0) * t));
     }
     else if (input->nDims == 3)
     {
@@ -103,6 +106,7 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   return val;
 }
 
+// TODO: Complete implementation of derivative for Euler vortex
 double compute_dU_true(double x, double y, double z, double t, unsigned int var, 
     unsigned int dim, const InputStruct *input)
 {
@@ -162,7 +166,6 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
   return val;
 }
 
-
 double compute_source_term(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
 {
   double val = 0.;
@@ -210,6 +213,21 @@ double get_cfl_limit_adv(int order)
 
     case 5:
       return 0.0736;
+      
+    case 6:
+      return 0.048639193282486;
+    
+    case 7:
+      return 0.034554530245757;
+    
+    case 8:
+      return 0.023910375650672;
+    
+    case 9:
+      return 0.015583791814472;
+      
+    case 10:
+      return 0.008892412680298;
 
     default:
       ThrowException("CFL limit no available for this order!");

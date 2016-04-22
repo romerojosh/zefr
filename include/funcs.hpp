@@ -74,4 +74,10 @@ void gemm(int m, int n, int p, T* A, int lda, T* B, int ldb, T* C, int ldc)
   }
 }
 
+template <typename T> 
+unsigned int step(const T& val) 
+{
+    return T(0) <= val;
+}
+
 #endif /* funcs_hpp */

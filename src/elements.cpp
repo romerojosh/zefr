@@ -2444,6 +2444,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
 void Elements::compute_Uavg()
 {
 #ifdef _CPU
+#pragma omp parallel for collapse(2)
   /* Compute average solution using quadrature */
   for (unsigned int n = 0; n < nVars; n++)
   {
@@ -2481,6 +2482,7 @@ void Elements::poly_squeeze()
 
   /* For each element, check for negative density at solution and flux points */
   double tol = 1e-10;
+#pragma omp parallel for 
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     bool negRho = false;
@@ -2519,6 +2521,8 @@ void Elements::poly_squeeze()
     }
   }
 
+
+#pragma omp parallel for 
   /* For each element, check for entropy loss */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
@@ -2602,6 +2606,7 @@ void Elements::poly_squeeze_ppts()
 
   /* For each element, check for negative density at plot points */
   double tol = 1e-10;
+#pragma omp parallel for 
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     bool negRho = false;
@@ -2626,6 +2631,7 @@ void Elements::poly_squeeze_ppts()
     }
   }
 
+#pragma omp parallel for 
   /* For each element, check for entropy loss */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {

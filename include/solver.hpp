@@ -12,6 +12,7 @@
 #include "geometry.hpp"
 #include "input.hpp"
 #include "spmatrix.hpp"
+#include "filter.hpp"
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
@@ -24,24 +25,26 @@
 #endif
 
 class PMGrid;
+
 class FRSolver
 {
   friend class PMGrid;
-
+  friend class Filter;
+  
   private:
     InputStruct *input = NULL;
     GeoStruct geo;
     int order;
+    std::shared_ptr<Elements> eles;
+    std::shared_ptr<Faces> faces;
     int current_iter = 0;
     int restart_iter = 0;
     double flow_time = 0.;
-    std::shared_ptr<Elements> eles;
-    std::shared_ptr<Faces> faces;
-
     unsigned int nStages;
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> dt;
     mdvector<double> U_ini;
+    Filter filt;
 
     /* Implicit method parameters */
     double SER_omg = 1;
@@ -79,21 +82,28 @@ class FRSolver
     void setup();
     void compute_residual(unsigned int stage);
     void add_source(unsigned int stage);
-    void update();
-    void update_with_source(mdvector<double> &source);
+#ifdef _CPU
+    void update(const mdvector<double> &source = mdvector<double>());
+#endif
 #ifdef _GPU
-    void update_with_source(mdvector_gpu<double> &source);
+    void update(const mdvector_gpu<double> &source = mdvector_gpu<double>());
 #endif
     void write_solution(const std::string &prefix);
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
+    void filter_solution();
 
     /* Routines for implicit method */
     void compute_LHS();
     void compute_LHS_LU();
-    void compute_RHS(unsigned int color);
-    void compute_RHS_source(mdvector<double> &source, unsigned int color = 1);
+    void compute_RHS(unsigned int color = 1);
+#ifdef _CPU
+    void compute_RHS_source(const mdvector<double> &source, unsigned int color = 1);
+#endif
+#ifdef _GPU
+    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color = 1);
+#endif
     void compute_deltaU(unsigned int color = 1);
     void compute_U(unsigned int color = 1);
     void dFcdU_from_faces();

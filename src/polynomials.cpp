@@ -47,3 +47,23 @@ double Lagrange_d1(std::vector<double> xiGrid, unsigned int mode, double xi)
 
   return val/den;
 }
+
+double Legendre(unsigned int P, double xi)
+{
+  if (P == 0)
+    return 1.0;
+  else if (P == 1)
+    return xi;
+
+	return ((2.0 * P - 1.0) / P) *xi *Legendre(P-1, xi) - ((P - 1.0) / P) *Legendre(P-2, xi);
+}
+
+double Legendre_d1(unsigned int P, double xi)
+{
+	if (P == 0)
+    return 0.0;
+  else if (P == 1)
+    return 1.0;
+	
+  return ((2.0 * P - 1.0) / P) * (Legendre(P-1, xi) + xi *Legendre_d1(P-1, xi)) - ((P - 1.0) / P) *Legendre_d1(P-2, xi);
+}
