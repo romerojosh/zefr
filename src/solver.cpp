@@ -2178,24 +2178,24 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int ele =0; ele < eles->nEles; ele++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        eles->divF_spts(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
+        eles->divF_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
 
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     /* Infinity norm */
     if (input->res_type == 0)
-      res[n] =*std::max_element(&eles->divF_spts(0, 0, n, nStages-1), 
-          &eles->divF_spts(0, 0, n+1, nStages-1));
+      res[n] =*std::max_element(&eles->divF_spts(0, 0, n, 0), 
+          &eles->divF_spts(0, 0, n+1, 1));
 
     /* L1 norm */
     else if (input->res_type == 1)
-      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, nStages-1), 
-          &eles->divF_spts(0, 0, n+1, nStages-1), 0.0, abs_sum<double>());
+      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
+          &eles->divF_spts(0, 0, n+1, 1), 0.0, abs_sum<double>());
 
     /* L2 norm */
     else if (input->res_type == 2)
-      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, nStages-1), 
-            &eles->divF_spts(0, 0, n+1, nStages-1), 0.0, square<double>());
+      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
+            &eles->divF_spts(0, 0, n+1, 1), 0.0, square<double>());
   }
 
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
