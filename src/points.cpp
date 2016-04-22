@@ -207,7 +207,7 @@ std::vector<double> Gauss_Legendre_weights(unsigned int n)
 
 std::vector<double> Shape_pts(unsigned int P)
 {
-  std::vector<double> nodes(P+1,0.0);
+  std::vector<double> nodes(P+1, 0.0);
 
   double dx = 2.0/(double)P;
 

@@ -14,6 +14,7 @@
 #include "macros.hpp"
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
+#include "funcs_kernels.cu"
 
 void check_error()
 {
@@ -285,55 +286,6 @@ void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU
   }
 }
 
-template <unsigned int nVars, unsigned int nDims>
-__global__
-void compute_divF(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int stage)
-{
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
-
-  if (spt >= nSpts || ele >= nEles)
-    return;
-
-  double sum[nVars];
-
-  for (unsigned int var = 0; var < nVars; var++)
-    sum[var] = 0.0;
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-    for (unsigned int var = 0; var < nVars; var++)
-      sum[var] += dF_spts(spt, ele, var, dim);
-
-  for (unsigned int var = 0; var < nVars; var++)
-    divF(spt, ele, var, stage) = sum[var];
-
-
-}
-
-void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_spts, 
-    unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
-    unsigned int equation, unsigned int stage)
-{
-  unsigned int threads= 192;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
-
-  if (equation == AdvDiff)
-  {
-    if (nDims == 2)
-      compute_divF<1,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-    else
-      compute_divF<1,3><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      compute_divF<4,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-    else
-      compute_divF<5,3><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-  }
-}
-
 template <unsigned int nVars>
 __global__
 void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
@@ -485,51 +437,11 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
   }
 }
 
-__device__
-double get_cfl_limit_dev(int order)
-{
-  switch(order)
-  {
-    case 0:
-      return 1.393;
-
-    case 1:
-      return 0.464; 
-
-    case 2:
-      return 0.235;
-
-    case 3:
-      return 0.139;
-
-    case 4:
-      return 0.100;
-
-    case 5:
-      return 0.068;
-      
-    case 6:
-      return 0.048639193282486;
-    
-    case 7:
-      return 0.034554530245757;
-    
-    case 8:
-      return 0.023910375650672;
-    
-    case 9:
-      return 0.015583791814472;
-      
-    case 10:
-      return 0.008892412680298;
-
-  }
-}
-
-
+template <unsigned int nDims>
 __global__
 void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfpts, 
-    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, double CFL, int order, 
+    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, mdvector_gpu<double> weights_spts,
+    mdvector_gpu<double> vol, unsigned int nSpts1D, double CFL, int order, 
     unsigned int nFpts, unsigned int nEles)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
@@ -537,34 +449,53 @@ void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfp
   if (ele >= nEles)
     return;
 
-  double waveSp_max = 0.0;
+  double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-  /* Compute maximum wavespeed */
-  for (unsigned int fpt = 0; fpt <nFpts; fpt++)
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     /* Skip if on ghost edge. */
     int gfpt = fpt2gfpt(fpt,ele);
     if (gfpt == -1)
       continue;
 
-    double waveSp = waveSp_gfpts(gfpt) / dA(gfpt);
+    if (nDims == 2)
+    {
+      int_waveSp += weights_spts(fpt % nSpts1D) * waveSp_gfpts(gfpt) * dA(gfpt);
+    }
+    else
+    {
+      int idx = fpt % (nSpts1D * nSpts1D);
+      int i = idx % nSpts1D;
+      int j = idx / nSpts1D;
 
-    waveSp_max = max(waveSp, waveSp_max);
+      int_waveSp += weights_spts(i) * weights_spts(j) * waveSp_gfpts(gfpt) * dA(gfpt);
+    }
   }
 
-  /* Note: CFL is applied to parent space element with width 2 */
-  dt(ele) = (CFL) * get_cfl_limit_dev(order) * (2.0 / (waveSp_max+1.e-10));
+  /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
+   * consistent with 1D CFL estimates. */
+  dt(ele) = 2.0 * CFL * get_cfl_limit_dev(order) * vol(ele) / int_waveSp;
+  
 }
 
-void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 
-    unsigned int dt_type, unsigned int nFpts, unsigned int nEles)
+void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, 
+    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<double> &weights_spts,
+    mdvector_gpu<double> &vol, unsigned int nSpts1D, double CFL, int order, unsigned int dt_type,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nEles + threads - 1) / threads;
 
-  compute_element_dt<<<blocks, threads>>>(dt, waveSp, dA, fpt2gfpt, CFL, order, 
-      nFpts, nEles);
+  if (nDims == 2)
+  {
+    compute_element_dt<2><<<blocks, threads>>>(dt, waveSp_gfpts, dA, fpt2gfpt, weights_spts, vol,
+        nSpts1D, CFL, order, nFpts, nEles);
+  }
+  else
+  {
+    compute_element_dt<3><<<blocks, threads>>>(dt, waveSp_gfpts, dA, fpt2gfpt, weights_spts, vol, 
+        nSpts1D, CFL, order, nFpts, nEles);
+  }
 
   if (dt_type == 1)
   {
@@ -583,4 +514,58 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
 
   }
 
+}
+
+template<unsigned int nVars, unsigned int nDims>
+__global__
+void add_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int equation, 
+    double flow_time, unsigned int stage)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  double x = coord_spts(spt, ele, 0);
+  double y = coord_spts(spt, ele, 1);
+  double z = 0;
+  if (nDims == 3)
+    z = coord_spts(spt, ele, 2);
+
+  double jaco_det = jaco_det_spts(spt, ele);
+
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    divF_spts(spt, ele, n, stage) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
+  }
+}
+
+void add_source_wrapper(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    double flow_time, unsigned int stage)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
+      threads.y);
+
+  if (nDims == 2)
+  {
+    if (equation == AdvDiff)
+      add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+    else
+      add_source<4, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+  }
+  else
+  {
+    if (equation == AdvDiff)
+      add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+    else
+      add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage);
+  }
 }

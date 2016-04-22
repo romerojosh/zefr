@@ -28,6 +28,7 @@ InputStruct read_input_file(std::string inputfile)
     ThrowException("Equation not recognized!");
 
   read_param(f, "viscous", input.viscous);
+  read_param(f, "source", input.source, false);
   read_param(f, "squeeze", input.squeeze, false);
   read_param(f, "s_factor", input.s_factor, 0.0);
 
@@ -40,8 +41,12 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
 
+  read_param(f, "mg_cycle", input.mg_cycle, std::string("V"));
+  read_param(f, "FMG_vcycles", input.FMG_vcycles, (unsigned int) 1);
   read_param(f, "p_multi", input.p_multi, false);
   read_param(f, "smooth_steps", input.smooth_steps, (unsigned int) 1);
+  read_param(f, "p_smooth_steps", input.p_smooth_steps, (unsigned int) 1);
+  read_param(f, "c_smooth_steps", input.c_smooth_steps, (unsigned int) 1);
   read_param(f, "rel_fac", input.rel_fac, 1.0);
   read_param(f, "low_order", input.low_order, (unsigned int) 0);
 

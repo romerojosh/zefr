@@ -53,12 +53,16 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_spts(spt,dim);
 
+
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_spts(node,spt) = calc_shape(shape_order, node, loc);
+      shape_spts(node,spt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_spts(node,spt,dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_spts(node,spt,dim) = dshape_val(node, dim);
     }
   }
 
@@ -68,12 +72,15 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_fpts(fpt,dim);
 
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_fpts(node, fpt) = calc_shape(shape_order, node, loc);
+      shape_fpts(node, fpt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_fpts(node, fpt, dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_fpts(node, fpt, dim) = dshape_val(node, dim);
     }
   }
 
@@ -83,12 +90,15 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_ppts(ppt,dim);
 
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_ppts(node,ppt) = calc_shape(shape_order, node, loc);
+      shape_ppts(node, ppt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_ppts(node,ppt,dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_ppts(node, ppt, dim) = dshape_val(node, dim);
     }
   }
   
@@ -98,12 +108,15 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_qpts(qpt,dim);
 
+    auto shape_val = calc_shape(shape_order, loc);
+    auto dshape_val = calc_d_shape(shape_order, loc);
+
     for (unsigned int node = 0; node < nNodes; node++)
     {
-      shape_qpts(node,qpt) = calc_shape(shape_order, node, loc);
+      shape_qpts(node, qpt) = shape_val(node);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_qpts(node,qpt,dim) = calc_d_shape(shape_order, node, loc, dim);
+        dshape_qpts(node, qpt, dim) = dshape_val(node, dim);
     }
   }
 }
@@ -116,6 +129,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   faces->coord.assign({geo->nGfpts, nDims});
   geo->coord_ppts.assign({nPpts, nEles, nDims});
   geo->coord_qpts.assign({nQpts, nEles, nDims});
+
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
@@ -149,7 +163,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         }
       }
 
-      /* Setup physical coordinates at plot points */
+          /* Setup physical coordinates at plot points */
       for (unsigned int ppt = 0; ppt < nPpts; ppt++)
       {
         for (unsigned int node = 0; node < nNodes; node++)
@@ -179,6 +193,7 @@ void Elements::setup_FR()
   oppE.assign({nFpts, nSpts});
   oppD.assign({nSpts, nSpts, nDims});
   oppD_fpts.assign({nSpts, nFpts, nDims});
+  oppDiv_fpts.assign({nSpts, nFpts});
 
   std::vector<double> loc(nDims, 0.0);
   /* Setup spt to fpt extrapolation operator (oppE) */
@@ -201,8 +216,8 @@ void Elements::setup_FR()
     {
       for (unsigned int ispt = 0; ispt < nSpts; ispt++)
       {
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          loc[dim] = loc_spts(ispt , dim);
+        for (unsigned int d = 0; d < nDims; d++)
+          loc[d] = loc_spts(ispt , d);
 
         oppD(ispt,jspt,dim) = calc_d_nodal_basis_spts(jspt, loc, dim);
       }
@@ -216,10 +231,22 @@ void Elements::setup_FR()
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          loc[dim] = loc_spts(spt , dim);
+        for (unsigned int d = 0; d < nDims; d++)
+          loc[d] = loc_spts(spt , d);
 
         oppD_fpts(spt,fpt,dim) = calc_d_nodal_basis_fpts(fpt, loc, dim);
+      }
+    }
+  }
+
+  /* Setup divergence operator (oppDiv_fpts) for flux points by combining dimensions of oppD_fpts */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        oppDiv_fpts(spt, fpt) += oppD_fpts(spt, fpt, dim);
       }
     }
   }
@@ -381,92 +408,65 @@ void Elements::compute_dU()
 
 }
 
-void Elements::compute_dF()
+void Elements::compute_divF(unsigned int stage)
 {
 #ifdef _CPU
-    /* Compute contribution to derivative from flux at solution points */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      auto &A = oppD(0, 0,dim);
-      auto &B = F_spts(0, 0, 0, dim);
-      auto &C = dF_spts(0, 0, 0, dim);
+  /* Compute contribution to divergence from flux at solution points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    auto &A = oppD(0, 0,dim);
+    auto &B = F_spts(0, 0, 0, dim);
+    auto &C = divF_spts(0, 0, 0, stage);
+
+    double fac = (dim == 0) ? 0.0 : 1.0;
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+        nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, fac, &C, nSpts);
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-            nSpts, 1.0, &A, nSpts, &B, nSpts, 0.0, &C, nSpts);
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+          nSpts, 1.0, &A, nSpts, &B, nSpts, fac, &C, nSpts);
 #endif
 
-    }
+  }
 
-    /* Compute contribution to derivative from common flux at flux points */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      auto &A = oppD_fpts(0, 0, dim);
-      auto &B = Fcomm(0, 0, 0);
-      auto &C = dF_spts(0, 0, 0, dim);
+  /* Compute contribution to divergence from common flux at flux points */
+  auto &A = oppDiv_fpts(0, 0);
+  auto &B = Fcomm(0, 0, 0);
+  auto &C = divF_spts(0, 0, 0, stage);
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+      nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-          nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+      nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
 #endif
-    }
-
 #endif
 
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    /* Compute contribution to derivative from flux at solution points */
+    double fac = (dim == 0) ? 0.0 : 1.0;
+
+    /* Compute contribution to derivative from solution at solution points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
         oppD_d.data() + dim * (nSpts * nSpts), nSpts, 
         F_spts_d.data() + dim * (nSpts * nVars * nEles), 
-        nSpts, 0.0, dF_spts_d.data() + dim * (nSpts * nVars * 
+        nSpts, fac, divF_spts_d.data() + stage * (nSpts * nVars * 
         nEles), nSpts);
-
-    check_error();
-
-    /* Compute contribution to derivative from common flux at flux points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
-        oppD_fpts_d.data() + dim * (nSpts * nFpts), nSpts, 
-        Fcomm_d.data(), nFpts, 1.0, dF_spts_d.data() + dim * 
-        (nSpts * nVars * nEles), nSpts);
-
-    check_error();
   }
-#endif
 
-}
+  /* Compute contribution to derivative from common solution at flux points */
+  cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
+      oppDiv_fpts_d.data(), nSpts, Fcomm_d.data(), nFpts, 
+      1.0, divF_spts_d.data()  + stage * (nSpts * nVars * 
+      nEles), nSpts);
 
-void Elements::compute_divF(unsigned int stage)
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < nVars; n++)
-    for (unsigned int ele =0; ele < nEles; ele++)
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-        divF_spts(spt, ele, n, stage) = dF_spts(spt, ele, n, 0);
-
-  for (unsigned int dim = 1; dim < nDims; dim ++)
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < nVars; n++)
-      for (unsigned int ele =0; ele < nEles; ele++)
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-          divF_spts(spt, ele, n, stage) += dF_spts(spt, ele, n, dim);
-
-#endif
-
-#ifdef _GPU
-  compute_divF_wrapper(divF_spts_d, dF_spts_d, nSpts, nVars, nEles, 
-      nDims, input->equation, stage);
   check_error();
 #endif
 }
+
 
 void Elements::compute_Fconv()
 {

@@ -44,10 +44,6 @@ void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
     unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation);
 
-void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_spts, 
-    unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
-    unsigned int equation, unsigned int stage);
-
 void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
     mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
     mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
@@ -60,8 +56,13 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, 
     unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage);
 
-void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, double CFL, int order, 
-    unsigned int dt_type, unsigned int nFpts, unsigned int nEles);
+void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, 
+    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<double> &weights_spts,
+    mdvector_gpu<double> &vol, unsigned int nSpts1D, double CFL, int order, unsigned int dt_type,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims);
+
+void add_source_wrapper(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    double flow_time, unsigned int stage);
 
 #endif /* solver_kernels_h */

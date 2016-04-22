@@ -13,6 +13,8 @@
 #include "funcs.hpp"
 #include "geometry.hpp"
 #include "hexas.hpp"
+#include "points.hpp"
+#include "polynomials.hpp"
 #include "quads.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
@@ -88,7 +90,7 @@ void FRSolver::setup_update()
   if (input->dt_scheme == "Euler")
   {
     nStages = 1;
-    rk_beta.assign({nStages},1.0);
+    rk_beta.assign({nStages}, 1.0);
 
   }
   else if (input->dt_scheme == "RK44")
@@ -102,18 +104,13 @@ void FRSolver::setup_update()
     rk_beta(0) = 1./6.; rk_beta(1) = 1./3.; 
     rk_beta(2) = 1./3.; rk_beta(3) = 1./6.;
   }
-  else if (input->dt_scheme == "RK54")
+  else if (input->dt_scheme == "RKj")
   {
-    nStages = 5;
-
-    rk_alpha.assign({nStages-1});
-    rk_alpha(0) = -0.417890474499852; rk_alpha(1) = -1.192151694642677; 
-    rk_alpha(2) = -1.697784692471528; rk_alpha(3) = -1.514183444257156;
-
-    rk_beta.assign({nStages});
-    rk_beta(0) = 0.149659021999229; rk_beta(1) = 0.379210312999627; 
-    rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
-    rk_beta(4) = 0.153057247968152;
+    nStages = 4;
+    rk_alpha.assign({nStages});
+    /* Standard RK44 */
+    rk_alpha(0) = 1./4; rk_alpha(1) = 1./3.; 
+    rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
   }
   else
   {
@@ -243,8 +240,8 @@ void FRSolver::restart(std::string restart_file)
 
   std::string param, line;
   double val;
-  unsigned int nPpts1D = eles->nSpts1D + 2;
-  unsigned int nPpts2D = nPpts1D * nPpts1D;
+  unsigned int order_restart;
+  mdvector<double> U_restart, oppRestart;
 
   /* Load data from restart file */
   while (f >> param)
@@ -257,9 +254,55 @@ void FRSolver::restart(std::string restart_file)
     {
       f >> current_iter;
     }
+    if (param == "ORDER")
+    {
+      f >> order_restart;
+    }
 
     if (param == "<PointData>")
     {
+
+      unsigned int nSpts1D_restart = order_restart + 1;
+      unsigned int nSpts2D_restart = nSpts1D_restart * nSpts1D_restart;
+      unsigned int nPpts1D = nSpts1D_restart + 2;
+      unsigned int nPpts2D = nPpts1D * nPpts1D;
+
+      unsigned int nSpts_restart = (unsigned int) std::pow(nSpts1D_restart, input->nDims);
+      unsigned int nPpts = (unsigned int) std::pow(nPpts1D, input->nDims);
+
+      U_restart.assign({nSpts_restart, eles->nEles, eles->nVars});
+
+      /* Setup extrapolation operator from restart points */
+      oppRestart.assign({eles->nSpts, nSpts_restart});
+      auto loc_spts_restart_1D = Gauss_Legendre_pts(order_restart + 1); 
+
+      std::vector<double> loc(input->nDims);
+      for (unsigned int rpt = 0; rpt < nSpts_restart; rpt++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          for (unsigned int dim = 0; dim < input->nDims; dim++)
+            loc[dim] = eles->loc_spts(spt , dim);
+
+          if (input->nDims == 2)
+          {
+            int i = rpt % nSpts1D_restart;
+            int j = rpt / nSpts1D_restart;
+            oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) * 
+                                  Lagrange(loc_spts_restart_1D, j, loc[1]);
+          }
+          else
+          {
+            int i = rpt % nSpts1D_restart;
+            int j = (rpt / nSpts1D_restart) % nSpts1D_restart;
+            int k = rpt / nSpts2D_restart;
+            oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) * 
+                                  Lagrange(loc_spts_restart_1D, j, loc[1]) *
+                                  Lagrange(loc_spts_restart_1D, k, loc[2]);
+          }
+        }
+      }
+
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
         std::getline(f,line);
@@ -268,7 +311,7 @@ void FRSolver::restart(std::string restart_file)
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
           unsigned int spt = 0;
-          for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+          for (unsigned int ppt = 0; ppt < nPpts; ppt++)
           {
             f >> val;
 
@@ -283,18 +326,33 @@ void FRSolver::restart(std::string restart_file)
             {
               int shift = (ppt / nPpts2D) * nPpts2D;
               if (ppt < nPpts2D || ppt < nPpts1D + shift || ppt > nPpts1D * (nPpts1D-1) + shift || 
-                  (ppt-shift) % nPpts1D== 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts2D - 1))
+                  (ppt-shift) % nPpts1D == 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts2D - 1))
                 continue;
             }
 
-            eles->U_spts(spt, ele, n) = val;
+            U_restart(spt, ele, n) = val;
             spt++;
           }
         }
         std::getline(f,line);
       }
-    }
 
+      /* Extrapolate values from restart points to solution points */
+      auto &A = oppRestart(0, 0);
+      auto &B = U_restart(0, 0, 0);
+      auto &C = eles->U_spts(0, 0, 0);
+
+#ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
+          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, eles->nSpts, &B, 
+          nSpts_restart, 0.0, &C, eles->nSpts);
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
+          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, eles->nSpts, &B, 
+          nSpts_restart, 0.0, &C, eles->nSpts);
+#endif
+
+    }
   }
 
   f.close();
@@ -310,6 +368,7 @@ void FRSolver::solver_data_to_device()
   eles->oppE_d = eles->oppE;
   eles->oppD_d = eles->oppD;
   eles->oppD_fpts_d = eles->oppD_fpts;
+  eles->oppDiv_fpts_d = eles->oppDiv_fpts;
 
   /* If using multigrid, copy relevant operators */
   if (input->p_multi)
@@ -334,11 +393,11 @@ void FRSolver::solver_data_to_device()
   eles->dU_fpts_d = eles->dU_fpts;
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
-  eles->dF_spts_d = eles->dF_spts;
   eles->divF_spts_d = eles->divF_spts;
   eles->jaco_spts_d = eles->jaco_spts;
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
+  eles->vol_d = eles->vol;
 
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
@@ -361,6 +420,7 @@ void FRSolver::solver_data_to_device()
   geo.fpt2gfpt_slot_d = geo.fpt2gfpt_slot;
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
+  geo.coord_spts_d = geo.coord_spts;
 
   /* Input parameters */
   input->V_fs_d = input->V_fs;
@@ -515,9 +575,12 @@ void FRSolver::compute_residual(unsigned int stage)
   /* Copy flux data from face local storage to element local storage */
   F_from_faces();
 
-  /* Compute flux gradients and divergence */
-  eles->compute_dF();
+  /* Compute divergence of flux */
   eles->compute_divF(stage);
+
+  /* Add source term (if required) */
+  if (input->source)
+    add_source(stage);
 }
 
 void FRSolver::initialize_U()
@@ -538,7 +601,6 @@ void FRSolver::initialize_U()
   eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
   eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
   eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
-  eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
@@ -765,6 +827,38 @@ void FRSolver::F_from_faces()
 #endif
 }
 
+void FRSolver::add_source(unsigned int stage)
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele =0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+          double x = geo.coord_spts(spt, ele, 0);
+          double y = geo.coord_spts(spt, ele, 1);
+          double z = 0;
+          if (eles->nDims == 3)
+            z = geo.coord_spts(spt, ele, 2);
+
+          eles->divF_spts(spt, ele, n, stage) += compute_source_term(x, y, z, flow_time, n, input) * 
+            eles->jaco_det_spts(spt, ele);
+      }
+    }
+  }
+
+#endif
+
+#ifdef _GPU
+  add_source_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, geo.coord_spts_d, eles->nSpts, eles->nEles,
+      eles->nVars, eles->nDims, input->equation, flow_time, stage);
+  check_error();
+#endif
+
+}
+
 void FRSolver::update()
 {
   
@@ -776,8 +870,10 @@ void FRSolver::update()
   device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 #endif
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nSteps; stage++)
   {
     compute_residual(stage);
 
@@ -800,66 +896,72 @@ void FRSolver::update()
           if (input->dt_type != 2)
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-              eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt, ele, n, stage);
+              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
           }
           else
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-              eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt, ele, n, stage);
+              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
           }
         }
 #endif
 
 #ifdef _GPU
+    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
+
     RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
         rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
+        input->equation, stage, last_stage, false);
     check_error();
 #endif
 
   }
 
-  /* Final stage */
-  compute_residual(nStages-1);
+  /* Final stage combining residuals for full Butcher table style RK timestepping*/
+  if (input->dt_scheme != "RKj")
+  {
+    compute_residual(nStages-1);
 #ifdef _CPU
-  eles->U_spts = U_ini;
+    eles->U_spts = U_ini;
 #endif
 #ifdef _GPU
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
 #endif
 
 #ifdef _CPU
-  for (unsigned int stage = 0; stage < nStages; stage++)
-  {
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
+    for (unsigned int stage = 0; stage < nStages; stage++)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < eles->nVars; n++)
       {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          if (input->dt_type != 2)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
-              eles->divF_spts(spt, ele, n, stage);
-          }
-          else
-          {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
-              eles->divF_spts(spt, ele, n, stage);
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
+                eles->divF_spts(spt, ele, n, stage);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
+                eles->divF_spts(spt, ele, n, stage);
+            }
           }
         }
       }
     }
-  }
 #endif
 
 #ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-        input->equation, 0, nStages, true);
-    check_error();
+      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+          rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+          input->equation, 0, nStages, true);
+      check_error();
 #endif
+  }
 
   flow_time += dt(0);
   current_iter++;
@@ -869,10 +971,12 @@ void FRSolver::update()
 void FRSolver::update_with_source(mdvector<double> &source)
 {
   
-    U_ini = eles->U_spts;
+  U_ini = eles->U_spts;
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nSteps; stage++)
   {
     compute_residual(stage);
 
@@ -904,27 +1008,30 @@ void FRSolver::update_with_source(mdvector<double> &source)
         }
   }
 
-  /* Final stage */
-  compute_residual(nStages-1);
-  eles->U_spts = U_ini;
+  /* Final stage combining residuals for full Butcher table style RK timestepping*/
+  if (input->dt_scheme != "RKj")
+  {
+    compute_residual(nStages-1);
+    eles->U_spts = U_ini;
 
-  for (unsigned int stage = 0; stage < nStages; stage++)
+    for (unsigned int stage = 0; stage < nStages; stage++)
 #pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
-              (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
           }
-          else
-          {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
-              (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-          }
-        }
+  }
 
 }
 
@@ -934,8 +1041,10 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
   
   device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nSteps; stage++)
   {
     compute_residual(stage);
 
@@ -949,21 +1058,26 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
       }
     }
 
+    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
+
     RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
         rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
+        input->equation, stage, last_stage, false);
     check_error();
 
   }
 
-  /* Final stage */
-  compute_residual(nStages-1);
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+  if (input->dt_scheme != "RKj")
+  {
+    compute_residual(nStages-1);
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
 
-  RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-      rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-      input->equation, 0, nStages, true);
-  check_error();
+    RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
+        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+        input->equation, 0, nStages, true);
+    check_error();
+  }
 
 }
 #endif
@@ -974,9 +1088,8 @@ void FRSolver::compute_element_dt()
 #pragma omp parallel for
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   { 
-    double waveSp_max = 0.0;
+    double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-    /* Compute maximum wavespeed */
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
     {
       /* Skip if on ghost edge. */
@@ -984,13 +1097,23 @@ void FRSolver::compute_element_dt()
       if (gfpt == -1)
         continue;
 
-      double waveSp = faces->waveSp(gfpt) / faces->dA(gfpt);
+      if (eles->nDims == 2)
+      {
+        int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
+      }
+      else
+      {
+        int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
+        int i = idx % eles->nSpts1D;
+        int j = idx / eles->nSpts1D;
 
-      waveSp_max = std::max(waveSp, waveSp_max);
+        int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
+      }
     }
 
-    /* Note: CFL is applied to parent space element with width 2 */
-    dt(ele) = (input->CFL) * get_cfl_limit(order) * (2.0 / (waveSp_max+1.e-10));
+    /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
+     * consistent with 1D CFL estimates. */
+    dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
   }
 
   if (input->dt_type == 1) /* Global minimum */
@@ -1006,11 +1129,12 @@ void FRSolver::compute_element_dt()
 
 #ifdef _GPU
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->dA_d, geo.fpt2gfpt_d, 
-      input->CFL, order, input->dt_type, eles->nFpts, eles->nEles);
+      eles->weights_spts_d, eles->vol_d, eles->nSpts1D, input->CFL, order, 
+      input->dt_type, eles->nFpts, eles->nEles, eles->nDims);
 #endif
 }
 
-void FRSolver::write_solution()
+void FRSolver::write_solution(const std::string &prefix)
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
@@ -1025,7 +1149,7 @@ void FRSolver::write_solution()
   if (input->rank == 0)
   {
     ss << input->output_prefix << "/";
-    ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0');
+    ss << prefix << "_" << std::setw(9) << std::setfill('0');
     ss << current_iter << ".pvtu";
    
     std::ofstream f(ss.str());
@@ -1072,7 +1196,7 @@ void FRSolver::write_solution()
     for (unsigned int n = 0; n < input->nRanks; n++)
     { 
       ss.str("");
-      ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+      ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
       ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
       f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
     }
@@ -1087,11 +1211,11 @@ void FRSolver::write_solution()
   ss.str("");
 #ifdef _MPI
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
   ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
 #else
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
   ss << ".vtu";
 #endif
 
@@ -1107,8 +1231,9 @@ void FRSolver::write_solution()
   f << "byte_order=\"LittleEndian\" ";
   f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
 
-  /* Write comments for iteration number and flowtime */
-  f << "<!-- TIME " << flow_time << " -->" << std::endl;
+  /* Write comments for solution order, iteration number and flowtime */
+  f << "<!-- ORDER " << input->order << " -->" << std::endl;
+  f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
   f << "<!-- ITER " << current_iter << " -->" << std::endl;
 
   f << "<UnstructuredGrid>" << std::endl;
@@ -1365,7 +1490,16 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 
-    std::cout << "dt: " << dt(0);
+    if (input->dt_type == 2)
+    {
+      std::cout << "dt: " <<  *std::min_element(dt.data(), dt.data()+eles->nEles) << " (min) ";
+      std::cout << *std::max_element(dt.data(), dt.data()+eles->nEles) << " (max)";
+    }
+    else
+    {
+      std::cout << "dt: " << dt(0);
+    }
+
     std::cout << std::endl;
     
     /* Write to history file */
@@ -1392,9 +1526,16 @@ void FRSolver::report_forces(std::ofstream &f)
   force_conv.fill(0.0); force_visc.fill(0.0); taun.fill(0.0);
 
   std::stringstream ss;
+#ifdef _MPI
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_p" << std::setw(3) << std::setfill('0') << input->rank;
-  ss << "_" << std::setw(9) << std::setfill('0') << current_iter << ".cp";
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".cp";
+#else
+  ss << input->output_prefix << "/";
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << ".cp";
+#endif
+
   auto cpfile = ss.str();
   std::ofstream g(cpfile);
 

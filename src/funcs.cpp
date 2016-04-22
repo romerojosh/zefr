@@ -14,6 +14,7 @@
 
 #include "funcs.hpp"
 #include "input.hpp"
+#include "funcs.hpp"
 
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
 {
@@ -24,17 +25,26 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   {
     if (input->nDims == 2)
     {
-      /* val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
+      
+      /*
+      val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
-             std::sin(M_PI * (y - input->AdvDiff_A(1) * t)); */
-      val =  step((x - input->AdvDiff_A(0) * t));
+             std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
+      */
+      
+      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y);
+
+      //val =  step((x - input->AdvDiff_A(0) * t));
     }
     else if (input->nDims == 3)
     {
+      
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t))*
              std::sin(M_PI * (z - input->AdvDiff_A(2) * t));
+      
+      //val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
     }
   }
   else if (input->equation == EulerNS)
@@ -152,28 +162,52 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
   return val;
 }
 
-// TODO: Can have a best-fit curve for higher P of the form 'a + b/P + c/P^2'
+double compute_source_term(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
+{
+  double val = 0.;
+  if (input->equation == AdvDiff)
+  {
+    if (input->nDims == 2)
+    {
+      val =  -M_PI * (std::cos(M_PI * x) + M_PI * std::sin(M_PI * x) + 
+             std::cos(M_PI * y) + M_PI * std::sin(M_PI * y));
+    }
+    else
+    {
+      val =  -M_PI * (std::cos(M_PI * x) + M_PI * std::sin(M_PI * x) + 
+             std::cos(M_PI * y) + M_PI * std::sin(M_PI * y) + 
+             std::cos(M_PI * z) + M_PI * std::sin(M_PI * z));
+    }
+  }
+  else
+  {
+    ThrowException("No source defined for EulerNS!");
+  }
+
+  return val;
+}
+
 double get_cfl_limit(int order)
 {
   switch(order)
   {
     case 0:
-      return 1.393;
+      return 1.392;
 
     case 1:
-      return 0.464; 
+      return 0.4642; 
 
     case 2:
-      return 0.235;
+      return 0.2351;
 
     case 3:
-      return 0.139;
+      return 0.1453;
 
     case 4:
-      return 0.100;
+      return 0.1000;
 
     case 5:
-      return 0.068;
+      return 0.0736;
       
     case 6:
       return 0.048639193282486;

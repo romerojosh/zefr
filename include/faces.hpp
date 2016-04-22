@@ -36,6 +36,7 @@ class Faces
     void apply_bcs();
     void apply_bcs_dU();
     void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
+    void roe_flux(unsigned int startFpt, unsigned int endFpt);
     void LDG_flux(unsigned int startFpt, unsigned int endFpt);
     void central_flux();
     void transform_flux();
