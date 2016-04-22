@@ -711,7 +711,6 @@ void FRSolver::compute_LHS()
   /* Compute LHS implicit Jacobian */
   if (input->dt_scheme == "BDF1")
   {
-    //TODO: Modify order of LHS matrix to new order
     eles->compute_globalLHS(dt);
 
 #ifdef _GPU
@@ -1485,7 +1484,6 @@ void FRSolver::update()
     compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
 
     /* Add deltaU to solution */
-    //device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
     compute_U();
 #endif
   }
@@ -1714,8 +1712,7 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
     compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
 
     /* Add deltaU to solution */
-    //TODO: Cannot use add with reorganized RHS. Need a kernel that adds correctly!
-    device_add(eles->U_spts_d, eles->deltaU_d, eles->U_spts_d.size());
+    compute_U();
   }
 
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
