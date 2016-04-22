@@ -309,55 +309,6 @@ void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU
   }
 }
 
-template <unsigned int nVars, unsigned int nDims>
-__global__
-void compute_divF(mdvector_gpu<double> divF, mdvector_gpu<double> dF_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int stage)
-{
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
-
-  if (spt >= nSpts || ele >= nEles)
-    return;
-
-  double sum[nVars];
-
-  for (unsigned int var = 0; var < nVars; var++)
-    sum[var] = 0.0;
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-    for (unsigned int var = 0; var < nVars; var++)
-      sum[var] += dF_spts(spt, ele, var, dim);
-
-  for (unsigned int var = 0; var < nVars; var++)
-    divF(spt, ele, var, stage) = sum[var];
-
-
-}
-
-void compute_divF_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &dF_spts, 
-    unsigned int nSpts, unsigned int nVars, unsigned int nEles, unsigned int nDims,
-    unsigned int equation, unsigned int stage)
-{
-  unsigned int threads= 192;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
-
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    if (nDims == 2)
-      compute_divF<1,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-    else
-      compute_divF<1,3><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      compute_divF<4,2><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-    else
-      compute_divF<5,3><<<blocks, threads>>>(divF, dF_spts, nSpts, nEles, stage);
-  }
-}
-
 template <unsigned int nVars>
 __global__
 void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 

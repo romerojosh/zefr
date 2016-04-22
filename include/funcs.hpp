@@ -45,4 +45,33 @@ struct abs_sum
   }
 };
 
+/* Diagonal general matrix multiplication (C = A * diag(x) + C) */
+template <typename T>
+void dgmm(int m, int n, T* A, int lda, T* x, int incx, T* C, int ldc)
+{
+  for (unsigned int j = 0; j < n; j++)
+  {
+    for (unsigned int i = 0; i < m; i++)
+    {
+      C[ldc*j + i] += A[lda*j + i] * x[j + incx];
+    }
+  }
+}
+
+/* General matrix multiplication (C = A * B + C) */
+template <typename T>
+void gemm(int m, int n, int p, T* A, int lda, T* B, int ldb, T* C, int ldc)
+{
+  for (unsigned int j = 0; j < n; j++)
+  {
+    for (unsigned int i = 0; i < m; i++)
+    {
+      for (unsigned int k = 0; k < p; k++)
+      {
+        C[ldc*j + i] += A[lda*k + i] * B[ldb*j + k];
+      }
+    }
+  }
+}
+
 #endif /* funcs_hpp */

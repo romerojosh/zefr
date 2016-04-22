@@ -424,6 +424,7 @@ void FRSolver::solver_data_to_device()
   eles->oppE_d = eles->oppE;
   eles->oppD_d = eles->oppD;
   eles->oppD_fpts_d = eles->oppD_fpts;
+  eles->oppDiv_fpts_d = eles->oppDiv_fpts;
 
   /* If using multigrid, copy relevant operators */
   if (input->p_multi)
@@ -471,7 +472,6 @@ void FRSolver::solver_data_to_device()
   eles->dU_fpts_d = eles->dU_fpts;
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
-  eles->dF_spts_d = eles->dF_spts;
   eles->divF_spts_d = eles->divF_spts;
   eles->jaco_spts_d = eles->jaco_spts;
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
@@ -656,8 +656,7 @@ void FRSolver::compute_residual(unsigned int stage)
   /* Copy flux data from face local storage to element local storage */
   F_from_faces();
 
-  /* Compute flux gradients and divergence */
-  eles->compute_dF();
+  /* Compute divergence of flux */
   eles->compute_divF(stage);
 
   /* Add source term (if required) */
@@ -981,7 +980,6 @@ void FRSolver::initialize_U()
   eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
   eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
   eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
-  eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
