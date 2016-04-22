@@ -85,7 +85,7 @@ void FRSolver::setup_update()
   if (input->dt_scheme == "Euler")
   {
     nStages = 1;
-    rk_beta.assign({nStages},1.0);
+    rk_beta.assign({nStages}, 1.0);
 
   }
   else if (input->dt_scheme == "RK44")
@@ -99,18 +99,13 @@ void FRSolver::setup_update()
     rk_beta(0) = 1./6.; rk_beta(1) = 1./3.; 
     rk_beta(2) = 1./3.; rk_beta(3) = 1./6.;
   }
-  else if (input->dt_scheme == "RK54")
+  else if (input->dt_scheme == "RKj")
   {
-    nStages = 5;
-
-    rk_alpha.assign({nStages-1});
-    rk_alpha(0) = -0.417890474499852; rk_alpha(1) = -1.192151694642677; 
-    rk_alpha(2) = -1.697784692471528; rk_alpha(3) = -1.514183444257156;
-
-    rk_beta.assign({nStages});
-    rk_beta(0) = 0.149659021999229; rk_beta(1) = 0.379210312999627; 
-    rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
-    rk_beta(4) = 0.153057247968152;
+    nStages = 4;
+    rk_alpha.assign({nStages});
+    /* Standard RK44 */
+    rk_alpha(0) = 1./4; rk_alpha(1) = 1./3.; 
+    rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
   }
   else
   {
@@ -870,8 +865,10 @@ void FRSolver::update()
   device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 #endif
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nSteps; stage++)
   {
     compute_residual(stage);
 
@@ -905,55 +902,61 @@ void FRSolver::update()
 #endif
 
 #ifdef _GPU
+    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
+
     RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
         rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
+        input->equation, stage, last_stage, false);
     check_error();
 #endif
 
   }
 
-  /* Final stage */
-  compute_residual(nStages-1);
+  /* Final stage combining residuals for full Butcher table style RK timestepping*/
+  if (input->dt_scheme != "RKj")
+  {
+    compute_residual(nStages-1);
 #ifdef _CPU
-  eles->U_spts = U_ini;
+    eles->U_spts = U_ini;
 #endif
 #ifdef _GPU
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
 #endif
 
 #ifdef _CPU
-  for (unsigned int stage = 0; stage < nStages; stage++)
-  {
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
+    for (unsigned int stage = 0; stage < nStages; stage++)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < eles->nVars; n++)
       {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          if (input->dt_type != 2)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
-              eles->divF_spts(spt, ele, n, stage);
-          }
-          else
-          {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
-              eles->divF_spts(spt, ele, n, stage);
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
+                eles->divF_spts(spt, ele, n, stage);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
+                eles->divF_spts(spt, ele, n, stage);
+            }
           }
         }
       }
     }
-  }
 #endif
 
 #ifdef _GPU
-    RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-        input->equation, 0, nStages, true);
-    check_error();
+      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+          rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+          input->equation, 0, nStages, true);
+      check_error();
 #endif
+  }
 
   flow_time += dt(0);
   current_iter++;
@@ -963,10 +966,12 @@ void FRSolver::update()
 void FRSolver::update_with_source(mdvector<double> &source)
 {
   
-    U_ini = eles->U_spts;
+  U_ini = eles->U_spts;
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nSteps; stage++)
   {
     compute_residual(stage);
 
@@ -998,27 +1003,30 @@ void FRSolver::update_with_source(mdvector<double> &source)
         }
   }
 
-  /* Final stage */
-  compute_residual(nStages-1);
-  eles->U_spts = U_ini;
+  /* Final stage combining residuals for full Butcher table style RK timestepping*/
+  if (input->dt_scheme != "RKj")
+  {
+    compute_residual(nStages-1);
+    eles->U_spts = U_ini;
 
-  for (unsigned int stage = 0; stage < nStages; stage++)
+    for (unsigned int stage = 0; stage < nStages; stage++)
 #pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
-              (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
           }
-          else
-          {
-            eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
-              (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-          }
-        }
+  }
 
 }
 
@@ -1028,8 +1036,10 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
   
   device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 
-  /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
-  for (unsigned int stage = 0; stage < (nStages-1); stage++)
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nSteps; stage++)
   {
     compute_residual(stage);
 
@@ -1043,21 +1053,26 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
       }
     }
 
+    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
+
     RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
         rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
+        input->equation, stage, last_stage, false);
     check_error();
 
   }
 
-  /* Final stage */
-  compute_residual(nStages-1);
-  device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+  if (input->dt_scheme != "RKj")
+  {
+    compute_residual(nStages-1);
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
 
-  RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-      rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-      input->equation, 0, nStages, true);
-  check_error();
+    RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
+        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+        input->equation, 0, nStages, true);
+    check_error();
+  }
 
 }
 #endif
