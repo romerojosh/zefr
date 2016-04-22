@@ -196,8 +196,7 @@ void Filter::setup_oppS()
   } 
   else // Hexes   
   {
-    if (input->rank == 0) std::cout << "Sensor on hexes hasn't been implemented yet." << std::endl;
-    exit(EXIT_FAILURE);
+    ThrowException("Sensor on hexes hasn't been implemented yet.");
   }
 }
 
@@ -239,20 +238,17 @@ void Filter::apply_sensor()
   }
   
   // Calculate KS
-  for (unsigned int var = 0; var < eles->nVars; var++)
-  {
-    auto &A = oppS(0,0);
-    auto &B = U_spts(0, 0, var);
-    auto &C = KS(0, 0, var);
+  auto &A = oppS(0,0);
+  auto &B = U_spts(0, 0, 0);
+  auto &C = KS(0, 0, 0);
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-      2 * eles->nSpts, eles->nEles, eles->nSpts, 1.0, &A, 2 * eles->nSpts, &B, eles->nSpts, 0.0, &C, 2 * eles->nSpts);
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    2 * eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, 2 * eles->nSpts, &B, eles->nSpts, 0.0, &C, 2 * eles->nSpts);
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-      2 * eles->nSpts, eles->nEles, eles->nSpts, 1.0, &A, 2 * eles->nSpts, &B, eles->nSpts, 0.0, &C, 2 * eles->nSpts);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+    2 * eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, 2 * eles->nSpts, &B, eles->nSpts, 0.0, &C, 2 * eles->nSpts);
 #endif
-  }
     
     // Apply non-liqnear enhancement and store sensor values
   for (unsigned int var = 0; var < eles->nVars; var++)
@@ -284,13 +280,10 @@ void Filter::apply_sensor()
   }
   
   // Calculate KS
-  for (unsigned int var = 0; var < eles->nVars; var++)
-  {
-    cublasDGEMM_wrapper(2 * eles->nSpts, eles->nEles, eles->nSpts, 1.0,
-      oppS_d.data(), 2 * eles->nSpts, U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts, 0.0,
-      KS_d.data() + var * eles->nEles * 2 * eles->nSpts, 2 * eles->nSpts);
-  }
-    
+  cublasDGEMM_wrapper(2 * eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
+    oppS_d.data(), 2 * eles->nSpts, U_spts_d.data(), eles->nSpts, 0.0,
+    KS_d.data(), 2 * eles->nSpts);
+  
   // Apply non-linear enhancement and store sensor values
   compute_max_sensor_wrapper(KS_d, sensor_d, order, max_sensor_d, eles->nSpts, eles->nEles, eles->nVars);
 
@@ -430,8 +423,7 @@ void Filter::setup_oppF(unsigned int level)
   } 
   else // Hexes   
   {
-    if (input->rank == 0) std::cout << "Filter on hexes hasn't been implemented yet." << std::endl;
-    exit(EXIT_FAILURE);
+    ThrowException("Filter on hexes hasn't been implemented yet.");
   }
 }
 
@@ -439,10 +431,13 @@ void Filter::setup_oppF(unsigned int level)
 unsigned int Filter::apply_filter(unsigned int level)
 {
   
-#ifdef _CPU
-
   // Check if filtering is required
+#ifdef _CPU
   if (sensor.max_val() < threshJ) return 0;
+#endif
+#ifdef _GPU
+  if (max_sensor_d < threshJ) return 0;
+#endif
   
   // Transfer information to flux points
   eles->extrapolate_U(); 
@@ -456,34 +451,32 @@ unsigned int Filter::apply_filter(unsigned int level)
 #endif 
   solver->U_from_faces(); 
  
+#ifdef _CPU
   // Loop over variables
-  for (unsigned int var = 0; var < eles->nVars; var++)
-  {
-    // Contribution from solution points
-    auto &A = oppF_spts[level](0,0);
-    auto &B = eles->U_spts(0, 0, var);
-    auto &C = U_spts(0, 0, var);
+  // Contribution from solution points
+  auto &A = oppF_spts[level](0,0);
+  auto &B = eles->U_spts(0, 0, 0);
+  auto &C = U_spts(0, 0, 0);
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-      eles->nSpts, eles->nEles, eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-      eles->nSpts, eles->nEles, eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+    eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
 #endif
-    
-    // Contribution from flux points
-    auto &D = oppF_fpts[level](0,0);
-    auto &E = eles->U_fpts(0, 0, var);
+  
+  // Contribution from flux points
+  auto &D = oppF_fpts[level](0,0);
+  auto &E = eles->U_fpts(0, 0, 0);
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-      eles->nSpts, eles->nEles, eles->nFpts, 1.0, &D, eles->nSpts, &E, eles->nFpts, 1.0, &C, eles->nSpts);
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0, &D, eles->nSpts, &E, eles->nFpts, 1.0, &C, eles->nSpts);
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-      eles->nSpts, eles->nEles, eles->nFpts, 1.0, &D, eles->nSpts, &E, eles->nFpts, 1.0, &C, eles->nSpts);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+    eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0, &D, eles->nSpts, &E, eles->nFpts, 1.0, &C, eles->nSpts);
 #endif
-  }
    
   // Copy back filtered values
 #pragma omp parallel for
@@ -500,34 +493,16 @@ unsigned int Filter::apply_filter(unsigned int level)
 #endif
 
 #ifdef _GPU
-  // Check if filtering is required
-  if (max_sensor_d < threshJ) return 0;
-  
-  // Transfer information to flux points
-  eles->extrapolate_U(); 
-  solver->U_to_faces(); 
-#ifdef _MPI 
-  faces->send_U_data();
-  faces->recv_U_data();
-  faces->compute_common_U(geo->nGfpts_int + geo->nGfpts_bnd, geo->nGfpts);
-#else
-  faces->compute_common_U(0, geo->nGfpts); 
-#endif 
-  solver->U_from_faces(); 
- 
   // Loop over variables
-  for (unsigned int var = 0; var < eles->nVars; var++)
-  {
-    // Contribution from solution points
-    cublasDGEMM_wrapper(eles->nSpts, eles->nEles, eles->nSpts, 1.0,
-      oppF_spts_d[level].data(), eles->nSpts, eles->U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts, 0.0,
-      U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts);
+  // Contribution from solution points
+  cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0,
+    oppF_spts_d[level].data(), eles->nSpts, eles->U_spts_d.data(), eles->nSpts, 0.0,
+    U_spts_d.data(), eles->nSpts);
 
-    // Contribution from flux points
-    cublasDGEMM_wrapper(eles->nSpts, eles->nEles, eles->nFpts, 1.0,
-      oppF_fpts_d[level].data(), eles->nSpts, eles->U_fpts_d.data() + var * eles->nEles * eles->nFpts, eles->nFpts, 1.0,
-      U_spts_d.data() + var * eles->nEles * eles->nSpts, eles->nSpts);
-  }
+  // Contribution from flux points
+  cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0,
+    oppF_fpts_d[level].data(), eles->nSpts, eles->U_fpts_d.data(), eles->nFpts, 1.0,
+    U_spts_d.data(), eles->nSpts);
    
   // Copy back filtered values
   copy_filtered_solution_wrapper(U_spts_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars);
