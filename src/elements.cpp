@@ -1972,8 +1972,8 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
           for (unsigned int i = 0; i < nSpts; i++)
           {
             /* Determine index */
-            int Gi = ni*nEles*nSpts + ele*nSpts + i;
-            int Gj = nj*nEles*nSpts + ele*nSpts + j;
+            int Gi = ele*nVars*nSpts + ni*nSpts + i;
+            int Gj = ele*nVars*nSpts + nj*nSpts + j;
 
             /* Compute val */
             double Gval;
@@ -2011,8 +2011,8 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
               for (unsigned int i = 0; i < nSpts; i++)
               {
                 /* Determine index */
-                int Gi = ni*nEles*nSpts + ele*nSpts + i;
-                int Gj = nj*nEles*nSpts + eleN*nSpts + j;
+                int Gi = ele*nVars*nSpts + ni*nSpts + i;
+                int Gj = eleN*nVars*nSpts + nj*nSpts + j;
 
                 /* Compute val and fill */
                 double Gval;
