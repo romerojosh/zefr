@@ -195,7 +195,6 @@ void Elements::setup_FR()
   oppE.assign({nFpts, nSpts});
   oppD.assign({nSpts, nSpts, nDims});
   oppD_fpts.assign({nSpts, nFpts, nDims});
-  oppDiv.assign({nSpts, nSpts});
   oppDiv_fpts.assign({nSpts, nFpts});
 
   std::vector<double> loc(nDims, 0.0);
@@ -242,18 +241,7 @@ void Elements::setup_FR()
     }
   }
 
-  /* Combine dimensions of differentiation operators into single divergence operators */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int jspt = 0; jspt < nSpts; jspt++)
-    {
-      for (unsigned int ispt = 0; ispt < nSpts; ispt++)
-      {
-        oppDiv(ispt, jspt) += oppD(ispt, jspt, dim);
-      }
-    }
-  }
-
+  /* Setup divergence operator (oppDiv_fpts) for flux points by combining dimensions of oppD_fpts */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
