@@ -102,12 +102,12 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
     for (unsigned int step = 0; step < nSteps; step++)
     {
 #ifdef _CPU
-      grids[P]->update_with_source(sources[P]);
+      grids[P]->update(sources[P]);
       grids[P]->filter_solution();
 #endif
 
 #ifdef _GPU
-      grids[P]->update_with_source(sources_d[P]);
+      grids[P]->update(sources_d[P]);
       grids[P]->filter_solution();
 #endif
     }
@@ -144,12 +144,12 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
       for (unsigned int step = 0; step < input->p_smooth_steps; step++)
       {
 #ifdef _CPU
-        grids[P]->update_with_source(sources[P]);
+        grids[P]->update(sources[P]);
         grids[P]->filter_solution();
 #endif
 
 #ifdef _GPU
-        grids[P]->update_with_source(sources_d[P]);
+        grids[P]->update(sources_d[P]);
         grids[P]->filter_solution();
 #endif
       }

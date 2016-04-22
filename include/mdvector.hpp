@@ -57,7 +57,7 @@ class mdvector
     void fill(T value);
 
     //! Size operator
-    unsigned int size() const;
+    size_t size() const;
 
     //! Method to return vector shape
     std::array<unsigned int,4> shape(void) const;
@@ -89,7 +89,9 @@ class mdvector
     T operator()(unsigned int idx0, unsigned int idx1) const;
     T& operator()(unsigned int idx0, unsigned int idx1);
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
+    T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2) const;
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
+    T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3) const;
 
 #ifdef _GPU
     //! Assignment (copy from GPU)
@@ -154,7 +156,7 @@ void mdvector<T>::fill(T value)
 }
 
 template <typename T>
-unsigned int mdvector<T>::size() const
+size_t mdvector<T>::size() const
 {
   return values.size();
 }
@@ -265,8 +267,22 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
 }
 
 template <typename T>
+T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
+{
+  //assert(ndims == 3);
+  return values[(idx2 * strides[1] + idx1) * strides[0] + idx0];
+}
+template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3) 
+{
+  //assert(ndims == 4);
+  return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template <typename T>
+T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3) const
 {
   //assert(ndims == 4);
   return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];

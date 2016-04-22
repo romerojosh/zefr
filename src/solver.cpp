@@ -859,7 +859,14 @@ void FRSolver::add_source(unsigned int stage)
 
 }
 
-void FRSolver::update()
+/* Note: Source term in update() is used primarily for multigrid. To add a true source term, define
+ * a source term in funcs.cpp and set source input flag to 1. */
+#ifdef _CPU
+void FRSolver::update(const mdvector<double> &source)
+#endif 
+#ifdef _GPU
+void FRSolver::update(const mdvector_gpu<double> &source)
+#endif
 {
   
 #ifdef _CPU
@@ -888,31 +895,62 @@ void FRSolver::update()
     }
 
 #ifdef _CPU
+    if (source.size() == 0)
+    {
 #pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            }
           }
-          else
+    }
+    else
+    {
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-              eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
+                eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
+                eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
           }
-        }
+    }
 #endif
 
 #ifdef _GPU
     /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
     unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
 
-    RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, last_stage, false);
+    if (source.size() == 0)
+    {
+      RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
+          rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+          input->equation, stage, last_stage, false);
+    }
+    else
+    {
+      RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
+          rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
+          input->equation, stage, last_stage, false);
+    }
     check_error();
 #endif
 
@@ -932,155 +970,69 @@ void FRSolver::update()
 #ifdef _CPU
     for (unsigned int stage = 0; stage < nStages; stage++)
     {
-#pragma omp parallel for collapse(3)
-      for (unsigned int n = 0; n < eles->nVars; n++)
+      if (source.size() == 0)
       {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            if (input->dt_type != 2)
+#pragma omp parallel for collapse(3)
+        for (unsigned int n = 0; n < eles->nVars; n++)
+          for (unsigned int ele = 0; ele < eles->nEles; ele++)
+            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+              if (input->dt_type != 2)
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
+                  eles->divF_spts(spt, ele, n, stage);
+              }
+              else
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
+                  eles->divF_spts(spt, ele, n, stage);
+              }
+      }
+      else
+      {
+#pragma omp parallel for collapse(3)
+        for (unsigned int n = 0; n < eles->nVars; n++)
+          for (unsigned int ele = 0; ele < eles->nEles; ele++)
+            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
             {
-              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
-                eles->divF_spts(spt, ele, n, stage);
+              if (input->dt_type != 2)
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                  (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+              }
+              else
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                  (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+              }
             }
-            else
-            {
-              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
-                eles->divF_spts(spt, ele, n, stage);
-            }
-          }
-        }
       }
     }
 #endif
 
 #ifdef _GPU
+    if (source.size() == 0)
+    {
       RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
           rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
           input->equation, 0, nStages, true);
-      check_error();
+    }
+    else
+    {
+
+      RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
+          rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+          input->equation, 0, nStages, true);
+    }
+
+    check_error();
 #endif
+
   }
 
   flow_time += dt(0);
   current_iter++;
  
 }
-
-void FRSolver::update_with_source(mdvector<double> &source)
-{
-  
-  U_ini = eles->U_spts;
-
-  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
-
-  /* Main stage loop. Complete for Jameson-style RK timestepping */
-  for (unsigned int stage = 0; stage < nSteps; stage++)
-  {
-    compute_residual(stage);
-
-    /* If in first stage, compute stable timestep */
-    if (stage == 0)
-    {
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
-      {
-        compute_element_dt();
-      }
-    }
-
-#pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < eles->nVars; n++)
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          if (input->dt_type != 2)
-          {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-              eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-          }
-          else
-          {
-            eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-              eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-          }
-        }
-  }
-
-  /* Final stage combining residuals for full Butcher table style RK timestepping*/
-  if (input->dt_scheme != "RKj")
-  {
-    compute_residual(nStages-1);
-    eles->U_spts = U_ini;
-
-    for (unsigned int stage = 0; stage < nStages; stage++)
-#pragma omp parallel for collapse(3)
-      for (unsigned int n = 0; n < eles->nVars; n++)
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            if (input->dt_type != 2)
-            {
-              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
-                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-            }
-            else
-            {
-              eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
-                (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-            }
-          }
-  }
-
-}
-
-#ifdef _GPU
-void FRSolver::update_with_source(mdvector_gpu<double> &source)
-{
-  
-  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
-
-  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
-
-  /* Main stage loop. Complete for Jameson-style RK timestepping */
-  for (unsigned int stage = 0; stage < nSteps; stage++)
-  {
-    compute_residual(stage);
-
-    /* If in first stage, compute stable timestep */
-    if (stage == 0)
-    {
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
-      {
-        compute_element_dt();
-      }
-    }
-
-    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
-    unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
-
-    RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, last_stage, false);
-    check_error();
-
-  }
-
-  if (input->dt_scheme != "RKj")
-  {
-    compute_residual(nStages-1);
-    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
-
-    RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-        input->equation, 0, nStages, true);
-    check_error();
-  }
-
-}
-#endif
 
 void FRSolver::compute_element_dt()
 {

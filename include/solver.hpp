@@ -64,10 +64,11 @@ class FRSolver
     void setup();
     void compute_residual(unsigned int stage);
     void add_source(unsigned int stage);
-    void update();
-    void update_with_source(mdvector<double> &source);
+#ifdef _CPU
+    void update(const mdvector<double> &source = mdvector<double>());
+#endif
 #ifdef _GPU
-    void update_with_source(mdvector_gpu<double> &source);
+    void update(const mdvector_gpu<double> &source = mdvector_gpu<double>());
 #endif
     void write_solution(const std::string &prefix);
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
