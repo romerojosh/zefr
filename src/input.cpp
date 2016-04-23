@@ -49,6 +49,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "c_smooth_steps", input.c_smooth_steps, (unsigned int) 1);
   read_param(f, "rel_fac", input.rel_fac, 1.0);
   read_param(f, "low_order", input.low_order, (unsigned int) 0);
+  read_param(f, "hmg_levels", input.hmg_levels, (unsigned int) 0);
+  read_param(f, "coarse_mode", input.coarse_mode, (unsigned int) 0);
+  read_param(f, "nElesX", input.nElesX, (unsigned int) 0);
+  read_param(f, "nElesY", input.nElesY, (unsigned int) 0);
 
   read_param(f, "output_prefix", input.output_prefix);
   read_param(f, "write_freq", input.write_freq);

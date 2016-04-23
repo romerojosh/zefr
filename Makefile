@@ -33,13 +33,13 @@ endif
 
 INCS = -I$(strip $(BLAS_DIR))/include 
 INCS += -I$(strip $(BLAS_DIR))/include/openblas
+INCS += -I$(strip $(METIS_DIR))/include
+LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
 
-# Setting MPI/METIS flags
+# Setting MPI flags
 ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
-	INCS += -I$(strip $(METIS_DIR))/include
-	LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
 endif
 
 # Setting Architecture flags

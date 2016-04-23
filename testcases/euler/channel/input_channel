@@ -29,6 +29,11 @@ smooth_steps 1
 p_smooth_steps 1
 c_smooth_steps 10
 
+hmg_levels 3
+coarse_mode 1
+nElesX 48
+nElesY 16
+
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix channel_48x16_RK4_pmg

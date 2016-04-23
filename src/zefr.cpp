@@ -78,6 +78,11 @@ int main(int argc, char* argv[])
   FRSolver solver(&input);
   solver.setup();
   
+  //TESTING
+  FRSolver solverFV(&input, input.order, true);
+  solverFV.setup();
+  
+  
   PMGrid pmg;
   if (input.p_multi)
   {
