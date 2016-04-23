@@ -2041,6 +2041,9 @@ void Elements::compute_localLHS(mdvector<double> &dt)
   CtempFS.assign({nFpts, nSpts});
   CtempFS2.assign({nFpts, nSpts});
 
+  mdvector<double> CtempSF;
+  CtempSF.assign({nSpts, nFpts});
+
   mdvector<double> CtempFSN, CtempFSN2;
   CtempFSN.assign({nSpts1D, nSpts});
   CtempFSN2.assign({nSpts1D, nSpts});
@@ -2068,29 +2071,26 @@ void Elements::compute_localLHS(mdvector<double> &dt)
         }
 
         /* Compute center inviscid LHS implicit Jacobian */
-        CtempFS.fill(0);
-        for (unsigned int j = 0; j < nSpts; j++)
-        {
-          for (unsigned int i = 0; i < nFpts; i++)
-          {
-            CtempFS(i, j) = dFcdUconv_fpts(i, ele, ni, nj, 0) * oppE(i, j);
-          }
-        }
-
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          for (unsigned int j = 0; j < nSpts; j++)
-          {
-            for (unsigned int i = 0; i < nSpts; i++)
-            {
-              LHS(i, j, ele, ni, nj) += oppD(i, j, dim) * dFdUconv_spts(j, ele, ni, nj, dim);
-              for (unsigned int k = 0; k < nFpts; k++)
-              {
-                LHS(i, j, ele, ni, nj) += oppD_fpts(i, k, dim) * CtempFS(k, j);
-              }
-            }
-          }
+          auto *A = &oppD(0, 0, dim);
+          auto *B = &dFdUconv_spts(0, ele, ni, nj, dim);
+          auto *C = &LHS(0, 0, ele, ni, nj);
+
+          double fac = (dim == 0) ? 0.0 : 1.0;
+
+          dgmm(nSpts, nSpts, 1, A, nSpts, B, 0, fac, C, nSpts);
         }
+
+        auto *A = &oppDiv_fpts(0, 0);
+        auto *B = &dFcdUconv_fpts(0, ele, ni, nj, 0);
+        auto *C = &CtempSF(0, 0);
+        dgmm(nSpts, nFpts, 1, A, nSpts, B, 0, 0, C, nSpts);
+
+        A = &CtempSF(0, 0);
+        B = &oppE(0, 0);
+        C = &LHS(0, 0, ele, ni, nj);
+        gemm(nSpts, nSpts, nFpts, 1, A, nSpts, B, nFpts, 1, C, nSpts);
 
         /* Compute center viscous LHS implicit Jacobian */
         if (input->viscous)

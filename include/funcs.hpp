@@ -45,31 +45,33 @@ struct abs_sum
   }
 };
 
-/* Diagonal general matrix multiplication (C = A * diag(x) + C) */
+/* Diagonal general matrix multiplication (C = alpha * A * diag(x) + beta * C) */
 template <typename T>
-void dgmm(int m, int n, T* A, int lda, T* x, int incx, T* C, int ldc)
+void dgmm(int m, int n, double alpha, T* A, int lda, T* x, int incx, double beta, T* C, int ldc)
 {
   for (unsigned int j = 0; j < n; j++)
   {
     for (unsigned int i = 0; i < m; i++)
     {
-      C[ldc*j + i] += A[lda*j + i] * x[j + incx];
+      C[ldc*j + i] = alpha * A[lda*j + i] * x[j + incx] + beta * C[ldc*j + i];
     }
   }
 }
 
-/* General matrix multiplication (C = A * B + C) */
+/* General matrix multiplication (C = alpha * A * B + beta * C) */
 template <typename T>
-void gemm(int m, int n, int p, T* A, int lda, T* B, int ldb, T* C, int ldc)
+void gemm(int m, int n, int p, double alpha, T* A, int lda, T* B, int ldb, double beta, T* C, int ldc)
 {
   for (unsigned int j = 0; j < n; j++)
   {
     for (unsigned int i = 0; i < m; i++)
     {
+      double val = 0;
       for (unsigned int k = 0; k < p; k++)
       {
-        C[ldc*j + i] += A[lda*k + i] * B[ldb*j + k];
+        val += A[lda*k + i] * B[ldb*j + k];
       }
+      C[ldc*j + i] = alpha * val + beta * C[ldc*j + i];
     }
   }
 }
