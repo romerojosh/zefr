@@ -90,6 +90,7 @@ class Elements
     mdvector_gpu<double> LHS_d;
     mdvector_gpu<int> LU_pivots_d, LU_info_d; 
     mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d; 
+    mdvector_gpu<double> dFdUconv_spts_d;
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
 #endif

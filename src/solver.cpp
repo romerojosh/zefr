@@ -478,6 +478,9 @@ void FRSolver::solver_data_to_device()
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
 
+  /* Implicit flux derivative data structures (element local) */
+  eles->dFdUconv_spts_d = eles->dFdUconv_spts;
+
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
   faces->dU_d = faces->dU;
@@ -669,7 +672,7 @@ void FRSolver::compute_LHS()
 #ifdef _GPU
   /* Copy new solution from GPU */
   // TODO: Temporary until placed in GPU
-  eles->U_spts = eles->U_spts_d;
+  //eles->U_spts = eles->U_spts_d;
   faces->U = faces->U_d;
 #endif
 
@@ -677,6 +680,12 @@ void FRSolver::compute_LHS()
    * at solution and flux points */
   eles->compute_dFdUconv();
   faces->compute_dFdUconv(0, geo.nGfpts);
+
+#ifdef _GPU
+  /* Copy new dFdUconv from GPU */
+  // TODO: Temporary until placed in GPU
+  eles->dFdUconv_spts = eles->dFdUconv_spts_d;
+#endif
 
   if (input->viscous)
   {
@@ -718,13 +727,13 @@ void FRSolver::compute_LHS()
     eles->GLHS_d.free_data();
     eles->GLHS_d = eles->GLHS;
 #endif
+
   }
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     eles->compute_localLHS(dt);
     compute_LHS_LU();
   }
-
 }
 
 void FRSolver::compute_LHS_LU()

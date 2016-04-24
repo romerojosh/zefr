@@ -25,6 +25,20 @@ void compute_Fvisc_spts_EulerNS_wrapper(mdvector_gpu<double> &F_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis);
 
+/* Element flux derivative kernel wrappers (Implicit Method) */
+void compute_dFdUconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
+    mdvector_gpu<double> &AdvDiff_A);
+
+void compute_dFdUconv_spts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
+    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
+    unsigned int nDims);
+
+void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
+    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
+    unsigned int nDims, double gamma);
+
+/* Element transformation kernel wrappers */
 void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts, 
     mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &jaco_det_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, 

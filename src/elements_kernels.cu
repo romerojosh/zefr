@@ -430,6 +430,155 @@ void compute_Fvisc_spts_EulerNS_wrapper(mdvector_gpu<double> &F_spts,
 
 }
 
+template <unsigned int nDims>
+__global__
+void compute_dFdUconv_spts_AdvDiff(mdvector_gpu<double> dFdUconv_spts, 
+    unsigned int nSpts, unsigned int nEles, mdvector_gpu<double> AdvDiff_A)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    dFdUconv_spts(spt, ele, 0, 0, dim) = AdvDiff_A(dim);
+  }
+}
+
+void compute_dFdUconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nDims, mdvector_gpu<double> &AdvDiff_A)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+      threads.y);
+
+  if (nDims == 2)
+  {
+    compute_dFdUconv_spts_AdvDiff<2><<<blocks, threads>>>(dFdUconv_spts, nSpts, nEles, AdvDiff_A);
+  }
+  else
+  {
+    compute_dFdUconv_spts_AdvDiff<3><<<blocks, threads>>>(dFdUconv_spts, nSpts, nEles, AdvDiff_A);
+  }
+}
+
+template <unsigned int nDims>
+__global__
+void compute_dFdUconv_spts_Burgers(mdvector_gpu<double> dFdUconv_spts, 
+    mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    dFdUconv_spts(spt, ele, 0, 0, dim) = U_spts(spt, ele, 0);
+  }
+}
+
+void compute_dFdUconv_spts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
+    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
+    unsigned int nDims)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+      threads.y);
+
+  if (nDims == 2)
+  {
+    compute_dFdUconv_spts_Burgers<2><<<blocks, threads>>>(dFdUconv_spts, U_spts, nSpts, 
+      nEles);
+  }
+  else
+  {
+    compute_dFdUconv_spts_Burgers<3><<<blocks, threads>>>(dFdUconv_spts, U_spts, nSpts, 
+      nEles);
+  }
+}
+
+__global__
+void compute_dFdUconv_spts_2D_EulerNS(mdvector_gpu<double> dFdUconv_spts, mdvector_gpu<double> U_spts, 
+    unsigned int nSpts, unsigned int nEles, double gam)
+{
+  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  /* Primitive Variables */
+  double rho = U_spts(spt, ele, 0);
+  double u = U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
+  double v = U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+  double e = U_spts(spt, ele, 3);
+
+  /* Set convective dFdU values in the x-direction */
+  dFdUconv_spts(spt, ele, 0, 0, 0) = 0;
+  dFdUconv_spts(spt, ele, 1, 0, 0) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * v*v);
+  dFdUconv_spts(spt, ele, 2, 0, 0) = -u * v;
+  dFdUconv_spts(spt, ele, 3, 0, 0) = -gam * e * u / rho + (gam-1.0) * u * (u*u + v*v);
+
+  dFdUconv_spts(spt, ele, 0, 1, 0) = 1;
+  dFdUconv_spts(spt, ele, 1, 1, 0) = (3.0-gam) * u;
+  dFdUconv_spts(spt, ele, 2, 1, 0) = v;
+  dFdUconv_spts(spt, ele, 3, 1, 0) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
+
+  dFdUconv_spts(spt, ele, 0, 2, 0) = 0;
+  dFdUconv_spts(spt, ele, 1, 2, 0) = (1.0-gam) * v;
+  dFdUconv_spts(spt, ele, 2, 2, 0) = u;
+  dFdUconv_spts(spt, ele, 3, 2, 0) = (1.0-gam) * u * v;
+
+  dFdUconv_spts(spt, ele, 0, 3, 0) = 0;
+  dFdUconv_spts(spt, ele, 1, 3, 0) = (gam-1.0);
+  dFdUconv_spts(spt, ele, 2, 3, 0) = 0;
+  dFdUconv_spts(spt, ele, 3, 3, 0) = gam * u;
+
+  /* Set convective dFdU values in the y-direction */
+  dFdUconv_spts(spt, ele, 0, 0, 1) = 0;
+  dFdUconv_spts(spt, ele, 1, 0, 1) = -u * v;
+  dFdUconv_spts(spt, ele, 2, 0, 1) = 0.5 * ((gam-1.0) * u*u + (gam-3.0) * v*v);
+  dFdUconv_spts(spt, ele, 3, 0, 1) = -gam * e * v / rho + (gam-1.0) * v * (u*u + v*v);
+
+  dFdUconv_spts(spt, ele, 0, 1, 1) = 0;
+  dFdUconv_spts(spt, ele, 1, 1, 1) = v;
+  dFdUconv_spts(spt, ele, 2, 1, 1) = (1.0-gam) * u;
+  dFdUconv_spts(spt, ele, 3, 1, 1) = (1.0-gam) * u * v;
+
+  dFdUconv_spts(spt, ele, 0, 2, 1) = 1;
+  dFdUconv_spts(spt, ele, 1, 2, 1) = u;
+  dFdUconv_spts(spt, ele, 2, 2, 1) = (3.0-gam) * v;
+  dFdUconv_spts(spt, ele, 3, 2, 1) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
+
+  dFdUconv_spts(spt, ele, 0, 3, 1) = 0;
+  dFdUconv_spts(spt, ele, 1, 3, 1) = 0;
+  dFdUconv_spts(spt, ele, 2, 3, 1) = (gam-1.0);
+  dFdUconv_spts(spt, ele, 3, 3, 1) = gam * v;
+}
+
+void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
+    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
+    unsigned int nDims, double gamma)
+{
+  dim3 threads(16,12);
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+      threads.y);
+
+  if (nDims == 2)
+  {
+    compute_dFdUconv_spts_2D_EulerNS<<<blocks, threads>>>(dFdUconv_spts, U_spts, nSpts, 
+      nEles, gamma);
+  }
+  else
+  {
+    ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
+  }
+}
+
 template <unsigned int nVars>
 __global__
 void transform_dU_quad(mdvector_gpu<double> dU_spts, 
