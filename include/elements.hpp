@@ -64,7 +64,7 @@ class Elements
     mdvector<double> LHS_copy;
     mdvector<int> LU_pivots, LU_info; 
     mdvector<double*> LHS_ptrs, RHS_ptrs; 
-    mdvector<double> dFdUconv_spts, dFdUvisc_spts, dFddUvisc_spts;
+    mdvector<double> dFdU_spts, dFddUvisc_spts;
     mdvector<double> dFcdUconv_fpts, dUcdU_fpts, dFcdUvisc_fpts, dFcddUvisc_fpts;
     mdvector<double> deltaU;
     mdvector<double> RHS;
@@ -90,7 +90,7 @@ class Elements
     mdvector_gpu<double> LHS_d;
     mdvector_gpu<int> LU_pivots_d, LU_info_d; 
     mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d; 
-    mdvector_gpu<double> dFdUconv_spts_d;
+    mdvector_gpu<double> dFdU_spts_d;
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
 #endif

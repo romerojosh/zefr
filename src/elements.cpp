@@ -840,7 +840,7 @@ void Elements::compute_dFdUconv()
           {
             for (unsigned int spt = 0; spt < nSpts; spt++)
             {
-              dFdUconv_spts(spt, ele, ni, nj, dim) = input->AdvDiff_A(dim);
+              dFdU_spts(spt, ele, ni, nj, dim) = input->AdvDiff_A(dim);
             }
           }
         }
@@ -849,7 +849,7 @@ void Elements::compute_dFdUconv()
 #endif
 
 #ifdef _GPU
-    compute_dFdUconv_spts_AdvDiff_wrapper(dFdUconv_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d);
+    compute_dFdUconv_spts_AdvDiff_wrapper(dFdU_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d);
     check_error();
 #endif
 
@@ -869,7 +869,7 @@ void Elements::compute_dFdUconv()
           {
             for (unsigned int spt = 0; spt < nSpts; spt++)
             {
-              dFdUconv_spts(spt, ele, ni, nj, dim) = U_spts(spt, ele, 0);
+              dFdU_spts(spt, ele, ni, nj, dim) = U_spts(spt, ele, 0);
             }
           }
         }
@@ -878,7 +878,7 @@ void Elements::compute_dFdUconv()
 #endif
 
 #ifdef _GPU
-    compute_dFdUconv_spts_Burgers_wrapper(dFdUconv_spts_d, U_spts_d, nSpts, nEles, nDims);
+    compute_dFdUconv_spts_Burgers_wrapper(dFdU_spts_d, U_spts_d, nSpts, nEles, nDims);
     check_error();
 #endif
 
@@ -902,46 +902,46 @@ void Elements::compute_dFdUconv()
           double gam = input->gamma;
 
           /* Set convective dFdU values in the x-direction */
-          dFdUconv_spts(spt, ele, 0, 0, 0) = 0;
-          dFdUconv_spts(spt, ele, 1, 0, 0) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * v*v);
-          dFdUconv_spts(spt, ele, 2, 0, 0) = -u * v;
-          dFdUconv_spts(spt, ele, 3, 0, 0) = -gam * e * u / rho + (gam-1.0) * u * (u*u + v*v);
+          dFdU_spts(spt, ele, 0, 0, 0) = 0;
+          dFdU_spts(spt, ele, 1, 0, 0) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * v*v);
+          dFdU_spts(spt, ele, 2, 0, 0) = -u * v;
+          dFdU_spts(spt, ele, 3, 0, 0) = -gam * e * u / rho + (gam-1.0) * u * (u*u + v*v);
 
-          dFdUconv_spts(spt, ele, 0, 1, 0) = 1;
-          dFdUconv_spts(spt, ele, 1, 1, 0) = (3.0-gam) * u;
-          dFdUconv_spts(spt, ele, 2, 1, 0) = v;
-          dFdUconv_spts(spt, ele, 3, 1, 0) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
+          dFdU_spts(spt, ele, 0, 1, 0) = 1;
+          dFdU_spts(spt, ele, 1, 1, 0) = (3.0-gam) * u;
+          dFdU_spts(spt, ele, 2, 1, 0) = v;
+          dFdU_spts(spt, ele, 3, 1, 0) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
 
-          dFdUconv_spts(spt, ele, 0, 2, 0) = 0;
-          dFdUconv_spts(spt, ele, 1, 2, 0) = (1.0-gam) * v;
-          dFdUconv_spts(spt, ele, 2, 2, 0) = u;
-          dFdUconv_spts(spt, ele, 3, 2, 0) = (1.0-gam) * u * v;
+          dFdU_spts(spt, ele, 0, 2, 0) = 0;
+          dFdU_spts(spt, ele, 1, 2, 0) = (1.0-gam) * v;
+          dFdU_spts(spt, ele, 2, 2, 0) = u;
+          dFdU_spts(spt, ele, 3, 2, 0) = (1.0-gam) * u * v;
 
-          dFdUconv_spts(spt, ele, 0, 3, 0) = 0;
-          dFdUconv_spts(spt, ele, 1, 3, 0) = (gam-1.0);
-          dFdUconv_spts(spt, ele, 2, 3, 0) = 0;
-          dFdUconv_spts(spt, ele, 3, 3, 0) = gam * u;
+          dFdU_spts(spt, ele, 0, 3, 0) = 0;
+          dFdU_spts(spt, ele, 1, 3, 0) = (gam-1.0);
+          dFdU_spts(spt, ele, 2, 3, 0) = 0;
+          dFdU_spts(spt, ele, 3, 3, 0) = gam * u;
 
           /* Set convective dFdU values in the y-direction */
-          dFdUconv_spts(spt, ele, 0, 0, 1) = 0;
-          dFdUconv_spts(spt, ele, 1, 0, 1) = -u * v;
-          dFdUconv_spts(spt, ele, 2, 0, 1) = 0.5 * ((gam-1.0) * u*u + (gam-3.0) * v*v);
-          dFdUconv_spts(spt, ele, 3, 0, 1) = -gam * e * v / rho + (gam-1.0) * v * (u*u + v*v);
+          dFdU_spts(spt, ele, 0, 0, 1) = 0;
+          dFdU_spts(spt, ele, 1, 0, 1) = -u * v;
+          dFdU_spts(spt, ele, 2, 0, 1) = 0.5 * ((gam-1.0) * u*u + (gam-3.0) * v*v);
+          dFdU_spts(spt, ele, 3, 0, 1) = -gam * e * v / rho + (gam-1.0) * v * (u*u + v*v);
 
-          dFdUconv_spts(spt, ele, 0, 1, 1) = 0;
-          dFdUconv_spts(spt, ele, 1, 1, 1) = v;
-          dFdUconv_spts(spt, ele, 2, 1, 1) = (1.0-gam) * u;
-          dFdUconv_spts(spt, ele, 3, 1, 1) = (1.0-gam) * u * v;
+          dFdU_spts(spt, ele, 0, 1, 1) = 0;
+          dFdU_spts(spt, ele, 1, 1, 1) = v;
+          dFdU_spts(spt, ele, 2, 1, 1) = (1.0-gam) * u;
+          dFdU_spts(spt, ele, 3, 1, 1) = (1.0-gam) * u * v;
 
-          dFdUconv_spts(spt, ele, 0, 2, 1) = 1;
-          dFdUconv_spts(spt, ele, 1, 2, 1) = u;
-          dFdUconv_spts(spt, ele, 2, 2, 1) = (3.0-gam) * v;
-          dFdUconv_spts(spt, ele, 3, 2, 1) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
+          dFdU_spts(spt, ele, 0, 2, 1) = 1;
+          dFdU_spts(spt, ele, 1, 2, 1) = u;
+          dFdU_spts(spt, ele, 2, 2, 1) = (3.0-gam) * v;
+          dFdU_spts(spt, ele, 3, 2, 1) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
 
-          dFdUconv_spts(spt, ele, 0, 3, 1) = 0;
-          dFdUconv_spts(spt, ele, 1, 3, 1) = 0;
-          dFdUconv_spts(spt, ele, 2, 3, 1) = (gam-1.0);
-          dFdUconv_spts(spt, ele, 3, 3, 1) = gam * v;
+          dFdU_spts(spt, ele, 0, 3, 1) = 0;
+          dFdU_spts(spt, ele, 1, 3, 1) = 0;
+          dFdU_spts(spt, ele, 2, 3, 1) = (gam-1.0);
+          dFdU_spts(spt, ele, 3, 3, 1) = gam * v;
         }
       }
     }
@@ -952,7 +952,7 @@ void Elements::compute_dFdUconv()
 #endif
 
 #ifdef _GPU
-    compute_dFdUconv_spts_EulerNS_wrapper(dFdUconv_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma);
+    compute_dFdUconv_spts_EulerNS_wrapper(dFdU_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma);
     check_error();
 #endif
 
@@ -963,24 +963,7 @@ void Elements::compute_dFdUvisc()
 {
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
-#pragma omp parallel for collapse(5)
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          for (unsigned int ele = 0; ele < nEles; ele++)
-          {
-            for (unsigned int spt = 0; spt < nSpts; spt++)
-            {
-              // TODO: Can be removed if initialized to zero
-              dFdUvisc_spts(spt, ele, ni, nj, dim) = 0;
-            }
-          }
-        }
-      }
-    }
+    /* Note: dFdUvisc = 0 for this case */
   }
 
   else if (input->equation == EulerNS)
@@ -1037,30 +1020,17 @@ void Elements::compute_dFdUvisc()
           double tauxy = mu * (du_dy + dv_dx);
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
-          /* Set viscous dFdU values to zero */
-          // TODO: Can be removed if initialized to zero
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          {
-            for (unsigned int nj = 0; nj < nVars; nj++)
-            {
-              for (unsigned int ni = 0; ni < nVars-1; ni++)
-              {
-                dFdUvisc_spts(spt, ele, ni, nj, dim) = 0;
-              }
-            }
-          }
-
           /* Set viscous dFdU values in the x-direction */
-          dFdUvisc_spts(spt, ele, 3, 0, 0) = -(u * tauxx + v * tauxy) / rho;
-          dFdUvisc_spts(spt, ele, 3, 1, 0) = tauxx / rho;
-          dFdUvisc_spts(spt, ele, 3, 2, 0) = tauxy / rho;
-          dFdUvisc_spts(spt, ele, 3, 3, 0) = 0;
+          dFdU_spts(spt, ele, 3, 0, 0) += -(u * tauxx + v * tauxy) / rho;
+          dFdU_spts(spt, ele, 3, 1, 0) += tauxx / rho;
+          dFdU_spts(spt, ele, 3, 2, 0) += tauxy / rho;
+          dFdU_spts(spt, ele, 3, 3, 0) += 0;
 
           /* Set viscous dFdU values in the y-direction */
-          dFdUvisc_spts(spt, ele, 3, 0, 1) = -(u * tauxy + v * tauyy) / rho;
-          dFdUvisc_spts(spt, ele, 3, 1, 1) = tauxy / rho;
-          dFdUvisc_spts(spt, ele, 3, 2, 1) = tauyy / rho;
-          dFdUvisc_spts(spt, ele, 3, 3, 1) = 0;
+          dFdU_spts(spt, ele, 3, 0, 1) += -(u * tauxy + v * tauyy) / rho;
+          dFdU_spts(spt, ele, 3, 1, 1) += tauxy / rho;
+          dFdU_spts(spt, ele, 3, 2, 1) += tauyy / rho;
+          dFdU_spts(spt, ele, 3, 3, 1) += 0;
         }
       }
     }
@@ -1275,7 +1245,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
           {
             for (unsigned int i = 0; i < nSpts; i++)
             {
-              LHS(i, j, 0) += oppD(i, j, dim) * dFdUconv_spts(j, ele, ni, nj, dim);
+              LHS(i, j, 0) += oppD(i, j, dim) * dFdU_spts(j, ele, ni, nj, dim);
               for (unsigned int k = 0; k < nFpts; k++)
               {
                 LHS(i, j, 0) += oppD_fpts(i, k, dim) * CtempFS(k, j);
@@ -1572,7 +1542,6 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
             CtempSS.fill(0);
             for (unsigned int j = 0; j < nSpts; j++)
             {
-              CtempSS(j, j) += dFdUvisc_spts(j, ele, ni, nj, dim);
               for (unsigned int i = 0; i < nSpts; i++)
               {
                 CtempSS(i, j) += CdFddU0(i, j, dim);
@@ -2099,7 +2068,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           auto *A = &oppD(0, 0, dim);
-          auto *B = &dFdUconv_spts(0, ele, ni, nj, dim);
+          auto *B = &dFdU_spts(0, ele, ni, nj, dim);
           auto *C = &LHS(0, 0, ele, ni, nj);
 
           double fac = (dim == 0) ? 0.0 : 1.0;
@@ -2258,7 +2227,6 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             CtempSS.fill(0);
             for (unsigned int j = 0; j < nSpts; j++)
             {
-              CtempSS(j, j) += dFdUvisc_spts(j, ele, ni, nj, dim);
               for (unsigned int i = 0; i < nSpts; i++)
               {
                 CtempSS(i, j) += CdFddU0(i, j, dim);

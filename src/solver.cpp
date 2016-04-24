@@ -479,7 +479,7 @@ void FRSolver::solver_data_to_device()
   eles->vol_d = eles->vol;
 
   /* Implicit flux derivative data structures (element local) */
-  eles->dFdUconv_spts_d = eles->dFdUconv_spts;
+  eles->dFdU_spts_d = eles->dFdU_spts;
 
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
@@ -684,7 +684,7 @@ void FRSolver::compute_LHS()
 #ifdef _GPU
   /* Copy new dFdUconv from GPU */
   // TODO: Temporary until placed in GPU
-  eles->dFdUconv_spts = eles->dFdUconv_spts_d;
+  eles->dFdU_spts = eles->dFdU_spts_d;
 #endif
 
   if (input->viscous)
@@ -1000,7 +1000,7 @@ void FRSolver::initialize_U()
     /* Maximum number of unique matrices possible per element */
     unsigned int nMat = eles->nFaces + 1;
 
-    eles->dFdUconv_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
+    eles->dFdU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
     eles->dFcdUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
     if(input->viscous)
@@ -1008,7 +1008,6 @@ void FRSolver::initialize_U()
       nMat += eles->nFaces * (eles->nFaces - 1);
 
       // nDimsi: Fx, Fy // nDimsj: dUx, dUy
-      eles->dFdUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
       eles->dFddUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
 
       eles->dUcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});

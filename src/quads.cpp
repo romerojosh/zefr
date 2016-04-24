@@ -552,35 +552,12 @@ void Quads::transform_dFdU()
       {
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
-          double dFdUtemp = dFdUconv_spts(spt, ele, ni, nj, 0);
+          double dFdUtemp = dFdU_spts(spt, ele, ni, nj, 0);
 
-          dFdUconv_spts(spt, ele, ni, nj, 0) = dFdUconv_spts(spt, ele, ni, nj, 0) * jaco_spts(1, 1, spt, ele) -
-                                               dFdUconv_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 1, spt, ele);
-          dFdUconv_spts(spt, ele, ni, nj, 1) = dFdUconv_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 0, spt, ele) -
-                                               dFdUtemp * jaco_spts(1, 0, spt, ele);
-        }
-      }
-    }
-  }
-
-  if (input->viscous)
-  {
-#pragma omp parallel for collapse(4)
-    for (unsigned int nj = 0; nj < nVars; nj++)
-    {
-      for (unsigned int ni = 0; ni < nVars; ni++)
-      {
-        for (unsigned int ele = 0; ele < nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            double dFdUtemp = dFdUvisc_spts(spt, ele, ni, nj, 0);
-
-            dFdUvisc_spts(spt, ele, ni, nj, 0) = dFdUvisc_spts(spt, ele, ni, nj, 0) * jaco_spts(1, 1, spt, ele) -
-                                            dFdUvisc_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 1, spt, ele);
-            dFdUvisc_spts(spt, ele, ni, nj, 1) = dFdUvisc_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 0, spt, ele) -
-                                            dFdUtemp * jaco_spts(1, 0, spt, ele);
-          }
+          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * jaco_spts(1, 1, spt, ele) -
+                                           dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 1, spt, ele);
+          dFdU_spts(spt, ele, ni, nj, 1) = dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 0, spt, ele) -
+                                           dFdUtemp * jaco_spts(1, 0, spt, ele);
         }
       }
     }
