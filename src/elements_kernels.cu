@@ -75,18 +75,6 @@ void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
  
 }
 
-void compute_Fconv_spts_2D_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
-    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
-    double gamma)
-{
-  dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
-      threads.y);
-
-  compute_Fconv_spts_2D_EulerNS<<<blocks, threads>>>(F_spts, U_spts, nSpts, 
-      nEles, gamma);
-}
-
 __global__
 void compute_Fconv_spts_3D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, 
     unsigned int nSpts, unsigned int nEles, double gamma)

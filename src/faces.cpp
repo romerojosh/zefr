@@ -801,19 +801,13 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
   if (input->equation == AdvDiff)
   {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
-    //for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+#pragma omp parallel for collapse(2)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-          Fconv(fpt, n, dim, 0) = input->AdvDiff_A(dim) * U(fpt, n, 0);
-
-          Fconv(fpt, n, dim, 1) = input->AdvDiff_A(dim) * U(fpt, n, 1);
-
-        }
+        Fconv(fpt, 0, dim, 0) = input->AdvDiff_A(dim) * U(fpt, 0, 0);
+        Fconv(fpt, 0, dim, 1) = input->AdvDiff_A(dim) * U(fpt, 0, 1);
       }
     }
 #endif
@@ -826,9 +820,9 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
   }
   else if (input->equation == EulerNS)
   {
+#ifdef _CPU
     if (nDims == 2)
     {
-#ifdef _CPU
 #pragma omp parallel for collapse(2)
       //for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -858,12 +852,9 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
           Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
         }
       }
-#endif
-
     }
     else if (nDims == 3)
     {
-#ifdef _CPU
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
@@ -900,9 +891,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
           Fconv(fpt, 4, 2, slot) = U(fpt, 3, slot) * H;
         }
       }
-#endif
-
     }
+#endif
 
 #ifdef _GPU
       compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma, 
