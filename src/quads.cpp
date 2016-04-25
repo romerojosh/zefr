@@ -358,14 +358,6 @@ void Quads::set_normals(std::shared_ptr<Faces> faces)
 
       faces->norm(gfpt, 0, slot) /= faces->dA(gfpt);
       faces->norm(gfpt, 1, slot) /= faces->dA(gfpt);
-
-      unsigned int face_idx = fpt/nSpts1D;
-
-      if(face_idx == 0 || face_idx == 3)
-        faces->outnorm(gfpt, slot) = -1; 
-      else 
-        faces->outnorm(gfpt, slot) = 1; 
-
     }
   }
 

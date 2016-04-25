@@ -476,14 +476,6 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
       for (unsigned int dim = 0; dim < nDims; dim++)
         faces->norm(gfpt, dim, slot) /= faces->dA(gfpt);
 
-      unsigned int face_idx = fpt/(nSpts1D * nSpts1D);
-
-      if(face_idx == 0 || face_idx == 2 || face_idx == 4)
-        faces->outnorm(gfpt, slot) = -1; 
-      else 
-        faces->outnorm(gfpt, slot) = 1; 
-
-
     }
   }
 

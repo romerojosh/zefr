@@ -54,12 +54,12 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdv
 
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
-    mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias, mdvector_gpu<int> &bc_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
 
 void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, 
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, 
     mdvector_gpu<double> &waveSp, mdvector_gpu<int> &bc_bias, double gamma, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
 
@@ -69,7 +69,7 @@ void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> 
 
 void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, 
-    mdvector_gpu<int> &outnorm, mdvector_gpu<int> &LDG_bias, double beta, double tau, 
+    mdvector_gpu<int> &LDG_bias, double beta, double tau, 
     unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
     unsigned int startFpt, unsigned int endFpt);
 

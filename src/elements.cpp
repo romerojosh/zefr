@@ -246,9 +246,25 @@ void Elements::setup_FR()
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
+
+      /* Set positive parent sign convention into operator based on face */
+      int fac = 1;
+      if (nDims == 2) 
+      {
+        int face = fpt / nSpts1D;
+        if (face == 0 or face == 3) // Bottom and Right face
+          fac = -1;
+      }
+      else if (nDims == 3)
+      {
+        int face = fpt / (nSpts1D * nSpts1D);
+        if (face % 2 == 0) // Bottom, Left, and Front face
+          fac = -1;
+      }
+
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        oppDiv_fpts(spt, fpt) += oppD_fpts(spt, fpt, dim);
+        oppDiv_fpts(spt, fpt) += fac * oppD_fpts(spt, fpt, dim);
       }
     }
   }

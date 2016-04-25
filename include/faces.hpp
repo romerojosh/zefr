@@ -58,7 +58,6 @@ class Faces
   protected:
     mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Fcomm_temp, Ucomm, P;
     mdvector<double> norm, jaco, coord;
-    mdvector<int> outnorm;
     mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
     mdvector<int> bc_bias;
@@ -80,7 +79,6 @@ class Faces
 #ifdef _GPU
     mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, Ucomm_d, P_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
-    mdvector_gpu<int> outnorm_d;
     mdvector_gpu<double> dA_d, waveSp_d;
     mdvector_gpu<int> LDG_bias_d;
     mdvector_gpu<int> bc_bias_d;

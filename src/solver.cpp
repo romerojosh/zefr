@@ -491,7 +491,6 @@ void FRSolver::solver_data_to_device()
   faces->Fcomm_d = faces->Fcomm;
   faces->Fcomm_temp_d = faces->Fcomm_temp;
   faces->norm_d = faces->norm;
-  faces->outnorm_d = faces->outnorm;
   faces->dA_d = faces->dA;
   faces->waveSp_d = faces->waveSp;
   faces->LDG_bias_d = faces->LDG_bias;

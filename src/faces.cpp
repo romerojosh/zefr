@@ -79,7 +79,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   /* Allocate memory for geometry structures */
   norm.assign({nFpts, nDims, 2});
-  outnorm.assign({nFpts, 2});
   dA.assign({nFpts},0.0);
   jaco.assign({nFpts, nDims, nDims , 2});
 
@@ -1813,7 +1812,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, bc_bias_d, 
+    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d, bc_bias_d, 
         input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1829,7 +1828,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, outnorm_d, waveSp_d, bc_bias_d, input->gamma, 
+    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, waveSp_d, bc_bias_d, input->gamma, 
         nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1849,7 +1848,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, outnorm_d, LDG_bias_d, input->ldg_b,
+      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, LDG_bias_d, input->ldg_b,
           input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
       check_error();
@@ -1995,8 +1994,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm(fpt, n, 0) = FR[n] * outnorm(fpt, 0);
-        Fcomm(fpt, n, 1) = FR[n] * -outnorm(fpt, 1);
+        Fcomm(fpt, n, 0) = FR[n];
+        Fcomm(fpt, n, 1) = FR[n];
       }
       continue;
     }
@@ -2055,8 +2054,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n]);
 
       /* Correct for positive parent space sign convention */
-      Fcomm(fpt, n, 0) = F * outnorm(fpt, 0);
-      Fcomm(fpt, n, 1) = F * -outnorm(fpt, 1);
+      Fcomm(fpt, n, 0) = F;
+      Fcomm(fpt, n, 1) = F;
     }
   }
 }
@@ -2170,8 +2169,8 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
     /* Correct for positive parent space sign convention */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) = F[n] * outnorm(fpt, 0);
-      Fcomm(fpt, n, 1) = F[n] * -outnorm(fpt, 1);
+      Fcomm(fpt, n, 0) = F[n];
+      Fcomm(fpt, n, 1) = F[n];
     }
   }
 }
@@ -2185,7 +2184,7 @@ void Faces::transform_flux()
     for (unsigned int n = 0; n < nVars; n++)
     {
       Fcomm(fpt, n, 0) *= dA(fpt);
-      Fcomm(fpt, n, 1) *= dA(fpt);
+      Fcomm(fpt, n, 1) *= -dA(fpt); // Right state flux has opposite sign
     }
   }
 #endif
@@ -2293,8 +2292,8 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-        Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+        Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0));
+        Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0));
       }
     }
   }
@@ -2333,8 +2332,8 @@ void Faces::central_flux()
     /* Compute common normal viscous flux and accumulate */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) += (0.5 * (FL[n]+FR[n])) * outnorm(fpt, 0); 
-      Fcomm(fpt, n, 1) += (0.5 * (FL[n]+FR[n])) * -outnorm(fpt, 1); 
+      Fcomm(fpt, n, 0) += (0.5 * (FL[n]+FR[n])); 
+      Fcomm(fpt, n, 1) += (0.5 * (FL[n]+FR[n])); 
     }
   }
 }
@@ -2859,10 +2858,10 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
           dFcdU(fpt, ni, nj, 0, 0) = 0;
-          dFcdU(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj);
 
           dFcdU(fpt, ni, nj, 0, 1) = 0;
-          dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj);
         }
       }
       continue;
@@ -2992,19 +2991,19 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         if (ni == nj)
         {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k));
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k));
 
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k));
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k));
         }
         else
         {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * outnorm(fpt, 0);
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k));
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k));
 
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * -outnorm(fpt, 1);
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k));
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k));
         }
       }
     }
@@ -3160,19 +3159,6 @@ void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
     else
     {
       ThrowException("Roe flux not implemented for this equation type!");
-    }
-
-    /* Correct for positive parent space sign convention */
-    for (unsigned int slot = 0; slot < 2; slot++)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFcdU(fpt, ni, nj, slot, 0) *= outnorm(fpt, 0);
-          dFcdU(fpt, ni, nj, slot, 1) *= -outnorm(fpt, 1);
-        }
-      }
     }
   }
 }
@@ -3332,8 +3318,8 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFcdU(fpt, ni, nj, slot, 0) += dFcdU_temp(fpt, ni, nj, slot) * outnorm(fpt, 0);
-          dFcdU(fpt, ni, nj, slot, 1) += dFcdU_temp(fpt, ni, nj, slot) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, slot, 0) += dFcdU_temp(fpt, ni, nj, slot);
+          dFcdU(fpt, ni, nj, slot, 1) += dFcdU_temp(fpt, ni, nj, slot);
         }
       }
     }
@@ -3347,8 +3333,8 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFcddU(fpt, ni, nj, dim, slot, 0) = dFcddU_temp(fpt, ni, nj, dim, slot) * outnorm(fpt, 0);
-            dFcddU(fpt, ni, nj, dim, slot, 1) = dFcddU_temp(fpt, ni, nj, dim, slot) * -outnorm(fpt, 1);
+            dFcddU(fpt, ni, nj, dim, slot, 0) = dFcddU_temp(fpt, ni, nj, dim, slot);
+            dFcddU(fpt, ni, nj, dim, slot, 1) = dFcddU_temp(fpt, ni, nj, dim, slot);
           }
         }
       }
@@ -3359,18 +3345,16 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 void Faces::transform_dFcdU()
 {
 #pragma omp parallel for collapse(5)
-  for (unsigned int slotj = 0; slotj < 2; slotj++)
+  for (unsigned int slot = 0; slot < 2; slot++)
   {
-    for (unsigned int sloti = 0; sloti < 2; sloti++)
+    for (unsigned int nj = 0; nj < nVars; nj++)
     {
-      for (unsigned int nj = 0; nj < nVars; nj++)
+      for (unsigned int ni = 0; ni < nVars; ni++)
       {
-        for (unsigned int ni = 0; ni < nVars; ni++)
+        for (unsigned int fpt = 0; fpt < nFpts; fpt++)
         {
-          for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-          {
-            dFcdU(fpt, ni, nj, sloti, slotj) *= dA(fpt);
-          }
+          dFcdU(fpt, ni, nj, slot, 0) *= dA(fpt);
+          dFcdU(fpt, ni, nj, slot, 1) *= -dA(fpt);
         }
       }
     }
@@ -3379,20 +3363,18 @@ void Faces::transform_dFcdU()
   if (input->viscous)
   {
 #pragma omp parallel for collapse(6)
-    for (unsigned int slotj = 0; slotj < 2; slotj++)
+    for (unsigned int slot = 0; slot < 2; slot++)
     {
-      for (unsigned int sloti = 0; sloti < 2; sloti++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          for (unsigned int nj = 0; nj < nVars; nj++)
+          for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            for (unsigned int ni = 0; ni < nVars; ni++)
+            for (unsigned int fpt = 0; fpt < nFpts; fpt++)
             {
-              for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-              {
-                dFcddU(fpt, ni, nj, dim, sloti, slotj) *= dA(fpt);
-              }
+              dFcddU(fpt, ni, nj, dim, slot, 0) *= dA(fpt);
+              dFcddU(fpt, ni, nj, dim, slot, 1) *= -dA(fpt);
             }
           }
         }
