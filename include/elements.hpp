@@ -64,8 +64,8 @@ class Elements
     mdvector<double> LHS_copy;
     mdvector<int> LU_pivots, LU_info; 
     mdvector<double*> LHS_ptrs, RHS_ptrs; 
-    mdvector<double> dFdU_spts, dFddUvisc_spts;
-    mdvector<double> dFcdUconv_fpts, dUcdU_fpts, dFcdUvisc_fpts, dFcddUvisc_fpts;
+    mdvector<double> dFdU_spts, dFddU_spts;
+    mdvector<double> dFcdU_fpts, dUcdU_fpts, dFcddU_fpts;
     mdvector<double> deltaU;
     mdvector<double> RHS;
 

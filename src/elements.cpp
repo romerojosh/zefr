@@ -1054,10 +1054,10 @@ void Elements::compute_dFddUvisc()
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
-            dFddUvisc_spts(spt, ele, ni, nj, 0, 0) = -input->AdvDiff_D;
-            dFddUvisc_spts(spt, ele, ni, nj, 1, 0) = 0;
-            dFddUvisc_spts(spt, ele, ni, nj, 0, 1) = 0;
-            dFddUvisc_spts(spt, ele, ni, nj, 1, 1) = -input->AdvDiff_D;
+            dFddU_spts(spt, ele, ni, nj, 0, 0) = -input->AdvDiff_D;
+            dFddU_spts(spt, ele, ni, nj, 1, 0) = 0;
+            dFddU_spts(spt, ele, ni, nj, 0, 1) = 0;
+            dFddU_spts(spt, ele, ni, nj, 1, 1) = -input->AdvDiff_D;
           }
         }
       }
@@ -1084,88 +1084,88 @@ void Elements::compute_dFddUvisc()
           double diffCo2 = input->gamma * input->mu / (input->prandtl * rho);
 
           /* Set viscous dFxddUx values */
-          dFddUvisc_spts(spt, ele, 0, 0, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 0, 0, 0) = -4.0/3.0 * u * diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 0, 0, 0) = -v * diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 0, 0, 0) = -(4.0/3.0 * u*u + v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+          dFddU_spts(spt, ele, 0, 0, 0, 0) = 0;
+          dFddU_spts(spt, ele, 1, 0, 0, 0) = -4.0/3.0 * u * diffCo1;
+          dFddU_spts(spt, ele, 2, 0, 0, 0) = -v * diffCo1;
+          dFddU_spts(spt, ele, 3, 0, 0, 0) = -(4.0/3.0 * u*u + v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
 
-          dFddUvisc_spts(spt, ele, 0, 1, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 1, 0, 0) = 4.0/3.0 * diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 1, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 3, 1, 0, 0) = u * (4.0/3.0 * diffCo1 - diffCo2);
+          dFddU_spts(spt, ele, 0, 1, 0, 0) = 0;
+          dFddU_spts(spt, ele, 1, 1, 0, 0) = 4.0/3.0 * diffCo1;
+          dFddU_spts(spt, ele, 2, 1, 0, 0) = 0;
+          dFddU_spts(spt, ele, 3, 1, 0, 0) = u * (4.0/3.0 * diffCo1 - diffCo2);
 
-          dFddUvisc_spts(spt, ele, 0, 2, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 2, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 2, 2, 0, 0) = diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 2, 0, 0) = v * (diffCo1 - diffCo2);
+          dFddU_spts(spt, ele, 0, 2, 0, 0) = 0;
+          dFddU_spts(spt, ele, 1, 2, 0, 0) = 0;
+          dFddU_spts(spt, ele, 2, 2, 0, 0) = diffCo1;
+          dFddU_spts(spt, ele, 3, 2, 0, 0) = v * (diffCo1 - diffCo2);
 
-          dFddUvisc_spts(spt, ele, 0, 3, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 3, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 2, 3, 0, 0) = 0;
-          dFddUvisc_spts(spt, ele, 3, 3, 0, 0) = diffCo2;
+          dFddU_spts(spt, ele, 0, 3, 0, 0) = 0;
+          dFddU_spts(spt, ele, 1, 3, 0, 0) = 0;
+          dFddU_spts(spt, ele, 2, 3, 0, 0) = 0;
+          dFddU_spts(spt, ele, 3, 3, 0, 0) = diffCo2;
 
           /* Set viscous dFyddUx values */
-          dFddUvisc_spts(spt, ele, 0, 0, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 0, 1, 0) = -v * diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 0, 1, 0) = 2.0/3.0 * u * diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 0, 1, 0) = -1.0/3.0 * u * v * diffCo1;
+          dFddU_spts(spt, ele, 0, 0, 1, 0) = 0;
+          dFddU_spts(spt, ele, 1, 0, 1, 0) = -v * diffCo1;
+          dFddU_spts(spt, ele, 2, 0, 1, 0) = 2.0/3.0 * u * diffCo1;
+          dFddU_spts(spt, ele, 3, 0, 1, 0) = -1.0/3.0 * u * v * diffCo1;
 
-          dFddUvisc_spts(spt, ele, 0, 1, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 1, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 2, 1, 1, 0) = -2.0/3.0 * diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 1, 1, 0) = -2.0/3.0 * v * diffCo1;
+          dFddU_spts(spt, ele, 0, 1, 1, 0) = 0;
+          dFddU_spts(spt, ele, 1, 1, 1, 0) = 0;
+          dFddU_spts(spt, ele, 2, 1, 1, 0) = -2.0/3.0 * diffCo1;
+          dFddU_spts(spt, ele, 3, 1, 1, 0) = -2.0/3.0 * v * diffCo1;
 
-          dFddUvisc_spts(spt, ele, 0, 2, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 2, 1, 0) = diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 2, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 3, 2, 1, 0) = u * diffCo1;
+          dFddU_spts(spt, ele, 0, 2, 1, 0) = 0;
+          dFddU_spts(spt, ele, 1, 2, 1, 0) = diffCo1;
+          dFddU_spts(spt, ele, 2, 2, 1, 0) = 0;
+          dFddU_spts(spt, ele, 3, 2, 1, 0) = u * diffCo1;
 
-          dFddUvisc_spts(spt, ele, 0, 3, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 1, 3, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 2, 3, 1, 0) = 0;
-          dFddUvisc_spts(spt, ele, 3, 3, 1, 0) = 0;
+          dFddU_spts(spt, ele, 0, 3, 1, 0) = 0;
+          dFddU_spts(spt, ele, 1, 3, 1, 0) = 0;
+          dFddU_spts(spt, ele, 2, 3, 1, 0) = 0;
+          dFddU_spts(spt, ele, 3, 3, 1, 0) = 0;
 
           /* Set viscous dFxddUy values */
-          dFddUvisc_spts(spt, ele, 0, 0, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 0, 0, 1) = 2.0/3.0 * v * diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 0, 0, 1) = -u * diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 0, 0, 1) = -1.0/3.0 * u * v * diffCo1;
+          dFddU_spts(spt, ele, 0, 0, 0, 1) = 0;
+          dFddU_spts(spt, ele, 1, 0, 0, 1) = 2.0/3.0 * v * diffCo1;
+          dFddU_spts(spt, ele, 2, 0, 0, 1) = -u * diffCo1;
+          dFddU_spts(spt, ele, 3, 0, 0, 1) = -1.0/3.0 * u * v * diffCo1;
 
-          dFddUvisc_spts(spt, ele, 0, 1, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 1, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 2, 1, 0, 1) = diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 1, 0, 1) = v * diffCo1;
+          dFddU_spts(spt, ele, 0, 1, 0, 1) = 0;
+          dFddU_spts(spt, ele, 1, 1, 0, 1) = 0;
+          dFddU_spts(spt, ele, 2, 1, 0, 1) = diffCo1;
+          dFddU_spts(spt, ele, 3, 1, 0, 1) = v * diffCo1;
 
-          dFddUvisc_spts(spt, ele, 0, 2, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 2, 0, 1) = -2.0/3.0 * diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 2, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 3, 2, 0, 1) = -2.0/3.0 * u * diffCo1;
+          dFddU_spts(spt, ele, 0, 2, 0, 1) = 0;
+          dFddU_spts(spt, ele, 1, 2, 0, 1) = -2.0/3.0 * diffCo1;
+          dFddU_spts(spt, ele, 2, 2, 0, 1) = 0;
+          dFddU_spts(spt, ele, 3, 2, 0, 1) = -2.0/3.0 * u * diffCo1;
 
-          dFddUvisc_spts(spt, ele, 0, 3, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 3, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 2, 3, 0, 1) = 0;
-          dFddUvisc_spts(spt, ele, 3, 3, 0, 1) = 0;
+          dFddU_spts(spt, ele, 0, 3, 0, 1) = 0;
+          dFddU_spts(spt, ele, 1, 3, 0, 1) = 0;
+          dFddU_spts(spt, ele, 2, 3, 0, 1) = 0;
+          dFddU_spts(spt, ele, 3, 3, 0, 1) = 0;
 
           /* Set viscous dFyddUy values */
-          dFddUvisc_spts(spt, ele, 0, 0, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 0, 1, 1) = -u * diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 0, 1, 1) = -4.0/3.0 * v * diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 0, 1, 1) = -(u*u + 4.0/3.0 * v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+          dFddU_spts(spt, ele, 0, 0, 1, 1) = 0;
+          dFddU_spts(spt, ele, 1, 0, 1, 1) = -u * diffCo1;
+          dFddU_spts(spt, ele, 2, 0, 1, 1) = -4.0/3.0 * v * diffCo1;
+          dFddU_spts(spt, ele, 3, 0, 1, 1) = -(u*u + 4.0/3.0 * v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
 
-          dFddUvisc_spts(spt, ele, 0, 1, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 1, 1, 1) = diffCo1;
-          dFddUvisc_spts(spt, ele, 2, 1, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 3, 1, 1, 1) = u * (diffCo1 - diffCo2);
+          dFddU_spts(spt, ele, 0, 1, 1, 1) = 0;
+          dFddU_spts(spt, ele, 1, 1, 1, 1) = diffCo1;
+          dFddU_spts(spt, ele, 2, 1, 1, 1) = 0;
+          dFddU_spts(spt, ele, 3, 1, 1, 1) = u * (diffCo1 - diffCo2);
 
-          dFddUvisc_spts(spt, ele, 0, 2, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 2, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 2, 2, 1, 1) = 4.0/3.0 * diffCo1;
-          dFddUvisc_spts(spt, ele, 3, 2, 1, 1) = v * (4.0/3.0 * diffCo1 - diffCo2);
+          dFddU_spts(spt, ele, 0, 2, 1, 1) = 0;
+          dFddU_spts(spt, ele, 1, 2, 1, 1) = 0;
+          dFddU_spts(spt, ele, 2, 2, 1, 1) = 4.0/3.0 * diffCo1;
+          dFddU_spts(spt, ele, 3, 2, 1, 1) = v * (4.0/3.0 * diffCo1 - diffCo2);
 
-          dFddUvisc_spts(spt, ele, 0, 3, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 1, 3, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 2, 3, 1, 1) = 0;
-          dFddUvisc_spts(spt, ele, 3, 3, 1, 1) = diffCo2;
+          dFddU_spts(spt, ele, 0, 3, 1, 1) = 0;
+          dFddU_spts(spt, ele, 1, 3, 1, 1) = 0;
+          dFddU_spts(spt, ele, 2, 3, 1, 1) = 0;
+          dFddU_spts(spt, ele, 3, 3, 1, 1) = diffCo2;
         }
       }
     }
@@ -1214,7 +1214,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
           ele_list.push_back(eleN);
         }
 
-        /* Add contribution from inviscid flux boundary condition */
+        /* Add contribution from boundary conditions (dFcdU) */
         for (unsigned int face = 0; face < nFaces; face++)
         {
           int eleN = geo->ele_adj(face, ele);
@@ -1223,7 +1223,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
             for (unsigned int i = 0; i < nSpts1D; i++)
             {
               unsigned int ind = face * nSpts1D + i;
-              dFcdUconv_fpts(ind, ele, ni, nj, 0) += dFcdUconv_fpts(ind, ele, ni, nj, 1);
+              dFcdU_fpts(ind, ele, ni, nj, 0) += dFcdU_fpts(ind, ele, ni, nj, 1);
             }
           }
         }
@@ -1235,7 +1235,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
         {
           for (unsigned int i = 0; i < nFpts; i++)
           {
-            CtempFS(i, j) = dFcdUconv_fpts(i, ele, ni, nj, 0) * oppE(i, j);
+            CtempFS(i, j) = dFcdU_fpts(i, ele, ni, nj, 0) * oppE(i, j);
           }
         }
 
@@ -1275,7 +1275,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
               {
                 unsigned int ind = face * nSpts1D + i;
                 unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                CtempFSN(i, j) = dFcdUconv_fpts(ind, ele, ni, nj, 1) * oppE(indN, j);
+                CtempFSN(i, j) = dFcdU_fpts(ind, ele, ni, nj, 1) * oppE(indN, j);
               }
             }
 
@@ -1299,24 +1299,18 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
         /* Compute viscous LHS implicit Jacobians */
         if (input->viscous)
         {
-          /* Add contribution from viscous flux boundary conditions */
+          /* Add contribution from boundary conditions (dFcddU) */
           for (unsigned int face = 0; face < nFaces; face++)
           {
             int eleN = geo->ele_adj(face, ele);
             if (eleN == -1)
             {
-              for (unsigned int i = 0; i < nSpts1D; i++)
-              {
-                unsigned int ind = face * nSpts1D + i;
-                dFcdUvisc_fpts(ind, ele, ni, nj, 0) += dFcdUvisc_fpts(ind, ele, ni, nj, 1);
-              }
-
               for (unsigned int dim = 0; dim < nDims; dim++)
               {
                 for (unsigned int i = 0; i < nSpts1D; i++)
                 {
                   unsigned int ind = face * nSpts1D + i;
-                  dFcddUvisc_fpts(ind, ele, ni, nj, dim, 0) += dFcddUvisc_fpts(ind, ele, ni, nj, dim, 1);
+                  dFcddU_fpts(ind, ele, ni, nj, dim, 0) += dFcddU_fpts(ind, ele, ni, nj, dim, 1);
                 }
               }
             }
@@ -1474,7 +1468,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
               {
                 for (unsigned int i = 0; i < nSpts; i++)
                 {
-                  CdFddU0(i, j, dimi) += dFddUvisc_spts(i, ele, ni, nj, dimi, dimj) * Cvisc0(i, j, dimj);
+                  CdFddU0(i, j, dimi) += dFddU_spts(i, ele, ni, nj, dimi, dimj) * Cvisc0(i, j, dimj);
                 }
               }
             }
@@ -1493,7 +1487,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
                 {
                   for (unsigned int i = 0; i < nSpts; i++)
                   {
-                    CdFddUN(i, j, dimi, face) += dFddUvisc_spts(i, ele, ni, nj, dimi, dimj) * CviscN(i, j, dimj, face);
+                    CdFddUN(i, j, dimi, face) += dFddU_spts(i, ele, ni, nj, dimi, dimj) * CviscN(i, j, dimj, face);
                   }
                 }
               }
@@ -1562,14 +1556,6 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
 
           /* (Center) Term 2 */
           CtempFS.fill(0);
-          for (unsigned int j = 0; j < nSpts; j++)
-          {
-            for (unsigned int i = 0; i < nFpts; i++)
-            {
-              CtempFS(i, j) += dFcdUvisc_fpts(i, ele, ni, nj, 0) * oppE(i, j);
-            }
-          }
-
           for (unsigned int dim = 0; dim < nDims; dim++)
           {
             CtempFS2.fill(0);
@@ -1577,7 +1563,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
             {
               for (unsigned int i = 0; i < nFpts; i++)
               {
-                CtempFS2(i, j) += dFcddUvisc_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
+                CtempFS2(i, j) += dFcddU_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
               }
             }
 
@@ -1640,7 +1626,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
                 {
                   for (unsigned int i = 0; i < nFpts; i++)
                   {
-                    CtempFS2(i, j) += dFcddUvisc_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
+                    CtempFS2(i, j) += dFcddU_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
                   }
                 }
 
@@ -1829,16 +1815,6 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
               /* Neighbors contribution to viscous LHS */
               /* (Neighbor Center) Term 1 */
               CtempFSN.fill(0);
-              for (unsigned int j = 0; j < nSpts; j++)
-              {
-                for (unsigned int i = 0; i < nSpts1D; i++)
-                {
-                  unsigned int ind = face * nSpts1D + i;
-                  unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                  CtempFSN(i, j) += dFcdUvisc_fpts(ind, ele, ni, nj, 1) * oppE(indN, j);
-                }
-              }
-
               for (unsigned int dim = 0; dim < nDims; dim++)
               {
                 CtempFSN2.fill(0);
@@ -1848,7 +1824,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
                   {
                     unsigned int ind = face * nSpts1D + i;
                     unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                    CtempFSN2(i, j) += dFcddUvisc_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
+                    CtempFSN2(i, j) += dFcddU_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
                   }
                 }
 
@@ -1911,7 +1887,7 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
                       {
                         unsigned int ind = face * nSpts1D + i;
                         unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                        CtempFSN2(i, j) += dFcddUvisc_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
+                        CtempFSN2(i, j) += dFcddU_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
                       }
                     }
 
@@ -2050,7 +2026,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
     {
       for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        /* Add contribution from inviscid flux boundary condition */
+        /* Add contribution from boundary conditions (dFcdU) */
         for (unsigned int face = 0; face < nFaces; face++)
         {
           int eleN = geo->ele_adj(face, ele);
@@ -2059,7 +2035,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             for (unsigned int i = 0; i < nSpts1D; i++)
             {
               unsigned int ind = face * nSpts1D + i;
-              dFcdUconv_fpts(ind, ele, ni, nj, 0) += dFcdUconv_fpts(ind, ele, ni, nj, 1);
+              dFcdU_fpts(ind, ele, ni, nj, 0) += dFcdU_fpts(ind, ele, ni, nj, 1);
             }
           }
         }
@@ -2077,7 +2053,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
         }
 
         auto *A = &oppDiv_fpts(0, 0);
-        auto *B = &dFcdUconv_fpts(0, ele, ni, nj, 0);
+        auto *B = &dFcdU_fpts(0, ele, ni, nj, 0);
         auto *C = &CtempSF(0, 0);
         dgmm(nSpts, nFpts, 1, A, nSpts, B, 0, 0, C, nSpts);
 
@@ -2095,18 +2071,12 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             int eleN = geo->ele_adj(face, ele);
             if (eleN == -1)
             {
-              for (unsigned int i = 0; i < nSpts1D; i++)
-              {
-                unsigned int ind = face * nSpts1D + i;
-                dFcdUvisc_fpts(ind, ele, ni, nj, 0) += dFcdUvisc_fpts(ind, ele, ni, nj, 1);
-              }
-
               for (unsigned int dim = 0; dim < nDims; dim++)
               {
                 for (unsigned int i = 0; i < nSpts1D; i++)
                 {
                   unsigned int ind = face * nSpts1D + i;
-                  dFcddUvisc_fpts(ind, ele, ni, nj, dim, 0) += dFcddUvisc_fpts(ind, ele, ni, nj, dim, 1);
+                  dFcddU_fpts(ind, ele, ni, nj, dim, 0) += dFcddU_fpts(ind, ele, ni, nj, dim, 1);
                 }
               }
             }
@@ -2200,7 +2170,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
               {
                 for (unsigned int i = 0; i < nSpts; i++)
                 {
-                  CdFddU0(i, j, dimi) += dFddUvisc_spts(i, ele, ni, nj, dimi, dimj) * Cvisc0(i, j, dimj);
+                  CdFddU0(i, j, dimi) += dFddU_spts(i, ele, ni, nj, dimi, dimj) * Cvisc0(i, j, dimj);
                 }
               }
             }
@@ -2247,14 +2217,6 @@ void Elements::compute_localLHS(mdvector<double> &dt)
 
           /* (Center) Term 2 */
           CtempFS.fill(0);
-          for (unsigned int j = 0; j < nSpts; j++)
-          {
-            for (unsigned int i = 0; i < nFpts; i++)
-            {
-              CtempFS(i, j) += dFcdUvisc_fpts(i, ele, ni, nj, 0) * oppE(i, j);
-            }
-          }
-
           for (unsigned int dim = 0; dim < nDims; dim++)
           {
             CtempFS2.fill(0);
@@ -2262,7 +2224,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             {
               for (unsigned int i = 0; i < nFpts; i++)
               {
-                CtempFS2(i, j) += dFcddUvisc_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
+                CtempFS2(i, j) += dFcddU_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
               }
             }
 
@@ -2372,7 +2334,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
                       {
                         unsigned int ind = face * nSpts1D + i;
                         unsigned int indN = (faceN+1) * nSpts1D - (i+1);
-                        CtempFSN2(i, j) += dFcddUvisc_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
+                        CtempFSN2(i, j) += dFcddU_fpts(ind, ele, ni, nj, dim, 1) * oppE(indN, j);
                       }
                     }
 

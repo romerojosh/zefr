@@ -1001,18 +1001,17 @@ void FRSolver::initialize_U()
     unsigned int nMat = eles->nFaces + 1;
 
     eles->dFdU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
-    eles->dFcdUconv_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
+    eles->dFcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
     if(input->viscous)
     {
       nMat += eles->nFaces * (eles->nFaces - 1);
 
-      // nDimsi: Fx, Fy // nDimsj: dUx, dUy
-      eles->dFddUvisc_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
-
       eles->dUcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
-      eles->dFcdUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
-      eles->dFcddUvisc_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
+
+      /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
+      eles->dFddU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
+      eles->dFcddU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
     }
 
     if (input->dt_scheme == "BDF1")
@@ -1277,8 +1276,8 @@ void FRSolver::dFcdU_from_faces()
             notslot = 0;
           }
 
-          eles->dFcdUconv_fpts(fpt, ele, ni, nj, 0) = faces->dFcdUconv(gfpt, ni, nj, slot, slot);
-          eles->dFcdUconv_fpts(fpt, ele, ni, nj, 1) = faces->dFcdUconv(gfpt, ni, nj, notslot, slot);
+          eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
+          eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
         }
       }
     }
@@ -1309,13 +1308,10 @@ void FRSolver::dFcdU_from_faces()
             eles->dUcdU_fpts(fpt, ele, ni, nj, 0) = faces->dUcdU(gfpt, ni, nj, slot);
             eles->dUcdU_fpts(fpt, ele, ni, nj, 1) = faces->dUcdU(gfpt, ni, nj, notslot);
 
-            eles->dFcdUvisc_fpts(fpt, ele, ni, nj, 0) = faces->dFcdUvisc(gfpt, ni, nj, slot, slot);
-            eles->dFcdUvisc_fpts(fpt, ele, ni, nj, 1) = faces->dFcdUvisc(gfpt, ni, nj, notslot, slot);
-
             for (unsigned int dim = 0; dim < eles->nDims; dim++)
             {
-              eles->dFcddUvisc_fpts(fpt, ele, ni, nj, dim, 0) = faces->dFcddUvisc(gfpt, ni, nj, dim, slot, slot);
-              eles->dFcddUvisc_fpts(fpt, ele, ni, nj, dim, 1) = faces->dFcddUvisc(gfpt, ni, nj, dim, notslot, slot);
+              eles->dFcddU_fpts(fpt, ele, ni, nj, dim, 0) = faces->dFcddU(gfpt, ni, nj, dim, slot, slot);
+              eles->dFcddU_fpts(fpt, ele, ni, nj, dim, 1) = faces->dFcddU(gfpt, ni, nj, dim, notslot, slot);
             }
           }
         }

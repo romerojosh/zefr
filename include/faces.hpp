@@ -65,7 +65,7 @@ class Faces
 
     /* Structures for implicit method */
     mdvector<double> dFdUconv, dFdUvisc, dFddUvisc; 
-    mdvector<double> dFcdUconv, dUcdU, dFcdUvisc, dFcddUvisc;
+    mdvector<double> dFcdU, dUcdU, dFcddU;
     mdvector<double> dFndUL_temp, dFndUR_temp, dFnddUL_temp, dFnddUR_temp;
     mdvector<double> dFcdU_temp, dFcddU_temp;
 

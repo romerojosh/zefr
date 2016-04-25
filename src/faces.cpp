@@ -37,20 +37,19 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   {
     dFdUconv.assign({nFpts, nVars, nVars, nDims, 2});
 
-    dFcdUconv.assign({nFpts, nVars, nVars, 2, 2});
+    dFcdU.assign({nFpts, nVars, nVars, 2, 2});
 
     dFndUL_temp.assign({nFpts, nVars, nVars});
     dFndUR_temp.assign({nFpts, nVars, nVars});
 
     if(input->viscous)
     {
-      // nDimsi: Fx, Fy // nDimsj: dUdx, dUdy
+      /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
       dFdUvisc.assign({nFpts, nVars, nVars, nDims, 2});
       dFddUvisc.assign({nFpts, nVars, nVars, nDims, nDims, 2});
 
       dUcdU.assign({nFpts, nVars, nVars, 2});
-      dFcdUvisc.assign({nFpts, nVars, nVars, 2, 2});
-      dFcddUvisc.assign({nFpts, nVars, nVars, nDims, 2, 2});
+      dFcddU.assign({nFpts, nVars, nVars, nDims, 2, 2});
 
       dFnddUL_temp.assign({nFpts, nVars, nVars, nDims});
       dFnddUR_temp.assign({nFpts, nVars, nVars, nDims});
@@ -2836,11 +2835,11 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFcdUconv(fpt, ni, nj, 0, 0) = 0;
-          dFcdUconv(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 0, 0) = 0;
+          dFcdU(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj) * outnorm(fpt, 0);
 
-          dFcdUconv(fpt, ni, nj, 0, 1) = 0;
-          dFcdUconv(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 0, 1) = 0;
+          dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj) * -outnorm(fpt, 1);
         }
       }
       continue;
@@ -2970,19 +2969,19 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         if (ni == nj)
         {
-          dFcdUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
-          dFcdUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * outnorm(fpt, 0);
 
-          dFcdUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
-          dFcdUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k)) * -outnorm(fpt, 1);
         }
         else
         {
-          dFcdUconv(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * outnorm(fpt, 0);
-          dFcdUconv(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * outnorm(fpt, 0);
 
-          dFcdUconv(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * -outnorm(fpt, 1);
-          dFcdUconv(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k)) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k)) * -outnorm(fpt, 1);
         }
       }
     }
@@ -3091,46 +3090,46 @@ void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
       /* Compute common dFdU */
       for (unsigned int slot = 0; slot < 2; slot++)
       {
-        dFcdUconv(fpt, 0, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 0) + (1.0-k) * (lambda0 + aL1[0]);
-        dFcdUconv(fpt, 0, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 1) + (1.0-k) * (aL1[1]);
-        dFcdUconv(fpt, 0, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 2) + (1.0-k) * (aL1[2]);
-        dFcdUconv(fpt, 0, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 3) + (1.0-k) * (aL1[3]);
+        dFcdU(fpt, 0, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 0) + (1.0-k) * (lambda0 + aL1[0]);
+        dFcdU(fpt, 0, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 1) + (1.0-k) * (aL1[1]);
+        dFcdU(fpt, 0, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 2) + (1.0-k) * (aL1[2]);
+        dFcdU(fpt, 0, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 3) + (1.0-k) * (aL1[3]);
 
-        dFcdUconv(fpt, 1, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 0) + (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
-        dFcdUconv(fpt, 1, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 1) + (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
-        dFcdUconv(fpt, 1, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 2) + (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
-        dFcdUconv(fpt, 1, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 3) + (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 0) + (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 1) + (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 2) + (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 3) + (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
 
-        dFcdUconv(fpt, 2, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 0) + (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
-        dFcdUconv(fpt, 2, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 1) + (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
-        dFcdUconv(fpt, 2, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 2) + (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
-        dFcdUconv(fpt, 2, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 3) + (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 0) + (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 1) + (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 2) + (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 3) + (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
 
-        dFcdUconv(fpt, 3, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 0) + (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
-        dFcdUconv(fpt, 3, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 1) + (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
-        dFcdUconv(fpt, 3, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 2) + (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
-        dFcdUconv(fpt, 3, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 3) + (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
+        dFcdU(fpt, 3, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 0) + (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
+        dFcdU(fpt, 3, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 1) + (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
+        dFcdU(fpt, 3, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 2) + (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
+        dFcdU(fpt, 3, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 3) + (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
 
 
-        dFcdUconv(fpt, 0, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 0) - (1.0-k) * (lambda0 + aL1[0]);
-        dFcdUconv(fpt, 0, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 1) - (1.0-k) * (aL1[1]);
-        dFcdUconv(fpt, 0, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 2) - (1.0-k) * (aL1[2]);
-        dFcdUconv(fpt, 0, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 3) - (1.0-k) * (aL1[3]);
+        dFcdU(fpt, 0, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 0) - (1.0-k) * (lambda0 + aL1[0]);
+        dFcdU(fpt, 0, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 1) - (1.0-k) * (aL1[1]);
+        dFcdU(fpt, 0, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 2) - (1.0-k) * (aL1[2]);
+        dFcdU(fpt, 0, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 3) - (1.0-k) * (aL1[3]);
 
-        dFcdUconv(fpt, 1, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 0) - (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
-        dFcdUconv(fpt, 1, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 1) - (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
-        dFcdUconv(fpt, 1, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 2) - (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
-        dFcdUconv(fpt, 1, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 3) - (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 0) - (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 1) - (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 2) - (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
+        dFcdU(fpt, 1, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 3) - (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
 
-        dFcdUconv(fpt, 2, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 0) - (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
-        dFcdUconv(fpt, 2, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 1) - (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
-        dFcdUconv(fpt, 2, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 2) - (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
-        dFcdUconv(fpt, 2, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 3) - (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 0) - (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 1) - (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 2) - (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
+        dFcdU(fpt, 2, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 3) - (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
 
-        dFcdUconv(fpt, 3, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 0) - (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
-        dFcdUconv(fpt, 3, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 1) - (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
-        dFcdUconv(fpt, 3, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 2) - (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
-        dFcdUconv(fpt, 3, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 3) - (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
+        dFcdU(fpt, 3, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 0) - (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
+        dFcdU(fpt, 3, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 1) - (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
+        dFcdU(fpt, 3, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 2) - (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
+        dFcdU(fpt, 3, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 3) - (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
       }
 
       waveSp(fpt) = std::max(std::max(lambda0, lambdaP), lambdaM);
@@ -3147,8 +3146,8 @@ void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFcdUconv(fpt, ni, nj, slot, 0) *= outnorm(fpt, 0);
-          dFcdUconv(fpt, ni, nj, slot, 1) *= -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, slot, 0) *= outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, slot, 1) *= -outnorm(fpt, 1);
         }
       }
     }
@@ -3310,8 +3309,8 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFcdUvisc(fpt, ni, nj, slot, 0) = dFcdU_temp(fpt, ni, nj, slot) * outnorm(fpt, 0);
-          dFcdUvisc(fpt, ni, nj, slot, 1) = dFcdU_temp(fpt, ni, nj, slot) * -outnorm(fpt, 1);
+          dFcdU(fpt, ni, nj, slot, 0) += dFcdU_temp(fpt, ni, nj, slot) * outnorm(fpt, 0);
+          dFcdU(fpt, ni, nj, slot, 1) += dFcdU_temp(fpt, ni, nj, slot) * -outnorm(fpt, 1);
         }
       }
     }
@@ -3325,8 +3324,8 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFcddUvisc(fpt, ni, nj, dim, slot, 0) = dFcddU_temp(fpt, ni, nj, dim, slot) * outnorm(fpt, 0);
-            dFcddUvisc(fpt, ni, nj, dim, slot, 1) = dFcddU_temp(fpt, ni, nj, dim, slot) * -outnorm(fpt, 1);
+            dFcddU(fpt, ni, nj, dim, slot, 0) = dFcddU_temp(fpt, ni, nj, dim, slot) * outnorm(fpt, 0);
+            dFcddU(fpt, ni, nj, dim, slot, 1) = dFcddU_temp(fpt, ni, nj, dim, slot) * -outnorm(fpt, 1);
           }
         }
       }
@@ -3347,7 +3346,7 @@ void Faces::transform_dFcdU()
         {
           for (unsigned int fpt = 0; fpt < nFpts; fpt++)
           {
-            dFcdUconv(fpt, ni, nj, sloti, slotj) *= dA(fpt);
+            dFcdU(fpt, ni, nj, sloti, slotj) *= dA(fpt);
           }
         }
       }
@@ -3356,24 +3355,6 @@ void Faces::transform_dFcdU()
 
   if (input->viscous)
   {
-#pragma omp parallel for collapse(5)
-    for (unsigned int slotj = 0; slotj < 2; slotj++)
-    {
-      for (unsigned int sloti = 0; sloti < 2; sloti++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-            {
-              dFcdUvisc(fpt, ni, nj, sloti, slotj) *= dA(fpt);
-            }
-          }
-        }
-      }
-    }
-
 #pragma omp parallel for collapse(6)
     for (unsigned int slotj = 0; slotj < 2; slotj++)
     {
@@ -3387,7 +3368,7 @@ void Faces::transform_dFcdU()
             {
               for (unsigned int fpt = 0; fpt < nFpts; fpt++)
               {
-                dFcddUvisc(fpt, ni, nj, dim, sloti, slotj) *= dA(fpt);
+                dFcddU(fpt, ni, nj, dim, sloti, slotj) *= dA(fpt);
               }
             }
           }
