@@ -1582,7 +1582,6 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
       check_error();
 #endif
   }
-
 }
 
 void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
@@ -2345,6 +2344,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(5)
     for (unsigned int slot = 0; slot < 2; slot++)
     { 
@@ -2362,10 +2362,19 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
         }
       }
     }
+#endif
+
+#ifdef _GPU
+    compute_dFdUconv_fpts_AdvDiff_wrapper(dFdUconv_d, nFpts, nDims, input->AdvDiff_A_d,
+        startFpt, endFpt);
+    check_error();
+#endif
+
   }
 
   else if (input->equation == Burgers)
   {
+#ifdef _CPU
 #pragma omp parallel for collapse(5)
     for (unsigned int slot = 0; slot < 2; slot++)
     {
@@ -2383,10 +2392,17 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
         }
       }
     }
+#endif
+
+#ifdef _GPU
+    compute_dFdUconv_fpts_Burgers_wrapper(dFdUconv_d, U_d, nFpts, nDims, startFpt, endFpt);
+    check_error();
+#endif
   }
 
   else if (input->equation == EulerNS)
   {
+#ifdef _CPU
     if (nDims == 2)
     {
 #pragma omp parallel for collapse(2)
@@ -2403,44 +2419,44 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 
           /* Set convective dFdU values in the x-direction */
           dFdUconv(fpt, 0, 0, 0, slot) = 0;
-          dFdUconv(fpt, 0, 1, 0, slot) = 1;
-          dFdUconv(fpt, 0, 2, 0, slot) = 0;
-          dFdUconv(fpt, 0, 3, 0, slot) = 0;
-
           dFdUconv(fpt, 1, 0, 0, slot) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * v*v);
-          dFdUconv(fpt, 1, 1, 0, slot) = (3.0-gam) * u;
-          dFdUconv(fpt, 1, 2, 0, slot) = (1.0-gam) * v;
-          dFdUconv(fpt, 1, 3, 0, slot) = (gam-1.0);
-
           dFdUconv(fpt, 2, 0, 0, slot) = -u * v;
-          dFdUconv(fpt, 2, 1, 0, slot) = v;
-          dFdUconv(fpt, 2, 2, 0, slot) = u;
-          dFdUconv(fpt, 2, 3, 0, slot) = 0;
-
           dFdUconv(fpt, 3, 0, 0, slot) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * u;
+
+          dFdUconv(fpt, 0, 1, 0, slot) = 1;
+          dFdUconv(fpt, 1, 1, 0, slot) = (3.0-gam) * u;
+          dFdUconv(fpt, 2, 1, 0, slot) = v;
           dFdUconv(fpt, 3, 1, 0, slot) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v);
+
+          dFdUconv(fpt, 0, 2, 0, slot) = 0;
+          dFdUconv(fpt, 1, 2, 0, slot) = (1.0-gam) * v;
+          dFdUconv(fpt, 2, 2, 0, slot) = u;
           dFdUconv(fpt, 3, 2, 0, slot) = (1.0-gam) * u * v;
+
+          dFdUconv(fpt, 0, 3, 0, slot) = 0;
+          dFdUconv(fpt, 1, 3, 0, slot) = (gam-1.0);
+          dFdUconv(fpt, 2, 3, 0, slot) = 0;
           dFdUconv(fpt, 3, 3, 0, slot) = gam * u;
 
           /* Set convective dFdU values in the y-direction */
           dFdUconv(fpt, 0, 0, 1, slot) = 0;
-          dFdUconv(fpt, 0, 1, 1, slot) = 0;
-          dFdUconv(fpt, 0, 2, 1, slot) = 1;
-          dFdUconv(fpt, 0, 3, 1, slot) = 0;
-
           dFdUconv(fpt, 1, 0, 1, slot) = -u * v;
-          dFdUconv(fpt, 1, 1, 1, slot) = v;
-          dFdUconv(fpt, 1, 2, 1, slot) = u;
-          dFdUconv(fpt, 1, 3, 1, slot) = 0;
-
           dFdUconv(fpt, 2, 0, 1, slot) = 0.5 * ((gam-1.0) * u*u + (gam-3.0) * v*v);
-          dFdUconv(fpt, 2, 1, 1, slot) = (1.0-gam) * u;
-          dFdUconv(fpt, 2, 2, 1, slot) = (3.0-gam) * v;
-          dFdUconv(fpt, 2, 3, 1, slot) = (gam-1.0);
-
           dFdUconv(fpt, 3, 0, 1, slot) = (-gam * e / rho + (gam-1.0) * (u*u + v*v)) * v;
+
+          dFdUconv(fpt, 0, 1, 1, slot) = 0;
+          dFdUconv(fpt, 1, 1, 1, slot) = v;
+          dFdUconv(fpt, 2, 1, 1, slot) = (1.0-gam) * u;
           dFdUconv(fpt, 3, 1, 1, slot) = (1.0-gam) * u * v;
+
+          dFdUconv(fpt, 0, 2, 1, slot) = 1;
+          dFdUconv(fpt, 1, 2, 1, slot) = u;
+          dFdUconv(fpt, 2, 2, 1, slot) = (3.0-gam) * v;
           dFdUconv(fpt, 3, 2, 1, slot) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v);
+
+          dFdUconv(fpt, 0, 3, 1, slot) = 0;
+          dFdUconv(fpt, 1, 3, 1, slot) = 0;
+          dFdUconv(fpt, 2, 3, 1, slot) = (gam-1.0);
           dFdUconv(fpt, 3, 3, 1, slot) = gam * v;
         }
       }
@@ -2449,6 +2465,13 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
     {
       ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
     }
+#endif
+
+#ifdef _GPU
+      compute_dFdUconv_fpts_EulerNS_wrapper(dFdUconv_d, U_d, nFpts, nDims, input->gamma, 
+          startFpt, endFpt);
+      check_error();
+#endif
   }
 }
 

@@ -3,6 +3,7 @@
 
 #include "mdvector_gpu.h"
 
+/* Face flux kernel wrappers */
 void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F, 
     mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims,
     mdvector_gpu<double> &AdvDiff_A, unsigned int startFpt,
@@ -26,6 +27,20 @@ void compute_Fvisc_fpts_EulerNS_wrapper(mdvector_gpu<double> &Fvisc,
         double prandtl, double mu_in, double c_sth, double rt, bool fix_vis,
         unsigned int startFpt, unsigned int endFpt);
 
+/* Face flux derivative kernel wrappers (Implicit Method) */
+void compute_dFdUconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv, 
+    unsigned int nFpts, unsigned int nDims, mdvector_gpu<double> &AdvDiff_A, 
+    unsigned int startFpt, unsigned int endFpt);
+
+void compute_dFdUconv_fpts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv, 
+    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims,
+    unsigned int startFpt, unsigned int endFpt);
+
+void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv, 
+    mdvector_gpu<double> &U,unsigned int nFpts, unsigned int nDims, double gamma,
+    unsigned int startFpt, unsigned int endFpt);
+
+/* Face boundary conditions kernal wrappers */
 void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 

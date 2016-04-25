@@ -2065,7 +2065,7 @@ void Elements::compute_localLHS(mdvector<double> &dt)
         /* Compute center viscous LHS implicit Jacobian */
         if (input->viscous)
         {
-          /* Add contribution from viscous flux boundary conditions */
+          /* Add contribution from boundary conditions (dFcddU) */
           for (unsigned int face = 0; face < nFaces; face++)
           {
             int eleN = geo->ele_adj(face, ele);

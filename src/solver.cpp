@@ -497,6 +497,9 @@ void FRSolver::solver_data_to_device()
   faces->LDG_bias_d = faces->LDG_bias;
   faces->bc_bias_d = faces->bc_bias;
 
+  /* Implicit flux derivative data structures (faces) */
+  faces->dFdUconv_d = faces->dFdUconv;
+
   /* Additional data */
   /* Geometry */
   geo.fpt2gfpt_d = geo.fpt2gfpt;
@@ -672,7 +675,7 @@ void FRSolver::compute_LHS()
 #ifdef _GPU
   /* Copy new solution from GPU */
   // TODO: Temporary until placed in GPU
-  //eles->U_spts = eles->U_spts_d;
+  eles->U_spts = eles->U_spts_d;
   faces->U = faces->U_d;
 #endif
 
@@ -685,6 +688,7 @@ void FRSolver::compute_LHS()
   /* Copy new dFdUconv from GPU */
   // TODO: Temporary until placed in GPU
   eles->dFdU_spts = eles->dFdU_spts_d;
+  faces->dFdUconv = faces->dFdUconv_d;
 #endif
 
   if (input->viscous)
