@@ -51,7 +51,6 @@ class Elements
     mdvector<double> oppE_ppts, oppE_qpts;
     mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
     mdvector<double> F_spts, F_fpts;
-    mdvector<double> Fconv_spts, Fvisc_spts;
     mdvector<double> Fcomm, Ucomm;
     mdvector<double> dU_spts, dU_fpts, dU_qpts, divF_spts;
 
@@ -75,7 +74,6 @@ class Elements
     mdvector_gpu<double> oppE_ppts_d, oppE_qpts_d;
     mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d, Uavg_d;
     mdvector_gpu<double> F_spts_d, F_fpts_d;
-    mdvector_gpu<double> Fconv_spts_d, Fvisc_spts_d;
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, divF_spts_d;
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;

@@ -16,7 +16,6 @@ void compute_Fconv_fpts_AdvDiff(mdvector_gpu<double> F, mdvector_gpu<double> U,
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
       F(fpt, 0, dim, 0) = AdvDiff_A(dim) * U(fpt, 0, 0);
-
       F(fpt, 0, dim, 1) = AdvDiff_A(dim) * U(fpt, 0, 1);
   }
 
