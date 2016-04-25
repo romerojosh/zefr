@@ -40,7 +40,7 @@ void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv,
     mdvector_gpu<double> &U,unsigned int nFpts, unsigned int nDims, double gamma,
     unsigned int startFpt, unsigned int endFpt);
 
-/* Face boundary conditions kernal wrappers */
+/* Face boundary conditions kernel wrappers */
 void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
