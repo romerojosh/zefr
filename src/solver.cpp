@@ -745,6 +745,7 @@ void FRSolver::compute_LHS_LU()
 
 #ifdef _GPU
   /* Reorganize LHS matrices on CPU */
+  // TODO: Copy can now be removed
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     for (unsigned int nj = 0; nj < eles->nVars; nj++)
@@ -757,7 +758,7 @@ void FRSolver::compute_LHS_LU()
           {
             unsigned int i = ni * eles->nSpts + si;
             unsigned int j = nj * eles->nSpts + sj;
-            eles->LHS_copy(i, j, ele) = eles->LHS(si, sj, ele, ni, nj); 
+            eles->LHS_copy(i, j, ele) = eles->LHS(si, ni, sj, nj, ele); 
           }
         }
       }
@@ -786,6 +787,7 @@ void FRSolver::compute_LHS_LU()
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     /* Copy LHS into TNT object */
+    // TODO: Copy can now be removed
     unsigned int N = eles->nSpts * eles->nVars;
     TNT::Array2D<double> A(N, N);
     for (unsigned int nj = 0; nj < eles->nVars; nj++)
@@ -798,7 +800,7 @@ void FRSolver::compute_LHS_LU()
           {
             unsigned int i = ni * eles->nSpts + si;
             unsigned int j = nj * eles->nSpts + sj;
-            A[i][j] = eles->LHS(si, sj, ele, ni, nj);
+            A[i][j] = eles->LHS(si, ni, sj, nj, ele);
           }
         }
       }
@@ -1024,7 +1026,7 @@ void FRSolver::initialize_U()
     }
     else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
-      eles->LHS.assign({eles->nSpts, eles->nSpts, eles->nEles, eles->nVars, eles->nVars});
+      eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
       eles->LHS_copy.assign({eles->nSpts * eles->nVars, eles->nSpts * eles->nVars, eles->nEles});
       eles->LHS_ptrs.assign({eles->nEles});
       eles->RHS_ptrs.assign({eles->nEles});

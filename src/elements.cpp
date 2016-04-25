@@ -2045,11 +2045,11 @@ void Elements::compute_localLHS(mdvector<double> &dt)
         {
           auto *A = &oppD(0, 0, dim);
           auto *B = &dFdU_spts(0, ele, ni, nj, dim);
-          auto *C = &LHS(0, 0, ele, ni, nj);
+          auto *C = &LHS(0, ni, 0, nj, ele);
 
           double fac = (dim == 0) ? 0.0 : 1.0;
 
-          dgmm(nSpts, nSpts, 1, A, nSpts, B, 0, fac, C, nSpts);
+          dgmm(nSpts, nSpts, 1, A, nSpts, B, 0, fac, C, nSpts*nVars);
         }
 
         auto *A = &oppDiv_fpts(0, 0);
@@ -2059,8 +2059,8 @@ void Elements::compute_localLHS(mdvector<double> &dt)
 
         A = &CtempSF(0, 0);
         B = &oppE(0, 0);
-        C = &LHS(0, 0, ele, ni, nj);
-        gemm(nSpts, nSpts, nFpts, 1, A, nSpts, B, nFpts, 1, C, nSpts);
+        C = &LHS(0, ni, 0, nj, ele);
+        gemm(nSpts, nSpts, nFpts, 1, A, nSpts, B, nFpts, 1, C, nSpts*nVars);
 
         /* Compute center viscous LHS implicit Jacobian */
         if (input->viscous)
@@ -2207,10 +2207,12 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             {
               for (unsigned int i = 0; i < nSpts; i++)
               {
+                double val = 0;
                 for (unsigned int k = 0; k < nSpts; k++)
                 {
-                  LHS(i, j, ele, ni, nj) += oppD(i, k, dim) * CtempSS(k, j);
+                  val += oppD(i, k, dim) * CtempSS(k, j);
                 }
+                LHS(i, ni, j, nj, ele) += val;
               }
             }
           }
@@ -2246,10 +2248,12 @@ void Elements::compute_localLHS(mdvector<double> &dt)
             {
               for (unsigned int i = 0; i < nSpts; i++)
               {
+                double val = 0;
                 for (unsigned int k = 0; k < nFpts; k++)
                 {
-                  LHS(i, j, ele, ni, nj) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                  val += oppD_fpts(i, k, dim) * CtempFS(k, j);
                 }
+                LHS(i, ni, j, nj, ele) += val;
               }
             }
           }
@@ -2356,11 +2360,13 @@ void Elements::compute_localLHS(mdvector<double> &dt)
                     {
                       for (unsigned int i = 0; i < nSpts; i++)
                       {
+                        double val = 0;
                         for (unsigned int k = 0; k < nSpts1D; k++)
                         {
                           unsigned int ind = face * nSpts1D + k;
-                          LHS(i, j, ele, ni, nj) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                          val += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
                         }
+                        LHS(i, ni, j, nj, ele) += val;
                       }
                     }
                   }
@@ -2371,23 +2377,24 @@ void Elements::compute_localLHS(mdvector<double> &dt)
         }
 
         /* Compute center LHS implicit Jacobian */
+        // TODO: Create a new function for this operation
         for (unsigned int j = 0; j < nSpts; j++)
         {
           for (unsigned int i = 0; i < nSpts; i++)
           {
             if (input->dt_type != 2)
             {
-              LHS(i, j, ele, ni, nj) = dt(0) * LHS(i, j, ele, ni, nj) / jaco_det_spts(i, ele);
+              LHS(i, ni, j, nj, ele) = dt(0) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele);
             }
 
             else
             {
-              LHS(i, j, ele, ni, nj) = dt(ele) * LHS(i, j, ele, ni, nj) / jaco_det_spts(i, ele);
+              LHS(i, ni, j, nj, ele) = dt(ele) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele);
             }
 
             if (i == j && ni == nj)
             {
-              LHS(i, j, ele, ni, nj) += 1;
+              LHS(i, ni, j, nj, ele) += 1;
             }
           }
         }
