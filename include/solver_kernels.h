@@ -32,6 +32,9 @@ void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, uns
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
     int lda, const double* B, int ldb, const double beta, double *C, int ldc);
 
+void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
+    int lda, const double** Barray, int ldb, const double beta, double** Carray, int ldc, int batchCount);
+
 void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchSize);
 void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
     double** Barray, int ldb, int* info, int batchSize);

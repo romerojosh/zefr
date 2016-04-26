@@ -149,6 +149,12 @@ void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* 
   cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
+void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
+    int lda, const double** Barray, int ldb, const double beta, double** Carray, int ldc, int batchCount)
+{
+  cublasDgemmBatched(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, Aarray, lda, Barray, 
+      ldb, &beta, Carray, ldc, batchCount);
+}
 void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchSize)
 {
   cublasDgetrfBatched(cublas_handle, N, Aarray, lda, PivotArray, InfoArray, batchSize);

@@ -60,9 +60,9 @@ class Elements
     /* Element structures for implicit method */
     spmatrix<double> GLHS; // Sparse matrix for global implicit system
     mdvector<double> LHS;  // Element local matrices for implicit system
-    mdvector<double> LHS_copy;
+    mdvector<double> LHS_tempSF;
     mdvector<int> LU_pivots, LU_info; 
-    mdvector<double*> LHS_ptrs, RHS_ptrs; 
+    mdvector<double*> LHS_ptrs, RHS_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs; 
     mdvector<double> dFdU_spts, dFddU_spts;
     mdvector<double> dFcdU_fpts, dUcdU_fpts, dFcddU_fpts;
     mdvector<double> deltaU;
@@ -86,9 +86,10 @@ class Elements
     /* Element structures for implicit method */
     spmatrix_gpu<double> GLHS_d;
     mdvector_gpu<double> LHS_d;
+    mdvector_gpu<double> LHS_tempSF_d;
     mdvector_gpu<int> LU_pivots_d, LU_info_d; 
-    mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d; 
-    mdvector_gpu<double> dFdU_spts_d;
+    mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d, LHS_subptrs_d, LHS_tempSF_subptrs_d, oppE_ptrs_d; 
+    mdvector_gpu<double> dFcdU_fpts_d, dFdU_spts_d;
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
 #endif
@@ -127,7 +128,12 @@ class Elements
 
     /* Routines for implicit method */
     void compute_globalLHS(mdvector<double> &dt);
+#ifdef _CPU
     void compute_localLHS(mdvector<double> &dt);
+#endif
+#ifdef _GPU
+    void compute_localLHS(mdvector_gpu<double> &dt_d);
+#endif
     void compute_dFdUconv();
     void compute_dFdUvisc();
     void compute_dFddUvisc();
