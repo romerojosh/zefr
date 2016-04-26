@@ -93,15 +93,7 @@ void ShockCapture::setup_vandermonde_matrices()
     for (int j=0;j<(order + 1)*(order + 1);j++)
       Vander2D(i,j) = Legendre2D(j,loc,order);
   }
-
-  /* Get truncated inverse 2D Vandermonde matrix */
-  Vander2D_tr.assign({eles->nSpts, eles->nDims + 1});
-  for (uint i = 0; i < eles->nSpts; i++)
-  {
-    for (uint j = 0; j < eles->nDims + 1; j++)
-      Vander2D_tr(i,j) = Vander2D(i,j);
-  }
-
+ 
   /* Calculate inverse of the 2D Vandermonde matrix */
   mdvector<double> Vander2DInv({eles->nSpts, (order + 1)*(order + 1)});
   mdvector<double> eye2D({eles->nSpts, eles->nSpts});
@@ -111,11 +103,26 @@ void ShockCapture::setup_vandermonde_matrices()
   Vander2D.solve(Vander2DInv,eye2D);
 
   /* Get truncated inverse 2D Vandermonde matrix */
-  Vander2DInv_tr.assign({eles->nDims + 1, eles->nSpts});
-  for (uint i= 0; i < eles->nDims + 1; i++)
+  if(order >= 1)
   {
-    for (uint j = 0; j < eles->nSpts; j++)
-      Vander2DInv_tr(i,j) = Vander2DInv(i,j);
+    Vander2D_tr.assign({eles->nSpts, eles->nDims + 1});
+    for (uint i = 0; i < eles->nSpts; i++)
+    {
+      for (uint j = 0; j < eles->nDims + 1; j++)
+        Vander2D_tr(i,j) = Vander2D(i,j);
+    }
+  
+    Vander2DInv_tr.assign({eles->nDims + 1, eles->nSpts});
+    for (uint i= 0; i < eles->nDims + 1; i++)
+    {
+      for (uint j = 0; j < eles->nSpts; j++)
+        Vander2DInv_tr(i,j) = Vander2DInv(i,j);
+    }
+  }
+  else
+  {
+    Vander2D_tr = Vander2D;
+    Vander2DInv_tr = Vander2DInv;
   }
 }
 

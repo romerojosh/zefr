@@ -72,7 +72,7 @@ void FRSolver::setup()
     restart(input->restart_file);
   }
   
-  if (input->shockcapture)
+  if (input->shockcapture && order>1)
   {
     if (input->rank == 0) std::cout << "Setting up shock capturing..." << std::endl;
     shock.setup(input, *this);
@@ -404,7 +404,7 @@ void FRSolver::solver_data_to_device()
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
 
-  if(input->shockcapture)
+  if(input->shockcapture && order > 1)
     eles->Umodal_d = eles->Umodal;
 
   /* Solution data structures (faces) */
@@ -615,7 +615,7 @@ void FRSolver::initialize_U()
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
-  if(input->shockcapture)
+  if(input->shockcapture && order > 1)
   {
     eles->Umodal.assign({eles->nDims+1, eles->nEles, eles->nVars});
   }
@@ -1177,7 +1177,7 @@ void FRSolver::write_solution()
       }
     }
     
-    if (input->shockcapture)
+    if (input->shockcapture && order > 1)
     {
       f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
       f << std::endl;
@@ -1395,7 +1395,7 @@ void FRSolver::write_solution()
     }
   }
 
-  if (input->shockcapture)
+  if (input->shockcapture && order > 1)
   {
 #ifdef _GPU
     shock.sensor = shock.sensor_d;
@@ -1926,7 +1926,7 @@ void FRSolver::report_error(std::ofstream &f)
 void FRSolver::capture_shock()
 {
   /* Do shock capturing if required */
-  if(input->shockcapture)
+  if(input->shockcapture && order > 1)
   {
     shock.apply_sensor();
     shock.compute_Umodal();
