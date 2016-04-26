@@ -468,11 +468,14 @@ void FRSolver::solver_data_to_device()
 
   if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    eles->LHS_d = eles->LHS_copy;
+    eles->LHS_d = eles->LHS;
     eles->LU_pivots_d = eles->LU_pivots;
     eles->LU_info_d = eles->LU_info;
+    eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
+    eles->LHS_tempSF_d = eles->LHS_tempSF;
 
-    /* Setup and transfer array of GPU pointers to LHS matrices and RHS vectors */
+    /* For cublas batched LU: Setup and transfer array of GPU pointers to 
+     * LHS matrices and RHS vectors */
     unsigned int N = eles->nSpts * eles->nVars;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
@@ -480,11 +483,23 @@ void FRSolver::solver_data_to_device()
       eles->RHS_ptrs(ele) = eles->RHS_d.data() + ele * N;
     }
 
+    /* Additional pointers for batched DGEMM */
+    for (unsigned int i = 0; i < eles->nEles * eles->nVars; i++)
+    {
+      eles->LHS_subptrs(i) = eles->LHS_d.data() + i * N * eles->nSpts;
+      eles->LHS_tempSF_subptrs(i) = eles->LHS_tempSF_d.data() + i * N * eles->nFpts;
+      eles->oppE_ptrs(i) = eles->oppE_d.data();
+    }
+
     eles->LHS_ptrs_d = eles->LHS_ptrs;
+    eles->LHS_subptrs_d = eles->LHS_subptrs;
     eles->RHS_ptrs_d = eles->RHS_ptrs;
+    eles->LHS_tempSF_subptrs_d = eles->LHS_tempSF_subptrs;
+    eles->oppE_ptrs_d = eles->oppE_ptrs;
 
     /* Implicit flux derivative data structures (element local) */
     eles->dFdU_spts_d = eles->dFdU_spts;
+    eles->dFcdU_fpts_d = eles->dFcdU_fpts;
 
     /* Implicit flux derivative data structures (faces) */
     faces->dFdUconv_d = faces->dFdUconv;
@@ -756,7 +771,12 @@ void FRSolver::compute_LHS()
   }
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
+#ifdef _CPU
     eles->compute_localLHS(dt);
+#endif
+#ifdef _GPU
+    eles->compute_localLHS(dt_d);
+#endif
     compute_LHS_LU();
   }
 }
@@ -765,38 +785,7 @@ void FRSolver::compute_LHS_LU()
 {
 
 #ifdef _GPU
-  /* Reorganize LHS matrices on CPU */
-  // TODO: Copy can now be removed
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    for (unsigned int nj = 0; nj < eles->nVars; nj++)
-    {
-      for (unsigned int ni = 0; ni < eles->nVars; ni++)
-      {
-        for (unsigned int sj = 0; sj < eles->nSpts; sj++)
-        {
-          for (unsigned int si = 0; si < eles->nSpts; si++)
-          {
-            unsigned int i = ni * eles->nSpts + si;
-            unsigned int j = nj * eles->nSpts + sj;
-            eles->LHS_copy(i, j, ele) = eles->LHS(si, ni, sj, nj, ele); 
-          }
-        }
-      }
-    }
-  }
-
-  /* Transfer LHS data to GPU */
-  eles->LHS_d = eles->LHS_copy;
-
   unsigned int N = eles->nSpts * eles->nVars;
-
-  /* Create pointer array */
-  //for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  //{
-  //  eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
-  //}
-  //eles->LHS_ptrs_d = eles->LHS_ptrs;
 
   /* Perform batched LU using cuBLAS */
   cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), eles->nEles);
@@ -1048,11 +1037,14 @@ void FRSolver::initialize_U()
     else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
       eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
-      eles->LHS_copy.assign({eles->nSpts * eles->nVars, eles->nSpts * eles->nVars, eles->nEles});
+      eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
       eles->LHS_ptrs.assign({eles->nEles});
       eles->RHS_ptrs.assign({eles->nEles});
       eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
       eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
+      eles->LHS_subptrs.assign({eles->nEles * eles->nVars});
+      eles->LHS_tempSF_subptrs.assign({eles->nEles * eles->nVars});
+      eles->oppE_ptrs.assign({eles->nEles * eles->nVars});
     }
     eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
     eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
@@ -1302,6 +1294,8 @@ void FRSolver::dFcdU_from_faces()
           {
             notslot = 0;
           }
+
+          //TODO: if gfpt > nGfpts_int (and < nGfpts_int + nGfpts_bnd), it is a boundary. You can add boundary contributions here I think.
 
           eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
           eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);

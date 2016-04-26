@@ -567,6 +567,103 @@ void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdU_spts,
   }
 }
 
+__global__
+void add_scaled_oppD(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+    mdvector_gpu<double> C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims)
+{
+  const unsigned int ni = blockIdx.x;
+  const unsigned int nj = blockIdx.y % nVars;
+  const unsigned int ele = blockIdx.y / nVars;
+  const unsigned int i = threadIdx.x;
+  const unsigned int j = threadIdx.y;
+
+  if (ele >= nEles || ni >= nVars || nj >= nVars)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    LHS(i, ni, j, nj, ele) += oppD(i, j, dim) * C(j, ele, ni, nj, dim);
+  }
+}
+
+void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+    mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims)
+{
+  dim3 threads(nSpts, nSpts);
+  dim3 blocks((nSpts * nVars + threads.x - 1) / threads.x, 
+      (nSpts * nVars * nEles + threads.y - 1) / threads.y);
+
+  add_scaled_oppD<<<blocks, threads>>>(LHS, oppD, C, nSpts, nVars, nEles, nDims);
+}
+
+__global__
+void add_scaled_oppDiv(mdvector_gpu<double> LHS_tempSF, mdvector_gpu<double> oppDiv_fpts, 
+    mdvector_gpu<double> C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nEles)
+{
+  const unsigned int ni = blockIdx.x;
+  const unsigned int nj = blockIdx.y % nVars;
+  const unsigned int ele = blockIdx.y / nVars;
+  const unsigned int i = threadIdx.x;
+  const unsigned int j = threadIdx.y;
+
+  if (ele >= nEles || ni >= nVars || nj >= nVars)
+    return;
+
+  LHS_tempSF(i, ni, j, nj, ele) = oppDiv_fpts(i, j) * C(j, ele, ni, nj, 0);
+}
+
+void add_scaled_oppDiv_wrapper(mdvector_gpu<double> &LHS_tempSF, mdvector_gpu<double> &oppDiv_fpts, 
+    mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nEles)
+{
+  dim3 threads(nSpts, nFpts);
+  dim3 blocks((nSpts * nVars + threads.x - 1) / threads.x, 
+      (nFpts * nVars * nEles + threads.y - 1) / threads.y);
+
+  add_scaled_oppDiv<<<blocks, threads>>>(LHS_tempSF, oppDiv_fpts, C, nSpts, nFpts, nVars, nEles);
+}
+
+__global__
+void finalize_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt, 
+    mdvector_gpu<double> jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int dt_type)
+{
+  const unsigned int ni = blockIdx.x;
+  const unsigned int nj = blockIdx.y % nVars;
+  const unsigned int ele = blockIdx.y / nVars;
+  const unsigned int i = threadIdx.x;
+  const unsigned int j = threadIdx.y;
+
+  if (ele >= nEles || ni >= nVars || nj >= nVars)
+    return;
+
+  double add_one = (double) (i == j && nj == ni);
+
+  if (dt_type != 2)
+  {
+    LHS(i, ni, j, nj, ele) = dt(0) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele) + add_one;
+  }
+  else
+  {
+    LHS(i, ni, j, nj, ele) = dt(ele) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele) + add_one;
+  }
+}
+
+void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int dt_type)
+{
+  dim3 threads(nSpts, nSpts);
+  dim3 blocks((nSpts * nVars + threads.x - 1) / threads.x, 
+      (nSpts * nVars * nEles + threads.y - 1) / threads.y);
+
+  finalize_LHS<<<blocks, threads>>>(LHS, dt, jaco_det_spts, nSpts, nVars, nEles, dt_type);
+}
+
+
 template <unsigned int nVars>
 __global__
 void transform_dU_quad(mdvector_gpu<double> dU_spts, 

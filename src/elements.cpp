@@ -2032,8 +2032,15 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
   GLHS.toCSR();
 }
 
+#ifdef _CPU
 void Elements::compute_localLHS(mdvector<double> &dt)
+#endif
+#ifdef _GPU
+void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
+#endif
 {
+
+#ifdef _CPU
   /* TODO: Move setup */
   mdvector<double> Cvisc0, CviscN, CdFddU0;
   Cvisc0.assign({nSpts, nSpts, nDims});
@@ -2435,6 +2442,53 @@ void Elements::compute_localLHS(mdvector<double> &dt)
       }
     }
   }
+#endif
+
+#ifdef _GPU
+  /* Add contribution from boundary conditions (dFcdU) */
+  //TODO: I think this should be taken care of in faces. Adding boundary contributions in elements 
+  // does not lead to good memory accesses. In faces, the boundary flux points are contiguous. 
+  for (unsigned int nj = 0; nj < nVars; nj++)
+  {
+    for (unsigned int ni = 0; ni < nVars; ni++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int face = 0; face < nFaces; face++)
+        {
+          int eleN = geo->ele_adj(face, ele);
+          if (eleN == -1)
+          {
+            for (unsigned int i = 0; i < nSpts1D; i++)
+            {
+              unsigned int ind = face * nSpts1D + i;
+              dFcdU_fpts(ind, ele, ni, nj, 0) += dFcdU_fpts(ind, ele, ni, nj, 1);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  dFcdU_fpts_d = dFcdU_fpts;
+  dFdU_spts_d = dFdU_spts;
+
+  /* Compute center inviscid LHS implicit Jacobian */
+
+  /* Fill temporary matrix with oppDiv_fpts scaled by dFcdU_fpts */
+  add_scaled_oppDiv_wrapper(LHS_tempSF_d, oppDiv_fpts_d, dFcdU_fpts_d, nSpts, nFpts, nVars, nEles);
+
+  /* Multiply blocks by oppE, put result in LHS */
+  cublasDgemmBatched_wrapper(nSpts * nVars, nSpts, nFpts, 1.0, (const double**)LHS_tempSF_subptrs_d.data(), nSpts * nVars, 
+      (const double**) oppE_ptrs_d.data(), nFpts, 0.0, LHS_subptrs_d.data(), nSpts * nVars, nEles * nVars);
+
+  /* Add oppD scaled by dFdU_spts to LHS */
+  add_scaled_oppD_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
+
+  /* Finalize LHS (scale by jacobian, dt, and add identity) */
+  finalize_LHS_wrapper(LHS_d, dt_d, jaco_det_spts_d, nSpts, nVars, nEles, input->dt_type);
+
+#endif
 }
 
 void Elements::compute_Uavg()
