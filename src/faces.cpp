@@ -49,7 +49,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   /* Allocate memory for geometry structures */
   norm.assign({nFpts, nDims, 2});
-  outnorm.assign({nFpts, 2});
   dA.assign({nFpts},0.0);
   jaco.assign({nFpts, nDims, nDims , 2});
 
@@ -802,19 +801,13 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
   if (input->equation == AdvDiff)
   {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
-    //for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+#pragma omp parallel for collapse(2)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-          Fconv(fpt, n, dim, 0) = input->AdvDiff_A(dim) * U(fpt, n, 0);
-
-          Fconv(fpt, n, dim, 1) = input->AdvDiff_A(dim) * U(fpt, n, 1);
-
-        }
+        Fconv(fpt, 0, dim, 0) = input->AdvDiff_A(dim) * U(fpt, 0, 0);
+        Fconv(fpt, 0, dim, 1) = input->AdvDiff_A(dim) * U(fpt, 0, 1);
       }
     }
 #endif
@@ -827,9 +820,9 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
   }
   else if (input->equation == EulerNS)
   {
+#ifdef _CPU
     if (nDims == 2)
     {
-#ifdef _CPU
 #pragma omp parallel for collapse(2)
       //for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -859,12 +852,9 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
           Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
         }
       }
-#endif
-
     }
     else if (nDims == 3)
     {
-#ifdef _CPU
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
@@ -901,9 +891,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
           Fconv(fpt, 4, 2, slot) = U(fpt, 3, slot) * H;
         }
       }
-#endif
-
     }
+#endif
 
 #ifdef _GPU
       compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma, 
@@ -1145,7 +1134,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, outnorm_d, waveSp_d, LDG_bias_d, 
+    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d, 
         input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1161,7 +1150,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, outnorm_d, waveSp_d, input->gamma, 
+    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, waveSp_d, input->gamma, 
         nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1181,7 +1170,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, outnorm_d, LDG_bias_d, input->ldg_b,
+      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, LDG_bias_d, input->ldg_b,
           input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
       check_error();
@@ -1323,8 +1312,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm(fpt, n, 0) = FR[n] * outnorm(fpt, 0);
-        Fcomm(fpt, n, 1) = FR[n] * -outnorm(fpt, 1);
+        Fcomm(fpt, n, 0) = FR[n];
+        Fcomm(fpt, n, 1) = FR[n];
       }
       continue;
     }
@@ -1370,8 +1359,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n]);
 
       /* Correct for positive parent space sign convention */
-      Fcomm(fpt, n, 0) = F * outnorm(fpt, 0);
-      Fcomm(fpt, n, 1) = F * -outnorm(fpt, 1);
+      Fcomm(fpt, n, 0) = F;
+      Fcomm(fpt, n, 1) = F;
     }
   }
 }
@@ -1478,8 +1467,8 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
     /* Correct for positive parent space sign convention */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) = F[n] * outnorm(fpt, 0);
-      Fcomm(fpt, n, 1) = F[n] * -outnorm(fpt, 1);
+      Fcomm(fpt, n, 0) = F[n];
+      Fcomm(fpt, n, 1) = F[n];
     }
   }
 }
@@ -1493,7 +1482,7 @@ void Faces::transform_flux()
     for (unsigned int n = 0; n < nVars; n++)
     {
       Fcomm(fpt, n, 0) *= dA(fpt);
-      Fcomm(fpt, n, 1) *= dA(fpt);
+      Fcomm(fpt, n, 1) *= -dA(fpt); // Right state flux has opposite sign
     }
   }
 #endif
@@ -1588,8 +1577,8 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * outnorm(fpt, 0);
-        Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * -outnorm(fpt, 1);
+        Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0));
+        Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0));
       }
     }
 
@@ -1629,8 +1618,8 @@ void Faces::central_flux()
     /* Compute common normal viscous flux and accumulate */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) += (0.5 * (FL[n]+FR[n])) * outnorm(fpt, 0); 
-      Fcomm(fpt, n, 1) += (0.5 * (FL[n]+FR[n])) * -outnorm(fpt, 1); 
+      Fcomm(fpt, n, 0) += (0.5 * (FL[n]+FR[n]));
+      Fcomm(fpt, n, 1) += (0.5 * (FL[n]+FR[n]));
     }
   }
 }

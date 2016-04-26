@@ -16,7 +16,6 @@ void compute_Fconv_fpts_AdvDiff(mdvector_gpu<double> F, mdvector_gpu<double> U,
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
       F(fpt, 0, dim, 0) = AdvDiff_A(dim) * U(fpt, 0, 0);
-
       F(fpt, 0, dim, 1) = AdvDiff_A(dim) * U(fpt, 0, 1);
   }
 
@@ -1170,8 +1169,7 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
-    mdvector_gpu<double> norm_gfpts, mdvector_gpu<int> outnorm_gfpts, 
-    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
+    mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
     double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
     unsigned int endFpt)
 {
@@ -1182,16 +1180,12 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
   double FL[nVars]; double FR[nVars];
   double WL[nVars]; double WR[nVars];
-  double norm[nDims]; double outnorm[2];
+  double norm[nDims]; 
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     norm[dim] = norm_gfpts(fpt, dim, 0);
   }
-
-  outnorm[0] = outnorm_gfpts(fpt, 0);
-  outnorm[1] = outnorm_gfpts(fpt, 1);
-
 
   /* Initialize FL, FR */
   for (unsigned int n = 0; n < nVars; n++)
@@ -1214,8 +1208,8 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) = FR[n] * outnorm[0];
-      Fcomm(fpt, n, 1) = FR[n] * -outnorm[1];
+      Fcomm(fpt, n, 0) = FR[n];
+      Fcomm(fpt, n, 1) = FR[n];
     }
 
     return;
@@ -1266,15 +1260,15 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   {
     double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0-rus_k) * 
         (WR[n]-WL[n]);
-    Fcomm(fpt, n, 0) = F * outnorm[0];
-    Fcomm(fpt, n, 1) = F * -outnorm[1];
+    Fcomm(fpt, n, 0) = F;
+    Fcomm(fpt, n, 1) = F;
   }
 
 }
 
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
-    mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
@@ -1290,19 +1284,19 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, 
           waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
     else
-      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, 
           waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, 
           waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
     else
-      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, outnorm, 
+      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm, 
           waveSp, LDG_bias, gamma, rus_k, nFpts, startFpt, endFpt);
 
   }
@@ -1312,8 +1306,8 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void roe_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> norm_gfpts, 
-    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<double> waveSp_gfpts, 
-    double gamma, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt)
+    mdvector_gpu<double> waveSp_gfpts, double gamma, unsigned int nFpts, 
+    unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -1322,16 +1316,12 @@ void roe_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 
   double FL[nVars]; double FR[nVars]; 
   double F[nVars]; double dW[nVars];
-  double norm[nDims]; double outnorm[2];
+  double norm[nDims];
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     norm[dim] = norm_gfpts(fpt, dim, 0);
   }
-
-  outnorm[0] = outnorm_gfpts(fpt, 0);
-  outnorm[1] = outnorm_gfpts(fpt, 1);
-
 
   /* Initialize FL, FR */
   for (unsigned int n = 0; n < nVars; n++)
@@ -1418,13 +1408,13 @@ void roe_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   /* Correct for positive parent space sign convention */
   for (unsigned int n = 0; n < nVars; n++)
   {
-    Fcomm(fpt, n, 0) = F[n] * outnorm[0];
-    Fcomm(fpt, n, 1) = F[n] * -outnorm[1];
+    Fcomm(fpt, n, 0) = F[n];
+    Fcomm(fpt, n, 1) = F[n];
   }
 }
 
 void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<int> &outnorm, 
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, 
     mdvector_gpu<double> &waveSp, double gamma, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
@@ -1434,7 +1424,7 @@ void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   if (equation == EulerNS)
   {
     if (nDims == 2)
-      roe_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, norm, outnorm, 
+      roe_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, norm, 
           waveSp, gamma, nFpts, startFpt, endFpt);
     else
       ThrowException("Roe flux only implemented for 2D!");
@@ -1449,8 +1439,8 @@ template <unsigned int nVars, unsigned int nDims>
 __global__
 void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_no, mdvector_gpu<double> norm_gfpts, 
-    mdvector_gpu<int> outnorm_gfpts, mdvector_gpu<int> LDG_bias, double beta, double tau, 
-    unsigned int nFpts, unsigned int startFpt, unsigned int endFpt)
+    mdvector_gpu<int> LDG_bias, double beta, double tau, unsigned int nFpts, unsigned int startFpt, 
+    unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -1461,7 +1451,6 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   double WL[nVars]; double WR[nVars];
   double Fcomm_temp[nVars][nDims];
   double norm[nDims];
-  double outnorm[2];
    
   /* Zero out temporary array */
   for (unsigned int n = 0; n < nVars; n++)
@@ -1478,9 +1467,6 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
   {
     norm[dim] = norm_gfpts(fpt, dim, 0);
   }
-
-  outnorm[0] = outnorm_gfpts(fpt, 0);
-  outnorm[1] = outnorm_gfpts(fpt, 1);
 
   /* Setting sign of beta (from HiFiLES) */
   if (nDims == 2)
@@ -1541,8 +1527,8 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
     for (unsigned int n = 0; n < nVars; n++)
     {
       double F = Fcomm_temp[n][dim] * norm[dim];
-      Fcomm(fpt, n, 0) += F * outnorm[0];
-      Fcomm(fpt, n, 1) += F * -outnorm[1];
+      Fcomm(fpt, n, 0) += F;
+      Fcomm(fpt, n, 1) += F;
     }
   }
 
@@ -1550,9 +1536,8 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
 
 void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, 
-    mdvector_gpu<int> &outnorm, mdvector_gpu<int> &LDG_bias, double beta, double tau, 
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
-    unsigned int startFpt, unsigned int endFpt)
+    mdvector_gpu<int> &LDG_bias, double beta, double tau, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 256;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
@@ -1560,19 +1545,19 @@ void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      LDG_flux<1, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
+      LDG_flux<1, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, beta, tau, 
           nFpts, startFpt, endFpt);
     else
-      LDG_flux<1, 3><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
+      LDG_flux<1, 3><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, beta, tau, 
           nFpts, startFpt, endFpt);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      LDG_flux<4, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
+      LDG_flux<4, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, beta, tau, 
           nFpts, startFpt, endFpt);
     else
-      LDG_flux<5, 3><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, outnorm, LDG_bias, beta, tau, 
+      LDG_flux<5, 3><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, beta, tau, 
           nFpts, startFpt, endFpt);
   }
 }
@@ -1646,7 +1631,7 @@ void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA,
       return;
 
     Fcomm(fpt, var, 0) *= dA(fpt);
-    Fcomm(fpt, var, 1) *= dA(fpt);
+    Fcomm(fpt, var, 1) *= -dA(fpt); // Right state flux has opposite sign
 }
 
 void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 

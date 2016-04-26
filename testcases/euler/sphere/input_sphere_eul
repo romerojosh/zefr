@@ -7,16 +7,17 @@ order     2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
+serendipity 1
 
 # Timestepping:
-n_steps 1000
+n_steps 10000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
-CFL	  0.5
+CFL	  0.8
 
 # Multigrid:
-p_multi 0
+p_multi 1
 smooth_steps 1
 rel_fac 1.00
 low_order 0
@@ -25,7 +26,7 @@ low_order 0
 # Note: You can suppress output by setting freq to zero. 
 output_prefix sphere_eul
 write_freq    1000
-report_freq   10
+report_freq   100
 res_type      1
 force_freq    0
 error_freq    0
