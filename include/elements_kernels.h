@@ -38,10 +38,6 @@ void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv_spts,
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
     unsigned int nDims, double gamma);
 
-//void add_scaled_opp_wrapper(mdvector_gpu<double> &A, mdvector_gpu<double> &B, 
-//    mdvector_gpu<double> &C, unsigned int m, unsigned int n, unsigned int p,
-//    double alpha);
-
 void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims);

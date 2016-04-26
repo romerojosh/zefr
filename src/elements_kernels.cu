@@ -567,35 +567,6 @@ void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdU_spts,
   }
 }
 
-/*
-__global__
-void add_scaled_opp(mdvector_gpu<double> A, mdvector_gpu<double> B, 
-    mdvector_gpu<double> C, unsigned int m, unsigned int n, unsigned int p,
-    unsigned int q, double alpha)
-{
-  const unsigned int ni = blockDim.x;
-  const unsigned int nj = blockDim.y % p;
-  const unsigned int ele = blockDim.y / p;
-  const unsigned int i = threadIdx.x;
-  const unsigned int j = threadIdx.y;
-
-  if (ele >= q || ni >= p || nj >= p)
-    return;
-
-  A(i, ni, j, nj, ele) = B(i, j, 0) * C(j, ele, ni, nj, 0);
-  A(i, ni, j, nj, ele) += B(i, j, 1) * C(j, ele, ni, nj, 1);
-}
-
-void add_scaled_opp_wrapper(mdvector_gpu<double> &A, mdvector_gpu<double> &B, 
-    mdvector_gpu<double> &C, unsigned int m, unsigned int n, unsigned int p,
-    double alpha)
-{
-  dim3 threads(m, n);
-  dim3 blocks((p*m + threads.x - 1) / threads.x, (n*p*q + threads.y - 1) / threads.y);
-  add_scaled_opp<<<blocks, threads>>>(A, B, C, m, n, p, q, alpha);
-}
-*/
-
 __global__
 void add_scaled_oppD(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
     mdvector_gpu<double> C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
