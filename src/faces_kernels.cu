@@ -560,14 +560,10 @@ void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv,
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
   if (nDims == 2)
-  {
     compute_dFdUconv_fpts_2D_EulerNS<<<blocks, threads>>>(dFdUconv, U, nFpts, gamma,
         startFpt, endFpt);
-  }
   else
-  {
     ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
-  }
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
@@ -1295,6 +1291,558 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdv
     else
       apply_bcs_dU<5, 3><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
           gfpt2bnd, per_fpt_list);
+  }
+}
+
+template<unsigned int nVars, unsigned int nDims>
+__global__
+void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvector_gpu<double> dFdUvisc,
+    mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFddUvisc, unsigned int nGfpts_int, 
+    unsigned int nGfpts_bnd, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma,
+    mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, bool viscous)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
+
+  if (fpt >= nGfpts_int + nGfpts_bnd)
+    return;
+
+  unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
+
+  double dURdUL[nVars][nVars];
+  double dFdURconv[nVars][nVars][nDims];
+
+  double dUcdUR[nVars][nVars];
+  double dFdURvisc[nVars][nVars][nDims];
+
+  double ddURddUL[nVars][nVars][nDims][nDims];
+  double dFddURvisc[nVars][nVars][nDims][nDims];
+
+  /* Copy right state values */
+  if (bnd_id != 1 && bnd_id != 2)
+  {
+    /* Copy right state dFdUconv */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFdURconv[ni][nj][dim] = dFdUconv(fpt, ni, nj, dim, 1);
+        }
+      }
+    }
+
+    if (viscous)
+    {
+      /* Copy right state dUcdU */
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dUcdUR[ni][nj] = dUcdU(fpt, ni, nj, 1);
+        }
+      }
+
+      /* Copy right state dFdUvisc */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFdURvisc[ni][nj][dim] = dFdUvisc(fpt, ni, nj, dim, 1);
+          }
+        }
+      }
+
+      /* Copy right state dFddUvisc */
+      if (bnd_id == 11) /* Adiabatic Wall */
+      {
+        for (unsigned int dimj = 0; dimj < nDims; dimj++)
+        {
+          for (unsigned int dimi = 0; dimi < nDims; dimi++)
+          {
+            for (unsigned int nj = 0; nj < nVars; nj++)
+            {
+              for (unsigned int ni = 0; ni < nVars; ni++)
+              {
+                dFddURvisc[ni][nj][dimi][dimj] = dFddUvisc(fpt, ni, nj, dimi, dimj, 1);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /* Apply specified boundary condition */
+  switch(bnd_id)
+  {
+    case 2: /* Farfield and Supersonic Inlet */
+    {
+      /* Compute dFdULconv for right state */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dFdUconv(fpt, ni, nj, dim, 1) = 0;
+          }
+        }
+      }
+
+      if (viscous)
+      {
+        /* Compute dUcdUL for right state */
+        for (unsigned int nj = 0; nj < nVars; nj++)
+        {
+          for (unsigned int ni = 0; ni < nVars; ni++)
+          {
+            dUcdU(fpt, ni, nj, 1) = 0;
+          }
+        }
+
+        /* Compute dFdULvisc for right state */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int nj = 0; nj < nVars; nj++)
+          {
+            for (unsigned int ni = 0; ni < nVars; ni++)
+            {
+              dFdUvisc(fpt, ni, nj, dim, 1) = 0;
+            }
+          }
+        }
+      }
+
+      break;
+    }
+
+    case 5: /* Subsonic Outlet */
+    {
+      /* Primitive Variables */
+      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+
+      /* Compute dURdUL */
+      dURdUL[0][0] = 1;
+      dURdUL[1][0] = 0;
+      dURdUL[2][0] = 0;
+      dURdUL[3][0] = -0.5 * (uL*uL + vL*vL);
+
+      dURdUL[0][1] = 0;
+      dURdUL[1][1] = 1;
+      dURdUL[2][1] = 0;
+      dURdUL[3][1] = uL;
+
+      dURdUL[0][2] = 0;
+      dURdUL[1][2] = 0;
+      dURdUL[2][2] = 1;
+      dURdUL[3][2] = vL;
+
+      dURdUL[0][3] = 0;
+      dURdUL[1][3] = 0;
+      dURdUL[2][3] = 0;
+      dURdUL[3][3] = 0;
+
+      break;
+    }
+
+    case 6: /* Characteristic (from HiFiLES) */
+    {
+      double nx = norm(fpt, 0, 0);
+      double ny = norm(fpt, 1, 0);
+      double gam = gamma;
+
+      /* Primitive Variables */
+      double rhoL = U(fpt, 0, 0);
+      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+
+      double rhoR = U(fpt, 0, 1);
+      double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+      double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+
+      /* Compute wall normal velocities */
+      double VnL = 0.0; double VnR = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+        VnR += V_fs(dim) * norm(fpt, dim, 0);
+      }
+
+      /* Compute pressure. TODO: Compute pressure once!*/
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+      }
+
+      momF /= U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+      double PR = P_fs;
+
+      double cL = std::sqrt(gam * PL / rhoL);
+
+      /* Compute Riemann Invariants */
+      double Rp = VnL + 2.0 / (gamma - 1) * std::sqrt(gamma * PL / 
+          U(fpt, 0, 0));
+      double Rn = VnR - 2.0 / (gamma - 1) * std::sqrt(gamma * PR / 
+          rho_fs);
+
+      double cstar = 0.25 * (gamma - 1) * (Rp - Rn);
+      double ustarn = 0.5 * (Rp + Rn);
+
+      if (VnL < 0.0) /* Case 1: Inflow */
+      {
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vsq += V_fs(dim) * V_fs(dim);
+
+        double H_fs = gamma / (gamma - 1.0) * PR / rho_fs +
+            0.5 * Vsq;
+
+        /* Matrix Parameters */
+        double a1 = 0.5 * rhoR / cstar;
+        double a2 = gam / (rhoL * cL);
+        
+        double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+        double b2 = nx / rhoL - a2 * uL;
+        double b3 = ny / rhoL - a2 * vL;
+        double b4 = a2 / cstar;
+
+        double c1 = H_fs - cstar * cstar / gam;
+        double c2 = (gam-1.0)/(2.0*gam) * rhoR * cstar;
+
+        /* Compute dURdUL */
+        dURdUL[0][0] = a1 * b1;
+        dURdUL[1][0] = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+        dURdUL[2][0] = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+        dURdUL[3][0] = a1 * b1 * c1 - b1 * c2;
+
+        dURdUL[0][1] = a1 * b2;
+        dURdUL[1][1] = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+        dURdUL[2][1] = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+        dURdUL[3][1] = a1 * b2 * c1 - b2 * c2;
+
+        dURdUL[0][2] = a1 * b3;
+        dURdUL[1][2] = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+        dURdUL[2][2] = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+        dURdUL[3][2] = a1 * b3 * c1 - b3 * c2;
+
+        dURdUL[0][3] = 0.5 * rhoR * b4;
+        dURdUL[1][3] = 0.5 * rhoR * (b4 * uR + a2 * nx);
+        dURdUL[2][3] = 0.5 * rhoR * (b4 * vR + a2 * ny);
+        dURdUL[3][3] = 0.5 * rhoR * b4 * c1 - a2 * c2;
+      }
+
+      else  /* Case 2: Outflow */
+      {
+        /* Matrix Parameters */
+        double a1 = gam * rhoR / (gam-1.0);
+        double a2 = gam / (rhoL * cL);
+        double a3 = (gam-1.0) / (gam * PL);
+        double a4 = (gam-1.0) / (2.0 * gam * cstar);
+        double a5 = rhoR * cstar * cstar / (gam-1.0) / (gam-1.0);
+        double a6 = rhoR * cstar / (2.0 * gam);
+
+        double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+        double b2 = nx / rhoL - a2 * uL;
+        double b3 = ny / rhoL - a2 * vL;
+
+        double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
+        double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
+        double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
+        double c4 = ustarn * nx + uL - VnL * nx;
+
+        double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
+        double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
+        double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
+        double d4 = ustarn * ny + vL - VnL * ny;
+
+        double e1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
+        double e2 = a3 * uL + a4 * b2;
+        double e3 = a3 * vL + a4 * b3;
+        double e4 = a3 + a2 * a4;
+
+        double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
+
+        /* Compute dURdUL */
+        dURdUL[0][0] = a1 * e1;
+        dURdUL[1][0] = a1 * e1 * c4 + rhoR * c1;
+        dURdUL[2][0] = a1 * e1 * d4 + rhoR * d1;
+        dURdUL[3][0] = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
+
+        dURdUL[0][1] = a1 * e2;
+        dURdUL[1][1] = a1 * e2 * c4 + rhoR * c2;
+        dURdUL[2][1] = a1 * e2 * d4 + rhoR * d2;
+        dURdUL[3][1] = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
+
+        dURdUL[0][2] = a1 * e3;
+        dURdUL[1][2] = a1 * e3 * c4 + rhoR * c3;
+        dURdUL[2][2] = a1 * e3 * d4 + rhoR * d3;
+        dURdUL[3][2] = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
+
+        dURdUL[0][3] = a1 * e4;
+        dURdUL[1][3] = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
+        dURdUL[2][3] = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
+        dURdUL[3][3] = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
+      }
+
+      break;
+    }
+
+    case 8: /* Slip Wall */
+    {
+      /* Compute dURdUL */
+      dURdUL[0][0] = 1;
+      dURdUL[1][0] = 0;
+      dURdUL[2][0] = 0;
+      dURdUL[3][0] = 0;
+
+      dURdUL[0][1] = 0;
+      dURdUL[1][1] = 1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0);
+      dURdUL[2][1] = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
+      dURdUL[3][1] = 0;
+
+      dURdUL[0][2] = 0;
+      dURdUL[1][2] = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
+      dURdUL[2][2] = 1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0);
+      dURdUL[3][2] = 0;
+
+      dURdUL[0][3] = 0;
+      dURdUL[1][3] = 0;
+      dURdUL[2][3] = 0;
+      dURdUL[3][3] = 1;
+
+      break;
+    }
+
+    case 11: /* No-slip Wall (adiabatic) */
+    {
+      double nx = norm(fpt, 0, 0);
+      double ny = norm(fpt, 1, 0);
+
+      /* Primitive Variables */
+      double rhoL = U(fpt, 0, 0);
+      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+      double eL = U(fpt, 3, 0);
+
+      /* Compute dURdUL */
+      dURdUL[0][0] = 1;
+      dURdUL[1][0] = 0;
+      dURdUL[2][0] = 0;
+      dURdUL[3][0] = 0.5 * (uL*uL + vL*vL);
+
+      dURdUL[0][1] = 0;
+      dURdUL[1][1] = 0;
+      dURdUL[2][1] = 0;
+      dURdUL[3][1] = -uL;
+
+      dURdUL[0][2] = 0;
+      dURdUL[1][2] = 0;
+      dURdUL[2][2] = 0;
+      dURdUL[3][2] = -vL;
+
+      dURdUL[0][3] = 0;
+      dURdUL[1][3] = 0;
+      dURdUL[2][3] = 0;
+      dURdUL[3][3] = 1;
+
+      if (viscous)
+      {
+        /* Compute dUxR/dUxL */
+        ddURddUL[0][0][0][0] = 1;
+        ddURddUL[1][0][0][0] = 0;
+        ddURddUL[2][0][0][0] = 0;
+        ddURddUL[3][0][0][0] = nx*nx * (eL / rhoL - (uL*uL + vL*vL));
+
+        ddURddUL[0][1][0][0] = 0;
+        ddURddUL[1][1][0][0] = 1;
+        ddURddUL[2][1][0][0] = 0;
+        ddURddUL[3][1][0][0] = nx*nx * uL;
+
+        ddURddUL[0][2][0][0] = 0;
+        ddURddUL[1][2][0][0] = 0;
+        ddURddUL[2][2][0][0] = 1;
+        ddURddUL[3][2][0][0] = nx*nx * vL;
+
+        ddURddUL[0][3][0][0] = 0;
+        ddURddUL[1][3][0][0] = 0;
+        ddURddUL[2][3][0][0] = 0;
+        ddURddUL[3][3][0][0] = 1.0 - nx*nx;
+
+        /* Compute dUyR/dUxL */
+        ddURddUL[0][0][1][0] = 0;
+        ddURddUL[1][0][1][0] = 0;
+        ddURddUL[2][0][1][0] = 0;
+        ddURddUL[3][0][1][0] = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
+
+        ddURddUL[0][1][1][0] = 0;
+        ddURddUL[1][1][1][0] = 0;
+        ddURddUL[2][1][1][0] = 0;
+        ddURddUL[3][1][1][0] = nx*ny * uL;
+
+        ddURddUL[0][2][1][0] = 0;
+        ddURddUL[1][2][1][0] = 0;
+        ddURddUL[2][2][1][0] = 0;
+        ddURddUL[3][2][1][0] = nx*ny * vL;
+
+        ddURddUL[0][3][1][0] = 0;
+        ddURddUL[1][3][1][0] = 0;
+        ddURddUL[2][3][1][0] = 0;
+        ddURddUL[3][3][1][0] = -nx * ny;
+
+        /* Compute dUxR/dUyL */
+        ddURddUL[0][0][0][1] = 0;
+        ddURddUL[1][0][0][1] = 0;
+        ddURddUL[2][0][0][1] = 0;
+        ddURddUL[3][0][0][1] = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
+
+        ddURddUL[0][1][0][1] = 0;
+        ddURddUL[1][1][0][1] = 0;
+        ddURddUL[2][1][0][1] = 0;
+        ddURddUL[3][1][0][1] = nx*ny * uL;
+
+        ddURddUL[0][2][0][1] = 0;
+        ddURddUL[1][2][0][1] = 0;
+        ddURddUL[2][2][0][1] = 0;
+        ddURddUL[3][2][0][1] = nx*ny * vL;
+
+        ddURddUL[0][3][0][1] = 0;
+        ddURddUL[1][3][0][1] = 0;
+        ddURddUL[2][3][0][1] = 0;
+        ddURddUL[3][3][0][1] = -nx * ny;
+
+        /* Compute dUyR/dUyL */
+        ddURddUL[0][0][1][1] = 1;
+        ddURddUL[1][0][1][1] = 0;
+        ddURddUL[2][0][1][1] = 0;
+        ddURddUL[3][0][1][1] = ny*ny * (eL / rhoL - (uL*uL + vL*vL));
+
+        ddURddUL[0][1][1][1] = 0;
+        ddURddUL[1][1][1][1] = 1;
+        ddURddUL[2][1][1][1] = 0;
+        ddURddUL[3][1][1][1] = ny*ny * uL;
+
+        ddURddUL[0][2][1][1] = 0;
+        ddURddUL[1][2][1][1] = 0;
+        ddURddUL[2][2][1][1] = 1;
+        ddURddUL[3][2][1][1] = ny*ny * vL;
+
+        ddURddUL[0][3][1][1] = 0;
+        ddURddUL[1][3][1][1] = 0;
+        ddURddUL[2][3][1][1] = 0;
+        ddURddUL[3][3][1][1] = 1.0 - ny*ny;
+      }
+
+      break;
+    }
+  }
+
+  /* Compute new right state values */
+  if (bnd_id != 1 && bnd_id != 2)
+  {
+    /* Compute dFdULconv for right state */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int j = 0; j < nVars; j++)
+      {
+        for (unsigned int i = 0; i < nVars; i++)
+        {
+          double val = 0;
+          for (unsigned int k = 0; k < nVars; k++)
+          {
+            val += dFdURconv[i][k][dim] * dURdUL[k][j];
+          }
+          dFdUconv(fpt, i, j, dim, 1) = val;
+        }
+      }
+    }
+
+    if (viscous)
+    {
+      /* Compute dUcdUL for right state */
+      for (unsigned int j = 0; j < nVars; j++)
+      {
+        for (unsigned int i = 0; i < nVars; i++)
+        {
+          double val = 0;
+          for (unsigned int k = 0; k < nVars; k++)
+          {
+            val += dUcdUR[i][k] * dURdUL[k][j];
+          }
+          dUcdU(fpt, i, j, 1) = val;
+        }
+      }
+
+      /* Compute dFdULvisc for right state */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int j = 0; j < nVars; j++)
+        {
+          for (unsigned int i = 0; i < nVars; i++)
+          {
+            double val = 0;
+            for (unsigned int k = 0; k < nVars; k++)
+            {
+              val += dFdURvisc[i][k][dim] * dURdUL[k][j];
+            }
+            dFdUvisc(fpt, i, j, dim, 1) = val;
+          }
+        }
+      }
+
+      /* Compute dFddULvisc for right state */
+      if (bnd_id == 11) /* Adiabatic Wall */
+      {
+        for (unsigned int dimj = 0; dimj < nDims; dimj++)
+        {
+          for (unsigned int dimi = 0; dimi < nDims; dimi++)
+          {
+            for (unsigned int j = 0; j < nVars; j++)
+            {
+              for (unsigned int i = 0; i < nVars; i++)
+              {
+                double val = 0;
+                for (unsigned int dimk = 0; dimk < nDims; dimk++)
+                {
+                  for (unsigned int k = 0; k < nVars; k++)
+                  {
+                    val += dFddURvisc[i][k][dimi][dimk] * ddURddUL[k][j][dimk][dimj];
+                  }
+                }
+                dFddUvisc(fpt, i, j, dimi, dimj, 1) = val;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void apply_bcs_dFdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUconv, mdvector_gpu<double> &dFdUvisc,
+    mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddUvisc, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
+    unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
+    mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
+
+  if (blocks != 0)
+  {
+    if (equation == EulerNS)
+    {
+      if (nDims == 2)
+        apply_bcs_dFdU<4, 2><<<blocks, threads>>>(U, dFdUconv, dFdUvisc, dUcdU, dFddUvisc,
+            nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, gamma, norm, gfpt2bnd, viscous);
+      else
+        ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
+    }
   }
 }
 

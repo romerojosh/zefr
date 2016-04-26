@@ -123,6 +123,29 @@ void FRSolver::setup_update()
   }
   else if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
+    /* Set temporary flag for global implicit system */
+#ifdef _CPU
+    eles->CPU_flag = true;
+    if (input->dt_scheme == "BDF1")
+    {
+      ThrowException("BDF1 not implemented on CPU");
+    }
+#endif
+#ifdef _GPU
+    if (input->dt_scheme == "BDF1")
+      eles->CPU_flag = true;
+    else if (input->dt_scheme == "LUJac")
+    {
+      if (input->viscous)
+      {
+        ThrowException("Viscous LUJac not implemented on GPU");
+      }
+      eles->CPU_flag = false;
+    }
+    else if (input->dt_scheme == "LUSGS")
+      ThrowException("LUSGS not set up for GPU yet");
+#endif
+
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
 
@@ -460,6 +483,11 @@ void FRSolver::solver_data_to_device()
     eles->LHS_ptrs_d = eles->LHS_ptrs;
     eles->RHS_ptrs_d = eles->RHS_ptrs;
 
+    /* Implicit flux derivative data structures (element local) */
+    eles->dFdU_spts_d = eles->dFdU_spts;
+
+    /* Implicit flux derivative data structures (faces) */
+    faces->dFdUconv_d = faces->dFdUconv;
   }
 
   /* Solution data structures (element local) */
@@ -478,9 +506,6 @@ void FRSolver::solver_data_to_device()
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
 
-  /* Implicit flux derivative data structures (element local) */
-  eles->dFdU_spts_d = eles->dFdU_spts;
-
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
   faces->dU_d = faces->dU;
@@ -495,9 +520,6 @@ void FRSolver::solver_data_to_device()
   faces->waveSp_d = faces->waveSp;
   faces->LDG_bias_d = faces->LDG_bias;
   faces->bc_bias_d = faces->bc_bias;
-
-  /* Implicit flux derivative data structures (faces) */
-  faces->dFdUconv_d = faces->dFdUconv;
 
   /* Additional data */
   /* Geometry */
@@ -683,13 +705,6 @@ void FRSolver::compute_LHS()
   eles->compute_dFdUconv();
   faces->compute_dFdUconv(0, geo.nGfpts);
 
-#ifdef _GPU
-  /* Copy new dFdUconv from GPU */
-  // TODO: Temporary until placed in GPU
-  eles->dFdU_spts = eles->dFdU_spts_d;
-  faces->dFdUconv = faces->dFdUconv_d;
-#endif
-
   if (input->viscous)
   {
     /* Compute derivative of common solution with respect to state variables
@@ -709,6 +724,13 @@ void FRSolver::compute_LHS()
 
   /* Apply boundary conditions for flux derivative data */
   faces->apply_bcs_dFdU();
+
+#ifdef _GPU
+  /* Copy new dFdUconv from GPU */
+  // TODO: Temporary until placed in GPU
+  eles->dFdU_spts = eles->dFdU_spts_d;
+  faces->dFdUconv = faces->dFdUconv_d;
+#endif
 
   /* Compute normal flux derivative data at flux points */
   faces->compute_dFcdU(0, geo.nGfpts);

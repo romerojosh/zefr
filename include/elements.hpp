@@ -58,6 +58,7 @@ class Elements
     mdvector<double> oppPro, oppRes;
 
     /* Element structures for implicit method */
+    bool CPU_flag; // Temporary flag for global implicit method
     spmatrix<double> GLHS; // Sparse matrix for global implicit system
     mdvector<double> LHS;  // Element local matrices for implicit system
     mdvector<double> LHS_copy;

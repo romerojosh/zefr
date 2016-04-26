@@ -63,10 +63,13 @@ class Faces
     mdvector<int> bc_bias;
 
     /* Structures for implicit method */
+    bool CPU_flag; // Temporary flag for global implicit method
     mdvector<double> dFdUconv, dFdUvisc, dFddUvisc; 
     mdvector<double> dFcdU, dUcdU, dFcddU;
     mdvector<double> dFndUL_temp, dFndUR_temp, dFnddUL_temp, dFnddUR_temp;
     mdvector<double> dFcdU_temp, dFcddU_temp;
+    mdvector<double> dFdURconv, dUcdUR, dFdURvisc, dFddURvisc;
+    mdvector<double> dURdUL, ddURddUL;
 
 #ifdef _MPI
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
@@ -84,7 +87,8 @@ class Faces
     mdvector_gpu<int> bc_bias_d;
 
     /* Structures for implicit method */
-    mdvector_gpu<double> dFdUconv_d;
+    mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;
+    mdvector_gpu<double> dUcdU_d;
 
 #ifdef _MPI
     std::map<unsigned int, mdvector_gpu<double>> U_sbuffs_d, U_rbuffs_d;

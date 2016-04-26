@@ -844,65 +844,79 @@ void Elements::compute_dFdUconv()
 {
   if (input->equation == AdvDiff)
   {
-#ifdef _CPU
-#pragma omp parallel for collapse(5)
-    for (unsigned int dim = 0; dim < nDims; dim++)
+//#ifdef _CPU
+    if (CPU_flag)
     {
-      for (unsigned int nj = 0; nj < nVars; nj++)
+#pragma omp parallel for collapse(5)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int ni = 0; ni < nVars; ni++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          for (unsigned int ele = 0; ele < nEles; ele++)
+          for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            for (unsigned int spt = 0; spt < nSpts; spt++)
+            for (unsigned int ele = 0; ele < nEles; ele++)
             {
-              dFdU_spts(spt, ele, ni, nj, dim) = input->AdvDiff_A(dim);
+              for (unsigned int spt = 0; spt < nSpts; spt++)
+              {
+                dFdU_spts(spt, ele, ni, nj, dim) = input->AdvDiff_A(dim);
+              }
             }
           }
         }
       }
     }
-#endif
+//#endif
 
 #ifdef _GPU
-    compute_dFdUconv_spts_AdvDiff_wrapper(dFdU_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d);
-    check_error();
+    if (!CPU_flag)
+    {
+      compute_dFdUconv_spts_AdvDiff_wrapper(dFdU_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d);
+      check_error();
+    }
 #endif
 
   }
 
   else if (input->equation == Burgers)
   {
-#ifdef _CPU
-#pragma omp parallel for collapse(5)
-    for (unsigned int dim = 0; dim < nDims; dim++)
+//#ifdef _CPU
+    if (CPU_flag)
     {
-      for (unsigned int nj = 0; nj < nVars; nj++)
+#pragma omp parallel for collapse(5)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int ni = 0; ni < nVars; ni++)
+        for (unsigned int nj = 0; nj < nVars; nj++)
         {
-          for (unsigned int ele = 0; ele < nEles; ele++)
+          for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            for (unsigned int spt = 0; spt < nSpts; spt++)
+            for (unsigned int ele = 0; ele < nEles; ele++)
             {
-              dFdU_spts(spt, ele, ni, nj, dim) = U_spts(spt, ele, 0);
+              for (unsigned int spt = 0; spt < nSpts; spt++)
+              {
+                dFdU_spts(spt, ele, ni, nj, dim) = U_spts(spt, ele, 0);
+              }
             }
           }
         }
       }
     }
-#endif
+//#endif
 
 #ifdef _GPU
-    compute_dFdUconv_spts_Burgers_wrapper(dFdU_spts_d, U_spts_d, nSpts, nEles, nDims);
-    check_error();
+    if (!CPU_flag)
+    {
+      compute_dFdUconv_spts_Burgers_wrapper(dFdU_spts_d, U_spts_d, nSpts, nEles, nDims);
+      check_error();
+    }
 #endif
 
   }
 
   else if (input->equation == EulerNS)
   {
-#ifdef _CPU
+//#ifdef _CPU
+    if (CPU_flag)
+    {
     if (nDims == 2)
     {
 #pragma omp parallel for collapse(2)
@@ -965,11 +979,15 @@ void Elements::compute_dFdUconv()
     {
       ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
     }
-#endif
+    }
+//#endif
 
 #ifdef _GPU
-    compute_dFdUconv_spts_EulerNS_wrapper(dFdU_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma);
-    check_error();
+    if (!CPU_flag)
+    {
+      compute_dFdUconv_spts_EulerNS_wrapper(dFdU_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma);
+      check_error();
+    }
 #endif
 
   }

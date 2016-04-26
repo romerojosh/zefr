@@ -35,37 +35,59 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
+    /* Set temporary flag for global implicit system */
+#ifdef _CPU
+    CPU_flag = true;
+#endif
+#ifdef _GPU
+    if (input->dt_scheme == "BDF1")
+      CPU_flag = true;
+    else if (input->dt_scheme == "LUJac")
+      CPU_flag = false;
+#endif
+
+    /* Index Map Notes:
+     * Common Value Slots:  Sloti:  dFdUL, dFdUR  Slotj:  L, R
+     * dFddUvisc:           nDimsi: Fx, Fy        nDimsj: dUdx, dUdy
+     * ddURddUL:            nDimsi: dURdx, dURdy  nDimsj: dULdx, dULdy
+     */
     dFdUconv.assign({nFpts, nVars, nVars, nDims, 2});
 
     dFcdU.assign({nFpts, nVars, nVars, 2, 2});
-
     dFndUL_temp.assign({nFpts, nVars, nVars});
     dFndUR_temp.assign({nFpts, nVars, nVars});
 
+    /* Temp strutures for inviscid boundary conditions */
+    dFdURconv.assign({nVars, nVars, nDims});
+    dURdUL.assign({nVars, nVars});
+
     if(input->viscous)
     {
-      /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
       dFdUvisc.assign({nFpts, nVars, nVars, nDims, 2});
-      dFddUvisc.assign({nFpts, nVars, nVars, nDims, nDims, 2});
-
+      dFddUvisc.assign({nFpts, nVars, nVars, nDims, nDims, 2}); 
       dUcdU.assign({nFpts, nVars, nVars, 2});
       dFcddU.assign({nFpts, nVars, nVars, nDims, 2, 2});
-
       dFnddUL_temp.assign({nFpts, nVars, nVars, nDims});
       dFnddUR_temp.assign({nFpts, nVars, nVars, nDims});
 
       // TODO: May be able to remove these
       dFcdU_temp.assign({nFpts, nVars, nVars, 2});
       dFcddU_temp.assign({nFpts, nVars, nVars, nDims, 2});
+
+      /* Temp strutures for viscous boundary conditions */
+      dUcdUR.assign({nVars, nVars});
+      dFdURvisc.assign({nVars, nVars, nDims});
+      dFddURvisc.assign({nVars, nVars, nDims, nDims});
+      ddURddUL.assign({nVars, nVars, nDims, nDims});
     }
   }
+  bc_bias.assign({nFpts}, 0);
 
   /* If viscous, allocate arrays used for LDG flux */
   //if(input->viscous)
   //{
     Fcomm_temp.assign({nFpts, nVars, nDims});
     LDG_bias.assign({nFpts}, 0);
-    bc_bias.assign({nFpts}, 0);
   //}
 
   Ucomm.assign({nFpts, nVars, 2});
@@ -772,23 +794,22 @@ void Faces::apply_bcs_dU()
 #endif
 }
 
-
+// TODO: Add a check to ensure proper boundary conditions are used
 void Faces::apply_bcs_dFdU()
 {
+//#ifdef _CPU
+  if (CPU_flag)
+  {
   /* Loop over boundary flux points */
 #pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
-    /* TODO: Move setup */
-    mdvector<double> dFdURconv, dURdUL;
-    dFdURconv.assign({nVars, nVars, nDims});
-    dURdUL.assign({nVars, nVars});
-
-    /* Copy right state dFdUconv */
-    if (bnd_id != 2)
+    /* Copy right state values */
+    if (bnd_id != 1 && bnd_id != 2)
     {
+      /* Copy right state dFdUconv */
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         for (unsigned int nj = 0; nj < nVars; nj++)
@@ -799,20 +820,10 @@ void Faces::apply_bcs_dFdU()
           }
         }
       }
-    }
 
-    /* TODO: Move setup */
-    mdvector<double> dUcdUR, dFdURvisc, dFddURvisc, ddURddUL;
-    if (input->viscous)
-    {
-      dUcdUR.assign({nVars, nVars});
-      dFdURvisc.assign({nVars, nVars, nDims});
-      dFddURvisc.assign({nVars, nVars, nDims, nDims}); // nDimsi: Fx, Fy // nDimsj: dUdx, dUdy
-      ddURddUL.assign({nVars, nVars, nDims, nDims}); // nDimsi: dUdxR, dUdyR // nDimsj: dUdxL, dUdyL
-
-      /* Copy right state dUcdU */
-      if (bnd_id != 2)
+      if (input->viscous)
       {
+        /* Copy right state dUcdU */
         for (unsigned int nj = 0; nj < nVars; nj++)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
@@ -820,11 +831,8 @@ void Faces::apply_bcs_dFdU()
             dUcdUR(ni, nj) = dUcdU(fpt, ni, nj, 1);
           }
         }
-      }
 
-      /* Copy right state dFdUvisc */
-      if (bnd_id != 2)
-      {
+        /* Copy right state dFdUvisc */
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           for (unsigned int nj = 0; nj < nVars; nj++)
@@ -835,20 +843,20 @@ void Faces::apply_bcs_dFdU()
             }
           }
         }
-      }
 
-      /* Copy right state dFddUvisc */
-      if (bnd_id == 11 || bnd_id == 12) /* Adiabatic Wall */
-      {
-        for (unsigned int dimj = 0; dimj < nDims; dimj++)
+        /* Copy right state dFddUvisc */
+        if (bnd_id == 11) /* Adiabatic Wall */
         {
-          for (unsigned int dimi = 0; dimi < nDims; dimi++)
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {
-            for (unsigned int nj = 0; nj < nVars; nj++)
+            for (unsigned int dimi = 0; dimi < nDims; dimi++)
             {
-              for (unsigned int ni = 0; ni < nVars; ni++)
+              for (unsigned int nj = 0; nj < nVars; nj++)
               {
-                dFddURvisc(ni, nj, dimi, dimj) = dFddUvisc(fpt, ni, nj, dimi, dimj, 1);
+                for (unsigned int ni = 0; ni < nVars; ni++)
+                {
+                  dFddURvisc(ni, nj, dimi, dimj) = dFddUvisc(fpt, ni, nj, dimi, dimj, 1);
+                }
               }
             }
           }
@@ -857,7 +865,6 @@ void Faces::apply_bcs_dFdU()
     }
 
     /* Apply specified boundary condition */
-    // TODO: Needs to be checked to ensure all boundary conditions have the correct cases
     switch(bnd_id)
     {
       case 2: /* Farfield and Supersonic Inlet */
@@ -910,72 +917,24 @@ void Faces::apply_bcs_dFdU()
 
         /* Compute dURdUL */
         dURdUL(0, 0) = 1;
-        dURdUL(0, 1) = 0;
-        dURdUL(0, 2) = 0;
-        dURdUL(0, 3) = 0;
-
         dURdUL(1, 0) = 0;
-        dURdUL(1, 1) = 1;
-        dURdUL(1, 2) = 0;
-        dURdUL(1, 3) = 0;
-
         dURdUL(2, 0) = 0;
-        dURdUL(2, 1) = 0;
-        dURdUL(2, 2) = 1;
-        dURdUL(2, 3) = 0;
-        
         dURdUL(3, 0) = -0.5 * (uL*uL + vL*vL);
+
+        dURdUL(0, 1) = 0;
+        dURdUL(1, 1) = 1;
+        dURdUL(2, 1) = 0;
         dURdUL(3, 1) = uL;
+
+        dURdUL(0, 2) = 0;
+        dURdUL(1, 2) = 0;
+        dURdUL(2, 2) = 1;
         dURdUL(3, 2) = vL;
+
+        dURdUL(0, 3) = 0;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
         dURdUL(3, 3) = 0;
-
-        /* Compute dFdULconv for right state */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dFdUconv(fpt, i, j, dim, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
-              }
-            }
-          }
-        }
-
-        if (input->viscous)
-        {
-          /* Compute dUcdUL for right state */
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dUcdU(fpt, i, j, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
-              }
-            }
-          }
-
-          /* Compute dFdULvisc for right state */
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          {
-            for (unsigned int j = 0; j < nVars; j++)
-            {
-              for (unsigned int i = 0; i < nVars; i++)
-              {
-                dFdUvisc(fpt, i, j, dim, 1) = 0;
-                for (unsigned int k = 0; k < nVars; k++)
-                {
-                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
-                }
-              }
-            }
-          }
-        }
 
         bc_bias(fpt) = 1;
         break;
@@ -1050,23 +1009,23 @@ void Faces::apply_bcs_dFdU()
 
           /* Compute dURdUL */
           dURdUL(0, 0) = a1 * b1;
-          dURdUL(0, 1) = a1 * b2;
-          dURdUL(0, 2) = a1 * b3;
-          dURdUL(0, 3) = 0.5 * rhoR * b4;
-
           dURdUL(1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-          dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-          dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-          dURdUL(1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
-
           dURdUL(2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-          dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-          dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-          dURdUL(2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
-          
           dURdUL(3, 0) = a1 * b1 * c1 - b1 * c2;
+
+          dURdUL(0, 1) = a1 * b2;
+          dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+          dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
           dURdUL(3, 1) = a1 * b2 * c1 - b2 * c2;
+
+          dURdUL(0, 2) = a1 * b3;
+          dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+          dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
           dURdUL(3, 2) = a1 * b3 * c1 - b3 * c2;
+
+          dURdUL(0, 3) = 0.5 * rhoR * b4;
+          dURdUL(1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
+          dURdUL(2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
           dURdUL(3, 3) = 0.5 * rhoR * b4 * c1 - a2 * c2;
         }
 
@@ -1103,72 +1062,24 @@ void Faces::apply_bcs_dFdU()
 
           /* Compute dURdUL */
           dURdUL(0, 0) = a1 * e1;
-          dURdUL(0, 1) = a1 * e2;
-          dURdUL(0, 2) = a1 * e3;
-          dURdUL(0, 3) = a1 * e4;
-
           dURdUL(1, 0) = a1 * e1 * c4 + rhoR * c1;
-          dURdUL(1, 1) = a1 * e2 * c4 + rhoR * c2;
-          dURdUL(1, 2) = a1 * e3 * c4 + rhoR * c3;
-          dURdUL(1, 3) = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
-
           dURdUL(2, 0) = a1 * e1 * d4 + rhoR * d1;
-          dURdUL(2, 1) = a1 * e2 * d4 + rhoR * d2;
-          dURdUL(2, 2) = a1 * e3 * d4 + rhoR * d3;
-          dURdUL(2, 3) = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
-          
           dURdUL(3, 0) = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
+
+          dURdUL(0, 1) = a1 * e2;
+          dURdUL(1, 1) = a1 * e2 * c4 + rhoR * c2;
+          dURdUL(2, 1) = a1 * e2 * d4 + rhoR * d2;
           dURdUL(3, 1) = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
+
+          dURdUL(0, 2) = a1 * e3;
+          dURdUL(1, 2) = a1 * e3 * c4 + rhoR * c3;
+          dURdUL(2, 2) = a1 * e3 * d4 + rhoR * d3;
           dURdUL(3, 2) = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
+
+          dURdUL(0, 3) = a1 * e4;
+          dURdUL(1, 3) = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
+          dURdUL(2, 3) = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
           dURdUL(3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
-        }
-
-        /* Compute dFdULconv for right state */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dFdUconv(fpt, i, j, dim, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
-              }
-            }
-          }
-        }
-
-        if (input->viscous)
-        {
-          /* Compute dUcdUL for right state */
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dUcdU(fpt, i, j, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
-              }
-            }
-          }
-
-          /* Compute dFdULvisc for right state */
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          {
-            for (unsigned int j = 0; j < nVars; j++)
-            {
-              for (unsigned int i = 0; i < nVars; i++)
-              {
-                dFdUvisc(fpt, i, j, dim, 1) = 0;
-                for (unsigned int k = 0; k < nVars; k++)
-                {
-                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
-                }
-              }
-            }
-          }
         }
 
         bc_bias(fpt) = 1;
@@ -1178,73 +1089,25 @@ void Faces::apply_bcs_dFdU()
       case 8: /* Slip Wall */
       {
         /* Compute dURdUL */
-        dURdUL(0, 0) = 1.0;
-        dURdUL(0, 1) = 0;
-        dURdUL(0, 2) = 0;
-        dURdUL(0, 3) = 0;
-
+        dURdUL(0, 0) = 1;
         dURdUL(1, 0) = 0;
-        dURdUL(1, 1) = 1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0);
-        dURdUL(1, 2) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
-        dURdUL(1, 3) = 0;
-
         dURdUL(2, 0) = 0;
-        dURdUL(2, 1) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
-        dURdUL(2, 2) = 1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0);
-        dURdUL(2, 3) = 0;
-        
         dURdUL(3, 0) = 0;
+
+        dURdUL(0, 1) = 0;
+        dURdUL(1, 1) = 1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0);
+        dURdUL(2, 1) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
         dURdUL(3, 1) = 0;
+
+        dURdUL(0, 2) = 0;
+        dURdUL(1, 2) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
+        dURdUL(2, 2) = 1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0);
         dURdUL(3, 2) = 0;
-        dURdUL(3, 3) = 1.0;
 
-        /* Compute dFdULconv for right state */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dFdUconv(fpt, i, j, dim, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
-              }
-            }
-          }
-        }
-
-        if (input->viscous)
-        {
-          /* Compute dUcdUL for right state */
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dUcdU(fpt, i, j, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
-              }
-            }
-          }
-
-          /* Compute dFdULvisc for right state */
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          {
-            for (unsigned int j = 0; j < nVars; j++)
-            {
-              for (unsigned int i = 0; i < nVars; i++)
-              {
-                dFdUvisc(fpt, i, j, dim, 1) = 0;
-                for (unsigned int k = 0; k < nVars; k++)
-                {
-                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
-                }
-              }
-            }
-          }
-        }
+        dURdUL(0, 3) = 0;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
+        dURdUL(3, 3) = 1;
 
         bc_bias(fpt) = 1;
         break;
@@ -1262,73 +1125,28 @@ void Faces::apply_bcs_dFdU()
         double eL = U(fpt, 3, 0);
 
         /* Compute dURdUL */
-        dURdUL(0, 0) = 1.0;
-        dURdUL(0, 1) = 0;
-        dURdUL(0, 2) = 0;
-        dURdUL(0, 3) = 0;
-
+        dURdUL(0, 0) = 1;
         dURdUL(1, 0) = 0;
-        dURdUL(1, 1) = 0;
-        dURdUL(1, 2) = 0;
-        dURdUL(1, 3) = 0;
-
         dURdUL(2, 0) = 0;
-        dURdUL(2, 1) = 0;
-        dURdUL(2, 2) = 0;
-        dURdUL(2, 3) = 0;
-        
         dURdUL(3, 0) = 0.5 * (uL*uL + vL*vL);
-        dURdUL(3, 1) = -uL;
-        dURdUL(3, 2) = -vL;
-        dURdUL(3, 3) = 1.0;
 
-        /* Compute dFdULconv for right state */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dFdUconv(fpt, i, j, dim, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dFdUconv(fpt, i, j, dim, 1) += dFdURconv(i, k, dim) * dURdUL(k, j);
-              }
-            }
-          }
-        }
+        dURdUL(0, 1) = 0;
+        dURdUL(1, 1) = 0;
+        dURdUL(2, 1) = 0;
+        dURdUL(3, 1) = -uL;
+
+        dURdUL(0, 2) = 0;
+        dURdUL(1, 2) = 0;
+        dURdUL(2, 2) = 0;
+        dURdUL(3, 2) = -vL;
+
+        dURdUL(0, 3) = 0;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
+        dURdUL(3, 3) = 1;
 
         if (input->viscous)
         {
-          /* Compute dUcdUL for right state */
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              dUcdU(fpt, i, j, 1) = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                dUcdU(fpt, i, j, 1) += dUcdUR(i, k) * dURdUL(k, j);
-              }
-            }
-          }
-
-          /* Compute dFdULvisc for right state */
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          {
-            for (unsigned int j = 0; j < nVars; j++)
-            {
-              for (unsigned int i = 0; i < nVars; i++)
-              {
-                dFdUvisc(fpt, i, j, dim, 1) = 0;
-                for (unsigned int k = 0; k < nVars; k++)
-                {
-                  dFdUvisc(fpt, i, j, dim, 1) += dFdURvisc(i, k, dim) * dURdUL(k, j);
-                }
-              }
-            }
-          }
-
           /* Compute dUxR/dUxL */
           ddURddUL(0, 0, 0, 0) = 1;
           ddURddUL(1, 0, 0, 0) = 0;
@@ -1412,8 +1230,70 @@ void Faces::apply_bcs_dFdU()
           ddURddUL(1, 3, 1, 1) = 0;
           ddURddUL(2, 3, 1, 1) = 0;
           ddURddUL(3, 3, 1, 1) = 1.0 - ny*ny;
+        }
 
-          /* Compute dFddULvisc for right state */
+        /* Set LDG bias */
+        LDG_bias(fpt) = 1;
+        break;
+      }
+    }
+
+    /* Compute new right state values */
+    if (bnd_id != 1 && bnd_id != 2)
+    {
+      /* Compute dFdULconv for right state */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int j = 0; j < nVars; j++)
+        {
+          for (unsigned int i = 0; i < nVars; i++)
+          {
+            double val = 0;
+            for (unsigned int k = 0; k < nVars; k++)
+            {
+              val += dFdURconv(i, k, dim) * dURdUL(k, j);
+            }
+            dFdUconv(fpt, i, j, dim, 1) = val;
+          }
+        }
+      }
+
+      if (input->viscous)
+      {
+        /* Compute dUcdUL for right state */
+        for (unsigned int j = 0; j < nVars; j++)
+        {
+          for (unsigned int i = 0; i < nVars; i++)
+          {
+            double val = 0;
+            for (unsigned int k = 0; k < nVars; k++)
+            {
+              val += dUcdUR(i, k) * dURdUL(k, j);
+            }
+            dUcdU(fpt, i, j, 1) = val;
+          }
+        }
+
+        /* Compute dFdULvisc for right state */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int j = 0; j < nVars; j++)
+          {
+            for (unsigned int i = 0; i < nVars; i++)
+            {
+              double val = 0;
+              for (unsigned int k = 0; k < nVars; k++)
+              {
+                val += dFdURvisc(i, k, dim) * dURdUL(k, j);
+              }
+              dFdUvisc(fpt, i, j, dim, 1) = val;
+            }
+          }
+        }
+
+        /* Compute dFddULvisc for right state */
+        if (bnd_id == 11) /* Adiabatic Wall */
+        {
           for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {
             for (unsigned int dimi = 0; dimi < nDims; dimi++)
@@ -1422,26 +1302,35 @@ void Faces::apply_bcs_dFdU()
               {
                 for (unsigned int i = 0; i < nVars; i++)
                 {
-                  dFddUvisc(fpt, i, j, dimi, dimj, 1) = 0;
+                  double val = 0;
                   for (unsigned int dimk = 0; dimk < nDims; dimk++)
                   {
                     for (unsigned int k = 0; k < nVars; k++)
                     {
-                      dFddUvisc(fpt, i, j, dimi, dimj, 1) += dFddURvisc(i, k, dimi, dimk) * ddURddUL(k, j, dimk, dimj);
+                      val += dFddURvisc(i, k, dimi, dimk) * ddURddUL(k, j, dimk, dimj);
                     }
                   }
+                  dFddUvisc(fpt, i, j, dimi, dimj, 1) = val;
                 }
               }
             }
           }
         }
-
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
-        break;
       }
     }
   }
+  }
+//#endif
+
+#ifdef _GPU
+  if (!CPU_flag)
+  {
+    apply_bcs_dFdU_wrapper(U_d, dFdUconv_d, dFdUvisc_d, dUcdU_d, dFddUvisc_d,
+        geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
+        input->P_fs, input->gamma, norm_d, geo->gfpt2bnd_d, input->equation, input->viscous);
+    check_error();
+  }
+#endif
 }
 
 
@@ -2332,53 +2221,67 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
-#ifdef _CPU
+//#ifdef _CPU
+    if (CPU_flag)
+    {
 #pragma omp parallel for collapse(3)
-    for (unsigned int slot = 0; slot < 2; slot++)
-    { 
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+      for (unsigned int slot = 0; slot < 2; slot++)
+      { 
+        for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          dFdUconv(fpt, 0, 0, dim, slot) = input->AdvDiff_A(dim);
+          for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+          {
+            dFdUconv(fpt, 0, 0, dim, slot) = input->AdvDiff_A(dim);
+          }
         }
       }
     }
-#endif
+//#endif
 
 #ifdef _GPU
-    compute_dFdUconv_fpts_AdvDiff_wrapper(dFdUconv_d, nFpts, nDims, input->AdvDiff_A_d,
-        startFpt, endFpt);
-    check_error();
+    if (!CPU_flag)
+    {
+      compute_dFdUconv_fpts_AdvDiff_wrapper(dFdUconv_d, nFpts, nDims, input->AdvDiff_A_d,
+          startFpt, endFpt);
+      check_error();
+    }
 #endif
 
   }
 
   else if (input->equation == Burgers)
   {
-#ifdef _CPU
-#pragma omp parallel for collapse(3)
-    for (unsigned int slot = 0; slot < 2; slot++)
+//#ifdef _CPU
+    if (CPU_flag)
     {
-      for (unsigned int dim = 0; dim < nDims; dim++)
+#pragma omp parallel for collapse(3)
+      for (unsigned int slot = 0; slot < 2; slot++)
       {
-        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+        for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          dFdUconv(fpt, 0, 0, dim, slot) = U(fpt, 0, slot);
+          for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+          {
+            dFdUconv(fpt, 0, 0, dim, slot) = U(fpt, 0, slot);
+          }
         }
       }
     }
-#endif
+//#endif
 
 #ifdef _GPU
-    compute_dFdUconv_fpts_Burgers_wrapper(dFdUconv_d, U_d, nFpts, nDims, startFpt, endFpt);
-    check_error();
+    if (!CPU_flag)
+    {
+      compute_dFdUconv_fpts_Burgers_wrapper(dFdUconv_d, U_d, nFpts, nDims, startFpt, endFpt);
+      check_error();
+    }
 #endif
   }
 
   else if (input->equation == EulerNS)
   {
-#ifdef _CPU
+//#ifdef _CPU
+    if (CPU_flag)
+    {
     if (nDims == 2)
     {
 #pragma omp parallel for collapse(2)
@@ -2441,12 +2344,16 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
     {
       ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
     }
-#endif
+    }
+//#endif
 
 #ifdef _GPU
+    if (!CPU_flag)
+    {
       compute_dFdUconv_fpts_EulerNS_wrapper(dFdUconv_d, U_d, nFpts, nDims, input->gamma, 
           startFpt, endFpt);
       check_error();
+    }
 #endif
   }
 }
