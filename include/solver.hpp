@@ -37,10 +37,11 @@ class FRSolver
     mdvector<double> U_ini, U_avg;
     Filter filt;
 
-    /* Additioanl "Finite-Volume" variables */
+    /* Additional "Finite-Volume" variables */
     bool FV_mode;
-    mdvector<int> FV_parts; 
-    std::vector<std::vector<double>> FV_vols;
+    mdvector<int> FV_ele2part; 
+    std::vector<mdvector<int>> FV_part2eles;
+    std::vector<mdvector<double>> FV_vols;
     mdvector<double> dt_part;
 
 #ifdef _GPU

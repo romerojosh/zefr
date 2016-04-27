@@ -223,7 +223,8 @@ void FRSolver::setup_output()
 void FRSolver::setup_h_levels()
 {
   /* Allocate space for FV partition data */
-  FV_parts.assign({eles->nEles, input->hmg_levels});
+  FV_ele2part.assign({eles->nEles, input->hmg_levels});
+  FV_part2eles.resize(input->hmg_levels);
   U_avg.assign({eles->nEles, eles->nVars});
   FV_vols.resize(input->hmg_levels);
 
@@ -269,11 +270,11 @@ void FRSolver::setup_h_levels()
   for (unsigned int H = 0; H < input->hmg_levels; H++)
   {
     //int nPartitions = eles->nEles / (1 << (H+1));
-    int nPartitions = eles->nEles / (1 << (H));
+    int nPartitions = eles->nEles / ((1 << (eles->nDims * H)));
 
     std::cout << nPartitions << std::endl;
 
-    FV_vols[H].assign(nPartitions, 0);
+    FV_vols[H].assign({nPartitions}, 0);
 
     /* Coarsening using METIS (not too great) */
     if (input->coarse_mode == 0)
@@ -285,7 +286,7 @@ void FRSolver::setup_h_levels()
       int nNodes = geo.nNodes;
 
       METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), nullptr, 
-          nullptr, &nNodesPerFace, &nPartitions, nullptr, options, &objval, &FV_parts(0,H), 
+          nullptr, &nNodesPerFace, &nPartitions, nullptr, options, &objval, &FV_ele2part(0,H), 
           npart.data());  
 
 
@@ -317,7 +318,7 @@ void FRSolver::setup_h_levels()
           {
             for (unsigned int j = 0; j < segmentWidthY; j++)
             {
-              FV_parts((I*segmentWidthX + i) * nElesY + (J*segmentWidthY +j), H) = part;
+              FV_ele2part((I*segmentWidthX + i) * nElesY + (J*segmentWidthY +j), H) = part;
             }
           }
           part++;
@@ -332,11 +333,37 @@ void FRSolver::setup_h_levels()
     double sum = 0;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      FV_vols[H][FV_parts(ele, H)] += scale_fac * eles->jaco_det_spts(0, ele);
+      FV_vols[H](FV_ele2part(ele, H)) += scale_fac * eles->jaco_det_spts(0, ele);
       sum += scale_fac * eles->jaco_det_spts(0,ele);
     }
     std::cout << sum << std::endl;
 
+    std::vector<unsigned int> eles_per_part(nPartitions, 0);
+
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      eles_per_part[FV_ele2part(ele, H)]++;
+    }
+
+    unsigned int max_eles_per_part = *std::max_element(eles_per_part.begin(), eles_per_part.end());
+    FV_part2eles[H].assign({nPartitions, max_eles_per_part}, -1);
+
+    // TODO: This procedure is a bit expensive. Can push_back to vectors and then copy?
+    for (unsigned int part = 0; part < nPartitions; part++)
+    {
+      unsigned int idx = 0;
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        if (FV_ele2part(ele, H) == part)
+        {
+          FV_part2eles[H](part, idx) = ele;
+          idx++;
+        }
+
+        if (idx == max_eles_per_part)
+          break;
+      }
+    }
   }
 }
 
@@ -1017,22 +1044,30 @@ void FRSolver::accumulate_partition_U(int FV_level)
 {
   /* Compute partition average solutions */
   U_avg.fill(0.0);
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int part = 0; part < FV_part2eles[FV_level].shape()[0]; part++)
     {
-        int part = FV_parts(ele, FV_level);
+      for (unsigned int idx = 0; idx < FV_part2eles[FV_level].shape()[1]; idx++)
+      {
+        int ele = FV_part2eles[FV_level](part, idx);
+        if (ele == -1)
+          break;
+
         U_avg(part, n) += eles->U_spts(0, ele, n) * eles->vol(ele);
+      }
     }
   }
 
   /* Set solution point solutions to corresponding partition average */
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      int part = FV_parts(ele, FV_level);
-      eles->U_spts(0, ele, n) = U_avg(part, n)/FV_vols[FV_level][part];
+      int part = FV_ele2part(ele, FV_level);
+      eles->U_spts(0, ele, n) = U_avg(part, n)/FV_vols[FV_level](part);
     }
   }
 }
@@ -1041,23 +1076,33 @@ void FRSolver::accumulate_partition_divF(unsigned int stage, int FV_level)
 {
   /* Accumulate subelement residual components */
   U_avg.fill(0.0); //Reuse U_avg storage
+
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int part = 0; part < FV_part2eles[FV_level].shape()[0]; part++)
     {
-      int part = FV_parts(ele, FV_level);
-      U_avg(part, n) += eles->divF_spts(0, ele, n, stage);
+      for (unsigned int idx = 0; idx < FV_part2eles[FV_level].shape()[1]; idx++)
+      {
+        int ele = FV_part2eles[FV_level](part, idx);
+
+        if (ele == -1)
+          break;
+
+        U_avg(part, n) += eles->divF_spts(0, ele, n, stage);
+      }
     }
   }
 
   /* Set residual to accumulated partition residuals */
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
-        int part = FV_parts(ele, FV_level);
-        eles->divF_spts(0, ele, n, stage) = U_avg(part, n);
-      }
+    {
+      int part = FV_ele2part(ele, FV_level);
+      eles->divF_spts(0, ele, n, stage) = U_avg(part, n);
+    }
   }
 }
 
@@ -1272,24 +1317,24 @@ void FRSolver::update_FV(int FV_level, const mdvector_gpu<double> &source)
 #ifdef _CPU
     if (source.size() == 0)
     {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          int part = FV_parts(ele, FV_level);
+          int part = FV_ele2part(ele, FV_level);
 
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
             if (input->dt_type != 2)
             {
               eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(0) / 
-                FV_vols[FV_level][part] * eles->divF_spts(spt, ele, n, stage);
+                FV_vols[FV_level](part) * eles->divF_spts(spt, ele, n, stage);
             }
             else
             {
               eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(part) / 
-                FV_vols[FV_level][part] * eles->divF_spts(spt, ele, n, stage);
+                FV_vols[FV_level](part) * eles->divF_spts(spt, ele, n, stage);
             }
           }
         }
@@ -1297,23 +1342,23 @@ void FRSolver::update_FV(int FV_level, const mdvector_gpu<double> &source)
     }
     else
     {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          int part = FV_parts(ele, FV_level);
+          int part = FV_ele2part(ele, FV_level);
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
             if (input->dt_type != 2)
             {
               eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(0) / 
-                FV_vols[FV_level][part] * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                FV_vols[FV_level](part) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
             }
             else
             {
               eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt_part(part) / 
-                FV_vols[FV_level][part] * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                FV_vols[FV_level](part) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
             }
           }
         }
@@ -1358,23 +1403,23 @@ void FRSolver::update_FV(int FV_level, const mdvector_gpu<double> &source)
     {
       if (source.size() == 0)
       {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < eles->nVars; n++)
         {
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
-            int part = FV_parts(ele, FV_level);
+            int part = FV_ele2part(ele, FV_level);
 
             for (unsigned int spt = 0; spt < eles->nSpts; spt++)
             {
               if (input->dt_type != 2)
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) / FV_vols[FV_level][part] * 
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) / FV_vols[FV_level](part) * 
                   eles->divF_spts(spt, ele, n, stage);
               }
               else
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) / FV_vols[FV_level][part] * 
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) / FV_vols[FV_level](part) * 
                   eles->divF_spts(spt, ele, n, stage);
               }
             }
@@ -1383,22 +1428,22 @@ void FRSolver::update_FV(int FV_level, const mdvector_gpu<double> &source)
       }
       else
       {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < eles->nVars; n++)
         {
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
-            int part = FV_parts(ele, FV_level);
+            int part = FV_ele2part(ele, FV_level);
             for (unsigned int spt = 0; spt < eles->nSpts; spt++)
             {
               if (input->dt_type != 2)
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) / FV_vols[FV_level][part] * 
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(0) / FV_vols[FV_level](part) * 
                   (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
               }
               else
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) / FV_vols[FV_level][part] * 
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt_part(part) / FV_vols[FV_level](part) * 
                   (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
               }
             }
@@ -1471,7 +1516,7 @@ void FRSolver::compute_element_dt(int FV_level)
     dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
 
     if (FV_mode)
-      dt_part(FV_parts(ele, FV_level)) = std::min(dt_part(FV_parts(ele, FV_level)), dt(ele));
+      dt_part(FV_ele2part(ele, FV_level)) = std::min(dt_part(FV_ele2part(ele, FV_level)), dt(ele));
   }
 
   if (input->dt_type == 1) /* Global minimum */
@@ -1958,7 +2003,7 @@ void FRSolver::write_partition_file()
     {
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << FV_parts(ele, H) << " ";
+        f << FV_ele2part(ele, H) << " ";
       }
 
       f << std::endl;
@@ -1997,8 +2042,8 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         }
         else if (FV_mode)
         {
-          int part = FV_parts(ele, FV_level);
-          eles->divF_spts(spt, ele, n, 0) /= FV_vols[FV_level][part];
+          int part = FV_ele2part(ele, FV_level);
+          eles->divF_spts(spt, ele, n, 0) /= FV_vols[FV_level](part);
         }
       }
     }
