@@ -715,8 +715,8 @@ void FRSolver::compute_LHS()
   if (input->dt_scheme == "BDF1")
   {
     eles->U_spts = eles->U_spts_d;
+    faces->U = faces->U_d;
   }
-  faces->U = faces->U_d;
 #endif
 
   /* Compute derivative of convective flux with respect to state variables 
@@ -750,14 +750,6 @@ void FRSolver::compute_LHS()
   /* Transform flux derivative data from physical to reference space */
   eles->transform_dFdU();
   faces->transform_dFcdU();
-
-#ifdef _GPU
-  // TODO: Temporary until placed in GPU
-  if (input->dt_scheme == "LUJac")
-  {
-    faces->dFcdU = faces->dFcdU_d;
-  }
-#endif
 
   /* Copy normal flux derivative data from face local storage to element local storage */
   dFcdU_from_faces();
@@ -1280,6 +1272,9 @@ void FRSolver::F_from_faces()
 
 void FRSolver::dFcdU_from_faces()
 {
+//#ifdef _CPU
+  if (eles->CPU_flag)
+  {
 #pragma omp parallel for collapse(4)
   for (unsigned int nj = 0; nj < eles->nVars; nj++) 
   {
@@ -1300,10 +1295,22 @@ void FRSolver::dFcdU_from_faces()
             notslot = 0;
           }
 
-          //TODO: if gfpt > nGfpts_int (and < nGfpts_int + nGfpts_bnd), it is a boundary. You can add boundary contributions here I think.
-
-          eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
-          eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
+          /* Combine dFcdU on non-periodic boundaries */
+          // TODO: might need to move this to faces
+          if (gfpt >= (int)geo.nGfpts_int && gfpt < (int)(geo.nGfpts_int + geo.nGfpts_bnd))
+          {
+            unsigned int bnd_id = geo.gfpt2bnd(gfpt - geo.nGfpts_int);
+            if (bnd_id != 1)
+            {
+              eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot) + 
+                                                      faces->dFcdU(gfpt, ni, nj, notslot, slot);
+            }
+          }
+          else
+          {
+            eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
+            eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
+          }
         }
       }
     }
@@ -1344,6 +1351,18 @@ void FRSolver::dFcdU_from_faces()
       }
     }
   }
+  }
+//#endif
+
+#ifdef _GPU
+  if (!eles->CPU_flag)
+  {
+    dFcdU_from_faces_wrapper(faces->dFcdU_d, eles->dFcdU_fpts_d, geo.fpt2gfpt_d,
+        geo.fpt2gfpt_slot_d, geo.gfpt2bnd_d, geo.nGfpts_int, geo.nGfpts_bnd, eles->nVars, 
+        eles->nEles, eles->nFpts, eles->nDims, input->equation);
+    check_error();
+  }
+#endif
 }
 
 void FRSolver::add_source(unsigned int stage)
@@ -1620,9 +1639,6 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         if (input->dt_type != 0)
         {
           compute_element_dt();
-#ifdef _GPU
-          dt = dt_d; // Copy timestep out to CPU for LHS computation
-#endif
         }
 
         /* Compute SER time step growth */
@@ -1635,7 +1651,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         }
 
         /* Compute LHS implicit Jacobian */
-          compute_LHS();
+        compute_LHS();
       }
 
       /* Prepare RHS vector */

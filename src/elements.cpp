@@ -1248,20 +1248,6 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
           ele_list.push_back(eleN);
         }
 
-        /* Add contribution from boundary conditions (dFcdU) */
-        for (unsigned int face = 0; face < nFaces; face++)
-        {
-          int eleN = geo->ele_adj(face, ele);
-          if (eleN == -1)
-          {
-            for (unsigned int i = 0; i < nSpts1D; i++)
-            {
-              unsigned int ind = face * nSpts1D + i;
-              dFcdU_fpts(ind, ele, ni, nj, 0) += dFcdU_fpts(ind, ele, ni, nj, 1);
-            }
-          }
-        }
-
         /* Compute inviscid LHS implicit Jacobians */
         /* (Center) */
         CtempFS.fill(0);
@@ -2067,20 +2053,6 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
     {
       for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        /* Add contribution from boundary conditions (dFcdU) */
-        for (unsigned int face = 0; face < nFaces; face++)
-        {
-          int eleN = geo->ele_adj(face, ele);
-          if (eleN == -1)
-          {
-            for (unsigned int i = 0; i < nSpts1D; i++)
-            {
-              unsigned int ind = face * nSpts1D + i;
-              dFcdU_fpts(ind, ele, ni, nj, 0) += dFcdU_fpts(ind, ele, ni, nj, 1);
-            }
-          }
-        }
-
         /* Compute center inviscid LHS implicit Jacobian */
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
@@ -2445,33 +2417,6 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
 #endif
 
 #ifdef _GPU
-  /* Add contribution from boundary conditions (dFcdU) */
-  //TODO: I think this should be taken care of in faces. Adding boundary contributions in elements 
-  // does not lead to good memory accesses. In faces, the boundary flux points are contiguous. 
-  for (unsigned int nj = 0; nj < nVars; nj++)
-  {
-    for (unsigned int ni = 0; ni < nVars; ni++)
-    {
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        for (unsigned int face = 0; face < nFaces; face++)
-        {
-          int eleN = geo->ele_adj(face, ele);
-          if (eleN == -1)
-          {
-            for (unsigned int i = 0; i < nSpts1D; i++)
-            {
-              unsigned int ind = face * nSpts1D + i;
-              dFcdU_fpts(ind, ele, ni, nj, 0) += dFcdU_fpts(ind, ele, ni, nj, 1);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  dFcdU_fpts_d = dFcdU_fpts;
-
   /* Compute center inviscid LHS implicit Jacobian */
 
   /* Fill temporary matrix with oppDiv_fpts scaled by dFcdU_fpts */

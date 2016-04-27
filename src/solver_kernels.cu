@@ -317,6 +317,83 @@ void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU
 
 template <unsigned int nVars>
 __global__
+void dFcdU_from_faces(mdvector_gpu<double> dFcdU_gfpts, mdvector_gpu<double> dFcdU_fpts, mdvector_gpu<int> fpt2gfpt, 
+    mdvector_gpu<int> fpt2gfpt_slot, mdvector_gpu<unsigned int> gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
+    unsigned int nEles, unsigned int nFpts)
+{
+  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+
+  if (fpt >= nFpts || ele >= nEles)
+    return;
+
+  int gfpt = fpt2gfpt(fpt,ele);
+
+  /* Check if flux point is on ghost edge */
+  if (gfpt == -1)
+    return;
+
+  int slot = fpt2gfpt_slot(fpt,ele);
+  int notslot = 1;
+  if (slot == 1)
+  {
+    notslot = 0;
+  }
+
+  /* Add dFcdU on non-periodic boundaries */
+  if (gfpt >= (int)nGfpts_int && gfpt < (int)(nGfpts_int + nGfpts_bnd))
+  {
+    unsigned int bnd_id = gfpt2bnd(gfpt - nGfpts_int);
+    if (bnd_id != 1)
+    {
+      for (unsigned int nj = 0; nj < nVars; nj++) 
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++) 
+        {
+          dFcdU_fpts(fpt, ele, ni, nj, 0) = dFcdU_gfpts(gfpt, ni, nj, slot, slot) + 
+                                            dFcdU_gfpts(gfpt, ni, nj, notslot, slot);
+        }
+      }
+    }
+  }
+  else
+  {
+    for (unsigned int nj = 0; nj < nVars; nj++) 
+    {
+      for (unsigned int ni = 0; ni < nVars; ni++) 
+      {
+        dFcdU_fpts(fpt, ele, ni, nj, 0) = dFcdU_gfpts(gfpt, ni, nj, slot, slot);
+        dFcdU_fpts(fpt, ele, ni, nj, 1) = dFcdU_gfpts(gfpt, ni, nj, notslot, slot);
+      }
+    }
+  }
+}
+
+void dFcdU_from_faces_wrapper(mdvector_gpu<double> &dFcdU_gfpts, mdvector_gpu<double> &dFcdU_fpts, 
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
+    unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation)
+{
+  unsigned int threads= 192;
+  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
+
+  if (equation == AdvDiff || equation == Burgers)
+  {
+    dFcdU_from_faces<1><<<blocks, threads>>>(dFcdU_gfpts, dFcdU_fpts, fpt2gfpt, fpt2gfpt_slot, gfpt2bnd,
+        nGfpts_int, nGfpts_bnd, nEles, nFpts);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      dFcdU_from_faces<4><<<blocks, threads>>>(dFcdU_gfpts, dFcdU_fpts, fpt2gfpt, fpt2gfpt_slot, gfpt2bnd,
+          nGfpts_int, nGfpts_bnd, nEles, nFpts);
+    else
+      dFcdU_from_faces<5><<<blocks, threads>>>(dFcdU_gfpts, dFcdU_fpts, fpt2gfpt, fpt2gfpt_slot, gfpt2bnd,
+          nGfpts_int, nGfpts_bnd, nEles, nFpts);
+  }
+}
+
+template <unsigned int nVars>
+__global__
 void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
     mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
     mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
