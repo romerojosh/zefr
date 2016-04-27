@@ -79,8 +79,9 @@ int main(int argc, char* argv[])
   solver.setup();
   
   //TESTING
-  FRSolver solverFV(&input, input.order, true);
+  FRSolver solverFV(&input, 0, true);
   solverFV.setup();
+  //solverFV.accumulate_partition_U(0);
   
   
   PMGrid pmg;
@@ -114,6 +115,7 @@ int main(int argc, char* argv[])
 
   /* Write initial solution */
   solver.write_solution(input.output_prefix);
+  solverFV.write_solution(input.output_prefix + "_FV");
 
   /* Write initial error (if required) */
   if (input.error_freq != 0)
@@ -124,6 +126,7 @@ int main(int argc, char* argv[])
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
     solver.update();
+    solverFV.update_FV(0);
     solver.filter_solution();
     
     /* If using multigrid, perform correction cycle */
@@ -134,11 +137,13 @@ int main(int argc, char* argv[])
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
     {
       solver.report_residuals(hist_file, t1);
+      solverFV.report_residuals(hist_file, t1, 0);
     }
 
     if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps))
     {
       solver.write_solution(input.output_prefix);
+      solverFV.write_solution(input.output_prefix + "_FV");
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps))

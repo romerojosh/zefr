@@ -98,6 +98,7 @@ class Elements
     void extrapolate_dU();
     void compute_dU();
     void compute_divF(unsigned int stage);
+    void compute_intF(unsigned int stage);
     void compute_Fconv();
     void compute_Fvisc();
     virtual void transform_flux() = 0;
