@@ -2340,6 +2340,223 @@ void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> 
         LDG_bias, startFpt, endFpt);
 
 }
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+__global__
+void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, 
+    mdvector_gpu<double> dFcdU, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts, 
+    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias, mdvector_gpu<int> bc_bias,
+    double gamma, double rus_k, unsigned int startFpt, unsigned int endFpt)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
+
+  if (fpt >= endFpt)
+    return;
+
+  /* Apply central flux at boundaries */
+  double k = rus_k;
+  if (bc_bias(fpt))
+  {
+    k = 1.0;
+  }
+
+  double dFndUL[nVars][nVars]; double dFndUR[nVars][nVars];
+  double WL[nVars]; double WR[nVars];
+  double norm[nDims]; 
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    norm[dim] = norm_gfpts(fpt, dim, 0);
+  }
+
+  /* Initialize dFndUL, dFndUR */
+  for (unsigned int nj = 0; nj < nVars; nj++)
+  {
+    for (unsigned int ni = 0; ni < nVars; ni++)
+    {
+      dFndUL[ni][nj] = 0;
+      dFndUR[ni][nj] = 0;
+    }
+  }
+
+  /* Get interface-normal dFdU components  (from L to R)*/
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int nj = 0; nj < nVars; nj++)
+    {
+      for (unsigned int ni = 0; ni < nVars; ni++)
+      {
+        dFndUL[ni][nj] += dFdUconv(fpt, ni, nj, dim, 0) * norm[dim];
+        dFndUR[ni][nj] += dFdUconv(fpt, ni, nj, dim, 1) * norm[dim];
+      }
+    }
+  }
+
+  if (LDG_bias(fpt) != 0)
+  {
+    for (unsigned int nj = 0; nj < nVars; nj++)
+    {
+      for (unsigned int ni = 0; ni < nVars; ni++)
+      {
+        dFcdU(fpt, ni, nj, 0, 0) = 0;
+        dFcdU(fpt, ni, nj, 1, 0) = dFndUR[ni][nj];
+
+        dFcdU(fpt, ni, nj, 0, 1) = 0;
+        dFcdU(fpt, ni, nj, 1, 1) = dFndUR[ni][nj];
+      }
+    }
+    return;
+  }
+
+  /* Get left and right state variables */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
+  }
+
+  /* Get numerical wavespeed and derivative */
+  double waveSp = 0;
+  double dwSdU[nVars];
+  if (equation == AdvDiff)
+  {
+    waveSp = waveSp_gfpts(fpt);
+    dwSdU[0] = 0;
+  }
+  else if (equation == Burgers)
+  {
+    /* TODO: Need to change this later */
+    waveSp = waveSp_gfpts(fpt);
+    dwSdU[0] = 0;
+  }
+  else if (equation == EulerNS)
+  {
+    /* Compute speed of sound */
+    double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
+    double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
+
+    /* Compute normal velocities */
+    double VnL = 0.0; double VnR = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      VnL += WL[dim+1]/WL[0] * norm[dim];
+      VnR += WR[dim+1]/WR[0] * norm[dim];
+    }
+
+    /* Compute wavespeed */
+    double nx = norm[0];
+    double ny = norm[1];
+    double gam = gamma;
+    double wSL = std::abs(VnL) + aL;
+    double wSR = std::abs(VnR) + aR;
+    if (wSL > wSR)
+    {
+      /* Determine direction */
+      int pmL = 0;
+      if (VnL > 0)
+      {
+        pmL = 1;
+      }
+      else if (VnL < 0)
+      {
+        pmL = -1;
+      }
+
+      /* Compute derivative of wavespeed */
+      double rho = WL[0];
+      double u = WL[1]/WL[0];
+      double v = WL[2]/WL[0];
+
+      waveSp = wSL;
+      dwSdU[0] = -pmL*VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
+      dwSdU[1] = pmL*nx/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
+      dwSdU[2] = pmL*ny/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
+      dwSdU[3] = gam * (gam-1.0) / (2.0*aL*rho);
+    }
+    else
+    {
+      /* Determine direction */
+      int pmR = 0;
+      if (VnR > 0)
+      {
+        pmR = 1;
+      }
+      else if (VnR < 0)
+      {
+        pmR = -1;
+      }
+
+      /* Compute derivative of wavespeed */
+      double rho = WR[0];
+      double u = WR[1]/WR[0];
+      double v = WR[2]/WR[0];
+
+      waveSp = wSR;
+      dwSdU[0] = -pmR*VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
+      dwSdU[1] = pmR*nx/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
+      dwSdU[2] = pmR*ny/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
+      dwSdU[3] = gam * (gam-1.0) / (2.0*aR*rho);
+    }
+  }
+
+  /* Compute common dFdU */
+  for (unsigned int nj = 0; nj < nVars; nj++)
+  {
+    for (unsigned int ni = 0; ni < nVars; ni++)
+    {
+      if (ni == nj)
+      {
+        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + (dwSdU[nj]*WL[ni] + waveSp)*(1.0-k));
+        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - (dwSdU[nj]*WR[ni] + waveSp)*(1.0-k));
+
+        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + (dwSdU[nj]*WL[ni] + waveSp)*(1.0-k));
+        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - (dwSdU[nj]*WR[ni] + waveSp)*(1.0-k));
+      }
+      else
+      {
+        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + dwSdU[nj]*WL[ni]*(1.0-k));
+        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - dwSdU[nj]*WR[ni]*(1.0-k));
+
+        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + dwSdU[nj]*WL[ni]*(1.0-k));
+        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - dwSdU[nj]*WR[ni]*(1.0-k));
+      }
+    }
+  }
+}
+
+void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
+    mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<int> &LDG_bias, mdvector_gpu<int> &bc_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
+{
+  unsigned int threads = 256;
+  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
+
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      rusanov_dFcdU<1, 2, AdvDiff><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
+          waveSp, LDG_bias, bc_bias, gamma, rus_k, startFpt, endFpt);
+    else
+      ThrowException("rusanov_dFdUconv for 3D AdvDiff not implemented yet!");
+  }
+  else if (equation == Burgers)
+  {
+    if (nDims == 2)
+      rusanov_dFcdU<1, 2, Burgers><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
+          waveSp, LDG_bias, bc_bias, gamma, rus_k, startFpt, endFpt);
+    else
+      ThrowException("rusanov_dFdUconv for 3D Burgers not implemented yet!");
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      rusanov_dFcdU<4, 2, EulerNS><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
+          waveSp, LDG_bias, bc_bias, gamma, rus_k, startFpt, endFpt);
+    else
+      ThrowException("rusanov_dFdUconv for 3D EulerNS not implemented yet!");
+  }
+}
+
 __global__
 void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
     unsigned int nFpts, unsigned int nVars)

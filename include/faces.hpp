@@ -88,7 +88,7 @@ class Faces
 
     /* Structures for implicit method */
     mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;
-    mdvector_gpu<double> dUcdU_d;
+    mdvector_gpu<double> dFcdU_d, dUcdU_d;
 
 #ifdef _MPI
     std::map<unsigned int, mdvector_gpu<double>> U_sbuffs_d, U_rbuffs_d;

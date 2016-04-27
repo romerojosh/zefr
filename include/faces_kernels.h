@@ -58,7 +58,7 @@ void apply_bcs_dFdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUc
     unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous);
 
-/* Face common flux kernel wrappers */
+/* Face common value kernel wrappers */
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
@@ -80,6 +80,13 @@ void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
     unsigned int startFpt, unsigned int endFpt);
 
+/* Face common value kernel wrappers (Implicit Method) */
+void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
+    mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<int> &LDG_bias, mdvector_gpu<int> &bc_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
+
+/* Face transformation kernel wrappers */
 void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars);
 

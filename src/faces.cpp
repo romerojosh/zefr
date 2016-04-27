@@ -2611,11 +2611,39 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 {
   if (input->fconv_type == "Rusanov")
   {
-    rusanov_dFcdU(startFpt, endFpt);
+//#ifdef _CPU
+    if (CPU_flag)
+    {
+      rusanov_dFcdU(startFpt, endFpt);
+    }
+//#endif
+
+#ifdef _GPU
+    if (!CPU_flag)
+    {
+      rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, LDG_bias_d, bc_bias_d, 
+          input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+      check_error();
+    }
+#endif
+
   }
   else if (input->fconv_type == "Roe")
   {
-    roe_dFcdU(startFpt, endFpt);
+//#ifdef _CPU
+    if (CPU_flag)
+    {
+      roe_dFcdU(startFpt, endFpt);
+    }
+//#endif
+
+#ifdef _GPU
+    if (!CPU_flag)
+    {
+      ThrowException("Roe flux for implicit method not implemented on GPU!");
+    }
+#endif
+
   }
   else
   {
@@ -2626,7 +2654,20 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
   {
     if (input->fvisc_type == "LDG")
     {
-      LDG_dFcdU(startFpt, endFpt);
+//#ifdef _CPU
+      if (CPU_flag)
+      {
+        LDG_dFcdU(startFpt, endFpt);
+      }
+//#endif
+
+#ifdef _GPU
+      if (!CPU_flag)
+      {
+        ThrowException("LDG flux for implicit method not implemented on GPU!");
+      }
+#endif
+
     }
     else
     {
