@@ -898,6 +898,57 @@ void transform_flux_hexa_wrapper(mdvector_gpu<double> &F_spts,
   }
 }
 
+template <unsigned int nVars>
+__global__
+void transform_dFdU_quad(mdvector_gpu<double> dFdU_spts, 
+    mdvector_gpu<double> jaco_spts, unsigned int nSpts, 
+    unsigned int nEles)
+{
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  /* Get metric terms */
+  double jaco[2][2];
+  jaco[0][0] = jaco_spts(0, 0, spt, ele);
+  jaco[0][1] = jaco_spts(0, 1, spt, ele);
+  jaco[1][0] = jaco_spts(1, 0, spt, ele);
+  jaco[1][1] = jaco_spts(1, 1, spt, ele);
+
+  for (unsigned int nj = 0; nj < nVars; nj++)
+  {
+    for (unsigned int ni = 0; ni < nVars; ni++)
+    {
+      double dFdUtemp = dFdU_spts(spt, ele, ni, nj, 0);
+
+      dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * jaco[1][1] -
+                                       dFdU_spts(spt, ele, ni, nj, 1) * jaco[0][1];
+      dFdU_spts(spt, ele, ni, nj, 1) = dFdU_spts(spt, ele, ni, nj, 1) * jaco[0][0] -
+                                       dFdUtemp * jaco[1][0];
+    }
+  }
+}
+
+void transform_dFdU_quad_wrapper(mdvector_gpu<double> &dFdU_spts, 
+    mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims,
+    unsigned int equation)
+{
+  unsigned int threads= 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+
+  if (equation == AdvDiff || equation == Burgers)
+  {
+    transform_dFdU_quad<1><<<blocks, threads>>>(dFdU_spts, jaco_spts, nSpts, nEles);
+  }
+  else if (equation == EulerNS)
+  {
+    transform_dFdU_quad<4><<<blocks, threads>>>(dFdU_spts, jaco_spts, nSpts, nEles);
+  }
+}
+
 __global__
 void compute_Uavg(mdvector_gpu<double> U_spts, 
     mdvector_gpu<double> Uavg, mdvector_gpu<double> jaco_det_spts, 

@@ -747,19 +747,17 @@ void FRSolver::compute_LHS()
   /* Compute normal flux derivative data at flux points */
   faces->compute_dFcdU(0, geo.nGfpts);
 
+  /* Transform flux derivative data from physical to reference space */
+  eles->transform_dFdU();
+  faces->transform_dFcdU();
+
 #ifdef _GPU
   // TODO: Temporary until placed in GPU
   if (input->dt_scheme == "LUJac")
   {
-    eles->dFdU_spts = eles->dFdU_spts_d;
-    faces->bc_bias = faces->bc_bias_d;
     faces->dFcdU = faces->dFcdU_d;
   }
 #endif
-
-  /* Transform flux derivative data from physical to reference space */
-  eles->transform_dFdU();
-  faces->transform_dFcdU();
 
   /* Copy normal flux derivative data from face local storage to element local storage */
   dFcdU_from_faces();

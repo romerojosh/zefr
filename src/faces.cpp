@@ -3269,6 +3269,9 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::transform_dFcdU()
 {
+//#ifdef _CPU
+  if (CPU_flag)
+  {
 #pragma omp parallel for collapse(5)
   for (unsigned int slot = 0; slot < 2; slot++)
   {
@@ -3279,7 +3282,7 @@ void Faces::transform_dFcdU()
         for (unsigned int fpt = 0; fpt < nFpts; fpt++)
         {
           dFcdU(fpt, ni, nj, slot, 0) *= dA(fpt);
-          dFcdU(fpt, ni, nj, slot, 1) *= -dA(fpt);
+          dFcdU(fpt, ni, nj, slot, 1) *= -dA(fpt); // Right state flux has opposite sign
         }
       }
     }
@@ -3299,13 +3302,23 @@ void Faces::transform_dFcdU()
             for (unsigned int fpt = 0; fpt < nFpts; fpt++)
             {
               dFcddU(fpt, ni, nj, dim, slot, 0) *= dA(fpt);
-              dFcddU(fpt, ni, nj, dim, slot, 1) *= -dA(fpt);
+              dFcddU(fpt, ni, nj, dim, slot, 1) *= -dA(fpt); // Right state flux has opposite sign
             }
           }
         }
       }
     }
   }
+  }
+//#endif
+
+#ifdef _GPU
+  if (!CPU_flag)
+  {
+    transform_dFcdU_faces_wrapper(dFcdU_d, dA_d, nFpts, nVars);
+    check_error();
+  }
+#endif
 }
 
 

@@ -2471,7 +2471,6 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
   }
 
   dFcdU_fpts_d = dFcdU_fpts;
-  dFdU_spts_d = dFdU_spts;
 
   /* Compute center inviscid LHS implicit Jacobian */
 

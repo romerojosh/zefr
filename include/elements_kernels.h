@@ -71,6 +71,12 @@ void transform_flux_hexa_wrapper(mdvector_gpu<double> &F_spts,
     unsigned int nEles, unsigned int nVars, unsigned int nDims,
     unsigned int equation);
 
+/* Element transformation kernel wrappers (Implicit Method) */
+void transform_dFdU_quad_wrapper(mdvector_gpu<double> &dFdU_spts, 
+    mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims,
+    unsigned int equation);
+
 /* Additional wrappers */
 void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 
     mdvector_gpu<double> &Uavg, mdvector_gpu<double> &jaco_det_spts, 

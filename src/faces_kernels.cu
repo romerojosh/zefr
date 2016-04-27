@@ -2581,6 +2581,35 @@ void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<doub
 
 }
 
+__global__
+void transform_dFcdU_faces(mdvector_gpu<double> dFcdU, mdvector_gpu<double> dA, 
+    unsigned int nFpts, unsigned int nVars)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int ni = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (fpt >= nFpts || ni >= nVars)
+    return;
+
+  for (unsigned int slot = 0; slot < 2; slot++)
+  {
+    for (unsigned int nj = 0; nj < nVars; nj++)
+    {
+      dFcdU(fpt, ni, nj, slot, 0) *= dA(fpt);
+      dFcdU(fpt, ni, nj, slot, 1) *= -dA(fpt); // Right state flux has opposite sign
+    }
+  }
+}
+
+void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dA, 
+    unsigned int nFpts, unsigned int nVars)
+{
+  dim3 threads(32,4);
+  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  transform_dFcdU_faces<<<blocks,threads>>>(dFcdU, dA, nFpts, nVars);
+}
+
 #ifdef _MPI
 __global__
 void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 

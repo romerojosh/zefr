@@ -535,6 +535,9 @@ void Quads::transform_flux()
 
 void Quads::transform_dFdU()
 {
+//#ifdef _CPU
+  if (CPU_flag)
+  {
 #pragma omp parallel for collapse(4)
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
@@ -554,6 +557,17 @@ void Quads::transform_dFdU()
       }
     }
   }
+  }
+//#endif
+
+#ifdef _GPU
+  if (!CPU_flag)
+  {
+    transform_dFdU_quad_wrapper(dFdU_spts_d, jaco_spts_d, nSpts, nEles, nVars,
+        nDims, input->equation);
+    check_error();
+  }
+#endif
 }
 
 mdvector<double> Quads::calc_shape(unsigned int shape_order, 

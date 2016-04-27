@@ -90,6 +90,10 @@ void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUco
 void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars);
 
+/* Face transformation kernel wrappers (Implicit Method) */
+void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dA, 
+    unsigned int nFpts, unsigned int nVars);
+
 #ifdef _MPI
 void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
     mdvector_gpu<double> &U, unsigned int nVars);
