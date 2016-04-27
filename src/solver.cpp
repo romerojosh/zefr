@@ -2231,17 +2231,17 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     /* Infinity norm */
     if (input->res_type == 0)
       res[n] =*std::max_element(&eles->divF_spts(0, 0, n, 0), 
-          &eles->divF_spts(0, 0, n+1, 1));
+          &eles->divF_spts(0, 0, n+1, 0));
 
     /* L1 norm */
     else if (input->res_type == 1)
       res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
-          &eles->divF_spts(0, 0, n+1, 1), 0.0, abs_sum<double>());
+          &eles->divF_spts(0, 0, n+1, 0), 0.0, abs_sum<double>());
 
     /* L2 norm */
     else if (input->res_type == 2)
       res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
-            &eles->divF_spts(0, 0, n+1, 1), 0.0, square<double>());
+            &eles->divF_spts(0, 0, n+1, 0), 0.0, square<double>());
   }
 
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
