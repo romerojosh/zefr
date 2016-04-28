@@ -269,10 +269,9 @@ void FRSolver::setup_h_levels()
 
   for (unsigned int H = 0; H < input->hmg_levels; H++)
   {
-    //int nPartitions = eles->nEles / (1 << (H+1));
-    int nPartitions = eles->nEles / ((1 << (eles->nDims * H)));
+    int nPartitions = eles->nEles / ((1 << (eles->nDims * (H + 1))));
 
-    std::cout << nPartitions << std::endl;
+    std::cout << "H: " << H << "nPartitions: " << nPartitions << std::endl;
 
     FV_vols[H].assign({(unsigned int) nPartitions}, 0);
 
@@ -298,10 +297,8 @@ void FRSolver::setup_h_levels()
         ThrowException("Structured coarsening not supported in 3D yet!");
       unsigned int nElesX = input->nElesX;
       unsigned int nElesY = input->nElesY;
-      //unsigned int nSegmentsX = nElesX / (1 << (H+1));
-      //unsigned int nSegmentsY = nElesY / (1 << (H+1));
-      unsigned int nSegmentsX = nElesX / (1 << (H));
-      unsigned int nSegmentsY = nElesY / (1 << (H));
+      unsigned int nSegmentsX = nElesX / (1 << (H + 1));
+      unsigned int nSegmentsY = nElesY / (1 << (H + 1));
 
       if (nSegmentsX == 1 or nSegmentsY == 1)
         ThrowException("Too many hmg_levels for mesh size and structured partitioning.");

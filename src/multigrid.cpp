@@ -57,6 +57,33 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
 #ifdef _GPU
   corrections_d[order] = corrections[order];
 #endif
+
+  /* H multigrid setup */
+  if (input->hmg_levels > 0)
+  {
+    hcorrections.resize(input->hmg_levels);
+    hsources.resize(input->hmg_levels);
+    hsolutions.resize(input->hmg_levels);
+    hsolutions_post.resize(input->hmg_levels);
+
+    hgrid = std::make_shared<FRSolver>(input, 0, true);
+    hgrid->setup();
+
+    for (unsigned int H = 0; H < input->hmg_levels; H++)
+    {
+      /* Allocate memory for corrections and source terms */
+      hcorrections[H] = hgrid->eles->U_spts;
+      hsources[H] = hgrid->eles->U_spts;
+      hsolutions[H] = hgrid->eles->U_spts;
+      hsolutions[H] = hgrid->eles->U_spts;
+      hsolutions_post[H] = hgrid->eles->U_spts;
+      hcorrections[H].fill(0.0);
+      hsources[H].fill(0.0);
+      hsolutions[H].fill(0.0);
+
+    }
+  }
+
 }
 
 void PMGrid::v_cycle(FRSolver &solver, int fine_order)
@@ -131,6 +158,153 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 
       /* Restrict to next coarse grid */
       restrict_pmg(*grids[P], *grids[P-1]);
+    }
+  }
+
+  if (input->hmg_levels > 0)
+  {
+    /* Continue cycle down h levels */
+    /* Update residual on P0 level and add source */
+    grids[0]->compute_residual(0);
+
+#pragma omp parallel for collapse(3)
+    for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+      for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+        for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+          grids[0]->eles->divF_spts(spt, ele, n, 0) += sources[0](spt, ele, n);
+
+    /* Transfer solution and residual to hgrid solver */
+    for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+        {
+          hgrid->eles->U_spts(spt, ele, n) = grids[0]->eles->U_spts(spt, ele, n);
+          hgrid->eles->divF_spts(spt, ele, n, 0) = 4. * grids[0]->eles->divF_spts(spt, ele, n, 0);
+        }
+      }
+    }
+
+    /* Restrict via accumulation*/
+    hgrid->accumulate_partition_U(0);
+    hgrid->accumulate_partition_divF(0, 0);
+
+
+    for(unsigned int H = 0; H < input->hmg_levels; H++)
+    {
+      /* Generate source term */
+      compute_source_term(*hgrid, hsources[H], H);
+    
+      /* Copy initial solution to solution storage */
+      for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+          {
+            hsolutions[H](spt, ele, n) = hgrid->eles->U_spts(spt, ele, n);
+          }
+        }
+      }
+
+      unsigned int nSteps = input->smooth_steps;
+      if (H == input->hmg_levels - 1)
+      {
+        nSteps = input->c_smooth_steps;
+      }
+
+      /* Update solution on coarse level */
+      for (unsigned int step = 0; step < nSteps; step++)
+        hgrid->update_FV(H, hsources[H]);
+      
+      /* Store updated solution */
+      for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+          {
+            hsolutions_post[H](spt, ele, n) = hgrid->eles->U_spts(spt, ele, n);
+          }
+        }
+      }
+      
+      
+      /* If coarser H level exists, restrict */
+      if (H < input->hmg_levels - 1)
+      {
+        /* Update residual on current H level and add source */
+        for (unsigned int step = 0; step < input->p_smooth_steps; step++)
+          hgrid->compute_residual(0, H);
+
+#pragma omp parallel for collapse(3)
+        for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+          for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+            for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+              hgrid->eles->divF_spts(spt, ele, n, 0) += hsources[H](spt, ele, n);
+
+        /* Restrict via accumulation*/
+        hgrid->accumulate_partition_U(H+1);
+        hgrid->accumulate_partition_divF(0, H+1);
+
+      }
+    } 
+
+    /* Upward H cycle */
+    for (int H = (int)input->hmg_levels - 1; H >= 0; H--)
+    {
+      /* Advance again (v-cycle)*/
+      if (H != (int) input->hmg_levels - 1)
+      {
+        hgrid->eles->U_spts = hsolutions_post[H];
+        hgrid->accumulate_partition_U(H);
+
+        for (unsigned int step = 0; step < input->p_smooth_steps; step++)
+        {
+#ifdef _CPU
+          hgrid->update_FV(H, hsources[H]);
+#endif
+
+#ifdef _GPU
+#endif
+        }
+      }
+
+      /* Generate error */
+#pragma omp parallel for collapse(3)
+      for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+        for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+            hcorrections[H](spt, ele, n) = hgrid->eles->U_spts(spt, ele, n) - 
+              hsolutions[H](spt, ele, n);
+
+      if (H > 0)
+      {
+        /* Prolong H correction to next fine H level */
+        for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+        {
+          for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+          {
+            for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+            {
+              hsolutions_post[H-1](spt, ele, n) +=  hcorrections[H](spt, ele, n);
+            }
+          }
+        }
+      }
+    }
+
+    /* Prolong H0 correction to P0 via direct addition */
+    for (unsigned int n = 0; n < hgrid->eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < hgrid->eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < hgrid->eles->nSpts; spt++)
+        {
+          grids[0]->eles->U_spts(spt, ele, n) +=  hcorrections[0](spt, ele, n);
+        }
+      }
     }
   }
 
@@ -397,7 +571,7 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector_gpu<double> &correction_c, F
 }
 #endif 
 
-void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
+void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source, int FV_level)
 {
   /* Copy restricted fine grid residual to source term */
 #pragma omp parallel for collapse(3)
@@ -407,7 +581,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
         source(spt,ele,n) = grid.eles->divF_spts(spt,ele,n,0);
 
   /* Update residual on current coarse grid */
-  grid.compute_residual(0);
+  grid.compute_residual(0, FV_level);
 
   /* Subtract to generate source term */
 #pragma omp parallel for collapse(3)

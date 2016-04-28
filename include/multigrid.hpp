@@ -21,6 +21,8 @@ class PMGrid
     int order;
     std::vector<mdvector<double>> corrections, sources, solutions;
     std::vector<std::shared_ptr<FRSolver>> grids;
+    std::vector<mdvector<double>> hcorrections, hsources, hsolutions, hsolutions_post;
+    std::shared_ptr<FRSolver> hgrid;
 
 #ifdef _GPU
     std::vector<mdvector_gpu<double>> corrections_d, sources_d, solutions_d;
@@ -30,7 +32,7 @@ class PMGrid
     void prolong_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
     void prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSolver &grid_f);
     void prolong_U(FRSolver &grid_c, FRSolver &grid_f);
-    void compute_source_term(FRSolver &grid, mdvector<double> &source);
+    void compute_source_term(FRSolver &grid, mdvector<double> &source, int FV_level = 0);
 
     /* Overloaded methods for GPU */
 #ifdef _GPU
