@@ -274,7 +274,7 @@ void FRSolver::setup_h_levels()
 
     std::cout << nPartitions << std::endl;
 
-    FV_vols[H].assign({nPartitions}, 0);
+    FV_vols[H].assign({(unsigned int) nPartitions}, 0);
 
     /* Coarsening using METIS (not too great) */
     if (input->coarse_mode == 0)
@@ -346,15 +346,15 @@ void FRSolver::setup_h_levels()
     }
 
     unsigned int max_eles_per_part = *std::max_element(eles_per_part.begin(), eles_per_part.end());
-    FV_part2eles[H].assign({nPartitions, max_eles_per_part}, -1);
+    FV_part2eles[H].assign({(unsigned int) nPartitions, max_eles_per_part}, -1);
 
     // TODO: This procedure is a bit expensive. Can push_back to vectors and then copy?
-    for (unsigned int part = 0; part < nPartitions; part++)
+    for (unsigned int part = 0; part < (unsigned int) nPartitions; part++)
     {
       unsigned int idx = 0;
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        if (FV_ele2part(ele, H) == part)
+        if ((unsigned int) FV_ele2part(ele, H) == part)
         {
           FV_part2eles[H](part, idx) = ele;
           idx++;
@@ -1310,7 +1310,7 @@ void FRSolver::update_FV(int FV_level, const mdvector_gpu<double> &source)
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
       {
-        compute_element_dt();
+        compute_element_dt(FV_level);
       }
     }
 
@@ -1481,42 +1481,89 @@ void FRSolver::update_FV(int FV_level, const mdvector_gpu<double> &source)
 void FRSolver::compute_element_dt(int FV_level)
 {
 #ifdef _CPU
-
-  if (FV_mode)
-    dt_part.fill(100); // Fill partition dt with large number...
-
+  if (!FV_mode)
+  {
 #pragma omp parallel for
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  { 
-    double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    { 
+      double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      {
+        /* Skip if on ghost edge. */
+        int gfpt = geo.fpt2gfpt(fpt,ele);
+        if (gfpt == -1)
+          continue;
+
+        if (eles->nDims == 2)
+        {
+          int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
+        }
+        else
+        {
+          int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
+          int i = idx % eles->nSpts1D;
+          int j = idx / eles->nSpts1D;
+
+          int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
+        }
+      }
+
+      /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
+       * consistent with 1D CFL estimates. */
+      dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
+    }
+  }
+  else if (FV_mode)
+  {
+    if (eles->nDims == 3)
+      ThrowException("CFL timestep for FV mode in 3D not developed due to missing adj info.");
+
+    for (unsigned int part = 0; part < FV_part2eles[FV_level].shape()[0]; part++)
     {
-      /* Skip if on ghost edge. */
-      int gfpt = geo.fpt2gfpt(fpt,ele);
-      if (gfpt == -1)
-        continue;
+      double int_waveSp = 0.;
 
-      if (eles->nDims == 2)
+      for (unsigned int idx = 0; idx < FV_part2eles[FV_level].shape()[1]; idx++)
       {
-        int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
-      }
-      else
-      {
-        int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
-        int i = idx % eles->nSpts1D;
-        int j = idx / eles->nSpts1D;
+        int ele = FV_part2eles[FV_level](part, idx);
+        if (ele == -1)
+          break;
 
-        int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
+        for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+        {
+          int face_idx = (eles->nDims == 2) ? (fpt / eles->nSpts1D) : (fpt / (eles->nSpts1D * eles->nSpts1D));
+          int eleN = geo.ele_adj(face_idx, ele);
+          unsigned int partN = part + 1;
+          if (eleN != -1)
+            partN = FV_ele2part(eleN, FV_level);
+
+          if (partN == part)
+            continue;
+
+          /* Skip if on ghost edge. */
+          int gfpt = geo.fpt2gfpt(fpt,ele);
+          if (gfpt == -1)
+            continue;
+
+          if (eles->nDims == 2)
+          {
+            int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
+          }
+          else
+          {
+            int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
+            int i = idx % eles->nSpts1D;
+            int j = idx / eles->nSpts1D;
+
+            int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
+          }
+        }
       }
+
+      //NOTE: This can NaN if a partition has no elements (int_waveSp == 0). 
+      dt_part(part) = 2.0 * input->CFL * get_cfl_limit(order) * FV_vols[FV_level](part) / int_waveSp;
     }
 
-    /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
-     * consistent with 1D CFL estimates. */
-    dt(ele) = 2.0 * input->CFL * get_cfl_limit(order) * eles->vol(ele) / int_waveSp;
-
-    if (FV_mode)
-      dt_part(FV_ele2part(ele, FV_level)) = std::min(dt_part(FV_ele2part(ele, FV_level)), dt(ele));
   }
 
   if (input->dt_type == 1) /* Global minimum */
@@ -2099,14 +2146,21 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 
-    if (input->dt_type == 2)
+    if (!FV_mode)
     {
-      std::cout << "dt: " <<  *std::min_element(dt.data(), dt.data()+eles->nEles) << " (min) ";
-      std::cout << *std::max_element(dt.data(), dt.data()+eles->nEles) << " (max)";
+      if (input->dt_type == 2)
+      {
+        std::cout << "dt: " <<  *std::min_element(dt.data(), dt.data()+eles->nEles) << " (min) ";
+        std::cout << *std::max_element(dt.data(), dt.data()+eles->nEles) << " (max)";
+      }
+      else
+      {
+        std::cout << "dt: " << dt(0);
+      }
     }
     else
     {
-      std::cout << "dt: " << dt(0);
+      std::cout << "dt_part (0): " << dt_part(0);
     }
 
     std::cout << std::endl;
