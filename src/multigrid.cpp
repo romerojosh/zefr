@@ -122,7 +122,8 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 
     /* Update solution on coarse level */
     unsigned int nSteps = input->smooth_steps;
-    if (P == (int) input->low_order)
+    if (P == (int) input->low_order and input->hmg_levels == 0)
+    //if (P == (int) input->low_order)
     {
       nSteps = input->c_smooth_steps;
     }
@@ -163,7 +164,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 
   if (input->hmg_levels > 0)
   {
-    /* Continue cycle down h levels */
+    /* ---Downward H cycle--- */
     /* Update residual on P0 level and add source */
     grids[0]->compute_residual(0);
 
@@ -251,7 +252,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
       }
     } 
 
-    /* Upward H cycle */
+    /* ---Upward H cycle--- */
     for (int H = (int)input->hmg_levels - 1; H >= 0; H--)
     {
       /* Advance again (v-cycle)*/
@@ -313,9 +314,15 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
   {
 
     /* Advance again (v-cycle)*/
-    if (P != (int) input->low_order)
+    if (P != (int) input->low_order or input->hmg_levels != 0)
     {
-      for (unsigned int step = 0; step < input->p_smooth_steps; step++)
+      unsigned int nSteps = input->p_smooth_steps;
+      //if (P == (int) input->low_order and input->hmg_levels != 0)
+      //{
+      //  nSteps = input->c_smooth_steps;
+      //}
+
+      for (unsigned int step = 0; step < nSteps; step++)
       {
 #ifdef _CPU
         grids[P]->update(sources[P]);

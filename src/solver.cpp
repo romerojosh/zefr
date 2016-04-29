@@ -119,9 +119,13 @@ void FRSolver::setup_update()
   {
     nStages = 4;
     rk_alpha.assign({nStages});
+
     /* Standard RK44 */
-    rk_alpha(0) = 1./4; rk_alpha(1) = 1./3.; 
-    rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
+    //rk_alpha(0) = 1./4; rk_alpha(1) = 1./3.; 
+    //rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
+    
+    rk_alpha(0) = 0.1505; rk_alpha(1) = 0.3712; 
+    rk_alpha(2) = 0.6640; rk_alpha(3) = 1.0;
   }
   else
   {
@@ -271,7 +275,7 @@ void FRSolver::setup_h_levels()
   {
     int nPartitions = eles->nEles / ((1 << (eles->nDims * (H + 1))));
 
-    std::cout << "H: " << H << "nPartitions: " << nPartitions << std::endl;
+    std::cout << "H =  " << H << " nPartitions =  " << nPartitions << std::endl;
 
     FV_vols[H].assign({(unsigned int) nPartitions}, 0);
 
@@ -333,7 +337,6 @@ void FRSolver::setup_h_levels()
       FV_vols[H](FV_ele2part(ele, H)) += scale_fac * eles->jaco_det_spts(0, ele);
       sum += scale_fac * eles->jaco_det_spts(0,ele);
     }
-    std::cout << sum << std::endl;
 
     std::vector<unsigned int> eles_per_part(nPartitions, 0);
 
@@ -1876,7 +1879,7 @@ void FRSolver::write_solution(const std::string &prefix)
 void FRSolver::write_partition_file()
 {
 
-  if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
+  if (input->rank == 0) std::cout << "Writing partition file..." << std::endl;
 
   std::stringstream ss;
 #ifdef _MPI
