@@ -1106,6 +1106,42 @@ void FRSolver::accumulate_partition_divF(unsigned int stage, int FV_level)
   }
 }
 
+void FRSolver::accumulate_partition_divF_weighted(unsigned int stage, int FV_level)
+{
+  /* Accumulate subelement residual components */
+  U_avg.fill(0.0); //Reuse U_avg storage
+
+#pragma omp parallel for collapse(2)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int part = 0; part < FV_part2eles[FV_level].shape()[0]; part++)
+    {
+      for (unsigned int idx = 0; idx < FV_part2eles[FV_level].shape()[1]; idx++)
+      {
+        int ele = FV_part2eles[FV_level](part, idx);
+
+        if (ele == -1)
+          break;
+
+        //TODO: Clean up this operation. 
+        U_avg(part, n) += eles->divF_spts(0, ele, n, stage) * eles->vol(ele) / FV_vols[FV_level - 1](FV_ele2part(ele, FV_level - 1));
+      }
+    }
+  }
+
+  /* Set residual to accumulated partition residuals */
+#pragma omp parallel for collapse(2)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      int part = FV_ele2part(ele, FV_level);
+      eles->divF_spts(0, ele, n, stage) = U_avg(part, n);
+    }
+  }
+}
+
+
 /* Note: Source term in update() is used primarily for multigrid. To add a true source term, define
  * a source term in funcs.cpp and set source input flag to 1. */
 #ifdef _CPU

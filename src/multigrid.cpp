@@ -247,7 +247,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 
         /* Restrict via accumulation*/
         hgrid->accumulate_partition_U(H+1);
-        hgrid->accumulate_partition_divF(0, H+1);
+        hgrid->accumulate_partition_divF_weighted(0, H+1);
 
       }
     } 

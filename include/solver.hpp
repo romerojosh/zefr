@@ -74,6 +74,7 @@ class FRSolver
     void add_source(unsigned int stage);
     void accumulate_partition_U(int FV_level);
     void accumulate_partition_divF(unsigned int stage, int FV_level);
+    void accumulate_partition_divF_weighted(unsigned int stage, int FV_level);
 #ifdef _CPU
     void update(const mdvector<double> &source = mdvector<double>());
     void update_FV(int FV_level, const mdvector<double> &source = mdvector<double>());
