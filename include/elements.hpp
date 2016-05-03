@@ -50,7 +50,7 @@ class Elements
     mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fcomm, Ucomm;
-    mdvector<double> dU_spts, dU_fpts, dU_qpts, divF_spts;
+    mdvector<double> dU_spts, dU_fpts, dU_qpts, divF_spts, divF_ppts;
 
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;

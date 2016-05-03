@@ -46,6 +46,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "p_multi", input.p_multi, false);
   read_param(f, "smooth_steps", input.smooth_steps, (unsigned int) 1);
   read_param(f, "p_smooth_steps", input.p_smooth_steps, (unsigned int) 1);
+  read_param(f, "f_smooth_steps", input.f_smooth_steps, (unsigned int) 1);
   read_param(f, "c_smooth_steps", input.c_smooth_steps, (unsigned int) 1);
   read_param(f, "rel_fac", input.rel_fac, 1.0);
   read_param(f, "low_order", input.low_order, (unsigned int) 0);
@@ -58,6 +59,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "write_freq", input.write_freq);
   read_param(f, "report_freq", input.report_freq);
   read_param(f, "res_type", input.res_type);
+  read_param(f, "res_write", input.res_write);
+  read_param(f, "res_field", input.res_field);
   read_param(f, "force_freq", input.force_freq);
   read_param(f, "error_freq", input.error_freq);
   read_param(f, "test_case", input.test_case, (unsigned int) 0);

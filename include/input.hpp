@@ -18,10 +18,10 @@ enum EQN {AdvDiff = 0, EulerNS = 1};
 struct InputStruct
 {
   unsigned int equation, dt_type, ic_type, nDims, nQpts1D, n_steps, order;
-  unsigned int report_freq, write_freq, force_freq, res_type, error_freq, test_case, err_field;
-  unsigned int smooth_steps, p_smooth_steps, c_smooth_steps, low_order, FMG_vcycles, hmg_levels, coarse_mode, nElesX, nElesY;
+  unsigned int report_freq, write_freq, force_freq, res_type, error_freq, test_case, err_field, res_field;
+  unsigned int smooth_steps, p_smooth_steps, c_smooth_steps, f_smooth_steps, low_order, FMG_vcycles, hmg_levels, coarse_mode, nElesX, nElesY;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
-  bool viscous, p_multi, restart, fix_vis, squeeze, serendipity, source;
+  bool viscous, p_multi, restart, fix_vis, squeeze, serendipity, source, res_write;
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
   double AdvDiff_D, dt, CFL, rel_fac;

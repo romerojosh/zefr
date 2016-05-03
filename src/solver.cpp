@@ -779,6 +779,7 @@ void FRSolver::initialize_U()
   eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
+  eles->divF_ppts.assign({eles->nPpts, eles->nEles, eles->nVars});
 
   /* Initialize solution */
   if (input->equation == AdvDiff)
@@ -1670,9 +1671,15 @@ void FRSolver::write_solution(const std::string &prefix)
         f << std::endl;
       }
     }
+
     if (input->filt_on && input->sen_write)
     {
       f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+    if (input->res_write)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"residual\" format=\"ascii\"/>";
       f << std::endl;
     }
 
@@ -1834,6 +1841,24 @@ void FRSolver::write_solution(const std::string &prefix)
       eles->nSpts, 0.0, &C, eles->nPpts);
 #endif
 
+  if (input->res_write)
+  {
+    /* Extrapolate solution to plot points */
+    auto &A = eles->oppE_ppts(0, 0);
+    auto &B = eles->divF_spts(0, 0, 0, 0);
+    auto &C = eles->divF_ppts(0, 0, 0);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+        eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
+        eles->nSpts, 0.0, &C, eles->nPpts);
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+        eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
+        eles->nSpts, 0.0, &C, eles->nPpts);
+#endif
+  }
+
   /* Apply squeezing if needed */
   if (input->squeeze)
   {
@@ -1887,6 +1912,7 @@ void FRSolver::write_solution(const std::string &prefix)
       f << "</DataArray>" << std::endl;
     }
   }
+
   if (input->filt_on && input->sen_write)
   {
 #ifdef _GPU
@@ -1902,6 +1928,25 @@ void FRSolver::write_solution(const std::string &prefix)
       f << std::endl;
     }
     f << "</DataArray>" << std::endl;
+  }
+
+  if (input->res_write)
+  {
+#ifdef _GPU
+    eles-divF_spts = eles->divF_spts_d;
+#endif
+    unsigned int var = input->res_field;
+    f << "<DataArray type=\"Float32\" Name=\"residual\" format=\"ascii\">"<< std::endl;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << eles->divF_ppts(ppt, ele, var) << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+
   }
 
 
@@ -2178,7 +2223,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         val = std::sqrt(val);
     }
 
-    std::cout << current_iter << " ";
+    std::cout << current_iter/input->f_smooth_steps << " ";
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 

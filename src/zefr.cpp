@@ -131,7 +131,17 @@ int main(int argc, char* argv[])
   /* Main iteration loop */
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
-    solver.update();
+    if (!input.p_multi)
+    {
+      solver.update();
+    }
+    else
+    {
+      for (unsigned int step = 0; step < input.f_smooth_steps; step++)
+      {
+        solver.update();
+      }
+    }
     //solverFV.update_FV(0);
     //solverFV2.update_FV(1);
     solver.filter_solution();
