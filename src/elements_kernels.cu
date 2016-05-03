@@ -572,13 +572,15 @@ void add_scaled_oppD(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD,
     mdvector_gpu<double> C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims)
 {
-  const unsigned int ni = blockIdx.x;
-  const unsigned int nj = blockIdx.y % nVars;
-  const unsigned int ele = blockIdx.y / nVars;
-  const unsigned int i = threadIdx.x;
-  const unsigned int j = threadIdx.y;
+  const unsigned int tidX = (blockIdx.x * blockDim.x  + threadIdx.x);
+  const unsigned int tidY = (blockIdx.y * blockDim.y  + threadIdx.y);
+  const unsigned int ni = tidX / nSpts;
+  const unsigned int nj = (tidY / nSpts) % nVars;
+  const unsigned int ele = (tidY / nSpts) / nVars;
+  const unsigned int i = tidX % nSpts; 
+  const unsigned int j = tidY % nSpts;
 
-  if (ele >= nEles || ni >= nVars || nj >= nVars)
+  if (ele >= nEles || ni >= nVars)
     return;
 
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -591,7 +593,7 @@ void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &op
     mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims)
 {
-  dim3 threads(nSpts, nSpts);
+  dim3 threads(16, 12);
   dim3 blocks((nSpts * nVars + threads.x - 1) / threads.x, 
       (nSpts * nVars * nEles + threads.y - 1) / threads.y);
 
@@ -603,13 +605,15 @@ void add_scaled_oppDiv(mdvector_gpu<double> LHS_tempSF, mdvector_gpu<double> opp
     mdvector_gpu<double> C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
     unsigned int nEles)
 {
-  const unsigned int ni = blockIdx.x;
-  const unsigned int nj = blockIdx.y % nVars;
-  const unsigned int ele = blockIdx.y / nVars;
-  const unsigned int i = threadIdx.x;
-  const unsigned int j = threadIdx.y;
+  const unsigned int tidX = (blockIdx.x * blockDim.x  + threadIdx.x);
+  const unsigned int tidY = (blockIdx.y * blockDim.y  + threadIdx.y);
+  const unsigned int ni = tidX / nSpts;
+  const unsigned int nj = (tidY / nFpts) % nVars;
+  const unsigned int ele = (tidY / nFpts) / nVars;
+  const unsigned int i = tidX % nSpts; 
+  const unsigned int j = tidY % nFpts;
 
-  if (ele >= nEles || ni >= nVars || nj >= nVars)
+  if (ele >= nEles || ni >= nVars)
     return;
 
   LHS_tempSF(i, ni, j, nj, ele) = oppDiv_fpts(i, j) * C(j, ele, ni, nj, 0);
@@ -619,7 +623,7 @@ void add_scaled_oppDiv_wrapper(mdvector_gpu<double> &LHS_tempSF, mdvector_gpu<do
     mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
     unsigned int nEles)
 {
-  dim3 threads(nSpts, nFpts);
+  dim3 threads(16, 12);
   dim3 blocks((nSpts * nVars + threads.x - 1) / threads.x, 
       (nFpts * nVars * nEles + threads.y - 1) / threads.y);
 
@@ -631,13 +635,15 @@ void finalize_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
     mdvector_gpu<double> jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int dt_type)
 {
-  const unsigned int ni = blockIdx.x;
-  const unsigned int nj = blockIdx.y % nVars;
-  const unsigned int ele = blockIdx.y / nVars;
-  const unsigned int i = threadIdx.x;
-  const unsigned int j = threadIdx.y;
+  const unsigned int tidX = (blockIdx.x * blockDim.x  + threadIdx.x);
+  const unsigned int tidY = (blockIdx.y * blockDim.y  + threadIdx.y);
+  const unsigned int ni = tidX / nSpts;
+  const unsigned int nj = (tidY / nSpts) % nVars;
+  const unsigned int ele = (tidY / nSpts) / nVars;
+  const unsigned int i = tidX % nSpts; 
+  const unsigned int j = tidY % nSpts;
 
-  if (ele >= nEles || ni >= nVars || nj >= nVars)
+  if (ele >= nEles || ni >= nVars)
     return;
 
   double add_one = (double) (i == j && nj == ni);
@@ -656,7 +662,7 @@ void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
     mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int dt_type)
 {
-  dim3 threads(nSpts, nSpts);
+  dim3 threads(16, 12);
   dim3 blocks((nSpts * nVars + threads.x - 1) / threads.x, 
       (nSpts * nVars * nEles + threads.y - 1) / threads.y);
 

@@ -2432,6 +2432,8 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
   /* Finalize LHS (scale by jacobian, dt, and add identity) */
   finalize_LHS_wrapper(LHS_d, dt_d, jaco_det_spts_d, nSpts, nVars, nEles, input->dt_type);
 
+  check_error();
+
 #endif
 }
 

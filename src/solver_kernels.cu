@@ -25,11 +25,13 @@
 
 void check_error()
 {
+#ifndef _NO_CUDA_ERROR
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess)
   {
     ThrowException(cudaGetErrorString(err));
   }
+#endif
 }
 
 static cublasHandle_t cublas_handle;
