@@ -60,7 +60,6 @@ class Faces
     mdvector<double> norm, jaco, coord;
     mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
-    mdvector<int> bc_bias;
 
     /* Structures for implicit method */
     bool CPU_flag; // Temporary flag for global implicit method
@@ -84,7 +83,6 @@ class Faces
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<double> dA_d, waveSp_d;
     mdvector_gpu<int> LDG_bias_d;
-    mdvector_gpu<int> bc_bias_d;
 
     /* Structures for implicit method */
     mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;

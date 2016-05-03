@@ -81,7 +81,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
       ddURddUL.assign({nVars, nVars, nDims, nDims});
     }
   }
-  bc_bias.assign({nFpts}, 0);
 
   /* If viscous, allocate arrays used for LDG flux */
   //if(input->viscous)
@@ -173,7 +172,6 @@ void Faces::apply_bcs()
         /* Set LDG bias */
         //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
-        bc_bias(fpt) = 1;
 
         break;
       }
@@ -303,9 +301,8 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5 * momF; 
 
         /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
-        LDG_bias(fpt) = 0;
-        bc_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = 0;
 
         break;
       }
@@ -390,9 +387,8 @@ void Faces::apply_bcs()
         }
 
         /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
-        LDG_bias(fpt) = 0;
-        bc_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = 0;
  
         break;
 
@@ -410,18 +406,17 @@ void Faces::apply_bcs()
 
         for (unsigned int dim = 0; dim < nDims; dim++)
           /* Set boundary state to cancelled normal velocity (strong)*/
-          //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
           /* Set boundary state to reflect normal velocity */
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+          //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
         /* Set energy */
-        //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
+        //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
         /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
-        LDG_bias(fpt) = 0;
-        bc_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = 0;
 
         break;
       }
@@ -454,7 +449,6 @@ void Faces::apply_bcs()
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
-
 
         break;
       }
@@ -572,7 +566,7 @@ void Faces::apply_bcs()
 #ifdef _GPU
   apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
       input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
-      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, bc_bias_d, input->equation);
+      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation);
 
   check_error();
 
@@ -905,7 +899,8 @@ void Faces::apply_bcs_dFdU()
           }
         }
 
-        bc_bias(fpt) = 1;
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
         break;
       }
 
@@ -936,7 +931,7 @@ void Faces::apply_bcs_dFdU()
         dURdUL(2, 3) = 0;
         dURdUL(3, 3) = 0;
 
-        bc_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
         break;
       }
 
@@ -1082,7 +1077,7 @@ void Faces::apply_bcs_dFdU()
           dURdUL(3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
         }
 
-        bc_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
         break;
       }
 
@@ -1109,7 +1104,7 @@ void Faces::apply_bcs_dFdU()
         dURdUL(2, 3) = 0;
         dURdUL(3, 3) = 1;
 
-        bc_bias(fpt) = 1;
+        LDG_bias(fpt) = -1;
         break;
       }
 
@@ -1690,7 +1685,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d, bc_bias_d, 
+    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
         input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1706,7 +1701,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, waveSp_d, bc_bias_d, input->gamma, 
+    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, waveSp_d, input->gamma, input->rus_k,
         nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1849,10 +1844,6 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
   {
     /* Apply central flux at boundaries */
     double k = input->rus_k;
-    if (bc_bias(fpt))
-    {
-      k = 1.0;
-    }
 
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
@@ -1954,11 +1945,7 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     /* Apply central flux at boundaries */
-    double k = 0;
-    if (bc_bias(fpt))
-    {
-      k = 1.0;
-    }
+    double k = input->rus_k;
 
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
@@ -2621,7 +2608,7 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 #ifdef _GPU
     if (!CPU_flag)
     {
-      rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, LDG_bias_d, bc_bias_d, 
+      rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, LDG_bias_d,
           input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
       check_error();
     }
@@ -2758,10 +2745,6 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
   {
     /* Apply central flux at boundaries */
     double k = input->rus_k;
-    if (bc_bias(fpt))
-    {
-      k = 1.0;
-    }
 
     /* Get interface-normal dFdU components  (from L to R)*/
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -2949,11 +2932,7 @@ void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     /* Apply central flux at boundaries */
-    double k = 0;
-    if (bc_bias(fpt))
-    {
-      k = 1.0;
-    }
+    double k = input->rus_k;
 
     /* Get interface-normal dFdU components  (from L to R)*/
     for (unsigned int dim = 0; dim < nDims; dim++)
