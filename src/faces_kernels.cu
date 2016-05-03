@@ -842,7 +842,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
 
     }
-    case 7:
+    case 7: /* Symmetry */
     case 8: /* Slip Wall */
     {
       double momN = 0.0;
@@ -1590,6 +1590,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       break;
     }
 
+    case 7: /* Symmetry */
     case 8: /* Slip Wall */
     {
       /* Compute dURdUL */

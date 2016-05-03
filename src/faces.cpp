@@ -393,7 +393,7 @@ void Faces::apply_bcs()
         break;
 
       }
-      case 7:
+      case 7: /* Symmetry */
       case 8: /* Slip Wall */
       {
         double momN = 0.0;
@@ -1081,6 +1081,7 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
+      case 7: /* Symmetry */
       case 8: /* Slip Wall */
       {
         /* Compute dURdUL */
