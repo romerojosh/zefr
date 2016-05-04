@@ -171,12 +171,12 @@ void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda
 template <unsigned int nVars>
 __global__
 void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> Ucomm, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts, bool viscous)
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts, bool viscous, unsigned int startEle, unsigned int endEle)
 {  
   const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts + startEle;
 
-  if (fpt >= nFpts || ele >= nEles)
+  if (fpt >= nFpts || ele >= endEle)
     return;
 
   int gfpt = fpt2gfpt(fpt,ele);
@@ -201,33 +201,33 @@ void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvec
 void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
     mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 
     unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation, 
-    bool viscous)
+    bool viscous, unsigned int startEle, unsigned int endEle)
 {
   unsigned int threads= 192;
-  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = ((nFpts * (endEle - startEle)) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
   {
-    U_to_faces<1><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
+    U_to_faces<1><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous, startEle, endEle);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      U_to_faces<4><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
+      U_to_faces<4><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous, startEle, endEle);
     else if (nDims == 3)
-      U_to_faces<5><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous);
+      U_to_faces<5><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, viscous, startEle, endEle);
   }
 }
 
 template <unsigned int nVars>
 __global__
 void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts)
+    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts, unsigned int startEle, unsigned int endEle)
 {
   const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts + startEle;
 
-  if (fpt >= nFpts || ele >= nEles)
+  if (fpt >= nFpts || ele >= endEle)
     return;
 
   int gfpt = fpt2gfpt(fpt,ele);
@@ -245,21 +245,22 @@ void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_f
 
 void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double> &Ucomm_fpts, 
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
-    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation)
+    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation,
+    unsigned int startEle, unsigned int endEle)
 {
   unsigned int threads= 192;
-  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = ((nFpts * (endEle - startEle)) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
   {
-    U_from_faces<1><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
+    U_from_faces<1><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, startEle, endEle);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      U_from_faces<4><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
+      U_from_faces<4><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, startEle, endEle);
     else
-      U_from_faces<5><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
+      U_from_faces<5><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, startEle, endEle);
   }
 
 }
@@ -627,12 +628,12 @@ template<unsigned int nVars, unsigned int nDims>
 __global__
 void add_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int equation, 
-    double flow_time, unsigned int stage)
+    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y + startEle;
 
-  if (spt >= nSpts || ele >= nEles)
+  if (spt >= nSpts || ele >= endEle)
     return;
 
   double x = coord_spts(spt, ele, 0);
@@ -651,29 +652,29 @@ void add_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_sp
 
 void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
-    double flow_time, unsigned int stage)
+    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
   dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, ((endEle - startEle) + threads.y - 1)/
       threads.y);
 
   if (nDims == 2)
   {
     if (equation == AdvDiff || equation == Burgers)
       add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage);
+          flow_time, stage, startEle, endEle);
     else
       add_source<4, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage);
+          flow_time, stage, startEle, endEle);
   }
   else
   {
     if (equation == AdvDiff || equation == Burgers)
       add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage);
+          flow_time, stage, startEle, endEle);
     else
       add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage);
+          flow_time, stage, startEle, endEle);
   }
 }
 

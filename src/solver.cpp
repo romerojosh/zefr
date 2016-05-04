@@ -1142,7 +1142,7 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   U_to_faces_wrapper(eles->U_fpts_d, faces->U_d, eles->Ucomm_d, geo.fpt2gfpt_d,
       geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, eles->nDims,
-      input->equation, input->viscous);
+      input->equation, input->viscous, startEle, endEle);
 
   check_error();
 #endif
@@ -1173,7 +1173,7 @@ void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d,
       geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts,
-      eles->nDims, input->equation);
+      eles->nDims, input->equation, startEle, endEle);
 
   check_error();
 #endif
@@ -1240,7 +1240,7 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
   /* Can reuse kernel here */
   U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, 
       geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, 
-      eles->nDims, input->equation);
+      eles->nDims, input->equation, startEle, endEle);
 
   check_error();
 #endif
@@ -1367,7 +1367,7 @@ void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned in
 
 #ifdef _GPU
   add_source_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, geo.coord_spts_d, eles->nSpts, eles->nEles,
-      eles->nVars, eles->nDims, input->equation, flow_time, stage);
+      eles->nVars, eles->nDims, input->equation, flow_time, stage, startEle, endEle);
   check_error();
 #endif
 

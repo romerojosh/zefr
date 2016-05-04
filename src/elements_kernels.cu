@@ -6,12 +6,12 @@ template <unsigned int nDims>
 __global__
 void compute_Fconv_spts_AdvDiff(mdvector_gpu<double> F_spts, 
     mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles, 
-    mdvector_gpu<double> AdvDiff_A)
+    mdvector_gpu<double> AdvDiff_A, unsigned int startEle, unsigned int endEle)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y + startEle;
 
-  if (spt >= nSpts || ele >= nEles)
+  if (spt >= nSpts || ele >= endEle)
     return;
 
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -22,34 +22,36 @@ void compute_Fconv_spts_AdvDiff(mdvector_gpu<double> F_spts,
 
 void compute_Fconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
-    unsigned int nDims, mdvector_gpu<double> &AdvDiff_A)
+    unsigned int nDims, mdvector_gpu<double> &AdvDiff_A, unsigned int startEle,
+    unsigned int endEle)
 {
 
   dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, ((endEle - startEle) + threads.y - 1) / 
       threads.y);
 
   if (nDims == 2)
   {
     compute_Fconv_spts_AdvDiff<2><<<blocks, threads>>>(F_spts, U_spts, nSpts, 
-      nEles, AdvDiff_A);
+      nEles, AdvDiff_A, startEle, endEle);
   }
   else
   {
     compute_Fconv_spts_AdvDiff<3><<<blocks, threads>>>(F_spts, U_spts, nSpts, 
-      nEles, AdvDiff_A);
+      nEles, AdvDiff_A, startEle, endEle);
   }
 }
 
 template <unsigned int nDims>
 __global__
 void compute_Fconv_spts_Burgers(mdvector_gpu<double> F_spts, 
-    mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles)
+    mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles,
+    unsigned int startEle, unsigned int endEle)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y + startEle;
 
-  if (spt >= nSpts || ele >= nEles)
+  if (spt >= nSpts || ele >= endEle)
     return;
 
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -60,33 +62,34 @@ void compute_Fconv_spts_Burgers(mdvector_gpu<double> F_spts,
 
 void compute_Fconv_spts_Burgers_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
-    unsigned int nDims)
+    unsigned int nDims, unsigned int startEle, unsigned int endEle)
 {
 
   dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, ((endEle - startEle) + threads.y - 1) / 
       threads.y);
 
   if (nDims == 2)
   {
     compute_Fconv_spts_Burgers<2><<<blocks, threads>>>(F_spts, U_spts, nSpts, 
-      nEles);
+      nEles, startEle, endEle);
   }
   else
   {
     compute_Fconv_spts_Burgers<3><<<blocks, threads>>>(F_spts, U_spts, nSpts, 
-      nEles);
+      nEles, startEle, endEle);
   }
 }
 
 __global__
 void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, 
-    unsigned int nSpts, unsigned int nEles, double gamma)
+    unsigned int nSpts, unsigned int nEles, double gamma, unsigned int startEle,
+    unsigned int endEle)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y + startEle;
 
-  if (spt >= nSpts || ele >= nEles)
+  if (spt >= nSpts || ele >= endEle)
     return;
 
   /* Get state variables */
@@ -115,12 +118,13 @@ void compute_Fconv_spts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
 
 __global__
 void compute_Fconv_spts_3D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, 
-    unsigned int nSpts, unsigned int nEles, double gamma)
+    unsigned int nSpts, unsigned int nEles, double gamma, unsigned int startEle,
+    unsigned int endEle)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y + startEle;
 
-  if (spt >= nSpts || ele >= nEles)
+  if (spt >= nSpts || ele >= endEle)
     return;
 
   /* Get state variables */
@@ -157,21 +161,21 @@ void compute_Fconv_spts_3D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
 
 void compute_Fconv_spts_EulerNS_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
-    unsigned int nDims, double gamma)
+    unsigned int nDims, double gamma, unsigned int startEle, unsigned int endEle)
 {
   dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
+  dim3 blocks((nSpts + threads.x - 1)/threads.x, ((endEle - startEle) + threads.y - 1) / 
       threads.y);
 
   if (nDims == 2)
   {
     compute_Fconv_spts_2D_EulerNS<<<blocks, threads>>>(F_spts, U_spts, nSpts, 
-      nEles, gamma);
+      nEles, gamma, startEle, endEle);
   }
   else
   {
     compute_Fconv_spts_3D_EulerNS<<<blocks, threads>>>(F_spts, U_spts, nSpts, 
-      nEles, gamma);
+      nEles, gamma, startEle, endEle);
   }
 }
 
@@ -796,12 +800,12 @@ template <unsigned int nVars>
 __global__
 void transform_flux_quad(mdvector_gpu<double> F_spts, 
     mdvector_gpu<double> jaco_spts, unsigned int nSpts, 
-    unsigned int nEles)
+    unsigned int nEles, unsigned int startEle, unsigned int endEle)
 {
   const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
 
-  if (spt >= nSpts || ele >= nEles)
+  if (spt >= nSpts || ele >= endEle)
     return;
 
   /* Get metric terms */
@@ -826,18 +830,18 @@ void transform_flux_quad(mdvector_gpu<double> F_spts,
 void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
     unsigned int nEles, unsigned int nVars, unsigned int nDims,
-    unsigned int equation)
+    unsigned int equation, unsigned int startEle, unsigned int endEle)
 {
   unsigned int threads= 192;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = ((nSpts * (endEle - startEle)) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
   {
-    transform_flux_quad<1><<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles);
+    transform_flux_quad<1><<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles, startEle, endEle);
   }
   else if (equation == EulerNS)
   {
-    transform_flux_quad<4><<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles);
+    transform_flux_quad<4><<<blocks, threads>>>(F_spts, jaco_spts, nSpts, nEles, startEle, endEle);
   }
 }
 
