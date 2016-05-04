@@ -13,9 +13,9 @@ n_steps 10000
 dt_scheme LUJac     (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.1
-CFL	  14.0
+CFL	  7.0
 
-restart 1
+restart 0
 restart_file channel_48x16_impLUJac/channel_48x16_impLUJac_000005000.vtu
 
 # Multigrid:

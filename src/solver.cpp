@@ -531,11 +531,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   unsigned int startEle = 0; unsigned int endEle = eles->nEles;
 
   /* If using coloring, modify range to extrapolate data from previously updated colors */
-  if (color == 1)
+  if (color == 1 && geo.nColors > 1)
   {
     startEle = geo.ele_color_range[1]; endEle = geo.ele_color_range[2];
   }
-  else if (color == 2)
+  else if (color == 2 && geo.nColors > 1)
   {
     startEle = geo.ele_color_range[0]; endEle = geo.ele_color_range[1];
   }
@@ -554,7 +554,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   U_to_faces(startEle, endEle);
 
   /* For coloring, modify range to sweep through current color */
-  if (color)
+  if (color && geo.nColors > 1)
   {
     startEle = geo.ele_color_range[color - 1]; endEle = geo.ele_color_range[color];
   }
