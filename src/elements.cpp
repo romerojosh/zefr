@@ -2059,26 +2059,8 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
 {
 
 #ifdef _CPU
-  /* TODO: Move setup */
-  mdvector<double> Cvisc0, CviscN, CdFddU0;
-  Cvisc0.assign({nSpts, nSpts, nDims});
-  CviscN.assign({nSpts, nSpts, nDims, nFaces});
-  CdFddU0.assign({nSpts, nSpts, nDims});
-
-  mdvector<double> CtempSS, CtempFS, CtempFS2;
-  CtempSS.assign({nSpts, nSpts});
-  CtempFS.assign({nFpts, nSpts});
-  CtempFS2.assign({nFpts, nSpts});
-
-  mdvector<double> CtempSF;
-  CtempSF.assign({nSpts, nFpts});
-
-  mdvector<double> CtempFSN, CtempFSN2;
-  CtempFSN.assign({nSpts1D, nSpts});
-  CtempFSN2.assign({nSpts1D, nSpts});
 
   /* Compute LHS */
-  LHS.fill(0);
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
     for (unsigned int ni = 0; ni < nVars; ni++)

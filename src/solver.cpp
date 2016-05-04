@@ -770,7 +770,7 @@ void FRSolver::compute_LHS_LU()
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     /* Copy LHS into TNT object */
-    // TODO: Copy can now be removed
+    // TODO: Copy can now be removed. Need to investigate column-major TNT array views.
     unsigned int N = eles->nSpts * eles->nVars;
     TNT::Array2D<double> A(N, N);
     for (unsigned int nj = 0; nj < eles->nVars; nj++)
@@ -798,24 +798,23 @@ void FRSolver::compute_LHS_LU()
 
 void FRSolver::compute_RHS(unsigned int color)
 {
+  unsigned int startEle = geo.ele_color_range[color - 1];
+  unsigned int endEle = geo.ele_color_range[color];
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (geo.ele_color(ele) == color)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        if (input->dt_type != 2)
         {
-          if (input->dt_type != 2)
-          {
-            eles->RHS(spt, n, ele) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
-          }
-          else
-          {
-            eles->RHS(spt, n, ele) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
-          }
+          eles->RHS(spt, n, ele) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+        }
+        else
+        {
+          eles->RHS(spt, n, ele) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
         }
       }
     }
@@ -830,23 +829,22 @@ void FRSolver::compute_RHS(unsigned int color)
 #ifdef _CPU
 void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int color)
 {
+  unsigned int startEle = geo.ele_color_range[color - 1];
+  unsigned int endEle = geo.ele_color_range[color];
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (geo.ele_color(ele) == color)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        if (input->dt_type != 2)
         {
-          if (input->dt_type != 2)
-          {
-            eles->RHS(spt, n, ele) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
-          }
-          else
-          {
-            eles->RHS(spt, n, ele) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
-          }
+          eles->RHS(spt, n, ele) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+        }
+        else
+        {
+          eles->RHS(spt, n, ele) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
         }
       }
     }
@@ -876,45 +874,27 @@ void FRSolver::compute_deltaU(unsigned int color)
   }
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
+    unsigned int startEle = geo.ele_color_range[color - 1];
+    unsigned int endEle = geo.ele_color_range[color];
+
 #ifdef _CPU
 #ifndef _NO_TNT
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (geo.ele_color(ele) == color)
+      /* Create Array1D view of RHS */
+      unsigned int N = eles->nSpts * eles->nVars;
+      TNT::Array1D<double> b(N, &eles->RHS(0, 0, ele));
+
+      /* Solve for deltaU */
+      TNT::Array1D<double> x(N, &eles->deltaU(0, 0, ele));
+      x.inject(LUptrs[ele]->solve(b));
+
+      if (x.dim() == 0)
       {
-        /* Copy RHS into TNT object */
-        unsigned int N = eles->nSpts * eles->nVars;
-        TNT::Array1D<double> b(N);
-        for (unsigned int n = 0; n < eles->nVars; n++)
-        {
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            unsigned int i = n * eles->nSpts + spt;
-            b[i] = eles->RHS(spt, n, ele);
-          }
-        }
-
-        /* Solve for deltaU */
-        TNT::Array1D<double> x = LUptrs[ele]->solve(b);
-        if (x.dim() == 0)
-        {
-          ThrowException("LU solve failed!");
-        }
-
-        /* Copy TNT object into deltaU */
-        for (unsigned int n = 0; n < eles->nVars; n++)
-        {
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            unsigned int i = n * eles->nSpts + spt;
-            eles->deltaU(spt, n, ele) = x[i];
-          }
-        }
+        ThrowException("LU solve failed!");
       }
-
-
     }
-    //ThrowException("PAUSE");
+
 #endif
 #endif
 
@@ -933,17 +913,17 @@ void FRSolver::compute_deltaU(unsigned int color)
 
 void FRSolver::compute_U(unsigned int color)
 {
+  unsigned int startEle = geo.ele_color_range[color - 1];
+  unsigned int endEle = geo.ele_color_range[color];
+
 #ifdef _CPU
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (geo.ele_color(ele) == color)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          eles->U_spts(spt, ele, n) += eles->deltaU(spt, n, ele);
-        }
+        eles->U_spts(spt, ele, n) += eles->deltaU(spt, n, ele);
       }
     }
   }
@@ -1018,6 +998,17 @@ void FRSolver::initialize_U()
       eles->LHS_subptrs.assign({eles->nEles * eles->nVars});
       eles->LHS_tempSF_subptrs.assign({eles->nEles * eles->nVars});
       eles->oppE_ptrs.assign({eles->nEles * eles->nVars});
+
+      eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+      eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
+      eles->CdFddU0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+      eles->CtempSS.assign({eles->nSpts, eles->nSpts});
+      eles->CtempFS.assign({eles->nFpts, eles->nSpts});
+      eles->CtempFS2.assign({eles->nFpts, eles->nSpts});
+      eles->CtempSF.assign({eles->nSpts, eles->nFpts});
+      eles->CtempFSN.assign({eles->nSpts1D, eles->nSpts});
+      eles->CtempFSN2.assign({eles->nSpts1D, eles->nSpts});
+
     }
     eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
     eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});

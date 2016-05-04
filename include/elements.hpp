@@ -69,6 +69,12 @@ class Elements
     mdvector<double> deltaU;
     mdvector<double> RHS;
 
+    mdvector<double> Cvisc0, CviscN, CdFddU0;
+    mdvector<double> CtempSS, CtempFS, CtempFS2;
+    mdvector<double> CtempSF;
+    mdvector<double> CtempFSN, CtempFSN2;
+
+
 #ifdef _GPU
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d, oppDiv_fpts_d;
