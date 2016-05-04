@@ -11,15 +11,15 @@ spt_type Legendre
 # Timestepping:
 n_steps 10000
 dt_scheme LUJac     (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.01
-CFL	  5.0
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.1
+CFL	  14.0
 
-restart 0
-restart_file channel_48x16_impLUJac_cpu/channel_48x16_impLUJac_cpu_000008000.vtu
+restart 1
+restart_file channel_48x16_impLUJac/channel_48x16_impLUJac_000005000.vtu
 
 # Multigrid:
-p_multi 1
+p_multi 0
 mg_cycle FMG
 FMG_vcycles 2000
 rel_fac 1.00
@@ -36,7 +36,7 @@ Jfreeze_freq 100
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix channel_48x16_impLUJac
-write_freq    4000
+write_freq    1000
 report_freq   100
 res_type      1
 force_freq    0

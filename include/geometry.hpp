@@ -32,6 +32,9 @@ struct GeoStruct
     mdvector<unsigned int> face_nodes;
     mdvector<int> ele_adj;
 
+    unsigned int nColors;
+    mdvector<unsigned int> ele_color;
+
 #ifdef _MPI
     unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
@@ -59,6 +62,7 @@ void set_face_nodes(GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);
 void setup_global_fpts(GeoStruct &geo, unsigned int order);
 void pair_periodic_gfpts(GeoStruct &geo);
+void setup_element_colors(InputStruct *input, GeoStruct &geo);
 
 #ifdef _MPI
 void partition_geometry(GeoStruct &geo);

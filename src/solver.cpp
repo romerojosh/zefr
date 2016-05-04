@@ -149,47 +149,6 @@ void FRSolver::setup_update()
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
 
-    /* Setup element colors */
-    ele_color.assign({eles->nEles});
-    if (input->dt_scheme == "LUJac")
-    {
-      nColors = 1;
-      ele_color.fill(1);
-    }
-    else if (input->dt_scheme == "LUSGS")
-    {
-      nColors = 2;
-      ele_color(0) = 1;
-      std::queue<unsigned int> Q;
-      Q.push(0);
-      while (!Q.empty())
-      {
-        unsigned int ele1 = Q.front();
-        Q.pop();
-
-        /* Determine opposite color */
-        unsigned int color = ele_color(ele1);
-        if (color == 1)
-        {
-          color = 2;
-        }
-        else
-        {
-          color = 1;
-        }
-
-        /* Color neighbors */
-        for (unsigned int face = 0; face < eles->nFaces; face++)
-        {
-          int ele2 = geo.ele_adj(face, ele1);
-          if (ele2 != -1 && ele_color(ele2) == 0)
-          {
-            ele_color(ele2) = color;
-            Q.push(ele2);
-          }
-        }
-      }
-    }
   }
   else
   {
@@ -827,7 +786,7 @@ void FRSolver::compute_RHS(unsigned int color)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (ele_color(ele) == color)
+      if (geo.ele_color(ele) == color)
       {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
@@ -858,7 +817,7 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (ele_color(ele) == color)
+      if (geo.ele_color(ele) == color)
       {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
@@ -903,7 +862,7 @@ void FRSolver::compute_deltaU(unsigned int color)
 #ifndef _NO_TNT
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (ele_color(ele) == color)
+      if (geo.ele_color(ele) == color)
       {
         /* Copy RHS into TNT object */
         unsigned int N = eles->nSpts * eles->nVars;
@@ -961,7 +920,7 @@ void FRSolver::compute_U(unsigned int color)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (ele_color(ele) == color)
+      if (geo.ele_color(ele) == color)
       {
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
@@ -1622,11 +1581,11 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   {
 
 #ifdef _GPU
-    if (nColors > 1)
+    if (geo.nColors > 1)
       ThrowException("Only block-jacobi supported on GPU currently!");
 #endif
 
-    for (unsigned int color = 1; color <= nColors; color++)
+    for (unsigned int color = 1; color <= geo.nColors; color++)
     {
       compute_residual(0);
 
@@ -2189,7 +2148,7 @@ void FRSolver::write_color()
   {
     for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
     {
-      f << std::scientific << std::setprecision(16) << ele_color(ele);
+      f << std::scientific << std::setprecision(16) << geo.ele_color(ele);
       f  << " ";
     }
     f << std::endl;

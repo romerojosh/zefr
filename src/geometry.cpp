@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <queue>
 #include <set>
 #include <string>
 #include <vector>
@@ -30,6 +31,11 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 #endif
 
   setup_global_fpts(geo, order);
+
+  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJacobi")
+  {
+    setup_element_colors(input, geo);
+  }
 
 
   return geo;
@@ -1383,6 +1389,51 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
 
 }
 
+void setup_element_colors(InputStruct *input, GeoStruct &geo)
+{
+  /* Setup element colors */
+  geo.ele_color.assign({geo.nEles});
+  if (input->dt_scheme == "LUJac")
+  {
+    geo.nColors = 1;
+    geo.ele_color.fill(1);
+  }
+  else if (input->dt_scheme == "LUSGS")
+  {
+    geo.nColors = 2;
+    geo.ele_color(0) = 1;
+    std::queue<unsigned int> Q;
+    Q.push(0);
+    while (!Q.empty())
+    {
+      unsigned int ele1 = Q.front();
+      Q.pop();
+
+      /* Determine opposite color */
+      unsigned int color = geo.ele_color(ele1);
+      if (color == 1)
+      {
+        color = 2;
+      }
+      else
+      {
+        color = 1;
+      }
+
+      /* Color neighbors */
+      for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
+      {
+        int ele2 = geo.ele_adj(face, ele1);
+        if (ele2 != -1 && geo.ele_color(ele2) == 0)
+        {
+          geo.ele_color(ele2) = color;
+          Q.push(ele2);
+        }
+      }
+    }
+  }
+}
+
 #ifdef _MPI
 void partition_geometry(GeoStruct &geo)
 {
@@ -1582,3 +1633,4 @@ void partition_geometry(GeoStruct &geo)
 
 }
 #endif
+
