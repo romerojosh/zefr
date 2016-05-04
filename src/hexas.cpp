@@ -601,13 +601,13 @@ void Hexas::setup_PMG()
   }
 }
 
-void Hexas::transform_dU()
+void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int ele = 0; ele < nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -643,13 +643,13 @@ void Hexas::transform_dU()
 
 }
 
-void Hexas::transform_flux()
+void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int ele = 0; ele < nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {

@@ -32,7 +32,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 
   setup_global_fpts(geo, order);
 
-  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJacobi")
+  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
   {
     setup_element_colors(input, geo);
   }

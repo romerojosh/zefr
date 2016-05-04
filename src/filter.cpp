@@ -440,8 +440,8 @@ unsigned int Filter::apply_filter(unsigned int level)
 #endif
   
   // Transfer information to flux points
-  eles->extrapolate_U(); 
-  solver->U_to_faces(); 
+  eles->extrapolate_U(0, eles->nEles); 
+  solver->U_to_faces(0, eles->nEles); 
 #ifdef _MPI 
   faces->send_U_data();
   faces->recv_U_data();
@@ -449,7 +449,7 @@ unsigned int Filter::apply_filter(unsigned int level)
 #else
   faces->compute_common_U(0, geo->nGfpts); 
 #endif 
-  solver->U_from_faces(); 
+  solver->U_from_faces(0, eles->nEles); 
  
 #ifdef _CPU
   // Loop over variables

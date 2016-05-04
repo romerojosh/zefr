@@ -526,10 +526,10 @@ void FRSolver::solver_data_to_device()
 }
 #endif
 
-void FRSolver::compute_residual(unsigned int stage)
+void FRSolver::compute_residual(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
   /* Extrapolate solution to flux points */
-  eles->extrapolate_U();
+  eles->extrapolate_U(startEle, endEle);
 
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
@@ -539,7 +539,7 @@ void FRSolver::compute_residual(unsigned int stage)
   }
 
   /* Copy flux point data from element local to face local storage */
-  U_to_faces();
+  U_to_faces(startEle, endEle);
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
@@ -550,7 +550,7 @@ void FRSolver::compute_residual(unsigned int stage)
   faces->apply_bcs();
 
   /* Compute convective flux at solution points */
-  eles->compute_Fconv();
+  eles->compute_Fconv(startEle, endEle);
 
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
@@ -595,20 +595,20 @@ void FRSolver::compute_residual(unsigned int stage)
 
     /* Copy solution data at flux points from face local to element local
      * storage */
-    U_from_faces();
+    U_from_faces(startEle, endEle);
 
     /* Compute gradient of state variables at solution points */
-    eles->compute_dU();
+    eles->compute_dU(startEle, endEle);
 
     /* Transform gradient of state variables to physical space from 
      * reference space */
-    eles->transform_dU();
+    eles->transform_dU(startEle, endEle);
 
     /* Extrapolate solution gradient to flux points */
-    eles->extrapolate_dU();
+    eles->extrapolate_dU(startEle, endEle);
 
     /* Copy gradient data from element local to face local storage */
-    dU_to_faces();
+    dU_to_faces(startEle, endEle);
 
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
@@ -618,7 +618,7 @@ void FRSolver::compute_residual(unsigned int stage)
     faces->apply_bcs_dU();
 
     /* Compute viscous flux at solution points */
-    eles->compute_Fvisc();
+    eles->compute_Fvisc(startEle, endEle);
 
     /* Compute viscous and convective flux and common interface flux 
      * at non-MPI flux points */
@@ -639,7 +639,7 @@ void FRSolver::compute_residual(unsigned int stage)
     faces->apply_bcs_dU();
 
     /* Compute viscous flux at solution points */
-    eles->compute_Fvisc();
+    eles->compute_Fvisc(startEle, endEle);
 
     /* Compute viscous and convective flux and common interface fluxes 
      * at flux points*/ 
@@ -651,18 +651,18 @@ void FRSolver::compute_residual(unsigned int stage)
   }
 
   /* Transform fluxes from physical to reference space */
-  eles->transform_flux();
+  eles->transform_flux(startEle, endEle);
   faces->transform_flux();
 
   /* Copy flux data from face local storage to element local storage */
-  F_from_faces();
+  F_from_faces(startEle, endEle);
 
   /* Compute divergence of flux */
-  eles->compute_divF(stage);
+  eles->compute_divF(stage, startEle, endEle);
 
   /* Add source term (if required) */
   if (input->source)
-    add_source(stage);
+    add_source(stage, startEle, endEle);
 }
 
 void FRSolver::compute_LHS()
@@ -1095,13 +1095,13 @@ void FRSolver::initialize_U()
   }
 }
 
-void FRSolver::U_to_faces()
+void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
@@ -1130,13 +1130,13 @@ void FRSolver::U_to_faces()
 #endif
 }
 
-void FRSolver::U_from_faces()
+void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
@@ -1162,7 +1162,7 @@ void FRSolver::U_from_faces()
 
 }
 
-void FRSolver::dU_to_faces()
+void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(4)
@@ -1170,7 +1170,7 @@ void FRSolver::dU_to_faces()
   {
     for (unsigned int n = 0; n < eles->nVars; n++) 
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int ele = startEle; ele < endEle; ele++)
       {
         for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
@@ -1195,13 +1195,13 @@ void FRSolver::dU_to_faces()
 #endif
 }
 
-void FRSolver::F_from_faces()
+void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
@@ -1323,13 +1323,13 @@ void FRSolver::dFcdU_from_faces()
 #endif
 }
 
-void FRSolver::add_source(unsigned int stage)
+void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    for (unsigned int ele =0; ele < eles->nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
@@ -1379,7 +1379,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     /* Main stage loop. Complete for Jameson-style RK timestepping */
     for (unsigned int stage = 0; stage < nSteps; stage++)
     {
-      compute_residual(stage);
+      compute_residual(stage, 0, eles->nEles);
 
       /* If in first stage, compute stable timestep */
       if (stage == 0)
@@ -1455,7 +1455,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     /* Final stage combining residuals for full Butcher table style RK timestepping*/
     if (input->dt_scheme != "RKj")
     {
-      compute_residual(nStages-1);
+      compute_residual(nStages-1, 0, eles->nEles);
 #ifdef _CPU
       eles->U_spts = U_ini;
 #endif
@@ -1531,7 +1531,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _GPU
-    compute_residual(0);
+    compute_residual(0, 0, eles->nEles);
 
     /* Freeze Jacobian */
     int iter = current_iter - restart_iter;
@@ -1587,7 +1587,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
     for (unsigned int color = 1; color <= geo.nColors; color++)
     {
-      compute_residual(0);
+      compute_residual(0, 0, eles->nEles);
 
       /* Freeze Jacobian */
       int iter = current_iter - restart_iter;

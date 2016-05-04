@@ -65,7 +65,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
   /* Update residual on finest grid level and restrict */
   if (fine_order != (int) input->low_order)
   {
-    solver.compute_residual(0);
+    solver.compute_residual(0, 0, solver.eles->nEles);
     restrict_pmg(solver, *grids[fine_order-1]);
   }
 
@@ -116,7 +116,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
     if (P-1 >= (int) input->low_order)
     {
       /* Update residual and add source */
-      grids[P]->compute_residual(0);
+      grids[P]->compute_residual(0, 0, grids[P]->eles->nEles);
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
       for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
@@ -407,7 +407,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
         source(spt,ele,n) = grid.eles->divF_spts(spt,ele,n,0);
 
   /* Update residual on current coarse grid */
-  grid.compute_residual(0);
+  grid.compute_residual(0, 0, grid.eles->nEles);
 
   /* Subtract to generate source term */
 #pragma omp parallel for collapse(3)
@@ -425,7 +425,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector_gpu<double> &source)
   device_copy(source, grid.eles->divF_spts_d, source.get_nvals());
 
   /* Update residual on current coarse grid */
-  grid.compute_residual(0);
+  grid.compute_residual(0, 0, grid.eles->nEles);
 
   /* Subtract to generate source term */
   device_subtract(source, grid.eles->divF_spts_d, source.get_nvals());

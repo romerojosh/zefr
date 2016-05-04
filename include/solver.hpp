@@ -71,18 +71,18 @@ class FRSolver
 #endif
 
     /* Routines to communicate data between faces and elements */
-    void U_to_faces();
-    void U_from_faces();
-    void dU_to_faces();
-    void F_from_faces();
+    void U_to_faces(unsigned int startEle, unsigned int endEle);
+    void U_from_faces(unsigned int startEle, unsigned int endEle);
+    void dU_to_faces(unsigned int startEle, unsigned int endEle);
+    void F_from_faces(unsigned int startEle, unsigned int endEle);
 
     void compute_element_dt();
 
   public:
     FRSolver(InputStruct *input, int order = -1);
     void setup();
-    void compute_residual(unsigned int stage);
-    void add_source(unsigned int stage);
+    void compute_residual(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
     void update(const mdvector<double> &source = mdvector<double>());
 #endif

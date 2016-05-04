@@ -119,13 +119,14 @@ class Elements
   public:
     void setup(std::shared_ptr<Faces> faces);
     void extrapolate_U();
-    void extrapolate_dU();
-    void compute_dU();
-    void compute_divF(unsigned int stage);
-    void compute_Fconv();
-    void compute_Fvisc();
-    virtual void transform_flux() = 0;
-    virtual void transform_dU() = 0;
+    void extrapolate_U(unsigned int startEle, unsigned int endEle);
+    void extrapolate_dU(unsigned int startEle, unsigned int endEle);
+    void compute_dU(unsigned int startEle, unsigned int endEle);
+    void compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void compute_Fconv(unsigned int startEle, unsigned int endEle);
+    void compute_Fvisc(unsigned int startEle, unsigned int endEle);
+    virtual void transform_flux(unsigned int startEle, unsigned int endEle) = 0;
+    virtual void transform_dU(unsigned int startEle, unsigned int endEle) = 0;
 
     /* Routines for implicit method */
     void compute_globalLHS(mdvector<double> &dt);

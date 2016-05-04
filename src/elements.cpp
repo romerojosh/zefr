@@ -305,20 +305,23 @@ void Elements::setup_aux()
 
 }
 
-void Elements::extrapolate_U()
+void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-  auto &A = oppE(0,0);
-  auto &B = U_spts(0, 0, 0);
-  auto &C = U_fpts(0, 0, 0);
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto &A = oppE(0,0);
+    auto &B = U_spts(0, startEle, var);
+    auto &C = U_fpts(0, startEle, var);
 
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-        nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+          nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-        nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+          nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
 #endif
+  }
 
 #endif
 
@@ -332,23 +335,26 @@ void Elements::extrapolate_U()
 
 }
 
-void Elements::extrapolate_dU()
+void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
   for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
     {
-        auto &A = oppE(0,0);
-        auto &B = dU_spts(0, 0, 0, dim);
-        auto &C = dU_fpts(0, 0, 0, dim);
+      auto &A = oppE(0,0);
+      auto &B = dU_spts(0, startEle, var, dim);
+      auto &C = dU_fpts(0, startEle, var, dim);
 
 #ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
-            nEles * nVars, nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
+          endEle - startEle, nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
 #else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-            nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+          nSpts, 1.0, &A, nFpts, &B, nSpts, 0.0, &C, nFpts);
 #endif
     }
+  }
 #endif
 
 #ifdef _GPU
@@ -362,43 +368,49 @@ void Elements::extrapolate_dU()
 #endif
 }
 
-void Elements::compute_dU()
+void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
   /* Compute contribution to derivative from solution at solution points */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      auto &A = oppD(0, 0, dim);
-      auto &B = U_spts(0, 0, 0);
-      auto &C = dU_spts(0, 0, 0, dim);
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppD(0, 0, dim);
+        auto &B = U_spts(0, startEle, var);
+        auto &C = dU_spts(0, startEle, var, dim);
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
-          0.0, &C, nSpts);
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nSpts, 1.0, &A, nSpts, &B, nSpts, 
+            0.0, &C, nSpts);
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, 
-          0.0, &C, nSpts);
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nSpts, 1.0, &A, nSpts, &B, nSpts, 
+            0.0, &C, nSpts);
 #endif
+      }
     }
 
     /* Compute contribution to derivative from common solution at flux points */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      auto &A = oppD_fpts(0, 0, dim);
-      auto &B = Ucomm(0, 0, 0);
-      auto &C = dU_spts(0, 0, 0, dim);
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppD_fpts(0, 0, dim);
+        auto &B = Ucomm(0, startEle, var);
+        auto &C = dU_spts(0, startEle, var, dim);
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
-          1.0, &C, nSpts);
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nFpts, 1.0, &A, nSpts, &B, nFpts, 
+            1.0, &C, nSpts);
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 
-          1.0, &C, nSpts);
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nFpts, 1.0, &A, nSpts, &B, nFpts, 
+            1.0, &C, nSpts);
 #endif
+      }
     }
 
 #endif
@@ -426,40 +438,45 @@ void Elements::compute_dU()
 
 }
 
-void Elements::compute_divF(unsigned int stage)
+void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
   /* Compute contribution to divergence from flux at solution points */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    auto &A = oppD(0, 0,dim);
-    auto &B = F_spts(0, 0, 0, dim);
-    auto &C = divF_spts(0, 0, 0, stage);
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      auto &A = oppD(0, 0, dim);
+      auto &B = F_spts(0, startEle, var, dim);
+      auto &C = divF_spts(0, startEle, var, stage);
 
-    double fac = (dim == 0) ? 0.0 : 1.0;
+      double fac = (dim == 0) ? 0.0 : 1.0;
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-        nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nSpts, fac, &C, nSpts);
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          endEle - startEle, nSpts, 1.0, &A, nSpts, &B, nSpts, fac, &C, nSpts);
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-          nSpts, 1.0, &A, nSpts, &B, nSpts, fac, &C, nSpts);
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
+            nSpts, 1.0, &A, nSpts, &B, nSpts, fac, &C, nSpts);
 #endif
-
+    }
   }
 
   /* Compute contribution to divergence from common flux at flux points */
-  auto &A = oppDiv_fpts(0, 0);
-  auto &B = Fcomm(0, 0, 0);
-  auto &C = divF_spts(0, 0, 0, stage);
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto &A = oppDiv_fpts(0, 0);
+    auto &B = Fcomm(0, startEle, var);
+    auto &C = divF_spts(0, startEle, var, stage);
 
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-      nEles * nVars, nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+        endEle - startEle, nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-      nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
+        nFpts, 1.0, &A, nSpts, &B, nFpts, 1.0, &C, nSpts);
 #endif
+  }
 #endif
 
 #ifdef _GPU
@@ -486,7 +503,7 @@ void Elements::compute_divF(unsigned int stage)
 }
 
 
-void Elements::compute_Fconv()
+void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 {
   if (input->equation == AdvDiff)
   {
@@ -496,7 +513,7 @@ void Elements::compute_Fconv()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int ele = startEle; ele < endEle; ele++)
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
@@ -522,7 +539,7 @@ void Elements::compute_Fconv()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int ele = startEle; ele < endEle; ele++)
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
@@ -546,7 +563,7 @@ void Elements::compute_Fconv()
     if (nDims == 2)
     {
 #pragma omp parallel for collapse(2)
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int ele = startEle; ele < endEle; ele++)
       {
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
@@ -578,7 +595,7 @@ void Elements::compute_Fconv()
     else if (nDims == 3)
     {
 #pragma omp parallel for collapse(2)
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int ele = startEle; ele < endEle; ele++)
       {
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
@@ -625,7 +642,7 @@ void Elements::compute_Fconv()
   }
 }
 
-void Elements::compute_Fvisc()
+void Elements::compute_Fvisc(unsigned int startEle, unsigned int endEle)
 {
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
@@ -635,7 +652,7 @@ void Elements::compute_Fvisc()
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int ele = startEle; ele < endEle; ele++)
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {

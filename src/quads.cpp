@@ -467,13 +467,13 @@ void Quads::setup_PMG()
   }
 }
 
-void Quads::transform_dU()
+void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int ele = 0; ele < nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -501,13 +501,13 @@ void Quads::transform_dU()
 
 }
 
-void Quads::transform_flux()
+void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int ele = 0; ele < nEles; ele++)
+    for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
