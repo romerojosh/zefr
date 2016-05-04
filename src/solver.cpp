@@ -1677,6 +1677,22 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
 void FRSolver::compute_element_dt()
 {
+  /* Adapt CFL number */
+  double CFL;
+  if (input->adapt_CFL)
+  {
+    CFL_ratio *= input->CFL_ratio;
+    CFL = input->CFL * CFL_ratio;
+    if (CFL > input->CFL_max)
+    {
+      CFL = input->CFL_max;
+    }
+  }
+  else
+  {
+    CFL = input->CFL;
+  }
+
 #ifdef _CPU
 #pragma omp parallel for
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -1706,7 +1722,7 @@ void FRSolver::compute_element_dt()
 
     /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
      * consistent with 1D CFL estimates. */
-    dt(ele) = 2.0 * input->CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
+    dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
   }
 
   if (input->dt_type == 1) /* Global minimum */
@@ -1722,7 +1738,7 @@ void FRSolver::compute_element_dt()
 
 #ifdef _GPU
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->dA_d, geo.fpt2gfpt_d, 
-      eles->weights_spts_d, eles->vol_d, eles->nSpts1D, input->CFL, order, 
+      eles->weights_spts_d, eles->vol_d, eles->nSpts1D, CFL, order, 
       input->dt_type, eles->nFpts, eles->nEles, eles->nDims);
 #endif
 }

@@ -41,6 +41,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "CFL", input.CFL);
   read_param(f, "CFLadvdiff", input.CFLadvdiff, false);
 
+  read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
+  read_param(f, "CFL_max", input.CFL_max, 1.0);
+  read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
+
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
 
