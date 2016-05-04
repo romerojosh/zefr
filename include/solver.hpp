@@ -41,6 +41,7 @@ class FRSolver
     int restart_iter = 0;
     double flow_time = 0.;
     unsigned int nStages;
+    double CFL_ratio = 1;
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> dt;
     mdvector<double> U_ini;
