@@ -529,7 +529,7 @@ void FRSolver::solver_data_to_device()
 void FRSolver::compute_residual(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
   /* Extrapolate solution to flux points */
-  eles->extrapolate_U(startEle, endEle);
+  eles->extrapolate_U(0, eles->nEles);
 
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
@@ -539,7 +539,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int startEle, unsig
   }
 
   /* Copy flux point data from element local to face local storage */
-  U_to_faces(startEle, endEle);
+  U_to_faces(0, eles->nEles);
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
@@ -608,7 +608,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int startEle, unsig
     eles->extrapolate_dU(startEle, endEle);
 
     /* Copy gradient data from element local to face local storage */
-    dU_to_faces(startEle, endEle);
+    dU_to_faces(0, eles->nEles);
 
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
@@ -1587,12 +1587,16 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
     for (unsigned int color = 1; color <= geo.nColors; color++)
     {
-      compute_residual(0, 0, eles->nEles);
+      /* Compute residual on elements of this color only (via specified range) */
+      compute_residual(0, geo.ele_color_range[color-1], geo.ele_color_range[color]);
 
       /* Freeze Jacobian */
       int iter = current_iter - restart_iter;
       if (color == 1 && iter%input->Jfreeze_freq == 0)
       {
+        /* Compute residual on all elements */
+        compute_residual(0, 0, eles->nEles);
+
         // TODO: Revisit this as it is kind of expensive.
         if (input->dt_type != 0)
         {

@@ -118,7 +118,6 @@ class Elements
 
   public:
     void setup(std::shared_ptr<Faces> faces);
-    void extrapolate_U();
     void extrapolate_U(unsigned int startEle, unsigned int endEle);
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);
     void compute_dU(unsigned int startEle, unsigned int endEle);
