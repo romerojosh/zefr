@@ -526,10 +526,22 @@ void FRSolver::solver_data_to_device()
 }
 #endif
 
-void FRSolver::compute_residual(unsigned int stage, unsigned int startEle, unsigned int endEle)
+void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 {
+  unsigned int startEle = 0; unsigned int endEle = eles->nEles;
+
+  /* If using coloring, modify range to extrapolate data from previously updated colors */
+  if (color == 1)
+  {
+    startEle = geo.ele_color_range[1]; endEle = geo.ele_color_range[2];
+  }
+  else if (color == 2)
+  {
+    startEle = geo.ele_color_range[0]; endEle = geo.ele_color_range[1];
+  }
+
   /* Extrapolate solution to flux points */
-  eles->extrapolate_U(0, eles->nEles);
+  eles->extrapolate_U(startEle, endEle);
 
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
@@ -539,7 +551,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int startEle, unsig
   }
 
   /* Copy flux point data from element local to face local storage */
-  U_to_faces(0, eles->nEles);
+  U_to_faces(startEle, endEle);
+
+  /* For coloring, modify range to sweep through current color */
+  if (color)
+  {
+    startEle = geo.ele_color_range[color - 1]; endEle = geo.ele_color_range[color];
+  }
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
@@ -1379,7 +1397,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     /* Main stage loop. Complete for Jameson-style RK timestepping */
     for (unsigned int stage = 0; stage < nSteps; stage++)
     {
-      compute_residual(stage, 0, eles->nEles);
+      compute_residual(stage);
 
       /* If in first stage, compute stable timestep */
       if (stage == 0)
@@ -1455,7 +1473,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     /* Final stage combining residuals for full Butcher table style RK timestepping*/
     if (input->dt_scheme != "RKj")
     {
-      compute_residual(nStages-1, 0, eles->nEles);
+      compute_residual(nStages-1);
 #ifdef _CPU
       eles->U_spts = U_ini;
 #endif
@@ -1531,7 +1549,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _GPU
-    compute_residual(0, 0, eles->nEles);
+    compute_residual(0);
 
     /* Freeze Jacobian */
     int iter = current_iter - restart_iter;
@@ -1585,17 +1603,21 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       ThrowException("Only block-jacobi supported on GPU currently!");
 #endif
 
+    /* For first iteration, need to compute residual once to load up faces with initial data. */
+    if (current_iter == 0)
+      compute_residual(0);
+
     for (unsigned int color = 1; color <= geo.nColors; color++)
     {
-      /* Compute residual on elements of this color only (via specified range) */
-      compute_residual(0, geo.ele_color_range[color-1], geo.ele_color_range[color]);
+      /* Compute residual on elements of this color only */
+      compute_residual(0, color);
 
       /* Freeze Jacobian */
       int iter = current_iter - restart_iter;
       if (color == 1 && iter%input->Jfreeze_freq == 0)
       {
         /* Compute residual on all elements */
-        compute_residual(0, 0, eles->nEles);
+        compute_residual(0);
 
         // TODO: Revisit this as it is kind of expensive.
         if (input->dt_type != 0)

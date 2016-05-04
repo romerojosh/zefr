@@ -81,7 +81,7 @@ class FRSolver
   public:
     FRSolver(InputStruct *input, int order = -1);
     void setup();
-    void compute_residual(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void compute_residual(unsigned int stage, unsigned int color = 0);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
     void update(const mdvector<double> &source = mdvector<double>());
