@@ -1860,16 +1860,6 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       }
     }
 
-    if (LDG_bias(fpt) != 0)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        Fcomm(fpt, n, 0) = FR[n];
-        Fcomm(fpt, n, 1) = FR[n];
-      }
-      continue;
-    }
-
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -1919,6 +1909,16 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     }
 
     /* Compute common normal flux */
+    if (LDG_bias(fpt) != 0)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        Fcomm(fpt, n, 0) = FR[n];
+        Fcomm(fpt, n, 1) = FR[n];
+      }
+      continue;
+    }
+
     for (unsigned int n = 0; n < nVars; n++)
     {
       double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n]);

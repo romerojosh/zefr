@@ -1884,18 +1884,6 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     }
   }
 
-  /* If on boundary, set common to right state flux */
-  if (LDG_bias(fpt) != 0)
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      Fcomm(fpt, n, 0) = FR[n];
-      Fcomm(fpt, n, 1) = FR[n];
-    }
-
-    return;
-  }
-
   /* Get left and right state variables */
   for (unsigned int n = 0; n < nVars; n++)
   {
@@ -1951,6 +1939,18 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     // NOTE: Can I just store absolute of waveSp?
     waveSp_gfpts(fpt) = waveSp;
     waveSp = std::abs(waveSp);
+  }
+
+  /* If on boundary, set common to right state flux */
+  if (LDG_bias(fpt) != 0)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm(fpt, n, 0) = FR[n];
+      Fcomm(fpt, n, 1) = FR[n];
+    }
+
+    return;
   }
 
   /* Compute common normal flux */
