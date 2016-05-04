@@ -899,6 +899,8 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     if (geo.nDims == 3)
       nFptsPerFace *= (order + 1);
 
+    geo.nFptsPerFace = nFptsPerFace;
+
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> face_fpts;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
     std::vector<std::vector<int>> ele2fpts(geo.nEles);
@@ -1430,6 +1432,42 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
           Q.push(ele2);
         }
       }
+    }
+  }
+
+  /* Reorganize required geometry data by color */
+  std::vector<std::vector<unsigned int>> color2eles(geo.nColors);
+  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  {
+    color2eles[geo.ele_color(ele) - 1].push_back(ele);
+  }
+
+  /* TODO: Consider an in-place permutation to save memory */
+  auto nd2gnd_temp = geo.nd2gnd;
+  auto fpt2gfpt_temp = geo.fpt2gfpt;
+  auto fpt2gfpt_slot_temp = geo.fpt2gfpt_slot;
+
+  unsigned int ele1 = 0;
+  for (unsigned int color = 1; color <= geo.nColors; color++)
+  {
+    for (unsigned int i = 0; i < color2eles[color - 1].size(); i++)
+    {
+      unsigned int ele2 = color2eles[color - 1][i];
+
+      for (unsigned int node = 0; node < geo.nNodesPerEle; node++)
+      {
+        geo.nd2gnd(node, ele1) = nd2gnd_temp(node, ele2);
+      }
+
+      for (unsigned int fpt = 0; fpt < geo.nFptsPerFace * geo.nFacesPerEle; fpt++) 
+      {
+        geo.fpt2gfpt(fpt, ele1) = fpt2gfpt_temp(fpt, ele2);
+        geo.fpt2gfpt_slot(fpt, ele1) = fpt2gfpt_slot_temp(fpt, ele2);
+      }
+
+      geo.ele_color(ele1) = color;
+
+      ele1++;
     }
   }
 }
