@@ -329,9 +329,9 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
   for (unsigned int var = 0; var < nVars; var++)
   {
     auto *A = oppE_d.data();
-    auto *B = U_spts_d.data() + startEle * nSpts + var * (nSpts * nVars);
-    auto *C = U_fpts_d.data() + startEle * nFpts + var * (nFpts * nVars);
-    cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0,
+    auto *B = U_spts_d.data() + startEle * nSpts + var * (nSpts * nEles);
+    auto *C = U_fpts_d.data() + startEle * nFpts + var * (nFpts * nEles);
+    cublasDGEMM_wrapper(nFpts, endEle - startEle, nSpts, 1.0,
         A, nFpts, B, nSpts, 0.0, C, nFpts);
   }
 
