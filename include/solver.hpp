@@ -79,6 +79,7 @@ class FRSolver
     void compute_element_dt();
 
   public:
+    double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);
     void setup();
     void compute_residual(unsigned int stage, unsigned int color = 0);
