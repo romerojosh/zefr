@@ -2069,16 +2069,64 @@ void FRSolver::write_solution(const std::string &prefix)
 
 void FRSolver::write_color()
 {
-  std::cout << "Writing colors to file..." << std::endl;
+  if (input->rank == 0) std::cout << "Writing colors to file..." << std::endl;
+
   std::stringstream ss;
+#ifdef _MPI
+
+  /* Write .pvtu file on rank 0 if running in parallel */
+  if (input->rank == 0)
+  {
+    ss << input->output_prefix << "/";
+    ss << input->output_prefix << "_color.pvtu";
+   
+    std::ofstream f(ss.str());
+    f << "<?xml version=\"1.0\"?>" << std::endl;
+    f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
+    f << "byte_order=\"LittleEndian\" ";
+    f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+    f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
+    f << "<PPointData>" << std::endl;
+    f << "<PDataArray type=\"Int32\" Name=\"color\" format=\"ascii\"/>";
+    f << std::endl;
+    f << "</PPointData>" << std::endl;
+    f << "<PPoints>" << std::endl;
+    f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+    f << "format=\"ascii\"/>" << std::endl;
+    f << "</PPoints>" << std::endl;
+
+
+
+    for (unsigned int n = 0; n < input->nRanks; n++)
+    { 
+      ss.str("");
+      ss << input->output_prefix << "_color_"; 
+      ss << std::setw(3) << std::setfill('0') << n << ".vtu";
+      f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
+    }
+
+    f << "</PUnstructuredGrid>" << std::endl;
+    f << "</VTKFile>" << std::endl;
+
+    f.close();
+  }
+#endif
+
   ss.str("");
+#ifdef _MPI
+  ss << input->output_prefix << "/";
+  ss << input->output_prefix << "_color_";
+  ss << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
+#else
   ss << input->output_prefix << "/";
   ss << input->output_prefix << "_color";
   ss << ".vtu";
+#endif
 
   auto outputfile = ss.str();
 
-  /* Write parition solution to file in .vtu format */
+  /* Write partition color to file in .vtu format */
   std::ofstream f(outputfile);
 
   /* Write header */
@@ -2174,7 +2222,7 @@ void FRSolver::write_color()
 
   /* Write color information */
   f << "<PointData>" << std::endl;
-  f << "<DataArray type=\"Float32\" Name=\"color\" ";
+  f << "<DataArray type=\"Int32\" Name=\"color\" ";
   f << "format=\"ascii\">"<< std::endl;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
