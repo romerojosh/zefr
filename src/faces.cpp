@@ -42,7 +42,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 #ifdef _GPU
     if (input->dt_scheme == "BDF1")
       CPU_flag = true;
-    else if (input->dt_scheme == "LUJac")
+    else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
       CPU_flag = false;
 #endif
 

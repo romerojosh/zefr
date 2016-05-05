@@ -134,16 +134,14 @@ void FRSolver::setup_update()
 #ifdef _GPU
     if (input->dt_scheme == "BDF1")
       eles->CPU_flag = true;
-    else if (input->dt_scheme == "LUJac")
+    else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
       if (input->viscous)
       {
-        ThrowException("Viscous LUJac not implemented on GPU");
+        ThrowException("Viscous LUJac/SGS not implemented on GPU");
       }
       eles->CPU_flag = false;
     }
-    else if (input->dt_scheme == "LUSGS")
-      ThrowException("LUSGS not set up for GPU yet");
 #endif
 
     // HACK: (nStages = 1) doesn't work, fix later
@@ -822,7 +820,8 @@ void FRSolver::compute_RHS(unsigned int color)
 #endif
 
 #ifdef _GPU
-  compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
+  compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, 
+      eles->nEles, eles->nVars, startEle, endEle);
 #endif
 }
 
@@ -855,7 +854,11 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
 #ifdef _GPU
 void FRSolver::compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color)
 {
-  compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars);
+  unsigned int startEle = geo.ele_color_range[color - 1];
+  unsigned int endEle = geo.ele_color_range[color];
+
+  compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, 
+      eles->nEles, eles->nVars, startEle, endEle);
 }
 #endif
 
@@ -902,8 +905,8 @@ void FRSolver::compute_deltaU(unsigned int color)
     /* Solve LU systems using batched cublas routine */
     unsigned int N = eles->nSpts * eles->nVars;
     int info;
-    cublasDgetrsBatched_wrapper(N, 1, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
-        eles->RHS_ptrs_d.data(), N, &info, eles->nEles);
+    cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, eles->LU_pivots_d.data() + startEle * N, 
+        eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
 
     if (info)
       ThrowException("cublasDgetrs failed. info = " + std::to_string(info));
@@ -932,12 +935,12 @@ void FRSolver::compute_U(unsigned int color)
 #ifdef _GPU
   if (input->dt_scheme == "BDF1")
   {
-    compute_U_wrapper(eles->U_spts_d, eles->deltaU_d, eles->nSpts, eles->nEles, eles->nVars);
+    compute_U_wrapper(eles->U_spts_d, eles->deltaU_d, eles->nSpts, eles->nEles, eles->nVars, startEle, endEle);
   }
   else if (input->dt_scheme == "LUJac" or input->dt_scheme == "LUSGS")
   {
     /* Add RHS (which contains deltaU) to U */
-    compute_U_wrapper(eles->U_spts_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars);
+    compute_U_wrapper(eles->U_spts_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars, startEle, endEle);
   }
 #endif
 }
@@ -1589,11 +1592,6 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
 
-#ifdef _GPU
-    if (geo.nColors > 1)
-      ThrowException("Only block-jacobi supported on GPU currently!");
-#endif
-
     /* For first iteration, need to compute residual once to load up faces with initial data. */
     if (current_iter == 0)
       compute_residual(0);
@@ -1644,6 +1642,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
       /* Add deltaU to solution */
       compute_U(color);
+
     }
   }
 
