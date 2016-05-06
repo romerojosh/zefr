@@ -190,33 +190,37 @@ void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* Piv
 }
 
 __global__
-void cublasDgemvBatched_custom(int M, int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
+void cublasDgemvBatched_custom(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
     const double beta, double** yarray, int incy, int batchSize)
 {
-  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  if (i >= M or batch >= batchSize)
+  if (batch >= batchSize)
     return;
 
-  double sum = 0.0;
+  for (unsigned int i = tidx; i < M; i += blockDim.x)
+  { 
+    double sum = 0.0;
 
-  for (unsigned int j = 0; j < N; j++)
-  {
-    sum += Aarray[batch][i + j*lda] * xarray[batch][j * incx];
+    for (unsigned int j = 0; j < N; j++)
+    {
+      sum += Aarray[batch][i + j*lda] * xarray[batch][j];
+    }
+
+    yarray[batch][i * incy] = sum;
   }
-
-  yarray[batch][i * incy] = sum;
 
 
 }
 
-void cublasDgemvBatched_wrapper(int M, int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
+void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
     const double beta, double** yarray, int incy, int batchSize)
 {
-  dim3 threads(32, 4);
-  dim3 blocks((M + threads.x - 1)/threads.x, (batchSize + threads.y - 1)/threads.y);
-  cublasDgemvBatched_custom<<<threads, blocks>>>(M, N, alpha, Aarray, lda, xarray, incx, beta, yarray, incy, batchSize);
+  dim3 threads(32, 6);
+  dim3 blocks(1, (batchSize + threads.y - 1)/threads.y);
+
+  cublasDgemvBatched_custom<<<blocks, threads>>>(M, N, alpha, Aarray, lda, xarray, incx, beta, yarray, incy, batchSize);
 }
 
 template <unsigned int nVars>
