@@ -2340,7 +2340,15 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     for (auto val : res)
       f << std::scientific << val / nDoF << " ";
     f << std::endl;
+
+    /* Store maximum residual */
+    res_max = res[0] / nDoF;
   }
+
+#ifdef _MPI
+  /* Broadcast maximum residual */
+  MPI_Bcast(&res_max, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+#endif
 }
 
 void FRSolver::report_forces(std::ofstream &f)

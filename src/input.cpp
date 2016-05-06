@@ -35,6 +35,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "s_factor", input.s_factor, 0.0);
 
   read_param(f, "n_steps", input.n_steps);
+  read_param(f, "res_tol", input.res_tol, 1e-18);
   read_param(f, "dt_scheme", input.dt_scheme);
   read_param(f, "dt_type", input.dt_type);
   read_param(f, "dt", input.dt);
