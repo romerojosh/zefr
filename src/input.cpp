@@ -59,6 +59,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "low_order", input.low_order, (unsigned int) 0);
 
   read_param(f, "SER", input.SER, false);
+  read_param(f, "inv_mode", input.inv_mode, false);
   read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
 
   read_param(f, "output_prefix", input.output_prefix);

@@ -34,10 +34,19 @@ void check_error()
 #endif
 }
 
-static cublasHandle_t cublas_handle;
+/* Create handles for default (0) and concurrent (1-16) streams */
+static std::vector<cublasHandle_t> cublas_handles(17);
+static std::vector<cudaStream_t> stream_handles(16);
 void start_cublas()
 {
-  cublasCreate(&cublas_handle);
+  cublasCreate(&cublas_handles[0]);
+
+  for (int i = 1; i < 17; i++)
+  {
+    cublasCreate(&cublas_handles[i]);
+    cudaStreamCreate(&stream_handles[i-1]);
+    cublasSetStream(cublas_handles[i], stream_handles[i-1]);
+  }
 }
 
 template <typename T>
@@ -148,24 +157,36 @@ void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, uns
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
     int lda, const double* B, int ldb, const double beta, double *C, int ldc)
 {
-  cublasDgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
+  cublasDgemm(cublas_handles[0], CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
     int lda, const double** Barray, int ldb, const double beta, double** Carray, int ldc, int batchCount)
 {
-  cublasDgemmBatched(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, Aarray, lda, Barray, 
+  cublasDgemmBatched(cublas_handles[0], CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, Aarray, lda, Barray, 
       ldb, &beta, Carray, ldc, batchCount);
 }
+
+void cublasDgemv_wrapper(int M, int N, const double alpha, const double* A, int lda, const double* x, int incx, 
+    const double beta, double *y, int incy, int stream)
+{
+  cublasDgemv(cublas_handles[stream], CUBLAS_OP_N, M, N, &alpha, A, lda, x, incx, &beta, y, incy); 
+}
+
 void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchSize)
 {
-  cublasDgetrfBatched(cublas_handle, N, Aarray, lda, PivotArray, InfoArray, batchSize);
+  cublasDgetrfBatched(cublas_handles[0], N, Aarray, lda, PivotArray, InfoArray, batchSize);
 }
 
 void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
     double** Barray, int ldb, int* info, int batchSize)
 {
-  cublasDgetrsBatched(cublas_handle, CUBLAS_OP_N, N, NRHS, Aarray, lda, PivotArray, Barray, ldb, info, batchSize);
+  cublasDgetrsBatched(cublas_handles[0], CUBLAS_OP_N, N, NRHS, Aarray, lda, PivotArray, Barray, ldb, info, batchSize);
+}
+
+void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchSize)
+{
+  cublasDgetriBatched(cublas_handles[0], N, Aarray, lda, PivotArray, Carray, ldc, InfoArray, batchSize);
 }
 
 template <unsigned int nVars>

@@ -426,6 +426,10 @@ void FRSolver::solver_data_to_device()
   if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     eles->LHS_d = eles->LHS;
+
+    if (input->inv_mode)
+      eles->LHSInv_d = eles->LHSInv;
+
     eles->LU_pivots_d = eles->LU_pivots;
     eles->LU_info_d = eles->LU_info;
     eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
@@ -438,6 +442,9 @@ void FRSolver::solver_data_to_device()
     {
       eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
       eles->RHS_ptrs(ele) = eles->RHS_d.data() + ele * N;
+
+      if (input->inv_mode)
+        eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
     }
 
     /* Additional pointers for batched DGEMM */
@@ -449,6 +456,7 @@ void FRSolver::solver_data_to_device()
     }
 
     eles->LHS_ptrs_d = eles->LHS_ptrs;
+    eles->LHSInv_ptrs_d = eles->LHSInv_ptrs;
     eles->LHS_subptrs_d = eles->LHS_subptrs;
     eles->RHS_ptrs_d = eles->RHS_ptrs;
     eles->LHS_tempSF_subptrs_d = eles->LHS_tempSF_subptrs;
@@ -760,6 +768,11 @@ void FRSolver::compute_LHS_LU()
 
   /* Perform batched LU using cuBLAS */
   cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), eles->nEles);
+
+  if (input->inv_mode)
+  {
+    cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), eles->nEles);
+  }
 #endif
 
 #ifdef _CPU
@@ -902,14 +915,30 @@ void FRSolver::compute_deltaU(unsigned int color)
 #endif
 
 #ifdef _GPU
-    /* Solve LU systems using batched cublas routine */
-    unsigned int N = eles->nSpts * eles->nVars;
-    int info;
-    cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, eles->LU_pivots_d.data() + startEle * N, 
-        eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
+    if (!input->inv_mode)
+    {
+      /* Solve LU systems using batched cublas routine */
+      unsigned int N = eles->nSpts * eles->nVars;
+      int info;
+      cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, eles->LU_pivots_d.data() + startEle * N, 
+          eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
 
-    if (info)
-      ThrowException("cublasDgetrs failed. info = " + std::to_string(info));
+      if (info)
+        ThrowException("cublasDgetrs failed. info = " + std::to_string(info));
+    }
+    else
+    {
+      unsigned int N = eles->nSpts * eles->nVars;
+
+      for (unsigned int ele = startEle; ele < endEle; ele++)
+      {
+        //cublasDgemv_wrapper(N, N, 1.0, eles->LHSInv_ptrs(ele), N,  eles->RHS_ptrs(ele), 1, 0.0, eles->deltaU_d.data() + N * ele, 1);
+        cublasDgemv_wrapper(N, N, 1.0, eles->LHSInv_d.data() + ele * N * N, N,  eles->RHS_d.data() + N * ele, 1, 0.0, eles->deltaU_d.data() + N * ele, 1, ele % 16 + 1);
+      }
+
+      cudaDeviceSynchronize();
+
+    }
 #endif
   }
 }
@@ -933,7 +962,7 @@ void FRSolver::compute_U(unsigned int color)
 #endif
 
 #ifdef _GPU
-  if (input->dt_scheme == "BDF1")
+  if (input->dt_scheme == "BDF1" or input->inv_mode)
   {
     compute_U_wrapper(eles->U_spts_d, eles->deltaU_d, eles->nSpts, eles->nEles, eles->nVars, startEle, endEle);
   }
@@ -993,6 +1022,11 @@ void FRSolver::initialize_U()
     else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
       eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
+      if (input->inv_mode)
+      {
+        eles->LHSInv.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
+        eles->LHSInv_ptrs.assign({eles->nEles});
+      }
       eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
       eles->LHS_ptrs.assign({eles->nEles});
       eles->RHS_ptrs.assign({eles->nEles});

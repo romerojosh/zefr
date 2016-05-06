@@ -37,7 +37,7 @@ struct InputStruct
   double sen_Jfac, filt_gamma;
 
   /* Implicit Parameters */
-  bool SER;
+  bool SER, inv_mode;
   unsigned int Jfreeze_freq;
 
 #ifdef _GPU
