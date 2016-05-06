@@ -1435,6 +1435,179 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
     }
   }
 
+#ifdef _MPI
+  int rank, nRanks;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+
+  /* In parallel, determine consistent coloring between partitions (easy method for 2 colors) */
+  int repeat = 1;
+  int flipRank = nRanks;
+
+  if (rank == 0)
+    flipRank = 0;
+
+  /* Repeat process until colors are consistent */
+  while (repeat)
+  {
+    repeat = 0;
+    for (int sendRank = 0; sendRank < nRanks; sendRank++)
+    {
+      MPI_Barrier(MPI_COMM_WORLD);
+
+      if (rank == sendRank)
+      {
+        std::set<int> processed;
+        std::vector<unsigned int> face(geo.nNodesPerFace, 0);
+        int other_color, other_flipRank;
+
+        /* Loop over elements and seek out MPI boundaries */
+        for (unsigned int ele1 = 0; ele1 < geo.nEles; ele1++)
+        {
+          for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+          {
+            int ele2 = geo.ele_adj(n, ele1);
+
+            /* Check if adjacent element is outside partition */
+            if (ele2 == -1)
+            {
+              /* Get face nodes and sort for consistency */
+              for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+              {
+                face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele1);
+              }
+              
+              std::sort(face.begin(), face.end());
+              
+              /* Check if face is at an MPI interface */
+              if (geo.mpi_faces.count(face))
+              {
+                auto face_ranks = geo.mpi_faces[face];
+                auto rank1 = *std::min_element(face_ranks.begin(), face_ranks.end());
+                auto rank2 = *std::max_element(face_ranks.begin(), face_ranks.end());
+                auto recvRank = (rank1 == rank) ? rank2 : rank1;
+
+                if (processed.count(recvRank))
+                  continue;
+
+                processed.insert(recvRank);
+
+                for (auto &nd : face)
+                  nd = geo.node_map_p2g[nd];
+
+                int flag = 0;
+
+                /* Send face information to adjacent element */
+                MPI_Send(&flag, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
+                MPI_Send(face.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
+                MPI_Send(&geo.ele_color(ele1), 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
+                MPI_Send(&flipRank, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
+
+                /* Receive adjacent elemnt information */
+                MPI_Recv(&other_color, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(&other_flipRank, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                /* If adjacent element is in a partition previous flipped by a lesser rank, flip this partition */
+                if (geo.ele_color(ele1) == (unsigned int) other_color and flipRank > other_flipRank)
+                {
+                  flipRank = other_flipRank;
+                  repeat = 1;
+                  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+                  {
+                    geo.ele_color(ele) = (geo.ele_color(ele) == 1) ? 2 : 1;
+                  }
+                }
+
+                flipRank = std::min(flipRank, other_flipRank);
+                continue;
+              }
+            }
+          }
+        }
+
+        /* Send termination flag to remaining unprocessed ranks */
+        for (int n = 0; n < nRanks; n++)
+        {
+          if (!processed.count(n) and n != rank)
+          {
+            int flag = 1;
+            MPI_Send(&flag, 1, MPI_INT, n, 0, MPI_COMM_WORLD);
+          }
+        }
+      }
+      else
+      {
+        std::vector<unsigned int> face(geo.nNodesPerFace, 0), other_face(geo.nNodesPerFace, 0);
+        int flag;
+        int other_color, other_flipRank;
+
+        /* Check if terminated */
+        MPI_Recv(&flag, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        if (flag)
+          continue;
+
+        /* Receive data from adjancent element */
+        MPI_Recv(other_face.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&other_color, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&other_flipRank, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        for (auto &nd : other_face)
+          nd = geo.node_map_g2p[nd];
+
+        /* Search for corresponding interface */
+        for (unsigned int ele1 = 0; ele1 < geo.nEles; ele1++)
+        {
+          for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+          {
+            int ele2 = geo.ele_adj(n, ele1);
+
+            /* Check if adjacent element is on boundary */
+            if (ele2 == -1)
+            {
+              /* Get face nodes and sort for consistency */
+              for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+              {
+                face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele1);
+              }
+              
+              std::sort(face.begin(), face.end());
+
+              /* Found matched face! */
+              if (other_face == face)
+              {
+                MPI_Send(&geo.ele_color(ele1), 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD);
+                MPI_Send(&other_flipRank, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD);
+
+                /* Apply similar logic as case above */
+                if (geo.ele_color(ele1) == (unsigned int) other_color and flipRank > other_flipRank)
+                {
+                  flipRank = other_flipRank;
+                  repeat = 1;
+                  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+                  {
+                    geo.ele_color(ele) = (geo.ele_color(ele) == 1) ? 2 : 1;
+                  }
+                }
+
+                flipRank = std::min(flipRank, other_flipRank);
+                break;
+              }
+            }
+          }
+          if (other_face == face)
+            break;
+        }
+      }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    /* If any flips have occured, repeat process */
+    MPI_Allreduce(MPI_IN_PLACE, &repeat, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
   /* Reorganize required geometry data by color */
   std::vector<std::vector<unsigned int>> color2eles(geo.nColors);
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
