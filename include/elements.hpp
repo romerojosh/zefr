@@ -63,7 +63,7 @@ class Elements
     mdvector<double> LHS, LHSInv;  // Element local matrices for implicit system
     mdvector<double> LHS_tempSF;
     mdvector<int> LU_pivots, LU_info; 
-    mdvector<double*> LHS_ptrs, RHS_ptrs, LHSInv_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs; 
+    mdvector<double*> LHS_ptrs, RHS_ptrs, LHSInv_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs, deltaU_ptrs; 
     mdvector<double> dFdU_spts, dFddU_spts;
     mdvector<double> dFcdU_fpts, dUcdU_fpts, dFcddU_fpts;
     mdvector<double> deltaU;
@@ -95,7 +95,7 @@ class Elements
     mdvector_gpu<double> LHS_d, LHSInv_d;
     mdvector_gpu<double> LHS_tempSF_d;
     mdvector_gpu<int> LU_pivots_d, LU_info_d; 
-    mdvector_gpu<double*> LHS_ptrs_d, LHSInv_ptrs_d, RHS_ptrs_d, LHS_subptrs_d, LHS_tempSF_subptrs_d, oppE_ptrs_d; 
+    mdvector_gpu<double*> LHS_ptrs_d, LHSInv_ptrs_d, RHS_ptrs_d, LHS_subptrs_d, LHS_tempSF_subptrs_d, oppE_ptrs_d, deltaU_ptrs_d; 
     mdvector_gpu<double> dFcdU_fpts_d, dFdU_spts_d;
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;

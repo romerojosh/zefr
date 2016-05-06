@@ -44,6 +44,9 @@ void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda
 
 void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchSize);
 
+void cublasDgemvBatched_wrapper(int M, int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
+    const double beta, double** yarray, int incy, int batchSize);
+
 /* Wrappers for custom kernels */
 void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
     mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 

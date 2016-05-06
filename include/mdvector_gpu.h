@@ -48,17 +48,17 @@ class mdvector_gpu
     T* data();
 
     //! Overloaded methods to access data
-    __device__
+    __device__ __forceinline__
     T& operator()(unsigned int idx0);
-    __device__
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1);
-    __device__
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
-    __device__
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
-    __device__
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4);
-    __device__
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5);
 };
 
@@ -135,7 +135,7 @@ T* mdvector_gpu<T>::data(void)
 }
 
 template <typename T>
-__device__
+__device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0) 
 {
   //assert(ndims == 1);
@@ -143,7 +143,7 @@ T& mdvector_gpu<T>::operator() (unsigned int idx0)
 }
 
 template <typename T>
-__device__
+__device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1) 
 {
   //assert(ndims == 2);
@@ -151,7 +151,7 @@ T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1)
 }
 
 template <typename T>
-__device__
+__device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
 {
   //assert(ndims == 3);
@@ -159,7 +159,7 @@ T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned i
 }
 
 template <typename T>
-__device__
+__device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3) 
 {
@@ -168,7 +168,7 @@ T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned i
 }
 
 template <typename T>
-__device__
+__device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3, unsigned int idx4) 
 {
@@ -177,7 +177,7 @@ T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned i
 }
 
 template <typename T>
-__device__
+__device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3, unsigned int idx4, unsigned int idx5) 
 {
