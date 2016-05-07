@@ -380,12 +380,12 @@ void FRSolver::restart(std::string restart_file)
 
 #ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
-          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, eles->nSpts, &B, 
-          nSpts_restart, 0.0, &C, eles->nSpts);
+          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, oppRestart.ldim(), &B, 
+          U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
-          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, eles->nSpts, &B, 
-          nSpts_restart, 0.0, &C, eles->nSpts);
+          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, oppRestart.ldim(), &B, 
+          U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #endif
 
     }
@@ -1434,7 +1434,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _GPU
-    device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
+    device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
 #endif
 
     unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
@@ -1523,7 +1523,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       eles->U_spts = U_ini;
 #endif
 #ifdef _GPU
-      device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.get_nvals());
+      device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.max_size());
 #endif
 
 #ifdef _CPU
@@ -2032,12 +2032,12 @@ void FRSolver::write_solution(const std::string &prefix)
 
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
-      eles->nSpts, 0.0, &C, eles->nPpts);
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
+      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nPpts, &B, 
-      eles->nSpts, 0.0, &C, eles->nPpts);
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
+      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
 #endif
 
   /* Apply squeezing if needed */
@@ -2673,12 +2673,12 @@ void FRSolver::report_error(std::ofstream &f)
 
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
-      eles->nSpts, 0.0, &C, eles->nQpts);
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_qpts.ldim(), &B, 
+      eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
-      eles->nSpts, 0.0, &C, eles->nQpts);
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B, 
+      eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
 #endif
 
   /* Extrapolate derivatives to quadrature points */
@@ -2690,12 +2690,12 @@ void FRSolver::report_error(std::ofstream &f)
 
 #ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
-          eles->nSpts, 0.0, &C, eles->nQpts);
+          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B, 
+          eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
 #else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nQpts, &B, 
-          eles->nSpts, 0.0, &C, eles->nQpts);
+          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B, 
+          eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
 #endif
 
   }

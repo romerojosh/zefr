@@ -2,12 +2,19 @@
 #define mdvector_hpp
 
 /*! mdvector.hpp 
- * \brief Template class for multidimensional vector implementation. i
+ * \brief Template class for multidimensional vector implementation. 
  * Currently uses column-major formatting.
  *
  * \author Josh Romero, Stanford University
  *
  */
+
+#ifdef _CPU
+static const unsigned int CACHE_LINE_SIZE = 64;
+#endif
+#ifdef _GPU
+static const unsigned int CACHE_LINE_SIZE = 128;
+#endif
 
 #include <algorithm>
 #include <array>
@@ -33,8 +40,8 @@ template <typename T>
 class mdvector
 {
   private:
-    int ndims = 0;
-    unsigned int nvals = 0;
+    int nDims = 0;
+    size_t size_ = 0;  // Size of true vector
     std::array<unsigned int,6> dims; 
     std::array<unsigned int,6> strides;
     std::vector<T> values;
@@ -45,10 +52,10 @@ class mdvector
   public:
     //! Constructors
     mdvector();
-    mdvector(std::vector<unsigned int> dims, T value = 0, unsigned int padding = 0);
+    mdvector(std::vector<unsigned int> dims, T value = 0, bool pad = false);
 
     //! Setup operator
-    void assign(std::vector<unsigned int> dims, T value = 0, unsigned int padding = 0); // 
+    void assign(std::vector<unsigned int> dims, T value = 0, bool pad = false);
 
     //! Push back operator (for compatibility)
     void push_back(T value); 
@@ -58,9 +65,18 @@ class mdvector
 
     //! Size operator
     size_t size() const;
+    //
+    //! Method to return number of values (with padding)
+    size_t max_size() const;
 
     //! Method to return vector shape
     std::array<unsigned int,6> shape(void) const;
+
+    //! Method to return vector strides
+    std::array<unsigned int,6> get_strides(void) const;
+
+    //! Method to get leading dimension
+    unsigned int ldim() const; 
 
     //! Method to return starting data pointer
     T* data();
@@ -76,9 +92,6 @@ class mdvector
     
     //! Method to solve L U x = B for x
     void solve(mdvector<T>& x, const mdvector<T>& B) const;
-
-    //! Method to return number of values (with padding)
-    unsigned int get_nvals() const;
 
     //! Method to return pointer to strides (for GPU)
     const unsigned int* strides_ptr() const;
@@ -107,50 +120,38 @@ class mdvector
 template <typename T>
 mdvector<T>::mdvector(){};
 
-// KA: Padding not used as yet
-// KA: Edge case - dims = {}
 template <typename T>
-mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, unsigned int padding)
+mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, bool pad)
 {
-  ndims = (int)dims.size();
-  
-  //assert(ndims <= 4);
-  
-  nvals = 1;
-  unsigned int i = 0;
-
-  for (auto &d : dims)
-  {
-    nvals *= (d + padding);
-    strides[i] = d + padding;
-    this->dims[i] = d;
-    i++;
-  }
-
-  values.assign(nvals, (T)value);
+  this->assign(dims, value, pad);
 }
 
-// KA: Padding not used as yet
-// KA: Edge case - dims = {}
 template <typename T>
-void mdvector<T>::assign(std::vector<unsigned int> dims, T value, unsigned int padding)
+void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad)
 {
-  ndims = (int)dims.size();
-  
-  //assert(ndims <= 4);
-  
-  nvals = 1;
-  unsigned int i = 0;
+  nDims = (int)dims.size();
 
-  for (auto &d : dims)
+  size_ = 1;
+  unsigned int max_size_ = 1;
+
+
+  for (unsigned int i = 0; i < nDims; i++)
   {
-    nvals *= (d + padding);
-    strides[i] = d + padding;
-    this->dims[i] = d;
-    i++;
+    strides[i] = dims[i];
+
+    /* Pad leading dimension to cache line boundary */
+    if (i == 0 and nDims > 1 and pad)
+    {
+      strides[i] += dims[i] % (CACHE_LINE_SIZE / sizeof(T));
+    }
+
+    size_ *= dims[i];
+    max_size_ *= strides[i];
+
+    this->dims[i] = dims[i];
   }
 
-  values.assign(nvals, (T)value);
+  values.assign(max_size_, (T)value);
 }
 
 template <typename T>
@@ -162,21 +163,38 @@ void mdvector<T>::fill(T value)
 template <typename T>
 size_t mdvector<T>::size() const
 {
+  return size_;
+}
+
+template <typename T>
+size_t mdvector<T>::max_size() const
+{
   return values.size();
 }
 
-// TODO: Must update dims and strides
 template <typename T>
-void mdvector<T>::push_back(T value)
+void mdvector<T>::push_back(T value) /* Only valid for 1D arrays! */
 {
   values.push_back(value);
-  nvals++;
+  size_++;
 }
 
 template <typename T>
 std::array<unsigned int,6> mdvector<T>::shape(void) const
 {
   return dims;
+}
+
+template <typename T>
+std::array<unsigned int,6> mdvector<T>::get_strides(void) const
+{
+  return strides;
+}
+
+template <typename T>
+unsigned int mdvector<T>::ldim() const
+{
+  return strides[0];
 }
 
 template <typename T>
@@ -325,12 +343,6 @@ T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int id
 }
 
 template <typename T>
-unsigned int mdvector<T>::get_nvals() const
-{
-  return nvals;
-}
-
-template <typename T>
 const unsigned int* mdvector<T>::strides_ptr() const
 {
   return strides.data();
@@ -341,8 +353,7 @@ const unsigned int* mdvector<T>::strides_ptr() const
 template <typename T>
 mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
 {
-  //cudaMemcpy(values.data(), vec.data(), nvals*sizeof(T), cudaMemcpyDeviceToHost);
-  copy_from_device(values.data(), vec.data(), nvals);
+  copy_from_device(values.data(), vec.data(), this->max_size());
 
   return *this;
 }

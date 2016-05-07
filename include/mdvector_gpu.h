@@ -23,10 +23,12 @@ template <typename T>
 class mdvector_gpu
 {
   private:
-    int ndims = 0;
-    int nvals;
+    int nDims = 0;
+    size_t size_ = 0;
+    size_t max_size_ = 0;
     unsigned int* dims; 
     unsigned int* strides;
+    unsigned int ldim_;
     T* values;
     bool allocated = false;
 
@@ -40,9 +42,12 @@ class mdvector_gpu
     mdvector_gpu<T>& operator= (mdvector<T>& vec);
 
     //! Method to return number of values (with padding)
-    unsigned int get_nvals() const;
+    size_t max_size() const;
 
-    unsigned int size() const;
+    size_t size() const;
+
+    //! Method to return leading dimension
+    unsigned int ldim() const;
 
     //! Method to return starting data pointer
     T* data();
@@ -97,8 +102,10 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
 {
   if(!allocated)
   {
-    nvals = vec.get_nvals();
-    allocate_device_data(values, nvals);
+    size_ = vec.size();
+    max_size_ = vec.max_size();
+    ldim_ = vec.ldim();
+    allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
 
     copy_to_device(strides, vec.strides_ptr(), 6);
@@ -106,26 +113,28 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
   }
 
   /* Copy values to GPU */
-  copy_to_device(values, vec.data(), nvals);
-
-  /* Copy strides to GPU (always size 4 for now!) */
-  //cudaMemcpy(strides, vec.strides_ptr(), 4*sizeof(unsigned int), cudaMemcpyHostToDevice);
-  //copy_to_device(strides, vec.strides_ptr(), 4*sizeof(unsigned int));
+  copy_to_device(values, vec.data(), max_size_);
 
   return *this;
 }
 
 
 template <typename T>
-unsigned int mdvector_gpu<T>::get_nvals() const
+size_t mdvector_gpu<T>::max_size() const
 {
-  return nvals;
+  return max_size_; 
 }
 
 template <typename T>
-unsigned int mdvector_gpu<T>::size() const
+size_t mdvector_gpu<T>::size() const
 {
-  return nvals;
+  return size_;
+}
+
+template <typename T>
+unsigned int mdvector_gpu<T>::ldim() const
+{
+  return ldim_;
 }
 
 template <typename T>

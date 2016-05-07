@@ -90,7 +90,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 #endif
 
 #ifdef _GPU
-    device_copy(solutions_d[P], grids[P]->eles->U_spts_d, solutions_d[P].get_nvals());
+    device_copy(solutions_d[P], grids[P]->eles->U_spts_d, solutions_d[P].max_size());
 #endif
 
     /* Update solution on coarse level */
@@ -126,7 +126,7 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 #endif
 
 #ifdef _GPU
-      device_add(grids[P]->eles->divF_spts_d, sources_d[P], sources_d[P].get_nvals());
+      device_add(grids[P]->eles->divF_spts_d, sources_d[P], sources_d[P].max_size());
 #endif
 
       /* Restrict to next coarse grid */
@@ -168,8 +168,8 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
 #ifdef _GPU
     /* Note: Doing this with two separate kernels might be more expensive. Can write a
      * single kernel for this eventually */
-    device_subtract(grids[P]->eles->U_spts_d, solutions_d[P], solutions_d[P].get_nvals());
-    device_copy(corrections_d[P], grids[P]->eles->U_spts_d, corrections_d[P].get_nvals());
+    device_subtract(grids[P]->eles->U_spts_d, solutions_d[P], solutions_d[P].max_size());
+    device_copy(corrections_d[P], grids[P]->eles->U_spts_d, corrections_d[P].max_size());
 #endif
 
     /* Prolong error and add to fine grid solution */
@@ -278,11 +278,11 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
       grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_c.eles->nSpts, &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
+      grid_f.eles->oppRes.ldim(), &B, grid_f.eles->U_spts.ldim(), 0.0, &C, grid_c.eles->U_spts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
       grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_c.eles->nSpts, &B, grid_f.eles->nSpts, 0.0, &C, grid_c.eles->nSpts);
+      grid_f.eles->oppRes.ldim(), &B, grid_f.eles->U_spts.ldim(), 0.0, &C, grid_c.eles->U_spts.ldim());
 #endif
 
   
@@ -293,11 +293,11 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
       grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_c.eles->nSpts, &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
+      grid_f.eles->oppRes.ldim(), &B2, grid_f.eles->divF_spts.ldim(), 0.0, &C2, grid_c.eles->divF_spts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
       grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_c.eles->nSpts, &B2, grid_f.eles->nSpts, 0.0, &C2, grid_c.eles->nSpts);
+      grid_f.eles->oppRes.ldim(), &B2, grid_f.eles->divF_spts.ldim(), 0.0, &C2, grid_c.eles->divF_spts.ldim());
 #endif
 
 #endif
@@ -330,12 +330,12 @@ void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
 
 #ifdef _OMP    
     omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
-        &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_c.eles->oppPro.ldim(), 
+        &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
 #else
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_f.eles->nSpts, 
-        &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_c.eles->oppPro.ldim(), 
+        &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
 #endif
   }
 
@@ -351,11 +351,11 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSol
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
       grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
-      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+      &A, grid_c.eles->oppPro.ldim(), &B, correction_c.ldim(), 1.0, &C, grid_f.eles->U_spts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
       grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
-      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 1.0, &C, grid_f.eles->nSpts);
+      &A, grid_c.eles->oppPro.ldim(), &B, correction_c.ldim(), 1.0, &C, grid_f.eles->U_spts.ldim());
 #endif
 }
 
@@ -370,11 +370,11 @@ void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
       grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, 1.0, 
-      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+      &A, grid_c.eles->oppPro.ldim(), &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
       grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, 1.0, 
-      &A, grid_f.eles->nSpts, &B, grid_c.eles->nSpts, 0.0, &C, grid_f.eles->nSpts);
+      &A, grid_c.eles->oppPro.ldim(), &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
 #endif
 #endif
 
@@ -422,13 +422,13 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
 void PMGrid::compute_source_term(FRSolver &grid, mdvector_gpu<double> &source)
 {
   /* Copy restricted fine grid residual to source term */
-  device_copy(source, grid.eles->divF_spts_d, source.get_nvals());
+  device_copy(source, grid.eles->divF_spts_d, source.max_size());
 
   /* Update residual on current coarse grid */
   grid.compute_residual(0);
 
   /* Subtract to generate source term */
-  device_subtract(source, grid.eles->divF_spts_d, source.get_nvals());
+  device_subtract(source, grid.eles->divF_spts_d, source.max_size());
 
 }
 #endif

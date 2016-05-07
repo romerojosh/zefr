@@ -147,7 +147,7 @@ void Filter::setup_threshold()
   auto &B = u_canon(0, 0);
   auto &C = KS_canon(0, 0);
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-    eles->nSpts1D, 2, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
+    eles->nSpts1D, 2, eles->nSpts1D, 1.0, &A, oppS_1D.ldim(), &B, u_canon.ldim(), 0.0, &C, KS_canon.ldim());
   
   // Apply non-linear enhancement
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
@@ -174,7 +174,7 @@ void Filter::setup_oppS()
   auto &B = VanderInv(0, 0);
   auto &C = oppS_1D(0, 0);
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-    eles->nSpts1D, eles->nSpts1D, eles->nSpts1D, 1.0, &A, eles->nSpts1D, &B, eles->nSpts1D, 0.0, &C, eles->nSpts1D);
+    eles->nSpts1D, eles->nSpts1D, eles->nSpts1D, 1.0, &A, Conc.ldim(), &B, VanderInv.ldim(), 0.0, &C, oppS_1D.ldim());
   
   // Sensor operator
   if (input->nDims == 2) // Quads
@@ -244,10 +244,10 @@ void Filter::apply_sensor()
 
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-    2 * eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, 2 * eles->nSpts, &B, eles->nSpts, 0.0, &C, 2 * eles->nSpts);
+    2 * eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, oppS.ldim(), &B, U_spts.ldim(), 0.0, &C, KS.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-    2 * eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, 2 * eles->nSpts, &B, eles->nSpts, 0.0, &C, 2 * eles->nSpts);
+    2 * eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, oppS.ldim(), &B, U_spts.ldim(), 0.0, &C, KS.ldim());
 #endif
     
     // Apply non-liqnear enhancement and store sensor values
@@ -271,7 +271,7 @@ void Filter::apply_sensor()
 #ifdef _GPU
   
   // Copy data to local structure
-  device_copy(U_spts_d, eles->U_spts_d, U_spts_d.get_nvals());
+  device_copy(U_spts_d, eles->U_spts_d, U_spts_d.max_size());
   
   // Normalize data
   if (input->sen_norm)
@@ -412,13 +412,13 @@ void Filter::setup_oppF(unsigned int level)
     auto &B = F_spts(0, 0);
     auto &C = oppF_spts[level](0, 0);
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-      eles->nSpts, eles->nSpts, 2 * eles->nSpts, 1.0, &A, eles->nSpts, &B, 2 * eles->nSpts, 0.0, &C, eles->nSpts);
+      eles->nSpts, eles->nSpts, 2 * eles->nSpts, 1.0, &A, half.ldim(), &B, F_spts.ldim(), 0.0, &C, oppF_spts[level].ldim());
     
     oppF_fpts[level].assign({eles->nSpts, eles->nFpts}, 0.0);
     auto &D = F_fpts(0, 0);
     auto &E = oppF_fpts[level](0, 0);
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-      eles->nSpts, eles->nFpts, 2 * eles->nSpts, 1.0, &A, eles->nSpts, &D, 2 * eles->nSpts, 0.0, &E, eles->nSpts);
+      eles->nSpts, eles->nFpts, 2 * eles->nSpts, 1.0, &A, half.ldim(), &D, F_fpts.ldim(), 0.0, &E, oppF_fpts[level].ldim() );
       
   } 
   else // Hexes   
@@ -460,10 +460,10 @@ unsigned int Filter::apply_filter(unsigned int level)
 
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-    eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
+    eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, oppF_spts[level].ldim(), &B, eles->U_spts.ldim(), 0.0, &C, U_spts.ldim());
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-    eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->nSpts);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, oppF_spts[level].ldim(), &B, eles->U_spts.ldim(), 0.0, &C, U_spts.ldim());
 #endif
   
   // Contribution from flux points
@@ -472,10 +472,10 @@ unsigned int Filter::apply_filter(unsigned int level)
 
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-    eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0, &D, eles->nSpts, &E, eles->nFpts, 1.0, &C, eles->nSpts);
+    eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0, &D, oppF_fpts[level].ldim(), &E, eles->U_fpts.ldim(), 1.0, &C, U_spts.ldim());
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-    eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0, &D, eles->nSpts, &E, eles->nFpts, 1.0, &C, eles->nSpts);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    eles->nSpts, eles->nEles * eles->nVars, eles->nFpts, 1.0, &D, oppF_fpts[level].ldim(), &E, eles->U_fpts.ldim(), 1.0, &C, U_spts.ldim());
 #endif
    
   // Copy back filtered values
