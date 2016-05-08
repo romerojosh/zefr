@@ -1856,9 +1856,6 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   if (fpt >= endFpt)
     return;
 
-  /* Apply central flux at boundaries */
-  double k = rus_k;
-
   double FL[nVars]; double FR[nVars];
   double WL[nVars]; double WR[nVars];
   double norm[nDims]; 
@@ -1923,8 +1920,8 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   else if (equation == EulerNS)
   {
     /* Compute speed of sound */
-    double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
-    double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
+    //double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
+    //double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
 
     /* Compute normal velocities */
     double VnL = 0.0; double VnR = 0.0;
@@ -1934,11 +1931,13 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       VnR += WR[dim+1]/WR[0] * norm[dim];
     }
 
-    waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+    //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+    waveSp = std::abs(VnL) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
+    waveSp = max(waveSp, std::abs(VnR) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
 
     // NOTE: Can I just store absolute of waveSp?
     waveSp_gfpts(fpt) = waveSp;
-    waveSp = std::abs(waveSp);
+    //waveSp = std::abs(waveSp);
   }
 
   /* If on boundary, set common to right state flux */
@@ -1956,8 +1955,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   /* Compute common normal flux */
   for (unsigned int n = 0; n < nVars; n++)
   {
-    double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0-k) * 
-        (WR[n]-WL[n]);
+    double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0 - rus_k) * (WR[n]-WL[n]);
     Fcomm(fpt, n, 0) = F;
     Fcomm(fpt, n, 1) = F;
   }
@@ -2546,8 +2544,8 @@ __global__
 void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
     unsigned int nFpts, unsigned int nVars)
 {
-    const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
-    const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+    const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+    const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
     if (fpt >= nFpts || var >= nVars)
       return;
@@ -2559,8 +2557,8 @@ void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA,
 void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars)
 {
-  dim3 threads(32,4);
-  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = (nFpts * nVars + threads - 1)/threads;
 
   transform_flux_faces<<<blocks,threads>>>(Fcomm, dA, nFpts, nVars);
 

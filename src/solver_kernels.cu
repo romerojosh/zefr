@@ -457,8 +457,8 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
     mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int stage, unsigned int nStages, bool last_stage)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
   if (spt >= nSpts || ele >= nEles)
     return;
@@ -505,9 +505,8 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
     unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int stage, 
     unsigned int nStages, bool last_stage)
 {
-  dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
-      threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
   {
@@ -533,8 +532,8 @@ void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
     unsigned int nSpts, unsigned int nEles, unsigned int stage, unsigned int nStages, 
     bool last_stage)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
   if (spt >= nSpts || ele >= nEles)
     return;
@@ -581,9 +580,8 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, 
     unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage)
 {
-  dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
-      threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
   {
