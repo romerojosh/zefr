@@ -196,13 +196,9 @@ __global__
 void cublasDgemvBatched_custom(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
     const double beta, double** yarray, int incy, int batchCount)
 {
-  //const unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y;
   const unsigned int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  //if (batch >= batchCount)
-  //  return;
-
-  for (unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y; batch < batchCount; batch += gridDim.y)
+  for (unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y; batch < batchCount; batch += gridDim.y * blockDim.y)
   {
     for (unsigned int i = tidx; i < M; i += blockDim.x)
     { 
@@ -215,6 +211,8 @@ void cublasDgemvBatched_custom(const int M, const int N, const double alpha, con
 
       yarray[batch][i * incy] = sum;
     }
+
+    __syncthreads(); /* To avoid divergence */
   }
 
 

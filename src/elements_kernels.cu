@@ -571,27 +571,28 @@ void add_scaled_oppD(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD,
     mdvector_gpu<double> C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims)
 {
-  const unsigned int tidX = (blockIdx.x * blockDim.x  + threadIdx.x);
-  const unsigned int ni = tidX / nSpts;
-  const unsigned int i = tidX % nSpts; 
+  const unsigned int tidx = (blockIdx.x * blockDim.x  + threadIdx.x);
 
-  unsigned int shift = 0;
-  while (1)
+  for (unsigned int l = (blockIdx.y * blockDim.y  + threadIdx.y); l < nEles * nVars; l += gridDim.y * blockDim.y)
   {
-    const unsigned int tidY = ((blockIdx.y + shift) * blockDim.y  + threadIdx.y);
-    const unsigned int nj = (tidY / nSpts) % nVars;
-    const unsigned int ele = (tidY / nSpts) / nVars;
-    const unsigned int j = tidY % nSpts;
+    unsigned int ele = l / nVars;
+    unsigned int nj = l % nVars;
 
-    if (ele >= nEles || ni >= nVars)
-      return;
-
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int k = tidx; k < nSpts * nVars; k += blockDim.x)
     {
-      LHS(i, ni, j, nj, ele) += oppD(i, j, dim) * C(j, ele, ni, nj, dim);
+      unsigned int i = k % nSpts;
+      unsigned int ni = k / nSpts;
+
+      for (unsigned int j = 0; j < nSpts; j++)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          LHS(i, ni, j, nj, ele) += oppD(i, j, dim) * C(j, ele, ni, nj, dim);
+        }
+      }
     }
 
-    shift += gridDim.y;
+    __syncthreads(); /* To avoid divergence */
   }
 
 }
@@ -600,9 +601,10 @@ void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &op
     mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims)
 {
-  dim3 threads(16, 12);
-  const unsigned int blocksX = (nSpts * nVars + threads.x - 1) / threads.x;
-  const unsigned int blocksY = std::min((nSpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
+  dim3 threads(36, 6);
+
+  const unsigned int blocksX = 1;
+  const unsigned int blocksY = std::min((nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
   dim3 blocks(blocksX, blocksY);
 
   add_scaled_oppD<<<blocks, threads>>>(LHS, oppD, C, nSpts, nVars, nEles, nDims);
@@ -613,35 +615,38 @@ void add_scaled_oppDiv(mdvector_gpu<double> LHS_tempSF, mdvector_gpu<double> opp
     mdvector_gpu<double> C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
     unsigned int nEles)
 {
-  const unsigned int tidX = (blockIdx.x * blockDim.x  + threadIdx.x);
-  const unsigned int ni = tidX / nSpts;
-  const unsigned int i = tidX % nSpts; 
+  const unsigned int tidx = (blockIdx.x * blockDim.x  + threadIdx.x);
 
-  unsigned int shift = 0;
-  while (1)
+  for (unsigned int l = (blockIdx.y * blockDim.y  + threadIdx.y); l < nEles * nVars; l += gridDim.y * blockDim.y)
   {
-    const unsigned int tidY = ((blockIdx.y + shift) * blockDim.y  + threadIdx.y);
-    const unsigned int nj = (tidY / nFpts) % nVars;
-    const unsigned int ele = (tidY / nFpts) / nVars;
-    const unsigned int j = tidY % nFpts;
+    unsigned int ele = l / nVars;
+    unsigned int nj = l % nVars;
 
-    if (ele >= nEles || ni >= nVars)
-      return;
+    for (unsigned int k = tidx; k < nSpts * nVars; k += blockDim.x)
+    {
+      unsigned int i = k % nSpts;
+      unsigned int ni = k / nSpts;
 
-    LHS_tempSF(i, ni, j, nj, ele) = oppDiv_fpts(i, j) * C(j, ele, ni, nj, 0);
-    shift += gridDim.y;
+      for (unsigned int j = 0; j < nFpts; j++)
+      {
+        LHS_tempSF(i, ni, j, nj, ele) = oppDiv_fpts(i, j) * C(j, ele, ni, nj, 0);
+      }
+    }
+
+    __syncthreads(); /* To avoid divergence */
   }
+
 }
 
 void add_scaled_oppDiv_wrapper(mdvector_gpu<double> &LHS_tempSF, mdvector_gpu<double> &oppDiv_fpts, 
     mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
     unsigned int nEles)
 {
-  dim3 threads(16, 12);
-  const unsigned int blocksX = (nSpts * nVars + threads.x - 1) / threads.x;
-  const unsigned int blocksY = std::min((nFpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
+  dim3 threads(36, 6);
+
+  const unsigned int blocksX = 1;
+  const unsigned int blocksY = std::min((nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
   dim3 blocks(blocksX, blocksY);
-      
 
   add_scaled_oppDiv<<<blocks, threads>>>(LHS_tempSF, oppDiv_fpts, C, nSpts, nFpts, nVars, nEles);
 }
@@ -651,43 +656,44 @@ void finalize_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
     mdvector_gpu<double> jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int dt_type)
 {
-  const unsigned int tidX = (blockIdx.x * blockDim.x  + threadIdx.x);
-  const unsigned int ni = tidX / nSpts;
-  const unsigned int i = tidX % nSpts; 
+  const unsigned int tidx = (blockIdx.x * blockDim.x  + threadIdx.x);
 
-  unsigned int shift = 0;
-  while (1)
+  for (unsigned int l = (blockIdx.y * blockDim.y  + threadIdx.y); l < nEles * nVars; l += gridDim.y * blockDim.y)
   {
-    const unsigned int tidY = ((blockIdx.y + shift) * blockDim.y  + threadIdx.y);
-    const unsigned int nj = (tidY / nSpts) % nVars;
-    const unsigned int ele = (tidY / nSpts) / nVars;
-    const unsigned int j = tidY % nSpts;
+    unsigned int ele = l / nVars;
+    unsigned int nj = l % nVars;
 
-    if (ele >= nEles || ni >= nVars)
-      return;
-
-    double add_one = (double) (i == j && nj == ni);
+    double dt_ = dt(ele);
 
     if (dt_type != 2)
+      dt_ = dt(0);
+
+    for (unsigned int k = tidx; k < nSpts * nVars; k += blockDim.x)
     {
-      LHS(i, ni, j, nj, ele) = dt(0) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele) + add_one;
-    }
-    else
-    {
-      LHS(i, ni, j, nj, ele) = dt(ele) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele) + add_one;
+      unsigned int i = k % nSpts;
+      unsigned int ni = k / nSpts;
+
+      double jaco_det = jaco_det_spts(i, ele);
+
+      for (unsigned int j = 0; j < nSpts; j++)
+      {
+        LHS(i, ni, j, nj, ele) = dt_ * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele) + (double) (i == j && nj == ni);
+      }
     }
 
-    shift += gridDim.y;
+    __syncthreads(); /* To avoid divergence */
   }
+
 }
 
 void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt, 
     mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int dt_type)
 {
-  dim3 threads(16, 12);
-  const unsigned int blocksX = (nSpts * nVars + threads.x - 1) / threads.x;
-  const unsigned int blocksY = std::min((nSpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
+  dim3 threads(36, 6);
+
+  const unsigned int blocksX = 1;
+  const unsigned int blocksY = std::min((nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
   dim3 blocks(blocksX, blocksY);
 
   finalize_LHS<<<blocks, threads>>>(LHS, dt, jaco_det_spts, nSpts, nVars, nEles, dt_type);
