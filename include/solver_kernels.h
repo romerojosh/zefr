@@ -38,14 +38,14 @@ void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const d
 void cublasDgemv_wrapper(int M, int N, const double alpha, const double* A, int lda, const double* x, int incx, 
     const double beta, double *y, int incy, int stream = 0); 
 
-void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchSize);
+void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchCount);
 void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
-    double** Barray, int ldb, int* info, int batchSize);
+    double** Barray, int ldb, int* info, int batchCount);
 
-void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchSize);
+void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchCount);
 
 void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
-    const double beta, double** yarray, int incy, int batchSize);
+    const double beta, double** yarray, int incy, int batchCount);
 
 /* Wrappers for custom kernels */
 void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 

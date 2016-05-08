@@ -2,6 +2,8 @@
 #include "input.hpp"
 #include "mdvector_gpu.h"
 
+static const unsigned int MAX_GRID_DIM = 65535;
+
 template <unsigned int nDims>
 __global__
 void compute_Fconv_spts_AdvDiff(mdvector_gpu<double> F_spts, 
@@ -589,8 +591,9 @@ void add_scaled_oppD(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD,
       LHS(i, ni, j, nj, ele) += oppD(i, j, dim) * C(j, ele, ni, nj, dim);
     }
 
-    shift += 65535;
+    shift += gridDim.y;
   }
+
 }
 
 void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
@@ -599,7 +602,7 @@ void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &op
 {
   dim3 threads(16, 12);
   const unsigned int blocksX = (nSpts * nVars + threads.x - 1) / threads.x;
-  const unsigned int blocksY = std::min((nSpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) 65535);
+  const unsigned int blocksY = std::min((nSpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
   dim3 blocks(blocksX, blocksY);
 
   add_scaled_oppD<<<blocks, threads>>>(LHS, oppD, C, nSpts, nVars, nEles, nDims);
@@ -626,7 +629,7 @@ void add_scaled_oppDiv(mdvector_gpu<double> LHS_tempSF, mdvector_gpu<double> opp
       return;
 
     LHS_tempSF(i, ni, j, nj, ele) = oppDiv_fpts(i, j) * C(j, ele, ni, nj, 0);
-    shift += 65535;
+    shift += gridDim.y;
   }
 }
 
@@ -636,7 +639,7 @@ void add_scaled_oppDiv_wrapper(mdvector_gpu<double> &LHS_tempSF, mdvector_gpu<do
 {
   dim3 threads(16, 12);
   const unsigned int blocksX = (nSpts * nVars + threads.x - 1) / threads.x;
-  const unsigned int blocksY = std::min((nFpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) 65535);
+  const unsigned int blocksY = std::min((nFpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
   dim3 blocks(blocksX, blocksY);
       
 
@@ -674,7 +677,7 @@ void finalize_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
       LHS(i, ni, j, nj, ele) = dt(ele) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele) + add_one;
     }
 
-    shift += 65535;
+    shift += gridDim.y;
   }
 }
 
@@ -684,7 +687,7 @@ void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
 {
   dim3 threads(16, 12);
   const unsigned int blocksX = (nSpts * nVars + threads.x - 1) / threads.x;
-  const unsigned int blocksY = std::min((nSpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) 65535);
+  const unsigned int blocksY = std::min((nSpts * nVars * nEles + threads.y - 1) / threads.y, (unsigned int) MAX_GRID_DIM);
   dim3 blocks(blocksX, blocksY);
 
   finalize_LHS<<<blocks, threads>>>(LHS, dt, jaco_det_spts, nSpts, nVars, nEles, dt_type);

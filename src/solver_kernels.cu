@@ -23,6 +23,12 @@
 #include "solver_kernels.h"
 #include "funcs_kernels.cu"
 
+static const unsigned int MAX_GRID_DIM = 65535;
+
+/* Create handles for default (0) and concurrent (1-16) streams */
+static std::vector<cublasHandle_t> cublas_handles(17);
+static std::vector<cudaStream_t> stream_handles(16);
+
 void check_error()
 {
 #ifndef _NO_CUDA_ERROR
@@ -34,9 +40,6 @@ void check_error()
 #endif
 }
 
-/* Create handles for default (0) and concurrent (1-16) streams */
-static std::vector<cublasHandle_t> cublas_handles(17);
-static std::vector<cudaStream_t> stream_handles(16);
 void start_cublas()
 {
   cublasCreate(&cublas_handles[0]);
@@ -173,54 +176,57 @@ void cublasDgemv_wrapper(int M, int N, const double alpha, const double* A, int 
   cublasDgemv(cublas_handles[stream], CUBLAS_OP_N, M, N, &alpha, A, lda, x, incx, &beta, y, incy); 
 }
 
-void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchSize)
+void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArray, int* InfoArray, int batchCount)
 {
-  cublasDgetrfBatched(cublas_handles[0], N, Aarray, lda, PivotArray, InfoArray, batchSize);
+  cublasDgetrfBatched(cublas_handles[0], N, Aarray, lda, PivotArray, InfoArray, batchCount);
 }
 
 void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
-    double** Barray, int ldb, int* info, int batchSize)
+    double** Barray, int ldb, int* info, int batchCount)
 {
-  cublasDgetrsBatched(cublas_handles[0], CUBLAS_OP_N, N, NRHS, Aarray, lda, PivotArray, Barray, ldb, info, batchSize);
+  cublasDgetrsBatched(cublas_handles[0], CUBLAS_OP_N, N, NRHS, Aarray, lda, PivotArray, Barray, ldb, info, batchCount);
 }
 
-void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchSize)
+void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchCount)
 {
-  cublasDgetriBatched(cublas_handles[0], N, Aarray, lda, PivotArray, Carray, ldc, InfoArray, batchSize);
+  cublasDgetriBatched(cublas_handles[0], N, Aarray, lda, PivotArray, Carray, ldc, InfoArray, batchCount);
 }
 
 __global__
 void cublasDgemvBatched_custom(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
-    const double beta, double** yarray, int incy, int batchSize)
+    const double beta, double** yarray, int incy, int batchCount)
 {
-  const unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y;
+  //const unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y;
   const unsigned int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  if (batch >= batchSize)
-    return;
+  //if (batch >= batchCount)
+  //  return;
 
-  for (unsigned int i = tidx; i < M; i += blockDim.x)
-  { 
-    double sum = 0.0;
+  for (unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y; batch < batchCount; batch += gridDim.y)
+  {
+    for (unsigned int i = tidx; i < M; i += blockDim.x)
+    { 
+      double sum = 0.0;
 
-    for (unsigned int j = 0; j < N; j++)
-    {
-      sum += Aarray[batch][i + j*lda] * xarray[batch][j];
+      for (unsigned int j = 0; j < N; j++)
+      {
+        sum += Aarray[batch][i + j*lda] * xarray[batch][j];
+      }
+
+      yarray[batch][i * incy] = sum;
     }
-
-    yarray[batch][i * incy] = sum;
   }
 
 
 }
 
 void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
-    const double beta, double** yarray, int incy, int batchSize)
+    const double beta, double** yarray, int incy, int batchCount)
 {
   dim3 threads(32, 6);
-  dim3 blocks(1, (batchSize + threads.y - 1)/threads.y);
+  dim3 blocks(1, std::min((batchCount + threads.y - 1)/threads.y, MAX_GRID_DIM));
 
-  cublasDgemvBatched_custom<<<blocks, threads>>>(M, N, alpha, Aarray, lda, xarray, incx, beta, yarray, incy, batchSize);
+  cublasDgemvBatched_custom<<<blocks, threads>>>(M, N, alpha, Aarray, lda, xarray, incx, beta, yarray, incy, batchCount);
 }
 
 template <unsigned int nVars>
