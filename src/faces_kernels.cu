@@ -2568,8 +2568,8 @@ __global__
 void transform_dFcdU_faces(mdvector_gpu<double> dFcdU, mdvector_gpu<double> dA, 
     unsigned int nFpts, unsigned int nVars)
 {
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ni = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int ni = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
   if (fpt >= nFpts || ni >= nVars)
     return;
@@ -2587,8 +2587,8 @@ void transform_dFcdU_faces(mdvector_gpu<double> dFcdU, mdvector_gpu<double> dA,
 void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars)
 {
-  dim3 threads(32,4);
-  dim3 blocks((nFpts + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = (nFpts * nVars + threads - 1)/threads;
 
   transform_dFcdU_faces<<<blocks,threads>>>(dFcdU, dA, nFpts, nVars);
 }

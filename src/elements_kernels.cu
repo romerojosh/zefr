@@ -423,8 +423,8 @@ __global__
 void compute_dFdUconv_spts_AdvDiff(mdvector_gpu<double> dFdU_spts, 
     unsigned int nSpts, unsigned int nEles, mdvector_gpu<double> AdvDiff_A)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
   if (spt >= nSpts || ele >= nEles)
     return;
@@ -438,9 +438,8 @@ void compute_dFdUconv_spts_AdvDiff(mdvector_gpu<double> dFdU_spts,
 void compute_dFdUconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &dFdU_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, mdvector_gpu<double> &AdvDiff_A)
 {
-  dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
-      threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = (nSpts * nEles + threads - 1)/threads;
 
   if (nDims == 2)
   {
@@ -457,8 +456,8 @@ __global__
 void compute_dFdUconv_spts_Burgers(mdvector_gpu<double> dFdU_spts, 
     mdvector_gpu<double> U_spts, unsigned int nSpts, unsigned int nEles)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
   if (spt >= nSpts || ele >= nEles)
     return;
@@ -473,9 +472,8 @@ void compute_dFdUconv_spts_Burgers_wrapper(mdvector_gpu<double> &dFdU_spts,
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
     unsigned int nDims)
 {
-  dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
-      threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = (nSpts * nEles + threads - 1)/threads;
 
   if (nDims == 2)
   {
@@ -493,8 +491,8 @@ __global__
 void compute_dFdUconv_spts_2D_EulerNS(mdvector_gpu<double> dFdU_spts, mdvector_gpu<double> U_spts, 
     unsigned int nSpts, unsigned int nEles, double gam)
 {
-  const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
   if (spt >= nSpts || ele >= nEles)
     return;
@@ -552,9 +550,8 @@ void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdU_spts,
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
     unsigned int nDims, double gamma)
 {
-  dim3 threads(16,12);
-  dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1) / 
-      threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = (nSpts * nEles + threads - 1)/threads;
 
   if (nDims == 2)
   {
