@@ -741,7 +741,7 @@ void FRSolver::compute_LHS()
 
   /* Transform flux derivative data from physical to reference space */
   eles->transform_dFdU();
-  //faces->transform_dFcdU();
+  faces->transform_dFcdU();
 
   /* Copy normal flux derivative data from face local storage to element local storage */
   dFcdU_from_faces();
