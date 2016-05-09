@@ -2433,12 +2433,16 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
 #ifdef _GPU
   /* Compute center inviscid LHS implicit Jacobian */
 
+  /* Note: Previous commented out calls associated with batched GEMM version requiring extra memory. */
   /* Fill temporary matrix with oppDiv_fpts scaled by dFcdU_fpts */
-  add_scaled_oppDiv_wrapper(LHS_tempSF_d, oppDiv_fpts_d, dFcdU_fpts_d, nSpts, nFpts, nVars, nEles);
+  //add_scaled_oppDiv_wrapper(LHS_tempSF_d, oppDiv_fpts_d, dFcdU_fpts_d, nSpts, nFpts, nVars, nEles);
 
   /* Multiply blocks by oppE, put result in LHS */
-  cublasDgemmBatched_wrapper(nSpts * nVars, nSpts, nFpts, 1.0, (const double**)LHS_tempSF_subptrs_d.data(), nSpts * nVars, 
-      (const double**) oppE_ptrs_d.data(), oppE_d.ldim(), 0.0, LHS_subptrs_d.data(), nSpts * nVars, nEles * nVars);
+  //cublasDgemmBatched_wrapper(nSpts * nVars, nSpts, nFpts, 1.0, (const double**)LHS_tempSF_subptrs_d.data(), nSpts * nVars, 
+  //    (const double**) oppE_ptrs_d.data(), oppE_d.ldim(), 0.0, LHS_subptrs_d.data(), nSpts * nVars, nEles * nVars);
+  
+  /* Add oppDiv_fpts scaled by dFcdU_fpts, multiplied by oppE, to LHS */
+  add_scaled_oppDiv_times_oppE_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_fpts_d, nSpts, nFpts, nVars, nEles);
 
   /* Add oppD scaled by dFdU_spts to LHS */
   add_scaled_oppD_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);

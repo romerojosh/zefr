@@ -434,8 +434,8 @@ void FRSolver::solver_data_to_device()
 
     eles->LU_pivots_d = eles->LU_pivots;
     eles->LU_info_d = eles->LU_info;
-    eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
-    eles->LHS_tempSF_d = eles->LHS_tempSF;
+    //eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
+    //eles->LHS_tempSF_d = eles->LHS_tempSF;
 
     /* For cublas batched LU: Setup and transfer array of GPU pointers to 
      * LHS matrices and RHS vectors */
@@ -453,18 +453,20 @@ void FRSolver::solver_data_to_device()
     }
 
     /* Additional pointers for batched DGEMM */
+    /*
     for (unsigned int i = 0; i < eles->nEles * eles->nVars; i++)
     {
       eles->LHS_subptrs(i) = eles->LHS_d.data() + i * N * eles->nSpts;
       eles->LHS_tempSF_subptrs(i) = eles->LHS_tempSF_d.data() + i * N * eles->nFpts;
       eles->oppE_ptrs(i) = eles->oppE_d.data();
     }
+    */
 
     eles->LHS_ptrs_d = eles->LHS_ptrs;
-    eles->LHS_subptrs_d = eles->LHS_subptrs;
     eles->RHS_ptrs_d = eles->RHS_ptrs;
-    eles->LHS_tempSF_subptrs_d = eles->LHS_tempSF_subptrs;
-    eles->oppE_ptrs_d = eles->oppE_ptrs;
+    //eles->LHS_subptrs_d = eles->LHS_subptrs;
+    //eles->LHS_tempSF_subptrs_d = eles->LHS_tempSF_subptrs;
+    //eles->oppE_ptrs_d = eles->oppE_ptrs;
     if (input->inv_mode)
     {
       eles->LHSInv_ptrs_d = eles->LHSInv_ptrs;
@@ -1044,14 +1046,14 @@ void FRSolver::initialize_U()
         eles->LHSInv_ptrs.assign({eles->nEles});
         eles->deltaU_ptrs.assign({eles->nEles});
       }
-      eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
+      //eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
       eles->LHS_ptrs.assign({eles->nEles});
       eles->RHS_ptrs.assign({eles->nEles});
       eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
       eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
-      eles->LHS_subptrs.assign({eles->nEles * eles->nVars});
-      eles->LHS_tempSF_subptrs.assign({eles->nEles * eles->nVars});
-      eles->oppE_ptrs.assign({eles->nEles * eles->nVars});
+      //eles->LHS_subptrs.assign({eles->nEles * eles->nVars});
+      //eles->LHS_tempSF_subptrs.assign({eles->nEles * eles->nVars});
+      //eles->oppE_ptrs.assign({eles->nEles * eles->nVars});
 
       eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
       eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
