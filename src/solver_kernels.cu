@@ -473,14 +473,14 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   else
     dt = dt_in(ele);
 
-  double jaco_det = jaco_det_spts(spt,ele);
+  double fac = dt / jaco_det_spts(spt,ele);
 
   if (!last_stage)
   {
     double coeff = rk_coeff(stage);
     for (unsigned int var = 0; var < nVars; var ++)
-      U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff * dt / 
-          jaco_det * divF(spt, ele, var, stage);
+      U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff *  
+          fac * divF(spt, ele, var, stage);
   }
   else
   {
@@ -493,7 +493,7 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
       double coeff = rk_coeff(n);
       for (unsigned int var = 0; var < nVars; var++)
       {
-        sum[var] -= coeff * dt / jaco_det * divF(spt, ele, var, n);
+        sum[var] -= coeff * fac * divF(spt, ele, var, n);
       }
     }
 
@@ -548,14 +548,14 @@ void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   else
     dt = dt_in(ele);
 
-  double jaco_det = jaco_det_spts(spt,ele);
+  double fac = dt / jaco_det_spts(spt,ele);
 
   if (!last_stage)
   {
     double coeff = rk_coeff(stage);
     for (unsigned int var = 0; var < nVars; var ++)
-      U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff * dt / 
-          jaco_det * (divF(spt, ele, var, stage) + source(spt, ele, var));
+      U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff *  
+          fac * (divF(spt, ele, var, stage) + source(spt, ele, var));
   }
   else
   {
@@ -568,7 +568,7 @@ void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
       double coeff = rk_coeff(n);
       for (unsigned int var = 0; var < nVars; var++)
       {
-        sum[var] -= coeff * dt / jaco_det * (divF(spt, ele, var, n) + source(spt, ele, var));
+        sum[var] -= coeff * fac * (divF(spt, ele, var, n) + source(spt, ele, var));
       }
     }
 

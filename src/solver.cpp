@@ -592,7 +592,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   {
 
 #ifdef _MPI
-  /* Compute convective flux and common flux at non-MPI flux points */
+  /* Compute convective flux and parent space common flux at non-MPI flux points */
   faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
   
@@ -604,7 +604,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
 
 #else
-  /* Compute convective and common fluxes at flux points */
+  /* Compute convective and parent space common fluxes at flux points */
   faces->compute_Fconv(0, geo.nGfpts);
   faces->compute_common_F(0, geo.nGfpts);
 #endif
@@ -685,11 +685,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   }
 
-  /* Transform fluxes from physical to reference space */
+  /* Transform solution point fluxes from physical to reference space */
   eles->transform_flux(startEle, endEle);
-  faces->transform_flux();
 
-  /* Copy flux data from face local storage to element local storage */
+  /* Copy common flux data from face local storage to element local storage */
   F_from_faces(startEle, endEle);
 
   /* Compute divergence of flux */
@@ -742,7 +741,7 @@ void FRSolver::compute_LHS()
 
   /* Transform flux derivative data from physical to reference space */
   eles->transform_dFdU();
-  faces->transform_dFcdU();
+  //faces->transform_dFcdU();
 
   /* Copy normal flux derivative data from face local storage to element local storage */
   dFcdU_from_faces();

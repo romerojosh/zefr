@@ -1687,7 +1687,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
-        input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+        dA_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
 
@@ -1702,7 +1702,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, waveSp_d, input->gamma, input->rus_k,
+    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, waveSp_d, dA_d, input->gamma, input->rus_k,
         nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
@@ -1722,7 +1722,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, LDG_bias_d, input->ldg_b,
+      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, LDG_bias_d, dA_d, input->ldg_b,
           input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
       check_error();
@@ -1913,19 +1913,20 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm(fpt, n, 0) = FR[n];
-        Fcomm(fpt, n, 1) = FR[n];
+        double F = FR[n] * dA(fpt);
+        Fcomm(fpt, n, 0) = F;
+        Fcomm(fpt, n, 1) = -F;
       }
       continue;
     }
 
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = 0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n]);
+      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n])) * dA(fpt);
 
       /* Correct for positive parent space sign convention */
       Fcomm(fpt, n, 0) = F;
-      Fcomm(fpt, n, 1) = F;
+      Fcomm(fpt, n, 1) = -F;
     }
   }
 }
@@ -2035,12 +2036,13 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
     /* Correct for positive parent space sign convention */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm(fpt, n, 0) = F[n];
-      Fcomm(fpt, n, 1) = F[n];
+      Fcomm(fpt, n, 0) = F[n] * dA(fpt);
+      Fcomm(fpt, n, 1) = -F[n] * dA(fpt);
     }
   }
 }
 
+/* Note: This function is deprecated */
 void Faces::transform_flux()
 {
 #ifdef _CPU
@@ -2158,8 +2160,9 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        Fcomm(fpt, n, 0) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0));
-        Fcomm(fpt, n, 1) += (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0));
+        double F = (Fcomm_temp(fpt, n, dim) * norm(fpt, dim, 0)) * dA(fpt);
+        Fcomm(fpt, n, 0) += F;
+        Fcomm(fpt, n, 1) -= F;
       }
     }
   }
