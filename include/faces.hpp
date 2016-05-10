@@ -60,6 +60,7 @@ class Faces
     mdvector<double> norm, jaco, coord;
     mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
+    std::vector<double> FL, FR, WL, WR;
 
     /* Structures for implicit method */
     bool CPU_flag; // Temporary flag for global implicit method

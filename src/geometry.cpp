@@ -30,7 +30,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
   partition_geometry(geo);
 #endif
 
-  setup_global_fpts(geo, order);
+  setup_global_fpts(input, geo, order);
 
   if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
   {
@@ -889,7 +889,7 @@ void couple_periodic_bnds(GeoStruct &geo)
   }
 }
 
-void setup_global_fpts(GeoStruct &geo, unsigned int order)
+void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 {
   /* Form set of unique faces */
   if (geo.nDims == 2 || geo.nDims == 3)
@@ -898,6 +898,11 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     unsigned int nFpts1D = (order + 1);
     if (geo.nDims == 3)
       nFptsPerFace *= (order + 1);
+
+    unsigned int nVars = 1;
+    if (input->equation == EulerNS)
+      nVars = geo.nDims + 2;
+
 
     geo.nFptsPerFace = nFptsPerFace;
 
@@ -1250,6 +1255,28 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
+
+    /* Create MPI Derived type for sends/receives */
+    for (auto &entry : geo.fpt_buffer_map)
+    {
+      unsigned int sendRank = entry.first;
+      auto fpts = entry.second;
+      std::vector<int> block_len(nVars * fpts.size(), 1);
+      std::vector<int> disp(nVars * fpts.size(), 0);
+      
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        for (unsigned int i = 0; i < fpts.size(); i++)
+          disp[i + var * fpts.size()] = fpts(i) + var * gfpt_mpi;
+      }
+      
+      MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]); 
+
+      MPI_Type_commit(&geo.mpi_types[sendRank]);
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
 #endif
 
     // TODO: For periodic MPI, move this up the code, define which faces are periodic first.
@@ -1663,11 +1690,20 @@ void partition_geometry(GeoStruct &geo)
   /* Setup METIS */
   idx_t options[METIS_NOPTIONS];
   METIS_SetDefaultOptions(options);
+  
+
+  options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+  options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
+  options[METIS_OPTION_DBGLVL] = 0;
+  options[METIS_OPTION_CONTIG] = 1;
+  options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_GROW;
 
   /* Form eptr and eind arrays */
   std::vector<int> eptr(geo.nEles + 1); 
   std::vector<int> eind(geo.nEles * geo.nCornerNodes); 
+  std::vector<int> vwgt(geo.nEles, 1);
   std::set<unsigned int> nodes;
+  std::vector<unsigned int> face;
 
   int n = 0;
   eptr[0] = 0;
@@ -1690,6 +1726,41 @@ void partition_geometry(GeoStruct &geo)
     }
     eptr[i + 1] = n;
     nodes.clear();
+
+    /* Loop over faces and search for boundaries */
+    for (unsigned int k = 0; k < geo.nFacesPerEle; k++)
+    {
+      face.assign(geo.nNodesPerFace, 0);
+
+      for (unsigned int nd = 0; nd < geo.nNodesPerFace; nd++)
+      {
+        face[nd] = geo.nd2gnd(geo.face_nodes(k, nd), i);
+      }
+
+      if (geo.bnd_faces.count(face))
+      {
+        auto bnd_id = geo.bnd_faces[face];
+
+        switch (bnd_id)
+        {
+          case 6:
+            vwgt[i] += 0; break;
+          case 7:
+          case 8:
+          case 9:
+          case 10:
+          case 11:
+          case 12:
+            vwgt[i] += 0; break;
+
+          default:
+            vwgt[i] += 0; break;
+        }
+        vwgt[i]++;
+      }
+    }
+
+
   }
 
   int objval;
@@ -1702,7 +1773,7 @@ void partition_geometry(GeoStruct &geo)
     int nEles = geo.nEles;
     int nNodes = geo.nNodes;
 
-    METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), nullptr, 
+    METIS_PartMeshDual(&nEles, &nNodes, eptr.data(), eind.data(), vwgt.data(), 
         nullptr, &nNodesPerFace, &nRanks, nullptr, options, &objval, epart.data(), 
         npart.data());  
   }
@@ -1716,7 +1787,7 @@ void partition_geometry(GeoStruct &geo)
   }
 
   /* Collect map of *ALL* MPI interfaces from METIS partition data */
-  std::vector<unsigned int> face(geo.nNodesPerFace);
+  //std::vector<unsigned int> face(geo.nNodesPerFace);
   std::map<std::vector<unsigned int>, std::set<int>> face2ranks;    
   std::map<std::vector<unsigned int>, std::set<int>> mpi_faces_glob;
 
@@ -1726,7 +1797,7 @@ void partition_geometry(GeoStruct &geo)
     int face_rank = epart[ele];
     for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
     {
-      //face.assign(geo.nNodesPerFace, 0); TODO: Might need this?
+      face.assign(geo.nNodesPerFace, 0);
       for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
       {
         face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);

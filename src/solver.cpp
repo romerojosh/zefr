@@ -47,6 +47,7 @@ FRSolver::FRSolver(InputStruct *input, int order)
     this->order = input->order;
   else
     this->order = order;
+
 }
 
 void FRSolver::setup()
@@ -576,9 +577,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[color - 1]; endEle = geo.ele_color_range[color];
   }
 
+
 #ifdef _MPI
   /* Commence sending U data to other processes */
   faces->send_U_data();
+
 #endif
 
   /* Apply boundary conditions to state variables */
@@ -592,12 +595,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   {
 
 #ifdef _MPI
+  /* Transform solution point fluxes from physical to reference space */
+  eles->transform_flux(startEle, endEle);
+
   /* Compute convective flux and parent space common flux at non-MPI flux points */
   faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
+
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
-  
-  /* Receive U data */
+
+    /* Receive U data */
   faces->recv_U_data();
+
 
   /* Complete computation on remaning flux points. */
   faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
@@ -654,6 +662,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Compute viscous flux at solution points */
     eles->compute_Fvisc(startEle, endEle);
+    
+    /* Transform solution point fluxes from physical to reference space */
+    eles->transform_flux(startEle, endEle);
 
     /* Compute viscous and convective flux and common interface flux 
      * at non-MPI flux points */
@@ -685,8 +696,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   }
 
-  /* Transform solution point fluxes from physical to reference space */
-  eles->transform_flux(startEle, endEle);
 
   /* Copy common flux data from face local storage to element local storage */
   F_from_faces(startEle, endEle);
@@ -697,6 +706,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Add source term (if required) */
   if (input->source)
     add_source(stage, startEle, endEle);
+
+
+
 }
 
 void FRSolver::compute_LHS()

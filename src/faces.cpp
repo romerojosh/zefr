@@ -25,12 +25,19 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   this->nVars = nVars;
   this->nDims = nDims;
 
+
   /* Allocate memory for solution structures */
   U.assign({nFpts, nVars, 2});
   dU.assign({nFpts, nVars, nDims, 2});
   Fconv.assign({nFpts, nVars, nDims, 2});
   Fvisc.assign({nFpts, nVars, nDims, 2});
   Fcomm.assign({nFpts, nVars, 2});
+
+  /* Allocating memory for Riemann solvers */
+  FL.assign(nVars, 0);
+  FR.assign(nVars, 0);
+  WL.assign(nVars, 0);
+  WR.assign(nVars, 0);
 
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
@@ -1415,7 +1422,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
-          /* Compute some primitive variables (keep pressure)*/
+          // Compute some primitive variables (keep pressure)
           double momF = 0.0;
           for (unsigned int dim = 0; dim < nDims; dim ++)
           {
@@ -1835,17 +1842,9 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 {
-  std::vector<double> FL(nVars);
-  std::vector<double> FR(nVars);
-  std::vector<double> WL(nVars);
-  std::vector<double> WR(nVars);
-
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    /* Apply central flux at boundaries */
-    double k = input->rus_k;
-
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
     std::fill(FR.begin(), FR.end(), 0.0);
@@ -1894,8 +1893,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     else if (input->equation == EulerNS)
     {
       /* Compute speed of sound */
-      double aL = std::sqrt(std::abs(input->gamma * P(fpt, 0) / WL[0]));
-      double aR = std::sqrt(std::abs(input->gamma * P(fpt, 1) / WR[0]));
+      double aL = std::sqrt(input->gamma * P(fpt, 0) / WL[0]);
+      double aR = std::sqrt(input->gamma * P(fpt, 1) / WR[0]);
 
       /* Compute normal velocities */
       double VnL = 0.0; double VnR = 0.0;
@@ -1922,7 +1921,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-k) * (WR[n]-WL[n])) * dA(fpt);
+      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
 
       /* Correct for positive parent space sign convention */
       Fcomm(fpt, n, 0) = F;
@@ -1938,8 +1937,6 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
     ThrowException("Roe Flux only implemented for 2D!");
   }
 
-  std::vector<double> FL(nVars);
-  std::vector<double> FR(nVars);
   std::vector<double> F(nVars);
   std::vector<double> dW(nVars);
 
@@ -2071,10 +2068,6 @@ void Faces::transform_flux()
 
 void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 {
-  std::vector<double> FL(nVars);
-  std::vector<double> FR(nVars);
-  std::vector<double> WL(nVars);
-  std::vector<double> WR(nVars);
    
   double tau = input->ldg_tau;
 
@@ -2170,11 +2163,6 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::central_flux()
 {
-  std::vector<double> FL(nVars);
-  std::vector<double> FR(nVars);
-  std::vector<double> WL(nVars);
-  std::vector<double> WR(nVars);
-   
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
@@ -3312,12 +3300,22 @@ void Faces::send_U_data()
   unsigned int ridx = 0;
 
 #ifdef _CPU
+  /*
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    ridx++;
+  }
+  */
+  for (const auto &entry : geo->mpi_types)
+  {
+    int recvRank = entry.first;
+    auto TYPE = entry.second;
+
+    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
     ridx++;
   }
 #endif
@@ -3335,12 +3333,13 @@ void Faces::send_U_data()
 
   unsigned int sidx = 0;
 #ifdef _CPU
+  /*
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
     const auto &fpts = entry.second;
     
-    /* Pack buffer of solution data at flux points in list */
+    // Pack buffer of solution data at flux points in list
     for (unsigned int n = 0; n < nVars; n++)
     {
       for (unsigned int i = 0; i < fpts.size(); i++)
@@ -3350,10 +3349,20 @@ void Faces::send_U_data()
 
     }
 
-    /* Send buffer to paired rank */
+    //Send buffer to paired rank
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
     sidx++;
   }
+  */
+  for (const auto &entry : geo->mpi_types)
+  {
+    int sendRank = entry.first;
+    auto TYPE = entry.second;
+
+    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    sidx++;
+  }
+
 #endif
 #ifdef _GPU
   for (auto &entry : geo->fpt_buffer_map_d)
@@ -3392,6 +3401,7 @@ void Faces::recv_U_data()
 
   /* Unpack buffer */
 #ifdef _CPU
+  /*
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
@@ -3405,6 +3415,7 @@ void Faces::recv_U_data()
       }
     }
   }
+  */
 #endif
 
 #ifdef _GPU

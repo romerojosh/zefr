@@ -14,6 +14,10 @@
 #include "mdvector_gpu.h"
 #endif
 
+#ifdef _MPI
+#include "mpi.h"
+#endif
+
 struct GeoStruct
 {
     unsigned int nEles = 0; 
@@ -39,7 +43,8 @@ struct GeoStruct
     unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
     std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
-    std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
+    std::map<unsigned int, mdvector<int>> fpt_buffer_map;
+    std::map<unsigned int, MPI_Datatype> mpi_types;
 #endif
 
 #ifdef _GPU
@@ -60,7 +65,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 void read_boundary_faces(std::ifstream &f, GeoStruct &geo);
 void set_face_nodes(GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);
-void setup_global_fpts(GeoStruct &geo, unsigned int order);
+void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order);
 void pair_periodic_gfpts(GeoStruct &geo);
 void setup_element_colors(InputStruct *input, GeoStruct &geo);
 
