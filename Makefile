@@ -56,6 +56,7 @@ endif
 # Including external template libraries
 INCS += -I external/tnt/
 INCS += -I external/jama/
+INCS += -I$(strip $(AUX_DIR))/
 
 TARGET = zefr
 OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/filter.o  bin/zefr.o 

@@ -2600,8 +2600,8 @@ __global__
 void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
     mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts)
 {
-  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
   if (i >= nFpts || var >= nVars)
     return;
@@ -2612,8 +2612,8 @@ void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts,
 void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
     mdvector_gpu<double> &U, unsigned int nVars)
 {
-  dim3 threads(32,4);
-  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
 
   pack_U<<<blocks,threads>>>(U_sbuffs, fpts, U, nVars, fpts.size());
 }
@@ -2622,8 +2622,8 @@ __global__
 void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
     mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts)
 {
-  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+  const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
   if (i >= nFpts || var >= nVars)
     return;
@@ -2634,8 +2634,8 @@ void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts,
 void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
     mdvector_gpu<double> &U, unsigned int nVars)
 {
-  dim3 threads(32,4);
-  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+  unsigned int threads = 192;
+  unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
 
   unpack_U<<<blocks,threads>>>(U_rbuffs, fpts, U, nVars, fpts.size());
 }
