@@ -194,6 +194,8 @@ void Elements::setup_FR()
   oppD.assign({nSpts, nSpts, nDims});
   oppD_fpts.assign({nSpts, nFpts, nDims});
   oppDiv_fpts.assign({nSpts, nFpts});
+  oppDp.assign({nSpts, nSpts, nDims});
+  oppDp2.assign({nSpts, nSpts});
 
   std::vector<double> loc(nDims, 0.0);
   /* Setup spt to fpt extrapolation operator (oppE) */
@@ -223,6 +225,28 @@ void Elements::setup_FR()
       }
     }
   }
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int jspt = 0; jspt < nSpts; jspt++)
+    {
+      for (unsigned int ispt = 0; ispt < nSpts; ispt++)
+      {
+        for (unsigned int d = 0; d < nDims; d++)
+          loc[d] = loc_spts(ispt , d);
+
+        oppDp(ispt,jspt,dim) = calc_d_nodal_basis_spts_FR(jspt, loc, dim);
+      }
+    }
+  }
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nSpts,
+          nSpts, 1.0, &oppDp(0, 0, dim), nSpts, &oppDp(0, 0, dim), nSpts, 
+          1.0, &oppDp2(0, 0), nSpts);
+  }
+
 
   /* Setup differentiation operator (oppD_fpts) for flux points (DFR Specific)*/
   for (unsigned int dim = 0; dim < nDims; dim++)

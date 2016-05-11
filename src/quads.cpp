@@ -396,6 +396,27 @@ double Quads::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc
 
 }
 
+double Quads::calc_d_nodal_basis_spts_FR(unsigned int spt, std::vector<double> &loc, unsigned int dim)
+{
+  /* Get indices for Lagrange polynomial evaluation  (standard FR) */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+
+  double val = 0.0;
+
+  if (dim == 0)
+  {
+      val = Lagrange_d1(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
+  }
+  else
+  {
+      val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange_d1(loc_spts_1D, j, loc[1]);
+  }
+
+  return val;
+
+}
+
 double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of

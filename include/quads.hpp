@@ -28,6 +28,8 @@ class Quads: public Elements
     double calc_nodal_basis(unsigned int spt, std::vector<double> &loc);
     double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
                                    unsigned int dim);
+    double calc_d_nodal_basis_spts_FR(unsigned int spt, std::vector<double> &loc, 
+                                      unsigned int dim);
     double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
                                    unsigned int dim);
 

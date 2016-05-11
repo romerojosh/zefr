@@ -14,6 +14,7 @@ dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
 CFL	  1.0
+damp_fac 1.0
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
@@ -34,6 +35,8 @@ ldg_tau    1.0
 
 # Equation Specific Parameters:
 ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+res_write 1
+res_field 0
 
 # Euler/Navier-Stokes
 T_gas 291.15

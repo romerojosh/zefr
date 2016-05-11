@@ -46,6 +46,7 @@ class Elements
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
+    mdvector<double> oppDp, oppDp2;
     mdvector<double> oppE_ppts, oppE_qpts;
     mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
     mdvector<double> F_spts, F_fpts;
@@ -87,6 +88,8 @@ class Elements
 
     virtual double calc_nodal_basis(unsigned int spt, std::vector<double> &loc) = 0;
     virtual double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
+                                   unsigned int dim) = 0;
+    virtual double calc_d_nodal_basis_spts_FR(unsigned int spt, std::vector<double> &loc, 
                                    unsigned int dim) = 0;
     virtual double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
                                    unsigned int dim) = 0;

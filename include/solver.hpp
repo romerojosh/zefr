@@ -34,7 +34,7 @@ class FRSolver
     unsigned int nStages;
     mdvector<double> rk_alpha, rk_beta;
     mdvector<double> dt;
-    mdvector<double> U_ini, U_avg;
+    mdvector<double> U_ini, U_avg, damp;
     Filter filt;
 
     /* Additional "Finite-Volume" variables */

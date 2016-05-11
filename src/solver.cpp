@@ -133,6 +133,7 @@ void FRSolver::setup_update()
   }
 
   U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
+  damp.assign({eles->nSpts, eles->nEles, eles->nVars});
   dt.assign({eles->nEles},input->dt);
 
   if (FV_mode)
@@ -1176,6 +1177,10 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       {
         compute_element_dt();
       }
+
+      //cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
+      //    eles->nEles * eles->nVars, eles->nSpts, 1.0, &eles->oppDp2(0, 0), eles->nSpts, 
+      //    &eles->U_spts(0, 0, 0), eles->nSpts, 0.0, &damp(0, 0, 0), eles->nSpts);
     }
 
 #ifdef _CPU
@@ -1189,12 +1194,14 @@ void FRSolver::update(const mdvector_gpu<double> &source)
             if (input->dt_type != 2)
             {
               eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+                eles->jaco_det_spts(spt, ele) * (eles->divF_spts(spt, ele, n, stage));
+              // - input->damp_fac * std::abs(eles->divF_spts(spt, ele, n, stage)) * damp(spt, ele, n));
             }
             else
             {
               eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+                eles->jaco_det_spts(spt, ele) * (eles->divF_spts(spt, ele, n, stage));
+              // - input->damp_fac * std::abs(eles->divF_spts(spt, ele, n, stage)) * damp(spt, ele, n));
             }
           }
     }
@@ -2223,7 +2230,11 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         val = std::sqrt(val);
     }
 
-    std::cout << current_iter/input->f_smooth_steps << " ";
+    if (!input->p_multi)
+      std::cout << current_iter << " ";
+    else
+      std::cout << current_iter/input->f_smooth_steps << " ";
+
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 
@@ -2249,7 +2260,11 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     /* Write to history file */
     auto t2 = std::chrono::high_resolution_clock::now();
     auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
-    f << current_iter << " " << current_runtime.count() << " ";
+
+    if (!input->p_multi)
+      f << current_iter << " " << current_runtime.count() << " ";
+    else
+      f << current_iter/input->f_smooth_steps << " " << current_runtime.count() << " ";
 
     for (auto val : res)
       f << std::scientific << val / nDoF << " ";
