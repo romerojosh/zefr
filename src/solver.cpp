@@ -612,9 +612,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
 
 #else
+  /* Transform solution point fluxes from physical to reference space */
+  eles->transform_flux(startEle, endEle);
+
   /* Compute convective and parent space common fluxes at flux points */
   faces->compute_Fconv(0, geo.nGfpts);
   faces->compute_common_F(0, geo.nGfpts);
+
 #endif
   }
 
@@ -686,6 +690,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Compute viscous flux at solution points */
     eles->compute_Fvisc(startEle, endEle);
+
+    /* Transform solution point fluxes from physical to reference space */
+    eles->transform_flux(startEle, endEle);
 
     /* Compute viscous and convective flux and common interface fluxes 
      * at flux points*/ 
