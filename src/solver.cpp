@@ -119,8 +119,11 @@ void FRSolver::setup_update()
     nStages = 4;
     rk_alpha.assign({nStages});
     /* Standard RK44 */
-    rk_alpha(0) = 1./4; rk_alpha(1) = 1./3.; 
-    rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
+    //rk_alpha(0) = 1./4; rk_alpha(1) = 1./3.; 
+    //rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
+    /* OptRK4 (r = 0.5) */
+    rk_alpha(0) = 0.153; rk_alpha(1) = 0.442; 
+    rk_alpha(2) = 0.930; rk_alpha(3) = 1.0;
   }
   else if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
@@ -2791,7 +2794,7 @@ void FRSolver::report_error(std::ofstream &f)
 
           double P = (input->gamma - 1.0) * (eles->U_qpts(qpt, ele, 3) - 0.5 * momF);
 
-          U_error = U_true - P/std::pow(eles->U_qpts(qpt, ele, 0), input->gamma);
+          U_error = (U_true - P/std::pow(eles->U_qpts(qpt, ele, 0), input->gamma)) / U_true;
         }
         else
         {

@@ -138,6 +138,10 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     {
       geo.bnd_ids[val] = 6;
     }
+    else if (bnd_id == "\"CHAR_PYFR\"")
+    {
+      geo.bnd_ids[val] = 13;
+    }
     else if (bnd_id == "\"SYMMETRY\"")
     {
       geo.bnd_ids[val] = 7;

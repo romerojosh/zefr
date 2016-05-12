@@ -324,7 +324,6 @@ void Faces::apply_bcs()
           VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
           VnR += input->V_fs(dim) * norm(fpt, dim, 0);
         }
-      
 
         /* Compute pressure. TODO: Compute pressure once!*/
         double momF = 0.0;
@@ -339,9 +338,9 @@ void Faces::apply_bcs()
         double PR = input->P_fs;
 
         /* Compute Riemann Invariants */
-        double Rp = VnL + 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PL / 
+        double Rp = VnL + 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PL /
             U(fpt, 0,0));
-        double Rn = VnR - 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PR / 
+        double Rn = VnR - 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PR /
             input->rho_fs);
 
         double cstar = 0.25 * (input->gamma - 1) * (Rp - Rn);
@@ -358,30 +357,30 @@ void Faces::apply_bcs()
           double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs +
               0.5 * Vsq;
 
-          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/ 
+          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/
               (input-> gamma - 1.0));
 
           U(fpt, 0, 1) = rhoR;
           for (unsigned int dim = 0; dim < nDims; dim++)
-            U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs(dim) - VnR * 
+            U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs(dim) - VnR *
               norm(fpt, dim, 0));
 
           PR = rhoR / input->gamma * cstar * cstar;
           U(fpt, nDims + 1, 1) = rhoR * H_fs - PR;
-          
+
         }
         else  /* Case 2: Outflow */
         {
           double rhoL = U(fpt, 0, 0);
           double s_inv = std::pow(rhoL, input->gamma) / PL;
 
-          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/ 
+          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/
               (input-> gamma - 1.0));
 
           U(fpt, 0, 1) = rhoR;
 
           for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) +(U(fpt, dim + 1, 0) / 
+          U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) +(U(fpt, dim + 1, 0) /
                 U(fpt, 0, 0) - VnL * norm(fpt, dim, 0)));
 
           double PR = rhoR / input->gamma * cstar * cstar;
@@ -389,8 +388,8 @@ void Faces::apply_bcs()
           double Vsq = 0.0;
           for (unsigned int dim = 0; dim < nDims; dim++)
             Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoR * rhoR) ;
-          
-          U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq; 
+
+          U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq;
         }
 
         /* Set LDG bias */
@@ -398,7 +397,84 @@ void Faces::apply_bcs()
         //LDG_bias(fpt) = 0;
  
         break;
+      }
 
+      case 13: /* Characteristic (from PyFR) */
+      {
+        /* Compute wall normal velocities */
+        double VnL = 0.0; double VnR = 0.0;
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+          VnR += input->V_fs(dim) * norm(fpt, dim, 0);
+        }
+
+        /* Compute pressure. TODO: Compute pressure once!*/
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+        double PR = input->P_fs;
+
+        double cL = std::sqrt(input->gamma * PL / U(fpt, 0, 0));
+        double cR = std::sqrt(input->gamma * PR / input->rho_fs);
+
+        /* Compute Riemann Invariants */
+        double RL;
+        if (std::abs(VnR) >= cR && VnL >= 0)
+          RL = VnR + 2.0 / (input->gamma - 1) * cR;
+        else
+          RL = VnL + 2.0 / (input->gamma - 1) * cL;
+
+        double RB;
+        if (std::abs(VnR) >= cR && VnL < 0)
+          RB = VnL - 2.0 / (input->gamma - 1) * cL;
+        else
+          RB = VnR - 2.0 / (input->gamma - 1) * cR;
+
+        double cstar = 0.25 * (input->gamma - 1) * (RL - RB);
+        double ustarn = 0.5 * (RL + RB);
+
+        double rhoR = cstar * cstar / input->gamma;
+        double VR[3] = {0, 0, 0};
+
+        if (VnL < 0.0) /* Case 1: Inflow */
+        {
+          rhoR *= pow(input->rho_fs, input->gamma) / PR;
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            VR[dim] = input->V_fs(dim) + (ustarn - VnR) * norm(fpt, dim, 0);
+        }
+        else  /* Case 2: Outflow */
+        {
+          rhoR *= pow(U(fpt, 0, 0), input->gamma) / PL;
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim, 0);
+        }
+
+        rhoR = std::pow(rhoR, 1.0 / (input->gamma - 1));
+
+        U(fpt, 0, 1) = rhoR;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim + 1, 1) = rhoR * VR[dim];
+
+        PR = rhoR / input->gamma * cstar * cstar;
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
+
+        /* Set LDG bias */
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
+
+        break;
       }
       case 7: /* Symmetry */
       case 8: /* Slip Wall */

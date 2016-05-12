@@ -842,6 +842,85 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
 
     }
+
+    case 13: /* Characteristic (from PyFR) */
+    {
+      /* Compute wall normal velocities */
+      double VnL = 0.0; double VnR = 0.0;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+        VnR += V_fs(dim) * norm(fpt, dim, 0);
+      }
+
+      /* Compute pressure. TODO: Compute pressure once!*/
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+      }
+
+      momF /= U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+      double PR = P_fs;
+
+      double cL = std::sqrt(gamma * PL / U(fpt, 0, 0));
+      double cR = std::sqrt(gamma * PR / rho_fs);
+
+      /* Compute Riemann Invariants */
+      double RL;
+      if (std::abs(VnR) >= cR && VnL >= 0)
+        RL = VnR + 2.0 / (gamma - 1) * cR;
+      else
+        RL = VnL + 2.0 / (gamma - 1) * cL;
+
+      double RB;
+      if (std::abs(VnR) >= cR && VnL < 0)
+        RB = VnL - 2.0 / (gamma - 1) * cL;
+      else
+        RB = VnR - 2.0 / (gamma - 1) * cR;
+
+      double cstar = 0.25 * (gamma - 1) * (RL - RB);
+      double ustarn = 0.5 * (RL + RB);
+
+      double rhoR = cstar * cstar / gamma;
+      double VR[3] = {0, 0, 0};
+
+      if (VnL < 0.0) /* Case 1: Inflow */
+      {
+        rhoR *= pow(rho_fs, gamma) / PR;
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          VR[dim] = V_fs(dim) + (ustarn - VnR) * norm(fpt, dim, 0);
+      }
+      else  /* Case 2: Outflow */
+      {
+        rhoR *= pow(U(fpt, 0, 0), gamma) / PL;
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim, 0);
+      }
+
+      rhoR = std::pow(rhoR, 1.0 / (gamma - 1));
+
+      U(fpt, 0, 1) = rhoR;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        U(fpt, dim + 1, 1) = rhoR * VR[dim];
+
+      PR = rhoR / gamma * cstar * cstar;
+      U(fpt, nDims + 1, 1) = PR / (gamma - 1);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        U(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
+
+      /* Set LDG bias */
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
+
+      break;
+    }
+
     case 7: /* Symmetry */
     case 8: /* Slip Wall */
     {
