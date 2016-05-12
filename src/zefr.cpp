@@ -135,17 +135,17 @@ int main(int argc, char* argv[])
       solver.report_residuals(hist_file, t1);
     }
 
-    if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps))
+    if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
     {
       solver.write_solution(input.output_prefix);
     }
 
-    if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps))
+    if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
     {
       solver.report_forces(force_file);
     }
 
-    if (input.error_freq != 0 && (n%input.error_freq == 0 || n == input.n_steps))
+    if (input.error_freq != 0 && (n%input.error_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
     {
       solver.report_error(error_file);
     }

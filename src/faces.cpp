@@ -314,92 +314,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 6: /* Characteristic (from HiFiLES) */
-      {
-        /* Compute wall normal velocities */
-        double VnL = 0.0; double VnR = 0.0;
-
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
-          VnR += input->V_fs(dim) * norm(fpt, dim, 0);
-        }
-
-        /* Compute pressure. TODO: Compute pressure once!*/
-        double momF = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
-        }
-
-        momF /= U(fpt, 0, 0);
-
-        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
-        double PR = input->P_fs;
-
-        /* Compute Riemann Invariants */
-        double Rp = VnL + 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PL /
-            U(fpt, 0,0));
-        double Rn = VnR - 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PR /
-            input->rho_fs);
-
-        double cstar = 0.25 * (input->gamma - 1) * (Rp - Rn);
-        double ustarn = 0.5 * (Rp + Rn);
-
-        if (VnL < 0.0) /* Case 1: Inflow */
-        {
-          double s_inv = std::pow(input->rho_fs, input->gamma) / PR;
-
-          double Vsq = 0.0;
-          for (unsigned int dim = 0; dim < nDims; dim++)
-            Vsq += input->V_fs(dim) * input->V_fs(dim);
-
-          double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs +
-              0.5 * Vsq;
-
-          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/
-              (input-> gamma - 1.0));
-
-          U(fpt, 0, 1) = rhoR;
-          for (unsigned int dim = 0; dim < nDims; dim++)
-            U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs(dim) - VnR *
-              norm(fpt, dim, 0));
-
-          PR = rhoR / input->gamma * cstar * cstar;
-          U(fpt, nDims + 1, 1) = rhoR * H_fs - PR;
-
-        }
-        else  /* Case 2: Outflow */
-        {
-          double rhoL = U(fpt, 0, 0);
-          double s_inv = std::pow(rhoL, input->gamma) / PL;
-
-          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/
-              (input-> gamma - 1.0));
-
-          U(fpt, 0, 1) = rhoR;
-
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) +(U(fpt, dim + 1, 0) /
-                U(fpt, 0, 0) - VnL * norm(fpt, dim, 0)));
-
-          double PR = rhoR / input->gamma * cstar * cstar;
-
-          double Vsq = 0.0;
-          for (unsigned int dim = 0; dim < nDims; dim++)
-            Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoR * rhoR) ;
-
-          U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq;
-        }
-
-        /* Set LDG bias */
-        LDG_bias(fpt) = -1;
-        //LDG_bias(fpt) = 0;
- 
-        break;
-      }
-
-      case 13: /* Characteristic (from PyFR) */
+      case 6: /* Characteristic (from PyFR) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
@@ -471,11 +386,12 @@ void Faces::apply_bcs()
           U(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
 
         /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
-        LDG_bias(fpt) = 0;
+        LDG_bias(fpt) = -1;
+        //LDG_bias(fpt) = 0;
 
         break;
       }
+
       case 7: /* Symmetry */
       case 8: /* Slip Wall */
       {
@@ -1018,7 +934,7 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case 6: /* Characteristic (from HiFiLES) */
+      case 6: /* Characteristic (from PyFR) */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
@@ -1053,26 +969,27 @@ void Faces::apply_bcs_dFdU()
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = input->P_fs;
 
-        double cL = std::sqrt(gam * PL / rhoL);
+        double cL = std::sqrt(input->gamma * PL / U(fpt, 0, 0));
+        double cR = std::sqrt(input->gamma * PR / input->rho_fs);
 
         /* Compute Riemann Invariants */
-        double Rp = VnL + 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PL / 
-            U(fpt, 0,0));
-        double Rn = VnR - 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PR / 
-            input->rho_fs);
+        double RL;
+        if (std::abs(VnR) >= cR && VnL >= 0)
+          ThrowException("Implicit Char BC not implemented for supersonic flow!")
+        else
+          RL = VnL + 2.0 / (input->gamma - 1) * cL;
 
-        double cstar = 0.25 * (input->gamma - 1) * (Rp - Rn);
-        double ustarn = 0.5 * (Rp + Rn);
+        double RB;
+        if (std::abs(VnR) >= cR && VnL < 0)
+          ThrowException("Implicit Char BC not implemented for supersonic flow!")
+        else
+          RB = VnR - 2.0 / (input->gamma - 1) * cR;
+
+        double cstar = 0.25 * (input->gamma - 1) * (RL - RB);
+        double ustarn = 0.5 * (RL + RB);
 
         if (VnL < 0.0) /* Case 1: Inflow */
         {
-          double Vsq = 0.0;
-          for (unsigned int dim = 0; dim < nDims; dim++)
-            Vsq += input->V_fs(dim) * input->V_fs(dim);
-
-          double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs +
-              0.5 * Vsq;
-
           /* Matrix Parameters */
           double a1 = 0.5 * rhoR / cstar;
           double a2 = gam / (rhoL * cL);
@@ -1082,31 +999,30 @@ void Faces::apply_bcs_dFdU()
           double b3 = ny / rhoL - a2 * vL;
           double b4 = a2 / cstar;
 
-          double c1 = H_fs - cstar * cstar / gam;
-          double c2 = (gam-1.0)/(2.0*gam) * rhoR * cstar;
+          double c1 = cstar * cstar / ((gam-1.0) * gam) + 0.5 * (uR*uR + vR*vR);
+          double c2 = uR * nx + vR * ny + cstar / gam;
 
           /* Compute dURdUL */
           dURdUL(0, 0) = a1 * b1;
           dURdUL(1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
           dURdUL(2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-          dURdUL(3, 0) = a1 * b1 * c1 - b1 * c2;
+          dURdUL(3, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
 
           dURdUL(0, 1) = a1 * b2;
           dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
           dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-          dURdUL(3, 1) = a1 * b2 * c1 - b2 * c2;
+          dURdUL(3, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
 
           dURdUL(0, 2) = a1 * b3;
           dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
           dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-          dURdUL(3, 2) = a1 * b3 * c1 - b3 * c2;
+          dURdUL(3, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
 
           dURdUL(0, 3) = 0.5 * rhoR * b4;
           dURdUL(1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
           dURdUL(2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
-          dURdUL(3, 3) = 0.5 * rhoR * b4 * c1 - a2 * c2;
+          dURdUL(3, 3) = 0.5 * rhoR * (b4 * c1 + a2 * c2);
         }
-
         else  /* Case 2: Outflow */
         {
           /* Matrix Parameters */
