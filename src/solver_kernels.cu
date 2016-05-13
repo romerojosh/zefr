@@ -78,29 +78,49 @@ template void free_device_data<unsigned int>(unsigned int* &device_data);
 template void free_device_data<int>(int* &device_data);
 
 template <typename T>
-void copy_to_device(T* device_data, const T* host_data, unsigned int size)
+void copy_to_device(T* device_data, const T* host_data, unsigned int size, int stream)
 {
-  cudaMemcpy(device_data, host_data, size * sizeof(T), cudaMemcpyHostToDevice);
+  if (stream == -1)
+  {
+    cudaMemcpy(device_data, host_data, size * sizeof(T), cudaMemcpyHostToDevice);
+  }
+  else 
+  {
+    cudaMemcpyAsync(device_data, host_data, size * sizeof(T), cudaMemcpyHostToDevice, stream_handles[stream]);
+
+  }
   check_error();
 }
 
 
-template void copy_to_device<double>(double* device_data, const double* host_data, unsigned int size);
-template void copy_to_device<double*>(double** device_data, double* const* host_data, unsigned int size);
-template void copy_to_device<unsigned int>(unsigned int* device_data, const unsigned int* host_data, unsigned int size);
-template void copy_to_device<int>(int* device_data, const int* host_data,  unsigned int size);
+template void copy_to_device<double>(double* device_data, const double* host_data, unsigned int size, int stream);
+template void copy_to_device<double*>(double** device_data, double* const* host_data, unsigned int size, int stream);
+template void copy_to_device<unsigned int>(unsigned int* device_data, const unsigned int* host_data, unsigned int size, int stream);
+template void copy_to_device<int>(int* device_data, const int* host_data,  unsigned int size, int stream);
 
 template <typename T>
-void copy_from_device(T* host_data, const T* device_data, unsigned int size)
+void copy_from_device(T* host_data, const T* device_data, unsigned int size, int stream)
 {
-  cudaMemcpy(host_data, device_data, size * sizeof(T), cudaMemcpyDeviceToHost);
+  if (stream == -1)
+  {
+    cudaMemcpy(host_data, device_data, size * sizeof(T), cudaMemcpyDeviceToHost);
+  }
+  else
+  {
+    cudaMemcpyAsync(host_data, device_data, size * sizeof(T), cudaMemcpyDeviceToHost, stream_handles[stream]);
+  }
   check_error();
 }
 
-template void copy_from_device<double>(double* host_data, const double* device_data, unsigned int size);
-template void copy_from_device<double*>(double** host_data, double* const* device_data, unsigned int size);
-template void copy_from_device<unsigned int>(unsigned int* host_data, const unsigned int* device_data, unsigned int size);
-template void copy_from_device<int>(int* host_data, const int* device_data, unsigned int size);
+template void copy_from_device<double>(double* host_data, const double* device_data, unsigned int size, int stream);
+template void copy_from_device<double*>(double** host_data, double* const* device_data, unsigned int size, int stream);
+template void copy_from_device<unsigned int>(unsigned int* host_data, const unsigned int* device_data, unsigned int size, int stream);
+template void copy_from_device<int>(int* host_data, const int* device_data, unsigned int size, int stream);
+
+void sync_stream(unsigned int stream)
+{
+  cudaStreamSynchronize(stream_handles[stream]);
+}
 
 __global__
 void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
@@ -886,3 +906,114 @@ void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &delta
 
   compute_U<<<blocks, threads>>>(U_spts, deltaU, nSpts, nEles, nVars, startEle, endEle);
 }
+
+#ifdef _MPI
+__global__
+void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts)
+{
+  const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  U_sbuffs(i, var) = U(fpts(i), var, 0);
+}
+
+void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars, int stream)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+    pack_U<<<blocks,threads>>>(U_sbuffs, fpts, U, nVars, fpts.size());
+  else
+    pack_U<<<blocks,threads, 0, stream_handles[stream]>>>(U_sbuffs, fpts, U, nVars, fpts.size());
+}
+
+__global__
+void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts)
+{
+  const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  U(fpts(i), var, 1) = U_rbuffs(i, var);
+}
+
+void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars, int stream)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+    unpack_U<<<blocks,threads>>>(U_rbuffs, fpts, U, nVars, fpts.size());
+  else
+    unpack_U<<<blocks,threads, 0, stream_handles[stream]>>>(U_rbuffs, fpts, U, nVars, fpts.size());
+}
+
+template<unsigned int nDims>
+__global__
+void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
+{
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    U_sbuffs(i, var, dim) = dU(fpts(i), var, dim, 0);
+  }
+}
+
+void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims)
+{
+  dim3 threads(32,4);
+  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  if (nDims == 2)
+    pack_dU<2><<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+  else
+    pack_dU<3><<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+}
+
+template<unsigned int nDims>
+__global__
+void unpack_dU(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
+    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
+{
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
+
+  if (i >= nFpts || var >= nVars)
+    return;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    dU(fpts(i), var, dim, 1) = U_rbuffs(i, var, dim);
+  }
+}
+
+void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims)
+{
+  dim3 threads(32,4);
+  dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+
+  if (nDims == 2)
+    unpack_dU<2><<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size());
+  else 
+    unpack_dU<3><<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size());
+}
+
+#endif

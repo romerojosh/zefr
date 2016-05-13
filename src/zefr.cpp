@@ -32,10 +32,10 @@ int main(int argc, char* argv[])
 
   if (nDevices < nRanks)
   {
-    ThrowException("Not enough GPUs for this run. Allocate more!");
+    //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  cudaSetDevice(rank);
+  cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
 #endif
 
 #endif

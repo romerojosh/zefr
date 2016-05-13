@@ -31,6 +31,7 @@ static const unsigned int CACHE_LINE_SIZE = 128;
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
+#include "cuda_runtime.h"
 
 template<typename T>
 class mdvector_gpu;
@@ -42,20 +43,26 @@ class mdvector
   private:
     int nDims = 0;
     size_t size_ = 0;  // Size of true vector
+    size_t max_size_ = 0;  // Size of allocation
     std::array<unsigned int,6> dims; 
     std::array<unsigned int,6> strides;
     std::vector<T> values;
+    T* values_ptr; // For pinned memory only!
+
 #ifndef _NO_TNT
     std::shared_ptr<JAMA::LU<double>> LUptr;
 #endif
 
+    bool pinned = false;
+
   public:
     //! Constructors
     mdvector();
-    mdvector(std::vector<unsigned int> dims, T value = 0, bool pad = false);
+    ~mdvector();
+    mdvector(std::vector<unsigned int> dims, T value = 0, bool pad = false, bool pinned = false);
 
     //! Setup operator
-    void assign(std::vector<unsigned int> dims, T value = 0, bool pad = false);
+    void assign(std::vector<unsigned int> dims, T value = 0, bool pad = false, bool pinned = false);
 
     //! Push back operator (for compatibility)
     void push_back(T value); 
@@ -121,18 +128,29 @@ template <typename T>
 mdvector<T>::mdvector(){};
 
 template <typename T>
-mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, bool pad)
+mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, bool pad, bool pinned)
 {
-  this->assign(dims, value, pad);
+  this->assign(dims, value, pad, pinned);
 }
 
 template <typename T>
-void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad)
+mdvector<T>::~mdvector()
+{
+#ifdef _GPU
+  if (pinned)
+  {
+    cudaFreeHost(values_ptr);
+  }
+#endif
+}
+
+template <typename T>
+void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad, bool pinned)
 {
   nDims = (int)dims.size();
 
   size_ = 1;
-  unsigned int max_size_ = 1;
+  max_size_ = 1;
 
 
   for (unsigned int i = 0; i < nDims; i++)
@@ -151,13 +169,32 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad)
     this->dims[i] = dims[i];
   }
 
-  values.assign(max_size_, (T)value);
+#ifdef _GPU
+  this->pinned = pinned;
+#endif
+  if (!pinned)
+    values.assign(max_size_, (T)value);
+  else
+  {
+#ifdef _GPU
+    auto status = cudaMallocHost(&values_ptr, max_size_ * sizeof(T));
+    if (status != cudaSuccess)
+      ThrowException("cudaMemcpy from device to host failed!");
+#endif
+
+#ifdef _CPU
+    ThrowException("CPU code should not be able to allocate pinned memory. Something's wrong!");
+#endif
+  }
 }
 
 template <typename T>
 void mdvector<T>::fill(T value)
 {
-  std::fill(values.begin(), values.end(), value);
+  if (!pinned)
+    std::fill(values.begin(), values.end(), value);
+  else
+    std::fill(values_ptr, values_ptr + max_size_, value);
 }
 
 template <typename T>
@@ -169,14 +206,22 @@ size_t mdvector<T>::size() const
 template <typename T>
 size_t mdvector<T>::max_size() const
 {
-  return values.size();
+  return max_size_;
 }
 
 template <typename T>
 void mdvector<T>::push_back(T value) /* Only valid for 1D arrays! */
 {
-  values.push_back(value);
-  size_++;
+  if (!pinned)
+  {
+    values.push_back(value);
+    size_++;
+    max_size_++;
+  }
+  else
+  {
+    ThrowException("Cannot push back to pinned mdvector!");
+  }
 }
 
 template <typename T>
@@ -200,19 +245,28 @@ unsigned int mdvector<T>::ldim() const
 template <typename T>
 T* mdvector<T>::data(void)
 {
-  return values.data();
+  if (!pinned)
+    return values.data();
+  else
+    return values_ptr;
 }
 
 template <typename T>
 T mdvector<T>::max_val(void) const
 {
-  return *std::max_element(values.begin(), values.end());
+  if (!pinned)
+    return *std::max_element(values.begin(), values.end());
+  else
+    return *std::max_element(values_ptr, values_ptr + max_size_);
 }
 
 template <typename T>
 T mdvector<T>::min_val(void) const
 {
-  return *std::min_element(values.begin(), values.end());
+  if (!pinned)
+    return *std::min_element(values.begin(), values.end());
+  else
+    return *std::min_element(values_ptr, values_ptr + max_size_);
 }
 
 template <typename T>
@@ -353,11 +407,23 @@ const unsigned int* mdvector<T>::strides_ptr() const
 template <typename T>
 mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
 {
-  copy_from_device(values.data(), vec.data(), this->max_size());
+  if (!pinned)
+  {
+    copy_from_device(values.data(), vec.data(), this->max_size());
+    //auto status = cudaMemcpy(values.data(), vec.data(), max_size_ * sizeof(T), cudaMemcpyDeviceToHost);
+    //if (status != cudaSuccess)
+    //  ThrowException("cudaMemcpy from device to host failed!");
+  }
+  else
+  {
+    copy_from_device(values_ptr, vec.data(), this->max_size());
+    //auto status = cudaMemcpy(values_ptr, vec.data(), max_size_ * sizeof(T), cudaMemcpyDeviceToHost);
+    //if (status != cudaSuccess)
+    //  ThrowException("cudaMemcpy from device to host failed!");
+  }
 
   return *this;
 }
 #endif
-
 
 #endif /* mdvector_hpp */

@@ -117,8 +117,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     int pairedRank = entry.first;
     const auto &fpts = entry.second;
 
-    U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0);
-    U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0);
+    U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+    U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
   }
 
   sreqs.resize(geo->fpt_buffer_map.size());
@@ -3300,16 +3300,6 @@ void Faces::send_U_data()
   unsigned int ridx = 0;
 
 #ifdef _CPU
-  /*
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int recvRank = entry.first;
-    const auto &fpts = entry.second;
-
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
-    ridx++;
-  }
-  */
   for (const auto &entry : geo->mpi_types)
   {
     int recvRank = entry.first;
@@ -3318,42 +3308,8 @@ void Faces::send_U_data()
     MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
     ridx++;
   }
-#endif
-#ifdef _GPU
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int recvRank = entry.first;
-    const auto &fpts = entry.second;
-
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
-    ridx++;
-  }
-#endif
-
 
   unsigned int sidx = 0;
-#ifdef _CPU
-  /*
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int sendRank = entry.first;
-    const auto &fpts = entry.second;
-    
-    // Pack buffer of solution data at flux points in list
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int i = 0; i < fpts.size(); i++)
-      {
-        U_sbuffs[sendRank](i, n) = U(fpts(i), n, 0);
-      }
-
-    }
-
-    //Send buffer to paired rank
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
-    sidx++;
-  }
-  */
   for (const auto &entry : geo->mpi_types)
   {
     int sendRank = entry.first;
@@ -3364,22 +3320,45 @@ void Faces::send_U_data()
   }
 
 #endif
+
 #ifdef _GPU
+  cudaDeviceSynchronize();
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
     
     /* Pack buffer of solution data at flux points in list */
-    pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars);
+    pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars, 1);
+    //pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars);
   }
 
   /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
-    U_sbuffs[pairedRank] = U_sbuffs_d[pairedRank];
+    //copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size());
+    copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
+
+#endif
+}
+
+void Faces::recv_U_data()
+{
+#ifdef _GPU
+  unsigned int ridx = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    ridx++;
+  }
+
+  unsigned int sidx = 0;
+  sync_stream(1); 
 
   for (auto &entry : geo->fpt_buffer_map)
   {
@@ -3391,39 +3370,19 @@ void Faces::send_U_data()
     sidx++;
   }
 #endif
-}
 
-void Faces::recv_U_data()
-{
   /* Wait for comms to finish */
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
 
   /* Unpack buffer */
-#ifdef _CPU
-  /*
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int recvRank = entry.first;
-    auto &fpts = entry.second;
-
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int i = 0; i < fpts.size(); i++)
-      {
-        U(fpts(i), n, 1) = U_rbuffs[recvRank](i, n);
-      }
-    }
-  }
-  */
-#endif
-
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
-    U_rbuffs_d[pairedRank] = U_rbuffs[pairedRank];
+    copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
+    //copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size());
   }
 
   for (auto &entry : geo->fpt_buffer_map_d)
@@ -3431,8 +3390,11 @@ void Faces::recv_U_data()
     int recvRank = entry.first;
     auto &fpts = entry.second;
 
-    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars);
+    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1);
+    //unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars);
   }
+
+  cudaDeviceSynchronize();
 #endif
 
 }

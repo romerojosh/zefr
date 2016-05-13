@@ -20,13 +20,15 @@ void free_device_data(T* &device_data);
 
 /* Wrappers for copy to and from GPU memory */
 template<typename T>
-void copy_to_device(T* device_data, const T* host_data, unsigned int size);
+void copy_to_device(T* device_data, const T* host_data, unsigned int size, int stream = -1);
 template<typename T>
-void copy_from_device(T* host_data, const T* device_data, unsigned int size);
+void copy_from_device(T* host_data, const T* device_data, unsigned int size, int stream = -1);
 
 void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
+
+void sync_stream(unsigned int stream);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
@@ -99,5 +101,17 @@ void compute_deltaU_globalLHS_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<doub
 
 void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
     unsigned int startEle, unsigned int endEle);
+
+#ifdef _MPI
+void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars, int stream = -1);
+void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &U, unsigned int nVars, int stream = -1);
+void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims);
+void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims);
+#endif
+
 
 #endif /* solver_kernels_h */

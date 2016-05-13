@@ -581,7 +581,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #ifdef _MPI
   /* Commence sending U data to other processes */
   faces->send_U_data();
-
 #endif
 
   /* Apply boundary conditions to state variables */
