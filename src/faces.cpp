@@ -2767,7 +2767,8 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
     /* Get numerical wavespeed */
     // TODO: This can be removed when NK implemented on CPU
-    std::vector<double> dwSdU(nVars);
+    std::vector<double> dwSdUL(nVars, 0);
+    std::vector<double> dwSdUR(nVars, 0);
     if (input->equation == AdvDiff)
     {
       double An = 0.;
@@ -2845,10 +2846,10 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
         double v = WL[2]/WL[0];
 
         waveSp(fpt) = wSL;
-        dwSdU[0] = -pmL*VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
-        dwSdU[1] = pmL*nx/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
-        dwSdU[2] = pmL*ny/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
-        dwSdU[3] = gam * (gam-1.0) / (2.0*aL*rho);
+        dwSdUL[0] = -pmL*VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
+        dwSdUL[1] = pmL*nx/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
+        dwSdUL[2] = pmL*ny/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
+        dwSdUL[3] = gam * (gam-1.0) / (2.0*aL*rho);
       }
       else
       {
@@ -2869,10 +2870,10 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
         double v = WR[2]/WR[0];
 
         waveSp(fpt) = wSR;
-        dwSdU[0] = -pmR*VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
-        dwSdU[1] = pmR*nx/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
-        dwSdU[2] = pmR*ny/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
-        dwSdU[3] = gam * (gam-1.0) / (2.0*aR*rho);
+        dwSdUR[0] = -pmR*VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
+        dwSdUR[1] = pmR*nx/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
+        dwSdUR[2] = pmR*ny/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
+        dwSdUR[3] = gam * (gam-1.0) / (2.0*aR*rho);
       }
     }
 
@@ -2883,19 +2884,19 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         if (ni == nj)
         {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k));
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k));
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
 
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdU[nj]*WL[ni] + waveSp(fpt))*(1.0-k));
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdU[nj]*WR[ni] + waveSp(fpt))*(1.0-k));
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
         }
         else
         {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k));
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k));
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
 
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdU[nj]*WL[ni]*(1.0-k));
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdU[nj]*WR[ni]*(1.0-k));
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
         }
       }
     }

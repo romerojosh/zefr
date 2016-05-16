@@ -2385,17 +2385,20 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
 
   /* Get numerical wavespeed and derivative */
   double waveSp = 0;
-  double dwSdU[nVars];
+  double dwSdUL[nVars];
+  double dwSdUR[nVars];
   if (equation == AdvDiff)
   {
     waveSp = waveSp_gfpts(fpt);
-    dwSdU[0] = 0;
+    dwSdUL[0] = 0;
+    dwSdUR[0] = 0;
   }
   else if (equation == Burgers)
   {
     /* TODO: Need to change this later */
     waveSp = waveSp_gfpts(fpt);
-    dwSdU[0] = 0;
+    dwSdUL[0] = 0;
+    dwSdUR[0] = 0;
   }
   else if (equation == EulerNS)
   {
@@ -2436,10 +2439,15 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
       double v = WL[2]/WL[0];
 
       waveSp = wSL;
-      dwSdU[0] = -pmL*VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
-      dwSdU[1] = pmL*nx/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
-      dwSdU[2] = pmL*ny/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
-      dwSdU[3] = gam * (gam-1.0) / (2.0*aL*rho);
+      dwSdUL[0] = -pmL*VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
+      dwSdUL[1] = pmL*nx/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
+      dwSdUL[2] = pmL*ny/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
+      dwSdUL[3] = gam * (gam-1.0) / (2.0*aL*rho);
+
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        dwSdUR[n] = 0;
+      }
     }
     else
     {
@@ -2460,10 +2468,15 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
       double v = WR[2]/WR[0];
 
       waveSp = wSR;
-      dwSdU[0] = -pmR*VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
-      dwSdU[1] = pmR*nx/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
-      dwSdU[2] = pmR*ny/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
-      dwSdU[3] = gam * (gam-1.0) / (2.0*aR*rho);
+      dwSdUR[0] = -pmR*VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
+      dwSdUR[1] = pmR*nx/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
+      dwSdUR[2] = pmR*ny/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
+      dwSdUR[3] = gam * (gam-1.0) / (2.0*aR*rho);
+
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        dwSdUL[n] = 0;
+      }
     }
   }
 
@@ -2474,19 +2487,19 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
     {
       if (ni == nj)
       {
-        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + (dwSdU[nj]*WL[ni] + waveSp)*(1.0-k));
-        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - (dwSdU[nj]*WR[ni] + waveSp)*(1.0-k));
+        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
 
-        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + (dwSdU[nj]*WL[ni] + waveSp)*(1.0-k));
-        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - (dwSdU[nj]*WR[ni] + waveSp)*(1.0-k));
+        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
       }
       else
       {
-        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + dwSdU[nj]*WL[ni]*(1.0-k));
-        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - dwSdU[nj]*WR[ni]*(1.0-k));
+        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
 
-        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + dwSdU[nj]*WL[ni]*(1.0-k));
-        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - dwSdU[nj]*WR[ni]*(1.0-k));
+        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
       }
     }
   }

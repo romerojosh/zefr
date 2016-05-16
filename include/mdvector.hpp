@@ -23,6 +23,8 @@ static const unsigned int CACHE_LINE_SIZE = 128;
 #include <vector>
 #include <memory>
 
+#include "macros.hpp"
+
 #ifndef _NO_TNT
 #include "tnt.h"
 #include <jama_lu.h>
