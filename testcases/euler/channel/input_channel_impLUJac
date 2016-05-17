@@ -1,6 +1,7 @@
 # Geometry:
 nDims    2
-meshfile channelBump_48x16_b2.msh
+meshfile channelBumpUtri_48x16_b2.msh
+serendipity 1
 
 # Solver:
 order     2
@@ -10,10 +11,10 @@ spt_type Legendre
 
 # Timestepping:
 n_steps 10000
-dt_scheme LUJac     (Euler, RK44, RK54)
-dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt_scheme LUSGS     (Euler, RK44, RK54)
+dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.1
-CFL	  7.0
+CFL	  30.0
 
 restart 0
 restart_file channel_48x16_impLUJac/channel_48x16_impLUJac_000005000.vtu
@@ -32,6 +33,8 @@ c_smooth_steps 5
 # Implicit
 SER 0
 Jfreeze_freq 100
+inv_mode 1
+nColors 4
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 

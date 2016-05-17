@@ -552,6 +552,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   unsigned int startEle = 0; unsigned int endEle = eles->nEles;
 
   /* If using coloring, modify range to extrapolate data from previously updated colors */
+  /*
   if (color == 1 && geo.nColors > 1)
   {
     startEle = geo.ele_color_range[1]; endEle = geo.ele_color_range[2];
@@ -560,6 +561,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   {
     startEle = geo.ele_color_range[0]; endEle = geo.ele_color_range[1];
   }
+  */
+
+  //TODO: Need to update range for previously updated color. 
+
 
   /* Extrapolate solution to flux points */
   eles->extrapolate_U(startEle, endEle);

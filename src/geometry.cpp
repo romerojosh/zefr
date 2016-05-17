@@ -1400,12 +1400,20 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         std::sort(face.begin(), face.end());
 
-        if (face2eles[face].empty() or face2eles[face].back() == ele)
-          geo.ele_adj(n, ele) = -1;
-        else
-          geo.ele_adj(n, ele) = face2eles[face].back();
+        if (face2eles.count(face))
+        {        
+          if (face2eles[face].empty() or face2eles[face].back() == ele)
+            geo.ele_adj(n, ele) = -1;
+          else
+            geo.ele_adj(n, ele) = face2eles[face].back();
 
-        face2eles[face].pop_back();
+          face2eles[face].pop_back();
+        }
+        else
+        {
+          geo.ele_adj(n, ele) = -1;
+        }
+        
 
       }
     }
@@ -1429,6 +1437,69 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
   }
   else if (input->dt_scheme == "LUSGS")
   {
+    geo.nColors = input->nColors;
+    std::vector<bool> used(geo.nColors, false);
+    std::vector<unsigned int> counts(geo.nColors, 0);
+    geo.ele_color.fill(0);
+    geo.ele_color(0) = 0;
+
+    /* Loop over elements and assign colors using greedy algorithm */
+    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    {
+      for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
+      {
+        int eleN = geo.ele_adj(face, ele);
+
+        if (eleN == -1)
+          continue;
+
+        unsigned int colorN = geo.ele_color(eleN);
+
+        /* Record if neighbor is using a given color */
+        if (colorN != 0)
+          used[colorN - 1] = true;
+      }
+
+      unsigned int color = 0;
+      unsigned int min_count = 0;
+      unsigned int min_color_all = 1;
+      unsigned int min_count_all = counts[0];
+
+      /* Set current element color to color unused by neighbors with minimum count in domain */
+      for (unsigned int c = 0; c < geo.nColors; c++)
+      {
+        if (!used[c] and color == 0)
+        {
+          color = c + 1;
+          min_count = counts[c];
+        }
+        else if (!used[c])
+        {
+          if (counts[c] < min_count)
+          {
+            color = c + 1;
+            min_count = counts[c];
+          }
+        }
+
+        if (counts[c] < min_count_all)
+        {
+          min_count_all = counts[c];
+          min_color_all = c + 1;
+        }
+      }
+
+      if (color == 0)
+      {
+        ThrowException("Could not color graph with number of colors provided. Increase nColors!");
+      }
+
+      geo.ele_color(ele) = color;
+      counts[color-1]++;
+      used.assign(geo.nColors, false);
+    }
+
+    /*
     geo.nColors = 2;
     geo.ele_color(0) = 1;
     std::queue<unsigned int> Q;
@@ -1438,7 +1509,7 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
       unsigned int ele1 = Q.front();
       Q.pop();
 
-      /* Determine opposite color */
+      // Determine opposite color
       unsigned int color = geo.ele_color(ele1);
       if (color == 1)
       {
@@ -1449,7 +1520,7 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
         color = 1;
       }
 
-      /* Color neighbors */
+      // Color neighbors
       for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
       {
         int ele2 = geo.ele_adj(face, ele1);
@@ -1460,6 +1531,7 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
         }
       }
     }
+    */
   }
 
 #ifdef _MPI
