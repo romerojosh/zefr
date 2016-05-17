@@ -69,6 +69,8 @@ class LU
 
 	public :
 
+   LU(){}; // Default constructor added by Josh for STL compatibility.
+
    /** LU Decomposition
    @param  A   Rectangular matrix
    @return     LU Decomposition object to access L, U and piv.
