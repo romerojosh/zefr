@@ -48,11 +48,10 @@ class FRSolver
     Filter filt;
 
     /* Implicit method parameters */
+    unsigned int prev_color;
     double SER_omg = 1;
     double SER_res[2] = {0};
     bool GMRES_conv;
-    //unsigned int nColors;
-    //mdvector<unsigned int> ele_color;
 #ifndef _NO_TNT
     std::vector<std::shared_ptr<JAMA::LU<double>>> LUptrs;
 #endif

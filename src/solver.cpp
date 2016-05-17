@@ -552,19 +552,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   unsigned int startEle = 0; unsigned int endEle = eles->nEles;
 
   /* If using coloring, modify range to extrapolate data from previously updated colors */
-  /*
-  if (color == 1 && geo.nColors > 1)
+  if (color && geo.nColors > 1)
   {
-    startEle = geo.ele_color_range[1]; endEle = geo.ele_color_range[2];
+    startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
-  else if (color == 2 && geo.nColors > 1)
-  {
-    startEle = geo.ele_color_range[0]; endEle = geo.ele_color_range[1];
-  }
-  */
-
-  //TODO: Need to update range for previously updated color. 
-
 
   /* Extrapolate solution to flux points */
   eles->extrapolate_U(startEle, endEle);
@@ -1669,21 +1660,18 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-
-    /* For first iteration, need to compute residual once to load up faces with initial data. */
-    if (current_iter == 0)
-      compute_residual(0);
-
-    for (unsigned int color = 1; color <= geo.nColors; color++)
+    /* Forward and backward sweep through colors */
+    for (unsigned int counter = 1; counter <= 2*geo.nColors-2; counter++)
     {
-      /* Compute residual on elements of this color only */
-      compute_residual(0, color);
+      /* Set color */
+      unsigned int color = counter;
+      if (color > geo.nColors)
+        color = 2*geo.nColors - counter;
 
-      /* Freeze Jacobian */
+      /* Compute residual and Jacobian on all elements */
       int iter = current_iter - restart_iter;
-      if (color == 1 && iter%input->Jfreeze_freq == 0)
+      if (counter == 1 && iter%input->Jfreeze_freq == 0)
       {
-        /* Compute residual on all elements */
         compute_residual(0);
 
         // TODO: Revisit this as it is kind of expensive.
@@ -1704,6 +1692,13 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         /* Compute LHS implicit Jacobian */
         compute_LHS();
       }
+
+      /* Compute residual on elements of this color only */
+      else
+      {
+        compute_residual(0, color);
+      }
+      prev_color = color;
 
       /* Prepare RHS vector */
       if (source.size() == 0)
