@@ -25,7 +25,7 @@ struct GeoStruct
     unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
     unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
     bool per_bnd_flag = false;
-    std::vector<unsigned int> bnd_ids, ele_color_range;
+    std::vector<unsigned int> bnd_ids, ele_color_range, ele_color_nEles;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;
     std::map<std::vector<unsigned int>, unsigned int> bnd_faces, per_bnd_rot;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;

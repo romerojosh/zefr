@@ -786,17 +786,20 @@ void FRSolver::compute_LHS()
   }
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
+    for (unsigned int color = 1; color <= geo.nColors; color++)
+    {
 #ifdef _CPU
-    eles->compute_localLHS(dt);
+      eles->compute_localLHS(dt, color);
 #endif
 #ifdef _GPU
-    eles->compute_localLHS(dt_d);
+      eles->compute_localLHS(dt_d, color);
 #endif
-    compute_LHS_LU();
+      compute_LHS_LU(color);
+    }
   }
 }
 
-void FRSolver::compute_LHS_LU()
+void FRSolver::compute_LHS_LU(unsigned int color)
 {
 
 #ifdef _GPU
@@ -813,8 +816,7 @@ void FRSolver::compute_LHS_LU()
 
 #ifdef _CPU
 #ifndef _NO_TNT
-  LUptrs.clear();
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  for (unsigned int ele = 0; ele < geo.ele_color_nEles[color - 1]; ele++)
   {
     /* Copy LHS into TNT object */
     // TODO: Copy can now be removed. Need to investigate column-major TNT array views.
@@ -830,14 +832,14 @@ void FRSolver::compute_LHS_LU()
           {
             unsigned int i = ni * eles->nSpts + si;
             unsigned int j = nj * eles->nSpts + sj;
-            A[i][j] = eles->LHS(si, ni, sj, nj, ele);
+            A[i][j] = eles->LHSs[color - 1](si, ni, sj, nj, ele);
           }
         }
       }
     }
 
     /* Calculate and store LU object */
-    LUptrs.push_back(std::make_shared<JAMA::LU<double>>(A));
+    LUptrs[color - 1][ele] = JAMA::LU<double>(A);
   }
 #endif
 #endif
@@ -931,6 +933,7 @@ void FRSolver::compute_deltaU(unsigned int color)
 
 #ifdef _CPU
 #ifndef _NO_TNT
+    unsigned int idx = 0;
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       /* Create Array1D view of RHS */
@@ -939,12 +942,14 @@ void FRSolver::compute_deltaU(unsigned int color)
 
       /* Solve for deltaU */
       TNT::Array1D<double> x(N, &eles->deltaU(0, 0, ele));
-      x.inject(LUptrs[ele]->solve(b));
+      x.inject(LUptrs[color - 1][idx].solve(b));
 
       if (x.dim() == 0)
       {
         ThrowException("LU solve failed!");
       }
+
+      idx++;
     }
 
 #endif
@@ -1064,16 +1069,35 @@ void FRSolver::initialize_U()
     }
     else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
-      eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
+      
+      eles->LHSs.resize(geo.nColors);
+      eles->LHSInvs.resize(geo.nColors);
+      eles->LHSs_ptrs.resize(geo.nColors);
+      eles->LHSInvs_ptrs.resize(geo.nColors);
+      LUptrs.resize(geo.nColors);
+
+      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+      for (unsigned int color = 1; color <= geo.nColors; color++)
+      {
+        eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
+        eles->LHSInvs[color - 1].assign({nElesMax}, 0);
+        eles->LHSs_ptrs[color - 1].assign({nElesMax}, 0);
+        eles->LHSInvs_ptrs[color - 1].assign({nElesMax}, 0);
+        LUptrs[color - 1].resize(nElesMax);
+      }
+      
+      //eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
+      //eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
       if (input->inv_mode)
       {
-        eles->LHSInv.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
-        eles->LHSInv_ptrs.assign({eles->nEles});
+        //eles->LHSInv.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
+        //eles->LHSInv_ptrs.assign({eles->nEles});
         eles->deltaU_ptrs.assign({eles->nEles});
       }
+
       //eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
-      eles->LHS_ptrs.assign({eles->nEles});
-      eles->RHS_ptrs.assign({eles->nEles});
+      //eles->LHS_ptrs.assign({eles->nEles});
+      //eles->RHS_ptrs.assign({eles->nEles});
       eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
       eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
       //eles->LHS_subptrs.assign({eles->nEles * eles->nVars});

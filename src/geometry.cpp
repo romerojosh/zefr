@@ -1744,11 +1744,21 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
   }
 
   /* Setup element color ranges */
+  geo.ele_color_nEles.assign(geo.nColors, 0);
   geo.ele_color_range.assign(geo.nColors + 1, 0);
+
   geo.ele_color_range[1] = color2eles[0].size(); 
+  geo.ele_color_nEles[0] = color2eles[0].size(); 
   for (unsigned int color = 2; color <= geo.nColors; color++)
   {
     geo.ele_color_range[color] = geo.ele_color_range[color - 1] + color2eles[color-1].size(); 
+    geo.ele_color_nEles[color - 1] = geo.ele_color_range[color] - geo.ele_color_range[color-1];
+  }
+
+  /* Print out color distribution */
+  for (unsigned int color = 1; color <= geo.nColors; color++)
+  {
+    std::cout << "color: " << color << " nEles: " << geo.ele_color_nEles[color - 1] << std::endl;
   }
 }
 

@@ -54,7 +54,9 @@ class FRSolver
     //unsigned int nColors;
     //mdvector<unsigned int> ele_color;
 #ifndef _NO_TNT
-    std::vector<std::shared_ptr<JAMA::LU<double>>> LUptrs;
+    //std::vector<std::shared_ptr<JAMA::LU<double>>> LUptrs;
+    //std::vector<std::vector<std::shared_ptr<JAMA::LU<double>>>> LUptrs;
+    std::vector<std::vector<JAMA::LU<double>>> LUptrs;
 #endif
 
 #ifdef _GPU
@@ -98,7 +100,7 @@ class FRSolver
 
     /* Routines for implicit method */
     void compute_LHS();
-    void compute_LHS_LU();
+    void compute_LHS_LU(unsigned int color = 1);
     void compute_RHS(unsigned int color = 1);
 #ifdef _CPU
     void compute_RHS_source(const mdvector<double> &source, unsigned int color = 1);

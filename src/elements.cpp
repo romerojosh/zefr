@@ -2051,13 +2051,14 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
 }
 
 #ifdef _CPU
-void Elements::compute_localLHS(mdvector<double> &dt)
+void Elements::compute_localLHS(mdvector<double> &dt, unsigned int color)
 #endif
 #ifdef _GPU
-void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
+void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int color)
 #endif
 {
-
+  unsigned int startEle = geo->ele_color_range[color - 1];
+  unsigned int endEle = geo->ele_color_range[color];
 #ifdef _CPU
 
   /* Compute LHS */
@@ -2065,14 +2066,15 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
   {
     for (unsigned int ni = 0; ni < nVars; ni++)
     {
-      for (unsigned int ele = 0; ele < nEles; ele++)
+      int idx = 0; /* Index for color local LHS */
+      for (unsigned int ele = startEle; ele < endEle; ele++)
       {
         /* Compute center inviscid LHS implicit Jacobian */
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           auto *A = &oppD(0, 0, dim);
           auto *B = &dFdU_spts(0, ele, ni, nj, dim);
-          auto *C = &LHS(0, ni, 0, nj, ele);
+          auto *C = &LHSs[color - 1](0, ni, 0, nj, idx);
 
           double fac = (dim == 0) ? 0.0 : 1.0;
 
@@ -2086,7 +2088,7 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
 
         A = &CtempSF(0, 0);
         B = &oppE(0, 0);
-        C = &LHS(0, ni, 0, nj, ele);
+        C = &LHSs[color - 1](0, ni, 0, nj, idx);
         gemm(nSpts, nSpts, nFpts, 1, A, nSpts, B, oppE.ldim(), 1, C, nSpts*nVars);
 
         /* Compute center viscous LHS implicit Jacobian */
@@ -2239,7 +2241,7 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
                 {
                   val += oppD(i, k, dim) * CtempSS(k, j);
                 }
-                LHS(i, ni, j, nj, ele) += val;
+                //LHS(i, ni, j, nj, ele) += val;
               }
             }
           }
@@ -2280,7 +2282,7 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
                 {
                   val += oppD_fpts(i, k, dim) * CtempFS(k, j);
                 }
-                LHS(i, ni, j, nj, ele) += val;
+                //LHS(i, ni, j, nj, ele) += val;
               }
             }
           }
@@ -2393,7 +2395,7 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
                           unsigned int ind = face * nSpts1D + k;
                           val += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
                         }
-                        LHS(i, ni, j, nj, ele) += val;
+                        //LHS(i, ni, j, nj, ele) += val;
                       }
                     }
                   }
@@ -2411,20 +2413,22 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d)
           {
             if (input->dt_type != 2)
             {
-              LHS(i, ni, j, nj, ele) = dt(0) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele);
+              LHSs[color - 1](i, ni, j, nj, idx) = dt(0) * LHSs[color - 1](i, ni, j, nj, idx) / jaco_det_spts(i, ele);
             }
 
             else
             {
-              LHS(i, ni, j, nj, ele) = dt(ele) * LHS(i, ni, j, nj, ele) / jaco_det_spts(i, ele);
+              LHSs[color - 1](i, ni, j, nj, idx) = dt(ele) * LHSs[color - 1](i, ni, j, nj, idx) / jaco_det_spts(i, ele);
             }
 
             if (i == j && ni == nj)
             {
-              LHS(i, ni, j, nj, ele) += 1;
+              LHSs[color - 1](i, ni, j, nj, idx) += 1;
             }
           }
         }
+
+        idx++;
       }
     }
   }
