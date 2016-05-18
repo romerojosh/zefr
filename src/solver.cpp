@@ -429,48 +429,52 @@ void FRSolver::solver_data_to_device()
 
   if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    eles->LHS_d = eles->LHS;
+    eles->LHS_d = eles->LHSs[0];
 
     if (input->inv_mode)
     {
-      eles->LHSInv_d = eles->LHSInv;
+      eles->LHSInv_d = eles->LHSInvs[0];
     }
 
     eles->LU_pivots_d = eles->LU_pivots;
     eles->LU_info_d = eles->LU_info;
-    //eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
-    //eles->LHS_tempSF_d = eles->LHS_tempSF;
 
     /* For cublas batched LU: Setup and transfer array of GPU pointers to 
      * LHS matrices and RHS vectors */
     unsigned int N = eles->nSpts * eles->nVars;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
       eles->RHS_ptrs(ele) = eles->RHS_d.data() + ele * N;
 
       if (input->inv_mode)
       {
-        eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
         eles->deltaU_ptrs(ele) = eles->deltaU_d.data() + ele * N;
       }
     }
 
-    /* Additional pointers for batched DGEMM */
-    /*
-    for (unsigned int i = 0; i < eles->nEles * eles->nVars; i++)
+    if (!input->stream_mode)
     {
-      eles->LHS_subptrs(i) = eles->LHS_d.data() + i * N * eles->nSpts;
-      eles->LHS_tempSF_subptrs(i) = eles->LHS_tempSF_d.data() + i * N * eles->nFpts;
-      eles->oppE_ptrs(i) = eles->oppE_d.data();
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
+        if (input->inv_mode)
+          eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
+      }
     }
-    */
+    else
+    {
+      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+      for (unsigned int ele = 0; ele < nElesMax; ele++)
+      {
+        eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
+        if (input->inv_mode)
+          eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
+      }
+    }
 
     eles->LHS_ptrs_d = eles->LHS_ptrs;
     eles->RHS_ptrs_d = eles->RHS_ptrs;
-    //eles->LHS_subptrs_d = eles->LHS_subptrs;
-    //eles->LHS_tempSF_subptrs_d = eles->LHS_tempSF_subptrs;
-    //eles->oppE_ptrs_d = eles->oppE_ptrs;
+
     if (input->inv_mode)
     {
       eles->LHSInv_ptrs_d = eles->LHSInv_ptrs;
@@ -786,37 +790,64 @@ void FRSolver::compute_LHS()
   }
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    for (unsigned int color = 1; color <= geo.nColors; color++)
+    if (!input->stream_mode)
     {
 #ifdef _CPU
-      eles->compute_localLHS(dt, color);
+        eles->compute_localLHS(dt);
 #endif
 #ifdef _GPU
-      eles->compute_localLHS(dt_d, color);
+        eles->compute_localLHS(dt_d);
 #endif
-      compute_LHS_LU(color);
+        compute_LHS_LU();
+    }
+    else
+    {
+      for (unsigned int color = geo.nColors; color > 0; color--)
+      {
+#ifdef _CPU
+        eles->compute_localLHS(dt, color);
+#endif
+#ifdef _GPU
+        eles->compute_localLHS(dt_d, color);
+#endif
+        compute_LHS_LU(color);
+
+#ifdef _GPU
+        copy_from_device(eles->LHSInvs[color - 1].data(), eles->LHSInv_d.data(), eles->LHSInv_d.max_size());
+#endif
+      }
     }
   }
 }
 
 void FRSolver::compute_LHS_LU(unsigned int color)
 {
+  unsigned int nElesColor = eles->nEles;
+
+  if (color)
+    nElesColor = geo.ele_color_nEles[color - 1];
+  else
+    color = 1; // Similar hack from localLHS
 
 #ifdef _GPU
   unsigned int N = eles->nSpts * eles->nVars;
 
   /* Perform batched LU using cuBLAS */
-  cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), eles->nEles);
+  //cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), eles->nEles);
+  cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), 
+      nElesColor);
 
   if (input->inv_mode)
   {
-    cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), eles->nEles);
+    //cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), eles->nEles);
+    cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
+        eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), nElesColor);
   }
 #endif
 
 #ifdef _CPU
 #ifndef _NO_TNT
-  for (unsigned int ele = 0; ele < geo.ele_color_nEles[color - 1]; ele++)
+  for (unsigned int ele = 0; ele < nElesColor; ele++)
   {
     /* Copy LHS into TNT object */
     // TODO: Copy can now be removed. Need to investigate column-major TNT array views.
@@ -931,9 +962,16 @@ void FRSolver::compute_deltaU(unsigned int color)
     unsigned int startEle = geo.ele_color_range[color - 1];
     unsigned int endEle = geo.ele_color_range[color];
 
+    if (!input->stream_mode)
+      color = 1;
+
 #ifdef _CPU
 #ifndef _NO_TNT
     unsigned int idx = 0;
+
+    if (!input->stream_mode)
+      idx = startEle;
+
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
       /* Create Array1D view of RHS */
@@ -971,19 +1009,15 @@ void FRSolver::compute_deltaU(unsigned int color)
     {
       unsigned int N = eles->nSpts * eles->nVars;
 
-      /*
-      for (unsigned int ele = startEle; ele < endEle; ele++)
-      {
-        //cublasDgemv_wrapper(N, N, 1.0, eles->LHSInv_ptrs(ele), N,  eles->RHS_ptrs(ele), 1, 0.0, eles->deltaU_d.data() + N * ele, 1);
-        cublasDgemv_wrapper(N, N, 1.0, eles->LHSInv_d.data() + ele * N * N, N,  eles->RHS_d.data() + N * ele, 1, 0.0, eles->deltaU_d.data() + N * ele, 1, ele % 16 + 1);
-      }
+      if (!input->stream_mode)
+        cublasDgemvBatched_wrapper(N, N, 1.0, (const double**) (eles->LHSInv_ptrs_d.data() + startEle), N, (const double**) eles->RHS_ptrs_d.data() + startEle, 
+            1, 0.0, eles->deltaU_ptrs_d.data() + startEle, 1, endEle - startEle); 
+      else
+        cublasDgemvBatched_wrapper(N, N, 1.0, (const double**) (eles->LHSInv_ptrs_d.data()), N, (const double**) eles->RHS_ptrs_d.data() + startEle, 
+            1, 0.0, eles->deltaU_ptrs_d.data() + startEle, 1, endEle - startEle); 
 
-      cudaDeviceSynchronize();
-
-      */
-
-      cublasDgemvBatched_wrapper(N, N, 1.0, (const double**) (eles->LHSInv_ptrs_d.data() + startEle), N, (const double**) eles->RHS_ptrs_d.data() + startEle, 
-          1, 0.0, eles->deltaU_ptrs_d.data() + startEle, 1, endEle - startEle); 
+      //check_error();
+      
 
     }
 #endif
@@ -1070,39 +1104,53 @@ void FRSolver::initialize_U()
     else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
     {
       
-      eles->LHSs.resize(geo.nColors);
-      eles->LHSInvs.resize(geo.nColors);
-      eles->LHSs_ptrs.resize(geo.nColors);
-      eles->LHSInvs_ptrs.resize(geo.nColors);
-      LUptrs.resize(geo.nColors);
-
-      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
-      for (unsigned int color = 1; color <= geo.nColors; color++)
+      if (!input->stream_mode)
       {
-        eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-        eles->LHSInvs[color - 1].assign({nElesMax}, 0);
-        eles->LHSs_ptrs[color - 1].assign({nElesMax}, 0);
-        eles->LHSInvs_ptrs[color - 1].assign({nElesMax}, 0);
-        LUptrs[color - 1].resize(nElesMax);
-      }
-      
-      //eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
-      //eles->LHS.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
-      if (input->inv_mode)
-      {
-        //eles->LHSInv.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
-        //eles->LHSInv_ptrs.assign({eles->nEles});
-        eles->deltaU_ptrs.assign({eles->nEles});
-      }
+        eles->LHSs.resize(1);
+        eles->LHSInvs.resize(1);
+        LUptrs.resize(1);
 
-      //eles->LHS_tempSF.assign({eles->nSpts, eles->nVars, eles->nFpts, eles->nVars, eles->nEles});
-      //eles->LHS_ptrs.assign({eles->nEles});
-      //eles->RHS_ptrs.assign({eles->nEles});
-      eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
-      eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
-      //eles->LHS_subptrs.assign({eles->nEles * eles->nVars});
-      //eles->LHS_tempSF_subptrs.assign({eles->nEles * eles->nVars});
-      //eles->oppE_ptrs.assign({eles->nEles * eles->nVars});
+        eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
+        eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
+        LUptrs[0].resize(eles->nEles);
+        
+        if (input->inv_mode)
+        {
+          eles->LHSInv_ptrs.assign({eles->nEles});
+          eles->deltaU_ptrs.assign({eles->nEles});
+        }
+
+        eles->LHS_ptrs.assign({eles->nEles});
+        eles->RHS_ptrs.assign({eles->nEles});
+        eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
+        eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
+
+      }
+      else
+      {
+        eles->LHSs.resize(geo.nColors);
+        eles->LHSInvs.resize(geo.nColors);
+        LUptrs.resize(geo.nColors);
+
+        unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+        for (unsigned int color = 1; color <= geo.nColors; color++)
+        {
+          eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
+          eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, false, true);
+          LUptrs[color - 1].resize(nElesMax);
+        }
+        
+        if (input->inv_mode)
+        {
+          eles->LHSInv_ptrs.assign({nElesMax});
+          eles->deltaU_ptrs.assign({eles->nEles});
+        }
+
+        eles->LHS_ptrs.assign({nElesMax});
+        eles->RHS_ptrs.assign({eles->nEles});
+        eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
+        eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
+      }
 
       eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
       eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
@@ -1739,8 +1787,22 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         compute_RHS_source(source, color);
       }
 
+#ifdef _GPU
+      if (input->stream_mode)
+        sync_stream(1);
+#endif
+
       /* Solve system for deltaU */
       compute_deltaU(color);
+
+#ifdef _GPU
+      /* Begin transfer of LHSInv for next color */
+      if (input->stream_mode)
+      {
+        cudaDeviceSynchronize();
+        copy_to_device(eles->LHSInv_d.data(), eles->LHSInvs[(color) % geo.nColors].data(), eles->LHSInv_d.max_size(), 1);
+      }
+#endif
 
       /* Add deltaU to solution */
       compute_U(color);

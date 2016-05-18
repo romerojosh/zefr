@@ -174,7 +174,7 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad, bool
 #ifdef _GPU
   this->pinned = pinned;
 #endif
-  if (!pinned)
+  if (!this->pinned)
     values.assign(max_size_, (T)value);
   else
   {

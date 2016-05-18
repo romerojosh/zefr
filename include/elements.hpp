@@ -70,7 +70,6 @@ class Elements
     mdvector<double> RHS;
 
     std::vector<mdvector<double>> LHSs, LHSInvs;
-    std::vector<mdvector<double*>> LHSs_ptrs, LHSInvs_ptrs;
 
     mdvector<double> Cvisc0, CviscN, CdFddU0;
     mdvector<double> CtempSS, CtempFS, CtempFS2;
@@ -139,10 +138,10 @@ class Elements
     /* Routines for implicit method */
     void compute_globalLHS(mdvector<double> &dt);
 #ifdef _CPU
-    void compute_localLHS(mdvector<double> &dt, unsigned int color = 1);
+    void compute_localLHS(mdvector<double> &dt, unsigned int color = 0);
 #endif
 #ifdef _GPU
-    void compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int color = 1);
+    void compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int color = 0);
 #endif
     void compute_dFdUconv();
     void compute_dFdUvisc();

@@ -41,7 +41,7 @@ void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv_spts,
 
 void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
-    unsigned int nDims);
+    unsigned int nDims, unsigned int startEle, unsigned int endEle);
 
 void add_scaled_oppDiv_wrapper(mdvector_gpu<double> &LHS_tempSF, mdvector_gpu<double> &oppDiv_fpts, 
     mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
@@ -49,11 +49,11 @@ void add_scaled_oppDiv_wrapper(mdvector_gpu<double> &LHS_tempSF, mdvector_gpu<do
 
 void add_scaled_oppDiv_times_oppE_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, mdvector_gpu<double> oppE,
     mdvector_gpu<double> C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nEles);
+    unsigned int nEles, unsigned int startEle, unsigned int endEle);
 
 void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt, 
     mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
-    unsigned int dt_type);
+    unsigned int dt_type, unsigned int startEle, unsigned int endEle);
 
 /* Element transformation kernel wrappers */
 void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts, 

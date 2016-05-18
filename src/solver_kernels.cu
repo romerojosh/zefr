@@ -43,6 +43,7 @@ void check_error()
 void start_cublas()
 {
   cublasCreate(&cublas_handles[0]);
+  cublasSetStream(cublas_handles[0], cudaStreamPerThread);
 
   for (int i = 1; i < 17; i++)
   {
