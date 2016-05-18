@@ -460,11 +460,18 @@ void FRSolver::solver_data_to_device()
 
     if (!input->stream_mode)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+      for (unsigned int ele = 0; ele < nElesMax; ele++)
       {
         eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
-        if (input->inv_mode)
-          eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
+      }
+        
+      if (input->inv_mode)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+            eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
+        }
       }
     }
     else
@@ -789,13 +796,16 @@ void FRSolver::compute_LHS()
   {
     if (!input->stream_mode)
     {
+      for (unsigned int color = geo.nColors; color > 0; color--)
+      {
 #ifdef _CPU
-        eles->compute_localLHS(dt);
+        eles->compute_localLHS(dt, color);
 #endif
 #ifdef _GPU
-        eles->compute_localLHS(dt_d);
+        eles->compute_localLHS(dt_d, color);
 #endif
-        compute_LHS_LU();
+        compute_LHS_LU(color);
+      }
     }
     else
     {
@@ -819,6 +829,8 @@ void FRSolver::compute_LHS()
 
 void FRSolver::compute_LHS_LU(unsigned int color)
 {
+  unsigned int startEle = geo.ele_color_range[color - 1];
+  unsigned int endEle = geo.ele_color_range[color];
   unsigned int nElesColor = eles->nEles;
 
   if (color)
@@ -837,8 +849,16 @@ void FRSolver::compute_LHS_LU(unsigned int color)
   if (input->inv_mode)
   {
     //cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), eles->nEles);
-    cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
-        eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), nElesColor);
+    if (!input->stream_mode)
+    {
+      cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
+          eles->LHSInv_ptrs_d.data() + startEle, N, eles->LU_info_d.data(), nElesColor);
+    }
+    else
+    {
+      cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
+          eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), nElesColor);
+    }
   }
 #endif
 
@@ -1107,7 +1127,9 @@ void FRSolver::initialize_U()
         eles->LHSInvs.resize(1);
         LUptrs.resize(1);
 
-        eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
+        unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+
+        eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
         eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
         LUptrs[0].resize(eles->nEles);
         
@@ -1117,10 +1139,10 @@ void FRSolver::initialize_U()
           eles->deltaU_ptrs.assign({eles->nEles});
         }
 
-        eles->LHS_ptrs.assign({eles->nEles});
+        eles->LHS_ptrs.assign({nElesMax});
         eles->RHS_ptrs.assign({eles->nEles});
-        eles->LU_pivots.assign({eles->nSpts * eles->nVars * eles->nEles});
-        eles->LU_info.assign({eles->nSpts * eles->nVars * eles->nEles});
+        eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
+        eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
 
       }
       else
