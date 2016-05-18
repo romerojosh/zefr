@@ -796,16 +796,17 @@ void FRSolver::compute_LHS()
   {
     if (!input->stream_mode)
     {
-      for (unsigned int color = geo.nColors; color > 0; color--)
-      {
 #ifdef _CPU
-        eles->compute_localLHS(dt, color);
+        eles->compute_localLHS(dt);
+        compute_LHS_LU();
 #endif
 #ifdef _GPU
+      for (unsigned int color = geo.nColors; color > 0; color--)
+      {
         eles->compute_localLHS(dt_d, color);
-#endif
         compute_LHS_LU(color);
       }
+#endif
     }
     else
     {
@@ -1127,14 +1128,19 @@ void FRSolver::initialize_U()
         eles->LHSInvs.resize(1);
         LUptrs.resize(1);
 
+#ifdef _CPU
+        unsigned int nElesMax = eles->nEles;
+#endif
+#ifdef _GPU
         unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+#endif
 
         eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-        eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
         LUptrs[0].resize(eles->nEles);
         
         if (input->inv_mode)
         {
+          eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
           eles->LHSInv_ptrs.assign({eles->nEles});
           eles->deltaU_ptrs.assign({eles->nEles});
         }
