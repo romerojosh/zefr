@@ -2884,19 +2884,19 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         if (ni == nj)
         {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUL[nj] - waveSp(fpt)) * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUR[nj] + waveSp(fpt)) * (1.0-k));
 
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp(fpt)) * (1.0-k));
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUL[nj] - waveSp(fpt)) * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUR[nj] + waveSp(fpt)) * (1.0-k));
         }
         else
         {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUL[nj] * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUR[nj] * (1.0-k));
 
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUL[nj] * (1.0-k));
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUR[nj] * (1.0-k));
         }
       }
     }

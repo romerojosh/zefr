@@ -2487,19 +2487,19 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
     {
       if (ni == nj)
       {
-        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
-        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
+        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] - ((WR[ni]-WL[ni]) * dwSdUL[nj] - waveSp) * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - ((WR[ni]-WL[ni]) * dwSdUR[nj] + waveSp) * (1.0-k));
 
-        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + (dwSdUL[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
-        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - (dwSdUR[nj] * (WR[ni]-WL[ni]) + waveSp) * (1.0-k));
+        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] - ((WR[ni]-WL[ni]) * dwSdUL[nj] - waveSp) * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - ((WR[ni]-WL[ni]) * dwSdUR[nj] + waveSp) * (1.0-k));
       }
       else
       {
-        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
-        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+        dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL[ni][nj] - (WR[ni]-WL[ni]) * dwSdUL[nj] * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR[ni][nj] - (WR[ni]-WL[ni]) * dwSdUR[nj] * (1.0-k));
 
-        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] + dwSdUL[nj] * (WR[ni]-WL[ni]) * (1.0-k));
-        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - dwSdUR[nj] * (WR[ni]-WL[ni]) * (1.0-k));
+        dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL[ni][nj] - (WR[ni]-WL[ni]) * dwSdUL[nj] * (1.0-k));
+        dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR[ni][nj] - (WR[ni]-WL[ni]) * dwSdUR[nj] * (1.0-k));
       }
     }
   }
