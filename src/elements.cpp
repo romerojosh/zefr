@@ -2057,8 +2057,17 @@ void Elements::compute_localLHS(mdvector<double> &dt, unsigned int color)
 void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int color)
 #endif
 {
-  unsigned int startEle = geo->ele_color_range[color - 1];
-  unsigned int endEle = geo->ele_color_range[color];
+  unsigned int startEle = 0; unsigned int endEle = nEles;
+
+  if (color)
+  {
+    startEle = geo->ele_color_range[color - 1];
+    endEle = geo->ele_color_range[color];
+  }
+  else
+  {
+    color = 1; // A little hacky. Forces function to use full Jacobian which is in LHSs[0]
+  }
 #ifdef _CPU
 
   /* Compute LHS */
@@ -2446,13 +2455,13 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int color)
   //    (const double**) oppE_ptrs_d.data(), oppE_d.ldim(), 0.0, LHS_subptrs_d.data(), nSpts * nVars, nEles * nVars);
   
   /* Add oppDiv_fpts scaled by dFcdU_fpts, multiplied by oppE, to LHS */
-  add_scaled_oppDiv_times_oppE_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_fpts_d, nSpts, nFpts, nVars, nEles);
+  add_scaled_oppDiv_times_oppE_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_fpts_d, nSpts, nFpts, nVars, nEles, startEle, endEle);
 
   /* Add oppD scaled by dFdU_spts to LHS */
-  add_scaled_oppD_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
+  add_scaled_oppD_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims, startEle, endEle);
 
   /* Finalize LHS (scale by jacobian, dt, and add identity) */
-  finalize_LHS_wrapper(LHS_d, dt_d, jaco_det_spts_d, nSpts, nVars, nEles, input->dt_type);
+  finalize_LHS_wrapper(LHS_d, dt_d, jaco_det_spts_d, nSpts, nVars, nEles, input->dt_type, startEle, endEle);
 
   check_error();
 
