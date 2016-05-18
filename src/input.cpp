@@ -60,6 +60,7 @@ InputStruct read_input_file(std::string inputfile)
 
   read_param(f, "SER", input.SER, false);
   read_param(f, "inv_mode", input.inv_mode, false);
+  read_param(f, "backsweep", input.backsweep, false);
   read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
   read_param(f, "nColors", input.nColors, (unsigned int) 4);
 

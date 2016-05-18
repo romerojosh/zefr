@@ -151,6 +151,12 @@ void FRSolver::setup_update()
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
 
+    /* Forward or Forward/Backward sweep */
+    nCounter = geo.nColors;
+    if (input->dt_scheme == "LUSGS" && input->backsweep)
+    {
+      nCounter *= 2;
+    }
   }
   else
   {
@@ -1684,13 +1690,13 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    /* Forward and backward sweep through colors */
-    for (unsigned int counter = 1; counter <= 2*geo.nColors-2; counter++)
+    /* Sweep through colors */
+    for (unsigned int counter = 1; counter <= nCounter; counter++)
     {
       /* Set color */
       unsigned int color = counter;
       if (color > geo.nColors)
-        color = 2*geo.nColors - counter;
+        color = 2*geo.nColors+1 - counter;
 
       /* Compute residual and Jacobian on all elements */
       int iter = current_iter - restart_iter;

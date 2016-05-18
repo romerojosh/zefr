@@ -48,6 +48,7 @@ class FRSolver
     Filter filt;
 
     /* Implicit method parameters */
+    unsigned int nCounter;
     unsigned int prev_color;
     double SER_omg = 1;
     double SER_res[2] = {0};
