@@ -1719,6 +1719,8 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
   auto fpt2gfpt_temp = geo.fpt2gfpt;
   auto fpt2gfpt_slot_temp = geo.fpt2gfpt_slot;
 
+  geo.gfpt2color.assign({geo.nGfpts, 2});
+
   unsigned int ele1 = 0;
   for (unsigned int color = 1; color <= geo.nColors; color++)
   {
@@ -1735,6 +1737,17 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
       {
         geo.fpt2gfpt(fpt, ele1) = fpt2gfpt_temp(fpt, ele2);
         geo.fpt2gfpt_slot(fpt, ele1) = fpt2gfpt_slot_temp(fpt, ele2);
+
+        if (geo.fpt2gfpt(fpt, ele1) != -1)
+        {
+          geo.gfpt2color(geo.fpt2gfpt(fpt, ele1), geo.fpt2gfpt_slot(fpt, ele1)) = color;
+        }
+
+        /* Make sure to also color right state flux point on boundaries */
+        if (geo.fpt2gfpt(fpt, ele1) >= geo.nGfpts_int)
+        {
+          geo.gfpt2color(geo.fpt2gfpt(fpt, ele1), 1) = color;
+        }
       }
 
       geo.ele_color(ele1) = color;

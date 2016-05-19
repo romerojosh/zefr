@@ -540,6 +540,7 @@ void FRSolver::solver_data_to_device()
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
   geo.coord_spts_d = geo.coord_spts;
+  geo.gfpt2color_d = geo.gfpt2color;
 
   /* Input parameters */
   input->V_fs_d = input->V_fs;
@@ -600,6 +601,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #endif
 
   /* Apply boundary conditions to state variables */
+  //faces->apply_bcs(prev_color);
   faces->apply_bcs();
 
   /* Compute convective flux at solution points */
@@ -631,7 +633,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   eles->transform_flux(startEle, endEle);
 
   /* Compute convective and parent space common fluxes at flux points */
+  //faces->compute_Fconv(0, geo.nGfpts, prev_color);
   faces->compute_Fconv(0, geo.nGfpts);
+
+  //faces->compute_common_F(0, geo.nGfpts, color);
   faces->compute_common_F(0, geo.nGfpts);
 
 #endif

@@ -33,9 +33,9 @@ class Faces
     GeoStruct *geo = NULL;
     unsigned int nFpts, nDims, nVars;
 
-    void apply_bcs();
+    void apply_bcs(unsigned int color = 0);
     void apply_bcs_dU();
-    void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
+    void rusanov_flux(unsigned int startFpt, unsigned int endFpt, unsigned int color = 0);
     void roe_flux(unsigned int startFpt, unsigned int endFpt);
     void LDG_flux(unsigned int startFpt, unsigned int endFpt);
     void central_flux();
@@ -98,8 +98,8 @@ class Faces
     Faces(GeoStruct *geo, InputStruct *input);
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U(unsigned int startFpt, unsigned int endFpt);
-    void compute_common_F(unsigned int startFpt, unsigned int endFpt);
-    void compute_Fconv(unsigned int startFpt, unsigned int endFpt);
+    void compute_common_F(unsigned int startFpt, unsigned int endFpt, unsigned int color = 0);
+    void compute_Fconv(unsigned int startFpt, unsigned int endFpt, unsigned int color = 0);
     void compute_Fvisc(unsigned int startFpt, unsigned int endFpt);
     
     /* Routines for implicit method */

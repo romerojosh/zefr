@@ -49,7 +49,7 @@ class FRSolver
 
     /* Implicit method parameters */
     unsigned int nCounter;
-    unsigned int prev_color;
+    unsigned int prev_color = 0;
     double SER_omg = 1;
     double SER_res[2] = {0};
     bool GMRES_conv;
