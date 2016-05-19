@@ -5,6 +5,7 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <stack>
 #include <set>
 #include <string>
 #include <vector>
@@ -26,20 +27,23 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 
   load_mesh_data(input, geo);
 
+  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
+  {
+    setup_element_colors(input, geo);
+  }
+
 #ifdef _MPI
-  partition_geometry(geo);
+  partition_geometry(input, geo);
 #endif
 
   setup_global_fpts(input, geo, order);
 
   if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
   {
-    setup_element_colors(input, geo);
+    shuffle_data_by_color(geo);
   }
 
-
   return geo;
-
 }
 
 void load_mesh_data(InputStruct *input, GeoStruct &geo)
@@ -94,6 +98,8 @@ void load_mesh_data(InputStruct *input, GeoStruct &geo)
   if (f.eof()) ThrowException("Meshfile missing $Elements tag");
 
   set_face_nodes(geo);
+
+  set_ele_adjacency(geo);
 
   f.close();
 
@@ -753,6 +759,74 @@ void set_face_nodes(GeoStruct &geo)
   }
 }
 
+void set_ele_adjacency(GeoStruct &geo)
+{
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> face2eles;
+  std::vector<unsigned int> face(geo.nNodesPerFace,0);
+
+  /* Fill face2eles structure */
+  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  {
+    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+    {
+      face.assign(geo.nNodesPerFace, 0);
+
+      for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+      {
+        face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+      }
+
+      /* Check if face is collapsed */
+      std::set<unsigned int> nodes;
+      for (auto node : face)
+        nodes.insert(node);
+
+      if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
+      {
+        continue;
+      }
+      else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
+      {
+        face.assign(nodes.begin(), nodes.end());
+      }
+
+      std::sort(face.begin(), face.end());
+      face2eles[face].push_back(ele);
+    }
+  }
+
+  /* Generate element adjacency */
+  geo.ele_adj.assign({geo.nFacesPerEle, geo.nEles});
+  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  {
+    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+    {
+      face.assign(geo.nNodesPerFace, 0);
+
+      for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+      {
+        face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+      }
+
+      std::sort(face.begin(), face.end());
+
+      if (face2eles.count(face))
+      {        
+        if (face2eles[face].empty() or face2eles[face].back() == ele)
+          geo.ele_adj(n, ele) = -1;
+        else
+          geo.ele_adj(n, ele) = face2eles[face].back();
+
+        face2eles[face].pop_back();
+      }
+      else
+      {
+        geo.ele_adj(n, ele) = -1;
+      }
+    }
+  }
+}
+
 void couple_periodic_bnds(GeoStruct &geo)
 {
   mdvector<double> coords_face1, coords_face2;
@@ -910,7 +984,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
     std::vector<std::vector<int>> ele2fpts(geo.nEles);
     std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
-    std::map<std::vector<unsigned int>, std::vector<unsigned int>> face2eles;
 
     std::vector<unsigned int> face(geo.nNodesPerFace,0);
 
@@ -950,8 +1023,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         }
 
         std::sort(face.begin(), face.end());
-        face2eles[face].push_back(ele);
-
 
         /* Check if face is has not been previously encountered */
         if (!unique_faces.count(face))
@@ -1304,8 +1375,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         auto fpts2 = bndface2fpts[face2];
         auto face2_ordered = geo.face2ordered[face2];
 
-        face2eles[face1].push_back(face2eles[face2][0]);
-
         /* Determine rotation using ordered faces*/
         unsigned int rot = 0;
         if (geo.nDims == 3)
@@ -1379,7 +1448,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-    geo.ele_adj.assign({geo.nFacesPerEle, geo.nEles});
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
     {
@@ -1399,21 +1467,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         }
 
         std::sort(face.begin(), face.end());
-
-        if (face2eles.count(face))
-        {        
-          if (face2eles[face].empty() or face2eles[face].back() == ele)
-            geo.ele_adj(n, ele) = -1;
-          else
-            geo.ele_adj(n, ele) = face2eles[face].back();
-
-          face2eles[face].pop_back();
-        }
-        else
-        {
-          geo.ele_adj(n, ele) = -1;
-        }
-        
 
       }
     }
@@ -1440,15 +1493,32 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
     geo.nColors = input->nColors;
     std::vector<bool> used(geo.nColors, false);
     std::vector<unsigned int> counts(geo.nColors, 0);
+    //std::queue<unsigned int> eleQ;
+    std::stack<unsigned int> eleQ;
     geo.ele_color.fill(0);
     geo.ele_color(0) = 0;
 
+    eleQ.push(0);
+
     /* Loop over elements and assign colors using greedy algorithm */
-    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    //for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    while (!eleQ.empty())
     {
+      //unsigned int ele = eleQ.front(); //TODO: Add stack and queue modes
+      unsigned int ele = eleQ.top();
+      eleQ.pop();
+
+      if (geo.ele_color(ele) != 0)
+        continue;
+
       for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
       {
         int eleN = geo.ele_adj(face, ele);
+
+        if (eleN != -1 && geo.ele_color(eleN) == 0)
+        {
+          eleQ.push(eleN);
+        }
 
         if (eleN == -1)
           continue;
@@ -1498,215 +1568,11 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
       counts[color-1]++;
       used.assign(geo.nColors, false);
     }
-
-    /*
-    geo.nColors = 2;
-    geo.ele_color(0) = 1;
-    std::queue<unsigned int> Q;
-    Q.push(0);
-    while (!Q.empty())
-    {
-      unsigned int ele1 = Q.front();
-      Q.pop();
-
-      // Determine opposite color
-      unsigned int color = geo.ele_color(ele1);
-      if (color == 1)
-      {
-        color = 2;
-      }
-      else
-      {
-        color = 1;
-      }
-
-      // Color neighbors
-      for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
-      {
-        int ele2 = geo.ele_adj(face, ele1);
-        if (ele2 != -1 && geo.ele_color(ele2) == 0)
-        {
-          geo.ele_color(ele2) = color;
-          Q.push(ele2);
-        }
-      }
-    }
-    */
   }
+}
 
-#ifdef _MPI
-  int rank, nRanks;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
-
-  /* In parallel, determine consistent coloring between partitions (easy method for 2 colors) */
-  int repeat = 1;
-  int flipRank = nRanks;
-
-  if (rank == 0)
-    flipRank = 0;
-
-  /* Repeat process until colors are consistent */
-  while (repeat)
-  {
-    repeat = 0;
-    for (int sendRank = 0; sendRank < nRanks; sendRank++)
-    {
-      MPI_Barrier(MPI_COMM_WORLD);
-
-      if (rank == sendRank)
-      {
-        std::set<int> processed;
-        std::vector<unsigned int> face(geo.nNodesPerFace, 0);
-        int other_color, other_flipRank;
-
-        /* Loop over elements and seek out MPI boundaries */
-        for (unsigned int ele1 = 0; ele1 < geo.nEles; ele1++)
-        {
-          for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
-          {
-            int ele2 = geo.ele_adj(n, ele1);
-
-            /* Check if adjacent element is outside partition */
-            if (ele2 == -1)
-            {
-              /* Get face nodes and sort for consistency */
-              for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
-              {
-                face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele1);
-              }
-              
-              std::sort(face.begin(), face.end());
-              
-              /* Check if face is at an MPI interface */
-              if (geo.mpi_faces.count(face))
-              {
-                auto face_ranks = geo.mpi_faces[face];
-                auto rank1 = *std::min_element(face_ranks.begin(), face_ranks.end());
-                auto rank2 = *std::max_element(face_ranks.begin(), face_ranks.end());
-                auto recvRank = (rank1 == rank) ? rank2 : rank1;
-
-                if (processed.count(recvRank))
-                  continue;
-
-                processed.insert(recvRank);
-
-                for (auto &nd : face)
-                  nd = geo.node_map_p2g[nd];
-
-                int flag = 0;
-
-                /* Send face information to adjacent element */
-                MPI_Send(&flag, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
-                MPI_Send(face.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
-                MPI_Send(&geo.ele_color(ele1), 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
-                MPI_Send(&flipRank, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
-
-                /* Receive adjacent elemnt information */
-                MPI_Recv(&other_color, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                MPI_Recv(&other_flipRank, 1, MPI_INT, recvRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-                /* If adjacent element is in a partition previous flipped by a lesser rank, flip this partition */
-                if (geo.ele_color(ele1) == (unsigned int) other_color and flipRank > other_flipRank)
-                {
-                  flipRank = other_flipRank;
-                  repeat = 1;
-                  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-                  {
-                    geo.ele_color(ele) = (geo.ele_color(ele) == 1) ? 2 : 1;
-                  }
-                }
-
-                flipRank = std::min(flipRank, other_flipRank);
-                continue;
-              }
-            }
-          }
-        }
-
-        /* Send termination flag to remaining unprocessed ranks */
-        for (int n = 0; n < nRanks; n++)
-        {
-          if (!processed.count(n) and n != rank)
-          {
-            int flag = 1;
-            MPI_Send(&flag, 1, MPI_INT, n, 0, MPI_COMM_WORLD);
-          }
-        }
-      }
-      else
-      {
-        std::vector<unsigned int> face(geo.nNodesPerFace, 0), other_face(geo.nNodesPerFace, 0);
-        int flag;
-        int other_color, other_flipRank;
-
-        /* Check if terminated */
-        MPI_Recv(&flag, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        if (flag)
-          continue;
-
-        /* Receive data from adjancent element */
-        MPI_Recv(other_face.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPI_Recv(&other_color, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPI_Recv(&other_flipRank, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        for (auto &nd : other_face)
-          nd = geo.node_map_g2p[nd];
-
-        /* Search for corresponding interface */
-        for (unsigned int ele1 = 0; ele1 < geo.nEles; ele1++)
-        {
-          for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
-          {
-            int ele2 = geo.ele_adj(n, ele1);
-
-            /* Check if adjacent element is on boundary */
-            if (ele2 == -1)
-            {
-              /* Get face nodes and sort for consistency */
-              for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
-              {
-                face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele1);
-              }
-              
-              std::sort(face.begin(), face.end());
-
-              /* Found matched face! */
-              if (other_face == face)
-              {
-                MPI_Send(&geo.ele_color(ele1), 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD);
-                MPI_Send(&other_flipRank, 1, MPI_INT, sendRank, 0, MPI_COMM_WORLD);
-
-                /* Apply similar logic as case above */
-                if (geo.ele_color(ele1) == (unsigned int) other_color and flipRank > other_flipRank)
-                {
-                  flipRank = other_flipRank;
-                  repeat = 1;
-                  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-                  {
-                    geo.ele_color(ele) = (geo.ele_color(ele) == 1) ? 2 : 1;
-                  }
-                }
-
-                flipRank = std::min(flipRank, other_flipRank);
-                break;
-              }
-            }
-          }
-          if (other_face == face)
-            break;
-        }
-      }
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
-    /* If any flips have occured, repeat process */
-    MPI_Allreduce(MPI_IN_PLACE, &repeat, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
-  }
-
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-
+void shuffle_data_by_color(GeoStruct &geo)
+{
   /* Reorganize required geometry data by color */
   std::vector<std::vector<unsigned int>> color2eles(geo.nColors);
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -1769,14 +1635,16 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
   }
 
   /* Print out color distribution */
+  std::cout << "color distribution: ";
   for (unsigned int color = 1; color <= geo.nColors; color++)
   {
-    std::cout << "color: " << color << " nEles: " << geo.ele_color_nEles[color - 1] << std::endl;
+    std::cout<< geo.ele_color_nEles[color - 1] << " ";
   }
+  std::cout << std::endl;
 }
 
 #ifdef _MPI
-void partition_geometry(GeoStruct &geo)
+void partition_geometry(InputStruct *input, GeoStruct &geo)
 {
   int rank, nRanks;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -1919,6 +1787,17 @@ void partition_geometry(GeoStruct &geo)
     for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
     {
       geo.nd2gnd(nd, ele) = nd2gnd_glob(nd, myEles[ele]);
+    }
+  }
+
+  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
+  {
+    /* Reduce color data to only contain partition local elements */
+    auto ele_color_glob = geo.ele_color;
+    geo.ele_color.assign({(unsigned int) myEles.size()}, 0);
+    for (unsigned int ele = 0; ele < myEles.size(); ele++)
+    {
+      geo.ele_color(ele) = ele_color_glob(myEles[ele]);
     }
   }
 

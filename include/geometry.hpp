@@ -64,13 +64,15 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo);
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input);
 void read_boundary_faces(std::ifstream &f, GeoStruct &geo);
 void set_face_nodes(GeoStruct &geo);
+void set_ele_adjacency(GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order);
 void pair_periodic_gfpts(GeoStruct &geo);
 void setup_element_colors(InputStruct *input, GeoStruct &geo);
+void shuffle_data_by_color(GeoStruct &geo);
 
 #ifdef _MPI
-void partition_geometry(GeoStruct &geo);
+void partition_geometry(InputStruct *input, GeoStruct &geo);
 #endif
 
 #endif /* geometry_hpp */
