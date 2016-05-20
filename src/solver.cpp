@@ -506,11 +506,8 @@ void FRSolver::solver_data_to_device()
   /* Solution data structures (element local) */
   eles->U_spts_d = eles->U_spts;
   eles->U_fpts_d = eles->U_fpts;
-  eles->Ucomm_d = eles->Ucomm;
   eles->Uavg_d = eles->Uavg;
   eles->weights_spts_d = eles->weights_spts;
-  eles->dU_spts_d = eles->dU_spts;
-  eles->dU_fpts_d = eles->dU_fpts;
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
   eles->divF_spts_d = eles->divF_spts;
@@ -519,11 +516,16 @@ void FRSolver::solver_data_to_device()
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
 
+  if (input->viscous)
+  {
+    eles->Ucomm_d = eles->Ucomm;
+    eles->dU_spts_d = eles->dU_spts;
+    eles->dU_fpts_d = eles->dU_fpts;
+  }
+
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
-  faces->dU_d = faces->dU;
   faces->Fconv_d = faces->Fconv;
-  faces->Fvisc_d = faces->Fvisc;
   faces->P_d = faces->P;
   faces->Ucomm_d = faces->Ucomm;
   faces->Fcomm_d = faces->Fcomm;
@@ -532,6 +534,12 @@ void FRSolver::solver_data_to_device()
   faces->dA_d = faces->dA;
   faces->waveSp_d = faces->waveSp;
   faces->LDG_bias_d = faces->LDG_bias;
+
+  if (input->viscous)
+  {
+    faces->dU_d = faces->dU;
+    faces->Fvisc_d = faces->Fvisc;
+  }
 
   /* Additional data */
   /* Geometry */
@@ -620,9 +628,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
 
-    /* Receive U data */
-  faces->recv_U_data();
+  /* Compute solution point contribution to divergence of flux */
+  eles->compute_divF_spts(stage, startEle, endEle);
 
+  /* Receive U data */
+  faces->recv_U_data();
 
   /* Complete computation on remaning flux points. */
   faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
@@ -638,6 +648,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   //faces->compute_common_F(0, geo.nGfpts, color);
   faces->compute_common_F(0, geo.nGfpts);
+
+  eles->compute_divF_spts(stage, startEle, endEle);
 
 #endif
   }
@@ -728,7 +740,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   F_from_faces(startEle, endEle);
 
   /* Compute divergence of flux */
-  eles->compute_divF(stage, startEle, endEle);
+  //eles->compute_divF(stage, startEle, endEle);
+  /* Compute flux point contribution to divergence of flux */
+  eles->compute_divF_fpts(stage, startEle, endEle);
 
   /* Add source term (if required) */
   if (input->source)

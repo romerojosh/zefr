@@ -27,7 +27,7 @@ static const unsigned int MAX_GRID_DIM = 65535;
 
 /* Create handles for default (0) and concurrent (1-16) streams */
 static std::vector<cublasHandle_t> cublas_handles(17);
-static std::vector<cudaStream_t> stream_handles(16);
+static std::vector<cudaStream_t> stream_handles(17);
 
 void check_error()
 {
@@ -43,13 +43,15 @@ void check_error()
 void start_cublas()
 {
   cublasCreate(&cublas_handles[0]);
-  cublasSetStream(cublas_handles[0], cudaStreamPerThread);
+  stream_handles[0] = cudaStreamPerThread;
+  cublasSetStream(cublas_handles[0], stream_handles[0]);
+
 
   for (int i = 1; i < 17; i++)
   {
     cublasCreate(&cublas_handles[i]);
-    cudaStreamCreate(&stream_handles[i-1]);
-    cublasSetStream(cublas_handles[i], stream_handles[i-1]);
+    cudaStreamCreate(&stream_handles[i]);
+    cublasSetStream(cublas_handles[i], stream_handles[i]);
   }
 }
 
@@ -179,9 +181,9 @@ void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, uns
 }
 
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
-    int lda, const double* B, int ldb, const double beta, double *C, int ldc)
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream)
 {
-  cublasDgemm(cublas_handles[0], CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
+  cublasDgemm(cublas_handles[stream], CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,

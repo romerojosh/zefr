@@ -32,7 +32,7 @@ void sync_stream(unsigned int stream);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
-    int lda, const double* B, int ldb, const double beta, double *C, int ldc);
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream = 0);
 
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
     int lda, const double** Barray, int ldb, const double beta, double** Carray, int ldc, int batchCount);

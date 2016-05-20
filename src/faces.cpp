@@ -28,10 +28,21 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   /* Allocate memory for solution structures */
   U.assign({nFpts, nVars, 2});
-  dU.assign({nFpts, nVars, nDims, 2});
   Fconv.assign({nFpts, nVars, nDims, 2});
-  Fvisc.assign({nFpts, nVars, nDims, 2});
   Fcomm.assign({nFpts, nVars, 2});
+
+  /* If viscous, allocate arrays used for LDG flux */
+  if(input->viscous)
+  {
+    dU.assign({nFpts, nVars, nDims, 2});
+    Fvisc.assign({nFpts, nVars, nDims, 2});
+    Fcomm_temp.assign({nFpts, nVars, nDims});
+    Ucomm.assign({nFpts, nVars, 2});
+  }
+
+  LDG_bias.assign({nFpts}, 0);
+
+
 
   /* Allocating memory for Riemann solvers */
   FL.assign(nVars, 0);
@@ -89,14 +100,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     }
   }
 
-  /* If viscous, allocate arrays used for LDG flux */
-  //if(input->viscous)
-  //{
-    Fcomm_temp.assign({nFpts, nVars, nDims});
-    LDG_bias.assign({nFpts}, 0);
-  //}
-
-  Ucomm.assign({nFpts, nVars, 2});
 
   /* If running Euler/NS, allocate memory for pressure */
   if (input->equation == EulerNS)
@@ -365,14 +368,14 @@ void Faces::apply_bcs(unsigned int color)
 
         if (VnL < 0.0) /* Case 1: Inflow */
         {
-          rhoR *= pow(input->rho_fs, input->gamma) / PR;
+          rhoR *= std::pow(input->rho_fs, input->gamma) / PR;
 
           for (unsigned int dim = 0; dim < nDims; dim++)
             VR[dim] = input->V_fs(dim) + (ustarn - VnR) * norm(fpt, dim, 0);
         }
         else  /* Case 2: Outflow */
         {
-          rhoR *= pow(U(fpt, 0, 0), input->gamma) / PL;
+          rhoR *= std::pow(U(fpt, 0, 0), input->gamma) / PL;
 
           for (unsigned int dim = 0; dim < nDims; dim++)
             VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim, 0);
@@ -3327,7 +3330,8 @@ void Faces::send_U_data()
 #endif
 
 #ifdef _GPU
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
+  sync_stream(0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
@@ -3399,7 +3403,8 @@ void Faces::recv_U_data()
     //unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars);
   }
 
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
+  sync_stream(0);
 #endif
 
 }

@@ -326,14 +326,17 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
+  sync_stream(0);
   for (unsigned int var = 0; var < nVars; var++)
   {
     auto *A = oppE_d.data();
     auto *B = U_spts_d.data() + startEle * U_spts_d.ldim() + var * (U_spts_d.ldim() * nEles);
     auto *C = U_fpts_d.data() + startEle * U_fpts_d.ldim() + var * (U_fpts_d.ldim() * nEles);
     cublasDGEMM_wrapper(nFpts, endEle - startEle, nSpts, 1.0,
-        A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim());
+        A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim(), var + 3);
   }
+
+  cudaDeviceSynchronize();
 
   check_error();
 #endif
@@ -517,6 +520,93 @@ void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned 
 #endif
 }
 
+void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+  /* Compute contribution to divergence from flux at solution points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    double fac = (dim == 0) ? 0.0 : 1.0;
+
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      auto &A = oppD(0, 0, dim);
+      auto &B = F_spts(0, startEle, var, dim);
+      auto &C = divF_spts(0, startEle, var, stage);
+
+
+#ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
+            nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+#endif
+    }
+  }
+#endif
+
+#ifdef _GPU
+  /* NOTE: Living a bit dangerously here. Staging GEMM calls into new streams without explicitly waiting for ele->transform_flux() to complete. 
+   * Not an issue now with Fermi, but may crop up in the future. */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    double fac = (dim == 0) ? 0.0 : 1.0;
+
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      auto *A = oppD_d.data() + dim * (oppD_d.ldim() * nSpts);
+      auto *B = F_spts_d.data() + startEle * F_spts_d.ldim() + var * (F_spts_d.ldim() * nEles) + dim * (F_spts_d.ldim() * nEles * nVars);
+      auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+
+      /* Compute contribution to derivative from solution at solution points */
+      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
+          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), var + 3);
+    }
+  }
+#endif
+
+}
+
+void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+  /* Compute contribution to divergence from common flux at flux points */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto &A = oppDiv_fpts(0, 0);
+    auto &B = Fcomm(0, startEle, var);
+    auto &C = divF_spts(0, startEle, var, stage);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+        endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
+        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+#endif
+  }
+#endif
+
+#ifdef _GPU
+  sync_stream(0);
+  /* Compute contribution to derivative from common solution at flux points */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto *A = oppDiv_fpts_d.data();
+    auto *B = Fcomm_d.data() + startEle * Fcomm_d.ldim() + var * (Fcomm_d.ldim() * nEles);
+    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+
+    cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
+        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), var + 3);
+  }
+
+  cudaDeviceSynchronize(); 
+
+  check_error();
+#endif
+
+}
 
 void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 {

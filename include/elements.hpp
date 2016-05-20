@@ -130,6 +130,8 @@ class Elements
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);
     void compute_dU(unsigned int startEle, unsigned int endEle);
     void compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_Fconv(unsigned int startEle, unsigned int endEle);
     void compute_Fvisc(unsigned int startEle, unsigned int endEle);
     virtual void transform_flux(unsigned int startEle, unsigned int endEle) = 0;
