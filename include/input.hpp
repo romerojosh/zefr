@@ -38,7 +38,7 @@ struct InputStruct
 
   /* Implicit Parameters */
   bool SER, inv_mode, stream_mode, backsweep;
-  unsigned int Jfreeze_freq, nColors;
+  unsigned int Jfreeze_freq, nColors, n_LHS_blocks;
 
 #ifdef _GPU
   mdvector_gpu<double> AdvDiff_A_d, V_fs_d, norm_fs_d, V_wall_d, norm_wall_d;

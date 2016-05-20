@@ -816,14 +816,17 @@ void FRSolver::compute_LHS()
     if (!input->stream_mode)
     {
 #ifdef _CPU
-        eles->compute_localLHS(dt);
-        compute_LHS_LU();
+        eles->compute_localLHS(dt, 0, geo.nEles);
+        compute_LHS_LU(0, geo.nEles);
 #endif
 #ifdef _GPU
-      for (unsigned int color = geo.nColors; color > 0; color--)
+      unsigned int blocksize = ceil(geo.nEles / (double) input->n_LHS_blocks);
+      for (unsigned int startEle = 0; startEle <  geo.nEles; startEle += blocksize)
       {
-        eles->compute_localLHS(dt_d, color);
-        compute_LHS_LU(color);
+        unsigned int endEle = std::min(startEle + blocksize, geo.nEles);
+
+        eles->compute_localLHS(dt_d, startEle, endEle);
+        compute_LHS_LU(startEle, endEle);
       }
 #endif
     }
@@ -831,13 +834,16 @@ void FRSolver::compute_LHS()
     {
       for (unsigned int color = geo.nColors; color > 0; color--)
       {
+        unsigned int startEle = geo.ele_color_range[color - 1];
+        unsigned int endEle = geo.ele_color_range[color];
+
 #ifdef _CPU
-        eles->compute_localLHS(dt, color);
+        eles->compute_localLHS(dt, startEle, endEle, color);
 #endif
 #ifdef _GPU
-        eles->compute_localLHS(dt_d, color);
+        eles->compute_localLHS(dt_d, startEle, endEle, color);
 #endif
-        compute_LHS_LU(color);
+        compute_LHS_LU(startEle, endEle, color);
 
 #ifdef _GPU
         copy_from_device(eles->LHSInvs[color - 1].data(), eles->LHSInv_d.data(), eles->LHSInv_d.max_size());
@@ -847,16 +853,8 @@ void FRSolver::compute_LHS()
   }
 }
 
-void FRSolver::compute_LHS_LU(unsigned int color)
+void FRSolver::compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsigned int color)
 {
-  unsigned int startEle = geo.ele_color_range[color - 1];
-  unsigned int endEle = geo.ele_color_range[color];
-  unsigned int nElesColor = eles->nEles;
-
-  if (color)
-    nElesColor = geo.ele_color_nEles[color - 1];
-  else
-    color = 1; // Similar hack from localLHS
 
 #ifdef _GPU
   unsigned int N = eles->nSpts * eles->nVars;
@@ -864,7 +862,7 @@ void FRSolver::compute_LHS_LU(unsigned int color)
   /* Perform batched LU using cuBLAS */
   //cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), eles->nEles);
   cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), 
-      nElesColor);
+      endEle - startEle);
 
   if (input->inv_mode)
   {
@@ -872,19 +870,19 @@ void FRSolver::compute_LHS_LU(unsigned int color)
     if (!input->stream_mode)
     {
       cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
-          eles->LHSInv_ptrs_d.data() + startEle, N, eles->LU_info_d.data(), nElesColor);
+          eles->LHSInv_ptrs_d.data() + startEle, N, eles->LU_info_d.data(), endEle - startEle);
     }
     else
     {
       cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
-          eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), nElesColor);
+          eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), endEle - startEle);
     }
   }
 #endif
 
 #ifdef _CPU
 #ifndef _NO_TNT
-  for (unsigned int ele = 0; ele < nElesColor; ele++)
+  for (unsigned int ele = 0; ele < endEle - startEle; ele++)
   {
     /* Copy LHS into TNT object */
     // TODO: Copy can now be removed. Need to investigate column-major TNT array views.

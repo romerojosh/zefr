@@ -100,7 +100,7 @@ class FRSolver
 
     /* Routines for implicit method */
     void compute_LHS();
-    void compute_LHS_LU(unsigned int color = 0);
+    void compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsigned int color = 1);
     void compute_RHS(unsigned int color = 1);
 #ifdef _CPU
     void compute_RHS_source(const mdvector<double> &source, unsigned int color = 1);

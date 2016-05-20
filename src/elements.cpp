@@ -2141,25 +2141,14 @@ void Elements::compute_globalLHS(mdvector<double> &dt)
 }
 
 #ifdef _CPU
-void Elements::compute_localLHS(mdvector<double> &dt, unsigned int color)
+void Elements::compute_localLHS(mdvector<double> &dt, unsigned int startEle, unsigned int endEle, unsigned int color)
 #endif
 #ifdef _GPU
-void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int color)
+void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEle, unsigned int endEle, unsigned int color)
 #endif
 {
-  unsigned int startEle = 0; unsigned int endEle = nEles;
 
-  if (color)
-  {
-    startEle = geo->ele_color_range[color - 1];
-    endEle = geo->ele_color_range[color];
-  }
-  else
-  {
-    color = 1; // A little hacky. Forces function to use full Jacobian which is in LHSs[0]
-  }
 #ifdef _CPU
-
   /* Compute LHS */
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
