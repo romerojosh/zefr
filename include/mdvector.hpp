@@ -77,6 +77,11 @@ class mdvector
     //! Method to solve L U x = B for x
     void solve(mdvector<T>& x, const mdvector<T>& B) const;
 
+    void add_dim_0(unsigned int ind, const T& val);
+    void add_dim_1(unsigned int ind, const T& val);
+    void add_dim_2(unsigned int ind, const T& val);
+    void add_dim_3(unsigned int ind, const T& val);
+
     //! Method to return number of values (with padding)
     unsigned int get_nvals() const;
 
@@ -286,6 +291,78 @@ T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int id
 {
   //assert(ndims == 4);
   return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template<typename T>
+void mdvector<T>::add_dim_0(unsigned int ind, const T& val)
+{
+  /* Insert new 'row' of memory */
+  unsigned int stride0 = dims[0]*dims[1]*dims[2];
+  unsigned int stride1 = dims[0]*dims[1];
+  unsigned int stride2 = dims[0];
+  unsigned int rowSize = 1;
+  unsigned int offset = ind*rowSize;
+  for (int i = dims[3]-1; i >= 0; i--) {
+    for (int j = dims[2]-1; j >= 0; j--) {
+      for (int k = dims[1]-1; k >= 0; k--) {
+        auto it = values.begin() + i*stride0 + j*stride1 + k*stride2 + offset;
+        values.insert(it, rowSize, val);
+      }
+    }
+  }
+
+  dims[0]++;
+  strides[0]++;
+  nvals = values.size();
+}
+
+template<typename T>
+void mdvector<T>::add_dim_1(unsigned int ind, const T &val)
+{
+  /* Insert new 'column' of memory */
+  unsigned int stride0 = dims[0]*dims[1]*dims[2];
+  unsigned int stride1 = dims[0]*dims[1];
+  unsigned int colSize = dims[0];
+  unsigned int offset = ind*colSize;
+  for (int i = dims[3]-1; i >= 0; i--) {
+    for (int j = dims[2]-1; j >= 0; j--) {
+      auto it = values.begin() + i*stride0 + j*stride1 + offset;
+      values.insert(it, colSize, val);
+    }
+  }
+
+  dims[1]++;
+  strides[1]++;
+  nvals = values.size();
+}
+
+template<typename T>
+void mdvector<T>::add_dim_2(unsigned int ind, const T &val)
+{
+  /* Insert new 'page' of memory */
+  unsigned int stride   = dims[0]*dims[1]*dims[2];
+  unsigned int pageSize = dims[0]*dims[1];
+  unsigned int offset = ind*pageSize;
+  for (int i = dims[3]-1; i >= 0; i--) {
+    auto it = values.begin() + i*stride + offset;
+    values.insert(it, pageSize, val);
+  }
+
+  dims[2]++;
+  strides[2]++;
+  nvals = values.size();
+}
+
+template<typename T>
+void mdvector<T>::add_dim_3(unsigned int ind, const T &val)
+{
+  /* Insert new 'book' of memory */
+  unsigned int bookSize = dims[0]*dims[1]*dims[2];
+  auto it = values.begin() + bookSize*ind;
+  values.insert(it, bookSize, val);
+  dims[3]++;
+  strides[3]++;
+  nvals = values.size();
 }
 
 template <typename T>
