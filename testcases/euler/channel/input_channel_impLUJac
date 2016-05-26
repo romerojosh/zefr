@@ -1,7 +1,7 @@
 # Geometry:
 nDims    2
-meshfile channelBumpUtri_48x16_b2.msh
-serendipity 1
+meshfile channelBump_48x16_b2.msh
+serendipity 0
 
 # Solver:
 order     2
@@ -10,7 +10,7 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 10
+n_steps 1000
 dt_scheme LUSGS     (Euler, RK44, RK54)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.1

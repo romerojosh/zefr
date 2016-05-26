@@ -9,11 +9,9 @@
 #include "geometry.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
-#include "spmatrix.hpp"
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
-#include "spmatrix_gpu.h"
 #endif
 
 class FRSolver;
@@ -59,10 +57,7 @@ class Elements
     mdvector<double> oppPro, oppRes;
 
     /* Element structures for implicit method */
-    bool CPU_flag; // Temporary flag for global implicit method
-    spmatrix<double> GLHS; // Sparse matrix for global implicit system
     mdvector<double> LHS, LHSInv;  // Element local matrices for implicit system
-    mdvector<double> LHS_tempSF;
     mdvector<int> LU_pivots, LU_info; 
     mdvector<double*> LHS_ptrs, RHS_ptrs, LHSInv_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs, deltaU_ptrs; 
     mdvector<double> dFdU_spts, dFddU_spts;
@@ -94,9 +89,7 @@ class Elements
     mdvector_gpu<double> oppPro_d, oppRes_d;
 
     /* Element structures for implicit method */
-    spmatrix_gpu<double> GLHS_d;
     mdvector_gpu<double> LHS_d, LHSInv_d;
-    mdvector_gpu<double> LHS_tempSF_d;
     mdvector_gpu<int> LU_pivots_d, LU_info_d; 
     mdvector_gpu<double*> LHS_ptrs_d, LHSInv_ptrs_d, RHS_ptrs_d, LHS_subptrs_d, LHS_tempSF_subptrs_d, oppE_ptrs_d, deltaU_ptrs_d; 
     mdvector_gpu<double> dFcdU_fpts_d, dFdU_spts_d;
@@ -139,7 +132,6 @@ class Elements
     virtual void transform_dU(unsigned int startEle, unsigned int endEle) = 0;
 
     /* Routines for implicit method */
-    void compute_globalLHS(mdvector<double> &dt);
 #ifdef _CPU
     void compute_localLHS(mdvector<double> &dt, unsigned int startEle, unsigned int endEle, unsigned int color = 1);
 #endif

@@ -3,12 +3,6 @@
 #include "cuda_runtime.h"
 #include "cublas_v2.h"
 
-#include <cusp/krylov/gmres.h>
-#include <cusp/krylov/cg.h>
-#include <cusp/krylov/bicgstab.h>
-#include <cusp/csr_matrix.h>
-#include <cusp/monitor.h>
-#include <cusp/print.h>
 #include <thrust/device_vector.h>
 #include <thrust/extrema.h>
 
@@ -19,7 +13,6 @@
 #include "input.hpp"
 #include "macros.hpp"
 #include "mdvector_gpu.h"
-#include "spmatrix_gpu.h"
 #include "solver_kernels.h"
 #include "funcs_kernels.cu"
 
@@ -821,67 +814,6 @@ void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, const mdvector_
   unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
 
   compute_RHS_source<<<blocks, threads>>>(divF_spts, source, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars, startEle, endEle);
-}
-
-void compute_deltaU_globalLHS_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU, mdvector_gpu<double> &b, bool &GMRES_conv) 
-{
-  /* Experiment: Use CUSP library to solve system */
-  /* First, wrap device arrays using Thrust */
-  thrust::device_ptr<double> vals_w = thrust::device_pointer_cast(A.getVals());
-  thrust::device_ptr<int> row_ptr_w = thrust::device_pointer_cast(A.getRowPtr());
-  thrust::device_ptr<int> col_idx_w = thrust::device_pointer_cast(A.getColIdx());
-  thrust::device_ptr<double> deltaU_w = thrust::device_pointer_cast(deltaU.data());
-  thrust::device_ptr<double> b_w = thrust::device_pointer_cast(b.data());
-
-  /* Next, create CSR array view using CUSP */
-  typedef typename cusp::array1d_view<thrust::device_ptr<int>> IntArray;
-  typedef typename cusp::array1d_view<thrust::device_ptr<double>> DoubleArray;
-  IntArray row_ptr(row_ptr_w, row_ptr_w + A.getNrows() + 1);
-  IntArray col_idx(col_idx_w, col_idx_w + A.getNnonzeros());
-  DoubleArray vals(vals_w, vals_w + A.getNnonzeros());
-  DoubleArray delU(deltaU_w, deltaU_w + A.getNrows());
-  DoubleArray RHS(b_w, b_w + A.getNrows());
-
-  /* Create cusp CSR view */
-  typedef cusp::csr_matrix_view<IntArray, IntArray, DoubleArray> CSRMat;
-  CSRMat Acsr(A.getNrows(), A.getNrows(), A.getNnonzeros(), row_ptr, col_idx, vals);
-
-  //std::cout << "\nA" << std::endl;
-  //cusp::print(Acsr);
-  //std::cout << "\nU"<< std::endl;
-  //cusp::print(U);
-  //std::cout << "\nRHS" << std::endl;
-  //cusp::print(RHS);
-
-
-  /* Setup linear solver */
-  // set stopping criteria:
-  //  iteration_limit    = 100
-  //  relative_tolerance = 1e-6
-  //  absolute_tolerance = 0
-  //  print = false
-  cusp::monitor<double> monitor(RHS, 1000, 1e-6, 0, false);
-  int restart = 50;
-  // set preconditioner (identity)
-  cusp::identity_operator<double, cusp::device_memory> M(Acsr.num_rows, Acsr.num_rows);
-
-  // solve the linear system A U = RHS
-  cusp::krylov::gmres(Acsr, delU, RHS, restart, monitor, M);
-  //cusp::krylov::bicgstab(Acsr, delU, RHS, monitor, M);
-  GMRES_conv = monitor.converged();
-
-  /*
-  if (GMRES_conv)
-  {
-    std::cout << "Solver converged to " << monitor.relative_tolerance() << " relative tolerance";
-    std::cout << " after " << monitor.iteration_count() << " iterations" << std::endl;
-  }
-  else
-  {
-    std::cout << "Solver reached iteration limit " << monitor.iteration_limit() << " before converging";
-    std::cout << " to " << monitor.relative_tolerance() << " relative tolerance " << std::endl;
-  }
-  */
 }
 
 __global__
