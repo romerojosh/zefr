@@ -51,19 +51,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   WR.assign(nVars, 0);
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    /* Set temporary flag for global implicit system */
-#ifdef _CPU
-    CPU_flag = true;
-#endif
-#ifdef _GPU
-    if (input->dt_scheme == "BDF1")
-      CPU_flag = true;
-    else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
-      CPU_flag = false;
-#endif
-
     /* Index Map Notes:
      * Common Value Slots:  Sloti:  dFdUL, dFdUR  Slotj:  L, R
      * dFddUvisc:           nDimsi: Fx, Fy        nDimsj: dUdx, dUdy
@@ -138,7 +127,6 @@ void Faces::apply_bcs(unsigned int color)
 
   /* Loop over boundary flux points */
 #pragma omp parallel for private(VL,VR)
-  //for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
 
@@ -576,9 +564,6 @@ void Faces::apply_bcs(unsigned int color)
       geo->gfpt2color_d);
 
   check_error();
-
-  //U = U_d;
-  //LDG_bias = LDG_bias_d;
 #endif
 
 }
@@ -588,7 +573,6 @@ void Faces::apply_bcs_dU()
 #ifdef _CPU
   /* Apply boundaries to solution derivative */
 #pragma omp parallel for 
-  //for (unsigned int fpt = geo->nGfpts_int; fpt < nFpts; fpt++)
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
@@ -798,9 +782,7 @@ void Faces::apply_bcs_dU()
 // TODO: Add a check to ensure proper boundary conditions are used
 void Faces::apply_bcs_dFdU()
 {
-//#ifdef _CPU
-  if (CPU_flag)
-  {
+#ifdef _CPU
   /* Loop over boundary flux points */
 #pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
@@ -1322,17 +1304,13 @@ void Faces::apply_bcs_dFdU()
       }
     }
   }
-  }
-//#endif
+#endif
 
 #ifdef _GPU
-  if (!CPU_flag)
-  {
-    apply_bcs_dFdU_wrapper(U_d, dFdUconv_d, dFdUvisc_d, dUcdU_d, dFddUvisc_d,
-        geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
-        input->P_fs, input->gamma, norm_d, geo->gfpt2bnd_d, input->equation, input->viscous);
-    check_error();
-  }
+  apply_bcs_dFdU_wrapper(U_d, dFdUconv_d, dFdUvisc_d, dUcdU_d, dFddUvisc_d,
+      geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
+      input->P_fs, input->gamma, norm_d, geo->gfpt2bnd_d, input->equation, input->viscous);
+  check_error();
 #endif
 }
 
@@ -2207,67 +2185,53 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
-//#ifdef _CPU
-    if (CPU_flag)
-    {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
-      for (unsigned int slot = 0; slot < 2; slot++)
-      { 
-        for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int slot = 0; slot < 2; slot++)
+    { 
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-          {
-            dFdUconv(fpt, 0, 0, dim, slot) = input->AdvDiff_A(dim);
-          }
+          dFdUconv(fpt, 0, 0, dim, slot) = input->AdvDiff_A(dim);
         }
       }
     }
-//#endif
+#endif
 
 #ifdef _GPU
-    if (!CPU_flag)
-    {
-      compute_dFdUconv_fpts_AdvDiff_wrapper(dFdUconv_d, nFpts, nDims, input->AdvDiff_A_d,
-          startFpt, endFpt);
-      check_error();
-    }
+    compute_dFdUconv_fpts_AdvDiff_wrapper(dFdUconv_d, nFpts, nDims, input->AdvDiff_A_d,
+        startFpt, endFpt);
+    check_error();
 #endif
 
   }
 
   else if (input->equation == Burgers)
   {
-//#ifdef _CPU
-    if (CPU_flag)
-    {
+#ifdef _CPU
 #pragma omp parallel for collapse(3)
-      for (unsigned int slot = 0; slot < 2; slot++)
+    for (unsigned int slot = 0; slot < 2; slot++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        for (unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-          {
-            dFdUconv(fpt, 0, 0, dim, slot) = U(fpt, 0, slot);
-          }
+          dFdUconv(fpt, 0, 0, dim, slot) = U(fpt, 0, slot);
         }
       }
     }
-//#endif
+#endif
 
 #ifdef _GPU
-    if (!CPU_flag)
-    {
-      compute_dFdUconv_fpts_Burgers_wrapper(dFdUconv_d, U_d, nFpts, nDims, startFpt, endFpt);
-      check_error();
-    }
+    compute_dFdUconv_fpts_Burgers_wrapper(dFdUconv_d, U_d, nFpts, nDims, startFpt, endFpt);
+    check_error();
 #endif
   }
 
   else if (input->equation == EulerNS)
   {
-//#ifdef _CPU
-    if (CPU_flag)
-    {
+#ifdef _CPU
     if (nDims == 2)
     {
 #pragma omp parallel for collapse(2)
@@ -2330,16 +2294,12 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
     {
       ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
     }
-    }
-//#endif
+#endif
 
 #ifdef _GPU
-    if (!CPU_flag)
-    {
-      compute_dFdUconv_fpts_EulerNS_wrapper(dFdUconv_d, U_d, nFpts, nDims, input->gamma, 
-          startFpt, endFpt);
-      check_error();
-    }
+    compute_dFdUconv_fpts_EulerNS_wrapper(dFdUconv_d, U_d, nFpts, nDims, input->gamma, 
+        startFpt, endFpt);
+    check_error();
 #endif
   }
 }
@@ -2597,39 +2557,26 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 {
   if (input->fconv_type == "Rusanov")
   {
-//#ifdef _CPU
-    if (CPU_flag)
-    {
-      rusanov_dFcdU(startFpt, endFpt);
-    }
-//#endif
+#ifdef _CPU
+    rusanov_dFcdU(startFpt, endFpt);
+#endif
 
 #ifdef _GPU
-    if (!CPU_flag)
-    {
-      rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, LDG_bias_d,
-          input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
-      check_error();
-    }
+    rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, LDG_bias_d,
+        input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+    check_error();
 #endif
 
   }
   else if (input->fconv_type == "Roe")
   {
-//#ifdef _CPU
-    if (CPU_flag)
-    {
-      roe_dFcdU(startFpt, endFpt);
-    }
-//#endif
-
-#ifdef _GPU
-    if (!CPU_flag)
-    {
-      ThrowException("Roe flux for implicit method not implemented on GPU!");
-    }
+#ifdef _CPU
+    roe_dFcdU(startFpt, endFpt);
 #endif
 
+#ifdef _GPU
+    ThrowException("Roe flux for implicit method not implemented on GPU!");
+#endif
   }
   else
   {
@@ -2640,18 +2587,12 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
   {
     if (input->fvisc_type == "LDG")
     {
-//#ifdef _CPU
-      if (CPU_flag)
-      {
-        LDG_dFcdU(startFpt, endFpt);
-      }
-//#endif
+#ifdef _CPU
+      LDG_dFcdU(startFpt, endFpt);
+#endif
 
 #ifdef _GPU
-      if (!CPU_flag)
-      {
-        ThrowException("LDG flux for implicit method not implemented on GPU!");
-      }
+      ThrowException("LDG flux for implicit method not implemented on GPU!");
 #endif
 
     }
@@ -3248,9 +3189,7 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::transform_dFcdU()
 {
-//#ifdef _CPU
-  if (CPU_flag)
-  {
+#ifdef _CPU
 #pragma omp parallel for collapse(5)
   for (unsigned int slot = 0; slot < 2; slot++)
   {
@@ -3288,15 +3227,11 @@ void Faces::transform_dFcdU()
       }
     }
   }
-  }
-//#endif
+#endif
 
 #ifdef _GPU
-  if (!CPU_flag)
-  {
-    transform_dFcdU_faces_wrapper(dFcdU_d, dA_d, nFpts, nVars);
-    check_error();
-  }
+  transform_dFcdU_faces_wrapper(dFcdU_d, dA_d, nFpts, nVars);
+  check_error();
 #endif
 }
 
@@ -3330,7 +3265,6 @@ void Faces::send_U_data()
 #endif
 
 #ifdef _GPU
-  //cudaDeviceSynchronize();
   sync_stream(0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
@@ -3339,14 +3273,12 @@ void Faces::send_U_data()
     
     /* Pack buffer of solution data at flux points in list */
     pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars, 1);
-    //pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars);
   }
 
   /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
-    //copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size());
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
 
@@ -3391,7 +3323,6 @@ void Faces::recv_U_data()
   {
     int pairedRank = entry.first;
     copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
-    //copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size());
   }
 
   for (auto &entry : geo->fpt_buffer_map_d)
@@ -3400,10 +3331,8 @@ void Faces::recv_U_data()
     auto &fpts = entry.second;
 
     unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1);
-    //unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars);
   }
 
-  //cudaDeviceSynchronize();
   sync_stream(0);
 #endif
 

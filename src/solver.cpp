@@ -21,7 +21,6 @@
 #include "input.hpp"
 #include "mdvector.hpp"
 #include "solver.hpp"
-#include "spmatrix.hpp"
 
 #ifdef _MPI
 #include "mpi.h"
@@ -29,7 +28,6 @@
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
-#include "spmatrix_gpu.h"
 #include "solver_kernels.h"
 #include "cublas_v2.h"
 #endif
@@ -125,26 +123,12 @@ void FRSolver::setup_update()
     rk_alpha(0) = 0.153; rk_alpha(1) = 0.442; 
     rk_alpha(2) = 0.930; rk_alpha(3) = 1.0;
   }
-  else if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
-    /* Set temporary flag for global implicit system */
-#ifdef _CPU
-    eles->CPU_flag = true;
-    if (input->dt_scheme == "BDF1")
-    {
-      ThrowException("BDF1 not implemented on CPU");
-    }
-#endif
 #ifdef _GPU
-    if (input->dt_scheme == "BDF1")
-      eles->CPU_flag = true;
-    else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+    if (input->viscous)
     {
-      if (input->viscous)
-      {
-        ThrowException("Viscous LUJac/SGS not implemented on GPU");
-      }
-      eles->CPU_flag = false;
+      ThrowException("Viscous LUJac/SGS not implemented on GPU");
     }
 #endif
 
@@ -568,8 +552,6 @@ void FRSolver::solver_data_to_device()
   }
 
 #endif
-
-
 }
 #endif
 
@@ -735,12 +717,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   }
 
-
   /* Copy common flux data from face local storage to element local storage */
   F_from_faces(startEle, endEle);
 
-  /* Compute divergence of flux */
-  //eles->compute_divF(stage, startEle, endEle);
   /* Compute flux point contribution to divergence of flux */
   eles->compute_divF_fpts(stage, startEle, endEle);
 
@@ -748,22 +727,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   if (input->source)
     add_source(stage, startEle, endEle);
 
-
-
 }
 
 void FRSolver::compute_LHS()
 {
-#ifdef _GPU
-  /* Copy new solution from GPU */
-  // TODO: Temporary until placed in GPU
-  if (input->dt_scheme == "BDF1")
-  {
-    eles->U_spts = eles->U_spts_d;
-    faces->U = faces->U_d;
-  }
-#endif
-
   /* Compute derivative of convective flux with respect to state variables 
    * at solution and flux points */
   eles->compute_dFdUconv();
@@ -800,55 +767,41 @@ void FRSolver::compute_LHS()
   dFcdU_from_faces();
 
   /* Compute LHS implicit Jacobian */
-  if (input->dt_scheme == "BDF1")
+  if (!input->stream_mode)
   {
-    eles->compute_globalLHS(dt);
-
-#ifdef _GPU
-    /* Copy to GPU */
-    eles->GLHS_d.free_data();
-    eles->GLHS_d = eles->GLHS;
-#endif
-
-  }
-  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
-  {
-    if (!input->stream_mode)
-    {
 #ifdef _CPU
-        eles->compute_localLHS(dt, 0, geo.nEles);
-        compute_LHS_LU(0, geo.nEles);
+      eles->compute_localLHS(dt, 0, geo.nEles);
+      compute_LHS_LU(0, geo.nEles);
 #endif
 #ifdef _GPU
-      unsigned int blocksize = ceil(geo.nEles / (double) input->n_LHS_blocks);
-      for (unsigned int startEle = 0; startEle <  geo.nEles; startEle += blocksize)
-      {
-        unsigned int endEle = std::min(startEle + blocksize, geo.nEles);
+    unsigned int blocksize = ceil(geo.nEles / (double) input->n_LHS_blocks);
+    for (unsigned int startEle = 0; startEle <  geo.nEles; startEle += blocksize)
+    {
+      unsigned int endEle = std::min(startEle + blocksize, geo.nEles);
 
-        eles->compute_localLHS(dt_d, startEle, endEle);
-        compute_LHS_LU(startEle, endEle);
-      }
-#endif
+      eles->compute_localLHS(dt_d, startEle, endEle);
+      compute_LHS_LU(startEle, endEle);
     }
-    else
+#endif
+  }
+  else
+  {
+    for (unsigned int color = geo.nColors; color > 0; color--)
     {
-      for (unsigned int color = geo.nColors; color > 0; color--)
-      {
-        unsigned int startEle = geo.ele_color_range[color - 1];
-        unsigned int endEle = geo.ele_color_range[color];
+      unsigned int startEle = geo.ele_color_range[color - 1];
+      unsigned int endEle = geo.ele_color_range[color];
 
 #ifdef _CPU
-        eles->compute_localLHS(dt, startEle, endEle, color);
+      eles->compute_localLHS(dt, startEle, endEle, color);
 #endif
 #ifdef _GPU
-        eles->compute_localLHS(dt_d, startEle, endEle, color);
+      eles->compute_localLHS(dt_d, startEle, endEle, color);
 #endif
-        compute_LHS_LU(startEle, endEle, color);
+      compute_LHS_LU(startEle, endEle, color);
 
 #ifdef _GPU
-        copy_from_device(eles->LHSInvs[color - 1].data(), eles->LHSInv_d.data(), eles->LHSInv_d.max_size());
+      copy_from_device(eles->LHSInvs[color - 1].data(), eles->LHSInv_d.data(), eles->LHSInv_d.max_size());
 #endif
-      }
     }
   }
 }
@@ -860,13 +813,11 @@ void FRSolver::compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsign
   unsigned int N = eles->nSpts * eles->nVars;
 
   /* Perform batched LU using cuBLAS */
-  //cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), eles->nEles);
   cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), 
       endEle - startEle);
 
   if (input->inv_mode)
   {
-    //cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LHSInv_ptrs_d.data(), N, eles->LU_info_d.data(), eles->nEles);
     if (!input->stream_mode)
     {
       cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
@@ -981,82 +932,65 @@ void FRSolver::compute_RHS_source(const mdvector_gpu<double> &source, unsigned i
 
 void FRSolver::compute_deltaU(unsigned int color)
 {
-  if (input->dt_scheme == "BDF1")
-  {
-#ifdef _CPU
-    ThrowException("Global BDF1 not supported on CPU.");
-#endif
+  unsigned int startEle = geo.ele_color_range[color - 1];
+  unsigned int endEle = geo.ele_color_range[color];
 
-#ifdef _GPU
-    compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
-#endif
-
-  }
-  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
-  {
-    unsigned int startEle = geo.ele_color_range[color - 1];
-    unsigned int endEle = geo.ele_color_range[color];
-
-    if (!input->stream_mode)
-      color = 1;
+  if (!input->stream_mode)
+    color = 1;
 
 #ifdef _CPU
 #ifndef _NO_TNT
-    unsigned int idx = 0;
+  unsigned int idx = 0;
 
-    if (!input->stream_mode)
-      idx = startEle;
+  if (!input->stream_mode)
+    idx = startEle;
 
-    for (unsigned int ele = startEle; ele < endEle; ele++)
+  for (unsigned int ele = startEle; ele < endEle; ele++)
+  {
+    /* Create Array1D view of RHS */
+    unsigned int N = eles->nSpts * eles->nVars;
+    TNT::Array1D<double> b(N, &eles->RHS(0, 0, ele));
+
+    /* Solve for deltaU */
+    TNT::Array1D<double> x(N, &eles->deltaU(0, 0, ele));
+    x.inject(LUptrs[color - 1][idx].solve(b));
+
+    if (x.dim() == 0)
     {
-      /* Create Array1D view of RHS */
-      unsigned int N = eles->nSpts * eles->nVars;
-      TNT::Array1D<double> b(N, &eles->RHS(0, 0, ele));
-
-      /* Solve for deltaU */
-      TNT::Array1D<double> x(N, &eles->deltaU(0, 0, ele));
-      x.inject(LUptrs[color - 1][idx].solve(b));
-
-      if (x.dim() == 0)
-      {
-        ThrowException("LU solve failed!");
-      }
-
-      idx++;
+      ThrowException("LU solve failed!");
     }
+
+    idx++;
+  }
 
 #endif
 #endif
 
 #ifdef _GPU
-    if (!input->inv_mode)
-    {
-      /* Solve LU systems using batched cublas routine */
-      unsigned int N = eles->nSpts * eles->nVars;
-      int info;
-      cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, eles->LU_pivots_d.data() + startEle * N, 
-          eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
+  if (!input->inv_mode)
+  {
+    /* Solve LU systems using batched cublas routine */
+    unsigned int N = eles->nSpts * eles->nVars;
+    int info;
+    cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, eles->LU_pivots_d.data() + startEle * N, 
+        eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
 
-      if (info)
-        ThrowException("cublasDgetrs failed. info = " + std::to_string(info));
-    }
-    else
-    {
-      unsigned int N = eles->nSpts * eles->nVars;
-
-      if (!input->stream_mode)
-        cublasDgemvBatched_wrapper(N, N, 1.0, (const double**) (eles->LHSInv_ptrs_d.data() + startEle), N, (const double**) eles->RHS_ptrs_d.data() + startEle, 
-            1, 0.0, eles->deltaU_ptrs_d.data() + startEle, 1, endEle - startEle); 
-      else
-        cublasDgemvBatched_wrapper(N, N, 1.0, (const double**) (eles->LHSInv_ptrs_d.data()), N, (const double**) eles->RHS_ptrs_d.data() + startEle, 
-            1, 0.0, eles->deltaU_ptrs_d.data() + startEle, 1, endEle - startEle); 
-
-      //check_error();
-      
-
-    }
-#endif
+    if (info)
+      ThrowException("cublasDgetrs failed. info = " + std::to_string(info));
   }
+  else
+  {
+    unsigned int N = eles->nSpts * eles->nVars;
+
+    if (!input->stream_mode)
+      cublasDgemvBatched_wrapper(N, N, 1.0, (const double**) (eles->LHSInv_ptrs_d.data() + startEle), N, (const double**) eles->RHS_ptrs_d.data() + startEle, 
+          1, 0.0, eles->deltaU_ptrs_d.data() + startEle, 1, endEle - startEle); 
+    else
+      cublasDgemvBatched_wrapper(N, N, 1.0, (const double**) (eles->LHSInv_ptrs_d.data()), N, (const double**) eles->RHS_ptrs_d.data() + startEle, 
+          1, 0.0, eles->deltaU_ptrs_d.data() + startEle, 1, endEle - startEle); 
+
+  }
+#endif
 }
 
 void FRSolver::compute_U(unsigned int color)
@@ -1078,14 +1012,13 @@ void FRSolver::compute_U(unsigned int color)
 #endif
 
 #ifdef _GPU
-  if (input->dt_scheme == "BDF1" or input->inv_mode)
+  /* Add RHS (which contains deltaU) to U */
+  if (input->inv_mode)
   {
-
     compute_U_wrapper(eles->U_spts_d, eles->deltaU_d, eles->nSpts, eles->nEles, eles->nVars, startEle, endEle);
   }
-  else if (input->dt_scheme == "LUJac" or input->dt_scheme == "LUSGS")
+  else
   {
-    /* Add RHS (which contains deltaU) to U */
     compute_U_wrapper(eles->U_spts_d, eles->RHS_d, eles->nSpts, eles->nEles, eles->nVars, startEle, endEle);
   }
 #endif
@@ -1113,7 +1046,7 @@ void FRSolver::initialize_U()
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     /* Maximum number of unique matrices possible per element */
     unsigned int nMat = eles->nFaces + 1;
@@ -1132,79 +1065,72 @@ void FRSolver::initialize_U()
       eles->dFcddU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
     }
 
-    if (input->dt_scheme == "BDF1")
-    {
-      eles->LHS.assign({eles->nSpts, eles->nSpts, nMat});
-    }
-    else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
-    {
       
-      if (!input->stream_mode)
-      {
-        eles->LHSs.resize(1);
-        eles->LHSInvs.resize(1);
-        LUptrs.resize(1);
+    if (!input->stream_mode)
+    {
+      eles->LHSs.resize(1);
+      eles->LHSInvs.resize(1);
+      LUptrs.resize(1);
 
 #ifdef _CPU
-        unsigned int nElesMax = eles->nEles;
+      unsigned int nElesMax = eles->nEles;
 #endif
 #ifdef _GPU
-        unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
 #endif
 
-        eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-        LUptrs[0].resize(eles->nEles);
-        
-        if (input->inv_mode)
-        {
-          eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
-          eles->LHSInv_ptrs.assign({eles->nEles});
-          eles->deltaU_ptrs.assign({eles->nEles});
-        }
-
-        eles->LHS_ptrs.assign({nElesMax});
-        eles->RHS_ptrs.assign({eles->nEles});
-        eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
-        eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
-
-      }
-      else
+      eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
+      LUptrs[0].resize(eles->nEles);
+      
+      if (input->inv_mode)
       {
-        eles->LHSs.resize(geo.nColors);
-        eles->LHSInvs.resize(geo.nColors);
-        LUptrs.resize(geo.nColors);
-
-        unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
-        for (unsigned int color = 1; color <= geo.nColors; color++)
-        {
-          eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-          eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, false, true);
-          LUptrs[color - 1].resize(nElesMax);
-        }
-        
-        if (input->inv_mode)
-        {
-          eles->LHSInv_ptrs.assign({nElesMax});
-          eles->deltaU_ptrs.assign({eles->nEles});
-        }
-
-        eles->LHS_ptrs.assign({nElesMax});
-        eles->RHS_ptrs.assign({eles->nEles});
-        eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
-        eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
+        eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
+        eles->LHSInv_ptrs.assign({eles->nEles});
+        eles->deltaU_ptrs.assign({eles->nEles});
       }
 
-      eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
-      eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
-      eles->CdFddU0.assign({eles->nSpts, eles->nSpts, eles->nDims});
-      eles->CtempSS.assign({eles->nSpts, eles->nSpts});
-      eles->CtempFS.assign({eles->nFpts, eles->nSpts});
-      eles->CtempFS2.assign({eles->nFpts, eles->nSpts});
-      eles->CtempSF.assign({eles->nSpts, eles->nFpts});
-      eles->CtempFSN.assign({eles->nSpts1D, eles->nSpts});
-      eles->CtempFSN2.assign({eles->nSpts1D, eles->nSpts});
+      eles->LHS_ptrs.assign({nElesMax});
+      eles->RHS_ptrs.assign({eles->nEles});
+      eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
+      eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
 
     }
+    else
+    {
+      eles->LHSs.resize(geo.nColors);
+      eles->LHSInvs.resize(geo.nColors);
+      LUptrs.resize(geo.nColors);
+
+      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+      for (unsigned int color = 1; color <= geo.nColors; color++)
+      {
+        eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
+        eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, false, true);
+        LUptrs[color - 1].resize(nElesMax);
+      }
+      
+      if (input->inv_mode)
+      {
+        eles->LHSInv_ptrs.assign({nElesMax});
+        eles->deltaU_ptrs.assign({eles->nEles});
+      }
+
+      eles->LHS_ptrs.assign({nElesMax});
+      eles->RHS_ptrs.assign({eles->nEles});
+      eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
+      eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
+    }
+
+    eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+    eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
+    eles->CdFddU0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+    eles->CtempSS.assign({eles->nSpts, eles->nSpts});
+    eles->CtempFS.assign({eles->nFpts, eles->nSpts});
+    eles->CtempFS2.assign({eles->nFpts, eles->nSpts});
+    eles->CtempSF.assign({eles->nSpts, eles->nFpts});
+    eles->CtempFSN.assign({eles->nSpts1D, eles->nSpts});
+    eles->CtempFSN2.assign({eles->nSpts1D, eles->nSpts});
+
     eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
     eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
   }
@@ -1245,7 +1171,6 @@ void FRSolver::initialize_U()
 
           }
         }
-
       }
     }
     else
@@ -1434,9 +1359,7 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 
 void FRSolver::dFcdU_from_faces()
 {
-//#ifdef _CPU
-  if (eles->CPU_flag)
-  {
+#ifdef _CPU
 #pragma omp parallel for collapse(4)
   for (unsigned int nj = 0; nj < eles->nVars; nj++) 
   {
@@ -1513,17 +1436,13 @@ void FRSolver::dFcdU_from_faces()
       }
     }
   }
-  }
-//#endif
+#endif
 
 #ifdef _GPU
-  if (!eles->CPU_flag)
-  {
-    dFcdU_from_faces_wrapper(faces->dFcdU_d, eles->dFcdU_fpts_d, geo.fpt2gfpt_d,
-        geo.fpt2gfpt_slot_d, geo.gfpt2bnd_d, geo.nGfpts_int, geo.nGfpts_bnd, eles->nVars, 
-        eles->nEles, eles->nFpts, eles->nDims, input->equation);
-    check_error();
-  }
+  dFcdU_from_faces_wrapper(faces->dFcdU_d, eles->dFcdU_fpts_d, geo.fpt2gfpt_d,
+      geo.fpt2gfpt_slot_d, geo.gfpt2bnd_d, geo.nGfpts_int, geo.nGfpts_bnd, eles->nVars, 
+      eles->nEles, eles->nFpts, eles->nDims, input->equation);
+  check_error();
 #endif
 }
 
@@ -1568,7 +1487,7 @@ void FRSolver::update(const mdvector<double> &source)
 void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 {
-  if (input->dt_scheme != "BDF1" && input->dt_scheme != "LUJac" && input->dt_scheme != "LUSGS")
+  if (input->dt_scheme != "LUJac" && input->dt_scheme != "LUSGS")
   {
 #ifdef _CPU
     U_ini = eles->U_spts;
@@ -1726,59 +1645,6 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       check_error();
 #endif
     }
-  }
-
-  else if (input->dt_scheme == "BDF1")
-  {
-#ifdef _CPU
-    ThrowException("BDF1 not implemented on CPU yet.");
-#endif
-
-#ifdef _GPU
-    compute_residual(0);
-
-    /* Freeze Jacobian */
-    int iter = current_iter - restart_iter;
-    if (iter%input->Jfreeze_freq == 0)
-    {
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
-      {
-        compute_element_dt();
-      }
-      dt = dt_d;
-
-      /* Compute SER time step growth */
-      if (input->SER)
-      {
-        eles->divF_spts = eles->divF_spts_d;
-        compute_SER_dt();
-        dt_d = dt;
-      }
-
-      /* Compute LHS implicit Jacobian */
-      compute_LHS();
-    }
-
-    /* Prepare RHS vector */
-    if (source.size() == 0)
-    {
-      compute_RHS();
-    }
-    else
-    {
-      compute_RHS_source(source);
-    }
-
-    /* Solve system for deltaU */
-    eles->deltaU.fill(0); //TODO: Whoops! We shouldn't be resetting the guess to zero every iteration!
-    eles->deltaU_d = eles->deltaU;
-    compute_deltaU_globalLHS_wrapper(eles->GLHS_d, eles->deltaU_d, eles->RHS_d, GMRES_conv);
-
-    /* Add deltaU to solution */
-    compute_U();
-
-#endif
   }
 
   else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
@@ -1960,12 +1826,6 @@ void FRSolver::compute_SER_dt()
     /* Relax Growth */
     if (omg > 1.0)
       omg = std::sqrt(omg);
-
-    /* Relax if GMRES did not converge */
-    if (input->dt_scheme == "BDF1" && !GMRES_conv)
-    {
-      omg = 0.5;
-    }
 
     /* Compute new time step */
     SER_omg *= omg;
@@ -2461,7 +2321,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #endif
 
   // HACK: Change nStages to compute the correct residual
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     nStages = 1;
   }
@@ -2495,7 +2355,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
 
   // HACK: Change nStages back
-  if (input->dt_scheme == "BDF1" || input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
   {
     nStages = 2;
   }

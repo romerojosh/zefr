@@ -4,8 +4,6 @@
 
 template<typename T>
 class mdvector_gpu;
-template<typename T>
-class spmatrix_gpu;
 
 /* TODO: Move these general operators to a different file (aux_kernels.h/cu) */
 void check_error();
@@ -96,8 +94,6 @@ void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &
 void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, const mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, 
     mdvector_gpu<double> &dt_in, mdvector_gpu<double> &b, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
     unsigned int startEle, unsigned int endEle);
-
-void compute_deltaU_globalLHS_wrapper(spmatrix_gpu<double> &A, mdvector_gpu<double> &deltaU,  mdvector_gpu<double> &b, bool &GMRES_conv);
 
 void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
     unsigned int startEle, unsigned int endEle);

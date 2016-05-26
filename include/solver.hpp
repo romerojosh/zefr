@@ -11,12 +11,10 @@
 #include "faces.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
-#include "spmatrix.hpp"
 #include "filter.hpp"
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
-#include "spmatrix_gpu.h"
 #endif
 
 #ifndef _NO_TNT
@@ -52,10 +50,7 @@ class FRSolver
     unsigned int prev_color = 0;
     double SER_omg = 1;
     double SER_res[2] = {0};
-    bool GMRES_conv;
 #ifndef _NO_TNT
-    //std::vector<std::shared_ptr<JAMA::LU<double>>> LUptrs;
-    //std::vector<std::vector<std::shared_ptr<JAMA::LU<double>>>> LUptrs;
     std::vector<std::vector<JAMA::LU<double>>> LUptrs;
 #endif
 
