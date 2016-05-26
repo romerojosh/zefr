@@ -3,20 +3,26 @@ nDims    2
 meshfile naca_32x32_b2.msh
 
 # Solver:
-order     2
+order     4
 equation EulerNS    (AdvDiff, Burgers, EulerNS)
 viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 2000
-dt_scheme LUJac      (Euler, RK44, RK54)
+n_steps 100000
+res_tol 1e-11
+dt_scheme MCGS      (Euler, RK44, RK54, MCGS)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
-CFL	  4.0
+CFL	  1.5
+
+# CFL Adaptation
+adapt_CFL 1
+CFL_max 1e5
+CFL_ratio 2.0
 
 # Multigrid:
-p_multi 1
+p_multi 0
 mg_cycle V
 FMG_vcycles 1000
 rel_fac 1.00
@@ -28,18 +34,22 @@ c_smooth_steps 2
 
 # Implicit
 SER 0
+stream_mode 0
+backsweep 0
 Jfreeze_freq 100
+nColors 2
+n_LHS_blocks 4
 
 restart 0
-restart_file qnaca_eul_impLUJac_gpu/qnaca_eul_impLUJac_gpu_000002000.vtu
+restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix naca_eul_impLUJac
-write_freq    1000
+output_prefix naca_eul_MCGS
+write_freq    100000
 report_freq   100
 res_type      1
-force_freq    0
+force_freq    1000
 error_freq    0
 nQpts1D       10
 
@@ -62,9 +72,9 @@ prandtl 0.72
 S       120
 
 # Euler specific
-rho_fs 1
+rho_fs 1.4
 u_fs 0.499881013537955
 v_fs 0.010907442517237
 w_fs 0.0
-P_fs .71428571428
+P_fs 1.0
 

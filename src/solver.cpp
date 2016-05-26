@@ -123,12 +123,12 @@ void FRSolver::setup_update()
     rk_alpha(0) = 0.153; rk_alpha(1) = 0.442; 
     rk_alpha(2) = 0.930; rk_alpha(3) = 1.0;
   }
-  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "MCGS")
   {
 #ifdef _GPU
     if (input->viscous)
     {
-      ThrowException("Viscous LUJac/SGS not implemented on GPU");
+      ThrowException("Viscous MCGS not implemented on GPU");
     }
 #endif
 
@@ -137,7 +137,7 @@ void FRSolver::setup_update()
 
     /* Forward or Forward/Backward sweep */
     nCounter = geo.nColors;
-    if (input->dt_scheme == "LUSGS" && input->backsweep)
+    if (input->backsweep)
     {
       nCounter *= 2;
     }
@@ -417,7 +417,7 @@ void FRSolver::solver_data_to_device()
   eles->deltaU_d = eles->deltaU;
   eles->RHS_d = eles->RHS;
 
-  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "MCGS")
   {
     eles->LHS_d = eles->LHSs[0];
 
@@ -1052,7 +1052,7 @@ void FRSolver::initialize_U()
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "MCGS")
   {
     /* Maximum number of unique matrices possible per element */
     unsigned int nMat = eles->nFaces + 1;
@@ -1493,7 +1493,7 @@ void FRSolver::update(const mdvector<double> &source)
 void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 {
-  if (input->dt_scheme != "LUJac" && input->dt_scheme != "LUSGS")
+  if (input->dt_scheme != "MCGS")
   {
 #ifdef _CPU
     U_ini = eles->U_spts;
@@ -1653,7 +1653,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     }
   }
 
-  else if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  else if (input->dt_scheme == "MCGS")
   {
     /* Sweep through colors */
     for (unsigned int counter = 1; counter <= nCounter; counter++)
@@ -2366,7 +2366,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #endif
 
   // HACK: Change nStages to compute the correct residual
-  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "MCGS")
   {
     nStages = 1;
   }
@@ -2400,7 +2400,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   unsigned int nDoF =  (eles->nSpts * eles->nEles);
 
   // HACK: Change nStages back
-  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "MCGS")
   {
     nStages = 2;
   }

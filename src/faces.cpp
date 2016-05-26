@@ -51,7 +51,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   WR.assign(nVars, 0);
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "LUJac" || input->dt_scheme == "LUSGS")
+  if (input->dt_scheme == "MCGS")
   {
     /* Index Map Notes:
      * Common Value Slots:  Sloti:  dFdUL, dFdUR  Slotj:  L, R

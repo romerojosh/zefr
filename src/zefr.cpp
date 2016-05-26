@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
 
   /* Write initial solution */
   solver.write_solution(input.output_prefix);
-  if (input.dt_scheme == "LUSGS")
+  if (input.dt_scheme == "MCGS")
   {
     solver.write_color();
   }

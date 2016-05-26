@@ -26,7 +26,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 
   load_mesh_data(input, geo);
 
-  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
+  if (input->dt_scheme == "MCGS")
   {
     setup_element_colors(input, geo);
   }
@@ -37,7 +37,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 
   setup_global_fpts(input, geo, order);
 
-  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
+  if (input->dt_scheme == "MCGS")
   {
     shuffle_data_by_color(geo);
   }
@@ -1482,12 +1482,12 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
 {
   /* Setup element colors */
   geo.ele_color.assign({geo.nEles});
-  if (input->dt_scheme == "LUJac")
+  if (input->nColors == 1)
   {
     geo.nColors = 1;
     geo.ele_color.fill(1);
   }
-  else if (input->dt_scheme == "LUSGS")
+  else
   {
     geo.nColors = input->nColors;
     std::vector<bool> used(geo.nColors, false);
@@ -1773,7 +1773,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  if (input->dt_scheme == "LUSGS" or input->dt_scheme == "LUJac")
+  if (input->dt_scheme == "MCGS")
   {
     /* Reduce color data to only contain partition local elements */
     auto ele_color_glob = geo.ele_color;
