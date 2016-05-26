@@ -1708,17 +1708,12 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
       check_error();
 #endif
     }
-    /*
-    else if (input->fvisc_type == "Central")
-      central_flux();
-    */
     else
     {
       ThrowException("Numerical viscous flux type not recognized!");
     }
   }
 
-  //transform_flux();
 }
 
 void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
@@ -2012,33 +2007,6 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
-/* Note: This function is deprecated */
-void Faces::transform_flux()
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(2)
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      Fcomm(fpt, n, 0) *= dA(fpt);
-      Fcomm(fpt, n, 1) *= -dA(fpt); // Right state flux has opposite sign
-    }
-  }
-#endif
-
-#ifdef _GPU
-  //Fcomm_d = Fcomm;
-
-  transform_flux_faces_wrapper(Fcomm_d, dA_d, nFpts, nVars);
-
-  check_error();
-
-  //Fcomm = Fcomm_d;
-#endif
-
-}
-
 void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 {
    
@@ -2130,40 +2098,6 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
         Fcomm(fpt, n, 0) += F;
         Fcomm(fpt, n, 1) -= F;
       }
-    }
-  }
-}
-
-void Faces::central_flux()
-{
-#pragma omp parallel for firstprivate(FL, FR, WL, WR)
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-  {
-    /* Initialize FL, FR */
-    std::fill(FL.begin(), FL.end(), 0.0);
-    std::fill(FR.begin(), FR.end(), 0.0);
-
-    /* Get interface-normal flux components  (from L to R)*/
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        FL[n] += Fvisc(fpt, n, dim, 0) * norm(fpt, dim, 0);
-        FR[n] += Fvisc(fpt, n, dim, 1) * norm(fpt, dim, 0);
-      }
-    }
-
-    /* Get left and right state variables */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
-    }
-
-    /* Compute common normal viscous flux and accumulate */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      Fcomm(fpt, n, 0) += (0.5 * (FL[n]+FR[n])); 
-      Fcomm(fpt, n, 1) += (0.5 * (FL[n]+FR[n])); 
     }
   }
 }

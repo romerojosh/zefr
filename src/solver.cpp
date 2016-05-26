@@ -590,7 +590,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #endif
 
   /* Apply boundary conditions to state variables */
-  //faces->apply_bcs(prev_color);
   faces->apply_bcs();
 
   /* Compute convective flux at solution points */
@@ -624,12 +623,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   eles->transform_flux(startEle, endEle);
 
   /* Compute convective and parent space common fluxes at flux points */
-  //faces->compute_Fconv(0, geo.nGfpts, prev_color);
   faces->compute_Fconv(0, geo.nGfpts);
-
-  //faces->compute_common_F(0, geo.nGfpts, color);
   faces->compute_common_F(0, geo.nGfpts);
 
+  /* Compute solution point contribution to divergence of flux */
   eles->compute_divF_spts(stage, startEle, endEle);
 
 #endif
@@ -645,6 +642,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Receieve U data */
     faces->recv_U_data();
 
+    //TODO: Do more work during this MPI transfer. Plenty of opportunities.
+    
     /* Finish computation of common interface solution */
     faces->compute_common_U(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
 
@@ -683,6 +682,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Transform solution point fluxes from physical to reference space */
     eles->transform_flux(startEle, endEle);
 
+    /* Compute solution point contribution to divergence of flux */
+    eles->compute_divF_spts(stage, startEle, endEle);
+
     /* Compute viscous and convective flux and common interface flux 
      * at non-MPI flux points */
     faces->compute_Fvisc(0, geo.nGfpts_int + geo.nGfpts_bnd);
@@ -706,6 +708,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Transform solution point fluxes from physical to reference space */
     eles->transform_flux(startEle, endEle);
+
+    /* Compute solution point contribution to divergence of flux */
+    eles->compute_divF_spts(stage, startEle, endEle);
 
     /* Compute viscous and convective flux and common interface fluxes 
      * at flux points*/ 

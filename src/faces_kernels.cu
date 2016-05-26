@@ -2540,30 +2540,6 @@ void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUco
 }
 
 __global__
-void transform_flux_faces(mdvector_gpu<double> Fcomm, mdvector_gpu<double> dA, 
-    unsigned int nFpts, unsigned int nVars)
-{
-    const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-    const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
-
-    if (fpt >= nFpts || var >= nVars)
-      return;
-
-    Fcomm(fpt, var, 0) *= dA(fpt);
-    Fcomm(fpt, var, 1) *= -dA(fpt); // Right state flux has opposite sign
-}
-
-void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 
-    unsigned int nFpts, unsigned int nVars)
-{
-  unsigned int threads = 192;
-  unsigned int blocks = (nFpts * nVars + threads - 1)/threads;
-
-  transform_flux_faces<<<blocks,threads>>>(Fcomm, dA, nFpts, nVars);
-
-}
-
-__global__
 void transform_dFcdU_faces(mdvector_gpu<double> dFcdU, mdvector_gpu<double> dA, 
     unsigned int nFpts, unsigned int nVars)
 {
