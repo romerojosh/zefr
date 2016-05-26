@@ -9,7 +9,7 @@ CXX = g++
 CU = nvcc
 FLAGS += -std=c++11
 CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -Wno-unknown-pragmas
-CUFLAGS = -arch=sm_20 -O3 -use_fast_math --default-stream per-thread -D_NO_CUDA_ERROR
+CUFLAGS = -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
 
 # Setting OpenMP flags
 ifeq ($(strip $(OPENMP)),YES)

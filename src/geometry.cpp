@@ -5,7 +5,6 @@
 #include <iostream>
 #include <map>
 #include <queue>
-#include <stack>
 #include <set>
 #include <string>
 #include <vector>
@@ -1493,19 +1492,16 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
     geo.nColors = input->nColors;
     std::vector<bool> used(geo.nColors, false);
     std::vector<unsigned int> counts(geo.nColors, 0);
-    //std::queue<unsigned int> eleQ;
-    std::stack<unsigned int> eleQ;
+    std::queue<unsigned int> eleQ;
     geo.ele_color.fill(0);
     geo.ele_color(0) = 0;
 
     eleQ.push(0);
 
     /* Loop over elements and assign colors using greedy algorithm */
-    //for (unsigned int ele = 0; ele < geo.nEles; ele++)
     while (!eleQ.empty())
     {
-      //unsigned int ele = eleQ.front(); //TODO: Add stack and queue modes
-      unsigned int ele = eleQ.top();
+      unsigned int ele = eleQ.front();
       eleQ.pop();
 
       if (geo.ele_color(ele) != 0)
