@@ -2727,7 +2727,10 @@ void FRSolver::report_error(std::ofstream &f)
   /* If using GPU, copy out solution */
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
-  eles->dU_spts = eles->dU_spts_d;
+  if (input->viscous)
+  {
+    eles->dU_spts = eles->dU_spts_d;
+  }
 #endif
 
   /* Extrapolate solution to quadrature points */
