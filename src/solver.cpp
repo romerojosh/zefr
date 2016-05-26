@@ -444,7 +444,7 @@ void FRSolver::solver_data_to_device()
 
     if (!input->stream_mode)
     {
-      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+      unsigned int nElesMax = ceil(geo.nEles / (double) input->n_LHS_blocks);
       for (unsigned int ele = 0; ele < nElesMax; ele++)
       {
         eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
@@ -782,6 +782,8 @@ void FRSolver::compute_LHS()
       eles->compute_localLHS(dt_d, startEle, endEle);
       compute_LHS_LU(startEle, endEle);
     }
+
+    check_error();
 #endif
   }
   else
@@ -1076,7 +1078,7 @@ void FRSolver::initialize_U()
       unsigned int nElesMax = eles->nEles;
 #endif
 #ifdef _GPU
-      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+      unsigned int nElesMax = ceil(geo.nEles / (double) input->n_LHS_blocks);
 #endif
 
       eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
