@@ -2860,6 +2860,7 @@ void FRSolver::report_error(std::ofstream &f)
   }
 
   std::vector<double> l2_error(2,0.0);
+  double vol = 0;
 
   unsigned int n = input->err_field;
   std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
@@ -2917,6 +2918,7 @@ void FRSolver::report_error(std::ofstream &f)
           U_error = U_true - u;
           dU_error[0] = dU_true[0] - du_dx;
           dU_error[1] = dU_true[1] - du_dy;
+          vol = 1;
         }
         else if (input->test_case == 3) // Isentropic bump
         {
@@ -2931,12 +2933,14 @@ void FRSolver::report_error(std::ofstream &f)
           double P = (input->gamma - 1.0) * (eles->U_qpts(qpt, ele, 3) - 0.5 * momF);
 
           U_error = (U_true - P/std::pow(eles->U_qpts(qpt, ele, 0), input->gamma)) / U_true;
+          vol += weight * eles->jaco_det_qpts(qpt, ele); 
         }
         else
         {
           U_error = U_true - eles->U_qpts(qpt, ele, n);
           dU_error[0] = dU_true[0] - eles->dU_qpts(qpt, ele, n, 0); 
           dU_error[1] = dU_true[1] - eles->dU_qpts(qpt, ele, n, 1);
+          vol = 1;
         }
 
         l2_error[0] += weight * eles->jaco_det_qpts(qpt, ele) * U_error * U_error; 
@@ -2963,13 +2967,13 @@ void FRSolver::report_error(std::ofstream &f)
   {
     std::cout << "l2_error: ";
     for (auto &val : l2_error)
-      std::cout << std::scientific << std::sqrt(val) << " ";
+      std::cout << std::scientific << std::sqrt(val / vol) << " ";
     std::cout << std::endl;
 
     /* Write to file */
     f << current_iter << " ";
     for (auto &val : l2_error)
-      f << std::scientific << std::setprecision(16) << std::sqrt(val) << " ";
+      f << std::scientific << std::setprecision(16) << std::sqrt(val / vol) << " ";
     f << std::endl;
   }
 
