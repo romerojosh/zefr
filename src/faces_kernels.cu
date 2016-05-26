@@ -73,50 +73,38 @@ void compute_Fconv_fpts_Burgers_wrapper(mdvector_gpu<double> &F,
 
 __global__
 void compute_Fconv_fpts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, mdvector_gpu<double> P, 
-    unsigned int nFpts, double gamma, unsigned int startFpt, unsigned int endFpt, unsigned int color,
-    mdvector_gpu<unsigned int> gfpt2color)
+    unsigned int nFpts, double gamma, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
   if (fpt >= endFpt)
     return;
 
-  /*
-  unsigned int flag = (unsigned int) (gfpt2color(fpt, 0) != color);
-  flag += (unsigned int) (gfpt2color(fpt, 1) != color);
-
-  if (color && flag == 2)
-    return;
-  */
-
   for (unsigned int slot = 0; slot < 2; slot ++)
   {
-    if (color == 0 or gfpt2color(fpt, slot) == color)
-    {
-      /* Get states */
-      double rho = U(fpt, 0, slot);
-      double momx = U(fpt, 1, slot);
-      double momy = U(fpt, 2, slot);
-      double ene = U(fpt, 3, slot);
+    /* Get states */
+    double rho = U(fpt, 0, slot);
+    double momx = U(fpt, 1, slot);
+    double momy = U(fpt, 2, slot);
+    double ene = U(fpt, 3, slot);
 
-      /* Compute some primitive variables (keep pressure)*/
-      double momF = (momx * momx + momy * momy) / rho;
+    /* Compute some primitive variables (keep pressure)*/
+    double momF = (momx * momx + momy * momy) / rho;
 
-      double P_d = (gamma - 1.0) * (ene - 0.5 * momF);
-      P(fpt, slot) = P_d;
+    double P_d = (gamma - 1.0) * (ene - 0.5 * momF);
+    P(fpt, slot) = P_d;
 
-      double H = (ene + P_d) / rho;
+    double H = (ene + P_d) / rho;
 
-      F(fpt, 0, 0, slot) = momx;
-      F(fpt, 1, 0, slot) = momx * momx / rho + P_d;
-      F(fpt, 2, 0, slot) = momx * momy / rho;
-      F(fpt, 3, 0, slot) = momx * H;
+    F(fpt, 0, 0, slot) = momx;
+    F(fpt, 1, 0, slot) = momx * momx / rho + P_d;
+    F(fpt, 2, 0, slot) = momx * momy / rho;
+    F(fpt, 3, 0, slot) = momx * H;
 
-      F(fpt, 0, 1, slot) = momy;
-      F(fpt, 1, 1, slot) = momy * momx / rho;
-      F(fpt, 2, 1, slot) = momy * momy / rho + P_d;
-      F(fpt, 3, 1, slot) = momy * H;
-    }
+    F(fpt, 0, 1, slot) = momy;
+    F(fpt, 1, 1, slot) = momy * momx / rho;
+    F(fpt, 2, 1, slot) = momy * momy / rho + P_d;
+    F(fpt, 3, 1, slot) = momy * H;
   }
 }
 
@@ -169,8 +157,7 @@ void compute_Fconv_fpts_3D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> 
 void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
     mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
     unsigned int nFpts, unsigned int nDims, double gamma,
-    unsigned int startFpt, unsigned int endFpt, unsigned int color, 
-    mdvector_gpu<unsigned int> &gfpt2color)
+    unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 192;
   //unsigned int blocks = (nFpts + threads - 1)/threads;
@@ -179,7 +166,7 @@ void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts,
   if (nDims == 2)
   {
     compute_Fconv_fpts_2D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma,
-        startFpt, endFpt, color, gfpt2color);
+        startFpt, endFpt);
   }
   else 
   {
@@ -586,15 +573,11 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
     mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
     mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, 
-    mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias, unsigned int color,
-    mdvector_gpu<unsigned int> gfpt2color)
+    mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
   if (fpt >= nGfpts_int + nGfpts_bnd)
-    return;
-
-  if (color && gfpt2color(fpt, 0) != color)
     return;
 
   unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
@@ -1032,8 +1015,7 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &norm_fs, 
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, 
-    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation,
-    unsigned int color, mdvector_gpu<unsigned int> &gfpt2color)
+    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
@@ -1044,34 +1026,28 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
     {
       if (nDims == 2)
         apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias,
-            color, gfpt2color); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
       else
         apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias,
-            color, gfpt2color); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
     }
     else if (equation == Burgers)
     {
       if (nDims == 2)
         apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias,
-            color, gfpt2color); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
       else
         apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias,
-            color, gfpt2color); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
     }
     else if (equation == EulerNS)
     {
       if (nDims == 2)
         apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias,
-            color, gfpt2color); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
       else
         apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias,
-            color, gfpt2color); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
     }
   }
 }
@@ -1857,21 +1833,12 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
     mdvector_gpu<double> dA, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
-    unsigned int endFpt, unsigned int color, mdvector_gpu<unsigned int> gfpt2color)
+    unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
   if (fpt >= endFpt)
     return;
-
-  if (color)
-  {
-    unsigned int flag = (unsigned int) (gfpt2color(fpt, 0) != color);
-    flag += (unsigned int) (gfpt2color(fpt, 1) != color);
-
-    if (flag == 2)
-      return;
-  }
 
   double FL[nVars]; double FR[nVars];
   double WL[nVars]; double WR[nVars];
@@ -1984,8 +1951,7 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, double gamma, double rus_k, unsigned int nFpts, 
-    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt,
-    unsigned int color, mdvector_gpu<unsigned int> &gfpt2color)
+    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 256;
   //unsigned int blocks = (nFpts + threads - 1)/threads;
@@ -2000,28 +1966,28 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   {
     if (nDims == 2)
       rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, color, gfpt2color);
+          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
     else
       rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, color, gfpt2color);
+          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
   }
   else if (equation == Burgers)
   {
     if (nDims == 2)
       rusanov_flux<1, 2, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, color, gfpt2color);
+          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
     else
       rusanov_flux<1, 3, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, color, gfpt2color);
+          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, color, gfpt2color);
+          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
     else
       rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, color, gfpt2color);
+          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
   }
 }
 

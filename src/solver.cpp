@@ -532,7 +532,6 @@ void FRSolver::solver_data_to_device()
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
   geo.coord_spts_d = geo.coord_spts;
-  geo.gfpt2color_d = geo.gfpt2color;
 
   /* Input parameters */
   input->V_fs_d = input->V_fs;

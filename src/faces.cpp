@@ -119,7 +119,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
 }
 
-void Faces::apply_bcs(unsigned int color)
+void Faces::apply_bcs()
 {
 #ifdef _CPU
   /* Create some useful variables outside loop */
@@ -129,9 +129,6 @@ void Faces::apply_bcs(unsigned int color)
 #pragma omp parallel for private(VL,VR)
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-
-    if (color && geo->gfpt2color(fpt, 0) != color)
-      continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -560,8 +557,7 @@ void Faces::apply_bcs(unsigned int color)
 #ifdef _GPU
   apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
       input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
-      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation, color,
-      geo->gfpt2color_d);
+      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation);
 
   check_error();
 #endif
@@ -1315,7 +1311,7 @@ void Faces::apply_bcs_dFdU()
 }
 
 
-void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt, unsigned int color)
+void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff)
   {
@@ -1364,35 +1360,31 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt, unsigned i
     if (nDims == 2)
     {
 #pragma omp parallel for collapse(2)
-      //for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
-          if (color == 0 or geo->gfpt2color(fpt, slot) == color)
+          /* Compute some primitive variables (keep pressure)*/
+          double momF = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim ++)
           {
-            /* Compute some primitive variables (keep pressure)*/
-            double momF = 0.0;
-            for (unsigned int dim = 0; dim < nDims; dim ++)
-            {
-              momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
-            }
-
-            momF /= U(fpt, 0, slot);
-
-            P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, 3, slot) - 0.5 * momF);
-            double H = (U(fpt, 3, slot) + P(fpt, slot)) / U(fpt, 0, slot);
-
-            Fconv(fpt, 0, 0, slot) = U(fpt, 1, slot);
-            Fconv(fpt, 1, 0, slot) = U(fpt, 1, slot) * U(fpt, 1, slot) / U(fpt, 0, slot) + P(fpt, slot);
-            Fconv(fpt, 2, 0, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
-            Fconv(fpt, 3, 0, slot) = U(fpt, 1, slot) * H;
-
-            Fconv(fpt, 0, 1, slot) = U(fpt, 2, slot);
-            Fconv(fpt, 1, 1, slot) = U(fpt, 2, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
-            Fconv(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
-            Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
+            momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
           }
+
+          momF /= U(fpt, 0, slot);
+
+          P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, 3, slot) - 0.5 * momF);
+          double H = (U(fpt, 3, slot) + P(fpt, slot)) / U(fpt, 0, slot);
+
+          Fconv(fpt, 0, 0, slot) = U(fpt, 1, slot);
+          Fconv(fpt, 1, 0, slot) = U(fpt, 1, slot) * U(fpt, 1, slot) / U(fpt, 0, slot) + P(fpt, slot);
+          Fconv(fpt, 2, 0, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 3, 0, slot) = U(fpt, 1, slot) * H;
+
+          Fconv(fpt, 0, 1, slot) = U(fpt, 2, slot);
+          Fconv(fpt, 1, 1, slot) = U(fpt, 2, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
+          Fconv(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
+          Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
         }
       }
     }
@@ -1439,7 +1431,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt, unsigned i
 
 #ifdef _GPU
       compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma, 
-          startFpt, endFpt, color, geo->gfpt2color_d);
+          startFpt, endFpt);
       check_error();
 #endif
   }
@@ -1665,18 +1657,17 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
-void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt, unsigned int color)
+void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 {
   if (input->fconv_type == "Rusanov")
   {
 #ifdef _CPU
-    rusanov_flux(startFpt, endFpt, color);
+    rusanov_flux(startFpt, endFpt);
 #endif
 
 #ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
-        dA_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt, 
-        color, geo->gfpt2color_d);
+        dA_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
 
@@ -1822,14 +1813,11 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 }
 
-void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt, unsigned int color)
+void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 {
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (color && (geo->gfpt2color(fpt, 0) != color && geo->gfpt2color(fpt, 1) != color))
-      continue;
-
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
     std::fill(FR.begin(), FR.end(), 0.0);
