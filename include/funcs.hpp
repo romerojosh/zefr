@@ -18,7 +18,7 @@ double compute_source_term(double x, double y, double z, double t, unsigned int 
 
 /* Compute maximum CFL */
 double get_cfl_limit_adv(int order);
-double get_cfl_limit_diff(double beta, int order);
+double get_cfl_limit_diff(int order, double beta);
 
 /* Blocked gemm operation using OpenMP */
 #ifdef _OMP

@@ -1879,35 +1879,74 @@ void FRSolver::compute_element_dt()
   }
 
 #ifdef _CPU
+  /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
+   * consistent with 1D CFL estimates. */
+  if (input->CFL_type == 1)
+  {
 #pragma omp parallel for
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  { 
-    double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    { 
+      double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-    {
-      /* Skip if on ghost edge. */
-      int gfpt = geo.fpt2gfpt(fpt,ele);
-      if (gfpt == -1)
-        continue;
-
-      if (eles->nDims == 2)
+      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
-        int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
-      }
-      else
-      {
-        int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
-        int i = idx % eles->nSpts1D;
-        int j = idx / eles->nSpts1D;
+        /* Skip if on ghost edge. */
+        int gfpt = geo.fpt2gfpt(fpt,ele);
+        if (gfpt == -1)
+          continue;
 
-        int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
+        if (eles->nDims == 2)
+        {
+          int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
+        }
+        else
+        {
+          int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
+          int i = idx % eles->nSpts1D;
+          int j = idx / eles->nSpts1D;
+
+          int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
+        }
       }
+
+      dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
     }
+  }
 
-    /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
-     * consistent with 1D CFL estimates. */
-    dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
+  /* CFL-estimate based on MacCormack for NS */
+  else if (input->CFL_type == 2)
+  {
+    std::vector<double> dtinv_fpts(eles->nFpts);
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    { 
+      /* Compute inverse of timestep in line */
+      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      {
+        /* Skip if on ghost edge. */
+        int gfpt = geo.fpt2gfpt(fpt,ele);
+        if (gfpt == -1)
+          continue;
+
+        dtinv_fpts[fpt] = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * eles->h_ref(fpt, ele)) +
+                       faces->diffCo(gfpt) / (get_cfl_limit_diff(order, input->ldg_b) * eles->h_ref(fpt, ele) * eles->h_ref(fpt, ele));
+      }
+
+      /* Find maximum in each face */
+      std::vector<double> dtinv(2*eles->nDims);
+      for (unsigned int face = 0; face < 2*eles->nDims; face++)
+      {
+        for (unsigned int fpt = face * eles->nSpts1D; fpt < (face+1) * eles->nSpts1D; fpt++)
+        {
+          dtinv[face] = std::max(dtinv[face], dtinv_fpts[fpt]);
+        }
+      }
+
+      /* Find maximum in each dimension */
+      dtinv[0] = std::max(dtinv[0], dtinv[2]);
+      dtinv[1] = std::max(dtinv[1], dtinv[3]);
+
+      dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+    }
   }
 
   if (input->dt_type == 1) /* Global minimum */

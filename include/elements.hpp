@@ -44,6 +44,7 @@ class Elements
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
     mdvector<double> vol;
     mdvector<double> weights_spts;
+    mdvector<double> h_ref;
     std::vector<double> weights_qpts;
 
     /* Element solution structures */
