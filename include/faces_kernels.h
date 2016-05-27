@@ -75,9 +75,9 @@ void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> 
     unsigned int nDims, mdvector_gpu<int> &LDG_bias, unsigned int startFpt, unsigned int endFpt);
 
 void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, 
-    mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double beta, double tau, 
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, mdvector_gpu<double> &diffCo,
+    mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double mu, double prandtl, 
+    double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
     unsigned int startFpt, unsigned int endFpt);
 
 /* Face common value kernel wrappers (Implicit Method) */

@@ -499,6 +499,7 @@ void FRSolver::solver_data_to_device()
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
+  eles->h_ref_d = eles->h_ref;
 
   if (input->viscous)
   {
@@ -517,6 +518,7 @@ void FRSolver::solver_data_to_device()
   faces->norm_d = faces->norm;
   faces->dA_d = faces->dA;
   faces->waveSp_d = faces->waveSp;
+  faces->diffCo_d = faces->diffCo;
   faces->LDG_bias_d = faces->LDG_bias;
 
   if (input->viscous)
@@ -1788,28 +1790,22 @@ void FRSolver::compute_element_dt()
   /* CFL-estimate based on MacCormack for NS */
   else if (input->CFL_type == 2)
   {
-    std::vector<double> dtinv_fpts(eles->nFpts);
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     { 
-      /* Compute inverse of timestep in line */
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-      {
-        /* Skip if on ghost edge. */
-        int gfpt = geo.fpt2gfpt(fpt,ele);
-        if (gfpt == -1)
-          continue;
-
-        dtinv_fpts[fpt] = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * eles->h_ref(fpt, ele)) +
-                       faces->diffCo(gfpt) / (get_cfl_limit_diff(order, input->ldg_b) * eles->h_ref(fpt, ele) * eles->h_ref(fpt, ele));
-      }
-
-      /* Find maximum in each face */
+      /* Compute inverse of timestep in each face */
       std::vector<double> dtinv(2*eles->nDims);
       for (unsigned int face = 0; face < 2*eles->nDims; face++)
       {
         for (unsigned int fpt = face * eles->nSpts1D; fpt < (face+1) * eles->nSpts1D; fpt++)
         {
-          dtinv[face] = std::max(dtinv[face], dtinv_fpts[fpt]);
+          /* Skip if on ghost edge. */
+          int gfpt = geo.fpt2gfpt(fpt,ele);
+          if (gfpt == -1)
+            continue;
+
+          double dtinv_temp = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * eles->h_ref(fpt, ele)) +
+                              faces->diffCo(gfpt) / (get_cfl_limit_diff(order, input->ldg_b) * eles->h_ref(fpt, ele) * eles->h_ref(fpt, ele));
+          dtinv[face] = std::max(dtinv[face], dtinv_temp);
         }
       }
 
@@ -1833,9 +1829,9 @@ void FRSolver::compute_element_dt()
 #endif
 
 #ifdef _GPU
-  compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->dA_d, geo.fpt2gfpt_d, 
-      eles->weights_spts_d, eles->vol_d, eles->nSpts1D, CFL, order, 
-      input->dt_type, eles->nFpts, eles->nEles, eles->nDims);
+  compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfpt_d, 
+      eles->weights_spts_d, eles->vol_d, eles->h_ref_d, eles->nSpts1D, CFL, input->ldg_b, order, 
+      input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims);
 #endif
 }
 

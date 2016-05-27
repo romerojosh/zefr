@@ -2128,12 +2128,12 @@ void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   }
 }
 
-template <unsigned int nVars, unsigned int nDims>
+template <unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> Fcomm_no, mdvector_gpu<double> norm_gfpts, 
-    mdvector_gpu<int> LDG_bias, mdvector_gpu<double> dA, double beta, double tau, unsigned int nFpts, unsigned int startFpt, 
-    unsigned int endFpt)
+void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc, mdvector_gpu<double> Fcomm, 
+    mdvector_gpu<double> Fcomm_no, mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> diffCo_gfpts,
+    mdvector_gpu<int> LDG_bias, mdvector_gpu<double> dA, double AdvDiff_D, double gamma, double mu, 
+    double prandtl, double beta, double tau, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -2190,6 +2190,19 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
     WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
   }
 
+  /* Get numerical diffusion coefficient */
+  if (equation == AdvDiff || equation == Burgers)
+  {
+    diffCo_gfpts(fpt) = AdvDiff_D;
+  }
+  else if (equation == EulerNS)
+  {
+    // TODO: Add or store mu from Sutherland's law
+    double diffCoL = max(mu / WL[0], gamma * mu / (prandtl * WL[0]));
+    double diffCoR = max(mu / WR[0], gamma * mu / (prandtl * WR[0]));
+    diffCo_gfpts(fpt) = max(diffCoL, diffCoR);
+  }
+
   /* Compute common normal viscous flux and accumulate */
   /* If interior, use central */
   if (LDG_bias(fpt) == 0)
@@ -2224,34 +2237,45 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fvisc,
       Fcomm(fpt, n, 1) -= F;
     }
   }
-
 }
 
 void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, 
-    mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double beta, double tau, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, mdvector_gpu<double> &diffCo,
+    mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double mu, double prandtl, 
+    double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 256;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
-  if (equation == AdvDiff || equation == Burgers)
+  if (equation == AdvDiff)
   {
     if (nDims == 2)
-      LDG_flux<1, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, dA, beta, tau, 
-          nFpts, startFpt, endFpt);
+      LDG_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, diffCo, LDG_bias, dA, 
+          AdvDiff_D, gamma, mu, prandtl, beta, tau, nFpts, startFpt, endFpt);
     else
-      LDG_flux<1, 3><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, dA, beta, tau, 
-          nFpts, startFpt, endFpt);
+      LDG_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, diffCo, LDG_bias, dA, 
+          AdvDiff_D, gamma, mu, prandtl, beta, tau, nFpts, startFpt, endFpt);
   }
+
+  else if (equation == Burgers)
+  {
+    if (nDims == 2)
+      LDG_flux<1, 2, Burgers><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, diffCo, LDG_bias, dA, 
+          AdvDiff_D, gamma, mu, prandtl, beta, tau, nFpts, startFpt, endFpt);
+    else
+      LDG_flux<1, 3, Burgers><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, diffCo, LDG_bias, dA, 
+          AdvDiff_D, gamma, mu, prandtl, beta, tau, nFpts, startFpt, endFpt);
+  }
+
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      LDG_flux<4, 2><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, dA, beta, tau, 
-          nFpts, startFpt, endFpt);
+      LDG_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, diffCo, LDG_bias, dA,
+          AdvDiff_D, gamma, mu, prandtl, beta, tau, nFpts, startFpt, endFpt);
     else
-      LDG_flux<5, 3><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, LDG_bias, dA, beta, tau, 
-          nFpts, startFpt, endFpt);
+      LDG_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fvisc, Fcomm, Fcomm_temp, norm, diffCo, LDG_bias, dA,
+          AdvDiff_D, gamma, mu, prandtl, beta, tau, nFpts, startFpt, endFpt);
   }
 }
 

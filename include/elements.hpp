@@ -84,6 +84,7 @@ class Elements
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;
     mdvector_gpu<double> vol_d;
     mdvector_gpu<double> weights_spts_d;
+    mdvector_gpu<double> h_ref_d;
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;

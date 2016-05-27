@@ -187,31 +187,35 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
   }
 
-  /* Allocate memory for tensor-line reference lengths */
-  h_ref.assign({nFpts, nEles});
-  /* Compute tensor-line lengths */
-  for (unsigned int ele = 0; ele < nEles; ele++)
+  if (input->CFL_type == 2)
   {
-    for (unsigned int fpt = 0; fpt < nFpts/2; fpt++)
+    /* Allocate memory for tensor-line reference lengths */
+    h_ref.assign({nFpts, nEles});
+
+    /* Compute tensor-line lengths */
+    for (unsigned int ele = 0; ele < nEles; ele++)
     {
-      if (nDims == 2)
+      for (unsigned int fpt = 0; fpt < nFpts/2; fpt++)
       {
-        /* Some indexing to pair up flux points in 2D (on Quad) */
-        unsigned int idx = fpt % nSpts1D;
-        unsigned int fpt1 = fpt;
-        unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
+        if (nDims == 2)
+        {
+          /* Some indexing to pair up flux points in 2D (on Quad) */
+          unsigned int idx = fpt % nSpts1D;
+          unsigned int fpt1 = fpt;
+          unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
 
 
-        double dx = geo->coord_fpts(fpt1, ele, 0) - geo->coord_fpts(fpt2, ele, 0);
-        double dy = geo->coord_fpts(fpt1, ele, 1) - geo->coord_fpts(fpt2, ele, 1);
-        double dist = std::sqrt(dx*dx + dy*dy); 
+          double dx = geo->coord_fpts(fpt1, ele, 0) - geo->coord_fpts(fpt2, ele, 0);
+          double dy = geo->coord_fpts(fpt1, ele, 1) - geo->coord_fpts(fpt2, ele, 1);
+          double dist = std::sqrt(dx*dx + dy*dy); 
 
-        h_ref(fpt1, ele) = dist;
-        h_ref(fpt2, ele) = dist;
-      }
-      else
-      {
-        ThrowException("h_ref computation not setup in 3D yet!");
+          h_ref(fpt1, ele) = dist;
+          h_ref(fpt2, ele) = dist;
+        }
+        else
+        {
+          ThrowException("h_ref computation not setup in 3D yet!");
+        }
       }
     }
   }

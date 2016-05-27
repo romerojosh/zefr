@@ -1702,7 +1702,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, LDG_bias_d, dA_d, input->ldg_b,
+      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, diffCo_d, LDG_bias_d, dA_d, 
+          input->AdvDiff_D, input->gamma, input->mu, input->prandtl, input->ldg_b,
           input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
       check_error();
