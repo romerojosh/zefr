@@ -579,8 +579,6 @@ void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsi
 #endif
 
 #ifdef _GPU
-  /* NOTE: Living a bit dangerously here. Staging GEMM calls into new streams without explicitly waiting for ele->transform_flux() to complete. 
-   * Not an issue now with Fermi, but may crop up in the future. */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     double fac = (dim == 0) ? 0.0 : 1.0;
@@ -593,7 +591,7 @@ void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsi
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
-          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), var + 3);
+          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
     }
   }
 #endif
@@ -621,7 +619,6 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
 #endif
 
 #ifdef _GPU
-  sync_stream(0);
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int var = 0; var < nVars; var++)
   {
@@ -630,10 +627,8 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
     auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
-        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), var + 3);
+        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
   }
-
-  cudaDeviceSynchronize(); 
 
   check_error();
 #endif
