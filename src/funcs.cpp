@@ -212,22 +212,22 @@ double get_cfl_limit_adv(int order)
       return 0.1000;
 
     case 5:
-      return 0.0736;
+      return 0.07363;
       
     case 6:
-      return 0.048639193282486;
+      return 0.05678;
     
     case 7:
-      return 0.034554530245757;
+      return 0.04530;
     
     case 8:
-      return 0.023910375650672;
+      return 0.03709;
     
     case 9:
-      return 0.015583791814472;
+      return 0.03101;
       
     case 10:
-      return 0.008892412680298;
+      return 0.02635;
 
     default:
       ThrowException("CFL limit no available for this order!");
@@ -245,19 +245,34 @@ double get_cfl_limit_diff(int order, double beta)
         return 2.785;
 
       case 1:
-        return 0.17408; 
+        return 0.1740;
 
       case 2:
         return 0.04264;
 
       case 3:
-        return 0.015800;
+        return 0.01580;
 
       case 4:
         return 0.007193;
 
       case 5:
         return 0.003730;
+
+      case 6:
+        return 0.002120;
+
+      case 7:
+        return 0.001292;
+
+      case 8:
+        return 0.0008314;
+
+      case 9:
+        return 0.0005586;
+
+      case 10:
+        return 0.0003890;
 
       default:
         ThrowException("CFL limit no available for this order!");
@@ -276,7 +291,7 @@ double get_cfl_limit_diff(int order, double beta)
         return 0.07736; 
 
       case 2:
-        return 0.018786;
+        return 0.01878;
 
       case 3:
         return 0.006345;
@@ -285,7 +300,22 @@ double get_cfl_limit_diff(int order, double beta)
         return 0.002664;
 
       case 5:
-        return 0.0012999;
+        return 0.001299;
+
+      case 6:
+        return 0.0007060;
+
+      case 7:
+        return 0.0004153;
+
+      case 8:
+        return 0.0002599;
+
+      case 9:
+        return 0.0001708;
+
+      case 10:
+        return 0.0001168;
 
       default:
         ThrowException("CFL limit no available for this order!");
