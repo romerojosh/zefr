@@ -866,49 +866,6 @@ void Faces::apply_bcs_dFdU()
     /* Apply specified boundary condition */
     switch(bnd_id)
     {
-      case 2: /* Farfield and Supersonic Inlet */
-      {
-        /* Compute dFdULconv for right state */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int nj = 0; nj < nVars; nj++)
-          {
-            for (unsigned int ni = 0; ni < nVars; ni++)
-            {
-              dFdUconv(fpt, ni, nj, dim, 1) = 0;
-            }
-          }
-        }
-
-        if (input->viscous)
-        {
-          /* Compute dUcdUL for right state */
-          for (unsigned int nj = 0; nj < nVars; nj++)
-          {
-            for (unsigned int ni = 0; ni < nVars; ni++)
-            {
-              dUcdU(fpt, ni, nj, 1) = 0;
-            }
-          }
-
-          /* Compute dFdULvisc for right state */
-          for (unsigned int dim = 0; dim < nDims; dim++)
-          {
-            for (unsigned int nj = 0; nj < nVars; nj++)
-            {
-              for (unsigned int ni = 0; ni < nVars; ni++)
-              {
-                dFdUvisc(fpt, ni, nj, dim, 1) = 0;
-              }
-            }
-          }
-        }
-
-        //LDG_bias(fpt) = -1;
-        LDG_bias(fpt) = 0;
-        break;
-      }
-
       case 5: /* Subsonic Outlet */
       {
         /* Primitive Variables */
@@ -1270,6 +1227,12 @@ void Faces::apply_bcs_dFdU()
 
         /* Set LDG bias */
         LDG_bias(fpt) = 1;
+        break;
+      }
+
+      default:
+      {
+        ThrowException("Boundary condition not implemented for implicit method");
         break;
       }
     }
