@@ -401,6 +401,26 @@ void Faces::apply_bcs()
           /* Set boundary state to reflect normal velocity */
           //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
+        /* Extrapolate pressure */
+        /*
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+        momF /= U(fpt, 0, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momF);
+        double PR = PL;
+        */
+
+        /* Compute energy */
+        /*
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, nDims + 1, 1) += 0.5 * U(fpt, dim + 1, 1) * U(fpt, dim + 1, 1) / U(fpt, 0, 1);
+          */
+
         /* Set energy */
         U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
         //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
@@ -1069,26 +1089,61 @@ void Faces::apply_bcs_dFdU()
       case 7: /* Symmetry */
       case 8: /* Slip Wall */
       {
+        double nx = norm(fpt, 0, 0);
+        double ny = norm(fpt, 1, 0);
+
+        /* Primitive Variables */
+        double rhoL = U(fpt, 0, 0);
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+        double VnL = uL * nx + vL * ny;
+
         /* Compute dURdUL */
         dURdUL(0, 0) = 1;
         dURdUL(1, 0) = 0;
         dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = 0;
+        dURdUL(3, 0) = 0.5 * VnL * VnL;
 
         dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0);
-        dURdUL(2, 1) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
-        dURdUL(3, 1) = 0;
+        dURdUL(1, 1) = 1.0 - nx * nx;
+        dURdUL(2, 1) = -nx * ny;
+        dURdUL(3, 1) = -VnL * nx;
 
         dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
-        dURdUL(2, 2) = 1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0);
-        dURdUL(3, 2) = 0;
+        dURdUL(1, 2) = -nx * ny;
+        dURdUL(2, 2) = 1.0 - ny * ny;
+        dURdUL(3, 2) = -VnL * ny;
 
         dURdUL(0, 3) = 0;
         dURdUL(1, 3) = 0;
         dURdUL(2, 3) = 0;
         dURdUL(3, 3) = 1;
+
+        /*
+        double rhoR = U(fpt, 0, 1);
+        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+
+        dURdUL(0, 0) = 1;
+        dURdUL(1, 0) = 0;
+        dURdUL(2, 0) = 0;
+        dURdUL(3, 0) = 0.5 * (uL * uL + vL * vL - uR * uR - vR * vR);
+
+        dURdUL(0, 1) = 0;
+        dURdUL(1, 1) = 1.0 - nx * nx;
+        dURdUL(2, 1) = -nx * ny;
+        dURdUL(3, 1) = -uL + (1.0 - nx * nx) * uR - nx * ny * vR;
+
+        dURdUL(0, 2) = 0;
+        dURdUL(1, 2) = -nx * ny;
+        dURdUL(2, 2) = 1.0 - ny * ny;
+        dURdUL(3, 2) = -vL - ny * ny * uR + (1.0 - ny*ny) * vR;
+
+        dURdUL(0, 3) = 0;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
+        dURdUL(3, 3) = 1;
+        */
 
         LDG_bias(fpt) = -1;
         break;

@@ -1577,21 +1577,30 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
     case 7: /* Symmetry */
     case 8: /* Slip Wall */
     {
+      double nx = norm(fpt, 0, 0);
+      double ny = norm(fpt, 1, 0);
+
+      /* Primitive Variables */
+      double rhoL = U(fpt, 0, 0);
+      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+      double VnL = uL * nx + vL * ny;
+
       /* Compute dURdUL */
       dURdUL[0][0] = 1;
       dURdUL[1][0] = 0;
       dURdUL[2][0] = 0;
-      dURdUL[3][0] = 0;
+      dURdUL[3][0] = 0.5 * VnL * VnL;
 
       dURdUL[0][1] = 0;
-      dURdUL[1][1] = 1.0 - 2.0 * norm(fpt, 0, 0) * norm(fpt, 0, 0);
-      dURdUL[2][1] = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
-      dURdUL[3][1] = 0;
+      dURdUL[1][1] = 1.0 - nx * nx;
+      dURdUL[2][1] = -nx * ny;
+      dURdUL[3][1] = -VnL * nx;
 
       dURdUL[0][2] = 0;
-      dURdUL[1][2] = -2.0 * norm(fpt, 0, 0) * norm(fpt, 1, 0);
-      dURdUL[2][2] = 1.0 - 2.0 * norm(fpt, 1, 0) * norm(fpt, 1, 0);
-      dURdUL[3][2] = 0;
+      dURdUL[1][2] = -nx * ny;
+      dURdUL[2][2] = 1.0 - ny * ny;
+      dURdUL[3][2] = -VnL * ny;
 
       dURdUL[0][3] = 0;
       dURdUL[1][3] = 0;
