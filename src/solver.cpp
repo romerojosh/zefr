@@ -1689,7 +1689,12 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         /* Compute LHS implicit Jacobian */
         compute_LHS();
       }
-
+      /* If running multigrid, assume solution has been updated externally. Compute res on
+       * all elements to update face data */
+      else if (input->p_multi and counter == 1)
+      {
+        compute_residual(0);
+      }
       /* Compute residual on elements of this color only */
       else
       {
