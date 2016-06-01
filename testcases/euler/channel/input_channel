@@ -28,12 +28,13 @@ low_order 0
 
 smooth_steps 1
 p_smooth_steps 1
-c_smooth_steps 10
+f_smooth_steps 2
+c_smooth_steps 5
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix channel_48x16_RK4_pmg
-write_freq    500
+write_freq    1000
 report_freq   100
 res_type      1
 force_freq    1000

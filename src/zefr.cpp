@@ -122,8 +122,19 @@ int main(int argc, char* argv[])
   /* Main iteration loop */
   for (unsigned int n = 1; (n <= input.n_steps) && (solver.res_max > input.res_tol); n++)
   {
-    solver.update();
-    solver.filter_solution();
+    if (!input.p_multi)
+    {
+      solver.update();
+      solver.filter_solution();
+    }
+    else
+    {
+      for (unsigned int step = 0; step < input.f_smooth_steps; step++)
+      {
+        solver.update();
+        solver.filter_solution();
+      }
+    }
     
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)

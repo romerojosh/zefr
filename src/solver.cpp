@@ -1895,6 +1895,10 @@ void FRSolver::write_solution(const std::string &prefix)
   eles->U_spts = eles->U_spts_d;
 #endif
 
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
+
   if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
 
   std::stringstream ss;
@@ -1905,7 +1909,7 @@ void FRSolver::write_solution(const std::string &prefix)
   {
     ss << input->output_prefix << "/";
     ss << prefix << "_" << std::setw(9) << std::setfill('0');
-    ss << current_iter << ".pvtu";
+    ss << iter << ".pvtu";
    
     std::ofstream f(ss.str());
     f << "<?xml version=\"1.0\"?>" << std::endl;
@@ -1951,7 +1955,7 @@ void FRSolver::write_solution(const std::string &prefix)
     for (unsigned int n = 0; n < input->nRanks; n++)
     { 
       ss.str("");
-      ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+      ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter;
       ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
       f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
     }
@@ -1966,11 +1970,11 @@ void FRSolver::write_solution(const std::string &prefix)
   ss.str("");
 #ifdef _MPI
   ss << input->output_prefix << "/";
-  ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter;
   ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
 #else
   ss << input->output_prefix << "/";
-  ss << prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter;
   ss << ".vtu";
 #endif
 
@@ -1989,7 +1993,7 @@ void FRSolver::write_solution(const std::string &prefix)
   /* Write comments for solution order, iteration number and flowtime */
   f << "<!-- ORDER " << input->order << " -->" << std::endl;
   f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
-  f << "<!-- ITER " << current_iter << " -->" << std::endl;
+  f << "<!-- ITER " << iter << " -->" << std::endl;
 
   f << "<UnstructuredGrid>" << std::endl;
   f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";
@@ -2354,6 +2358,9 @@ void FRSolver::write_color()
 
 void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1)
 {
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
 
   /* If running on GPU, copy out divergence */
 #ifdef _GPU
@@ -2427,7 +2434,8 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         val = std::sqrt(val);
     }
 
-    std::cout << current_iter << " ";
+    std::cout << iter << " ";
+
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 
@@ -2446,7 +2454,8 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     /* Write to history file */
     auto t2 = std::chrono::high_resolution_clock::now();
     auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
-    f << current_iter << " " << current_runtime.count() << " ";
+
+    f << iter << " " << current_runtime.count() << " ";
 
     for (auto val : res)
       f << std::scientific << val / nDoF << " ";
@@ -2464,6 +2473,10 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
 void FRSolver::report_forces(std::ofstream &f)
 {
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
+
   /* If using GPU, copy out solution, gradient and pressure */
 #ifdef _GPU
   faces->U = faces->U_d;
@@ -2477,11 +2490,11 @@ void FRSolver::report_forces(std::ofstream &f)
   std::stringstream ss;
 #ifdef _MPI
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << iter;
   ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".cp";
 #else
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << current_iter;
+  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << iter;
   ss << ".cp";
 #endif
 
@@ -2704,7 +2717,9 @@ void FRSolver::report_forces(std::ofstream &f)
     }
 
     std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
-    f << current_iter << " ";
+
+    f << iter << " ";
+
     f << std::scientific << std::setprecision(16) << CL_conv << " " << CD_conv;
 
     if (input->viscous)
@@ -2720,6 +2735,10 @@ void FRSolver::report_forces(std::ofstream &f)
 
 void FRSolver::report_error(std::ofstream &f)
 {
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
+
   /* If using GPU, copy out solution */
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
@@ -2875,7 +2894,8 @@ void FRSolver::report_error(std::ofstream &f)
     std::cout << std::endl;
 
     /* Write to file */
-    f << current_iter << " ";
+    f << iter << " ";
+
     for (auto &val : l2_error)
       f << std::scientific << std::setprecision(16) << std::sqrt(val / vol) << " ";
     f << std::endl;
