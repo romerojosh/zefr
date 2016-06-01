@@ -619,7 +619,6 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       }
 
       /* Set LDG bias */
-      //LDG_bias(fpt) = -1;
       LDG_bias(fpt) = 0;
 
       break;
@@ -641,10 +640,6 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
     case 4: /* Subsonic Inlet */
     {
       double VL[3]; double VR[3];
-      /*
-      if (!input->viscous)
-        ThrowException("Subsonic inlet only for viscous flows currently!");
-      */
 
       /* Get states for convenience */
       double rhoL = U(fpt, 0, 0);
@@ -834,8 +829,45 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 7: /* Symmetry */
-    case 8: /* Slip Wall */
+    case 7: /* Symmetry (prescribed) */
+    case 9: /* Slip Wall (prescribed) */
+    {
+      double momN = 0.0;
+
+      /* Compute wall normal momentum */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+
+      U(fpt, 0, 1) = U(fpt, 0, 0);
+
+      /* Set boundary state with cancelled normal velocity */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+
+      /* Set energy */
+      /* Get left-state pressure */
+      double momFL = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momFL += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momFL / U(fpt, 0, 0));
+
+      /* Get right-state momentum flux after velocity correction */
+      double momFR = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momFR += U(fpt, dim + 1, 1) * U(fpt, dim + 1, 1);
+
+      /* Recompute energy with extrapolated pressure and new momentum */
+      U(fpt, nDims + 1, 1) = PL / (gamma - 1)  + 0.5 * momFR / U(fpt, 0, 1);
+
+      /* Set LDG bias */
+      LDG_bias(fpt) = -1;
+
+      break;
+    }
+
+    case 8: /* Symmetry (ghost) */
+    case 10: /* Slip Wall (ghost) */
     {
       double momN = 0.0;
 
@@ -846,28 +878,20 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
-        /* Set boundary state to cancelled normal velocity (strong)*/
-        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
         /* Set boundary state to reflect normal velocity */
-        //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
 
-      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+      U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
-      //LDG_bias(fpt) = 0;
+      LDG_bias(fpt) = 0;
 
       break;
     }
 
-    case 9: /* No-slip Wall (isothermal) */
-    {
-      /*
-      if (!input->viscous)
-        ThrowException("No slip wall boundary only for viscous flows!");
-      */
 
+    case 11: /* Isothermal No-slip Wall (prescribed) */
+    {
       double momF = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -878,8 +902,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
       double PR = PL;
-      //double TR = T_wall;
-      double TR = 1; // T_wall = T_fs (hardcoded for couette flow)
+      double TR = T_wall;
       
       U(fpt, 0, 1) = PR / (R_ref * TR);
 
@@ -895,13 +918,15 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 10: /* No-slip Wall (isothermal and moving) */
+    case 12: /* Isothermal No-slip Wall (ghost) */
     {
-      /*
-      if (!input->viscous)
-        ThrowException("No slip wall boundary only for viscous flows!");
-      */
+      // NOT IMPLEMENTED
+      break;
+    }
 
+
+    case 13: /* Moving Isothermal No-slip Wall (prescribed) */
+    {
       double momF = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -932,14 +957,17 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       break;
     }
-
-    case 11: /* No-slip Wall (adiabatic) */
+    
+    case 14: /* Moving Isothermal No-slip Wall (ghost) */
     {
-      /*
-      if (!input->viscous)
-        ThrowException("No slip wall boundary only for viscous flows!");
-      */
+      // NOT IMPLEMENTED
 
+      break;
+    }
+
+
+    case 15: /* Adiabatic No-slip Wall (prescribed) */
+    {
       /* Extrapolate density */
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
@@ -958,10 +986,9 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       /* Set velocity to zero */
       for (unsigned int dim = 0; dim < nDims; dim++)
         U(fpt, dim+1, 1) = 0.0;
-        //U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
 
+      /* Recompute energy */
       U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
-      //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
@@ -969,13 +996,16 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 12: /* No-slip Wall (adiabatic and moving) */
+    case 16: /* Adiabatic No-slip Wall (ghost) */
     {
-      /*
-      if (!input->viscous)
-        ThrowException("No slip wall boundary only for viscous flows!");
-      */
 
+      // NOT IMPLEMENTED
+      break;
+    }
+
+
+    case 17: /* Moving Adiabatic No-slip Wall (prescribed) */
+    {
       /* Extrapolate density */
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
@@ -1003,6 +1033,13 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
+
+      break;
+    }
+
+    case 18: /* Moving Adiabatic No-slip Wall (ghost) */
+    {
+      // NOT IMPLEMENTED
 
       break;
     }
@@ -1077,7 +1114,7 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
       }
     }
   }
-  else if(bnd_id == 11 || bnd_id == 12) /* Adibatic Wall */
+  else if(bnd_id == 15 || bnd_id == 16 || bnd_id == 17 || bnd_id == 18) /* Adibatic Wall */
   {
     double norm[nDims];
 
@@ -1344,7 +1381,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       }
 
       /* Copy right state dFddUvisc */
-      if (bnd_id == 11) /* Adiabatic Wall */
+      if (bnd_id == 15) /* Adiabatic Wall */
       {
         for (unsigned int dimj = 0; dimj < nDims; dimj++)
         {
@@ -1534,32 +1571,33 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
     }
 
     case 7: /* Symmetry */
-    case 8: /* Slip Wall */
+    case 9: /* Slip Wall */
     {
       double nx = norm(fpt, 0, 0);
       double ny = norm(fpt, 1, 0);
 
       /* Primitive Variables */
-      double rhoL = U(fpt, 0, 0);
       double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
       double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-      double VnL = uL * nx + vL * ny;
 
       /* Compute dURdUL */
+      double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+      double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+
       dURdUL[0][0] = 1;
       dURdUL[1][0] = 0;
       dURdUL[2][0] = 0;
-      dURdUL[3][0] = 0.5 * VnL * VnL;
+      dURdUL[3][0] = 0.5 * (uL * uL + vL * vL - uR * uR - vR * vR);
 
       dURdUL[0][1] = 0;
       dURdUL[1][1] = 1.0 - nx * nx;
       dURdUL[2][1] = -nx * ny;
-      dURdUL[3][1] = -VnL * nx;
+      dURdUL[3][1] = -uL + (1.0 - nx * nx) * uR - nx * ny * vR;
 
       dURdUL[0][2] = 0;
       dURdUL[1][2] = -nx * ny;
       dURdUL[2][2] = 1.0 - ny * ny;
-      dURdUL[3][2] = -VnL * ny;
+      dURdUL[3][2] = -vL - ny * ny * uR + (1.0 - ny*ny) * vR;
 
       dURdUL[0][3] = 0;
       dURdUL[1][3] = 0;
@@ -1569,7 +1607,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       break;
     }
 
-    case 11: /* No-slip Wall (adiabatic) */
+    case 15: /* No-slip Wall (adiabatic) */
     {
       double nx = norm(fpt, 0, 0);
       double ny = norm(fpt, 1, 0);
@@ -1746,7 +1784,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       }
 
       /* Compute dFddULvisc for right state */
-      if (bnd_id == 11) /* Adiabatic Wall */
+      if (bnd_id == 15) /* Adiabatic Wall */
       {
         for (unsigned int dimj = 0; dimj < nDims; dimj++)
         {

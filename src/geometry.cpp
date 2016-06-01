@@ -143,29 +143,53 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     {
       geo.bnd_ids[val] = 6;
     }
-    else if (bnd_id == "\"SYMMETRY\"")
+    else if (bnd_id == "\"SYMMETRY_P\"")
     {
       geo.bnd_ids[val] = 7;
     }
-    else if (bnd_id == "\"WALL_SLIP\"")
+    else if (bnd_id == "\"SYMMETRY_G\"")
     {
       geo.bnd_ids[val] = 8;
     }
-    else if (bnd_id == "\"WALL_NS_ISO\"")
+    else if (bnd_id == "\"WALL_SLIP_P\"")
     {
       geo.bnd_ids[val] = 9;
     }
-    else if (bnd_id == "\"WALL_NS_ISO_MOVE\"")
+    else if (bnd_id == "\"WALL_SLIP_G\"")
     {
       geo.bnd_ids[val] = 10;
     }
-    else if (bnd_id == "\"WALL_NS_ADI\"")
+    else if (bnd_id == "\"WALL_NS_ISO_P\"")
     {
       geo.bnd_ids[val] = 11;
     }
-    else if (bnd_id == "\"WALL_NS_ADI_MOVE\"")
+    else if (bnd_id == "\"WALL_NS_ISO_G\"")
     {
       geo.bnd_ids[val] = 12;
+    }
+    else if (bnd_id == "\"WALL_NS_ISO_MOVE_P\"")
+    {
+      geo.bnd_ids[val] = 13;
+    }
+    else if (bnd_id == "\"WALL_NS_ISO_MOVE_G\"")
+    {
+      geo.bnd_ids[val] = 14;
+    }
+    else if (bnd_id == "\"WALL_NS_ADI_P\"")
+    {
+      geo.bnd_ids[val] = 15;
+    }
+    else if (bnd_id == "\"WALL_NS_ADI_G\"")
+    {
+      geo.bnd_ids[val] = 16;
+    }
+    else if (bnd_id == "\"WALL_NS_ADI_MOVE_P\"")
+    {
+      geo.bnd_ids[val] = 17;
+    }
+    else if (bnd_id == "\"WALL_NS_ADI_MOVE_G\"")
+    {
+      geo.bnd_ids[val] = 18;
     }
     else if (bnd_id == "\"FLUID\"")
     {

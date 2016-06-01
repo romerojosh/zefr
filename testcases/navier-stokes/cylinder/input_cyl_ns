@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile full_cyl_uquad.msh
+meshfile cyl_quad_ns.msh
 
 # Solver:
 order     2

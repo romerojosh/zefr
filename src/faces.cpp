@@ -169,7 +169,6 @@ void Faces::apply_bcs()
         }
 
         /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
 
         break;
@@ -182,7 +181,6 @@ void Faces::apply_bcs()
           U(fpt, n, 1) = U(fpt, n, 0);
 
         /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
 
         break;
@@ -268,7 +266,6 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
         /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
         LDG_bias(fpt) = 0;
 
         break;
@@ -379,13 +376,12 @@ void Faces::apply_bcs()
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
-        //LDG_bias(fpt) = 0;
 
         break;
       }
 
-      case 7: /* Symmetry */
-      case 8: /* Slip Wall */
+      case 7: /* Symmetry (prescribed) */
+      case 9: /* Slip Wall (prescribed) */
       {
         double momN = 0.0;
 
@@ -395,44 +391,57 @@ void Faces::apply_bcs()
 
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
+        /* Set boundary state with cancelled normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          /* Set boundary state to cancelled normal velocity (strong)*/
           U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
-          /* Set boundary state to reflect normal velocity */
-          //U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
-
-        /* Extrapolate pressure */
-        /*
-        double momF = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
-        }
-        momF /= U(fpt, 0, 0);
-
-        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momF);
-        double PR = PL;
-        */
-
-        /* Compute energy */
-        /*
-        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1);
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, nDims + 1, 1) += 0.5 * U(fpt, dim + 1, 1) * U(fpt, dim + 1, 1) / U(fpt, 0, 1);
-          */
 
         /* Set energy */
-        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0) - 0.5 * (momN * momN) / U(fpt, 0, 0);
-        //U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+        /* Get left-state pressure */
+        double momFL = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momFL += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momFL / U(fpt, 0, 0));
+
+        /* Get right-state momentum flux after velocity correction */
+        double momFR = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momFR += U(fpt, dim + 1, 1) * U(fpt, dim + 1, 1);
+
+        /* Compute energy with extrapolated pressure and new momentum */
+        U(fpt, nDims + 1, 1) = PL / (input->gamma - 1)  + 0.5 * momFR / U(fpt, 0, 1);
 
         /* Set LDG bias */
         LDG_bias(fpt) = -1;
-        //LDG_bias(fpt) = 0;
 
         break;
       }
 
-      case 9: /* No-slip Wall (isothermal) */
+      case 8: /* Symmetry (ghost) */
+      case 10: /* Slip Wall (ghost) */
+      {
+        double momN = 0.0;
+
+        /* Compute wall normal momentum */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+
+        U(fpt, 0, 1) = U(fpt, 0, 0);
+
+        /* Set boundary state to reflect normal velocity */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+
+        /* Set energy */
+        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+
+        /* Set LDG bias */
+        LDG_bias(fpt) = 0;
+
+        break;
+      }
+
+      case 11: /* Isothermal No-slip Wall (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -464,7 +473,18 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 10: /* No-slip Wall (isothermal and moving) */
+      case 12: /* Isothermal No-slip Wall (ghost) */
+      {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
+        ThrowException("WALL_NS_ISO_G not implemented");
+
+        break;
+      }
+
+
+      case 13: /* No-slip Wall (isothermal and moving) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -500,7 +520,17 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 11: /* No-slip Wall (adiabatic) */
+      case 14: /* Isothermal No-slip Wall, moving (ghost) */
+      {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
+        ThrowException("WALL_NS_ISO_MOVE_P not implemented yet!");
+        break;
+      }
+
+
+      case 15: /* Adiabatic No-slip Wall (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -523,10 +553,8 @@ void Faces::apply_bcs()
         /* Set right state (common) velocity to zero */
         for (unsigned int dim = 0; dim < nDims; dim++)
           U(fpt, dim+1, 1) = 0.0;
-          //U(fpt, dim+1, 1) = -U(fpt, dim+1, 0);
 
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
-        //U(fpt, 3, 1) = U(fpt, 3, 0);
 
         /* Set LDG bias */
         LDG_bias(fpt) = 1;
@@ -534,7 +562,17 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 12: /* No-slip Wall (adiabatic and moving) */
+      case 16: /* Adiabatic No-slip Wall (ghost) */
+      {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
+        ThrowException("WALL_NS_ADI_G not implemented");
+
+        break;
+      }
+
+      case 17: /* Adiabatic No-slip Wall, moving (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -569,7 +607,15 @@ void Faces::apply_bcs()
 
         break;
       }
-    
+
+      case 18: /* Adiabatic No-slip Wall, moving (ghost) */
+      {
+        if (!input->viscous)
+          ThrowException("No slip wall boundary only for viscous flows!");
+
+        ThrowException("WALL_NS_ADI_MOVE_G not implemented yet!");
+
+      }
     } 
   }
 #endif
@@ -605,7 +651,7 @@ void Faces::apply_bcs_dU()
         }
       }
     }
-    else if(bnd_id == 11 || bnd_id == 12) /* Adibatic Wall */
+    else if(bnd_id == 15 || bnd_id == 16 || bnd_id == 17 || bnd_id == 18) /* Adibatic Wall */
     {
       /* Extrapolate density gradient */
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -790,8 +836,6 @@ void Faces::apply_bcs_dU()
       nDims, geo->gfpt2bnd_d, geo->per_fpt_list_d);
 
   check_error();
-  
-  //dU = dU_d;
 #endif
 }
 
@@ -844,7 +888,7 @@ void Faces::apply_bcs_dFdU()
         }
 
         /* Copy right state dFddUvisc */
-        if (bnd_id == 11) /* Adiabatic Wall */
+        if (bnd_id == 15) /* Adiabatic Wall */
         {
           for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {
@@ -1044,40 +1088,16 @@ void Faces::apply_bcs_dFdU()
       }
 
       case 7: /* Symmetry */
-      case 8: /* Slip Wall */
+      case 9: /* Slip Wall */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
 
         /* Primitive Variables */
-        double rhoL = U(fpt, 0, 0);
         double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
         double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-        double VnL = uL * nx + vL * ny;
 
         /* Compute dURdUL */
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = 0.5 * VnL * VnL;
-
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 1.0 - nx * nx;
-        dURdUL(2, 1) = -nx * ny;
-        dURdUL(3, 1) = -VnL * nx;
-
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = -nx * ny;
-        dURdUL(2, 2) = 1.0 - ny * ny;
-        dURdUL(3, 2) = -VnL * ny;
-
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 1;
-
-        /*
-        double rhoR = U(fpt, 0, 1);
         double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
         double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
 
@@ -1100,13 +1120,12 @@ void Faces::apply_bcs_dFdU()
         dURdUL(1, 3) = 0;
         dURdUL(2, 3) = 0;
         dURdUL(3, 3) = 1;
-        */
 
         LDG_bias(fpt) = -1;
         break;
       }
 
-      case 11: /* No-slip Wall (adiabatic) */
+      case 15: /* No-slip Wall (adiabatic) */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
@@ -1291,7 +1310,7 @@ void Faces::apply_bcs_dFdU()
         }
 
         /* Compute dFddULvisc for right state */
-        if (bnd_id == 11) /* Adiabatic Wall */
+        if (bnd_id == 15) /* Adiabatic Wall */
         {
           for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {

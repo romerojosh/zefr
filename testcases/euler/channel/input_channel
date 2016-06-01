@@ -11,6 +11,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 40000
 dt_scheme RKj      (Euler, RK44, RKj)
+res_tol 1e-11
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
 CFL	  1.0
