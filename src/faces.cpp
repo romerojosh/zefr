@@ -937,7 +937,6 @@ void Faces::apply_bcs_dFdU()
         dURdUL(2, 3) = 0;
         dURdUL(3, 3) = 0;
 
-        LDG_bias(fpt) = -1;
         break;
       }
 
@@ -1083,12 +1082,11 @@ void Faces::apply_bcs_dFdU()
           dURdUL(3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
         }
 
-        LDG_bias(fpt) = -1;
         break;
       }
 
-      case 7: /* Symmetry */
-      case 9: /* Slip Wall */
+      case 7: /* Symmetry (prescribed) */
+      case 9: /* Slip Wall (prescribed) */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
@@ -1121,7 +1119,35 @@ void Faces::apply_bcs_dFdU()
         dURdUL(2, 3) = 0;
         dURdUL(3, 3) = 1;
 
-        LDG_bias(fpt) = -1;
+        break;
+      }
+
+      case 8: /* Symmetry (ghost) */
+      case 10: /* Slip Wall (ghost) */
+      {
+        double nx = norm(fpt, 0, 0);
+        double ny = norm(fpt, 1, 0);
+
+        dURdUL(0, 0) = 1;
+        dURdUL(1, 0) = 0;
+        dURdUL(2, 0) = 0;
+        dURdUL(3, 0) = 0;
+
+        dURdUL(0, 1) = 0;
+        dURdUL(1, 1) = 1.0 - 2.0 * nx * nx;
+        dURdUL(2, 1) = -2.0 * nx * ny;
+        dURdUL(3, 1) = 0;
+
+        dURdUL(0, 2) = 0;
+        dURdUL(1, 2) = -2.0 * nx * ny;
+        dURdUL(2, 2) = 1.0 - 2.0 * ny * ny;
+        dURdUL(3, 2) = 0;
+
+        dURdUL(0, 3) = 0;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
+        dURdUL(3, 3) = 1;
+
         break;
       }
 
@@ -1244,8 +1270,6 @@ void Faces::apply_bcs_dFdU()
           ddURddUL(3, 3, 1, 1) = 1.0 - ny*ny;
         }
 
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
         break;
       }
 
@@ -2670,6 +2694,21 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
           dFcdU(fpt, ni, nj, 0, 1) = 0;
           dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj);
+        }
+      }
+      continue;
+    }
+    else if (LDG_bias(fpt) == 2)
+    {
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * dFndUL_temp(fpt, ni, nj);
+          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * dFndUR_temp(fpt, ni, nj);
+
+          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * dFndUL_temp(fpt, ni, nj);
+          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * dFndUR_temp(fpt, ni, nj);
         }
       }
       continue;
