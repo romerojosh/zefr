@@ -44,6 +44,8 @@ void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda
 
 void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchCount);
 
+void gaussJordanInv_wrapper(int N, double** Aarray, int lda, double** Carray, int ldc, int batchCount);
+
 void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
     const double beta, double** yarray, int incy, int batchCount);
 

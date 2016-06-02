@@ -66,6 +66,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
   read_param(f, "nColors", input.nColors, (unsigned int) 4);
   read_param(f, "n_LHS_blocks", input.n_LHS_blocks, (unsigned int) 4);
+  read_param(f, "LU_pivot", input.LU_pivot, (unsigned int) 0);
 
   read_param(f, "output_prefix", input.output_prefix);
   read_param(f, "write_freq", input.write_freq);
@@ -142,6 +143,13 @@ InputStruct read_input_file(std::string inputfile)
   {
     input.exps0 = input.s_factor * (input.P_fs / std::pow(input.rho_fs, input.gamma));
   }
+
+
+  /* Input error handling */
+  if (!input.inv_mode and input.n_LHS_blocks != 1)
+  {
+    ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
+  } 
 
   return input;
 }

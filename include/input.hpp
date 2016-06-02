@@ -36,7 +36,7 @@ struct InputStruct
   double sen_Jfac, filt_gamma;
 
   /* Implicit Parameters */
-  bool SER, inv_mode, stream_mode, backsweep;
+  bool SER, inv_mode, stream_mode, backsweep, LU_pivot;
   unsigned int Jfreeze_freq, nColors, n_LHS_blocks;
 
 #ifdef _GPU

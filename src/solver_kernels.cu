@@ -209,6 +209,59 @@ void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* Piv
 }
 
 __global__
+void gaussJordanInv(int N, double** Aarray, int lda, double** Carray, int ldc, int batchCount)
+{
+  const unsigned int tidx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  for (unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y; batch < batchCount; batch += gridDim.y * blockDim.y)
+  {
+    for (unsigned int j = 0; j < N; j++)
+    { 
+      for (unsigned int i = tidx; i < N; i += blockDim.x)
+      {
+        Carray[batch][i + j*lda] = (double) (i == j);
+      }
+    }
+
+    for (unsigned int j = 0; j < N; j++)
+    { 
+      for (unsigned int i = tidx; i < N; i += blockDim.x)
+      {
+        if (i != j)
+        {
+          double fac =  Aarray[batch][i + j*lda] / Aarray[batch][j + j*lda];
+          for (unsigned int k = 0; k < N; k++)
+          {
+            Aarray[batch][i + k*lda] -= fac * Aarray[batch][j + k*lda];
+            Carray[batch][i + k*lda] -= fac * Carray[batch][j + k*lda];
+          }
+        }
+      }
+    }
+
+    for (unsigned int j = 0; j < N; j++)
+    { 
+      for (unsigned int i = tidx; i < N; i += blockDim.x)
+      {
+        Carray[batch][i + j*lda] /= Aarray[batch][i + i*lda];
+      }
+    }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+
+}
+
+void gaussJordanInv_wrapper(int N, double** Aarray, int lda, double** Carray, int ldc, int batchCount)
+{
+  dim3 threads(32, 6);
+  dim3 blocks(1, std::min((batchCount + threads.y - 1)/threads.y, MAX_GRID_DIM));
+
+  gaussJordanInv<<<blocks, threads>>>(N, Aarray, lda, Carray, ldc, batchCount);
+}
+
+
+__global__
 void cublasDgemvBatched_custom(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
     const double beta, double** yarray, int incy, int batchCount)
 {

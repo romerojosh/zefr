@@ -821,15 +821,31 @@ void FRSolver::compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsign
   unsigned int N = eles->nSpts * eles->nVars;
 
   /* Perform batched LU using cuBLAS */
-  cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), 
-      endEle - startEle);
+  if (input->LU_pivot)
+  {
+    cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), eles->LU_info_d.data(), 
+        endEle - startEle);
+  }
+  else
+  {
+    cublasDgetrfBatched_wrapper(N, eles->LHS_ptrs_d.data(), N, nullptr, eles->LU_info_d.data(), 
+        endEle - startEle);
+  }
 
   if (input->inv_mode)
   {
     if (!input->stream_mode)
     {
-      cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
-          eles->LHSInv_ptrs_d.data() + startEle, N, eles->LU_info_d.data(), endEle - startEle);
+      if (input->LU_pivot)
+      {
+        cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, eles->LU_pivots_d.data(), 
+            eles->LHSInv_ptrs_d.data() + startEle, N, eles->LU_info_d.data(), endEle - startEle);
+      }
+      else
+      {
+        cublasDgetriBatched_wrapper(N, (const double**) eles->LHS_ptrs_d.data(), N, nullptr, 
+            eles->LHSInv_ptrs_d.data() + startEle, N, eles->LU_info_d.data(), endEle - startEle);
+      }
     }
     else
     {
@@ -980,8 +996,16 @@ void FRSolver::compute_deltaU(unsigned int color)
     /* Solve LU systems using batched cublas routine */
     unsigned int N = eles->nSpts * eles->nVars;
     int info;
-    cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, eles->LU_pivots_d.data() + startEle * N, 
-        eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
+
+    if (input->LU_pivot)
+    {
+      cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, eles->LU_pivots_d.data() + startEle * N, 
+          eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
+    }
+    {
+      cublasDgetrsBatched_wrapper(N, 1, (const double**) (eles->LHS_ptrs_d.data() + startEle), N, nullptr, 
+          eles->RHS_ptrs_d.data() + startEle, N, &info, endEle - startEle);
+    }
 
     if (info)
       ThrowException("cublasDgetrs failed. info = " + std::to_string(info));

@@ -4,8 +4,8 @@ $EndMeshFormat
 $PhysicalNames
 4
 1 1 "CHAR"
-1 2 "SYMMETRY_G"
-1 3 "WALL_SLIP_G"
+1 2 "SYMMETRY_P"
+1 3 "WALL_SLIP_P"
 2 4 "FLUID"
 $EndPhysicalNames
 $Nodes
