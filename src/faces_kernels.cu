@@ -885,6 +885,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       /* Set LDG bias */
       LDG_bias(fpt) = 0;
+      //LDG_bias(fpt) = 2;
 
       break;
     }
@@ -1959,8 +1960,17 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     //waveSp = std::abs(waveSp);
   }
 
-  /* If on boundary, set common to right state flux */
-  if (LDG_bias(fpt) != 0)
+  /* Compute common normal flux */
+  if (LDG_bias(fpt) == 2) /* Centered */
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      double F = 0.5 * (FR[n] + FL[n])* dA(fpt);
+      Fcomm(fpt, n, 0) = F;
+      Fcomm(fpt, n, 1) = -F;
+    }
+  }
+  else if (LDG_bias(fpt) != 0) /* Prescribed right-state */
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -1968,16 +1978,15 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
-
-    return;
   }
-
-  /* Compute common normal flux */
-  for (unsigned int n = 0; n < nVars; n++)
+  else /* Upwinded */
   {
-    double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0 - rus_k) * (WR[n]-WL[n])) * dA(fpt);
-    Fcomm(fpt, n, 0) = F;
-    Fcomm(fpt, n, 1) = -F;
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0 - rus_k) * (WR[n]-WL[n])) * dA(fpt);
+      Fcomm(fpt, n, 0) = F;
+      Fcomm(fpt, n, 1) = -F;
+    }
   }
 
 }
@@ -2420,22 +2429,7 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
     }
   }
 
-  if (LDG_bias(fpt) != 0)
-  {
-    for (unsigned int nj = 0; nj < nVars; nj++)
-    {
-      for (unsigned int ni = 0; ni < nVars; ni++)
-      {
-        dFcdU(fpt, ni, nj, 0, 0) = 0;
-        dFcdU(fpt, ni, nj, 1, 0) = dFndUR[ni][nj];
-
-        dFcdU(fpt, ni, nj, 0, 1) = 0;
-        dFcdU(fpt, ni, nj, 1, 1) = dFndUR[ni][nj];
-      }
-    }
-    return;
-  }
-  else if (LDG_bias(fpt) == 2)
+  if (LDG_bias(fpt) == 2)
   {
     for (unsigned int nj = 0; nj < nVars; nj++)
     {
@@ -2446,6 +2440,21 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
 
         dFcdU(fpt, ni, nj, 0, 1) = 0.5 * dFndUL[ni][nj];
         dFcdU(fpt, ni, nj, 1, 1) = 0.5 * dFndUR[ni][nj];
+      }
+    }
+    return;
+  }
+  else if (LDG_bias(fpt) != 0)
+  {
+    for (unsigned int nj = 0; nj < nVars; nj++)
+    {
+      for (unsigned int ni = 0; ni < nVars; ni++)
+      {
+        dFcdU(fpt, ni, nj, 0, 0) = 0;
+        dFcdU(fpt, ni, nj, 1, 0) = dFndUR[ni][nj];
+
+        dFcdU(fpt, ni, nj, 0, 1) = 0;
+        dFcdU(fpt, ni, nj, 1, 1) = dFndUR[ni][nj];
       }
     }
     return;

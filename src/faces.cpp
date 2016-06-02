@@ -436,6 +436,7 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
         /* Set LDG bias */
+        //LDG_bias(fpt) = 2;
         LDG_bias(fpt) = 0;
 
         break;
@@ -1938,7 +1939,27 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     }
 
     /* Compute common normal flux */
-    if (LDG_bias(fpt) != 0)
+    if (LDG_bias(fpt) == 0)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
+
+        /* Correct for positive parent space sign convention */
+        Fcomm(fpt, n, 0) = F;
+        Fcomm(fpt, n, 1) = -F;
+      }
+    }
+    else if (LDG_bias(fpt) == 2)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double F = 0.5 * (FL[n] + FR[n]) * dA(fpt);
+        Fcomm(fpt, n, 0) = F;
+        Fcomm(fpt, n, 1) = -F;
+      }
+    }
+    else
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
@@ -1946,16 +1967,6 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         Fcomm(fpt, n, 0) = F;
         Fcomm(fpt, n, 1) = -F;
       }
-      continue;
-    }
-
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
-
-      /* Correct for positive parent space sign convention */
-      Fcomm(fpt, n, 0) = F;
-      Fcomm(fpt, n, 1) = -F;
     }
   }
 }
@@ -2683,22 +2694,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       }
     }
 
-    if (LDG_bias(fpt) != 0)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFcdU(fpt, ni, nj, 0, 0) = 0;
-          dFcdU(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj);
-
-          dFcdU(fpt, ni, nj, 0, 1) = 0;
-          dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj);
-        }
-      }
-      continue;
-    }
-    else if (LDG_bias(fpt) == 2)
+    if (LDG_bias(fpt) == 2)
     {
       for (unsigned int nj = 0; nj < nVars; nj++)
       {
@@ -2713,7 +2709,22 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       }
       continue;
     }
+    else if (LDG_bias(fpt) != 0)
+    {
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          dFcdU(fpt, ni, nj, 0, 0) = 0;
+          dFcdU(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj);
 
+          dFcdU(fpt, ni, nj, 0, 1) = 0;
+          dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj);
+        }
+      }
+      continue;
+    }
+   
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {

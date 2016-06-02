@@ -1080,6 +1080,11 @@ void FRSolver::initialize_U()
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
   {
+    if (!input->inv_mode and input->n_LHS_blocks != 1)
+    {
+      ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
+    } 
+
     /* Maximum number of unique matrices possible per element */
     unsigned int nMat = eles->nFaces + 1;
 
