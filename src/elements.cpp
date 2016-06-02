@@ -358,17 +358,14 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-  sync_stream(0);
   for (unsigned int var = 0; var < nVars; var++)
   {
     auto *A = oppE_d.data();
     auto *B = U_spts_d.data() + startEle * U_spts_d.ldim() + var * (U_spts_d.ldim() * nEles);
     auto *C = U_fpts_d.data() + startEle * U_fpts_d.ldim() + var * (U_fpts_d.ldim() * nEles);
     cublasDGEMM_wrapper(nFpts, endEle - startEle, nSpts, 1.0,
-        A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim(), var + 3);
+        A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim());
   }
-
-  cudaDeviceSynchronize();
 
   check_error();
 #endif
