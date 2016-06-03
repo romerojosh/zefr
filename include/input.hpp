@@ -1,6 +1,7 @@
 #ifndef input_hpp
 #define input_hpp
-
+//#define _CPU
+//#define _MPI
 #include <array>
 #include <fstream>
 #include <map>
@@ -46,23 +47,28 @@ enum EQUATION {
 
 /*! Enumeration for all available boundary conditions */
 enum BC_TYPE {
-  NONE = -1,
-  PERIODIC = 0,
-  CHAR = 1,
-  CHAR_PYFR = 2,
-  SUP_IN = 3,
-  SUP_OUT = 4,
-  SUB_IN = 5,
-  SUB_OUT = 6,
-  SUB_IN_CHAR = 7,
-  SUB_OUT_CHAR = 8,
-  SLIP_WALL = 9,
-  ISOTHERMAL_NOSLIP = 10,
-  ADIABATIC_NOSLIP = 11,
-  ISOTHERMAL_NOSLIP_MOVING = 12,
-  ADIABATIC_NOSLIP_MOVING = 13,
-  OVERSET = 14,
-  SYMMETRY = 15
+  NONE = 0,
+  PERIODIC,
+  CHAR,
+  SUP_IN,
+  SUP_OUT,
+  SUB_IN,
+  SUB_OUT,
+  SUB_IN_CHAR,
+  SUB_OUT_CHAR,
+  SLIP_WALL_P,
+  SLIP_WALL_G,
+  ISOTHERMAL_NOSLIP_P,
+  ISOTHERMAL_NOSLIP_G,
+  ADIABATIC_NOSLIP_P,
+  ADIABATIC_NOSLIP_G,
+  ISOTHERMAL_NOSLIP_MOVING_P,
+  ISOTHERMAL_NOSLIP_MOVING_G,
+  ADIABATIC_NOSLIP_MOVING_P,
+  ADIABATIC_NOSLIP_MOVING_G,
+  OVERSET,
+  SYMMETRY_P,
+  SYMMETRY_G
 };
 
 extern std::map<std::string,int> bcStr2Num;
@@ -86,13 +92,22 @@ struct InputStruct
   unsigned int rank, nRanks;
   unsigned int filt_on, sen_write, sen_norm, filt_maxLevels;
   double sen_Jfac, filt_gamma;
+  double iter, initIter, time, rkTime;
+
+  /* --- Overset / Moving-Grid Variables --- */
+  bool motion, overset, use_lgp;
+  unsigned int oversetMethod, nGrids, quad_order, motion_type;
+  std::vector<std::string> oversetGrids;
+
+  double moveAx, moveAy, moveFx, moveFy;
+
+
+  /* --- Additional Mesh Variables --- */
+  std::map<std::string,std::string> meshBounds;
 
   /* Implicit Parameters */
   bool SER, inv_mode, stream_mode, backsweep, LU_pivot;
   unsigned int Jfreeze_freq, nColors, n_LHS_blocks;
-
-  /* --- Additional Mesh Variables --- */
-  std::map<std::string,std::string> meshBounds;
 
 #ifdef _GPU
   mdvector_gpu<double> AdvDiff_A_d, V_fs_d, norm_fs_d, V_wall_d, norm_wall_d;
@@ -155,6 +170,51 @@ void read_param(std::ifstream &f, std::string name, T &var, T default_val)
   }
 
   var = default_val;
+}
+
+template<typename T>
+void read_vector(std::ifstream &f, std::string name, unsigned int &nVars, std::vector<T> &vars)
+{
+  std::string str, optKey;
+
+  if (!f.is_open())
+  {
+    ThrowException("Input file not open for reading!");
+  }
+
+  // Rewind to the start of the file
+  f.seekg(0, f.beg);
+
+  // Search for the given option string
+  while (std::getline(f, str)) {
+    // Remove any leading whitespace & see if first word is the input option
+    std::stringstream ss;
+    ss.str(str);
+    ss >> optKey;
+    if (optKey.compare(name)==0) {
+      if (!(ss >> nVars)) {
+        // This could happen if, for example, trying to assign a string to a double
+        cerr << "WARNING: Unable to read number of entries for vector option " << name << endl;
+        string errMsg = "Required option not set: " + name;
+        ThrowException(errMsg.c_str());
+      }
+
+      vars.resize(nVars);
+      for (unsigned int i = 0; i < nVars; i++) {
+        if (!(ss >> vars[i])) {
+          std::cerr << "WARNING: Unable to assign all values to vector option " << name << std::endl;
+          std::string errMsg = "Required option not set: " + name;
+          ThrowException(errMsg.c_str())
+        }
+      }
+
+      return;
+    }
+  }
+
+  // Option was not found; throw error & exit
+  std::string errMsg = "Required option not found: " + name;
+  ThrowException(errMsg.c_str());
 }
 
 /*! Read in a map of type <T,U> from input file; each entry prefaced by optName

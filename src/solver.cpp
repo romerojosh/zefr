@@ -1422,7 +1422,7 @@ void FRSolver::dFcdU_from_faces()
           if (gfpt >= (int)geo.nGfpts_int && gfpt < (int)(geo.nGfpts_int + geo.nGfpts_bnd))
           {
             unsigned int bnd_id = geo.gfpt2bnd(gfpt - geo.nGfpts_int);
-            if (bnd_id != 1)
+            if (bnd_id != PERIODIC)
             {
               eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot) + 
                                                       faces->dFcdU(gfpt, ni, nj, notslot, slot);
@@ -2555,7 +2555,9 @@ void FRSolver::report_forces(std::ofstream &f)
     /* Get boundary ID */
     unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
 
-    if (bnd_id >= 9) /* On wall boundary */
+    if (bnd_id == SLIP_WALL_P || bnd_id == SLIP_WALL_G || bnd_id == ISOTHERMAL_NOSLIP_G  || bnd_id == ISOTHERMAL_NOSLIP_G
+        || bnd_id == ISOTHERMAL_NOSLIP_MOVING_P || bnd_id == ISOTHERMAL_NOSLIP_MOVING_G || bnd_id == ADIABATIC_NOSLIP_P
+        || bnd_id == ADIABATIC_NOSLIP_G || bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* On wall boundary */
     {
       /* Get pressure */
       double PL = faces->P(fpt, 0);

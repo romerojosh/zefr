@@ -135,7 +135,7 @@ void Faces::apply_bcs()
     /* Apply specified boundary condition */
     switch(bnd_id)
     {
-      case 1:/* Periodic */
+      case PERIODIC:/* Periodic */
       {
         unsigned int per_fpt = geo->per_fpt_list(fpt - geo->nGfpts_int);
 
@@ -146,7 +146,7 @@ void Faces::apply_bcs()
         break;
       }
     
-      case 2: /* Farfield and Supersonic Inlet */
+      case SUP_IN: /* Farfield and Supersonic Inlet */
       {
         if (input->equation == AdvDiff || input->equation == Burgers)
         {
@@ -174,7 +174,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 3: /* Supersonic Outlet */
+      case SUP_OUT: /* Supersonic Outlet */
       {
         /* Extrapolate boundary values from interior */
         for (unsigned int n = 0; n < nVars; n++)
@@ -186,7 +186,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 4: /* Subsonic Inlet */
+      case SUB_IN: /* Subsonic Inlet */
       {
         if (!input->viscous)
           ThrowException("Subsonic inlet only for viscous flows currently!");
@@ -271,7 +271,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 5: /* Subsonic Outlet */
+      case SUB_OUT: /* Subsonic Outlet */
       {
         if (!input->viscous)
           ThrowException("Subsonic outlet only for viscous flows currently!");
@@ -303,7 +303,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 6: /* Characteristic (from PyFR) */
+      case CHAR: /* Characteristic (from PyFR) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
@@ -380,8 +380,8 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 7: /* Symmetry (prescribed) */
-      case 9: /* Slip Wall (prescribed) */
+      case SYMMETRY_P: /* Symmetry (prescribed) */
+      case SLIP_WALL_P: /* Slip Wall (prescribed) */
       {
         double momN = 0.0;
 
@@ -417,8 +417,8 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 8: /* Symmetry (ghost) */
-      case 10: /* Slip Wall (ghost) */
+      case SYMMETRY_G: /* Symmetry (ghost) */
+      case SLIP_WALL_G: /* Slip Wall (ghost) */
       {
         double momN = 0.0;
 
@@ -442,7 +442,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 11: /* Isothermal No-slip Wall (prescribed) */
+      case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -474,7 +474,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 12: /* Isothermal No-slip Wall (ghost) */
+      case ISOTHERMAL_NOSLIP_G: /* Isothermal No-slip Wall (ghost) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -485,7 +485,7 @@ void Faces::apply_bcs()
       }
 
 
-      case 13: /* No-slip Wall (isothermal and moving) */
+      case ISOTHERMAL_NOSLIP_MOVING_P: /* No-slip Wall (isothermal and moving) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -521,7 +521,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 14: /* Isothermal No-slip Wall, moving (ghost) */
+      case ISOTHERMAL_NOSLIP_MOVING_G: /* Isothermal No-slip Wall, moving (ghost) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -531,7 +531,7 @@ void Faces::apply_bcs()
       }
 
 
-      case 15: /* Adiabatic No-slip Wall (prescribed) */
+      case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -563,7 +563,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 16: /* Adiabatic No-slip Wall (ghost) */
+      case ADIABATIC_NOSLIP_G: /* Adiabatic No-slip Wall (ghost) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -573,7 +573,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 17: /* Adiabatic No-slip Wall, moving (prescribed) */
+      case ADIABATIC_NOSLIP_MOVING_P: /* Adiabatic No-slip Wall, moving (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -609,7 +609,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case 18: /* Adiabatic No-slip Wall, moving (ghost) */
+      case ADIABATIC_NOSLIP_MOVING_G: /* Adiabatic No-slip Wall, moving (ghost) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -641,7 +641,7 @@ void Faces::apply_bcs_dU()
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Apply specified boundary condition */
-    if (bnd_id == 1) /* Periodic */
+    if (bnd_id == PERIODIC) /* Periodic */
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -652,7 +652,8 @@ void Faces::apply_bcs_dU()
         }
       }
     }
-    else if(bnd_id == 15 || bnd_id == 16 || bnd_id == 17 || bnd_id == 18) /* Adibatic Wall */
+    else if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
+            bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* Adibatic Wall */
     {
       /* Extrapolate density gradient */
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -851,7 +852,7 @@ void Faces::apply_bcs_dFdU()
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Copy right state values */
-    if (bnd_id != 1 && bnd_id != 2)
+    if (bnd_id != PERIODIC && bnd_id != SUP_IN)
     {
       /* Copy right state dFdUconv */
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -889,7 +890,7 @@ void Faces::apply_bcs_dFdU()
         }
 
         /* Copy right state dFddUvisc */
-        if (bnd_id == 15) /* Adiabatic Wall */
+        if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
         {
           for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {
@@ -911,7 +912,7 @@ void Faces::apply_bcs_dFdU()
     /* Apply specified boundary condition */
     switch(bnd_id)
     {
-      case 5: /* Subsonic Outlet */
+      case SUB_OUT: /* Subsonic Outlet */
       {
         /* Primitive Variables */
         double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
@@ -941,7 +942,7 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case 6: /* Characteristic (from PyFR) */
+      case CHAR: /* Characteristic (from PyFR) */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
@@ -1086,8 +1087,8 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case 7: /* Symmetry (prescribed) */
-      case 9: /* Slip Wall (prescribed) */
+      case SYMMETRY_P: /* Symmetry (prescribed) */
+      case SLIP_WALL_P: /* Slip Wall (prescribed) */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
@@ -1123,8 +1124,8 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case 8: /* Symmetry (ghost) */
-      case 10: /* Slip Wall (ghost) */
+      case SYMMETRY_G: /* Symmetry (ghost) */
+      case SLIP_WALL_G: /* Slip Wall (ghost) */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
@@ -1152,7 +1153,7 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case 15: /* No-slip Wall (adiabatic) */
+      case ADIABATIC_NOSLIP_P: /* No-slip Wall (adiabatic) */
       {
         double nx = norm(fpt, 0, 0);
         double ny = norm(fpt, 1, 0);
@@ -1282,7 +1283,7 @@ void Faces::apply_bcs_dFdU()
     }
 
     /* Compute new right state values */
-    if (bnd_id != 1 && bnd_id != 2)
+    if (bnd_id != PERIODIC && bnd_id != SUP_IN)
     {
       /* Compute dFdULconv for right state */
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1335,7 +1336,7 @@ void Faces::apply_bcs_dFdU()
         }
 
         /* Compute dFddULvisc for right state */
-        if (bnd_id == 15) /* Adiabatic Wall */
+        if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
         {
           for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {

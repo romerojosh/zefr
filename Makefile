@@ -38,7 +38,7 @@ INCS += -I$(strip $(BLAS_DIR))/include/openblas
 ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
-	INCS += -I$(strip $(METIS_DIR))/include
+	INCS += -I$(strip $(METIS_DIR))/include -I$(strip $(MPI_INC_DIR))
 	LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
 endif
 

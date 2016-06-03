@@ -475,7 +475,7 @@ void dFcdU_from_faces(mdvector_gpu<double> dFcdU_gfpts, mdvector_gpu<double> dFc
   if (gfpt >= (int)nGfpts_int && gfpt < (int)(nGfpts_int + nGfpts_bnd))
   {
     unsigned int bnd_id = gfpt2bnd(gfpt - nGfpts_int);
-    if (bnd_id != 1)
+    if (bnd_id != PERIODIC)
     {
       for (unsigned int nj = 0; nj < nVars; nj++) 
       {

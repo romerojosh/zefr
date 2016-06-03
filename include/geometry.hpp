@@ -5,6 +5,7 @@
 #include <string>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "input.hpp"
@@ -13,6 +14,10 @@
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #endif
+
+#define HOLE 0
+#define FRINGE -1
+#define NORMAL 1
 
 #ifdef _MPI
 #include "mpi.h"
@@ -25,9 +30,10 @@ struct GeoStruct
     unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
     unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
     bool per_bnd_flag = false;
-    std::vector<unsigned int> bnd_ids, ele_color_range, ele_color_nEles;
+    std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
+    std::vector<unsigned int> ele_color_range, ele_color_nEles;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;
-    std::map<std::vector<unsigned int>, unsigned int> bnd_faces, per_bnd_rot;
+    std::map<std::vector<unsigned int>, int> bnd_faces, per_bnd_rot;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
     std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
     mdvector<unsigned int> nd2gnd, ppt_connect;
@@ -41,7 +47,6 @@ struct GeoStruct
 
     unsigned int nBounds;               //! Number of distinct mesh boundary regions
     std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
-    std::vector<unsigned int> bcList;   //! List of boundary conditions for each boundary
     std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
     std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
 
@@ -61,6 +66,28 @@ struct GeoStruct
     std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif
 #endif
+
+    /* --- Motion-Related Variables --- */
+    mdvector<double> vel_nodes;  //! Grid velocity at all mesh nodes
+
+    /* --- Overset-Related Variables --- */
+
+    InputStruct *input;
+
+    unsigned int nFaces, nBndFaces;
+    std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
+    mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
+    std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
+
+    unsigned int nGrids;             //! Number of distinct overset grids
+    int nProcGrid;          //! Number of MPI processes assigned to current (overset) grid block
+    unsigned int gridID;             //! Which (overset) grid block is this process handling
+    int gridRank;           //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
+    int rank;
+    int nproc;
+
+public:
+
 };
 
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims);
@@ -78,7 +105,9 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo);
 void shuffle_data_by_color(GeoStruct &geo);
 
 #ifdef _MPI
+void partition_geometry(GeoStruct &geo);
 void partition_geometry(InputStruct *input, GeoStruct &geo);
+void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo);
 #endif
 
 #endif /* geometry_hpp */

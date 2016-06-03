@@ -7,6 +7,7 @@
 #include <queue>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #ifdef _MPI
@@ -15,6 +16,7 @@
 #include "metis.h"
 #endif
 
+#include "funcs.hpp"
 #include "geometry.hpp"
 #include "macros.hpp"
 #include "mdvector.hpp"
@@ -23,6 +25,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 {
   GeoStruct geo;
   geo.nDims = nDims;
+  geo.input = input;
 
   load_mesh_data(input, geo);
 
@@ -81,7 +84,6 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
   f.seekg(0, f.beg);
 
   std::string str;
-
   while(1)
   {
     std::getline(f, str);
@@ -91,6 +93,7 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
 
   unsigned int nBndIds;
   f >> nBndIds;
+  std::getline(f, str); // Clear remainder of line
 
   /* New boundary-reading format taken from Flurry++ */
   geo.nBounds = 0;
@@ -111,7 +114,6 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
       bcStr.erase(ind,1);
       ind = bcStr.find("\"");
     }
-
     bcName = bcStr;
 
     // Convert to lowercase to match Flurry's boundary condition strings
@@ -144,9 +146,10 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
     else
     {
       geo.bnd_ids.push_back(bcStr2Num[bcStr]);
+      std::cout << "bcStr = " << bcStr << ", bnd_id = " << bcStr2Num[bcStr] << std::endl;
       geo.bcNames.push_back(bcName);
       geo.bcIdMap[bcid] = geo.nBounds; // Map Gmsh bcid to Flurry bound index
-      if (geo.bcList.back() == PERIODIC) geo.per_bnd_flag = true;
+      if (geo.bnd_ids.back() == PERIODIC) geo.per_bnd_flag = true;
       geo.nBounds++;
     }
   }
@@ -159,7 +162,6 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo)
   f.seekg(0, f.beg);
 
   std::string str;
-
   while(1)
   {
     std::getline(f, str);
@@ -188,7 +190,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
   f.seekg(0, f.beg);
 
   std::string str;
-
   while(1)
   {
     std::getline(f, str);
@@ -628,9 +629,14 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
       face[0]--; face[1]--;
 
+      /* Map to ZEFR boundary */
+      bnd_id = geo.bcIdMap[bnd_id];
+      int bcType = geo.bnd_ids[bnd_id];
+
       /* Sort for consistency and add to map*/
       std::sort(face.begin(), face.end());
-      geo.bnd_faces[face] = geo.bnd_ids[geo.bcIdMap[bnd_id]];
+      if (bcType != OVERSET)
+        geo.bnd_faces[face] = bcType;
     }
   }
   else if (geo.nDims == 3)
@@ -700,9 +706,13 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       for (auto &node : face)
         node--;
 
+      /* Map to ZEFR boundary */
+      bnd_id = geo.bcIdMap[bnd_id];
+      int bcType = geo.bnd_ids[bnd_id];
+
       std::sort(face.begin(), face.end());
-      geo.bnd_faces[face] = geo.bnd_ids[geo.bcIdMap[bnd_id]];
-      
+      if (bcType != OVERSET)
+        geo.bnd_faces[face] = bcType;
     }
 
   }
@@ -839,7 +849,7 @@ void couple_periodic_bnds(GeoStruct &geo)
     unsigned int nNodesPerFace = (unsigned int) face1.size();
     
     /* Check if face is periodic */
-    if (bnd_id == 1)
+    if (bnd_id == PERIODIC)
     {
       /* Get face node coordinates */
       for (unsigned int node = 0; node < nNodesPerFace; node++)
@@ -1054,6 +1064,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     std::set<std::vector<unsigned int>> mpi_faces_to_process;
 #endif
 
+    geo.nFaces = 0;
+    geo.faceList.resize(0);
 
     /* Begin loop through faces */
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -1080,6 +1092,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
+          geo.c2f(ele, n) = -1;
           continue;
         }
         else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
@@ -1121,6 +1134,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
             }
           }
 #endif
+          /* Otherwise, internal face */
           else
           {
             for (auto &fpt : fpts)
@@ -1138,6 +1152,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
             ele2fpts[ele][n*nFptsPerFace + i] = fpts[i];
             ele2fpts_slot[ele][n*nFptsPerFace + i] = 0;
           }
+
+          geo.faceList.push_back(face);
         }
         /* If face has already been encountered, must assign existing global flux points */
         else
@@ -1367,7 +1383,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         auto face1_ordered = geo.face2ordered[face1];
 
         /* If boundary face is not periodic, skip this pairing */
-        if (geo.bnd_faces[face1] != 1)
+        if (geo.bnd_faces[face1] != PERIODIC)
           continue;
 
         auto face2 = geo.per_bnd_pairs[face1];
@@ -1881,3 +1897,73 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 }
 #endif
 
+/*! ==== Overset-Related Functionality ==== */
+
+#ifdef _MPI
+void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo)
+{
+  // Split the processes among the overset grids such that they are roughly balanced
+
+  /* --- Read Number of Elements in Each Grid --- */
+
+  std::vector<int> nElesGrid(input->nGrids);
+  int nElesTotal = 0;
+
+  for (unsigned int i=0; i<input->nGrids; i++)
+  {
+    std::ifstream meshFile;
+    std::string str;
+    std::string fileName = input->oversetGrids[i];
+
+    meshFile.open(fileName.c_str());
+    if (!meshFile.is_open())
+      ThrowException("Unable to open mesh file.");
+
+    // Move cursor to $Elements
+    meshFile.clear();
+    meshFile.seekg(0, ios::beg);
+    while(1)
+    {
+      getline(meshFile,str);
+      if (str.find("$Elements")!=string::npos) break;
+      if(meshFile.eof()) ThrowException("$Elements tag not found in Gmsh file!");
+    }
+
+    // Read total number of interior + boundary elements
+    meshFile >> nElesGrid[i];
+    meshFile.close();
+
+    nElesTotal += nElesGrid[i];
+  }
+
+  /* --- Balance the processes across the grids --- */
+
+  geo.nProcsGrid.resize(input->nGrids);
+  for (unsigned int i=0; i<input->nGrids; i++)
+  {
+    double eleRatio = (double)nElesGrid[i]/nElesTotal;
+    geo.nProcsGrid[i] = round(eleRatio*input->nRanks);
+  }
+
+  /* --- Get the final gridID for this rank --- */
+
+  int g = 0;
+  int procSum = geo.nProcsGrid[0];
+  while (procSum < input->rank+1 && g < input->nGrids-1)
+  {
+    g++;
+    procSum += geo.nProcsGrid[g];
+  }
+  geo.gridID = g;
+
+  /* --- Split MPI Processes Based Upon gridID: Create MPI_Comm for each grid --- */
+
+  MPI_Comm_split(Comm_World, geo.gridID, input->rank, &Comm_Grid);
+
+  MPI_Comm_rank(Comm_Grid,&geo.gridRank);
+  MPI_Comm_size(Comm_Grid,&geo.nProcGrid);
+
+  geo.gridIdList.resize(input->nRanks);
+  MPI_Allgather(&geo.gridID,1,MPI_INT,geo.gridIdList.data(),1,MPI_INT,MPI_COMM_WORLD);
+}
+#endif
