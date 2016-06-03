@@ -2,6 +2,11 @@
 nDims    2
 meshfile cyl_quad_ns.msh
 
+# Boundary Conditions
+mesh_bound  fluid  fluid
+mesh_bound  wall_ns_iso_p  wall_ns_iso_p
+mesh_bound  char  char
+
 # Solver:
 order     2
 equation EulerNS    (AdvDiff, EulerNS)

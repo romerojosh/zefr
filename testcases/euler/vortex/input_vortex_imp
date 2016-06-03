@@ -2,6 +2,10 @@
 nDims    2
 meshfile QuadBox_32x32_eul.msh
 
+# Boundary Conditions
+mesh_bound  fluid  fluid
+mesh_bound  periodic  periodic
+
 # Solver:
 order     3
 equation EulerNS    (AdvDiff, EulerNS)

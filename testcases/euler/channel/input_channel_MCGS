@@ -3,6 +3,12 @@ nDims    2
 meshfile channelBump_48x16_b2.msh
 serendipity 0
 
+# Boundary Conditions
+mesh_bound  char  char
+mesh_bound  wall_slip  wall_slip_p
+mesh_bound  symmetry  symmetry_p
+mesh_bound  fluid  fluid
+
 # Solver:
 order     2
 equation EulerNS    (AdvDiff, EulerNS)

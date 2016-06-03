@@ -3,6 +3,11 @@ nDims    2
 meshfile full_cyl_quad.msh
 serendipity 1
 
+# Boundary Conditions
+mesh_bound  wall_slip_p  wall_slip_p
+mesh_bound  char  char
+mesh_bound  fluid  fluid
+
 # Solver:
 order     1
 equation EulerNS    (AdvDiff, EulerNS)
@@ -41,11 +46,6 @@ ldg_tau    1.0
 
 # Equation Specific Parameters:
 ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
-
-# Boundary Conditions
-mesh_bound  wall_slip_p  wall_slip_p
-mesh_bound  char  char
-mesh_bound  fluid  fluid
 
 # Euler/Navier-Stokes
 T_gas 291.15
