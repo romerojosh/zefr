@@ -28,10 +28,6 @@ void Elements::setup(std::shared_ptr<Faces> faces)
   setup_FR();
   setup_aux();
   set_coords(faces);
-
-  /* If P-multigrid is enabled, create associated operators */
-  if (input->p_multi)
-    setup_PMG();
 }
 
 void Elements::set_shape()

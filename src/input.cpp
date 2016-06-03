@@ -58,6 +58,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "f_smooth_steps", input.f_smooth_steps, (unsigned int) 1);
   read_param(f, "rel_fac", input.rel_fac, 1.0);
   read_param(f, "low_order", input.low_order, (unsigned int) 0);
+  read_param_vec(f, "mg_levels", input.mg_levels);
+  read_param_vec(f, "mg_steps", input.mg_steps);
 
   read_param(f, "SER", input.SER, false);
   read_param(f, "inv_mode", input.inv_mode, true);

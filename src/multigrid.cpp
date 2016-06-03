@@ -17,140 +17,153 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
 {
   this-> order = input->order;
   this-> input = input;
-  corrections.resize(order + 1);
-  sources.resize(order);
-  solutions.resize(order);
+  nLevels = input->mg_levels.size();
+
+  if (input->mg_levels[0] != order)
+    ThrowException("Invalid mg_levels provided. First level must equal order!");
+  if (input->mg_levels.size() != input->mg_steps.size())
+    ThrowException("Inconsistent number of mg_levels and mg_steps provided!");
+
+  corrections.resize(nLevels);
+  sources.resize(nLevels);
+  solutions.resize(nLevels);
 
 #ifdef _GPU
-  corrections_d.resize(order + 1);
-  sources_d.resize(order);
-  solutions_d.resize(order);
+  corrections_d.resize(nLevels);
+  sources_d.resize(nLevels);
+  solutions_d.resize(nLevels);
 #endif
 
+  /* Setup fine grid PMG operators */
+  solver.eles->setup_PMG(order, input->mg_levels[1]);
+  grids.push_back(nullptr); // Placeholder spot in grids array
+
   /* Instantiate coarse grid solvers */
-  for (int P = 0; P < order; P++)
+  for (int n = 1; n < nLevels; n++)
   {
+    int P = input->mg_levels[n];
+    int P_pro = input->mg_levels[n - 1];
+    int P_res = (n + 1 < nLevels) ? input->mg_levels[n + 1] : 0;
+
     if (input->rank == 0) std::cout << "P = " << P << std::endl;
-    grids.push_back(std::make_shared<FRSolver>(input,P));
-    grids[P]->setup();
+    if (input->rank == 0) std::cout << "P_pro = " << P_pro << std::endl;
+    if (input->rank == 0) std::cout << "P_res = " << P_res << std::endl;
+    grids.push_back(std::make_shared<FRSolver>(input, P));
+    grids[n]->setup();
+    grids[n]->eles->setup_PMG(P_pro, P_res);
 
     /* Allocate memory for corrections and source terms */
-    corrections[P] = grids[P]->eles->U_spts;
-    sources[P] = grids[P]->eles->U_spts;
-    solutions[P] = grids[P]->eles->U_spts;
-    corrections[P].fill(0.0);
-    sources[P].fill(0.0);
-    solutions[P].fill(0.0);
+    corrections[n] = grids[n]->eles->U_spts;
+    sources[n] = grids[n]->eles->U_spts;
+    solutions[n] = grids[n]->eles->U_spts;
+    corrections[n].fill(0.0);
+    sources[n].fill(0.0);
+    solutions[n].fill(0.0);
 
 #ifdef _GPU
     /* If using GPU, allocate device memory */
-    corrections_d[P] = corrections[P];
-    sources_d[P] = sources[P];
-    solutions_d[P] = solutions[P];
+    corrections_d[n] = corrections[n];
+    sources_d[n] = sources[n];
+    solutions_d[n] = solutions[n];
 #endif
   }
 
   /* Allocate memory for fine grid correction and initialize to zero */
-  corrections[order] = solver.eles->U_spts;
-  corrections[order].fill(0.0);
+  corrections[0] = solver.eles->U_spts;
+  corrections[0].fill(0.0);
 
 #ifdef _GPU
-  corrections_d[order] = corrections[order];
+  corrections_d[0] = corrections[0];
 #endif
 }
 
-void PMGrid::v_cycle(FRSolver &solver, int fine_order)
+void PMGrid::v_cycle(FRSolver &solver, int level)
 {
   /* ---Downward cycle--- */
   /* Update residual on finest grid level and restrict */
-  if (fine_order != (int) input->low_order)
-  {
+  //if (level != nLevels - 1)
+  //{
     solver.compute_residual(0);
-    restrict_pmg(solver, *grids[fine_order-1]);
-  }
+    restrict_pmg(solver, *grids[level + 1]);
+  //}
 
-  for (int P = fine_order-1; P >= (int) input->low_order; P--)
+  for (int n = level + 1; n < nLevels; n++)
   {
     /* Generate source term */
 #ifdef _CPU
-    compute_source_term(*grids[P], sources[P]);
+    compute_source_term(*grids[n], sources[n]);
 #endif
 
 #ifdef _GPU
-    compute_source_term(*grids[P], sources_d[P]);
+    compute_source_term(*grids[n], sources_d[n]);
 #endif
 
     /* Copy initial solution to solution storage */
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
-      for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-          solutions[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n);
+    for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
+      for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
+        for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
+          solutions[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var);
 #endif
 
 #ifdef _GPU
-    device_copy(solutions_d[P], grids[P]->eles->U_spts_d, solutions_d[P].max_size());
+    device_copy(solutions_d[n], grids[n]->eles->U_spts_d, solutions_d[n].max_size());
 #endif
 
     /* Update solution on coarse level */
-    unsigned int nSteps = input->smooth_steps;
-    if (P == (int) input->low_order)
-    {
-      nSteps = input->c_smooth_steps;
-    }
-    for (unsigned int step = 0; step < nSteps; step++)
+    for (unsigned int step = 0; step < input->mg_steps[n]; step++)
     {
 #ifdef _CPU
-      grids[P]->update(sources[P]);
-      grids[P]->filter_solution();
+      grids[n]->update(sources[n]);
+      grids[n]->filter_solution();
 #endif
 
 #ifdef _GPU
-      grids[P]->update(sources_d[P]);
-      grids[P]->filter_solution();
+      grids[n]->update(sources_d[n]);
+      grids[n]->filter_solution();
 #endif
     }
     
-    /* If coarser order exits, restrict */
-    if (P-1 >= (int) input->low_order)
+    /* If coarser level exits, restrict */
+    if (n + 1 < nLevels)
     {
       /* Update residual and add source */
-      grids[P]->compute_residual(0);
+      grids[n]->compute_residual(0);
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-      for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
-        for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
-          for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-            grids[P]->eles->divF_spts(spt, ele, n, 0) += sources[P](spt, ele, n);
+      for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
+        for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
+            grids[n]->eles->divF_spts(spt, ele, var, 0) += sources[n](spt, ele, var);
 #endif
 
 #ifdef _GPU
-      device_add(grids[P]->eles->divF_spts_d, sources_d[P], sources_d[P].max_size());
+      device_add(grids[n]->eles->divF_spts_d, sources_d[n], sources_d[n].max_size());
 #endif
 
-      /* Restrict to next coarse grid */
-      restrict_pmg(*grids[P], *grids[P-1]);
+      /* Restrict to next coarse level */
+      restrict_pmg(*grids[n], *grids[n + 1]);
     }
   }
 
   /* ---Upward cycle--- */
-  for (int P = (int) input->low_order; P <= fine_order-1; P++)
+  for (int n = nLevels - 1; n > level; n--)
   {
 
     /* Advance again (v-cycle)*/
-    if (P != (int) input->low_order)
+    if (n != nLevels - 1)
     {
-      for (unsigned int step = 0; step < input->p_smooth_steps; step++)
+      for (unsigned int step = 0; step < input->mg_steps[n]; step++)
       {
 #ifdef _CPU
-        grids[P]->update(sources[P]);
-        grids[P]->filter_solution();
+        grids[n]->update(sources[n]);
+        grids[n]->filter_solution();
 #endif
 
 #ifdef _GPU
-        grids[P]->update(sources_d[P]);
-        grids[P]->filter_solution();
+        grids[n]->update(sources_d[n]);
+        grids[n]->filter_solution();
 #endif
       }
     }
@@ -158,45 +171,44 @@ void PMGrid::v_cycle(FRSolver &solver, int fine_order)
     /* Generate error */
 #ifdef _CPU
 #pragma omp parallel for collapse(3)
-    for (unsigned int n = 0; n < grids[P]->eles->nVars; n++)
-      for (unsigned int ele = 0; ele < grids[P]->eles->nEles; ele++)
-        for (unsigned int spt = 0; spt < grids[P]->eles->nSpts; spt++)
-          corrections[P](spt, ele, n) = grids[P]->eles->U_spts(spt, ele, n) - 
-            solutions[P](spt, ele, n);
+    for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
+      for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
+        for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
+          corrections[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var) - 
+            solutions[n](spt, ele, var);
 #endif
 
 #ifdef _GPU
     /* Note: Doing this with two separate kernels might be more expensive. Can write a
      * single kernel for this eventually */
-    device_subtract(grids[P]->eles->U_spts_d, solutions_d[P], solutions_d[P].max_size());
-    device_copy(corrections_d[P], grids[P]->eles->U_spts_d, corrections_d[P].max_size());
+    device_subtract(grids[n]->eles->U_spts_d, solutions_d[n], solutions_d[n].max_size());
+    device_copy(corrections_d[n], grids[n]->eles->U_spts_d, corrections_d[n].max_size());
 #endif
 
     /* Prolong error and add to fine grid solution */
-    if (P < fine_order-1)
+    if (n > level + 1)
     {
 #ifdef _CPU
-      prolong_err(*grids[P], corrections[P], *grids[P+1]);
+      prolong_err(*grids[n], corrections[n], *grids[n - 1]);
 #endif
 
 #ifdef _GPU
-      prolong_err(*grids[P], corrections_d[P], *grids[P+1]);
+      prolong_err(*grids[n], corrections_d[n], *grids[n - 1]);
 #endif
     }
   }
 
   /* Prolong correction and add to finest grid solution */
-  if (fine_order != (int) input->low_order)
-  {
+  //if (level != 0)
+  //{
 #ifdef _CPU
-    prolong_err(*grids[fine_order-1], corrections[fine_order-1], solver);
+    prolong_err(*grids[level + 1], corrections[level + 1], solver);
 #endif
 
 #ifdef _GPU
-    prolong_err(*grids[fine_order-1], corrections_d[fine_order-1], solver);
+    prolong_err(*grids[level + 1], corrections_d[level + 1], solver);
 #endif
-  }
-
+  //}
 
 }
 
@@ -204,7 +216,13 @@ void PMGrid::cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_
 {
   if (input->mg_cycle == "V")
   {
-    v_cycle(solver, order);
+    for (int step = 0; step < input->mg_steps[0]; step++)
+    {
+      solver.update();
+      solver.filter_solution();
+    }
+
+    v_cycle(solver, 0);
   }
   else if (input->mg_cycle == "FMG")
   {
@@ -266,9 +284,6 @@ void PMGrid::cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
 {
-  if (grid_f.order - grid_c.order > 1)
-    ThrowException("Cannot restrict more than 1 order currently!");
-
 #ifdef _CPU
   /* Restrict solution */
   auto &A = grid_f.eles->oppRes(0, 0);
@@ -319,9 +334,6 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
 
 void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
 {
-  if (grid_f.order - grid_c.order > 1)
-    ThrowException("Cannot prolong more than 1 order currently!");
-
   for (unsigned int n = 0; n < grid_c.eles->nVars; n++)
   {
     auto &A = grid_c.eles->oppPro(0, 0);

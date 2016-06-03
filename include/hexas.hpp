@@ -17,7 +17,6 @@ class Hexas: public Elements
     void set_locs();
     void set_transforms(std::shared_ptr<Faces> faces);
     void set_normals(std::shared_ptr<Faces> faces);
-    void setup_PMG();
 
     mdvector<double> calc_shape(unsigned int shape_order,
                       std::vector<double> &loc);
@@ -35,6 +34,8 @@ class Hexas: public Elements
     Hexas(GeoStruct *geo, InputStruct *input, int order = -1);
     void transform_dU(unsigned int startEle, unsigned int endEle);
     void transform_flux(unsigned int startEle, unsigned int endEle);
+
+    void setup_PMG(int pro_order, int res_order);
 
     /* Routines for implicit method */
     void transform_dFdU();

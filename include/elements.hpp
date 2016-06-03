@@ -103,7 +103,6 @@ class Elements
     void setup_FR();
     void setup_aux();
 
-    virtual void setup_PMG() = 0;
     virtual void set_locs() = 0;
     virtual void set_transforms(std::shared_ptr<Faces> faces) = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
@@ -121,6 +120,7 @@ class Elements
 
   public:
     void setup(std::shared_ptr<Faces> faces);
+    virtual void setup_PMG(int pro_order, int res_order) = 0;
     void extrapolate_U(unsigned int startEle, unsigned int endEle);
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);
     void compute_dU(unsigned int startEle, unsigned int endEle);

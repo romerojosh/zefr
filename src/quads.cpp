@@ -418,11 +418,11 @@ double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc
 
 }
 
-void Quads::setup_PMG()
+void Quads::setup_PMG(int pro_order, int res_order)
 {
   /* Allocate memory for operators */
-  unsigned int nSpts_pro_1D = order+2;
-  unsigned int nSpts_res_1D = order;
+  unsigned int nSpts_pro_1D = pro_order + 1;
+  unsigned int nSpts_res_1D = res_order + 1;
   unsigned int nSpts_pro = nSpts_pro_1D * nSpts_pro_1D;
   unsigned int nSpts_res = nSpts_res_1D * nSpts_res_1D;
 
@@ -433,7 +433,7 @@ void Quads::setup_PMG()
     /* Setup prolongation operator */
     oppPro.assign({nSpts_pro, nSpts});
 
-    auto loc_spts_pro_1D = Gauss_Legendre_pts(order+2); 
+    auto loc_spts_pro_1D = Gauss_Legendre_pts(pro_order + 1); 
 
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
@@ -452,7 +452,7 @@ void Quads::setup_PMG()
     /* Setup restriction operator */
     oppRes.assign({nSpts_res, nSpts});
 
-    auto loc_spts_res_1D = Gauss_Legendre_pts(order); 
+    auto loc_spts_res_1D = Gauss_Legendre_pts(res_order + 1); 
 
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
@@ -465,6 +465,12 @@ void Quads::setup_PMG()
       }
     }
   }
+
+#ifdef _GPU
+  /* Copy PMG operators to device */
+  oppPro_d = oppPro;
+  oppRes_d = oppRes;
+#endif
 }
 
 void Quads::transform_dU(unsigned int startEle, unsigned int endEle)

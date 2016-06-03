@@ -400,13 +400,6 @@ void FRSolver::solver_data_to_device()
   eles->oppD_fpts_d = eles->oppD_fpts;
   eles->oppDiv_fpts_d = eles->oppDiv_fpts;
 
-  /* If using multigrid, copy relevant operators */
-  if (input->p_multi)
-  {
-    eles->oppPro_d = eles->oppPro;
-    eles->oppRes_d = eles->oppRes;
-  }
-
   /* Solver data structures */
   U_ini_d = U_ini;
   rk_alpha_d = rk_alpha;
@@ -1931,7 +1924,7 @@ void FRSolver::write_solution(const std::string &prefix)
 
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->f_smooth_steps;
+    iter = iter / input->mg_steps[0];
 
   if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
 
@@ -2394,7 +2387,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 {
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->f_smooth_steps;
+    iter = iter / input->mg_steps[0];
 
   /* If running on GPU, copy out divergence */
 #ifdef _GPU
@@ -2509,7 +2502,7 @@ void FRSolver::report_forces(std::ofstream &f)
 {
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->f_smooth_steps;
+    iter = iter / input->mg_steps[0];
 
   /* If using GPU, copy out solution, gradient and pressure */
 #ifdef _GPU
@@ -2771,7 +2764,7 @@ void FRSolver::report_error(std::ofstream &f)
 {
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->f_smooth_steps;
+    iter = iter / input->mg_steps[0];
 
   /* If using GPU, copy out solution */
 #ifdef _GPU

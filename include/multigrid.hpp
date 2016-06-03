@@ -18,7 +18,7 @@ class PMGrid
 {
   private:
     InputStruct *input = NULL;
-    int order;
+    int order, nLevels;
     std::vector<mdvector<double>> corrections, sources, solutions;
     std::vector<std::shared_ptr<FRSolver>> grids;
 

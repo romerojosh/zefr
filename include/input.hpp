@@ -21,6 +21,7 @@ struct InputStruct
   unsigned int report_freq, write_freq, force_freq, res_type, error_freq, test_case, err_field, FMG_vcycles;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
   bool viscous, p_multi, restart, fix_vis, squeeze, serendipity, source;
+  std::vector<unsigned int> mg_levels, mg_steps;
   std::string fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau; 
   double AdvDiff_D, dt, res_tol, CFL, rel_fac, CFL_max, CFL_ratio;
@@ -100,6 +101,45 @@ void read_param(std::ifstream &f, std::string name, T &var, T default_val)
   }
 
   var = default_val;
+}
+
+/* Function to read vector of parameters from input file. */
+template <typename T>
+void read_param_vec(std::ifstream &f, std::string name, std::vector<T> &vec)
+{
+  if (!f.is_open())
+  {
+    ThrowException("Input file not open for reading!");
+  }
+
+  if (vec.size() != 0)
+  {
+    ThrowException("Trying to assign input parameters to a vector that has data!");
+  }
+
+  std::string param;
+
+  f.clear();
+  f.seekg(0, f.beg);
+
+  while (f >> param)
+  {
+    if (param == name)
+    {
+      std::string line;
+      std::getline(f, line);
+      std::stringstream ss(line);
+
+      T val;
+      while (ss >> val)
+      {
+        vec.push_back(val);
+      }
+
+      return;
+    }
+  }
+
 }
 
 #endif /* input_hpp */

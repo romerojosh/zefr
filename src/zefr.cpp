@@ -129,17 +129,9 @@ int main(int argc, char* argv[])
     }
     else
     {
-      for (unsigned int step = 0; step < input.f_smooth_steps; step++)
-      {
-        solver.update();
-        solver.filter_solution();
-      }
+      pmg.cycle(solver, hist_file, t1);
     }
     
-    /* If using multigrid, perform correction cycle */
-    if (input.p_multi)
-      pmg.cycle(solver, hist_file, t1);
-
     /* Write output if required */
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
     {
