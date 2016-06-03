@@ -6,6 +6,25 @@
 #include "input.hpp"
 #include "macros.hpp"
 
+std::map<std::string,int> bcStr2Num = {
+  {"none", NONE},
+  {"fluid", NONE},
+  {"periodic", PERIODIC},
+  {"char", CHAR},
+  {"char_pyfr", CHAR_PYFR},
+  {"inlet_sup", SUP_IN},
+  {"outlet_sup", SUP_OUT},
+  {"inlet_sub", SUB_IN},
+  {"outlet_sub", SUB_OUT},
+  {"wall_slip", SLIP_WALL},
+  {"wall_ns_iso", ISOTHERMAL_NOSLIP},
+  {"wall_ns_iso_move", ISOTHERMAL_NOSLIP_MOVING},
+  {"wall_ns_adi", ADIABATIC_NOSLIP},
+  {"wall_ns_adi_move", ADIABATIC_NOSLIP_MOVING},
+  {"overset", OVERSET},
+  {"symmetry", SYMMETRY}
+};
+
 InputStruct read_input_file(std::string inputfile)
 {
   std::ifstream f(inputfile);
@@ -16,6 +35,17 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "nDims", input.nDims);
   read_param(f, "meshfile", input.meshfile);
   read_param(f, "serendipity", input.serendipity, false);
+
+  // Get mesh boundaries and boundary conditions, then convert to lowercase
+  std::map<std::string, std::string> meshBndTmp;
+  read_map(f, "mesh_bound", meshBndTmp);
+  for (auto& B:meshBndTmp) {
+    std::string tmp1, tmp2;
+    tmp1 = B.first; tmp2 = B.second;
+    std::transform(tmp1.begin(), tmp1.end(), tmp1.begin(), ::tolower);
+    std::transform(tmp2.begin(), tmp2.end(), tmp2.begin(), ::tolower);
+    input.meshBounds[tmp1] = tmp2;
+  }
 
   read_param(f, "order", input.order);
   read_param(f, "equation", str);

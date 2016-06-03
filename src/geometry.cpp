@@ -56,45 +56,15 @@ void load_mesh_data(InputStruct *input, GeoStruct &geo)
 
   /* Process file information */
   /* Load boundary tags */
-  while (f >> param)
-  {
-    if (param == "$PhysicalNames")
-    {
-      read_boundary_ids(f, geo); break;
-    }
-  }
-
-  if (f.eof()) ThrowException("Meshfile missing $PhysicalNames tag");
-
-  f.clear();
-  f.seekg(0, f.beg);
+  read_boundary_ids(f, geo, input);
 
   /* Load node coordinate data */
-  while (f >> param)
-  {
-    if (param == "$Nodes")
-    {
-      read_node_coords(f, geo); break;
-    }
-  }
+  read_node_coords(f, geo);
 
-  if (f.eof()) ThrowException("Meshfile missing $Nodes tag");
 
-  f.clear();
-  f.seekg(0, f.beg);
-
-  while (f >> param)
-  {
-    /* Load element connectivity data */
-    if (param == "$Elements")
-    {
-      read_element_connectivity(f, geo, input);
-      read_boundary_faces(f, geo);
-      break;
-    }
-  }
-
-  if (f.eof()) ThrowException("Meshfile missing $Elements tag");
+  /* Load element connectivity data */
+  read_element_connectivity(f, geo, input);
+  read_boundary_faces(f, geo);
 
   set_face_nodes(geo);
 
@@ -104,122 +74,128 @@ void load_mesh_data(InputStruct *input, GeoStruct &geo)
 
 }
 
-void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
+void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
 {
+  /* Move cursor to $PhysicalNames */
+  f.clear();
+  f.seekg(0, f.beg);
+
+  std::string str;
+
+  while(1)
+  {
+    std::getline(f, str);
+    if (str.find("$PhysicalNames") != std::string::npos) break;
+    if (f.eof()) ThrowException("Meshfile missing $PhysicalNames tag");
+  }
+
   unsigned int nBndIds;
   f >> nBndIds;
-  
-  /* This is oversized to use gmsh boundary tag indices directy (1-indexed) */
-  geo.bnd_ids.assign(nBndIds+1,0);
-  std::string bnd_id;
-  for (unsigned int n = 1; n < nBndIds+1; n++)
-  {
-    unsigned int val;
-    f >> val >> val >> bnd_id;
 
-    /* Check boundary tag and set appropriate index */
-    if (bnd_id == "\"PERIODIC\"")
+  /* New boundary-reading format taken from Flurry++ */
+  geo.nBounds = 0;
+  for (unsigned int i = 0; i < nBndIds; i++)
+  {
+    std::string bcStr, bcName;
+    std::stringstream ss;
+    int bcdim, bcid;
+
+    std::getline(f,str);
+    ss << str;
+    ss >> bcdim >> bcid >> bcStr;
+
+    // Remove quotation marks from around boundary condition
+    size_t ind = bcStr.find("\"");
+    while (ind!=std::string::npos)
     {
-      geo.bnd_ids[val] = 1;
-      geo.per_bnd_flag = true;
+      bcStr.erase(ind,1);
+      ind = bcStr.find("\"");
     }
-    else if (bnd_id == "\"FARFIELD\"" || bnd_id == "\"INLET_SUP\"")
+
+    bcName = bcStr;
+
+    // Convert to lowercase to match Flurry's boundary condition strings
+    std::transform(bcStr.begin(), bcStr.end(), bcStr.begin(), ::tolower);
+
+    // First, map mesh boundary to boundary name in input file
+    if (!input->meshBounds.count(bcStr))
     {
-      geo.bnd_ids[val] = 2;
+      std::string errS = "Unrecognized mesh boundary: \"" + bcStr + "\"\n";
+      errS += "Boundary names in input file must match those in mesh file.";
+      ThrowException(errS.c_str());
     }
-    else if (bnd_id == "\"OUTLET_SUP\"")
+
+    // Map the Gmsh PhysicalName to the input-file-specified Flurry boundary condition
+    bcStr = input->meshBounds[bcStr];
+
+    // Next, check that the requested boundary condition exists
+    if (!bcStr2Num.count(bcStr))
     {
-      geo.bnd_ids[val] = 3;
+      std::string errS = "Unrecognized boundary condition: \"" + bcStr + "\"";
+      ThrowException(errS.c_str());
     }
-    else if (bnd_id == "\"INLET_SUB\"")
+
+    if (bcStr.compare("fluid")==0)
     {
-      geo.bnd_ids[val] = 4;
-    }
-    else if (bnd_id == "\"OUTLET_SUB\"")
-    {
-      geo.bnd_ids[val] = 5;
-    }
-    else if (bnd_id == "\"CHAR\"")
-    {
-      geo.bnd_ids[val] = 6;
-    }
-    else if (bnd_id == "\"SYMMETRY_P\"")
-    {
-      geo.bnd_ids[val] = 7;
-    }
-    else if (bnd_id == "\"SYMMETRY_G\"")
-    {
-      geo.bnd_ids[val] = 8;
-    }
-    else if (bnd_id == "\"WALL_SLIP_P\"")
-    {
-      geo.bnd_ids[val] = 9;
-    }
-    else if (bnd_id == "\"WALL_SLIP_G\"")
-    {
-      geo.bnd_ids[val] = 10;
-    }
-    else if (bnd_id == "\"WALL_NS_ISO_P\"")
-    {
-      geo.bnd_ids[val] = 11;
-    }
-    else if (bnd_id == "\"WALL_NS_ISO_G\"")
-    {
-      geo.bnd_ids[val] = 12;
-    }
-    else if (bnd_id == "\"WALL_NS_ISO_MOVE_P\"")
-    {
-      geo.bnd_ids[val] = 13;
-    }
-    else if (bnd_id == "\"WALL_NS_ISO_MOVE_G\"")
-    {
-      geo.bnd_ids[val] = 14;
-    }
-    else if (bnd_id == "\"WALL_NS_ADI_P\"")
-    {
-      geo.bnd_ids[val] = 15;
-    }
-    else if (bnd_id == "\"WALL_NS_ADI_G\"")
-    {
-      geo.bnd_ids[val] = 16;
-    }
-    else if (bnd_id == "\"WALL_NS_ADI_MOVE_P\"")
-    {
-      geo.bnd_ids[val] = 17;
-    }
-    else if (bnd_id == "\"WALL_NS_ADI_MOVE_G\"")
-    {
-      geo.bnd_ids[val] = 18;
-    }
-    else if (bnd_id == "\"FLUID\"")
-    {
+      if (bcdim != input->nDims)
+        ThrowException("nDims in mesh file does not match input-specified nDims.");
+      geo.bcIdMap[bcid] = -1;
     }
     else
     {
-      ThrowException("Boundary type " + bnd_id + " not recognized!");
+      geo.bnd_ids.push_back(bcStr2Num[bcStr]);
+      geo.bcNames.push_back(bcName);
+      geo.bcIdMap[bcid] = geo.nBounds; // Map Gmsh bcid to Flurry bound index
+      if (geo.bcList.back() == PERIODIC) geo.per_bnd_flag = true;
+      geo.nBounds++;
     }
   }
 }
 
 void read_node_coords(std::ifstream &f, GeoStruct &geo)
 {
-      f >> geo.nNodes;
-      geo.coord_nodes.assign({geo.nNodes, geo.nDims});
-      for (unsigned int node = 0; node < geo.nNodes; node++)
-      {
-        unsigned int vint;
-        double vdouble;
-        f >> vint;
-        if (geo.nDims == 2)
-          f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> vdouble;
-        else if (geo.nDims == 3)
-          f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> geo.coord_nodes(node,2);
-      }
- 
+  /* Move cursor to $Nodes */
+  f.clear();
+  f.seekg(0, f.beg);
+
+  std::string str;
+
+  while(1)
+  {
+    std::getline(f, str);
+    if (str.find("$Nodes") != std::string::npos) break;
+    if (f.eof()) ThrowException("Meshfile missing $Nodes tag");
+  }
+
+  f >> geo.nNodes;
+  geo.coord_nodes.assign({geo.nNodes, geo.nDims});
+  for (unsigned int node = 0; node < geo.nNodes; node++)
+  {
+    unsigned int vint;
+    double vdouble;
+    f >> vint;
+    if (geo.nDims == 2)
+      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> vdouble;
+    else if (geo.nDims == 3)
+      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> geo.coord_nodes(node,2);
+  }
 }
 
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input)
 { 
+  /* Move cursor to $Elements */
+  f.clear();
+  f.seekg(0, f.beg);
+
+  std::string str;
+
+  while(1)
+  {
+    std::getline(f, str);
+    if (str.find("$Elements") != std::string::npos) break;
+    if (f.eof()) ThrowException("Meshfile missing $Elements tag");
+  }
+
   /* Get total number of elements and boundaries */
   unsigned int nElesBnds;
   f >> nElesBnds;
@@ -654,7 +630,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
       /* Sort for consistency and add to map*/
       std::sort(face.begin(), face.end());
-      geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
+      geo.bnd_faces[face] = geo.bnd_ids[geo.bcIdMap[bnd_id]];
     }
   }
   else if (geo.nDims == 3)
@@ -725,7 +701,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
         node--;
 
       std::sort(face.begin(), face.end());
-      geo.bnd_faces[face] = geo.bnd_ids[bnd_id];
+      geo.bnd_faces[face] = geo.bnd_ids[geo.bcIdMap[bnd_id]];
       
     }
 

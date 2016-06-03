@@ -39,6 +39,12 @@ struct GeoStruct
     unsigned int nColors;
     mdvector<unsigned int> ele_color;
 
+    unsigned int nBounds;               //! Number of distinct mesh boundary regions
+    std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
+    std::vector<unsigned int> bcList;   //! List of boundary conditions for each boundary
+    std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
+    std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
+
 #ifdef _MPI
     unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
@@ -59,7 +65,7 @@ struct GeoStruct
 
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims);
 void load_mesh_data(InputStruct *input, GeoStruct &geo);
-void read_boundary_ids(std::ifstream &f, GeoStruct &geo);
+void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input);
 void read_node_coords(std::ifstream &f, GeoStruct &geo);
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input);
 void read_boundary_faces(std::ifstream &f, GeoStruct &geo);
