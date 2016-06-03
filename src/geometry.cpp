@@ -146,7 +146,6 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
     else
     {
       geo.bnd_ids.push_back(bcStr2Num[bcStr]);
-      std::cout << "bcStr = " << bcStr << ", bnd_id = " << bcStr2Num[bcStr] << std::endl;
       geo.bcNames.push_back(bcName);
       geo.bcIdMap[bcid] = geo.nBounds; // Map Gmsh bcid to Flurry bound index
       if (geo.bnd_ids.back() == PERIODIC) geo.per_bnd_flag = true;
