@@ -19,6 +19,8 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
   this-> input = input;
   nLevels = input->mg_levels.size();
 
+  if (input->mg_levels.size() == 0 or input->mg_steps.size() == 0)
+    ThrowException("Need to provide mg_levels and/or mg_steps to run multigrid!");
   if (input->mg_levels[0] != order)
     ThrowException("Invalid mg_levels provided. First level must equal order!");
   if (input->mg_levels.size() != input->mg_steps.size())

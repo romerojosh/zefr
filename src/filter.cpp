@@ -31,13 +31,13 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
   faces = solver.faces;
   this->solver = &solver;
   
-	/* Setup sensor */
+  /* Setup sensor */
   setup_vandermonde_matrices();
-	setup_concentration_matrix();
+  setup_concentration_matrix();
   setup_oppS();
   setup_threshold();
   U_spts.assign({eles->nSpts, eles->nEles, eles->nVars});
-	sensor.assign({eles->nEles});
+  sensor.assign({eles->nEles});
 
   
   /* Setup filter */
@@ -72,37 +72,37 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
 
 void Filter::setup_vandermonde_matrices()
 {
-	/* Vandermonde matrix for the orthonormal basis */
-	Vander.assign({eles->nSpts1D, order + 1});
-	for (unsigned int j = 0; j <= order; j++)
-	{
-		double normC = std::sqrt(2.0 / (2.0 * j + 1.0));
-		for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
-			Vander(spt, j) = Legendre(j, eles->loc_spts_1D[spt]) / normC;
-	}
-	
-	/* Calculate inverse of Vandermonde matrix */
+  /* Vandermonde matrix for the orthonormal basis */
+  Vander.assign({eles->nSpts1D, order + 1});
+  for (unsigned int j = 0; j <= order; j++)
+  {
+    double normC = std::sqrt(2.0 / (2.0 * j + 1.0));
+    for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
+      Vander(spt, j) = Legendre(j, eles->loc_spts_1D[spt]) / normC;
+  }
+  
+  /* Calculate inverse of Vandermonde matrix */
   VanderInv.assign({eles->nSpts1D, order + 1});
   Vander.calc_LU();
   mdvector<double> eye({eles->nSpts1D, order + 1});
   for (unsigned int j = 0; j <= order; j++)
     eye(j,j) = 1.0;
   Vander.solve(VanderInv, eye);
-	
-	/* Vandermonde matrix for the derivatives of the orthonormal basis functions */
-	Vander_d1.assign({eles->nSpts1D, order + 1});
-	for (unsigned int j = 0; j <= order; j++)
-	{
-		double normC = std::sqrt(2.0 / (2.0 * j + 1.0));
-		for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
-			Vander_d1(spt, j) = Legendre_d1(j, eles->loc_spts_1D[spt]) / normC;
-	}
+  
+  /* Vandermonde matrix for the derivatives of the orthonormal basis functions */
+  Vander_d1.assign({eles->nSpts1D, order + 1});
+  for (unsigned int j = 0; j <= order; j++)
+  {
+    double normC = std::sqrt(2.0 / (2.0 * j + 1.0));
+    for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
+      Vander_d1(spt, j) = Legendre_d1(j, eles->loc_spts_1D[spt]) / normC;
+  }
 }
 
 
 void Filter::setup_concentration_matrix()
 {
-	Conc.assign({eles->nSpts1D, order + 1});
+  Conc.assign({eles->nSpts1D, order + 1});
   oppS_1D.assign({eles->nSpts1D, order + 1});
   
   if (order == 0) 
@@ -112,13 +112,13 @@ void Filter::setup_concentration_matrix()
   }
   
   for (unsigned int j = 0; j <= order; j++)
-	{
-		for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
-		{
-			double x = eles->loc_spts_1D[spt];
-			Conc(spt, j) = (M_PI / order) *std::sqrt(1.0 - x*x) *Vander_d1(spt, j);
-		}
-	}
+  {
+    for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
+    {
+      double x = eles->loc_spts_1D[spt];
+      Conc(spt, j) = (M_PI / order) *std::sqrt(1.0 - x*x) *Vander_d1(spt, j);
+    }
+  }
 }
 
 
@@ -134,7 +134,7 @@ void Filter::setup_threshold()
   KS_step.assign({eles->nSpts1D});
   KS_ramp.assign({eles->nSpts1D});
   
-	// Centered step in parent domain
+  // Centered step in parent domain
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
     u_canon(spt, 0) = step(eles->loc_spts_1D[spt]);
     

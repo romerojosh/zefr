@@ -10,6 +10,8 @@
 #include "polynomials.hpp"
 #include "quads.hpp"
 
+#include "cblas.h"
+
 #ifdef _GPU
 #include "elements_kernels.h"
 #include "solver_kernels.h"
@@ -420,7 +422,6 @@ double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc
 
 void Quads::setup_PMG(int pro_order, int res_order)
 {
-  /* Allocate memory for operators */
   unsigned int nSpts_pro_1D = pro_order + 1;
   unsigned int nSpts_res_1D = res_order + 1;
   unsigned int nSpts_pro = nSpts_pro_1D * nSpts_pro_1D;
@@ -433,18 +434,43 @@ void Quads::setup_PMG(int pro_order, int res_order)
     /* Setup prolongation operator */
     oppPro.assign({nSpts_pro, nSpts});
 
-    auto loc_spts_pro_1D = Gauss_Legendre_pts(pro_order + 1); 
+    std::vector<mdvector<double>> opps(pro_order + 1);
 
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    /* Form operator by sequential multiplication of single order prolongation operators */
+    for (int P = pro_order; P > order; P--)
     {
-      for (unsigned int pspt = 0; pspt < nSpts_pro; pspt++)
-      {
-        loc[0] = loc_spts_pro_1D[pspt%nSpts_pro_1D];
-        loc[1] = loc_spts_pro_1D[pspt/nSpts_pro_1D];
+      opps[P].assign({(P+1) * (P+1), P * P}, 0);
 
-        oppPro(pspt, spt) = calc_nodal_basis(spt, loc);
+      auto loc_spts_P1_1D = Gauss_Legendre_pts(P+1); 
+      auto loc_spts_P2_1D = Gauss_Legendre_pts(P); 
+
+      for (unsigned int spt = 0; spt < P * P; spt++)
+      {
+        int i = spt % P;
+        int j = spt / P;
+        for (unsigned int pspt = 0; pspt < (P+1) * (P+1); pspt++)
+        {
+          loc[0] = loc_spts_P1_1D[pspt % (P+1)];
+          loc[1] = loc_spts_P1_1D[pspt / (P+1)];
+
+          opps[P](pspt, spt) = Lagrange(loc_spts_P2_1D, i, loc[0]) * 
+                               Lagrange(loc_spts_P2_1D, j, loc[1]);
+        }
       }
     }
+
+    for (int P = pro_order; P > order + 1; P--)
+    {
+      mdvector<double> opp({nSpts_pro, (P-1) * (P-1)});
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, (P-1) * (P-1),
+          P * P, 1.0, opps[P].data(), opps[P].ldim(), opps[P-1].data(), opps[P-1].ldim(), 0.0, opp.data(), opp.ldim());
+
+      opps[P-1] = opp;
+    }
+
+    oppPro = opps[order + 1];
+
   }
 
   if (order != 0)
@@ -452,18 +478,43 @@ void Quads::setup_PMG(int pro_order, int res_order)
     /* Setup restriction operator */
     oppRes.assign({nSpts_res, nSpts});
 
-    auto loc_spts_res_1D = Gauss_Legendre_pts(res_order + 1); 
+    std::vector<mdvector<double>> opps(order + 1);
 
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (int P = res_order; P < order; P++)
     {
-      for (unsigned int rspt = 0; rspt < nSpts_res; rspt++)
-      {
-        loc[0] = loc_spts_res_1D[rspt%nSpts_res_1D];
-        loc[1] = loc_spts_res_1D[rspt/nSpts_res_1D];
+      opps[P].assign({(P+1) * (P+1), (P+2) * (P+2)}, 0);
 
-        oppRes(rspt, spt) = calc_nodal_basis(spt, loc);
+      auto loc_spts_P1_1D = Gauss_Legendre_pts(P+1); 
+      auto loc_spts_P2_1D = Gauss_Legendre_pts(P+2); 
+
+      for (unsigned int spt = 0; spt < (P+2) * (P+2); spt++)
+      {
+        int i = spt % (P+2);
+        int j = spt / (P+2);
+
+        for (unsigned int rspt = 0; rspt < (P+1) * (P+1); rspt++)
+        {
+          loc[0] = loc_spts_P1_1D[rspt % (P+1)];
+          loc[1] = loc_spts_P1_1D[rspt / (P+1)];
+
+          opps[P](rspt, spt) = Lagrange(loc_spts_P2_1D, i, loc[0]) * 
+                               Lagrange(loc_spts_P2_1D, j, loc[1]);
+        }
       }
     }
+
+    for (int P = res_order; P < order - 1; P++)
+    {
+      mdvector<double> opp({nSpts_res, (P+3) * (P+3)});
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, (P+3) * (P+3),
+          (P+2) * (P+2), 1.0, opps[P].data(), opps[P].ldim(), opps[P+1].data(), opps[P+1].ldim(), 0.0, opp.data(), opp.ldim());
+
+      opps[P+1] = opp;
+    }
+
+    oppRes = opps[order - 1];
+
   }
 
 #ifdef _GPU
