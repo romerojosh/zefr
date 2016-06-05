@@ -28,31 +28,39 @@ class ShockCapture
     FRSolver* solver;
 	unsigned int order;
 
-    mdvector<double> Vander, VanderInv, Vander_d1, Vander2D_tr, Vander2DInv_tr, Conc, oppS_1D, oppS;
-    mdvector<double> KS, U_spts;
+    mdvector<double> Vander, VanderInv, Vander_d1;
+    mdvector<double> Vander2D, Vander2DInv, Vander2D_tr, Vander2DInv_tr;
+    mdvector<double> Conc, oppS_1D, oppS, filt;
+    mdvector<double> KS, U_spts, U_filt;
     double threshJ, normalTol;
 
 #ifdef _GPU
-    mdvector_gpu<double> oppS_d, KS_d, U_spts_d, Vander2DInv_tr_d, Vander2D_tr_d;
+    mdvector_gpu<double> oppS_d, KS_d, U_spts_d, filt_d, U_filt_d;
+    mdvector_gpu<double> Vander2DInv_tr_d, Vander2D_tr_d;
     double max_sensor_d;
 #endif
 
     void setup_vandermonde_matrices();
     void setup_concentration_matrix();
+    double calc_expfilter_coeffs(int in_mode);
+    void setup_expfilter_matrix();
     void setup_threshold();
     void setup_oppS();
     void bring_to_square(uint ele, uint var, double Ulow, double Uhigh);
 
   public:
     mdvector<double> sensor; 
+    mdvector<uint> sensor_bool;
 #ifdef _GPU
     mdvector_gpu<double> sensor_d;
+    mdvector_gpu<uint> sensor_bool_d;
 #endif
     void setup(InputStruct *input, FRSolver &solver);
     void apply_sensor();
     void compute_Umodal();
     void compute_Unodal();
     void limiter();
+    void apply_expfilter();
 
 };
 

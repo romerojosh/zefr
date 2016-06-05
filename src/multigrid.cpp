@@ -94,10 +94,13 @@ void PMGrid::cycle(FRSolver &solver)
     {
 #ifdef _CPU
       grids[P]->update_with_source(sources[P]);
+      grids[P]->capture_shock();
+
 #endif
 
 #ifdef _GPU
       grids[P]->update_with_source(sources_d[P]);
+      grids[P]->capture_shock();
 #endif
     }
 
@@ -132,10 +135,13 @@ void PMGrid::cycle(FRSolver &solver)
       {
 #ifdef _CPU
         grids[P]->update_with_source(sources[P]);
+        grids[P]->capture_shock();
+
 #endif
 
 #ifdef _GPU
         grids[P]->update_with_source(sources_d[P]);
+        grids[P]->capture_shock();
 #endif
       }
     }
@@ -145,10 +151,12 @@ void PMGrid::cycle(FRSolver &solver)
       {
 #ifdef _CPU
         grids[P]->update_with_source(sources[P]);
+        grids[P]->capture_shock();
 #endif
 
 #ifdef _GPU
         grids[P]->update_with_source(sources_d[P]);
+        grids[P]->capture_shock();
 #endif
       }
 

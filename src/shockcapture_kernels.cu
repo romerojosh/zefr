@@ -42,7 +42,8 @@ void normalize_data_wrapper(mdvector_gpu<double>& U_spts, double normalTol, unsi
 
 __global__
 void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor, 
-    unsigned int order, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<unsigned int> sensor_bool, double threshJ, unsigned int order, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, double Q)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -55,7 +56,8 @@ void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
     double sen = 0.0;
     for (unsigned int row = 0; row < 2 * nSpts; row++)
     {
-      KS(row, ele, var) = order * (KS(row, ele, var) * KS(row, ele, var));
+      KS(row, ele, var) = pow(order+1,Q/2) * pow(abs(KS(row, ele, var)), Q);
+      //KS(row, ele, var) = order * (KS(row, ele, var) * KS(row, ele, var));
       sen = max(sen, KS(row, ele, var));
     }
     max_sen = max(max_sen, sen);
@@ -63,16 +65,17 @@ void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
 
   sensor(ele) = max_sen;
 
-
+  sensor_bool(ele) = max_sen > threshJ;
 }
 
 void compute_max_sensor_wrapper(mdvector_gpu<double>& KS, mdvector_gpu<double>& sensor, 
-    unsigned int order, double& max_sensor, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    unsigned int order, double& max_sensor, mdvector_gpu<unsigned int>& sensor_bool, double threshJ, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, double Q)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nEles + threads - 1)/threads;
 
-  compute_max_sensor<<<blocks, threads>>>(KS, sensor, order, nSpts, nEles, nVars);
+  compute_max_sensor<<<blocks, threads>>>(KS, sensor, sensor_bool, threshJ, order, nSpts, nEles, nVars, Q);
 
 
   /* Get max sensor value using thrust */
@@ -117,19 +120,13 @@ double max_3(double a, double b, double c)
   return m;
 }
 
-__device__
-void bring_to_square_gpu(uint ele, uint var, double Ulow, double Uhigh, mdvector_gpu<double> Umodal)
-{
- 
-
-
-}
-
 __global__
 void limiter_gpu(uint nEles, uint nFaces, uint nVars, double threshJ, mdvector_gpu<int> ele_adj, 
     mdvector_gpu<double> sensor, mdvector_gpu<double> Umodal)
 {
-  const uint ele = blockDim.x * blockIdx.x + threadIdx.x;
+  const uint ele = blockDim.x * blockIdx.x + threadIdx.x; 
+
+  if(ele >= nEles) return;
 
   // Check for sensor value
   if (sensor(ele) < threshJ) return;    //TODO: This causes divergence. Need to address.
@@ -172,3 +169,24 @@ void limiter_wrapper(uint nEles, uint nFaces, uint nVars, double threshJ, mdvect
 
   limiter_gpu<<<numBlocks, numThreads>>>(nEles, nFaces, nVars, threshJ, ele_adj, sensor, Umodal);
 }
+
+// void compute_primitive_gpu(uint nSpts, uint nEles, uint nVars, mdvector_gpu<double> U_spts, mdvector_gpu<double> U_prim)
+// {
+//   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
+//   if (ele >= nEles) return;
+
+//   for (unsigned int spt = 0; spt < nSpts; spt++)
+//   {
+    
+//   }
+
+// }
+
+// void compute_primitive_wrapper(uint nSpts, uint nEles, uint nVars, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& U_prim)
+// {
+//   uint numThreads = 256;
+//   uint numBlocks = (nEles + numThreads - 1)/numThreads;
+
+//   compute_primitive_gpu<<<numBlocks, numThreads>>>(nSpts, nEles, nVars, U_spts, U_prim);  
+// }
+

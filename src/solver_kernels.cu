@@ -340,7 +340,7 @@ __global__
 void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
     mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
     mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
-    unsigned int stage, unsigned int nStages, bool last_stage)
+    unsigned int stage, unsigned int nStages, bool last_stage, bool TVD)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
@@ -360,8 +360,15 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   {
     double coeff = rk_coeff(stage);
     for (unsigned int var = 0; var < nVars; var ++)
+    {
       U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff * dt / 
           jaco_det * divF(spt, ele, var, stage);
+
+      // Hard-coding the extra term for TVD RK scheme
+      if(TVD && stage==1)
+        U_spts(spt, ele, var) -= 0.25 * dt / 
+          jaco_det * divF(spt, ele, var, stage-1);
+    }
   }
   else
   {
@@ -388,7 +395,7 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
     mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
     mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int stage, 
-    unsigned int nStages, bool last_stage)
+    unsigned int nStages, bool last_stage, bool TVD)
 {
   dim3 threads(16,12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
@@ -397,16 +404,16 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
   if (equation == AdvDiff)
   {
       RK_update<1><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
-          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, TVD);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       RK_update<4><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
-          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, TVD);
     else
       RK_update<5><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
-          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, TVD);
   }
 }
 
@@ -416,7 +423,7 @@ void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
     mdvector_gpu<double> divF, mdvector_gpu<double> source, mdvector_gpu<double> jaco_det_spts, 
     mdvector_gpu<double> dt_in, mdvector_gpu<double> rk_coeff, unsigned int dt_type, 
     unsigned int nSpts, unsigned int nEles, unsigned int stage, unsigned int nStages, 
-    bool last_stage)
+    bool last_stage, bool TVD)
 {
   const unsigned int spt = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int ele = blockDim.y * blockIdx.y + threadIdx.y;
@@ -436,8 +443,15 @@ void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   {
     double coeff = rk_coeff(stage);
     for (unsigned int var = 0; var < nVars; var ++)
+    {
       U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff * dt / 
           jaco_det * (divF(spt, ele, var, stage) + source(spt, ele, var));
+
+      // Hard-coding the extra term for TVD RK scheme
+      if(TVD && stage==1)
+        U_spts(spt, ele, var) -= 0.25 * dt / 
+          jaco_det * divF(spt, ele, var, stage-1);
+    }
   }
   else
   {
@@ -464,7 +478,7 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
     mdvector_gpu<double> &divF, mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, 
     mdvector_gpu<double> &dt, mdvector_gpu<double> &rk_coeff, unsigned int dt_type, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, 
-    unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage)
+    unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage, bool TVD)
 {
   dim3 threads(16,12);
   dim3 blocks((nSpts + threads.x - 1)/threads.x, (nEles + threads.y - 1)/
@@ -473,16 +487,16 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
   if (equation == AdvDiff)
   {
       RK_update_source<1><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
-          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, TVD);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       RK_update_source<4><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
-          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, TVD);
     else
       RK_update_source<5><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
-          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage);
+          rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, TVD);
   }
 }
 

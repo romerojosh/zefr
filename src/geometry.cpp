@@ -1363,13 +1363,19 @@ void setup_global_fpts(GeoStruct &geo, unsigned int order)
  
         std::sort(face.begin(), face.end());
  
-        if (face2eles[face].empty() or face2eles[face].back() == ele)
-          geo.ele_adj(n, ele) = -1;
+	if (face2eles.count(face))
+      	{
+          if (face2eles[face].empty() or face2eles[face].back() == ele)
+            geo.ele_adj(n, ele) = -1;
+          else
+            geo.ele_adj(n, ele) = face2eles[face].back();
+ 
+          face2eles[face].pop_back();
+	}
         else
-          geo.ele_adj(n, ele) = face2eles[face].back();
- 
-        face2eles[face].pop_back();
- 
+        {
+          geo.ele_adj(n, ele) = -1;
+        } 
       }
     }
 

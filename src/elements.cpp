@@ -850,7 +850,7 @@ void Elements::poly_squeeze()
   double V[3]; 
 
   /* For each element, check for negative density at solution and flux points */
-  double tol = 1e-10;
+  double tol = 1e-4;
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     bool negRho = false;
@@ -877,7 +877,7 @@ void Elements::poly_squeeze()
     /* If negative density found, squeeze density */
     if (negRho)
     {
-      double theta = (Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho); 
+      double theta = std::min(1, (Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho)); 
       //double theta = 1.0;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)

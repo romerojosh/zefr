@@ -114,8 +114,19 @@ void FRSolver::setup_update()
 
     rk_beta.assign({nStages});
     rk_beta(0) = 0.149659021999229; rk_beta(1) = 0.379210312999627; 
-    rk_beta(3) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
+    rk_beta(2) = 0.822955029386982; rk_beta(3) = 0.699450455949122;
     rk_beta(4) = 0.153057247968152;
+  }
+  else if (input->dt_scheme == "RKTVD3")
+  {
+    nStages = 3;
+    rk_alpha.assign({nStages-1});
+    //rk_alpha(0) = 0.5; 
+    rk_alpha(0) = 1;
+    rk_alpha(1) = 0.25; 
+
+    rk_beta.assign({nStages});
+    rk_beta(0) = 1./6.; rk_beta(1) = 1./6.; rk_beta(2) = 2./3.; 
   }
   else
   {
@@ -886,6 +897,7 @@ void FRSolver::update()
   device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
 #endif
 
+  bool TVD = (input->dt_scheme == "RKTVD3");
   /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
   for (unsigned int stage = 0; stage < (nStages-1); stage++)
   {
@@ -911,11 +923,19 @@ void FRSolver::update()
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
               eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+
+            if(stage==1 && TVD)
+              eles->U_spts(spt, ele, n) -= 0.25 * dt(0) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage-1);  
           }
           else
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
               eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+
+            if(stage==1 && TVD)
+              eles->U_spts(spt, ele, n) -= 0.25 * dt(ele) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage-1);                
           }
         }
 #endif
@@ -923,7 +943,7 @@ void FRSolver::update()
 #ifdef _GPU
     RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
         rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
+        input->equation, stage, nStages, false, TVD);
     check_error();
 #endif
   }
@@ -966,7 +986,7 @@ void FRSolver::update()
 #ifdef _GPU
     RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
         rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-        input->equation, 0, nStages, true);
+        input->equation, 0, nStages, true, TVD);
     check_error();
 #endif
 
@@ -978,8 +998,8 @@ void FRSolver::update()
 void FRSolver::update_with_source(mdvector<double> &source)
 {
   
-    U_ini = eles->U_spts;
-
+  U_ini = eles->U_spts;
+  bool TVD = (input->dt_scheme == "RKTVD3");
   /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
   for (unsigned int stage = 0; stage < (nStages-1); stage++)
   {
@@ -1004,11 +1024,19 @@ void FRSolver::update_with_source(mdvector<double> &source)
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
               eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+
+            if(stage==1 && TVD)
+              eles->U_spts(spt, ele, n) -= 0.25 * dt(0) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage-1); 
           }
           else
           {
             eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
               eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+
+            if(stage==1 && TVD)
+              eles->U_spts(spt, ele, n) -= 0.25 * dt(0) / 
+                eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage-1); 
           }
         }
   }
@@ -1042,6 +1070,7 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
 {
   
   device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.get_nvals());
+  bool TVD = (input->dt_scheme == "RKTVD3");
 
   /* Loop over stages to get intermediate residuals. (Inactive for Euler) */
   for (unsigned int stage = 0; stage < (nStages-1); stage++)
@@ -1060,7 +1089,7 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
 
     RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
         rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-        input->equation, stage, nStages, false);
+        input->equation, stage, nStages, false, TVD);
     check_error();
 
   }
@@ -1071,7 +1100,7 @@ void FRSolver::update_with_source(mdvector_gpu<double> &source)
 
   RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
       rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-      input->equation, 0, nStages, true);
+      input->equation, 0, nStages, true, TVD);
   check_error();
 
 }
@@ -1426,15 +1455,36 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #ifdef _GPU
   eles->divF_spts = eles->divF_spts_d;
   dt = dt_d;
+  shock.sensor_bool = shock.sensor_bool_d;
+  U_ini = U_ini_d;
+  eles->U_spts = eles->U_spts_d;
 #endif
 
   std::vector<double> res(eles->nVars,0.0);
+  double DeltaU_max = 0;
+if(input->shockcapture)
+{
+  #pragma omp parallel for collapse(3)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+    for (unsigned int ele =0; ele < eles->nEles; ele++)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        eles->divF_spts(spt, ele, n, nStages-1) = 
+              eles->divF_spts(spt, ele, n, nStages-1)*(1 - shock.sensor_bool(ele))/eles->jaco_det_spts(spt, ele);
 
-#pragma omp parallel for collapse(3)
+        if( n == 0 && (1 - shock.sensor_bool(ele))*abs(eles->U_spts(spt, ele, n) - U_ini(spt, ele, n)) > DeltaU_max )
+          DeltaU_max = (abs(eles->U_spts(spt, ele, n) - U_ini(spt, ele, n)))/dt(0);
+      }
+}
+else
+{
+  #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int ele =0; ele < eles->nEles; ele++)
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         eles->divF_spts(spt, ele, n, nStages-1) /= eles->jaco_det_spts(spt, ele);
+}
+
 
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
@@ -1486,6 +1536,8 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     for (auto val : res)
       std::cout << std::scientific << val / nDoF << " ";
 
+    std::cout << DeltaU_max << " ";
+
     if (input->dt_type == 2)
     {
       std::cout << "dt: " <<  *std::min_element(dt.data(), dt.data()+eles->nEles) << " (min) ";
@@ -1505,6 +1557,8 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
     for (auto val : res)
       f << std::scientific << val / nDoF << " ";
+
+    f << std::scientific << DeltaU_max;
     f << std::endl;
   }
 }
@@ -1929,9 +1983,14 @@ void FRSolver::capture_shock()
   if(input->shockcapture && order > 1)
   {
     shock.apply_sensor();
-    shock.compute_Umodal();
-    if(input->limiter)
-      shock.limiter();
-    shock.compute_Unodal();
+
+    /* Method 1 */
+    shock.apply_expfilter();
+
+    /* Method 2 */
+    // shock.compute_Umodal();
+    // if(input->limiter)
+    //   shock.limiter();
+    // shock.compute_Unodal();
   }
 }

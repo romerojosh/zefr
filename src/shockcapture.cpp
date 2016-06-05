@@ -37,17 +37,23 @@ void ShockCapture::setup(InputStruct *input, FRSolver &solver)
   setup_concentration_matrix();
   setup_oppS();
   setup_threshold();
+  setup_expfilter_matrix();
   U_spts.assign({eles->nSpts, eles->nEles, eles->nVars});
+  U_filt.assign({eles->nSpts, eles->nEles, eles->nVars});
   sensor.assign({eles->nEles});
+  sensor_bool.assign({eles->nEles});
 
     /* Copy data to GPU */
 #ifdef _GPU
   U_spts_d = U_spts;
+  U_filt_d = U_filt;
   oppS_d = oppS;
   KS_d = KS;
   sensor_d = sensor;
+  sensor_bool_d = sensor_bool;
   Vander2DInv_tr_d = Vander2DInv_tr;
   Vander2D_tr_d = Vander2D_tr;
+  filt_d = filt;
 #endif
 }
 
@@ -82,7 +88,7 @@ void ShockCapture::setup_vandermonde_matrices()
 
   /* 2D Vandermonde matrix on quads */
   mdvector<double> loc({2});
-  mdvector<double> Vander2D({eles->nSpts, (order + 1)*(order + 1)});
+  Vander2D.assign({eles->nSpts, (order + 1)*(order + 1)});
 
   #pragma omp parallel for 
   for (int i=0;i<eles->nSpts;i++)
@@ -95,7 +101,7 @@ void ShockCapture::setup_vandermonde_matrices()
   }
  
   /* Calculate inverse of the 2D Vandermonde matrix */
-  mdvector<double> Vander2DInv({eles->nSpts, (order + 1)*(order + 1)});
+  Vander2DInv.assign({eles->nSpts, (order + 1)*(order + 1)});
   mdvector<double> eye2D({eles->nSpts, eles->nSpts});
   Vander2D.calc_LU();
   for (unsigned int j = 0; j < eles->nSpts; j++)
@@ -148,11 +154,85 @@ void ShockCapture::setup_concentration_matrix()
 	}
 }
 
+double ShockCapture::calc_expfilter_coeffs(int in_mode)
+{
+// Evaluate exponential filter
+  double sigma, eta;
+  sigma = 1;
+  double alpha = input->alpha;
+  double s = input->filtexp;
+
+  int n_dof=(order+1)*(order+1);
+
+  // Hardcoded for 2D, threshold no. of modes below which there is no effect of filter
+  double eta_c = 2.0/n_dof;         
+
+  if(in_mode<n_dof)
+  {
+    int i,j,k;
+    int mode;
+
+    mode = 0;
+    for (k=0;k<order*order+1;k++)
+    {
+      for (j=0;j<k+1;j++)
+      {
+        i = k-j;
+        if(i<=order && j<=order)
+        {
+          if(mode==in_mode) // found the correct mode
+          {
+            eta = (double)(i+j)/n_dof;
+            sigma = exp(-alpha*pow(eta,s));
+
+            //if(eta <= eta_c)
+              //sigma = 1;
+            //else
+              //sigma = exp(-alpha*pow( (eta - eta_c)/(1 - eta_c), s ));
+          }
+
+          mode++;
+        }
+      }
+    }
+  }
+  else
+  {
+    cout << "ERROR: Invalid mode when evaluating exponential filter ...." << endl;
+  }
+
+  return sigma;
+}
+
+void ShockCapture::setup_expfilter_matrix()
+{
+  /* Product of the diagonal sigma matrix and Vandermonde */
+  mdvector<double> temp({eles->nSpts, (order+1)*(order+1)});
+  filt.assign({eles->nSpts, (order+1)*(order+1)});
+  double sigma;
+  for (uint i=0; i < eles->nSpts; i++)
+  {
+    sigma = calc_expfilter_coeffs(i);
+    for (uint j=0; j<(order + 1)*(order + 1); j++)
+    {
+      temp(i,j) = sigma*Vander2DInv(i,j);
+    }
+  }
+
+  /* Writing my own straightforward multiplication routine */
+  for (uint i=0; i < eles->nSpts; i++)
+    for (uint j=0; j<(order + 1)*(order + 1); j++)
+      for(uint k=0; k<(order + 1)*(order + 1); k++)
+        filt(i,j) += Vander2D(i,k)*temp(k,j); 
+}
 
 void ShockCapture::setup_threshold()
 {
   // Normalization tolerance
   normalTol = 0.1;
+
+  // Non-linear enhancement exponent
+  double Q = input->nonlin_exp;
   
   // Local arrays
   mdvector<double> u_canon, KS_canon, KS_step, KS_ramp;
@@ -179,8 +259,8 @@ void ShockCapture::setup_threshold()
   // Apply non-linear enhancement
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
   {
-    KS_step(spt) = order * (KS_canon(spt, 0) * KS_canon(spt, 0));
-    KS_ramp(spt) = order * (KS_canon(spt, 1) * KS_canon(spt, 1));
+    KS_step(spt) = pow(order +1, Q/2.0) * pow(abs(KS_canon(spt, 0)), Q);
+    KS_ramp(spt) = pow(order +1, Q/2.0) * pow(abs(KS_canon(spt, 1)), Q);
   }
   
   // Calculate threshold
@@ -281,9 +361,11 @@ void ShockCapture::apply_sensor()
 #endif
   }
     
-    // Apply non-liqnear enhancement and store sensor values
+  // Apply non-liqnear enhancement and store sensor values
+  double Q = input->nonlin_exp;
   for (unsigned int var = 0; var < eles->nVars; var++)
-  {
+  {    
+    
 #pragma omp parallel for
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
@@ -291,10 +373,11 @@ void ShockCapture::apply_sensor()
 #pragma omp parallel for reduction(max:sen)
       for (unsigned int row = 0; row < 2*eles->nSpts; row++)
       {
-        KS(row, ele, var) = order * (KS(row, ele, var) * KS(row, ele, var));
+        KS(row, ele, var) = pow(order+1, Q/2) * pow(abs(KS(row, ele, var)), Q);
         sen = std::max(sen, KS(row, ele, var));
       }
       sensor(ele) = std::max(sensor(ele), sen);
+      sensor_bool(ele) = sensor(ele) > threshJ;
     }
   }
 #endif
@@ -319,7 +402,7 @@ void ShockCapture::apply_sensor()
   }
     
   // Apply non-linear enhancement and store sensor values
-  compute_max_sensor_wrapper(KS_d, sensor_d, order, max_sensor_d, eles->nSpts, eles->nEles, eles->nVars);
+  compute_max_sensor_wrapper(KS_d, sensor_d, order, max_sensor_d, sensor_bool_d, threshJ, eles->nSpts, eles->nEles, eles->nVars, input->nonlin_exp);
 
 #endif
 }
@@ -386,6 +469,45 @@ void ShockCapture::compute_Unodal()
 #endif 
 }
 
+void ShockCapture::apply_expfilter()
+{
+#ifdef _CPU  
+  auto &A = filt(0,0);
+  auto &B = eles->U_spts(0, 0, 0);
+  auto &C = U_filt(0, 0, 0);
+
+  #ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles * eles->nVars, 
+      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->eles->nSpts);
+  #else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles * eles->nVars, 
+      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->eles->nSpts);
+  #endif
+
+  // Copy back to eles->U_Spts only when sensor is greater than threshold
+  #pragma omp parallel for
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    // Check for sensor value
+    if (sensor(ele) < threshJ) continue;
+
+    #pragma omp parallel for collapse(2)    
+    for (unsigned int var = 0; var < eles->nVars; var++)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        eles->U_spts(spt,ele,var) = U_filt(spt,ele,var);
+  }
+
+#endif
+
+#ifdef _GPU
+  cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, filt_d.data(), eles->nSpts, 
+    eles->U_spts_d.data(), eles->nSpts, 0.0, U_filt_d.data(), eles->nSpts); 
+
+  // Copy back to eles->U_Spts only when sensor is greater than threshold
+  copy_filtered_solution_wrapper(U_filt_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars);  
+#endif   
+}
+
 void ShockCapture::bring_to_square(uint ele, uint var, double Ulow, double Uhigh)
 {
   assert(Ulow <= 0.0 && Uhigh >= 0.0);
@@ -435,3 +557,10 @@ void ShockCapture::limiter()
   limiter_wrapper(eles->nEles, eles->nFaces, eles->nVars, threshJ, geo->ele_adj_d, sensor_d, eles->Umodal_d);
 #endif
 }
+
+// void compute_primitive()
+// {
+// #ifdef _GPU
+//   compute_primitive_wrapper(eles->nSpts, eles->nEles, eles->nVars, eles->U_spts_d, U_prim_d);
+// #endif  
+// }

@@ -33,7 +33,7 @@ struct InputStruct
   double exps0, s_factor;
   unsigned int rank, nRanks;
   unsigned int shockcapture, sen_norm, limiter;
-  double sen_Jfac;
+  double sen_Jfac, alpha, filtexp, nonlin_exp;
 
 #ifdef _GPU
   mdvector_gpu<double> AdvDiff_A_d, V_fs_d, norm_fs_d, V_wall_d, norm_wall_d;
