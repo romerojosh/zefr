@@ -1,11 +1,12 @@
 # Geometry:
 nDims    3
 meshfile sphere_hex.msh
+serendipity 1
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
 mesh_bound  wall_ns_iso  wall_ns_iso_p
-mesh_bound  farfield  sup_in
+mesh_bound  char char
 
 # Solver:
 order     2
@@ -18,10 +19,8 @@ n_steps 80000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
-CFL	  0.8
-
-restart 1
-restart_file sphere_ns/sphere_ns_000020000.vtu
+CFL	  0.3
+CFL_type  1
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
@@ -54,7 +53,7 @@ S       120
 # Navier-Stokes specific
 fix_vis 0
 mach_fs 0.1
-Re_fs 100
+Re_fs 200
 L_fs 1
 T_fs 300
 nx_fs 1

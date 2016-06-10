@@ -205,52 +205,6 @@ void read_param_vec(std::ifstream &f, std::string name, std::vector<T> &vec)
   }
 }
 
-/* Function to read vector of parameters from input file. (Jacob's version) */
-template<typename T>
-void read_vector(std::ifstream &f, std::string name, unsigned int &nVars, std::vector<T> &vars)
-{
-  std::string str, optKey;
-
-  if (!f.is_open())
-  {
-    ThrowException("Input file not open for reading!");
-  }
-
-  // Rewind to the start of the file
-  f.seekg(0, f.beg);
-
-  // Search for the given option string
-  while (std::getline(f, str)) {
-    // Remove any leading whitespace & see if first word is the input option
-    std::stringstream ss;
-    ss.str(str);
-    ss >> optKey;
-    if (optKey.compare(name)==0) {
-      if (!(ss >> nVars)) {
-        // This could happen if, for example, trying to assign a string to a double
-        cerr << "WARNING: Unable to read number of entries for vector option " << name << endl;
-        string errMsg = "Required option not set: " + name;
-        ThrowException(errMsg.c_str());
-      }
-
-      vars.resize(nVars);
-      for (unsigned int i = 0; i < nVars; i++) {
-        if (!(ss >> vars[i])) {
-          std::cerr << "WARNING: Unable to assign all values to vector option " << name << std::endl;
-          std::string errMsg = "Required option not set: " + name;
-          ThrowException(errMsg.c_str())
-        }
-      }
-
-      return;
-    }
-  }
-
-  // Option was not found; throw error & exit
-  std::string errMsg = "Required option not found: " + name;
-  ThrowException(errMsg.c_str());
-}
-
 /*! Read in a map of type <T,U> from input file; each entry prefaced by optName
  *  i.e. 'mesh_bound  airfoil  wall_ns_adi'
  */

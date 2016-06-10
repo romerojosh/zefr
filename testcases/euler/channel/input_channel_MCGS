@@ -5,12 +5,12 @@ serendipity 0
 
 # Boundary Conditions
 mesh_bound  char  char
-mesh_bound  wall_slip  wall_slip_p
-mesh_bound  symmetry  symmetry_p
+mesh_bound  wall_slip_g  wall_slip_p
+mesh_bound  symmetry_g  symmetry_p
 mesh_bound  fluid  fluid
 
 # Solver:
-order     4
+order     2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  0
 spt_type Legendre
@@ -21,7 +21,7 @@ res_tol 1e-11
 dt_scheme MCGS     (Euler, RK44, RK54, MCGS)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.1
-CFL	  1.0
+CFL	  25.0
 
 # CFL Adaptation
 adapt_CFL 1
@@ -30,12 +30,6 @@ CFL_ratio 2.0
 
 restart 0
 restart_file channel_48x16_MCGS/channel_48x16_MCGS_000002700.vtu
-
-# Multigrid:
-p_multi 1
-
-mg_levels 4 0
-mg_steps 1 4
 
 # Implicit
 SER 0
