@@ -2,6 +2,11 @@
 nDims    3
 meshfile sphere_hex.msh
 
+# Boundary Conditions
+mesh_bound  fluid  fluid
+mesh_bound  wall_ns_iso  wall_ns_iso_p
+mesh_bound  farfield  sup_in
+
 # Solver:
 order     2
 equation EulerNS    (AdvDiff, EulerNS)

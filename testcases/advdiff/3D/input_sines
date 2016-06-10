@@ -2,6 +2,10 @@
 nDims    3
 meshfile HexBox_10x10.msh
 
+# Boundary Conditions
+mesh_bound  periodic  periodic
+mesh_bound  fluid  fluid
+
 # Solver:
 order     2
 equation AdvDiff    (AdvDiff, EulerNS)

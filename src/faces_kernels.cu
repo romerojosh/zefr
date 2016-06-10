@@ -585,7 +585,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
   /* Apply specified boundary condition */
   switch(bnd_id)
   {
-    case 1:/* Periodic */
+    case PERIODIC: /* Periodic */
     {
       unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
 
@@ -596,7 +596,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
   
-    case 2: /* Farfield and Supersonic Inlet */
+    case SUP_IN: /* Farfield and Supersonic Inlet */
     {
       if (equation == AdvDiff || equation == Burgers)
       {
@@ -624,7 +624,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 3: /* Supersonic Outlet */
+    case SUP_OUT: /* Supersonic Outlet */
     {
       /* Extrapolate boundary values from interior */
       for (unsigned int n = 0; n < nVars; n++)
@@ -637,7 +637,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 4: /* Subsonic Inlet */
+    case SUB_IN: /* Subsonic Inlet */
     {
       double VL[3]; double VR[3];
 
@@ -722,7 +722,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 5: /* Subsonic Outlet */
+    case SUB_OUT: /* Subsonic Outlet */
     { 
       /* Extrapolate Density */
       U(fpt, 0, 1) = U(fpt, 0, 0);
@@ -751,7 +751,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 6: /* Characteristic (from PyFR) */
+    case CHAR: /* Characteristic (from PyFR) */
     {
       /* Compute wall normal velocities */
       double VnL = 0.0; double VnR = 0.0;
@@ -829,8 +829,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 7: /* Symmetry (prescribed) */
-    case 9: /* Slip Wall (prescribed) */
+    case SYMMETRY_P: /* Symmetry (prescribed) */
+    case SLIP_WALL_P: /* Slip Wall (prescribed) */
     {
       double momN = 0.0;
 
@@ -866,8 +866,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 8: /* Symmetry (ghost) */
-    case 10: /* Slip Wall (ghost) */
+    case SYMMETRY_G: /* Symmetry (ghost) */
+    case SLIP_WALL_G: /* Slip Wall (ghost) */
     {
       double momN = 0.0;
 
@@ -891,7 +891,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
     }
 
 
-    case 11: /* Isothermal No-slip Wall (prescribed) */
+    case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
     {
       double momF = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -919,14 +919,14 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 12: /* Isothermal No-slip Wall (ghost) */
+    case ISOTHERMAL_NOSLIP_G: /* Isothermal No-slip Wall (ghost) */
     {
       // NOT IMPLEMENTED
       break;
     }
 
 
-    case 13: /* Moving Isothermal No-slip Wall (prescribed) */
+    case ISOTHERMAL_NOSLIP_MOVING_P: /* Moving Isothermal No-slip Wall (prescribed) */
     {
       double momF = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -959,7 +959,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
     
-    case 14: /* Moving Isothermal No-slip Wall (ghost) */
+    case ISOTHERMAL_NOSLIP_MOVING_G: /* Moving Isothermal No-slip Wall (ghost) */
     {
       // NOT IMPLEMENTED
 
@@ -967,7 +967,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
     }
 
 
-    case 15: /* Adiabatic No-slip Wall (prescribed) */
+    case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
     {
       /* Extrapolate density */
       U(fpt, 0, 1) = U(fpt, 0, 0);
@@ -997,7 +997,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 16: /* Adiabatic No-slip Wall (ghost) */
+    case ADIABATIC_NOSLIP_G: /* Adiabatic No-slip Wall (ghost) */
     {
 
       // NOT IMPLEMENTED
@@ -1005,7 +1005,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
     }
 
 
-    case 17: /* Moving Adiabatic No-slip Wall (prescribed) */
+    case ADIABATIC_NOSLIP_MOVING_P: /* Moving Adiabatic No-slip Wall (prescribed) */
     {
       /* Extrapolate density */
       U(fpt, 0, 1) = U(fpt, 0, 0);
@@ -1038,7 +1038,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       break;
     }
 
-    case 18: /* Moving Adiabatic No-slip Wall (ghost) */
+    case ADIABATIC_NOSLIP_MOVING_G: /* Moving Adiabatic No-slip Wall (ghost) */
     {
       // NOT IMPLEMENTED
 
@@ -1104,7 +1104,7 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
   unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
 
   /* Apply specified boundary condition */
-  if (bnd_id == 1) /* Periodic */
+  if (bnd_id == PERIODIC) /* Periodic */
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -1115,7 +1115,8 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
       }
     }
   }
-  else if(bnd_id == 15 || bnd_id == 16 || bnd_id == 17 || bnd_id == 18) /* Adibatic Wall */
+  else if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
+          bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* Adibatic Wall */
   {
     double norm[nDims];
 
@@ -1344,7 +1345,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
   double dFddURvisc[nVars][nVars][nDims][nDims];
 
   /* Copy right state values */
-  if (bnd_id != 1 && bnd_id != 2)
+  if (bnd_id != PERIODIC && bnd_id != SUP_IN)
   {
     /* Copy right state dFdUconv */
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1382,7 +1383,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       }
 
       /* Copy right state dFddUvisc */
-      if (bnd_id == 15) /* Adiabatic Wall */
+      if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
       {
         for (unsigned int dimj = 0; dimj < nDims; dimj++)
         {
@@ -1404,7 +1405,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
   /* Apply specified boundary condition */
   switch(bnd_id)
   {
-    case 5: /* Subsonic Outlet */
+    case SUB_OUT: /* Subsonic Outlet */
     {
       /* Primitive Variables */
       double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
@@ -1434,7 +1435,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       break;
     }
 
-    case 6: /* Characteristic (from PyFR) */
+    case CHAR: /* Characteristic (from PyFR) */
     {
       double nx = norm(fpt, 0, 0);
       double ny = norm(fpt, 1, 0);
@@ -1571,8 +1572,8 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       break;
     }
 
-    case 7: /* Symmetry (prescribed) */
-    case 9: /* Slip Wall (prescribed) */
+    case SYMMETRY_P: /* Symmetry (prescribed) */
+    case SLIP_WALL_P: /* Slip Wall (prescribed) */
     {
       double nx = norm(fpt, 0, 0);
       double ny = norm(fpt, 1, 0);
@@ -1608,8 +1609,8 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       break;
     }
 
-    case 8: /* Symmetry (ghost) */
-    case 10: /* Slip Wall (ghost) */
+    case SYMMETRY_G: /* Symmetry (ghost) */
+    case SLIP_WALL_G: /* Slip Wall (ghost) */
     {
       double nx = norm(fpt, 0, 0);
       double ny = norm(fpt, 1, 0);
@@ -1637,7 +1638,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       break;
     }
 
-    case 15: /* No-slip Wall (adiabatic) */
+    case ADIABATIC_NOSLIP_P: /* No-slip Wall (adiabatic) */
     {
       double nx = norm(fpt, 0, 0);
       double ny = norm(fpt, 1, 0);
@@ -1761,7 +1762,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
   }
 
   /* Compute new right state values */
-  if (bnd_id != 1 && bnd_id != 2)
+  if (bnd_id != PERIODIC && bnd_id != SUP_IN)
   {
     /* Compute dFdULconv for right state */
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1814,7 +1815,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       }
 
       /* Compute dFddULvisc for right state */
-      if (bnd_id == 15) /* Adiabatic Wall */
+      if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
       {
         for (unsigned int dimj = 0; dimj < nDims; dimj++)
         {

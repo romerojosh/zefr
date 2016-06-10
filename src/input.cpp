@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <stdexcept>
@@ -5,6 +6,31 @@
 
 #include "input.hpp"
 #include "macros.hpp"
+
+std::map<std::string,int> bcStr2Num = {
+  {"none", NONE},
+  {"fluid", NONE},
+  {"periodic", PERIODIC},
+  {"char", CHAR},
+  {"farfield", SUP_IN},
+  {"inlet_sup", SUP_IN},
+  {"outlet_sup", SUP_OUT},
+  {"inlet_sub", SUB_IN},
+  {"outlet_sub", SUB_OUT},
+  {"wall_slip_p", SLIP_WALL_P},
+  {"wall_slip_g", SLIP_WALL_G},
+  {"wall_ns_iso_p", ISOTHERMAL_NOSLIP_P},
+  {"wall_ns_iso_g", ISOTHERMAL_NOSLIP_G},
+  {"wall_ns_iso_move_p", ISOTHERMAL_NOSLIP_MOVING_P},
+  {"wall_ns_iso_move_g", ISOTHERMAL_NOSLIP_MOVING_G},
+  {"wall_ns_adi_p", ADIABATIC_NOSLIP_P},
+  {"wall_ns_adi_g", ADIABATIC_NOSLIP_G},
+  {"wall_ns_adi_move_p", ADIABATIC_NOSLIP_MOVING_P},
+  {"wall_ns_adi_move_g", ADIABATIC_NOSLIP_MOVING_G},
+  {"overset", OVERSET},
+  {"symmetry_p", SYMMETRY_P},
+  {"symmetry_g", SYMMETRY_G},
+};
 
 InputStruct read_input_file(std::string inputfile)
 {
@@ -16,6 +42,17 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "nDims", input.nDims);
   read_param(f, "meshfile", input.meshfile);
   read_param(f, "serendipity", input.serendipity, false);
+
+  // Get mesh boundaries and boundary conditions, then convert to lowercase
+  std::map<std::string, std::string> meshBndTmp;
+  read_map(f, "mesh_bound", meshBndTmp);
+  for (auto& B:meshBndTmp) {
+    std::string tmp1, tmp2;
+    tmp1 = B.first; tmp2 = B.second;
+    std::transform(tmp1.begin(), tmp1.end(), tmp1.begin(), ::tolower);
+    std::transform(tmp2.begin(), tmp2.end(), tmp2.begin(), ::tolower);
+    input.meshBounds[tmp1] = tmp2;
+  }
 
   read_param(f, "order", input.order);
   read_param(f, "equation", str);
@@ -127,6 +164,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "sen_Jfac", input.sen_Jfac, 1.0);
   read_param(f, "filt_gamma", input.filt_gamma, 0.1);
   read_param(f, "filt_maxLevels", input.filt_maxLevels, (unsigned int) 1);
+
+  read_param(f, "overset", input.overset, false);
+
+  read_param(f, "motion", input.motion, false);
 
   f.close();
 
