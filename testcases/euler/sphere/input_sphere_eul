@@ -20,7 +20,6 @@ CFL	  1.0
 p_multi 1
 smooth_steps 1
 rel_fac 1.00
-low_order 0
 mg_levels 3 0
 mg_steps  2 5
 

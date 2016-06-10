@@ -24,12 +24,7 @@ p_multi 1
 mg_cycle V
 FMG_vcycles 1000
 rel_fac 1.00
-low_order 0
 
-smooth_steps 1
-p_smooth_steps 1
-f_smooth_steps 2
-c_smooth_steps 5
 mg_levels 2 1 0
 mg_steps  2 1 5
 

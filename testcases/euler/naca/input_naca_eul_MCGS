@@ -21,17 +21,6 @@ adapt_CFL 1
 CFL_max 1e5
 CFL_ratio 2.0
 
-# Multigrid:
-p_multi 0
-mg_cycle V
-FMG_vcycles 1000
-rel_fac 1.00
-low_order 0
-
-smooth_steps 1
-p_smooth_steps 1
-c_smooth_steps 2
-
 # Implicit
 SER 0
 stream_mode 0

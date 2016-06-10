@@ -20,11 +20,9 @@ p_multi 1
 mg_cycle V
 FMG_vcycles 0
 rel_fac 1.0
-low_order 0
 
-smooth_steps 1
-p_smooth_steps 1
-c_smooth_steps 2
+mg_levels 4 3 2 1
+mg_steps  1 1 1 2
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
