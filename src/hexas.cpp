@@ -10,6 +10,8 @@
 #include "polynomials.hpp"
 #include "hexas.hpp"
 
+#include "cblas.h"
+
 #ifdef _GPU
 #include "elements_kernels.h"
 #include "solver_kernels.h"
@@ -558,46 +560,105 @@ void Hexas::setup_PMG(int pro_order, int res_order)
 
   if (order != input->order)
   {
+    /* Setup prolongation operator */
     oppPro.assign({nSpts_pro, nSpts});
 
-    auto loc_spts_pro_1D = Gauss_Legendre_pts(pro_order + 1); 
+    std::vector<mdvector<double>> opps(pro_order + 1);
 
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    /* Form operator by sequential multiplication of single order prolongation operators */
+    for (int P = pro_order; P > order; P--)
     {
-      for (unsigned int pspt = 0; pspt < nSpts_pro; pspt++)
-      {
-        unsigned int i = pspt % nSpts_pro_1D;
-        unsigned int j = (pspt / nSpts_pro_1D) % nSpts_pro_1D;
-        unsigned int k = pspt / (nSpts_pro_1D * nSpts_pro_1D);
-        loc[0] = loc_spts_pro_1D[i];
-        loc[1] = loc_spts_pro_1D[j];
-        loc[2] = loc_spts_pro_1D[k]; //TODO: Correct?
+      opps[P].assign({(P+1) * (P+1) * (P+1), P * P * P}, 0);
 
-        oppPro(pspt, spt) = calc_nodal_basis(spt, loc);
+      auto loc_spts_P1_1D = Gauss_Legendre_pts(P+1); 
+      auto loc_spts_P2_1D = Gauss_Legendre_pts(P); 
+
+      for (unsigned int spt = 0; spt < P * P * P; spt++)
+      {
+        int i1 = spt % P;
+        int j1 = (spt / P) % P;
+        int k1 = spt / (P * P);
+
+        for (unsigned int pspt = 0; pspt < (P+1) * (P+1) * (P+1); pspt++)
+        {
+          int i2 = pspt % (P+1);
+          int j2 = (pspt / (P+1)) % (P+1);
+          int k2 = pspt / ((P+1) * (P+1));
+          loc[0] = loc_spts_P1_1D[i2];
+          loc[1] = loc_spts_P1_1D[j2];
+          loc[2] = loc_spts_P1_1D[k2];
+
+          opps[P](pspt, spt) = Lagrange(loc_spts_P2_1D, i1, loc[0]) * 
+                               Lagrange(loc_spts_P2_1D, j1, loc[1]) *
+                               Lagrange(loc_spts_P2_1D, k1, loc[2]);
+        }
       }
     }
+
+    for (int P = pro_order; P > order + 1; P--)
+    {
+      mdvector<double> opp({nSpts_pro, (P-1) * (P-1) * (P-1)});
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, (P-1) * (P-1) * (P-1),
+          P * P * P, 1.0, opps[P].data(), opps[P].ldim(), opps[P-1].data(), opps[P-1].ldim(), 0.0, opp.data(), opp.ldim());
+
+      opps[P-1] = opp;
+    }
+
+    oppPro = opps[order + 1];
+
   }
 
   if (order != 0)
   {
+    /* Setup restriction operator */
     oppRes.assign({nSpts_res, nSpts});
 
-    auto loc_spts_res_1D = Gauss_Legendre_pts(res_order + 1); 
+    std::vector<mdvector<double>> opps(order + 1);
 
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    /* Form operator by sequential multiplication of single order restriction operators */
+    for (int P = res_order; P < order; P++)
     {
-      for (unsigned int rspt = 0; rspt < nSpts_res; rspt++)
-      {
-        unsigned int i = rspt % nSpts_res_1D;
-        unsigned int j = (rspt / nSpts_res_1D) % nSpts_res_1D;
-        unsigned int k = rspt / (nSpts_res_1D * nSpts_res_1D);
-        loc[0] = loc_spts_res_1D[i];
-        loc[1] = loc_spts_res_1D[j];
-        loc[2] = loc_spts_res_1D[k]; //TODO: Correct?
+      opps[P].assign({(P+1) * (P+1) * (P+1), (P+2) * (P+2) * (P+2)}, 0);
 
-        oppRes(rspt, spt) = calc_nodal_basis(spt, loc);
+      auto loc_spts_P1_1D = Gauss_Legendre_pts(P+1); 
+      auto loc_spts_P2_1D = Gauss_Legendre_pts(P+2); 
+
+      for (unsigned int spt = 0; spt < (P+2) * (P+2) * (P+2); spt++)
+      {
+        int i1 = spt % (P+2);
+        int j1 = (spt / (P+2)) % (P+2);
+        int k1 = spt / ((P+2) * (P+2));
+
+        for (unsigned int rspt = 0; rspt < (P+1) * (P+1) * (P+1); rspt++)
+        {
+          int i2 = rspt % (P+1);
+          int j2 = (rspt / (P+1)) % (P+1);
+          int k2 = rspt / ((P+1) * (P+1));
+
+          loc[0] = loc_spts_P1_1D[i2];
+          loc[1] = loc_spts_P1_1D[j2];
+          loc[2] = loc_spts_P1_1D[k2];
+
+          opps[P](rspt, spt) = Lagrange(loc_spts_P2_1D, i1, loc[0]) * 
+                               Lagrange(loc_spts_P2_1D, j1, loc[1]) *
+                               Lagrange(loc_spts_P2_1D, k1, loc[2]);
+        }
       }
     }
+
+    for (int P = res_order; P < order - 1; P++)
+    {
+      mdvector<double> opp({nSpts_res, (P+3) * (P+3) * (P+3)});
+
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, (P+3) * (P+3) * (P+3),
+          (P+2) * (P+2) * (P+2), 1.0, opps[P].data(), opps[P].ldim(), opps[P+1].data(), opps[P+1].ldim(), 0.0, opp.data(), opp.ldim());
+
+      opps[P+1] = opp;
+    }
+
+    oppRes = opps[order - 1];
+
   }
 
 #ifdef _GPU

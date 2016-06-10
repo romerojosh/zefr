@@ -480,6 +480,7 @@ void Quads::setup_PMG(int pro_order, int res_order)
 
     std::vector<mdvector<double>> opps(order + 1);
 
+    /* Form operator by sequential multiplication of single order restriction operators */
     for (int P = res_order; P < order; P++)
     {
       opps[P].assign({(P+1) * (P+1), (P+2) * (P+2)}, 0);
