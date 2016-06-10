@@ -83,11 +83,11 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 {
   /* ---Downward cycle--- */
   /* Update residual on finest grid level and restrict */
-  //if (level != nLevels - 1)
-  //{
+  if (level != nLevels - 1)
+  {
     solver.compute_residual(0);
     restrict_pmg(solver, *grids[level + 1]);
-  //}
+  }
 
   for (int n = level + 1; n < nLevels; n++)
   {
@@ -201,8 +201,8 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
   }
 
   /* Prolong correction and add to finest grid solution */
-  //if (level != 0)
-  //{
+  if (level != nLevels - 1)
+  {
 #ifdef _CPU
     prolong_err(*grids[level + 1], corrections[level + 1], solver);
 #endif
@@ -210,7 +210,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 #ifdef _GPU
     prolong_err(*grids[level + 1], corrections_d[level + 1], solver);
 #endif
-  //}
+  }
 
 }
 
@@ -228,60 +228,61 @@ void PMGrid::cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_
   }
   else if (input->mg_cycle == "FMG")
   {
-    /* Perform FMG cycle*/
-    for (int P = (int) input->low_order; P < order; P++)
+    /* Perform FMG cycle */
+    for (int n = nLevels - 1; n > 0; n--)
     {
-      std::cout << "FMG P: " << P << std::endl;
+      std::cout << "FMG P: " << input->mg_levels[n] << std::endl;
       for (unsigned int cycle = 0; cycle < input->FMG_vcycles; cycle++)
       {
         /* Update current level */
-        grids[P]->update();
+        grids[n]->update();
 
         /* Do a v-cycle on current level */
-        v_cycle(*grids[P], P); //Loop this?
+        v_cycle(*grids[n], n); //Loop this?
 
         if (cycle == 0 or cycle % input->report_freq == 0)
-          grids[P]->report_residuals(histfile, t1);
+          grids[n]->report_residuals(histfile, t1);
       }
 
       /* Update before prolongation */
-      grids[P]->update();
+      grids[n]->update();
 
 
       /* Prolong solution to next level */
-      if (P < order - 1)
+      if (n > 1)
       {
 #ifdef _CPU
-        prolong_U(*grids[P], *grids[P+1]);
+        prolong_U(*grids[n], *grids[n - 1]);
 #endif
 
 #ifdef _GPU
-        prolong_U(*grids[P], *grids[P+1]);
+        prolong_U(*grids[n], *grids[n - 1]);
 #endif
-        grids[P+1]->write_solution("FMG_prolong_"+std::to_string(P));
+        grids[n - 1]->write_solution("FMG_prolong_"+std::to_string(input->mg_levels[n - 1]));
       }
-
     }
 
     /* Prolong solution to finest level */
 #ifdef _CPU
-    prolong_U(*grids[order-1], solver);
+    prolong_U(*grids[1], solver);
 #endif
 
 #ifdef _GPU
-    prolong_U(*grids[order-1], solver);
+    prolong_U(*grids[1], solver);
 #endif
 
-    /* Set solver to use v_cycle */
+    /* Set cycle to use V-cycle */
     input->mg_cycle = std::string("V");
     solver.write_solution("FMG_prolong_"+std::to_string(order));
+
+    /* Perform first V-cycle */
+    cycle(solver, histfile, t1);
 
   }
   else
   {
     ThrowException("Multigrid cycle type unknown!");
   }
-
 }
 
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
