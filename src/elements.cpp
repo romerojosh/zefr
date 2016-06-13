@@ -877,6 +877,7 @@ void Elements::poly_squeeze()
     /* If negative density found, squeeze density */
     if (negRho)
     {
+      squeeze_bool(ele) += 1;
       double theta = std::min(1, (Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho)); 
       //double theta = 1.0;
 
@@ -922,6 +923,7 @@ void Elements::poly_squeeze()
     /* If minTau is negative, squeeze solution */
     if (minTau < 0)
     {
+      squeeze_bool(ele) += 1;
       double rho = Uavg(ele, 0);
       double Vsq = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -960,7 +962,7 @@ void Elements::poly_squeeze()
 #endif
 
 #ifdef _GPU
-  poly_squeeze_wrapper(U_spts_d, U_fpts_d, Uavg_d, input->gamma, input->exps0, nSpts, nFpts,
+  poly_squeeze_wrapper(U_spts_d, U_fpts_d, Uavg_d, squeeze_bool_d, input->gamma, input->exps0, nSpts, nFpts,
       nEles, nVars, nDims);
 #endif
 

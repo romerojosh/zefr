@@ -30,12 +30,12 @@ int main(int argc, char* argv[])
   int nDevices;
   cudaGetDeviceCount(&nDevices);
 
-  if (nDevices < nRanks)
-  {
-    ThrowException("Not enough GPUs for this run. Allocate more!");
-  }
+  // if (nDevices < nRanks)
+  // {
+  //   ThrowException("Not enough GPUs for this run. Allocate more!");
+  // }
 
-  cudaSetDevice(rank);
+  cudaSetDevice(rank%6);
 #endif
 
 #endif
@@ -118,8 +118,19 @@ int main(int argc, char* argv[])
   /* Main iteration loop */
   for (unsigned int n = 1; n<=input.n_steps ; n++)
   {
-    solver.update();
-    solver.capture_shock();
+    if (!input.p_multi)
+    {
+      solver.update();
+      solver.capture_shock();
+    }
+    else
+    {
+      for (unsigned int step = 0; step < input.f_smooth_steps; step++)
+      {
+        solver.update();
+        solver.capture_shock();
+      }
+    }
 
     /* If using multigrid, perform correction cycle */
     if (input.p_multi)

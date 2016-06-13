@@ -89,8 +89,14 @@ void PMGrid::cycle(FRSolver &solver)
     device_copy(solutions_d[P], grids[P]->eles->U_spts_d, solutions_d[P].get_nvals());
 #endif
 
+    unsigned int nSteps = input->smooth_steps;
+    if (P == (int) input->low_order)
+    {
+      nSteps = input->c_smooth_steps;
+    }
+
     /* Update solution on coarse level */
-    for (unsigned int step = 0; step < input->smooth_steps; step++)
+    for (unsigned int step = 0; step < nSteps; step++)
     {
 #ifdef _CPU
       grids[P]->update_with_source(sources[P]);
@@ -131,7 +137,21 @@ void PMGrid::cycle(FRSolver &solver)
     /* Advance again (v-cycle)*/
     if (P != (int) input->low_order)
     {
-      for (unsigned int step = 0; step < input->smooth_steps; step++)
+      for (unsigned int step = 0; step < input->p_smooth_steps; step++)
+      {
+#ifdef _CPU
+        grids[P]->update_with_source(sources[P]);
+        grids[P]->capture_shock();
+#endif
+
+#ifdef _GPU
+        grids[P]->update_with_source(sources_d[P]);
+        grids[P]->capture_shock();
+#endif
+      }
+    }
+
+/*      for (unsigned int step = 0; step < input->smooth_steps; step++)
       {
 #ifdef _CPU
         grids[P]->update_with_source(sources[P]);
@@ -160,7 +180,7 @@ void PMGrid::cycle(FRSolver &solver)
 #endif
       }
 
-    }
+    }*/
 
     /* Generate error */
 #ifdef _CPU

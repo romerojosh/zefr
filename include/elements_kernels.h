@@ -48,6 +48,7 @@ void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts,
 
 void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts, 
     mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &Uavg, 
+    mdvector_gpu<double> &squeeze_bool,
     double gamma, double exps0, unsigned int nSpts, 
     unsigned int nFpts, unsigned int nEles, unsigned int nVars,
     unsigned int nDims);

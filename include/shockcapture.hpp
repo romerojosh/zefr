@@ -51,9 +51,13 @@ class ShockCapture
   public:
     mdvector<double> sensor; 
     mdvector<uint> sensor_bool;
+    mdvector<double> squeeze_bool; 
+
 #ifdef _GPU
     mdvector_gpu<double> sensor_d;
     mdvector_gpu<uint> sensor_bool_d;
+    mdvector_gpu<double> squeeze_bool_d;
+
 #endif
     void setup(InputStruct *input, FRSolver &solver);
     void apply_sensor();

@@ -674,8 +674,8 @@ void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts,
 __global__
 void poly_squeeze(mdvector_gpu<double> U_spts, 
     mdvector_gpu<double> U_fpts, mdvector_gpu<double> Uavg, 
-    double gamma, double exps0, unsigned int nSpts, 
-    unsigned int nFpts, unsigned int nEles, unsigned int nVars,
+    mdvector_gpu<double> squeeze_bool, double gamma, double exps0, 
+    unsigned int nSpts, unsigned int nFpts, unsigned int nEles, unsigned int nVars,
     unsigned int nDims)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
@@ -712,6 +712,7 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   /* If negative density found, squeeze density */
   if (negRho)
   {
+    squeeze_bool(ele) += 1;
     if(Uavg(ele,0) < 0)
       printf("Negative average solution encountered \n");
 
@@ -756,6 +757,7 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   /* If minTau is negative, squeeze solution */
   if (minTau < 0)
   {
+    squeeze_bool(ele) += 1;
     double rho = Uavg(ele, 0);
     double Vsq = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -793,13 +795,13 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
 
 void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts, 
     mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &Uavg, 
-    double gamma, double exps0, unsigned int nSpts, 
-    unsigned int nFpts, unsigned int nEles, unsigned int nVars,
-    unsigned int nDims)
+    mdvector_gpu<double>& squeeze_bool, double gamma, double exps0, 
+    unsigned int nSpts, unsigned int nFpts, unsigned int nEles, 
+    unsigned int nVars, unsigned int nDims)
 {
   unsigned int threads= 192;
   unsigned int blocks = (nEles + threads - 1)/ threads;
 
-  poly_squeeze<<<blocks, threads>>>(U_spts, U_fpts, Uavg, gamma, exps0, nSpts, nFpts,
+  poly_squeeze<<<blocks, threads>>>(U_spts, U_fpts, Uavg, squeeze_bool, gamma, exps0, nSpts, nFpts,
       nEles, nVars, nDims);
 }

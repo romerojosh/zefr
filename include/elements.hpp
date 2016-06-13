@@ -52,6 +52,7 @@ class Elements
     mdvector<double> Fconv_spts, Fvisc_spts;
     mdvector<double> Fcomm, Ucomm;
     mdvector<double> dU_spts, dU_fpts, dU_qpts, dF_spts, divF_spts;
+    mdvector<double> squeeze_bool;
 
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;
@@ -71,6 +72,9 @@ class Elements
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
+
+    /* Squeeze output */
+    mdvector_gpu<double> squeeze_bool_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);

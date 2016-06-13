@@ -448,6 +448,9 @@ void FRSolver::solver_data_to_device()
   input->norm_fs_d = input->norm_fs;
   input->AdvDiff_A_d = input->AdvDiff_A;
 
+  /* Squeeze bool */
+  eles->squeeze_bool_d = eles->squeeze_bool;
+
 #ifdef _MPI
   /* MPI data */
   for (auto &entry : geo.fpt_buffer_map) 
@@ -630,6 +633,9 @@ void FRSolver::initialize_U()
   {
     eles->Umodal.assign({eles->nDims+1, eles->nEles, eles->nVars});
   }
+
+  if(input->squeeze)
+      eles->squeeze_bool.assign({eles->nEles});
 
   /* Initialize solution */
   if (input->equation == AdvDiff)
@@ -1164,6 +1170,10 @@ void FRSolver::write_solution()
   eles->U_spts = eles->U_spts_d;
 #endif
 
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
+
   if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
 
   std::stringstream ss;
@@ -1210,6 +1220,12 @@ void FRSolver::write_solution()
     {
       f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
       f << std::endl;
+    }
+
+    if(input->squeeze)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"squeeze\" format=\"ascii\"/>";
+      f << std::endl;     
     }
 
     f << "</PPointData>" << std::endl;
@@ -1377,9 +1393,10 @@ void FRSolver::write_solution()
 
 #ifdef _GPU
     eles->Uavg = eles->Uavg_d;
+    eles->squeeze_bool = eles->squeeze_bool_d;
 #endif
 
-    eles->poly_squeeze_ppts();
+    eles->poly_squeeze_ppts();   
   }
 
   if (input->equation == AdvDiff)
@@ -1429,12 +1446,25 @@ void FRSolver::write_solution()
 #ifdef _GPU
     shock.sensor = shock.sensor_d;
 #endif
+    /* Write out sensor to data file */
     f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << shock.sensor(ele) << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+
+    /* Write out squeeze bool to data file */
+    f << "<DataArray type=\"Float32\" Name=\"squeeze\" format=\"ascii\">"<< std::endl;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        f << eles->squeeze_bool(ele) << " ";
       }
       f << std::endl;
     }
@@ -1450,6 +1480,9 @@ void FRSolver::write_solution()
 
 void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1)
 {
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
 
   /* If running on GPU, copy out divergence */
 #ifdef _GPU
@@ -1462,7 +1495,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
   std::vector<double> res(eles->nVars,0.0);
   double DeltaU_max = 0;
-if(input->shockcapture)
+if(input->shockcapture && order>1)
 {
   #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
@@ -1565,6 +1598,9 @@ else
 
 void FRSolver::report_forces(std::ofstream &f)
 {
+    unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
   /* If using GPU, copy out solution, gradient and pressure */
 #ifdef _GPU
   faces->U = faces->U_d;
@@ -1821,6 +1857,9 @@ void FRSolver::report_forces(std::ofstream &f)
 
 void FRSolver::report_error(std::ofstream &f)
 {
+    unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->f_smooth_steps;
   /* If using GPU, copy out solution */
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
