@@ -259,8 +259,8 @@ void ShockCapture::setup_threshold()
   // Apply non-linear enhancement
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
   {
-    KS_step(spt) = pow(order +1, Q/2.0) * pow(abs(KS_canon(spt, 0)), Q);
-    KS_ramp(spt) = pow(order +1, Q/2.0) * pow(abs(KS_canon(spt, 1)), Q);
+    KS_step(spt) = pow(order, Q/2.0) * pow(abs(KS_canon(spt, 0)), Q);
+    KS_ramp(spt) = pow(order, Q/2.0) * pow(abs(KS_canon(spt, 1)), Q);
   }
   
   // Calculate threshold
@@ -373,7 +373,7 @@ void ShockCapture::apply_sensor()
 #pragma omp parallel for reduction(max:sen)
       for (unsigned int row = 0; row < 2*eles->nSpts; row++)
       {
-        KS(row, ele, var) = pow(order+1, Q/2) * pow(abs(KS(row, ele, var)), Q);
+        KS(row, ele, var) = pow(order, Q/2) * pow(abs(KS(row, ele, var)), Q);
         sen = std::max(sen, KS(row, ele, var));
       }
       sensor(ele) = std::max(sensor(ele), sen);
