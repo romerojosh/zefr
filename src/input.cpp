@@ -136,15 +136,16 @@ void apply_nondim(InputStruct &input)
   for (unsigned int dim = 0; dim < input.nDims; dim++)
     input.V_fs(dim) = V_fs_mag * input.norm_fs(dim);
 
-  input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
-  input.P_fs = input.rho_fs * input.R * input.T_fs;
-
+  double mu_save = input.mu; // Save for BC2
   /* If using Sutherland's law, update viscosity */
   if (!input.fix_vis)
   {
     input.mu = input.mu * std::pow(input.T_fs / input.T_gas, 1.5) * ((input.T_gas + input.S)/
         (input.T_fs + input.S));
   }
+
+  input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
+  input.P_fs = input.rho_fs * input.R * input.T_fs;
 
   /* Set reference quantities for nondimensionalization */
   input.T_ref = input.T_fs;
@@ -165,6 +166,40 @@ void apply_nondim(InputStruct &input)
       input.mach_fs * input.mach_fs);
   input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs * 
       input.mach_fs, input.gamma /
+      (input.gamma - 1.0));
+
+  /* Compute dimensional freestream quantities for fs 2  for SWLBLI*/
+  /* I'm hard-setting them because Rankine-Hugoniot + viscosity get confusing; it is
+     easy to make mistakes trying to set second input quantities */
+  input.norm_fs2.assign({input.nDims});
+  input.V_fs2.assign({input.nDims});
+  input.mach_fs2  =  2.00771568;
+  input.norm_fs2(0) = 0.99778636102;
+  input.norm_fs2(1) = -0.06650096051;
+  input.T_fs2 = 1.06550578 * input.T_fs;
+
+  double V_fs_mag2 = input.mach_fs2 * std::sqrt(input.gamma * input.R * input.T_fs2);
+  for (unsigned int dim = 0; dim < input.nDims; dim++)
+    input.V_fs2(dim) = V_fs_mag2 * input.norm_fs2(dim);
+
+  for (unsigned int n = 0; n < input.nDims; n++)
+    input.V_fs2(n) = input.V_fs2(n) / V_fs_mag2;
+
+    /* If using Sutherland's law, update viscosity */
+  if (!input.fix_vis)
+  {
+    input.mu2 = mu_save * std::pow(input.T_fs2 / input.T_gas, 1.5) * ((input.T_gas + input.S)/
+        (input.T_fs2 + input.S));
+  }
+  input.mu2 = input.mu2/input.mu_ref;
+
+  input.rho_fs2 = input.rho_fs * 1.17060913;
+  input.P_fs2 = input.P_fs * 1.24729080;
+
+  input.T_tot_fs2 = (input.T_fs2 / input.T_ref) * (1.0 + 0.5 * (input.gamma - 1.0) * 
+      input.mach_fs2 * input.mach_fs2);
+  input.P_tot_fs2 = input.P_fs2 * std::pow(1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs2 * 
+      input.mach_fs2, input.gamma /
       (input.gamma - 1.0));
 
   /* Compute and nondimensionalize wall quantities */

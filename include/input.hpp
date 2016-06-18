@@ -35,8 +35,13 @@ struct InputStruct
   unsigned int shockcapture, sen_norm, limiter;
   double sen_Jfac, alpha, filtexp, nonlin_exp;
 
+  /* SWLBLI stuff */
+  double rho_fs2, u_fs2, v_fs2, P_fs2, mu2;
+  double mach_fs2, T_fs2, nx_fs2, ny_fs2, T_tot_fs2, P_tot_fs2;
+  mdvector<double> V_fs2, norm_fs2;
+
 #ifdef _GPU
-  mdvector_gpu<double> AdvDiff_A_d, V_fs_d, norm_fs_d, V_wall_d, norm_wall_d;
+  mdvector_gpu<double> AdvDiff_A_d, V_fs_d, V_fs2_d, norm_fs_d, V_wall_d, norm_wall_d;
 #endif
 };
 

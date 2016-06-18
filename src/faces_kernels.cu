@@ -394,7 +394,8 @@ __global__
 void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, double rho_fs, 
     mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
-    double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
+    double P_tot_fs, double rho_fs2, mdvector_gpu<double> V_fs2, double P_fs2, double T_wall, 
+    mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
     mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, 
     mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias)
 {
@@ -899,6 +900,169 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
       break;
     }
+
+    case 13: /* Supersonic Inlet 2 for SWLBLI */
+    {
+      if (equation == AdvDiff)
+      {
+        /* Set boundaries to zero */
+        U(fpt, 0, 1) = 0;
+      }
+      else
+      {
+        /* Set boundaries to freestream values */
+        U(fpt, 0, 1) = rho_fs2;
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          U(fpt, dim+1, 1) = rho_fs2 * V_fs2(dim);
+          Vsq += V_fs2(dim) * V_fs2(dim);
+        }
+
+        U(fpt, nDims + 1, 1) = P_fs2/(gamma-1.0) + 0.5*rho_fs2 * Vsq; 
+      }
+
+      /* Set LDG bias */
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
+
+      break;
+    }
+    case 14: /* Characteristic (from HiFiLES) */
+    {
+      /* Compute wall normal velocities */
+      double VnL = 0.0; double VnR = 0.0;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+        VnR += V_fs2(dim) * norm(fpt, dim, 0);
+      }
+    
+
+      /* Compute pressure. TODO: Compute pressure once!*/
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+      }
+
+      momF /= U(fpt, 0, 0);
+
+      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+      double PR = P_fs2;
+
+      /* Compute Riemann Invariants */
+      double Rp = VnL + 2.0 / (gamma - 1) * std::sqrt(gamma * PL / 
+          U(fpt, 0,0));
+      double Rn = VnR - 2.0 / (gamma - 1) * std::sqrt(gamma * PR / 
+          rho_fs2);
+
+      double cstar = 0.25 * (gamma - 1) * (Rp - Rn);
+      double ustarn = 0.5 * (Rp + Rn);
+
+      if (VnL < 0.0) /* Case 1: Inflow */
+      {
+        double s_inv = std::pow(rho_fs2, gamma) / PR;
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vsq += V_fs2(dim) * V_fs2(dim);
+
+        double H_fs = gamma / (gamma - 1.0) * PR / rho_fs2 +
+            0.5 * Vsq;
+
+        double rhoR = std::pow(1.0 / gamma * (s_inv * cstar * cstar), 1.0/ 
+            (gamma - 1.0));
+
+        U(fpt, 0, 1) = rhoR;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + V_fs2(dim) - VnR * 
+            norm(fpt, dim, 0));
+
+        PR = rhoR / gamma * cstar * cstar;
+        U(fpt, nDims + 1, 1) = rhoR * H_fs - PR;
+        
+      }
+      else  /* Case 2: Outflow */
+      {
+        double rhoL = U(fpt, 0, 0);
+        double s_inv = std::pow(rhoL, gamma) / PL;
+
+        double rhoR = std::pow(1.0 / gamma * (s_inv * cstar * cstar), 1.0/ 
+            (gamma - 1.0));
+
+        U(fpt, 0, 1) = rhoR;
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) +(U(fpt, dim + 1, 0) / 
+                U(fpt, 0, 0) - VnL * norm(fpt, dim, 0)));
+
+        double PR = rhoR / gamma * cstar * cstar;
+
+        double Vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoR * rhoR) ;
+        
+        U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * rhoR * Vsq; 
+      }
+
+      /* Set LDG bias */
+      //LDG_bias(fpt) = -1;
+      LDG_bias(fpt) = 0;
+
+      break;
+
+    }
+    case 15: /* SubSupOut for SWBLI - does SUP_OUT or SUB_OUT based on c */
+    {
+        double VnL = 0.0; 
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+
+        /* Compute pressure. TODO: Compute pressure once!*/
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF); 
+        double c = std::sqrt(gamma*PL/U(fpt,0,0));
+        double V_mag = momF/U(fpt,0,0);
+
+        if(V_mag > c)
+        {
+          /* Extrapolate boundary values from interior */
+          for (unsigned int n = 0; n < nVars; n++)
+            U(fpt, n, 1) = U(fpt, n, 0);
+
+          /* Set LDG bias */
+          //LDG_bias(fpt) = -1;
+          LDG_bias(fpt) = 0;          
+        }
+        else
+        {
+          /* Extrapolate Density */
+          U(fpt, 0, 1) = U(fpt, 0, 0);
+
+          /* Extrapolate Momentum */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            U(fpt, dim+1, 1) =  U(fpt, dim+1, 0);
+          }
+
+          /* Fix pressure (outlet pressure diff. from P_fs) */
+          double P_out = P_fs*1.53;
+          U(fpt, nDims + 1, 1) = P_out/(gamma-1.0) + 0.5 * momF; 
+        }
+        break;       
+    } 
+
   }
 
 }
@@ -906,7 +1070,8 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
-    double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &norm_fs, 
+    double P_tot_fs, double rho_fs2, mdvector_gpu<double> V_fs2, double P_fs2,
+    double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &norm_fs, 
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, 
     mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation)
 {
@@ -919,19 +1084,19 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
     {
       if (nDims == 2)
         apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, rho_fs2, V_fs2, P_fs2, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
       else
         apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, rho_fs2, V_fs2, P_fs2, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
     }
     else if (equation == EulerNS)
     {
       if (nDims == 2)
         apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, rho_fs2, V_fs2, P_fs2, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
       else
         apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
+            gamma, R_ref,T_tot_fs, P_tot_fs, rho_fs2, V_fs2, P_fs2, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias); 
     }
   }
 }

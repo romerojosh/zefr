@@ -258,59 +258,59 @@ void Faces::apply_bcs()
 
 
         /* Get states for convenience */
-        double rhoL = U(fpt, 0, 0);
+        // double rhoL = U(fpt, 0, 0);
 
-        double Vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VL[dim] = U(fpt, dim+1, 0) / rhoL;
-          Vsq += VL[dim] * VL[dim];
-        }
+        // double Vsq = 0.0;
+        // for (unsigned int dim = 0; dim < nDims; dim++)
+        // {
+        //   VL[dim] = U(fpt, dim+1, 0) / rhoL;
+        //   Vsq += VL[dim] * VL[dim];
+        // }
 
-        double eL = U(fpt, nDims + 1, 0);
-        double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
+        // double eL = U(fpt, nDims + 1, 0);
+        // double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
 
-        /* Compute left normal velocity */
-        double VnL = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VnL += VL[dim] * norm(fpt, dim, 0);
-        }
+        // /* Compute left normal velocity */
+        // double VnL = 0.0;
+        // for (unsigned int dim = 0; dim < nDims; dim++)
+        // {
+        //   VnL += VL[dim] * norm(fpt, dim, 0);
+        // }
 
-        /* Compute speed of sound */
-        double cL = std::sqrt(input->gamma * PL / rhoL);
+        // /* Compute speed of sound */
+        // double cL = std::sqrt(input->gamma * PL / rhoL);
 
-        /* Extrapolate Riemann invariant */
-        double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
+        // /* Extrapolate Riemann invariant */
+        // double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
 
-        /* Extrapolate entropy */
-        double s = PL / std::pow(rhoL, input->gamma);
+        // /* Extrapolate entropy */
+        // double s = PL / std::pow(rhoL, input->gamma);
 
-        /* Fix pressure */
-        double PR = input->P_fs;
+        // /* Fix pressure */
+        // double PR = input->P_fs;
 
-        U(fpt, 0, 1) = std::pow(PR / s, 1.0 / input->gamma);
+        // U(fpt, 0, 1) = std::pow(PR / s, 1.0 / input->gamma);
 
-        /* Compute right speed of sound and velocity magnitude */
-        double cR = std::sqrt(input->gamma * PR/ U(fpt, 0, 1));
+        // /* Compute right speed of sound and velocity magnitude */
+        // double cR = std::sqrt(input->gamma * PR/ U(fpt, 0, 1));
 
-        double VnR = R_plus - 2.0 * cR / (input->gamma - 1.0);
+        // double VnR = R_plus - 2.0 * cR / (input->gamma - 1.0);
 
-        Vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VR[dim] = VL[dim] + (VnR - VnL) * norm(fpt, dim, 0);
-          U(fpt, dim+1, 1) = U(fpt, 0, 1) * VR[dim];
-          Vsq += VR[dim] * VR[dim];
-        }
+        // Vsq = 0.0;
+        // for (unsigned int dim = 0; dim < nDims; dim++)
+        // {
+        //   VR[dim] = VL[dim] + (VnR - VnL) * norm(fpt, dim, 0);
+        //   U(fpt, dim+1, 1) = U(fpt, 0, 1) * VR[dim];
+        //   Vsq += VR[dim] * VR[dim];
+        // }
 
-        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
+        // U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
-        /* Set LDG bias */
-        //LDG_bias(fpt) = -1;
-        LDG_bias(fpt) = 0;
+        // /* Set LDG bias */
+        // //LDG_bias(fpt) = -1;
+        // LDG_bias(fpt) = 0;
 
-        break;
+        // break;
       }
 
       case 6: /* Characteristic (from HiFiLES) */
@@ -566,15 +566,176 @@ void Faces::apply_bcs()
 
         break;
       }
-    
+      case 13: /* Supersonic Inlet 2*/
+      {
+        if (input->equation == AdvDiff)
+        {
+          /* Set boundaries to zero */
+          U(fpt, 0, 1) = 0;
+        }
+        else
+        {
+          /* Set boundaries to freestream values */
+          U(fpt, 0, 1) = input->rho_fs2;
+
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            U(fpt, dim+1, 1) = input->rho_fs2 * input->V_fs2(dim);
+            Vsq += input->V_fs2(dim) * input->V_fs2(dim);
+          }
+
+          U(fpt, nDims + 1, 1) = input->P_fs2/(input->gamma-1.0) + 0.5*input->rho_fs2 * Vsq; 
+        }
+
+        /* Set LDG bias */
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
+
+        break;
+      }
+      case 14: /* Char 2 for SWBLI - uses rho_fs2, etc */
+      {
+        /* Compute wall normal velocities */
+        double VnL = 0.0; double VnR = 0.0;
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+          VnR += input->V_fs2(dim) * norm(fpt, dim, 0);
+        }
+      
+
+        /* Compute pressure. TODO: Compute pressure once!*/
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+        double PR = input->P_fs2;
+
+        /* Compute Riemann Invariants */
+        double Rp = VnL + 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PL / 
+            U(fpt, 0,0));
+        double Rn = VnR - 2.0 / (input->gamma - 1) * std::sqrt(input->gamma * PR / 
+            input->rho_fs2);
+
+        double cstar = 0.25 * (input->gamma - 1) * (Rp - Rn);
+        double ustarn = 0.5 * (Rp + Rn);
+
+        if (VnL < 0.0) /* Case 1: Inflow */
+        {
+          double s_inv = std::pow(input->rho_fs2, input->gamma) / PR;
+
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            Vsq += input->V_fs2(dim) * input->V_fs2(dim);
+
+          double H_fs = input->gamma / (input->gamma - 1.0) * PR / input->rho_fs2 +
+              0.5 * Vsq;
+
+          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/ 
+              (input-> gamma - 1.0));
+
+          U(fpt, 0, 1) = rhoR;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) + input->V_fs2(dim) - VnR * 
+              norm(fpt, dim, 0));
+
+          PR = rhoR / input->gamma * cstar * cstar;
+          U(fpt, nDims + 1, 1) = rhoR * H_fs - PR;
+          
+        }
+        else  /* Case 2: Outflow */
+        {
+          double rhoL = U(fpt, 0, 0);
+          double s_inv = std::pow(rhoL, input->gamma) / PL;
+
+          double rhoR = std::pow(1.0 / input->gamma * (s_inv * cstar * cstar), 1.0/ 
+              (input-> gamma - 1.0));
+
+          U(fpt, 0, 1) = rhoR;
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim + 1, 1) = rhoR * (ustarn * norm(fpt, dim, 0) +(U(fpt, dim + 1, 0) / 
+                U(fpt, 0, 0) - VnL * norm(fpt, dim, 0)));
+
+          double PR = rhoR / input->gamma * cstar * cstar;
+
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            Vsq += U(fpt, dim+1, 1) * U(fpt, dim+1, 1) / (rhoR * rhoR) ;
+          
+          U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * rhoR * Vsq; 
+        }
+
+        /* Set LDG bias */
+        //LDG_bias(fpt) = -1;
+        LDG_bias(fpt) = 0;
+
+ 
+        break;
+
+      } 
+      case 15: /* SubSupOut for SWBLI - does SUP_OUT or SUB_OUT based on c */
+      {
+        double VnL = 0.0; 
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
+
+        /* Compute pressure. TODO: Compute pressure once!*/
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF); 
+        double c = std:sqrt(input->gamma*PL/U(fpt,0,0));
+        double V_mag = momF/U(fpt,0,0);
+
+        if(V_mag > c)
+        {
+          /* Extrapolate boundary values from interior */
+          for (unsigned int n = 0; n < nVars; n++)
+            U(fpt, n, 1) = U(fpt, n, 0);
+
+          /* Set LDG bias */
+          //LDG_bias(fpt) = -1;
+          LDG_bias(fpt) = 0;          
+        }
+        else
+        {
+          /* Extrapolate Density */
+          U(fpt, 0, 1) = U(fpt, 0, 0);
+
+          /* Extrapolate Momentum */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            U(fpt, dim+1, 1) =  U(fpt, dim+1, 0);
+          }
+
+          /* Fix pressure (outlet pressure diff. from P_fs) */
+          double P_out = input->P_fs*1.53;
+          U(fpt, nDims + 1, 1) = P_out/(input->gamma-1.0) + 0.5 * momF; 
+        }       
+      }  
+
     } 
   }
 #endif
 
 #ifdef _GPU
   apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
-      input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
-      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation);
+      input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->rho_fs2, input->V_fs2_d, input->P_fs2,
+      input->T_wall, input->V_wall_d, input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation);
 
   check_error();
 

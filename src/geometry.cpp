@@ -155,6 +155,18 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo)
     {
       geo.bnd_ids[val] = 12;
     }
+    else if (bnd_id == "\"INLET_SUP2\"") // For SWLBLI
+    {
+      geo.bnd_ids[val] = 13;
+    }
+    else if (bnd_id == "\"CHAR2\"") // For SWLBLI
+    {
+      geo.bnd_ids[val] = 14;
+    }  
+    else if (bnd_id == "\"SUBSUP_OUT\"") // For SWLBLI
+    {
+      geo.bnd_ids[val] = 15;
+    }            
     else if (bnd_id == "\"FLUID\"")
     {
     }

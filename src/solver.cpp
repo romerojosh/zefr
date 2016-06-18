@@ -418,6 +418,10 @@ void FRSolver::solver_data_to_device()
   if(input->shockcapture && order > 1)
     eles->Umodal_d = eles->Umodal;
 
+   /* Squeeze bool */
+  if(input->squeeze)
+    eles->squeeze_bool_d = eles->squeeze_bool;
+
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
   faces->dU_d = faces->dU;
@@ -444,12 +448,10 @@ void FRSolver::solver_data_to_device()
 
   /* Input parameters */
   input->V_fs_d = input->V_fs;
+  input->V_fs2_d = input->V_fs2;
   input->V_wall_d = input->V_wall;
   input->norm_fs_d = input->norm_fs;
   input->AdvDiff_A_d = input->AdvDiff_A;
-
-  /* Squeeze bool */
-  eles->squeeze_bool_d = eles->squeeze_bool;
 
 #ifdef _MPI
   /* MPI data */
@@ -719,6 +721,25 @@ void FRSolver::initialize_U()
           }
         }
       }
+    }
+    if (input->ic_type == 2)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          eles->U_spts(spt, ele, 0)  = input->rho_fs;
+
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < eles->nDims; dim++)
+          {
+            eles->U_spts(spt, ele, dim+1)  = 0;
+          }
+
+          eles->U_spts(spt, ele, eles->nDims + 1)  = input->P_fs/(input->gamma-1.0);
+        }
+      }
+
     }
   }
   else
@@ -1457,7 +1478,10 @@ void FRSolver::write_solution()
       f << std::endl;
     }
     f << "</DataArray>" << std::endl;
+  }
 
+  if(input->squeeze)
+  {
     /* Write out squeeze bool to data file */
     f << "<DataArray type=\"Float32\" Name=\"squeeze\" format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
