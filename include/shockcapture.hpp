@@ -30,19 +30,19 @@ class ShockCapture
 
     mdvector<double> Vander, VanderInv, Vander_d1;
     mdvector<double> Vander2D, Vander2DInv, Vander2D_tr, Vander2DInv_tr;
-    mdvector<double> Conc, oppS_1D, oppS, filt;
+    mdvector<double> Conc, oppS_1D, oppS, filt, filt2;
     mdvector<double> KS, U_spts, U_filt;
     double threshJ, normalTol;
 
 #ifdef _GPU
-    mdvector_gpu<double> oppS_d, KS_d, U_spts_d, filt_d, U_filt_d;
+    mdvector_gpu<double> oppS_d, KS_d, U_spts_d, filt_d, filt2_d, U_filt_d;
     mdvector_gpu<double> Vander2DInv_tr_d, Vander2D_tr_d;
     double max_sensor_d;
 #endif
 
     void setup_vandermonde_matrices();
     void setup_concentration_matrix();
-    double calc_expfilter_coeffs(int in_mode);
+    double calc_expfilter_coeffs(int in_mode, int type);
     void setup_expfilter_matrix();
     void setup_threshold();
     void setup_oppS();
@@ -65,6 +65,7 @@ class ShockCapture
     void compute_Unodal();
     void limiter();
     void apply_expfilter();
+    void apply_expfilter_type2();
 
 };
 

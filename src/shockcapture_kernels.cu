@@ -87,14 +87,15 @@ void compute_max_sensor_wrapper(mdvector_gpu<double>& KS, mdvector_gpu<double>& 
 
 __global__
 void copy_filtered_solution(mdvector_gpu<double> U_spts_limited, mdvector_gpu<double> U_spts, 
-    mdvector_gpu<double> sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double> sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars, int type)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (ele >= nEles) return;
 
   // Check for sensor value
-  if (sensor(ele) < threshJ) return; //TODO: This causes divergence. Need to address.
+  if ( (type ==1 && sensor(ele) < threshJ) || (type == 2 && sensor(ele) > threshJ) ) 
+    return; //TODO: This causes divergence. Need to address.
 
   for (unsigned int var = 0; var < nVars; var++)
     for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -103,12 +104,12 @@ void copy_filtered_solution(mdvector_gpu<double> U_spts_limited, mdvector_gpu<do
 }
 
 void copy_filtered_solution_wrapper(mdvector_gpu<double>& U_spts_limited, mdvector_gpu<double>& U_spts, 
-    mdvector_gpu<double>& sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double>& sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars, int type)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nEles + threads - 1)/threads;
 
-  copy_filtered_solution<<<blocks, threads>>>(U_spts_limited, U_spts, sensor, threshJ, nSpts, nEles, nVars);
+  copy_filtered_solution<<<blocks, threads>>>(U_spts_limited, U_spts, sensor, threshJ, nSpts, nEles, nVars, type);
 }
 
 __device__

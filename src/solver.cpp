@@ -2049,6 +2049,8 @@ void FRSolver::capture_shock()
 
     /* Method 1 */
     shock.apply_expfilter();
+    if(input->filt2on)
+      shock.apply_expfilter_type2();
 
     /* Method 2 */
     // shock.compute_Umodal();

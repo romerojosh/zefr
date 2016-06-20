@@ -112,6 +112,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "alpha", input.alpha, 1.0);
   read_param(f, "filtexp", input.filtexp, 2.0);
   read_param(f, "nonlin_exp", input.nonlin_exp, 2.0);
+  read_param(f, "filt2on", input.filt2on, (unsigned int) 0);  
 
   f.close();
 

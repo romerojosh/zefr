@@ -8,7 +8,7 @@ void compute_max_sensor_wrapper(mdvector_gpu<double>& KS, mdvector_gpu<double>& 
     unsigned int nEles, unsigned int nVars, double Q);
 
 void copy_filtered_solution_wrapper(mdvector_gpu<double>& U_spts_filt, mdvector_gpu<double>& U_spts, 
-    mdvector_gpu<double>& sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
+    mdvector_gpu<double>& sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars, int type);
 
 void limiter_wrapper(uint nEles, uint nFaces, uint nVars, double threshJ, mdvector_gpu<int> ele_adj_d, 
 	mdvector_gpu<double> sensor_d, mdvector_gpu<double>& Umodal_d);

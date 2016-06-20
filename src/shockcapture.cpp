@@ -54,6 +54,7 @@ void ShockCapture::setup(InputStruct *input, FRSolver &solver)
   Vander2DInv_tr_d = Vander2DInv_tr;
   Vander2D_tr_d = Vander2D_tr;
   filt_d = filt;
+  filt2_d = filt2;
 #endif
 }
 
@@ -154,13 +155,19 @@ void ShockCapture::setup_concentration_matrix()
 	}
 }
 
-double ShockCapture::calc_expfilter_coeffs(int in_mode)
+double ShockCapture::calc_expfilter_coeffs(int in_mode, int type)
 {
 // Evaluate exponential filter
   double sigma, eta;
   sigma = 1;
+
+  // For shock capturing
   double alpha = input->alpha;
   double s = input->filtexp;
+
+  // For aliasing/Washing away slow high freq. waves
+  double alpha2 = 1;
+  double s2 = 4;
 
   int n_dof=(order+1)*(order+1);
 
@@ -183,12 +190,18 @@ double ShockCapture::calc_expfilter_coeffs(int in_mode)
           if(mode==in_mode) // found the correct mode
           {
             eta = (double)(i+j)/n_dof;
-            sigma = exp(-alpha*pow(eta,s));
 
-            //if(eta <= eta_c)
-              //sigma = 1;
-            //else
-              //sigma = exp(-alpha*pow( (eta - eta_c)/(1 - eta_c), s ));
+            if(type == 1)
+            {
+              sigma = exp(-alpha*pow(eta,s));
+
+              //if(eta <= eta_c)
+                //sigma = 1;
+              //else
+                //sigma = exp(-alpha*pow( (eta - eta_c)/(1 - eta_c), s ));
+            }
+            else
+              sigma = exp(-alpha2*pow(eta,s2));
           }
 
           mode++;
@@ -208,14 +221,19 @@ void ShockCapture::setup_expfilter_matrix()
 {
   /* Product of the diagonal sigma matrix and Vandermonde */
   mdvector<double> temp({eles->nSpts, (order+1)*(order+1)});
+  mdvector<double> temp2({eles->nSpts, (order+1)*(order+1)});
   filt.assign({eles->nSpts, (order+1)*(order+1)});
-  double sigma;
+  filt2.assign({eles->nSpts, (order+1)*(order+1)});
+
+  double sigma, sigma2;
   for (uint i=0; i < eles->nSpts; i++)
   {
-    sigma = calc_expfilter_coeffs(i);
+    sigma = calc_expfilter_coeffs(i,1);
+    sigma2 = calc_expfilter_coeffs(i,2);
     for (uint j=0; j<(order + 1)*(order + 1); j++)
     {
       temp(i,j) = sigma*Vander2DInv(i,j);
+      temp2(i,j) = sigma2*Vander2DInv(i,j);
     }
   }
 
@@ -223,7 +241,11 @@ void ShockCapture::setup_expfilter_matrix()
   for (uint i=0; i < eles->nSpts; i++)
     for (uint j=0; j<(order + 1)*(order + 1); j++)
       for(uint k=0; k<(order + 1)*(order + 1); k++)
-        filt(i,j) += Vander2D(i,k)*temp(k,j); 
+      {
+        filt(i,j) += Vander2D(i,k)*temp(k,j);
+        filt2(i,j) += Vander2D(i,k)*temp2(k,j);
+      }
+         
 }
 
 void ShockCapture::setup_threshold()
@@ -467,7 +489,7 @@ void ShockCapture::compute_Unodal()
     eles->Umodal_d.data(), eles->nDims + 1, 0.0, U_spts_d.data(), eles->nSpts);
 
   // Copy back to eles->U_Spts only when sensor is greater than threshold
-  copy_filtered_solution_wrapper(U_spts_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars);  
+  copy_filtered_solution_wrapper(U_spts_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars, 1);  
 #endif 
 }
 
@@ -506,7 +528,46 @@ void ShockCapture::apply_expfilter()
     eles->U_spts_d.data(), eles->nSpts, 0.0, U_filt_d.data(), eles->nSpts); 
 
   // Copy back to eles->U_Spts only when sensor is greater than threshold
-  copy_filtered_solution_wrapper(U_filt_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars);  
+  copy_filtered_solution_wrapper(U_filt_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars, 1);  
+#endif   
+}
+
+void ShockCapture::apply_expfilter_type2()
+{
+#ifdef _CPU  
+  auto &A = filt2(0,0);
+  auto &B = eles->U_spts(0, 0, 0);
+  auto &C = U_filt(0, 0, 0);
+
+  #ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles * eles->nVars, 
+      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->eles->nSpts);
+  #else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, eles->nEles * eles->nVars, 
+      eles->nSpts, 1.0, &A, eles->nSpts, &B, eles->nSpts, 0.0, &C, eles->eles->nSpts);
+  #endif
+
+  // Copy back to eles->U_Spts only when sensor is greater than threshold
+  #pragma omp parallel for
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    // Check for sensor value
+    if (sensor(ele) > threshJ) continue;
+
+    #pragma omp parallel for collapse(2)    
+    for (unsigned int var = 0; var < eles->nVars; var++)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        eles->U_spts(spt,ele,var) = U_filt(spt,ele,var);
+  }
+
+#endif
+
+#ifdef _GPU
+  cublasDGEMM_wrapper(eles->nSpts, eles->nEles * eles->nVars, eles->nSpts, 1.0, filt2_d.data(), eles->nSpts, 
+    eles->U_spts_d.data(), eles->nSpts, 0.0, U_filt_d.data(), eles->nSpts); 
+
+  // Copy back to eles->U_Spts only when sensor is greater than threshold
+  copy_filtered_solution_wrapper(U_filt_d, eles->U_spts_d, sensor_d, threshJ, eles->nSpts, eles->nEles, eles->nVars, 2);  
 #endif   
 }
 
