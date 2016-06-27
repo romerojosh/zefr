@@ -548,6 +548,117 @@ void compute_dFdUconv_spts_2D_EulerNS(mdvector_gpu<double> dFdU_spts, mdvector_g
   dFdU_spts(spt, ele, 3, 3, 1) = gam * v;
 }
 
+__global__
+void compute_dFdUconv_spts_3D_EulerNS(mdvector_gpu<double> dFdU_spts, mdvector_gpu<double> U_spts, 
+    unsigned int nSpts, unsigned int nEles, double gam)
+{
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  /* Primitive Variables */
+  double rho = U_spts(spt, ele, 0);
+  double u = U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
+  double v = U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
+  double w = U_spts(spt, ele, 3) / U_spts(spt, ele, 0);
+  double e = U_spts(spt, ele, 4);
+
+  /* Set convective dFdU values in the x-direction */
+  dFdU_spts(spt, ele, 0, 0, 0) = 0;
+  dFdU_spts(spt, ele, 1, 0, 0) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * (v*v + w*w));
+  dFdU_spts(spt, ele, 2, 0, 0) = -u * v;
+  dFdU_spts(spt, ele, 3, 0, 0) = -u * w;
+  dFdU_spts(spt, ele, 4, 0, 0) = -gam * e * u / rho + (gam-1.0) * u * (u*u + v*v + w*w);
+
+  dFdU_spts(spt, ele, 0, 1, 0) = 1;
+  dFdU_spts(spt, ele, 1, 1, 0) = (3.0-gam) * u;
+  dFdU_spts(spt, ele, 2, 1, 0) = v;
+  dFdU_spts(spt, ele, 3, 1, 0) = w;
+  dFdU_spts(spt, ele, 4, 1, 0) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v + w*w);
+
+  dFdU_spts(spt, ele, 0, 2, 0) = 0;
+  dFdU_spts(spt, ele, 1, 2, 0) = (1.0-gam) * v;
+  dFdU_spts(spt, ele, 2, 2, 0) = u;
+  dFdU_spts(spt, ele, 3, 2, 0) = 0;
+  dFdU_spts(spt, ele, 4, 2, 0) = (1.0-gam) * u * v;
+
+  dFdU_spts(spt, ele, 0, 3, 0) = 0;
+  dFdU_spts(spt, ele, 1, 3, 0) = (1.0-gam) * w;
+  dFdU_spts(spt, ele, 2, 3, 0) = 0;
+  dFdU_spts(spt, ele, 3, 3, 0) = u;
+  dFdU_spts(spt, ele, 4, 3, 0) = (1.0-gam) * u * w;
+
+  dFdU_spts(spt, ele, 0, 4, 0) = 0;
+  dFdU_spts(spt, ele, 1, 4, 0) = (gam-1.0);
+  dFdU_spts(spt, ele, 2, 4, 0) = 0;
+  dFdU_spts(spt, ele, 3, 4, 0) = 0;
+  dFdU_spts(spt, ele, 4, 4, 0) = gam * u;
+
+  /* Set convective dFdU values in the y-direction */
+  dFdU_spts(spt, ele, 0, 0, 1) = 0;
+  dFdU_spts(spt, ele, 1, 0, 1) = -u * v;
+  dFdU_spts(spt, ele, 2, 0, 1) = 0.5 * ((gam-1.0) * (u*u + w*w) + (gam-3.0) * v*v);
+  dFdU_spts(spt, ele, 3, 0, 1) = -v * w;
+  dFdU_spts(spt, ele, 4, 0, 1) = -gam * e * v / rho + (gam-1.0) * v * (u*u + v*v + w*w);
+
+  dFdU_spts(spt, ele, 0, 1, 1) = 0;
+  dFdU_spts(spt, ele, 1, 1, 1) = v;
+  dFdU_spts(spt, ele, 2, 1, 1) = (1.0-gam) * u;
+  dFdU_spts(spt, ele, 3, 1, 1) = 0;
+  dFdU_spts(spt, ele, 4, 1, 1) = (1.0-gam) * u * v;
+
+  dFdU_spts(spt, ele, 0, 2, 1) = 1;
+  dFdU_spts(spt, ele, 1, 2, 1) = u;
+  dFdU_spts(spt, ele, 2, 2, 1) = (3.0-gam) * v;
+  dFdU_spts(spt, ele, 3, 2, 1) = w;
+  dFdU_spts(spt, ele, 4, 2, 1) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v + w*w);
+
+  dFdU_spts(spt, ele, 0, 3, 1) = 0;
+  dFdU_spts(spt, ele, 1, 3, 1) = 0;
+  dFdU_spts(spt, ele, 2, 3, 1) = (1.0-gam) * w;
+  dFdU_spts(spt, ele, 3, 3, 1) = v;
+  dFdU_spts(spt, ele, 4, 3, 1) = (1.0-gam) * v * w;
+
+  dFdU_spts(spt, ele, 0, 4, 1) = 0;
+  dFdU_spts(spt, ele, 1, 4, 1) = 0;
+  dFdU_spts(spt, ele, 2, 4, 1) = (gam-1.0);
+  dFdU_spts(spt, ele, 3, 4, 1) = 0;
+  dFdU_spts(spt, ele, 4, 4, 1) = gam * v;
+
+  /* Set convective dFdU values in the z-direction */
+  dFdU_spts(spt, ele, 0, 0, 2) = 0;
+  dFdU_spts(spt, ele, 1, 0, 2) = -u * w;
+  dFdU_spts(spt, ele, 2, 0, 2) = -v * w;
+  dFdU_spts(spt, ele, 3, 0, 2) = 0.5 * ((gam-1.0) * (u*u + v*v) + (gam-3.0) * w*w);
+  dFdU_spts(spt, ele, 4, 0, 2) = -gam * e * w / rho + (gam-1.0) * w * (u*u + v*v + w*w);
+
+  dFdU_spts(spt, ele, 0, 1, 2) = 0;
+  dFdU_spts(spt, ele, 1, 1, 2) = w;
+  dFdU_spts(spt, ele, 2, 1, 2) = 0;
+  dFdU_spts(spt, ele, 3, 1, 2) = (1.0-gam) * u;
+  dFdU_spts(spt, ele, 4, 1, 2) = (1.0-gam) * u * w;
+
+  dFdU_spts(spt, ele, 0, 2, 2) = 0;
+  dFdU_spts(spt, ele, 1, 2, 2) = 0;
+  dFdU_spts(spt, ele, 2, 2, 2) = w;
+  dFdU_spts(spt, ele, 3, 2, 2) = (1.0-gam) * v;
+  dFdU_spts(spt, ele, 4, 2, 2) = (1.0-gam) * v * w;
+
+  dFdU_spts(spt, ele, 0, 3, 2) = 1;
+  dFdU_spts(spt, ele, 1, 3, 2) = u;
+  dFdU_spts(spt, ele, 2, 3, 2) = v;
+  dFdU_spts(spt, ele, 3, 3, 2) = (3.0-gam) * w;
+  dFdU_spts(spt, ele, 4, 3, 2) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + v*v + 3.0*w*w);
+
+  dFdU_spts(spt, ele, 0, 4, 2) = 0;
+  dFdU_spts(spt, ele, 1, 4, 2) = 0;
+  dFdU_spts(spt, ele, 2, 4, 2) = 0;
+  dFdU_spts(spt, ele, 3, 4, 2) = (gam-1.0);
+  dFdU_spts(spt, ele, 4, 4, 2) = gam * w;
+}
+
 void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdU_spts, 
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
     unsigned int nDims, double gamma)
@@ -562,7 +673,8 @@ void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdU_spts,
   }
   else
   {
-    ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
+    compute_dFdUconv_spts_3D_EulerNS<<<blocks, threads>>>(dFdU_spts, U_spts, nSpts, 
+      nEles, gamma);
   }
 }
 

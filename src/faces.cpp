@@ -1090,36 +1090,86 @@ void Faces::apply_bcs_dFdU()
       case SYMMETRY_P: /* Symmetry (prescribed) */
       case SLIP_WALL_P: /* Slip Wall (prescribed) */
       {
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
+        if (nDims == 2)
+        {
+          double nx = norm(fpt, 0, 0);
+          double ny = norm(fpt, 1, 0);
 
-        /* Primitive Variables */
-        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+          /* Primitive Variables */
+          double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+          double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
 
-        /* Compute dURdUL */
-        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+          double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+          double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
 
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = 0.5 * (uL * uL + vL * vL - uR * uR - vR * vR);
+          /* Compute dURdUL */
+          dURdUL(0, 0) = 1;
+          dURdUL(1, 0) = 0;
+          dURdUL(2, 0) = 0;
+          dURdUL(3, 0) = 0.5 * (uL*uL + vL*vL - uR*uR - vR*vR);
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 1.0 - nx * nx;
-        dURdUL(2, 1) = -nx * ny;
-        dURdUL(3, 1) = -uL + (1.0 - nx * nx) * uR - nx * ny * vR;
+          dURdUL(0, 1) = 0;
+          dURdUL(1, 1) = 1.0-nx*nx;
+          dURdUL(2, 1) = -nx*ny;
+          dURdUL(3, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR;
 
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = -nx * ny;
-        dURdUL(2, 2) = 1.0 - ny * ny;
-        dURdUL(3, 2) = -vL - ny * ny * uR + (1.0 - ny*ny) * vR;
+          dURdUL(0, 2) = 0;
+          dURdUL(1, 2) = -nx*ny;
+          dURdUL(2, 2) = 1.0-ny*ny;
+          dURdUL(3, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR;
 
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 1;
+          dURdUL(0, 3) = 0;
+          dURdUL(1, 3) = 0;
+          dURdUL(2, 3) = 0;
+          dURdUL(3, 3) = 1;
+        }
+
+        else if (nDims == 3)
+        {
+          double nx = norm(fpt, 0, 0);
+          double ny = norm(fpt, 1, 0);
+          double nz = norm(fpt, 2, 0);
+
+          /* Primitive Variables */
+          double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+          double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+          double wL = U(fpt, 3, 0) / U(fpt, 0, 0);
+
+          double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+          double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+          double wR = U(fpt, 3, 1) / U(fpt, 0, 1);
+
+          /* Compute dURdUL */
+          dURdUL(0, 0) = 1;
+          dURdUL(1, 0) = 0;
+          dURdUL(2, 0) = 0;
+          dURdUL(3, 0) = 0;
+          dURdUL(4, 0) = 0.5 * (uL*uL + vL*vL + wL*wL - uR*uR - vR*vR - wR*wR);
+
+          dURdUL(0, 1) = 0;
+          dURdUL(1, 1) = 1.0-nx*nx;
+          dURdUL(2, 1) = -nx*ny;
+          dURdUL(3, 1) = -nx*nz;
+          dURdUL(4, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR - nx*nz*wR;
+
+          dURdUL(0, 2) = 0;
+          dURdUL(1, 2) = -nx*ny;
+          dURdUL(2, 2) = 1.0-ny*ny;
+          dURdUL(3, 2) = -ny*nz;
+          dURdUL(4, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR - ny*nz*wR;
+
+          dURdUL(0, 3) = 0;
+          dURdUL(1, 3) = -nx*nz;
+          dURdUL(2, 3) = -ny*nz;
+          dURdUL(3, 3) = 1.0-nz*nz;
+          dURdUL(4, 3) = -wL - nx*nz*uR - ny*nz*vR + (1.0-nz*nz)*wR;
+
+          dURdUL(0, 4) = 0;
+          dURdUL(1, 4) = 0;
+          dURdUL(2, 4) = 0;
+          dURdUL(3, 4) = 0;
+          dURdUL(4, 4) = 1;
+        }
 
         break;
       }
@@ -2288,7 +2338,113 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
     }
     else if (nDims == 3)
     {
-      ThrowException("compute_dFdUconv for 3D EulerNS not implemented yet!");
+#pragma omp parallel for collapse(2)
+      for (unsigned int slot = 0; slot < 2; slot++)
+      {
+        for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+        {
+          /* Primitive Variables */
+          double rho = U(fpt, 0, slot);
+          double u = U(fpt, 1, slot) / U(fpt, 0, slot);
+          double v = U(fpt, 2, slot) / U(fpt, 0, slot);
+          double w = U(fpt, 3, slot) / U(fpt, 0, slot);
+          double e = U(fpt, 4, slot);
+          double gam = input->gamma;
+
+          /* Set convective dFdU values in the x-direction */
+          dFdUconv(fpt, 0, 0, 0, slot) = 0;
+          dFdUconv(fpt, 1, 0, 0, slot) = 0.5 * ((gam-3.0) * u*u + (gam-1.0) * (v*v + w*w));
+          dFdUconv(fpt, 2, 0, 0, slot) = -u * v;
+          dFdUconv(fpt, 3, 0, 0, slot) = -u * w;
+          dFdUconv(fpt, 4, 0, 0, slot) = -gam * e * u / rho + (gam-1.0) * u * (u*u + v*v + w*w);
+
+          dFdUconv(fpt, 0, 1, 0, slot) = 1;
+          dFdUconv(fpt, 1, 1, 0, slot) = (3.0-gam) * u;
+          dFdUconv(fpt, 2, 1, 0, slot) = v;
+          dFdUconv(fpt, 3, 1, 0, slot) = w;
+          dFdUconv(fpt, 4, 1, 0, slot) = gam * e / rho + 0.5 * (1.0-gam) * (3.0*u*u + v*v + w*w);
+
+          dFdUconv(fpt, 0, 2, 0, slot) = 0;
+          dFdUconv(fpt, 1, 2, 0, slot) = (1.0-gam) * v;
+          dFdUconv(fpt, 2, 2, 0, slot) = u;
+          dFdUconv(fpt, 3, 2, 0, slot) = 0;
+          dFdUconv(fpt, 4, 2, 0, slot) = (1.0-gam) * u * v;
+
+          dFdUconv(fpt, 0, 3, 0, slot) = 0;
+          dFdUconv(fpt, 1, 3, 0, slot) = (1.0-gam) * w;
+          dFdUconv(fpt, 2, 3, 0, slot) = 0;
+          dFdUconv(fpt, 3, 3, 0, slot) = u;
+          dFdUconv(fpt, 4, 3, 0, slot) = (1.0-gam) * u * w;
+
+          dFdUconv(fpt, 0, 4, 0, slot) = 0;
+          dFdUconv(fpt, 1, 4, 0, slot) = (gam-1.0);
+          dFdUconv(fpt, 2, 4, 0, slot) = 0;
+          dFdUconv(fpt, 3, 4, 0, slot) = 0;
+          dFdUconv(fpt, 4, 4, 0, slot) = gam * u;
+
+          /* Set convective dFdU values in the y-direction */
+          dFdUconv(fpt, 0, 0, 1, slot) = 0;
+          dFdUconv(fpt, 1, 0, 1, slot) = -u * v;
+          dFdUconv(fpt, 2, 0, 1, slot) = 0.5 * ((gam-1.0) * (u*u + w*w) + (gam-3.0) * v*v);
+          dFdUconv(fpt, 3, 0, 1, slot) = -v * w;
+          dFdUconv(fpt, 4, 0, 1, slot) = -gam * e * v / rho + (gam-1.0) * v * (u*u + v*v + w*w);
+
+          dFdUconv(fpt, 0, 1, 1, slot) = 0;
+          dFdUconv(fpt, 1, 1, 1, slot) = v;
+          dFdUconv(fpt, 2, 1, 1, slot) = (1.0-gam) * u;
+          dFdUconv(fpt, 3, 1, 1, slot) = 0;
+          dFdUconv(fpt, 4, 1, 1, slot) = (1.0-gam) * u * v;
+
+          dFdUconv(fpt, 0, 2, 1, slot) = 1;
+          dFdUconv(fpt, 1, 2, 1, slot) = u;
+          dFdUconv(fpt, 2, 2, 1, slot) = (3.0-gam) * v;
+          dFdUconv(fpt, 3, 2, 1, slot) = w;
+          dFdUconv(fpt, 4, 2, 1, slot) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + 3.0*v*v + w*w);
+
+          dFdUconv(fpt, 0, 3, 1, slot) = 0;
+          dFdUconv(fpt, 1, 3, 1, slot) = 0;
+          dFdUconv(fpt, 2, 3, 1, slot) = (1.0-gam) * w;
+          dFdUconv(fpt, 3, 3, 1, slot) = v;
+          dFdUconv(fpt, 4, 3, 1, slot) = (1.0-gam) * v * w;
+
+          dFdUconv(fpt, 0, 4, 1, slot) = 0;
+          dFdUconv(fpt, 1, 4, 1, slot) = 0;
+          dFdUconv(fpt, 2, 4, 1, slot) = (gam-1.0);
+          dFdUconv(fpt, 3, 4, 1, slot) = 0;
+          dFdUconv(fpt, 4, 4, 1, slot) = gam * v;
+
+          /* Set convective dFdU values in the z-direction */
+          dFdUconv(fpt, 0, 0, 2, slot) = 0;
+          dFdUconv(fpt, 1, 0, 2, slot) = -u * w;
+          dFdUconv(fpt, 2, 0, 2, slot) = -v * w;
+          dFdUconv(fpt, 3, 0, 2, slot) = 0.5 * ((gam-1.0) * (u*u + v*v) + (gam-3.0) * w*w);
+          dFdUconv(fpt, 4, 0, 2, slot) = -gam * e * w / rho + (gam-1.0) * w * (u*u + v*v + w*w);
+
+          dFdUconv(fpt, 0, 1, 2, slot) = 0;
+          dFdUconv(fpt, 1, 1, 2, slot) = w;
+          dFdUconv(fpt, 2, 1, 2, slot) = 0;
+          dFdUconv(fpt, 3, 1, 2, slot) = (1.0-gam) * u;
+          dFdUconv(fpt, 4, 1, 2, slot) = (1.0-gam) * u * w;
+
+          dFdUconv(fpt, 0, 2, 2, slot) = 0;
+          dFdUconv(fpt, 1, 2, 2, slot) = 0;
+          dFdUconv(fpt, 2, 2, 2, slot) = w;
+          dFdUconv(fpt, 3, 2, 2, slot) = (1.0-gam) * v;
+          dFdUconv(fpt, 4, 2, 2, slot) = (1.0-gam) * v * w;
+
+          dFdUconv(fpt, 0, 3, 2, slot) = 1;
+          dFdUconv(fpt, 1, 3, 2, slot) = u;
+          dFdUconv(fpt, 2, 3, 2, slot) = v;
+          dFdUconv(fpt, 3, 3, 2, slot) = (3.0-gam) * w;
+          dFdUconv(fpt, 4, 3, 2, slot) = gam * e / rho + 0.5 * (1.0-gam) * (u*u + v*v + 3.0*w*w);
+
+          dFdUconv(fpt, 0, 4, 2, slot) = 0;
+          dFdUconv(fpt, 1, 4, 2, slot) = 0;
+          dFdUconv(fpt, 2, 4, 2, slot) = 0;
+          dFdUconv(fpt, 3, 4, 2, slot) = (gam-1.0);
+          dFdUconv(fpt, 4, 4, 2, slot) = gam * w;
+        }
+      }
     }
 #endif
 
