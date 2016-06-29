@@ -1901,9 +1901,10 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 #ifdef _MPI
 void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo)
 {
+  
   // Split the processes among the overset grids such that they are roughly balanced
 
-  /* --- Read Number of Elements in Each Grid --- */
+  // --- Read Number of Elements in Each Grid --- 
 
   std::vector<int> nElesGrid(input->nGrids);
   int nElesTotal = 0;
@@ -1935,34 +1936,35 @@ void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct
     nElesTotal += nElesGrid[i];
   }
 
-  /* --- Balance the processes across the grids --- */
+  // --- Balance the processes across the grids --- 
 
-  geo.nProcsGrid.resize(input->nGrids);
+  geo.nProcGrid.resize(input->nGrids);
   for (unsigned int i=0; i<input->nGrids; i++)
   {
     double eleRatio = (double)nElesGrid[i]/nElesTotal;
-    geo.nProcsGrid[i] = round(eleRatio*input->nRanks);
+    geo.nProcGrid[i] = round(eleRatio*input->nRanks);
   }
 
-  /* --- Get the final gridID for this rank --- */
+  // --- Get the final gridID for this rank --- 
 
   int g = 0;
-  int procSum = geo.nProcsGrid[0];
+  int procSum = geo.nProcGrid[0];
   while (procSum < input->rank+1 && g < input->nGrids-1)
   {
     g++;
-    procSum += geo.nProcsGrid[g];
+    procSum += geo.nProcGrid[g];
   }
   geo.gridID = g;
 
-  /* --- Split MPI Processes Based Upon gridID: Create MPI_Comm for each grid --- */
+  // --- Split MPI Processes Based Upon gridID: Create MPI_Comm for each grid --- 
 
   MPI_Comm_split(Comm_World, geo.gridID, input->rank, &Comm_Grid);
 
   MPI_Comm_rank(Comm_Grid,&geo.gridRank);
-  MPI_Comm_size(Comm_Grid,&geo.nProcGrid);
+  MPI_Comm_size(Comm_Grid,&geo.nProcsGrid);
 
   geo.gridIdList.resize(input->nRanks);
   MPI_Allgather(&geo.gridID,1,MPI_INT,geo.gridIdList.data(),1,MPI_INT,MPI_COMM_WORLD);
+  
 }
 #endif

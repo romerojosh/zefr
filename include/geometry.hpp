@@ -56,6 +56,9 @@ struct GeoStruct
     std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
     std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
     std::map<unsigned int, MPI_Datatype> mpi_types;
+
+    std::vector<int> nProcGrid;  //! Number of MPI processes assigned to each grid block
+    std::vector<int> gridIdList; //! List of grid ID assigned to each rank
 #endif
 
 #ifdef _GPU
@@ -80,7 +83,7 @@ struct GeoStruct
     std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
 
     unsigned int nGrids;             //! Number of distinct overset grids
-    int nProcGrid;          //! Number of MPI processes assigned to current (overset) grid block
+    int nProcsGrid;          //! Number of MPI processes assigned to current (overset) grid block
     unsigned int gridID;             //! Which (overset) grid block is this process handling
     int gridRank;           //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
     int rank;
