@@ -1,5 +1,5 @@
 ifeq ($(CONFIG),)
-include configfiles/icme.mpi.gpu2.config
+include configfiles/xstream.mpi.gpu.config
 else
 include $(CONFIG)
 endif
