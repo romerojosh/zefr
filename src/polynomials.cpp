@@ -83,7 +83,7 @@ double Legendre2D(unsigned int in_mode, mdvector<double> loc, unsigned int order
     double normCi, normCj;
     mode = 0;
     #pragma omp parallel for
-    for (k=0;k<order*order+1;k++)
+    for (k=0;k<=2*order;k++)
     {
       for (j=0;j<k+1;j++)
       {
