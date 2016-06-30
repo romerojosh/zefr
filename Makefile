@@ -4,7 +4,6 @@ else
 include $(CONFIG)
 endif
 
-
 CXX = g++
 AR = ar -rvs
 CU = nvcc
@@ -42,8 +41,6 @@ ifeq ($(strip $(BLAS)),$(strip ATLAS))
 endif
 
 INCS = -I$(strip $(BLAS_INC_DIR))
-INCS = -I$(strip $(BLAS_DIR))/include 
-INCS += -I$(strip $(BLAS_DIR))/include/openblas
 
 # Setting MPI/METIS flags
 ifeq ($(strip $(MPI)),YES)
@@ -69,41 +66,36 @@ INCS += -I$(CURDIR)/external/tnt/
 INCS += -I$(CURDIR)/external/jama/
 INCS += -I$(strip $(AUX_DIR))/
 
+BINDIR = $(CURDIR)/bin
+SWIGDIR = $(CURDIR)/swig
+
 TARGET = zefr
-OBJS = bin/elements.o bin/faces.o bin/funcs.o bin/geometry.o bin/hexas.o bin/input.o bin/multigrid.o bin/points.o bin/polynomials.o bin/quads.o bin/solver.o bin/filter.o  bin/zefr.o 
+OBJS = $(BINDIR)/elements.o $(BINDIR)/faces.o $(BINDIR)/funcs.o $(BINDIR)/geometry.o $(BINDIR)/hexas.o $(BINDIR)/input.o $(BINDIR)/multigrid.o $(BINDIR)/points.o $(BINDIR)/polynomials.o $(BINDIR)/quads.o $(BINDIR)/solver.o $(BINDIR)/filter.o  $(BINDIR)/zefr.o 
 
 ifeq ($(strip $(ARCH)),GPU)
-	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o  bin/filter_kernels.o
+	OBJS += $(BINDIR)/elements_kernels.o $(BINDIR)/faces_kernels.o $(BINDIR)/solver_kernels.o  $(BINDIR)/filter_kernels.o
 endif
 
 INCS += -I$(CURDIR)/include
 
 $(TARGET): $(OBJS)
-	@$(CXX) $(INCS) -o bin/$(TARGET) $(OBJS) $(LIBS) $(CXXFLAGS)
+	@$(CXX) $(INCS) -o $(BINDIR)/$(TARGET) $(OBJS) $(LIBS) $(CXXFLAGS)
 
-# Option to build libzefr.so for use with SWIG / Python wrapping
-lib: $(OBJS)
-	$(CXX) -shared $(INCS) $(FLAGS) $(CXXFLAGS) -o bin/libzefr.so $(OBJS) $(LIBS)
-#	@$(AR) bin/lib$(TARGET).a $(OBJS)
-
-# Build the library & run SWIG/Python scripts
+# Build the Python extension module (shared library) using SWIG
 swig: FLAGS += -D_BUILD_LIB
 swig: CXXFLAGS += -fPIC
-swig: lib
-	@cp bin/libzefr.so swig/
-	@$(MAKE) -C swig FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
+swig: $(OBJS)
+	@$(MAKE) -C $(SWIGDIR) OBJS='$(OBJS)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
 
-#	cd swig && make FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
-
-bin/%.o: src/%.cpp  include/*.hpp include/*.h
+$(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
 	@mkdir -p bin
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
 
 ifeq ($(strip $(ARCH)),GPU)
-bin/%.o: src/%.cu include/*.hpp include/*.h
+$(BINDIR)/%.o: src/%.cu include/*.hpp include/*.h
 	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS) -D_NO_TNT
 endif
 
 clean:
-	@rm -f bin/$(TARGET) bin/*.o bin/*.a swig/*.so swig/*.pyc swig/zefr.py
+	@rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(SWIGDIR)/*.so $(SWIGDIR)/*.o $(SWIGDIR)/zefr.pyc $(SWIGDIR)/zefr.py
 
