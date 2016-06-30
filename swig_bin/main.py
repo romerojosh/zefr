@@ -1,8 +1,13 @@
+from mpi4py import MPI
 import zefr
 
-inputfile = "input_vortex"
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
+inputfile = "input_channel"
 
 ZEFR = zefr.zefr()
+ZEFR.mpi_init(comm,0)
 ZEFR.initialize(inputfile)
 ZEFR.setup_solver()
 
@@ -16,4 +21,5 @@ for i in range(1,1000):
 ZEFR.write_residual()
 ZEFR.write_solution()
 
-print "Run complete!"
+if rank==0:
+    print "Run complete!"

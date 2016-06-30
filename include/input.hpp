@@ -10,6 +10,12 @@
 #include "inputstruct.hpp"
 #include "macros.hpp"
 
+#ifdef _MPI // This is kinda hacky, but it works and keeps things simple
+#define _mpi_comm MPI_Comm
+#else
+#define _mpi_comm int
+#endif
+
 enum EQN {AdvDiff = 0, EulerNS = 1, Burgers = 2};
 
 /*! Enumeration for original, mesh-file-defined face type */

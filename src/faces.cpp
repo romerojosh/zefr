@@ -13,11 +13,12 @@
 #include "solver_kernels.h"
 #endif
 
-Faces::Faces(GeoStruct *geo, InputStruct *input)
+Faces::Faces(GeoStruct *geo, InputStruct *input, _mpi_comm comm_in)
 {
   this->input = input;
   this->geo = geo;
   nFpts = geo->nGfpts;
+  myComm = comm_in;
 }
 
 void Faces::setup(unsigned int nDims, unsigned int nVars)
@@ -3415,7 +3416,7 @@ void Faces::send_U_data()
     int recvRank = entry.first;
     auto TYPE = entry.second;
 
-    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
 
@@ -3425,7 +3426,7 @@ void Faces::send_U_data()
     int sendRank = entry.first;
     auto TYPE = entry.second;
 
-    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, myComm, &sreqs[sidx]);
     sidx++;
   }
 
@@ -3461,7 +3462,7 @@ void Faces::recv_U_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
 
@@ -3474,7 +3475,7 @@ void Faces::recv_U_data()
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
     sidx++;
   }
 #endif
@@ -3515,7 +3516,7 @@ void Faces::send_dU_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
 #endif
@@ -3525,7 +3526,7 @@ void Faces::send_dU_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
 #endif
@@ -3550,7 +3551,7 @@ void Faces::send_dU_data()
     }
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
     sidx++;
   }
 #endif
@@ -3577,7 +3578,7 @@ void Faces::send_dU_data()
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
     sidx++;
   }
 

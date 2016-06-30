@@ -5,12 +5,26 @@
 // -----------------------------------------------------------------------------
 %header
 %{
+#ifdef _MPI
+#include <mpi.h>
+#define _mpi_comm MPI_Comm
+#else
+#define _mpi_comm int
+#endif
+
 #include "zefr.hpp"
 %}
 
 // -----------------------------------------------------------------------------
 // Header files and other declarations to be parsed as SWIG input
 // -----------------------------------------------------------------------------
+
+#ifdef _MPI
+// MPI SWIG interface file & MPI_Comm to Python Comm typemap
+%include mpi4py/mpi4py.i
+%mpi4py_typemap(Comm,MPI_Comm);
+#endif
+
 %include "inputstruct.hpp"
 %include "zefr.hpp"
 

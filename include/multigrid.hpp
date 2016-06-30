@@ -39,7 +39,7 @@ class PMGrid
 #endif
 
   public:
-    void setup(InputStruct *input, FRSolver &solver);
+    void setup(InputStruct *input, FRSolver &solver, _mpi_comm comm_in);
     void cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_resolution_clock::time_point t1);
     void v_cycle(FRSolver &solver, int fine_order);
 };

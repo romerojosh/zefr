@@ -21,11 +21,12 @@
 #include "macros.hpp"
 #include "mdvector.hpp"
 
-GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
+GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in)
 {
   GeoStruct geo;
   geo.nDims = nDims;
   geo.input = input;
+  geo.myComm = comm_in;
 
   load_mesh_data(input, geo);
 
@@ -1002,7 +1003,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #ifdef _MPI
     geo.nGfpts_mpi = 0;
     int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(geo.myComm, &rank);
 #endif
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -1255,7 +1256,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           geo.fpt_buffer_map[recvRank].push_back(fpt);
 
         /* Send ordered face to paired rank */
-        MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
+        MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, geo.myComm);
       }
       else if (rank == recvRank)
       {
@@ -1265,7 +1266,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         /* Receive ordered face from paired rank */
         MPI_Status temp;
-        MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, MPI_COMM_WORLD, &temp);
+        MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, geo.myComm, &temp);
 
         /* Convert received face_ordered node indexing to partition local indexing */
         for (auto &nd : face_ordered_mpi)
@@ -1339,7 +1340,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       }
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(geo.myComm);
 
     /* Create MPI Derived type for sends/receives */
     for (auto &entry : geo.fpt_buffer_map)
@@ -1360,7 +1361,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       MPI_Type_commit(&geo.mpi_types[sendRank]);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(geo.myComm);
 
 #endif
 
@@ -1645,8 +1646,8 @@ void shuffle_data_by_color(GeoStruct &geo)
 void partition_geometry(InputStruct *input, GeoStruct &geo)
 {
   int rank, nRanks;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+  MPI_Comm_rank(geo.myComm, &rank);
+  MPI_Comm_size(geo.myComm, &nRanks);
 
   /* Setup METIS */
   idx_t options[METIS_NOPTIONS];
@@ -1964,7 +1965,7 @@ void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct
   MPI_Comm_size(Comm_Grid,&geo.nProcsGrid);
 
   geo.gridIdList.resize(input->nRanks);
-  MPI_Allgather(&geo.gridID,1,MPI_INT,geo.gridIdList.data(),1,MPI_INT,MPI_COMM_WORLD);
+  MPI_Allgather(&geo.gridID,1,MPI_INT,geo.gridIdList.data(),1,MPI_INT,geo.myComm);
   
 }
 #endif

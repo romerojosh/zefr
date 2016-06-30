@@ -71,6 +71,7 @@ class Faces
     mdvector<double> dFdURconv, dUcdUR, dFdURvisc, dFddURvisc;
     mdvector<double> dURdUL, ddURddUL;
 
+    _mpi_comm myComm;
 #ifdef _MPI
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
     std::map<unsigned int, mdvector<double>> U_sbuffs, U_rbuffs;
@@ -95,7 +96,7 @@ class Faces
 #endif
 
   public:
-    Faces(GeoStruct *geo, InputStruct *input);
+    Faces(GeoStruct *geo, InputStruct *input, _mpi_comm comm_in);
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U(unsigned int startFpt, unsigned int endFpt);
     void compute_common_F(unsigned int startFpt, unsigned int endFpt);

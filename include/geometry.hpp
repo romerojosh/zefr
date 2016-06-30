@@ -50,6 +50,7 @@ struct GeoStruct
     std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
     std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
 
+    _mpi_comm myComm;
 #ifdef _MPI
     unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
@@ -93,7 +94,7 @@ public:
 
 };
 
-GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims);
+GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in);
 void load_mesh_data(InputStruct *input, GeoStruct &geo);
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input);
 void read_node_coords(std::ifstream &f, GeoStruct &geo);

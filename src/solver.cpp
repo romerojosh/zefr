@@ -48,10 +48,12 @@ FRSolver::FRSolver(InputStruct *input, int order)
 
 }
 
-void FRSolver::setup()
+void FRSolver::setup(_mpi_comm comm_in)
 {
+  myComm = comm_in;
+
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
-  geo = process_mesh(input, order, input->nDims);
+  geo = process_mesh(input, order, input->nDims, myComm);
 
   if (input->rank == 0) std::cout << "Setting up elements and faces..." << std::endl;
 
@@ -60,10 +62,10 @@ void FRSolver::setup()
   else if (input->nDims == 3)
     eles = std::make_shared<Hexas>(&geo, input, order);
 
-  faces = std::make_shared<Faces>(&geo, input);
+  faces = std::make_shared<Faces>(&geo, input, myComm);
 
   faces->setup(eles->nDims, eles->nVars);
-  eles->setup(faces);
+  eles->setup(faces, myComm);
 
   if (input->rank == 0) std::cout << "Setting up timestepping..." << std::endl;
   setup_update();
@@ -1849,7 +1851,7 @@ void FRSolver::compute_element_dt()
     dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
 
 #ifdef _MPI
-    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
+    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, myComm);
 #endif
 
   }
@@ -1858,7 +1860,7 @@ void FRSolver::compute_element_dt()
 #ifdef _GPU
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfpt_d, 
       eles->weights_spts_d, eles->vol_d, eles->h_ref_d, eles->nSpts1D, CFL, input->ldg_b, order, 
-      input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims);
+      input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims, myComm);
 #endif
 }
 
@@ -2442,13 +2444,13 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
   if (input->rank == 0)
   {
-    MPI_Reduce(MPI_IN_PLACE, res.data(), eles->nVars, MPI_DOUBLE, oper, 0, MPI_COMM_WORLD);
-    MPI_Reduce(MPI_IN_PLACE, &nDoF, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, res.data(), eles->nVars, MPI_DOUBLE, oper, 0, myComm);
+    MPI_Reduce(MPI_IN_PLACE, &nDoF, 1, MPI_INT, MPI_SUM, 0, myComm);
   }
   else
   {
-    MPI_Reduce(res.data(), res.data(), eles->nVars, MPI_DOUBLE, oper, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&nDoF, &nDoF, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(res.data(), res.data(), eles->nVars, MPI_DOUBLE, oper, 0, myComm);
+    MPI_Reduce(&nDoF, &nDoF, 1, MPI_INT, MPI_SUM, 0, myComm);
   }
 #endif
 
@@ -2494,7 +2496,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
 #ifdef _MPI
   /* Broadcast maximum residual */
-  MPI_Bcast(&res_max, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&res_max, 1, MPI_DOUBLE, 0, myComm);
 #endif
 }
 
@@ -2716,13 +2718,13 @@ void FRSolver::report_forces(std::ofstream &f)
 #ifdef _MPI
   if (input->rank == 0)
   {
-    MPI_Reduce(MPI_IN_PLACE, force_conv.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(MPI_IN_PLACE, force_visc.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, force_conv.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(MPI_IN_PLACE, force_visc.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
   }
   else
   {
-    MPI_Reduce(force_conv.data(), force_conv.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(force_visc.data(), force_visc.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(force_conv.data(), force_conv.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(force_visc.data(), force_visc.data(), eles->nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
   }
 #endif
 
@@ -2904,11 +2906,11 @@ void FRSolver::report_error(std::ofstream &f)
 #ifdef _MPI
   if (input->rank == 0)
   {
-    MPI_Reduce(MPI_IN_PLACE, l2_error.data(), 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, l2_error.data(), 2, MPI_DOUBLE, MPI_SUM, 0, myComm);
   }
   else
   {
-    MPI_Reduce(l2_error.data(), l2_error.data(), 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(l2_error.data(), l2_error.data(), 2, MPI_DOUBLE, MPI_SUM, 0, myComm);
   }
 
 #endif

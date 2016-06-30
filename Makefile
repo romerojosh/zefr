@@ -7,12 +7,11 @@ endif
 CXX = g++
 AR = ar -rvs
 CU = nvcc
-FLAGS += -std=c++11
-CXXFLAGS = -Ofast -Wno-unknown-pragmas
+CXXFLAGS = -std=c++11 -Ofast -Wno-unknown-pragmas
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
 
 WARN_ON = -Wall -Wextra -Wconversion
-WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing 
+WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
 ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
@@ -67,7 +66,7 @@ INCS += -I$(CURDIR)/external/jama/
 INCS += -I$(strip $(AUX_DIR))/
 
 BINDIR = $(CURDIR)/bin
-SWIGDIR = $(CURDIR)/swig
+SWIGDIR = $(CURDIR)/swig_bin
 
 TARGET = zefr
 OBJS = $(BINDIR)/elements.o $(BINDIR)/faces.o $(BINDIR)/funcs.o $(BINDIR)/geometry.o $(BINDIR)/hexas.o $(BINDIR)/input.o $(BINDIR)/multigrid.o $(BINDIR)/points.o $(BINDIR)/polynomials.o $(BINDIR)/quads.o $(BINDIR)/solver.o $(BINDIR)/filter.o  $(BINDIR)/zefr.o 
@@ -79,13 +78,13 @@ endif
 INCS += -I$(CURDIR)/include
 
 $(TARGET): $(OBJS)
-	@$(CXX) $(INCS) -o $(BINDIR)/$(TARGET) $(OBJS) $(LIBS) $(CXXFLAGS)
+	$(CXX) $(INCS) $(OBJS) $(LIBS) $(CXXFLAGS) -o $(BINDIR)/$(TARGET)
 
 # Build the Python extension module (shared library) using SWIG
 swig: FLAGS += -D_BUILD_LIB
 swig: CXXFLAGS += -fPIC
 swig: $(OBJS)
-	@$(MAKE) -C $(SWIGDIR) OBJS='$(OBJS)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
+	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' OBJS='$(OBJS)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
 
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
 	@mkdir -p bin
@@ -97,5 +96,5 @@ $(BINDIR)/%.o: src/%.cu include/*.hpp include/*.h
 endif
 
 clean:
-	@rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(SWIGDIR)/*.so $(SWIGDIR)/*.o $(SWIGDIR)/zefr.pyc $(SWIGDIR)/zefr.py
+	rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(SWIGDIR)/*.so $(SWIGDIR)/*.o $(SWIGDIR)/zefr.pyc $(SWIGDIR)/zefr.py
 

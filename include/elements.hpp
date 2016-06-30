@@ -72,6 +72,7 @@ class Elements
     mdvector<double> CtempSF;
     mdvector<double> CtempFSN, CtempFSN2;
 
+    _mpi_comm myComm;
 
 #ifdef _GPU
     /* GPU data */
@@ -119,7 +120,7 @@ class Elements
 
 
   public:
-    void setup(std::shared_ptr<Faces> faces);
+    void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
     virtual void setup_PMG(int pro_order, int res_order) = 0;
     void extrapolate_U(unsigned int startEle, unsigned int endEle);
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);

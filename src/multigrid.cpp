@@ -13,7 +13,7 @@
 #endif
 
 //void PMGrid::setup(int order, const InputStruct *input, FRSolver &solver)
-void PMGrid::setup(InputStruct *input, FRSolver &solver)
+void PMGrid::setup(InputStruct *input, FRSolver &solver, _mpi_comm comm_in)
 {
   this-> order = input->order;
   this-> input = input;
@@ -51,7 +51,7 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
     if (input->rank == 0) std::cout << "P_pro = " << P_pro << std::endl;
     if (input->rank == 0) std::cout << "P_res = " << P_res << std::endl;
     grids.push_back(std::make_shared<FRSolver>(input, P));
-    grids[n]->setup();
+    grids[n]->setup(comm_in);
     grids[n]->eles->setup_PMG(P_pro, P_res);
 
     /* Allocate memory for corrections and source terms */

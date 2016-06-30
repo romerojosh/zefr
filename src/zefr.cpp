@@ -22,10 +22,12 @@
 int main(int argc, char* argv[])
 {
   int rank = 0; int nRanks = 1;
+  _mpi_comm comm;
 #ifdef _MPI
   MPI_Init(&argc, &argv);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+  comm = MPI_COMM_WORLD;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &nRanks);
 
 #ifdef _GPU
   int nDevices;
@@ -38,8 +40,9 @@ int main(int argc, char* argv[])
 
   cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
 #endif
-
-#endif
+#else
+  comm = 0;
+#endif /* _MPI */
 
   if (argc != 2)
   {
@@ -55,35 +58,34 @@ int main(int argc, char* argv[])
   if (rank == 0)
   {
     std::cout << std::endl;
-    std::cout << R"(          ______     ______     ______   ______             )" << std::endl; 
-    std::cout << R"(         /\___  \   /\  ___\   /\  ___\ /\  == \            )" << std::endl;   
-    std::cout << R"(         \/_/  /__  \ \  __\   \ \  __\ \ \  __<            )" << std::endl;   
-    std::cout << R"(           /\_____\  \ \_____\  \ \_\    \ \_\ \_\          )" << std::endl; 
+    std::cout << R"(          ______     ______     ______   ______             )" << std::endl;
+    std::cout << R"(         /\___  \   /\  ___\   /\  ___\ /\  == \            )" << std::endl;
+    std::cout << R"(         \/_/  /__  \ \  __\   \ \  __\ \ \  __<            )" << std::endl;
+    std::cout << R"(           /\_____\  \ \_____\  \ \_\    \ \_\ \_\          )" << std::endl;
     std::cout << R"(           \/_____/   \/_____/   \/_/     \/_/ /_/          )" << std::endl;
     std::cout << R"(____________________________________________________________)" << std::endl;
     std::cout << R"( "...bear in mind that princes govern all things --         )" << std::endl;
     std::cout << R"(                              save the wind." -Victor Hugo  )" << std::endl;
     std::cout << std::endl;
   }
-                                                   
+
 
   std::string inputfile = argv[1];
 
   if (rank == 0) std::cout << "Reading input file: " << inputfile <<  std::endl;
   auto input = read_input_file(inputfile);
-
   input.rank = rank;
   input.nRanks = nRanks;
 
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   FRSolver solver(&input);
-  solver.setup();
+  solver.setup(comm);
   
   PMGrid pmg;
   if (input.p_multi)
   {
     if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
-    pmg.setup(&input, solver);
+    pmg.setup(&input, solver, comm);
   }
 
 #ifdef _GPU
@@ -169,26 +171,32 @@ int main(int argc, char* argv[])
 
 /* ==== Add in interface functions for use from external code ==== */
 //#define _BUILD_LIB  // for QT editing
+//#define _MPI        // for QT editing
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
 
 zefr::zefr(void)
 {
   // Basic constructor
+#ifndef _MPI
+  myComm = 0;
+  myGrid = 0;
+#endif
 }
 
-void zefr::initialize(char *inputfile)
-{
-  /// TODO: decide how to handle MPI init / communicators
 #ifdef _MPI
-  MPI_Init(&argc, &argv);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+void zefr::mpi_init(MPI_Comm comm_in, int grid_id)
+{
+  myComm = comm_in;
+  myGrid = grid_id;
+
+  MPI_Comm_rank(myComm, &rank);
+  MPI_Comm_size(myComm, &nRanks);
 
 #ifdef _GPU
   int nDevices;
   cudaGetDeviceCount(&nDevices);
-
+  /// TODO
   if (nDevices < nRanks)
   {
     //ThrowException("Not enough GPUs for this run. Allocate more!");
@@ -196,8 +204,11 @@ void zefr::initialize(char *inputfile)
 
   cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
 #endif
+}
 #endif
 
+void zefr::initialize(char *inputfile)
+{
   /* Print out cool ascii art header */
   if (rank == 0)
   {
@@ -224,12 +235,12 @@ void zefr::setup_solver(void)
 {
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   solver = new FRSolver(&input);
-  solver->setup();
+  solver->setup(myComm);
 
   if (input.p_multi)
   {
     if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
-    pmg.setup(&input, *solver);
+    pmg.setup(&input, *solver, myComm);
   }
 
 #ifdef _GPU
@@ -286,4 +297,4 @@ void zefr::write_error(void)
   solver->report_error(error_file);
 }
 
-#endif
+#endif /* _BUILD_LIB */

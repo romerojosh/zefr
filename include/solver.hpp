@@ -58,6 +58,8 @@ class FRSolver
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
 #endif
 
+    _mpi_comm myComm;
+
     void initialize_U();
     void restart(std::string restart_file);
     void setup_update();
@@ -78,7 +80,7 @@ class FRSolver
   public:
     double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);
-    void setup();
+    void setup(_mpi_comm comm_in);
     void compute_residual(unsigned int stage, unsigned int color = 0);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU

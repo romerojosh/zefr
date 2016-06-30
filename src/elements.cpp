@@ -19,8 +19,10 @@
 #include "solver_kernels.h"
 #endif
 
-void Elements::setup(std::shared_ptr<Faces> faces)
+void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 {
+  myComm = comm_in;
+
   set_locs();
   set_shape();
   set_transforms(faces);
