@@ -18,6 +18,7 @@
 #include "solver_kernels.h"
 #include "filter.hpp"
 
+#ifndef _BUILD_LIB
 int main(int argc, char* argv[])
 {
   int rank = 0; int nRanks = 1;
@@ -164,3 +165,125 @@ int main(int argc, char* argv[])
 
   return 0;
 }
+#endif
+
+/* ==== Add in interface functions for use from external code ==== */
+//#define _BUILD_LIB  // for QT editing
+#ifdef _BUILD_LIB
+#include "zefr.hpp"
+
+zefr::zefr(void)
+{
+  // Basic constructor
+}
+
+void zefr::initialize(char *inputfile)
+{
+  /// TODO: decide how to handle MPI init / communicators
+#ifdef _MPI
+  MPI_Init(&argc, &argv);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+
+#ifdef _GPU
+  int nDevices;
+  cudaGetDeviceCount(&nDevices);
+
+  if (nDevices < nRanks)
+  {
+    //ThrowException("Not enough GPUs for this run. Allocate more!");
+  }
+
+  cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
+#endif
+#endif
+
+  /* Print out cool ascii art header */
+  if (rank == 0)
+  {
+    std::cout << std::endl;
+    std::cout << R"(          ______     ______     ______   ______             )" << std::endl;
+    std::cout << R"(         /\___  \   /\  ___\   /\  ___\ /\  == \            )" << std::endl;
+    std::cout << R"(         \/_/  /__  \ \  __\   \ \  __\ \ \  __<            )" << std::endl;
+    std::cout << R"(           /\_____\  \ \_____\  \ \_\    \ \_\ \_\          )" << std::endl;
+    std::cout << R"(           \/_____/   \/_____/   \/_/     \/_/ /_/          )" << std::endl;
+    std::cout << R"(____________________________________________________________)" << std::endl;
+    std::cout << R"( "...bear in mind that princes govern all things --         )" << std::endl;
+    std::cout << R"(                              save the wind." -Victor Hugo  )" << std::endl;
+    std::cout << std::endl;
+  }
+
+  if (rank == 0) std::cout << "Reading input file: " << inputfile <<  std::endl;
+  input = read_input_file(inputfile);
+
+  input.rank = rank;
+  input.nRanks = nRanks;
+}
+
+void zefr::setup_solver(void)
+{
+  if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
+  solver = new FRSolver(&input);
+  solver->setup();
+
+  if (input.p_multi)
+  {
+    if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
+    pmg.setup(&input, *solver);
+  }
+
+#ifdef _GPU
+  start_cublas();
+#endif
+
+  /* Open files to write residual / force / error history output */
+  if (input.restart) /* If restarted, append to existing file */
+  {
+    hist_file.open(input.output_prefix + "/" + input.output_prefix + "_hist.dat", std::ios::app);
+    force_file.open(input.output_prefix + "/" + input.output_prefix + "_forces.dat", std::ios::app);
+    error_file.open(input.output_prefix + "/" + input.output_prefix + "_error.dat", std::ios::app);
+  }
+  else
+  {
+    hist_file.open(input.output_prefix + "/" + input.output_prefix + "_hist.dat");
+    force_file.open(input.output_prefix + "/" + input.output_prefix + "_forces.dat");
+    error_file.open(input.output_prefix + "/" + input.output_prefix + "_error.dat");
+  }
+
+  t_start = std::chrono::high_resolution_clock::now();
+}
+
+void zefr::do_step(void)
+{
+  if (!input.p_multi)
+  {
+    solver->update();
+    solver->filter_solution();
+  }
+  else
+  {
+    pmg.cycle(*solver, hist_file, t_start);
+  }
+}
+
+void zefr::write_residual(void)
+{
+  solver->report_residuals(hist_file, t_start);
+}
+
+void zefr::write_solution(void)
+{
+  solver->write_solution(input.output_prefix);
+}
+
+void zefr::write_forces(void)
+{
+  solver->report_forces(force_file);
+}
+
+void zefr::write_error(void)
+{
+  solver->report_error(error_file);
+}
+
+#endif

@@ -6,10 +6,20 @@ endif
 
 
 CXX = g++
+AR = ar -rvs
 CU = nvcc
 FLAGS += -std=c++11
-CXXFLAGS = -Ofast -Wall -Wextra -Wconversion -Wno-unknown-pragmas
+CXXFLAGS = -Ofast -Wno-unknown-pragmas
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
+
+WARN_ON = -Wall -Wextra -Wconversion
+WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing 
+
+ifeq ($(strip $(WARNINGS)),YES)
+	CXXFLAGS += $(WARN_ON)
+else
+	CXXFLAGS += $(WARN_OFF)
+endif
 
 # Setting OpenMP flags
 ifeq ($(strip $(OPENMP)),YES)
@@ -20,17 +30,18 @@ endif
 
 # Setting BLAS flags
 ifeq ($(strip $(BLAS)),STANDARD)
-	LIBS = -L$(BLAS_DIR)/lib -lblas
+	LIBS = -L$(BLAS_LIB_DIR) -lblas
 endif
 
 ifeq ($(strip $(BLAS)),OPENBLAS)
-	LIBS = -L$(BLAS_DIR)/lib -lopenblas
+	LIBS = -L$(BLAS_LIB_DIR)/lib -lopenblas
 endif
 
 ifeq ($(strip $(BLAS)),$(strip ATLAS))
-	LIBS = -L$(BLAS_DIR)/lib -latlas
+	LIBS = -L$(BLAS_LIB_DIR) -latlas -lcblas
 endif
 
+INCS = -I$(strip $(BLAS_INC_DIR))
 INCS = -I$(strip $(BLAS_DIR))/include 
 INCS += -I$(strip $(BLAS_DIR))/include/openblas
 
@@ -54,8 +65,8 @@ ifeq ($(strip $(ARCH)),GPU)
 endif
 
 # Including external template libraries
-INCS += -I external/tnt/
-INCS += -I external/jama/
+INCS += -I$(CURDIR)/external/tnt/
+INCS += -I$(CURDIR)/external/jama/
 INCS += -I$(strip $(AUX_DIR))/
 
 TARGET = zefr
@@ -65,10 +76,24 @@ ifeq ($(strip $(ARCH)),GPU)
 	OBJS += bin/elements_kernels.o bin/faces_kernels.o bin/solver_kernels.o  bin/filter_kernels.o
 endif
 
-INCS += -I include
+INCS += -I$(CURDIR)/include
 
 $(TARGET): $(OBJS)
-	$(CXX) $(INCS) -o bin/$(TARGET) $(OBJS) $(LIBS) $(CXXFLAGS)
+	@$(CXX) $(INCS) -o bin/$(TARGET) $(OBJS) $(LIBS) $(CXXFLAGS)
+
+# Option to build libzefr.so for use with SWIG / Python wrapping
+lib: $(OBJS)
+	$(CXX) -shared $(INCS) $(FLAGS) $(CXXFLAGS) -o bin/libzefr.so $(OBJS) $(LIBS)
+#	@$(AR) bin/lib$(TARGET).a $(OBJS)
+
+# Build the library & run SWIG/Python scripts
+swig: FLAGS += -D_BUILD_LIB
+swig: CXXFLAGS += -fPIC
+swig: lib
+	@cp bin/libzefr.so swig/
+	@$(MAKE) -C swig FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
+
+#	cd swig && make FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
 
 bin/%.o: src/%.cpp  include/*.hpp include/*.h
 	@mkdir -p bin
@@ -80,5 +105,5 @@ bin/%.o: src/%.cu include/*.hpp include/*.h
 endif
 
 clean:
-	rm bin/$(TARGET) bin/*.o
+	@rm -f bin/$(TARGET) bin/*.o bin/*.a swig/*.so swig/*.pyc swig/zefr.py
 

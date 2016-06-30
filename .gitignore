@@ -2,5 +2,10 @@
 *.vtu
 *.pvtu
 *.o
+*.so
+*.pyc
 *.cp
 *.dat
+*.out
+*.out.*
+*.pro.user
