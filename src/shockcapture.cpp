@@ -180,9 +180,9 @@ double ShockCapture::calc_expfilter_coeffs(int in_mode, int type)
     int mode;
 
     mode = 0;
-    for (k=0;k<order*order+1;k++)
+    for (k=0;k<=2*order;k++)
     {
-      for (j=0;j<k+1;j++)
+      for (j=0;j<=k;j++)
       {
         i = k-j;
         if(i<=order && j<=order)
