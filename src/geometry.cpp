@@ -1091,7 +1091,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
-          geo.c2f(ele, n) = -1;
+          //geo.c2f(ele, n) = -1;
           continue;
         }
         else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
@@ -1677,6 +1677,8 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     } 
 
     /* Check for collapsed edge (not fully general yet)*/
+    /* TODO: This is hardcoded for first order collapsed triangles, but seems to work. Generalize for
+     * better partitioning. */
     if (nodes.size() < geo.nCornerNodes)
     {
       n += geo.nCornerNodes - 1;
@@ -1689,6 +1691,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     nodes.clear();
 
     /* Loop over faces and search for boundaries */
+    /*
     for (unsigned int k = 0; k < geo.nFacesPerEle; k++)
     {
       face.assign(geo.nNodesPerFace, 0);
@@ -1720,6 +1723,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
         vwgt[i]++;
       }
     }
+    */
 
 
   }
@@ -1730,7 +1734,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   /* TODO: Should just not call this entire function if nRanks == 1 */
   if (nRanks > 1) 
   {
-    int nNodesPerFace = geo.nNodesPerFace; // TODO: What should this be?
+    int nNodesPerFace = geo.nNodesPerFace; // TODO: Related to previous TODO
     int nEles = geo.nEles;
     int nNodes = geo.nNodes;
 
@@ -1762,6 +1766,21 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
       {
         face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+      }
+
+      /* Check if face is collapsed */
+      std::set<unsigned int> nodes;
+      for (auto node : face)
+        nodes.insert(node);
+
+      if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
+      {
+        //geo.c2f(ele, n) = -1;
+        continue;
+      }
+      else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
+      {
+        face.assign(nodes.begin(), nodes.end());
       }
 
       /* Sort for consistency */
