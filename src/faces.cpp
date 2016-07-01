@@ -3629,3 +3629,11 @@ void Faces::recv_dU_data()
 }
 #endif
 
+void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
+{
+  /// TODO : faceMap for blanking [like eleMap]
+  // faceID = faceMap[faceID]
+  int i = faceID * nFpts + fpt;
+  ind    = std::distance(&U(0,0), &U(i,0));
+  stride = std::distance(&U(i,0), &U(i,1));
+}

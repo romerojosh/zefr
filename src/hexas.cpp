@@ -495,6 +495,18 @@ double Hexas::calc_nodal_basis(unsigned int spt, std::vector<double> &loc)
   return val;
 }
 
+double Hexas::calc_nodal_basis(unsigned int spt, double *loc)
+{
+  /* Get indices for Lagrange polynomial evaluation */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+  unsigned int k = idx_spts(spt,2);
+
+  double val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]) * Lagrange(loc_spts_1D, k, loc[2]);
+
+  return val;
+}
+
 double Hexas::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of

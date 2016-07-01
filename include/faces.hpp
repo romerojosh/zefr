@@ -16,6 +16,10 @@
 #include "mdvector_gpu.h"
 #endif
 
+#ifdef _BUILD_LIB
+#include "zefr.hpp"
+#endif
+
 class FRSolver;
 class Elements;
 class Quads;
@@ -26,7 +30,10 @@ class Faces
   friend class Elements;
   friend class Quads;
   friend class Hexas;
-	friend class Filter;
+  friend class Filter;
+#ifdef _BUILD_LIB
+  friend class zefr;
+#endif
 
   private:
     InputStruct *input = NULL;
@@ -109,6 +116,8 @@ class Faces
     void compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt);
     void compute_dUcdU(unsigned int startFpt, unsigned int endFpt);
     void compute_dFcdU(unsigned int startFpt, unsigned int endFpt);
+
+    void get_U_index(int faceID, int fpt, int& ind, int& stride);
 };
 
 #endif /* faces_hpp */

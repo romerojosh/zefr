@@ -2080,3 +2080,21 @@ void Elements::poly_squeeze_ppts()
 
 }
 
+bool Elements::getRefLoc(int cellID, double* xyz, double* rst)
+{
+  /// TODO [copy over Newton's method stuff from Flurry]
+}
+
+void Elements::get_interp_weights(int cellID, double* rst, int* inode, double* weights, int& nweights, int buffSize)
+{
+  /// TODO : modify TIOGA to use strides rather than 'point indices'
+  /// TODO : implement eleMap (in geo?) like in Flurry
+  //assert(nSpts <= buffSize);
+  // cellID = eleMap[cellID];
+  nweights = nSpts;
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    weights[spt] = this->calc_nodal_basis(spt, rst);
+    inode[spt] = cellID*nSpts + spt; //std::distance(&U_spts(0,0,0), &U_spts(spt,cellID,0));
+  }
+}

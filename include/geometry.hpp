@@ -83,6 +83,11 @@ struct GeoStruct
     mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
     std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
 
+    std::vector<int> iblank_node, iblank_cell; //! iblank values for nodes and cells
+
+    int nWall, nOver; //! Number of nodes on wall & overset boundaries
+    std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists
+
     unsigned int nGrids;             //! Number of distinct overset grids
     int nProcsGrid;          //! Number of MPI processes assigned to current (overset) grid block
     unsigned int gridID;             //! Which (overset) grid block is this process handling

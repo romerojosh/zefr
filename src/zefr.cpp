@@ -170,7 +170,7 @@ int main(int argc, char* argv[])
 #endif
 
 /* ==== Add in interface functions for use from external code ==== */
-//#define _BUILD_LIB  // for QT editing
+#define _BUILD_LIB  // for QT editing
 //#define _MPI        // for QT editing
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
@@ -182,6 +182,8 @@ zefr::zefr(void)
   myComm = 0;
   myGrid = 0;
 #endif
+
+  solver = NULL;
 }
 
 #ifdef _MPI
@@ -234,13 +236,15 @@ void zefr::initialize(char *inputfile)
 void zefr::setup_solver(void)
 {
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
-  solver = new FRSolver(&input);
+  solver = std::make_shared<FRSolver>(&input);
   solver->setup(myComm);
 
   if (input.p_multi)
   {
+    pmg = std::make_shared<PMGrid>();
+
     if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
-    pmg.setup(&input, *solver, myComm);
+    pmg->setup(&input, *solver, myComm);
   }
 
 #ifdef _GPU
@@ -273,7 +277,7 @@ void zefr::do_step(void)
   }
   else
   {
-    pmg.cycle(*solver, hist_file, t_start);
+    pmg->cycle(*solver, hist_file, t_start);
   }
 }
 
@@ -295,6 +299,68 @@ void zefr::write_forces(void)
 void zefr::write_error(void)
 {
   solver->report_error(error_file);
+}
+
+void zefr::get_basic_geo_data(int& btag, int& nnodes, double* xyz, int* iblank,
+                              int& nwall, int& nover, int* wallNodes,
+                              int* overNodes, int& nCellTypes, int* nvert_cell,
+                              int* nCells_type, int* c2v)
+{
+  GeoStruct geo = solver->geo;
+
+  btag = myGrid;
+  nnodes = geo.nNodes;
+  xyz = geo.coord_nodes.data();
+  iblank = geo.iblank_node.data();
+  nwall = geo.nWall;
+  nover = geo.nOver;
+  wallNodes = geo.wallNodes.data();
+  overNodes = geo.overNodes.data();
+  nCellTypes = 1;
+  nvert_cell = (int *)&geo.nNodesPerEle;
+  nCells_type = (int *)&geo.nEles;
+  c2v = (int *)geo.nd2gnd.data();
+}
+
+void zefr::get_extra_geo_data()
+{
+
+}
+
+void zefr::get_nodes_per_cell(int &nNodes)
+{
+  nNodes = (int)solver->eles->nSpts;
+}
+
+void zefr::get_nodes_per_face(int faceID, int& nNodes)
+{
+  nNodes = (int)solver->faces->nFpts;
+}
+
+void zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
+{
+  //solver->eles->get_pos_spts(cellID, nNodes, xyz);
+}
+
+void zefr::get_face_nodes(int faceID, int* nNodes, double* xyz)
+{
+  //solver->faces->get_pos_fpts(cellID, nNodes, xyz);
+}
+
+void zefr::get_q_index_face(int faceID, int fpt, int& ind, int& stride)
+{
+  solver->faces->get_U_index(faceID,fpt,ind,stride);
+}
+
+void zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
+{
+  passFlag = solver->eles->getRefLoc(cellID,xyz,rst);
+}
+
+void zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
+                      double* rst, int buffsize)
+{
+  solver->eles->get_interp_weights(cellID,rst,inode,weights,nweights,buffsize);
 }
 
 #endif /* _BUILD_LIB */

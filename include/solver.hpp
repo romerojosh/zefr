@@ -22,13 +22,22 @@
 #include <jama_lu.h>
 #endif
 
+#ifdef _BUILD_LIB
+#include "zefr.hpp"
+#endif
+
 class PMGrid;
+#ifdef _BUILD_LIB
+class zefr;
+#endif
 
 class FRSolver
 {
   friend class PMGrid;
   friend class Filter;
-  
+#ifdef _BUILD_LIB
+  friend class zefr;
+#endif
   private:
     InputStruct *input = NULL;
     GeoStruct geo;
@@ -94,6 +103,8 @@ class FRSolver
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
     void filter_solution();
+
+    /* Routines required for overset interfacing */
 
     /* Routines for implicit method */
     void compute_LHS();

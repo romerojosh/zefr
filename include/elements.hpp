@@ -14,13 +14,20 @@
 #include "mdvector_gpu.h"
 #endif
 
+#ifdef _BUILD_LIB
+#include "zefr.hpp"
+#endif
+
 class FRSolver;
 class PMGrid;
 class Elements
 {
   friend class FRSolver;
   friend class PMGrid;
-	friend class Filter;
+  friend class Filter;
+#ifdef _BUILD_LIB
+  friend class zefr;
+#endif
   protected:
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
@@ -113,6 +120,7 @@ class Elements
                             std::vector<double> &loc) = 0;
 
     virtual double calc_nodal_basis(unsigned int spt, std::vector<double> &loc) = 0;
+    virtual double calc_nodal_basis(unsigned int spt, double *loc) = 0;
     virtual double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
                                    unsigned int dim) = 0;
     virtual double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
@@ -149,6 +157,12 @@ class Elements
     void compute_Uavg();
     void poly_squeeze();
     void poly_squeeze_ppts();
+
+    /* Functions required for overset interfacing */
+    int get_nSpts(void) { return (int)nSpts; }
+    int get_nFpts(void) { return (int)nFpts; }
+    bool getRefLoc(int cellID, double* xyz, double* rst);
+    void get_interp_weights(int cellID, double* rst, int* inode, double* weights, int& nweights, int buffSize);
 };
 
 #endif /* elements_hpp */

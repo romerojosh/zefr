@@ -11,12 +11,15 @@
 #include "mpi.h"
 #endif
 
+class Elements;
+class Faces;
+class FRSolver;
+class PMGrid;
+
 #include "input.hpp"
 #include "macros.hpp"
 #include "multigrid.hpp"
 #include "solver.hpp"
-#include "solver_kernels.h"
-#include "filter.hpp"
 
 class zefr
 {
@@ -49,7 +52,28 @@ public:
   void write_forces(void);
   void write_error(void);
 
-  ~zefr(void) { delete solver; }
+  // Other Misc. Functions
+  InputStruct &get_input(void) { return input; }
+
+  /* ==== Overset-Related Functions ==== */
+
+  // Geometry Access Functions
+  void get_basic_geo_data(int &btag, int &nnodes, double* xyz, int *iblank,
+                          int &nwall, int &nover, int* wallNodes, int *overNodes,
+                          int &nCellTypes, int *nvert_cell, int *nCells_type,
+                          int* c2v);
+
+  void get_extra_geo_data();
+
+  // Callback Functions for TIOGA
+  void get_nodes_per_cell(int& nNodes);
+  void get_nodes_per_face(int faceID, int& nNodes);
+  void get_receptor_nodes(int cellID, int& nNodes, double* xyz);
+  void get_face_nodes(int faceID, int* nNodes, double* xyz);
+  void get_q_index_face(int faceID, int fpt, int& ind, int& stride);
+  void donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst);
+  void donor_frac(int cellID, int& nweights, int* inode,
+                  double* weights, double* rst, int buffsize);
 
 private:
   // Generic data about the run
@@ -57,9 +81,9 @@ private:
   int myGrid = 0;  //! For overset: which grid this rank belongs to
 
   // Basic ZEFR Solver Objects
-  FRSolver *solver;
+  std::shared_ptr<FRSolver> solver;
   InputStruct input;
-  PMGrid pmg;
+  std::shared_ptr<PMGrid> pmg;
 
   // Files to write history output
   std::chrono::high_resolution_clock::time_point t_start;
