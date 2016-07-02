@@ -105,6 +105,17 @@ class FRSolver
     void filter_solution();
 
     /* Routines required for overset interfacing */
+    void check_blanking(void);
+    void process_blanks(void);
+    void process_unblanks(void);
+    void remove_elements(std::unordered_set<int> blankEles);
+    void insert_elements(std::unordered_set<int> ubEles);
+    void remove_faces(std::unordered_set<int> blankIFaces,
+                      std::unordered_set<int> blankMFaces,
+                      std::unordered_set<int> blankOFaces);
+    void insert_faces(std::unordered_set<int> ubIFaces,
+                   std::unordered_set<int> ubMFaces,
+                   std::unordered_set<int> ubOFaces);
 
     /* Routines for implicit method */
     void compute_LHS();

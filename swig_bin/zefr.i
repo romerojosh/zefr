@@ -12,7 +12,7 @@
 #define _mpi_comm int
 #endif
 
-#include "zefr.hpp"
+#include "zefr_interface.hpp"
 %}
 
 // -----------------------------------------------------------------------------
@@ -27,6 +27,7 @@
 
 %include "inputstruct.hpp"
 %include "zefr.hpp"
+%include "zefr_interface.hpp"
 
 // <-- Additional C++ declations [anything that would normally go in a header]
 

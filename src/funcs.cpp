@@ -345,3 +345,87 @@ void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA,
 }
 #endif
 
+//std::ostream& operator<<(std::ostream &os, const point &pt)
+//{
+//  os << "(x,y,z) = " << pt.x << ", " << pt.y << ", " << pt.z;
+//  return os;
+//}
+
+mdvector<double> adjoint(const mdvector<double> &mat)
+{
+  auto dims = mat.shape();
+
+  if (dims[0] != dims[1])
+    ThrowException("Adjoint only meaningful for square matrices.");
+
+  mdvector<double> adj({dims[0],dims[1]});
+
+  int signRow = -1;
+  mdvector<double> Minor({dims[0]-1,dims[1]-1});
+  for (int row = 0; row < dims[0]; row++)
+  {
+    signRow *= -1;
+    int sign = -1*signRow;
+    for (int col = 0; col < dims[1]; col++)
+    {
+      sign *= -1;
+      // Setup the minor matrix (expanding along row, col)
+      int i0 = 0;
+      for (int i = 0; i < dims[0]; i++)
+      {
+        if (i == row) continue;
+        int j0 = 0;
+        for (int j = 0; j < dims[1]; j++)
+        {
+          if (j == col) continue;
+          Minor(i0,j0) = mat(i,j);
+          j0++;
+        }
+        i0++;
+      }
+      // Recall: adjoint is TRANSPOSE of cofactor matrix
+      adj(col,row) = sign*determinant(Minor);
+    }
+  }
+
+  return adj;
+}
+
+double determinant(const mdvector<double> &mat)
+{
+  auto dims = mat.shape();
+
+  if (dims[0] != dims[1])
+    ThrowException("Determinant only meaningful for square matrices.");
+
+  if (dims[0] == 1)
+    return mat(0,0);
+  else if (dims[0] == 2) // Base case
+    return mat(0,0)*mat(1,1) - mat(0,1)*mat(1,0);
+  else
+  {
+    // Use minor-matrix recursion
+    double Det = 0;
+    int sign = -1;
+    mdvector<double> Minor({dims[0]-1, dims[1]-1});
+    for (int row = 0; row < dims[0]; row++)
+    {
+      sign *= -1;
+      // Setup the minor matrix (expanding along first column)
+      int i0 = 0;
+      for (int i = 0; i < dims[0]; i++)
+      {
+        if (i == row) continue;
+        for (int j = 1; j < dims[1]; j++)
+        {
+          Minor(i0,j-1) = mat(i,j);
+        }
+        i0++;
+      }
+      // Add in the minor's determinant
+      Det += sign*determinant(Minor)*mat(row,0);
+    }
+
+    return Det;
+  }
+}

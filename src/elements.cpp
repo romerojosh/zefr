@@ -2080,9 +2080,112 @@ void Elements::poly_squeeze_ppts()
 
 }
 
-bool Elements::getRefLoc(int cellID, double* xyz, double* rst)
+std::vector<double> Elements::getBoundingBox(int ele)
 {
-  /// TODO [copy over Newton's method stuff from Flurry]
+  std::vector<double> bbox = { INFINITY, INFINITY, INFINITY,
+                              -INFINITY,-INFINITY,-INFINITY};
+
+  for (unsigned int node = 0; node < nNodes; node++)
+  {
+    unsigned int nd = geo->nd2gnd(node, ele);
+    for (int dim = 0; dim < nDims; dim++)
+    {
+      double pos = geo->coord_nodes(nd, dim);
+      bbox[dim]   = std::min(bbox[dim],  pos);
+      bbox[dim+3] = std::max(bbox[dim+3],pos);
+    }
+  }
+
+  if (nDims == 2)
+  {
+    bbox[2] = 0;
+    bbox[5] = 0;
+  }
+
+  return bbox;
+}
+
+bool Elements::getRefLoc(int ele, double* xyz, double* rst)
+{
+  /// // First, do a quick check to see if the point is even close to being in the element
+  point pos = point(xyz);
+  point loc;
+
+  double xmin, ymin, zmin;
+  double xmax, ymax, zmax;
+  xmin = ymin = zmin =  1e15;
+  xmax = ymax = zmax = -1e15;
+  double eps = 1e-10;
+
+  auto box = getBoundingBox(ele);
+  xmin = box[0];  ymin = box[1];  zmin = box[2];
+  xmax = box[3];  ymax = box[4];  zmax = box[5];
+
+  if (pos.x < xmin-eps || pos.y < ymin-eps || pos.z < zmin-eps ||
+      pos.x > xmax+eps || pos.y > ymax+eps || pos.z > zmax+eps) {
+    // Point does not lie within cell - return an obviously bad ref position
+    loc = {99.,99.,99.};
+    return false;
+  }
+
+  // Use a relative tolerance to handle extreme grids
+  double h = min(xmax-xmin,ymax-ymin);
+  if (nDims==3) h = min(h,zmax-zmin);
+
+  double tol = 1e-12*h;
+
+  mdvector<double> shape({nNodes});
+  mdvector<double> dshape({nNodes,nDims});
+  mdvector<double> grad({nDims,nDims});
+
+  int iter = 0;
+  int iterMax = 20;
+  double norm = 1;
+  loc = {0, 0, 0};
+  while (norm > tol && iter<iterMax) {
+    shape = calc_shape(shape_order, std::vector<double>{loc.x, loc.y, loc.z});
+    dshape = calc_d_shape(shape_order, std::vector<double>{loc.x, loc.y, loc.z});
+
+    point dx = pos;
+    grad.fill(0);
+    /// TODO (motion)
+    // if (params->motion) {
+    for (int node = 0; node < nNodes; node++)
+    {
+      int nd = geo->nd2gnd(node, ele);
+      for (int i = 0; i < nDims; i++)
+      {
+        for (int j = 0; j < nDims; j++)
+        {
+          grad(i,j) += geo->coord_nodes(nd,i)*dshape(nd,j);
+        }
+        dx[i] -= shape(nd)*geo->coord_nodes(nd,i);
+      }
+    }
+
+    double detJ = determinant(grad);
+
+    auto ginv = adjoint(grad);
+
+    point delta = {0,0,0};
+    for (int i=0; i<nDims; i++)
+      for (int j=0; j<nDims; j++)
+        delta[i] += ginv(i,j)*dx[j]/detJ;
+
+    norm = 0;
+    for (int i=0; i<nDims; i++) {
+      norm += dx[i]*dx[i];
+      loc[i] += delta[i];
+      loc[i] = max(min(loc[i],1.),-1.);
+    }
+
+    iter++;
+    if (iter == iterMax) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 void Elements::get_interp_weights(int cellID, double* rst, int* inode, double* weights, int& nweights, int buffSize)

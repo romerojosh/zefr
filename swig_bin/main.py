@@ -8,7 +8,7 @@ inputfile = "input_channel"
 
 ZEFR = zefr.zefr()
 ZEFR.mpi_init(comm,0)
-ZEFR.initialize(inputfile)
+ZEFR.read_input(inputfile)
 ZEFR.setup_solver()
 
 for i in range(1,1000):

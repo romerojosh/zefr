@@ -115,16 +115,17 @@ class Elements
     virtual void set_transforms(std::shared_ptr<Faces> faces) = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
     virtual mdvector<double> calc_shape(unsigned int shape_order,
-                            std::vector<double> &loc) = 0;
+                             const std::vector<double> &loc) = 0;
     virtual mdvector<double> calc_d_shape(unsigned int shape_order,
-                            std::vector<double> &loc) = 0;
+                             const std::vector<double> &loc) = 0;
 
-    virtual double calc_nodal_basis(unsigned int spt, std::vector<double> &loc) = 0;
+    virtual double calc_nodal_basis(unsigned int spt,
+                   const std::vector<double> &loc) = 0;
     virtual double calc_nodal_basis(unsigned int spt, double *loc) = 0;
-    virtual double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
-                                   unsigned int dim) = 0;
-    virtual double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
-                                   unsigned int dim) = 0;
+    virtual double calc_d_nodal_basis_spts(unsigned int spt,
+                   const std::vector<double> &loc, unsigned int dim) = 0;
+    virtual double calc_d_nodal_basis_fpts(unsigned int fpt,
+                   const std::vector<double> &loc, unsigned int dim) = 0;
 
 
   public:
@@ -161,8 +162,11 @@ class Elements
     /* Functions required for overset interfacing */
     int get_nSpts(void) { return (int)nSpts; }
     int get_nFpts(void) { return (int)nFpts; }
-    bool getRefLoc(int cellID, double* xyz, double* rst);
-    void get_interp_weights(int cellID, double* rst, int* inode, double* weights, int& nweights, int buffSize);
+    bool getRefLoc(int ele, double* xyz, double* rst);
+    void get_interp_weights(int cellID, double* rst, int* inode,
+                            double* weights, int& nweights, int buffSize);
+
+    std::vector<double> getBoundingBox(int ele);
 };
 
 #endif /* elements_hpp */

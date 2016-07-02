@@ -135,6 +135,8 @@ int main(int argc, char* argv[])
       pmg.cycle(solver, hist_file, t1);
     }
     
+    input.iter++;
+
     /* Write output if required */
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
     {
@@ -177,6 +179,21 @@ int main(int argc, char* argv[])
 
 zefr::zefr(void)
 {
+  /* Print out cool ascii art header */
+  if (rank == 0)
+  {
+    std::cout << std::endl;
+    std::cout << R"(          ______     ______     ______   ______             )" << std::endl;
+    std::cout << R"(         /\___  \   /\  ___\   /\  ___\ /\  == \            )" << std::endl;
+    std::cout << R"(         \/_/  /__  \ \  __\   \ \  __\ \ \  __<            )" << std::endl;
+    std::cout << R"(           /\_____\  \ \_____\  \ \_\    \ \_\ \_\          )" << std::endl;
+    std::cout << R"(           \/_____/   \/_____/   \/_/     \/_/ /_/          )" << std::endl;
+    std::cout << R"(____________________________________________________________)" << std::endl;
+    std::cout << R"( "...bear in mind that princes govern all things --         )" << std::endl;
+    std::cout << R"(                              save the wind." -Victor Hugo  )" << std::endl;
+    std::cout << std::endl;
+  }
+
   // Basic constructor
 #ifndef _MPI
   myComm = 0;
@@ -209,23 +226,8 @@ void zefr::mpi_init(MPI_Comm comm_in, int grid_id)
 }
 #endif
 
-void zefr::initialize(char *inputfile)
+void zefr::read_input(char *inputfile)
 {
-  /* Print out cool ascii art header */
-  if (rank == 0)
-  {
-    std::cout << std::endl;
-    std::cout << R"(          ______     ______     ______   ______             )" << std::endl;
-    std::cout << R"(         /\___  \   /\  ___\   /\  ___\ /\  == \            )" << std::endl;
-    std::cout << R"(         \/_/  /__  \ \  __\   \ \  __\ \ \  __<            )" << std::endl;
-    std::cout << R"(           /\_____\  \ \_____\  \ \_\    \ \_\ \_\          )" << std::endl;
-    std::cout << R"(           \/_____/   \/_____/   \/_/     \/_/ /_/          )" << std::endl;
-    std::cout << R"(____________________________________________________________)" << std::endl;
-    std::cout << R"( "...bear in mind that princes govern all things --         )" << std::endl;
-    std::cout << R"(                              save the wind." -Victor Hugo  )" << std::endl;
-    std::cout << std::endl;
-  }
-
   if (rank == 0) std::cout << "Reading input file: " << inputfile <<  std::endl;
   input = read_input_file(inputfile);
 
@@ -279,6 +281,14 @@ void zefr::do_step(void)
   {
     pmg->cycle(*solver, hist_file, t_start);
   }
+
+  input.iter++;
+}
+
+void zefr::do_n_steps(int n)
+{
+  for (int i = 0; i < n; i++)
+    do_step();
 }
 
 void zefr::write_residual(void)
@@ -322,9 +332,30 @@ void zefr::get_basic_geo_data(int& btag, int& nnodes, double* xyz, int* iblank,
   c2v = (int *)geo.nd2gnd.data();
 }
 
-void zefr::get_extra_geo_data()
+void zefr::get_extra_geo_data(int& nFaceTypes, int* nvert_face,
+                              int* nFaces_type, int* f2v, int* f2c, int* c2f,
+                              int* iblank_face, int* iblank_cell)
 {
+  GeoStruct geo = solver->geo;
 
+  nFaceTypes = 1;
+  nvert_face = (int *)&geo.nNodesPerFace;
+  nFaces_type = (int *)&geo.nFaces;
+  f2v = (int *)geo.face_nodes.data();
+  f2c = geo.f2c.data();
+  c2f = geo.c2f.data();
+  iblank_face = geo.iblank_face.data();
+  iblank_cell = geo.iblank_cell.data();
+}
+
+double *zefr::get_u_spts(void)
+{
+  return solver->eles->U_spts.data();
+}
+
+double *zefr::get_u_fpts(void)
+{
+  return solver->faces->U.data();
 }
 
 void zefr::get_nodes_per_cell(int &nNodes)
@@ -332,7 +363,7 @@ void zefr::get_nodes_per_cell(int &nNodes)
   nNodes = (int)solver->eles->nSpts;
 }
 
-void zefr::get_nodes_per_face(int faceID, int& nNodes)
+void zefr::get_nodes_per_face(int& nNodes)
 {
   nNodes = (int)solver->faces->nFpts;
 }
@@ -342,7 +373,7 @@ void zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
   //solver->eles->get_pos_spts(cellID, nNodes, xyz);
 }
 
-void zefr::get_face_nodes(int faceID, int* nNodes, double* xyz)
+void zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 {
   //solver->faces->get_pos_fpts(cellID, nNodes, xyz);
 }
@@ -355,6 +386,9 @@ void zefr::get_q_index_face(int faceID, int fpt, int& ind, int& stride)
 void zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
   passFlag = solver->eles->getRefLoc(cellID,xyz,rst);
+
+  std::cout << "x = " << xyz[0] << ", y = " << xyz[1] << ", z = " << xyz[2] << std::endl;
+  std::cout << "r = " << rst[0] << ", s = " << rst[1] << ", t = " << rst[2] << std::endl;
 }
 
 void zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,

@@ -365,7 +365,7 @@ void Quads::set_normals(std::shared_ptr<Faces> faces)
 
 }
 
-double Quads::calc_nodal_basis(unsigned int spt, std::vector<double> &loc)
+double Quads::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
 {
   /* Get indices for Lagrange polynomial evaluation */
   unsigned int i = idx_spts(spt,0);
@@ -387,7 +387,8 @@ double Quads::calc_nodal_basis(unsigned int spt, double *loc)
   return val;
 }
 
-double Quads::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, unsigned int dim)
+double Quads::calc_d_nodal_basis_spts(unsigned int spt,
+              const std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
@@ -409,7 +410,8 @@ double Quads::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc
 
 }
 
-double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, unsigned int dim)
+double Quads::calc_d_nodal_basis_fpts(unsigned int fpt,
+              const std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
@@ -634,7 +636,7 @@ void Quads::transform_dFdU()
 }
 
 mdvector<double> Quads::calc_shape(unsigned int shape_order, 
-    std::vector<double> &loc)
+                                   const std::vector<double> &loc)
 {
   mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
@@ -702,7 +704,7 @@ mdvector<double> Quads::calc_shape(unsigned int shape_order,
 }
 
 mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
-                          std::vector<double> &loc)
+                                     const std::vector<double> &loc)
 {
   mdvector<double> dshape_val({nNodes, nDims}, 0.0);
   double xi = loc[0];

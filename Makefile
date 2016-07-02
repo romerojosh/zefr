@@ -65,6 +65,7 @@ INCS += -I$(CURDIR)/external/tnt/
 INCS += -I$(CURDIR)/external/jama/
 INCS += -I$(strip $(AUX_DIR))/
 
+SRCDIR = $(CURDIR)/src
 BINDIR = $(CURDIR)/bin
 SWIGDIR = $(CURDIR)/swig_bin
 
@@ -75,17 +76,21 @@ ifeq ($(strip $(ARCH)),GPU)
 	OBJS += $(BINDIR)/elements_kernels.o $(BINDIR)/faces_kernels.o $(BINDIR)/solver_kernels.o  $(BINDIR)/filter_kernels.o
 endif
 
+SOBJS = $(OBJS) $(BINDIR)/zefr_interface.o
+
 INCS += -I$(CURDIR)/include
 
 $(TARGET): $(OBJS)
 	$(CXX) $(INCS) $(OBJS) $(LIBS) $(CXXFLAGS) -o $(BINDIR)/$(TARGET)
 
 # Build the Python extension module (shared library) using SWIG
+.PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
 swig: CXXFLAGS += -fPIC
-swig: $(OBJS)
-	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' OBJS='$(OBJS)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
+swig: $(SOBJS)
+	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
 
+# Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
 	@mkdir -p bin
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)

@@ -1,15 +1,46 @@
 #include "zefr_interface.hpp"
 
+zefr *ZEFR = NULL;
 
-void initialize(MPI_Comm comm_in)
+#ifdef _MPI
+void initialize(MPI_Comm comm_in, int gridID, char *input_file)
 {
-  ZEFR = new zefr();
+  if (!ZEFR) ZEFR = new zefr();
+
+  ZEFR->mpi_init(comm_in, gridID);
+  ZEFR->read_input(input_file);
+}
+#endif
+
+void initialize(char *input_file)
+{
+  if (!ZEFR) ZEFR = new zefr();
+
+#ifdef _MPI
+  ZEFR->mpi_init(MPI_COMM_WORLD, 0);
+#endif
+
+  ZEFR->read_input(input_file);
+}
+
+void set_zefr_object(zefr *_ZEFR)
+{
+  delete ZEFR;
+
+  ZEFR = _ZEFR;
+}
+
+zefr* get_zefr_object(void)
+{
+  return ZEFR;
 }
 
 void finalize(void)
 {
-  delete zefr;
+  delete ZEFR;
 }
+
+/* ---- Data-Acess Functions ---- */
 
 BasicGeo get_basic_geo_data(void)
 {
@@ -22,12 +53,23 @@ BasicGeo get_basic_geo_data(void)
   return geo;
 }
 
+double* get_q_spts(void)
+{
+  return ZEFR->get_u_spts();
+}
+
+double* get_q_fpts(void)
+{
+  return ZEFR->get_u_fpts();
+}
 
 ExtraGeo get_extra_geo_data(void)
 {
   ExtraGeo geo;
 
-  ZEFR->get_extra_geo_data(geo.f2v);
+  ZEFR->get_extra_geo_data(geo.nFaceTypes,geo.nvert_face,geo.nFaces_type,
+                           geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,
+                           geo.iblank_cell);
 
   return geo;
 }
@@ -43,7 +85,10 @@ CallbackFuncs get_callback_funcs(void)
   call.get_q_index_face = get_q_index_face;
   call.donor_inclusion_test = donor_inclusion_test;
   call.donor_frac = donor_frac;
+  call.convert_to_modal = convert_to_modal;
 }
+
+/* ---- TIOGA Callback Functions ---- */
 
 void get_nodes_per_cell(int* cellID, int* nNodes)
 {
@@ -52,7 +97,7 @@ void get_nodes_per_cell(int* cellID, int* nNodes)
 
 void get_nodes_per_face(int* faceID, int* nNodes)
 {
-  ZEFR->get_nodes_per_face(*faceID, *nNodes);
+  ZEFR->get_nodes_per_face(*nNodes);
 }
 
 void get_receptor_nodes(int* cellID, int* nNodes, double* xyz)
@@ -79,4 +124,12 @@ void donor_frac(int* cellID, double* xyz, int* nweights, int* inode,
                 double* weights, double* rst, int* buffsize)
 {
   ZEFR->donor_frac(*cellID, *nweights, inode, weights, rst, *buffsize);
+}
+
+void convert_to_modal(int* cellID, int* nSpts, double* q_in, int* npts, int* index_out, double* q_out)
+{
+  //assert(*nSpts == *npts);
+  *index_out = (*cellID) * (*nSpts);
+  for (int spt = 0; spt < (*nSpts); spt++)
+    q_out[spt] = q_in[spt];
 }

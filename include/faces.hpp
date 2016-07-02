@@ -117,6 +117,7 @@ class Faces
     void compute_dUcdU(unsigned int startFpt, unsigned int endFpt);
     void compute_dFcdU(unsigned int startFpt, unsigned int endFpt);
 
+    //! Get location of right-state U data for a flux point
     void get_U_index(int faceID, int fpt, int& ind, int& stride);
 };
 

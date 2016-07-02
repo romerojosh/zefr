@@ -38,13 +38,16 @@ public:
 #endif
 
   //! Read input file and set basic run parameters
-  void initialize(char *inputfile);
+  void read_input(char *inputfile);
 
   //! Perform preprocessing and prepare to run case
   void setup_solver(void);
 
   //! Run one full time step, including any filtering or multigrid operations
   void do_step(void);
+
+  //! Call "do_step()" n times
+  void do_n_steps(int n);
 
   // Functions to write data to file and/or terminal
   void write_residual(void);
@@ -63,13 +66,19 @@ public:
                           int &nCellTypes, int *nvert_cell, int *nCells_type,
                           int* c2v);
 
-  void get_extra_geo_data();
+  void get_extra_geo_data(int &nFaceTypes, int *nvert_face, int *nFaces_type,
+                          int *f2v, int *f2c, int *c2f, int *iblank_face,
+                          int *iblank_cell);
+
+  // Solution-data access functions
+  double *get_u_spts(void);
+  double *get_u_fpts(void);
 
   // Callback Functions for TIOGA
   void get_nodes_per_cell(int& nNodes);
-  void get_nodes_per_face(int faceID, int& nNodes);
+  void get_nodes_per_face(int& nNodes);
   void get_receptor_nodes(int cellID, int& nNodes, double* xyz);
-  void get_face_nodes(int faceID, int* nNodes, double* xyz);
+  void get_face_nodes(int faceID, int& nNodes, double* xyz);
   void get_q_index_face(int faceID, int fpt, int& ind, int& stride);
   void donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst);
   void donor_frac(int cellID, int& nweights, int* inode,

@@ -483,7 +483,8 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
 
 }
 
-double Hexas::calc_nodal_basis(unsigned int spt, std::vector<double> &loc)
+double Hexas::calc_nodal_basis(unsigned int spt,
+                               const std::vector<double> &loc)
 {
   /* Get indices for Lagrange polynomial evaluation */
   unsigned int i = idx_spts(spt,0);
@@ -507,7 +508,8 @@ double Hexas::calc_nodal_basis(unsigned int spt, double *loc)
   return val;
 }
 
-double Hexas::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, unsigned int dim)
+double Hexas::calc_d_nodal_basis_spts(unsigned int spt,
+              const std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
@@ -534,7 +536,8 @@ double Hexas::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc
 
 }
 
-double Hexas::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, unsigned int dim)
+double Hexas::calc_d_nodal_basis_fpts(unsigned int fpt,
+              const std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
@@ -771,8 +774,8 @@ void Hexas::transform_dFdU()
   ThrowException("Implicit method not implemented for Hex element type yet!");
 }
 
-mdvector<double> Hexas::calc_shape(unsigned int shape_order, 
-                         std::vector<double> &loc)
+mdvector<double> Hexas::calc_shape(unsigned int shape_order,
+                                   const std::vector<double> &loc)
 {
   mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
@@ -832,7 +835,7 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
 }
 
 mdvector<double> Hexas::calc_d_shape(unsigned int shape_order,
-                          std::vector<double> &loc)
+                                     const std::vector<double> &loc)
 {
   mdvector<double> dshape_val({nNodes, nDims}, 0);
   double xi = loc[0];
