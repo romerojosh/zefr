@@ -356,7 +356,7 @@ void FRSolver::restart(std::string restart_file)
             {
               int shift = (ppt / nPpts2D) * nPpts2D;
               if (ppt < nPpts2D || ppt < nPpts1D + shift || ppt > nPpts1D * (nPpts1D-1) + shift || 
-                  (ppt-shift) % nPpts1D == 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts2D - 1))
+                  (ppt-shift) % nPpts1D == 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts1D - 1))
                 continue;
             }
 
