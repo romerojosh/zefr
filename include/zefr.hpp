@@ -49,6 +49,8 @@ public:
   //! Call "do_step()" n times
   void do_n_steps(int n);
 
+  void extrapolate_u();
+
   // Functions to write data to file and/or terminal
   void write_residual(void);
   void write_solution(void);
@@ -93,6 +95,7 @@ private:
   std::shared_ptr<FRSolver> solver;
   InputStruct input;
   std::shared_ptr<PMGrid> pmg;
+  GeoStruct *geo;
 
   // Files to write history output
   std::chrono::high_resolution_clock::time_point t_start;

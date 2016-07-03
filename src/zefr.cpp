@@ -267,6 +267,8 @@ void zefr::setup_solver(void)
     error_file.open(input.output_prefix + "/" + input.output_prefix + "_error.dat");
   }
 
+  geo = &solver->geo;
+
   t_start = std::chrono::high_resolution_clock::now();
 }
 
@@ -289,6 +291,11 @@ void zefr::do_n_steps(int n)
 {
   for (int i = 0; i < n; i++)
     do_step();
+}
+
+void zefr::extrapolate_u(void)
+{
+  solver->eles->extrapolate_U(0, solver->eles->nEles);
 }
 
 void zefr::write_residual(void)
@@ -316,36 +323,32 @@ void zefr::get_basic_geo_data(int& btag, int& nnodes, double* xyz, int* iblank,
                               int* overNodes, int& nCellTypes, int* nvert_cell,
                               int* nCells_type, int* c2v)
 {
-  GeoStruct geo = solver->geo;
-
   btag = myGrid;
-  nnodes = geo.nNodes;
-  xyz = geo.coord_nodes.data();
-  iblank = geo.iblank_node.data();
-  nwall = geo.nWall;
-  nover = geo.nOver;
-  wallNodes = geo.wallNodes.data();
-  overNodes = geo.overNodes.data();
+  nnodes = geo->nNodes;
+  xyz = geo->coord_nodes.data();
+  iblank = geo->iblank_node.data();
+  nwall = geo->nWall;
+  nover = geo->nOver;
+  wallNodes = geo->wallNodes.data();
+  overNodes = geo->overNodes.data();
   nCellTypes = 1;
-  nvert_cell = (int *)&geo.nNodesPerEle;
-  nCells_type = (int *)&geo.nEles;
-  c2v = (int *)geo.nd2gnd.data();
+  nvert_cell = (int *)&geo->nNodesPerEle;
+  nCells_type = (int *)&geo->nEles;
+  c2v = (int *)geo->nd2gnd.data();
 }
 
 void zefr::get_extra_geo_data(int& nFaceTypes, int* nvert_face,
                               int* nFaces_type, int* f2v, int* f2c, int* c2f,
                               int* iblank_face, int* iblank_cell)
 {
-  GeoStruct geo = solver->geo;
-
   nFaceTypes = 1;
-  nvert_face = (int *)&geo.nNodesPerFace;
-  nFaces_type = (int *)&geo.nFaces;
-  f2v = (int *)geo.face_nodes.data();
-  f2c = geo.f2c.data();
-  c2f = geo.c2f.data();
-  iblank_face = geo.iblank_face.data();
-  iblank_cell = geo.iblank_cell.data();
+  nvert_face = (int *)&geo->nNodesPerFace;
+  nFaces_type = (int *)&geo->nFaces;
+  f2v = (int *)geo->face_nodes.data();
+  f2c = geo->f2c.data();
+  c2f = geo->c2f.data();
+  iblank_face = geo->iblank_face.data();
+  iblank_cell = geo->iblank_cell.data();
 }
 
 double *zefr::get_u_spts(void)
@@ -370,12 +373,21 @@ void zefr::get_nodes_per_face(int& nNodes)
 
 void zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 {
-  //solver->eles->get_pos_spts(cellID, nNodes, xyz);
+  nNodes = (int)solver->eles->nSpts;
+
+  for (int spt = 0; spt < nNodes; spt++)
+    for (int dim = 0; dim < geo->nDims; dim++)
+      xyz[3*spt+dim] = geo->coord_spts(spt, cellID, dim);
 }
 
 void zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 {
-  //solver->faces->get_pos_fpts(cellID, nNodes, xyz);
+  nNodes = (int)geo->nFptsPerFace;
+
+  int start_fpt = faceID * nNodes;
+  for (int fpt = 0; fpt < nNodes; fpt++)
+    for (int dim = 0; dim < geo->nDims; dim++)
+      xyz[3*fpt+dim] = solver->faces->coord(start_fpt+fpt, dim);
 }
 
 void zefr::get_q_index_face(int faceID, int fpt, int& ind, int& stride)

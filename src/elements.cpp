@@ -2109,7 +2109,6 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 {
   /// // First, do a quick check to see if the point is even close to being in the element
   point pos = point(xyz);
-  point loc;
 
   double xmin, ymin, zmin;
   double xmax, ymax, zmax;
@@ -2124,7 +2123,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   if (pos.x < xmin-eps || pos.y < ymin-eps || pos.z < zmin-eps ||
       pos.x > xmax+eps || pos.y > ymax+eps || pos.z > zmax+eps) {
     // Point does not lie within cell - return an obviously bad ref position
-    loc = {99.,99.,99.};
+    rst[0] = 99.; rst[1] = 99.; rst[2] = 99.;
     return false;
   }
 
@@ -2141,10 +2140,10 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   int iter = 0;
   int iterMax = 20;
   double norm = 1;
-  loc = {0, 0, 0};
+  rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
   while (norm > tol && iter<iterMax) {
-    shape = calc_shape(shape_order, std::vector<double>{loc.x, loc.y, loc.z});
-    dshape = calc_d_shape(shape_order, std::vector<double>{loc.x, loc.y, loc.z});
+    shape = calc_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
+    dshape = calc_d_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
 
     point dx = pos;
     grad.fill(0);
@@ -2175,8 +2174,8 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
     norm = 0;
     for (int i=0; i<nDims; i++) {
       norm += dx[i]*dx[i];
-      loc[i] += delta[i];
-      loc[i] = max(min(loc[i],1.),-1.);
+      rst[i] += delta[i];
+      rst[i] = max(min(rst[i],1.),-1.);
     }
 
     iter++;

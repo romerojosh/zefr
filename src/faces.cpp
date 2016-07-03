@@ -3632,7 +3632,7 @@ void Faces::recv_dU_data()
 void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
 {
   /// TODO : faceMap for blanking [like eleMap]
-  if (geo->faceMap.size() > 0) faceID = geo->faceMap[faceID];
+//  if (geo->faceMap.size() > 0) faceID = geo->faceMap[faceID];
 
   int i = faceID * nFpts + fpt;
   ind    = std::distance(&U(0,0,1), &U(i,0,1));

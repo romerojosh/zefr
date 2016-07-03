@@ -1264,6 +1264,7 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
         int gfpt = geo.fpt2gfpt(fpt,ele);
