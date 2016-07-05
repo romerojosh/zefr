@@ -7,16 +7,24 @@ endif
 CXX = g++
 AR = ar -rvs
 CU = nvcc
-CXXFLAGS = -std=c++11 -Ofast -Wno-unknown-pragmas
+CXXFLAGS = -std=c++11 -Wno-unknown-pragmas
 CUFLAGS = -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
-
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
+
+DEBUG_FLAGS = -g
+RELEASE_FLAGS = -Ofast
 
 ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
 else
 	CXXFLAGS += $(WARN_OFF)
+endif
+
+ifeq ($(strip $(DEBUG_LEVEL)),1)
+	CXXFLAGS += $(DEBUG_FLAGS)
+else
+	CXXFLAGS += $(RELEASE_FLAGS)
 endif
 
 # Setting OpenMP flags

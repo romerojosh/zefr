@@ -27,9 +27,13 @@ struct GeoStruct
 {
     unsigned int nEles = 0; 
     unsigned int nBnds = 0;
-    unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
+    unsigned int nDims, nNodes, nFaces, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
     unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
     bool per_bnd_flag = false;
+
+    /* Connectivity Data */
+    mdvector<int> ele2nodes, ele2face, face2nodes, face2eles, face2eles_idx;
+
     std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
     std::vector<unsigned int> ele_color_range, ele_color_nEles;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;
@@ -80,7 +84,7 @@ struct GeoStruct
 
     InputStruct *input;
 
-    unsigned int nFaces, nBndFaces, nIntFaces, nMpiFaces, nOverFaces;
+    unsigned int nBndFaces, nIntFaces, nMpiFaces, nOverFaces;
     std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
     mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
     std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c

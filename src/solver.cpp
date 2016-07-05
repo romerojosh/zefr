@@ -1300,6 +1300,7 @@ void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
         int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1334,6 +1335,7 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
     {
       for (unsigned int ele = startEle; ele < endEle; ele++)
       {
+        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
         for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
           int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1365,6 +1367,7 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
         int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1400,6 +1403,7 @@ void FRSolver::dFcdU_from_faces()
     {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
+        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
         for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
           int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1443,6 +1447,7 @@ void FRSolver::dFcdU_from_faces()
       {
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
+          if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
           for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
           {
             int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1487,6 +1492,7 @@ void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned in
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
           double x = geo.coord_spts(spt, ele, 0);
@@ -1553,6 +1559,8 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #pragma omp parallel for collapse(3)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
             for (unsigned int spt = 0; spt < eles->nSpts; spt++)
             {
               if (input->dt_type != 2)
@@ -1566,12 +1574,15 @@ void FRSolver::update(const mdvector_gpu<double> &source)
                   eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
               }
             }
+          }
       }
       else
       {
 #pragma omp parallel for collapse(3)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
             for (unsigned int spt = 0; spt < eles->nSpts; spt++)
             {
               if (input->dt_type != 2)
@@ -1585,6 +1596,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
                   eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
               }
             }
+          }
       }
 #endif
 
@@ -1627,6 +1639,8 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #pragma omp parallel for collapse(3)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
               for (unsigned int spt = 0; spt < eles->nSpts; spt++)
                 if (input->dt_type != 2)
                 {
@@ -1638,12 +1652,15 @@ void FRSolver::update(const mdvector_gpu<double> &source)
                   eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
                     eles->divF_spts(spt, ele, n, stage);
                 }
+            }
         }
         else
         {
 #pragma omp parallel for collapse(3)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
               for (unsigned int spt = 0; spt < eles->nSpts; spt++)
               {
                 if (input->dt_type != 2)
@@ -1657,6 +1674,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
                     (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
                 }
               }
+            }
         }
       }
 #endif
@@ -1790,6 +1808,7 @@ void FRSolver::compute_element_dt()
 #pragma omp parallel for
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     { 
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
@@ -1822,6 +1841,7 @@ void FRSolver::compute_element_dt()
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     { 
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       /* Compute inverse of timestep in each face */
       std::vector<double> dtinv(2*eles->nDims);
       for (unsigned int face = 0; face < 2*eles->nDims; face++)
@@ -2041,6 +2061,7 @@ void FRSolver::write_solution(const std::string &prefix)
     // TODO: Change order of ppt structures for better looping 
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2053,6 +2074,7 @@ void FRSolver::write_solution(const std::string &prefix)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2071,6 +2093,7 @@ void FRSolver::write_solution(const std::string &prefix)
   f << "format=\"ascii\">"<< std::endl;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
+    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
@@ -2087,6 +2110,7 @@ void FRSolver::write_solution(const std::string &prefix)
   unsigned int offset = eles->nNodesPerSubelement;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
+    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       f << offset << " ";
@@ -2152,6 +2176,7 @@ void FRSolver::write_solution(const std::string &prefix)
     f << "format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << std::scientific << std::setprecision(16) << eles->U_ppts(ppt, ele, 0);
@@ -2176,6 +2201,7 @@ void FRSolver::write_solution(const std::string &prefix)
       
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
+        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
         {
           f << std::scientific << std::setprecision(16);
@@ -2195,6 +2221,7 @@ void FRSolver::write_solution(const std::string &prefix)
     f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << filt.sensor(ele) << " ";
@@ -2306,6 +2333,7 @@ void FRSolver::write_color()
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2339,6 +2367,7 @@ void FRSolver::write_color()
   unsigned int offset = eles->nNodesPerSubelement;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
+    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       f << offset << " ";
@@ -2371,6 +2400,7 @@ void FRSolver::write_color()
   f << "format=\"ascii\">"<< std::endl;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
+    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
     for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
     {
       f << std::scientific << std::setprecision(16) << geo.ele_color(ele);
@@ -2409,8 +2439,11 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int ele =0; ele < eles->nEles; ele++)
+    {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         eles->divF_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
+    }
 
   for (unsigned int n = 0; n < eles->nVars; n++)
   {

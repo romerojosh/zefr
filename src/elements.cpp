@@ -141,7 +141,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(node, ele);
+          unsigned int gnd = geo->ele2nodes(node, ele);
           geo->coord_spts(spt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_spts(node, spt);
         }
       }
@@ -151,7 +151,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(node, ele);
+          unsigned int gnd = geo->ele2nodes(node, ele);
           geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
 
           int gfpt = geo->fpt2gfpt(fpt,ele);
@@ -168,7 +168,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(node, ele);
+          unsigned int gnd = geo->ele2nodes(node, ele);
           geo->coord_ppts(ppt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_ppts(node, ppt);
         }
       }
@@ -178,7 +178,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       {
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          unsigned int gnd = geo->nd2gnd(node, ele);
+          unsigned int gnd = geo->ele2nodes(node, ele);
           geo->coord_qpts(qpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_qpts(node, qpt);
         }
       }
