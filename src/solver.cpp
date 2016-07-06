@@ -342,6 +342,9 @@ void FRSolver::restart(std::string restart_file)
 
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
+          /// TODO: make sure this is setup correctly first
+          if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
           unsigned int spt = 0;
           for (unsigned int ppt = 0; ppt < nPpts; ppt++)
           {
@@ -429,6 +432,8 @@ void FRSolver::solver_data_to_device()
     unsigned int N = eles->nSpts * eles->nVars;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
       eles->RHS_ptrs(ele) = eles->RHS_d.data() + ele * N;
 
       if (input->inv_mode)
@@ -442,6 +447,8 @@ void FRSolver::solver_data_to_device()
       unsigned int nElesMax = ceil(geo.nEles / (double) input->n_LHS_blocks);
       for (unsigned int ele = 0; ele < nElesMax; ele++)
       {
+        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
         eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
       }
         
@@ -449,7 +456,9 @@ void FRSolver::solver_data_to_device()
       {
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-            eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
+          if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
+          eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
         }
       }
     }
@@ -458,6 +467,8 @@ void FRSolver::solver_data_to_device()
       unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
       for (unsigned int ele = 0; ele < nElesMax; ele++)
       {
+        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
         eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
         if (input->inv_mode)
           eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
@@ -854,6 +865,8 @@ void FRSolver::compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsign
 #ifndef _NO_TNT
   for (unsigned int ele = 0; ele < endEle - startEle; ele++)
   {
+    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
     /* Copy LHS into TNT object */
     // TODO: Copy can now be removed. Need to investigate column-major TNT array views.
     unsigned int N = eles->nSpts * eles->nVars;
@@ -891,6 +904,8 @@ void FRSolver::compute_RHS(unsigned int color)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
         if (input->dt_type != 2)
@@ -922,6 +937,8 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
         if (input->dt_type != 2)
@@ -966,6 +983,8 @@ void FRSolver::compute_deltaU(unsigned int color)
 
   for (unsigned int ele = startEle; ele < endEle; ele++)
   {
+    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
     /* Create Array1D view of RHS */
     unsigned int N = eles->nSpts * eles->nVars;
     TNT::Array1D<double> b(N, &eles->RHS(0, 0, ele));
@@ -1030,6 +1049,8 @@ void FRSolver::compute_U(unsigned int color)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
         eles->U_spts(spt, ele, n) += eles->deltaU(spt, n, ele);
@@ -1895,6 +1916,8 @@ void FRSolver::compute_SER_dt()
   {
     for (unsigned int ele =0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
         SER_res[0] += (eles->divF_spts(spt, ele, n, 0) / eles->jaco_det_spts(spt, ele)) *
@@ -2351,6 +2374,7 @@ void FRSolver::write_color()
   f << "format=\"ascii\">"<< std::endl;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
+    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
@@ -2855,6 +2879,7 @@ void FRSolver::report_error(std::ofstream &f)
 #pragma omp for collapse (2)
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int qpt = 0; qpt < eles->nQpts; qpt++)
       {
         double U_true = 0.0;
@@ -2998,20 +3023,20 @@ void FRSolver::process_blanks(void)
 
     for (int j = 0; j < geo.nFacesPerEle; j++)
     {
-      int ftype = geo.currFaceType[geo.c2f(ic,j)];
+      int ftype = geo.currFaceType[geo.ele2face(j,ic)];
       switch (ftype)
       {
         case INTERNAL:
-          blankIFaces.insert(geo.c2f(ic,j));
+          blankIFaces.insert(geo.ele2face(j,ic));
           break;
         case BOUNDARY:
-          blankIFaces.insert(geo.c2f(ic,j));
+          blankIFaces.insert(geo.ele2face(j,ic));
           break;
         case MPI_FACE:
-          blankMFaces.insert(geo.c2f(ic,j));
+          blankMFaces.insert(geo.ele2face(j,ic));
           break;
         case OVER_FACE:
-          blankOFaces.insert(geo.c2f(ic,j));
+          blankOFaces.insert(geo.ele2face(j,ic));
           break;
         case HOLE_FACE:
           break;
@@ -3025,8 +3050,8 @@ void FRSolver::process_blanks(void)
   // Find all the internal faces which must be replaced with overset faces
   for (auto &ff:blankIFaces)
   {
-    int ic1 = geo.f2c(ff,0);
-    int ic2 = geo.f2c(ff,1);
+    int ic1 = geo.face2eles(0,ff);
+    int ic2 = geo.face2eles(1,ff);
     if ( (geo.iblank_cell[ic1] != HOLE && geo.iblank_cell[ic2] == HOLE) ||
          (geo.iblank_cell[ic1] == HOLE && geo.iblank_cell[ic2] != HOLE) )
       ubOFaces.insert(ff);
@@ -3096,8 +3121,9 @@ void FRSolver::process_unblanks(void)
   {
     for (int j = 0; j < geo.nFacesPerEle; j++)
     {
-      int ic2 = geo.c2c(ic,j);
-      int ff2 = geo.c2f(ic,j);
+      int ff2 = geo.ele2face(j,ic);
+      int ic2 = geo.face2eles(0,ff2);
+      if (ic2 == ic) ic2 = geo.face2eles(1,ff2);
       if (ic2 >= 0)
       {
         if (geo.iblank_cell[ic2] != HOLE || geo.unblankCells.count(ic2))
@@ -3295,18 +3321,18 @@ void FRSolver::insert_faces(std::unordered_set<int> ubIFaces, std::unordered_set
 
     if (geo.faceType[ff] == INTERNAL)
     {
-      int ic1 = geo.f2c(ff,0);
+      int ic1 = geo.face2eles(0,ff);
       // Find local face ID of global face within first element [on left]
       std::vector<int> cellFaces;
-      cellFaces.assign(&geo.c2f(ic1,0),&geo.c2f(ic1,0)+geo.nFacesPerEle);
+      cellFaces.assign(&geo.ele2face(0,ic1),&geo.ele2face(0,ic1)+geo.nFacesPerEle);
       int fid1 = findFirst(cellFaces,ff);
-      if (geo.f2c(ff,1) == -1) {
+      if (geo.face2eles(1,ff) == -1) {
         ThrowException("Interior face does not have a right element assigned.");
       }
       else
       {
-        int ic2 = geo.f2c(ff,1);
-        cellFaces.assign(&geo.c2f(ic1,0),&geo.c2f(ic1,0)+geo.nFacesPerEle);  // List of cell's faces
+        int ic2 = geo.face2eles(0,ff);
+        cellFaces.assign(&geo.ele2face(0,ic1),&geo.ele2face(0,ic1)+geo.nFacesPerEle);  // List of cell's faces
         int fid2 = findFirst(cellFaces,ff);           // Which one is this face
 //        int relRot = compareOrientation(ic1,fid1,ic2,fid2);
 //        struct faceInfo info;
@@ -3346,12 +3372,12 @@ void FRSolver::insert_faces(std::unordered_set<int> ubIFaces, std::unordered_set
         // Just a normal boundary face
 //        shared_ptr<face> bface = make_shared<boundFace>();
 
-        int ic = geo.f2c(ff,0);
+        int ic = geo.face2eles(0,ff);
         // Find local face ID of global face within element
         std::vector<int> cellFaces;
-        cellFaces.assign(&geo.c2f(ic,0),&geo.c2f(ic,0)+geo.nFacesPerEle);  // List of cell's faces
+        cellFaces.assign(&geo.ele2face(0,ic),&geo.ele2face(0,ic)+geo.nFacesPerEle);  // List of cell's faces
         int fid1 = findFirst(cellFaces,ff);
-        if (geo.f2c(ff,1) != -1)
+        if (geo.face2eles(1,ff) != -1)
         {
           ThrowException("Boundary face has a right element assigned.");
         }
@@ -3395,12 +3421,12 @@ void FRSolver::insert_faces(std::unordered_set<int> ubIFaces, std::unordered_set
 
 //    shared_ptr<mpiFace> mface = make_shared<mpiFace>();
 
-    int ic = geo.f2c(ff,0);
+    int ic = geo.face2eles(0,ff);
     // Find local face ID of global face within element
     int fid1;
     vector<int> cellFaces;
     if (geo.nDims == 2) {
-      cellFaces.assign(&geo.c2f(ic,0),&geo.c2f(ic,0)+geo.nFacesPerEle);  // List of cell's faces
+      cellFaces.assign(&geo.ele2face(0,ic),&geo.ele2face(0,ic)+geo.nFacesPerEle);  // List of cell's faces
       fid1 = findFirst(cellFaces,ff);
     }
     else
@@ -3408,7 +3434,7 @@ void FRSolver::insert_faces(std::unordered_set<int> ubIFaces, std::unordered_set
       fid1 = geo.mpiLocF[ind];
     }
 
-    if (geo.f2c(ff,1) != -1)
+    if (geo.face2eles(1,ff) != -1)
     {
       ThrowException("MPI face has a right element assigned.");
     }
@@ -3456,20 +3482,20 @@ void FRSolver::insert_faces(std::unordered_set<int> ubIFaces, std::unordered_set
 
 //    shared_ptr<overFace> oface = make_shared<overFace>();
 
-    int ic = geo.f2c(ff,0);
-    if (ic == -1 || geo.iblank_cell[geo.f2c(ff,0)] == HOLE) {
-      if (geo.f2c(ff,1) == -1 || geo.iblank_cell[geo.f2c(ff,1)] == HOLE) {
+    int ic = geo.face2eles(0,ff);
+    if (ic == -1 || geo.iblank_cell[geo.face2eles(0,ff)] == HOLE) {
+      if (geo.face2eles(1,ff) == -1 || geo.iblank_cell[geo.face2eles(1,ff)] == HOLE) {
         // This happens when a fringe face is ALSO an MPI-boundary face
         // Since the other processor has the non-blanked cell, just ignore the face here
         // But, this should never happen during unblanking... right?
         ThrowException("Something went wrong in determining MPI/Overset face unblanking.");
       }
-      ic = geo.f2c(ff,1);
+      ic = geo.face2eles(1,ff);
     }
 
     // Find local face ID of global face within first element [on left]
     std::vector<int> cellFaces;
-    cellFaces.assign(&geo.c2f(ic,0),&geo.c2f(ic,0)+geo.nFacesPerEle);  // List of cell's faces
+    cellFaces.assign(&geo.ele2face(0,ic),&geo.ele2face(0,ic)+geo.nFacesPerEle);  // List of cell's faces
     int fid = findFirst(cellFaces,ff);
 
 //    struct faceInfo info;

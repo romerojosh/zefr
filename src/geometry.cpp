@@ -46,6 +46,12 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     shuffle_data_by_color(geo);
   }
 
+  if (input->overset)
+  {
+    geo.iblank_cell.assign(geo.nEles, 1);
+    geo.iblank_face.assign(geo.nEles, 1);
+  }
+
   return geo;
 }
 
@@ -69,7 +75,6 @@ void load_mesh_data(InputStruct *input, GeoStruct &geo)
   /* Load element connectivity data */
   read_element_connectivity(f, geo, input);
   read_boundary_faces(f, geo);
-
 
   set_ele_adjacency(geo);
 
@@ -678,55 +683,13 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     }
   }
 
-  /* Some debug printing. TODO: Remove this. */
-  std::cout << "geo.nFaces = " << geo.nFaces << std::endl;
-
-  std::cout << "geo.ele2nodes" << std::endl;
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-  {
-    for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
-    {
-      std::cout << geo.ele2nodes(nd, ele) << " ";
-    }
-    std::cout << std::endl;
-  }
-
-  std::cout << "geo.face2eles" << std::endl;
-  for (unsigned int face = 0; face < geo.nFaces; face++)
-  {
-    for (unsigned int i = 0; i < 2; i++)
-    {
-      std::cout << geo.face2eles(i, face) << " ";
-    }
-    std::cout << std::endl;
-  }
-
-  std::cout << "geo.face2eles_idx" << std::endl;
-  for (unsigned int face = 0; face < geo.nFaces; face++)
-  {
-    for (unsigned int i = 0; i < 2; i++)
-    {
-      std::cout << geo.face2eles_idx(i, face) << " ";
-    }
-    std::cout << std::endl;
-  }
-
-  std::cout << "geo.face2nodes" << std::endl;
-  for (unsigned int face = 0; face < geo.nFaces; face++)
-  {
-    for (unsigned int nd = 0; nd < geo.nNodesPerFace; nd++)
-    {
-      std::cout << geo.face2nodes(nd, face) << " ";
-    }
-    std::cout << std::endl;
-  }
-
   /* Rewind file */
   f.seekg(pos);
 }
 
 void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 {
+  std::set<int> overPts, wallPts;
   if (geo.nDims == 2)
   {
     std::vector<unsigned int> face(geo.nNodesPerFace, 0);
@@ -765,8 +728,24 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
       /* Sort for consistency and add to map*/
       std::sort(face.begin(), face.end());
-      if (bcType != OVERSET)
-        geo.bnd_faces[face] = bcType;
+//      if (bcType != OVERSET)
+      geo.bnd_faces[face] = bcType;
+      if (bcType == OVERSET)
+      {
+        for (auto &pt:face) overPts.insert(pt);
+      }
+      else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
+               bcType == ISOTHERMAL_NOSLIP_G ||
+               bcType == ISOTHERMAL_NOSLIP_P ||
+               bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
+               bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
+               bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
+               bcType == ADIABATIC_NOSLIP_MOVING_G ||
+               bcType == ADIABATIC_NOSLIP_MOVING_P ||
+               bcType == SYMMETRY_G || bcType == SYMMETRY_P)
+      {
+        for (auto &pt:face) wallPts.insert(pt);
+      }
     }
   }
   else if (geo.nDims == 3)
@@ -840,19 +819,43 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       int bcType = geo.bnd_ids[bnd_id];
 
       std::sort(face.begin(), face.end());
-      if (bcType != OVERSET)
-        geo.bnd_faces[face] = bcType;
+//      if (bcType != OVERSET)
+      geo.bnd_faces[face] = bcType;
+      if (bcType == OVERSET)
+      {
+        for (auto &pt:face) overPts.insert(pt);
+      }
+      else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
+               bcType == ISOTHERMAL_NOSLIP_G ||
+               bcType == ISOTHERMAL_NOSLIP_P ||
+               bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
+               bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
+               bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
+               bcType == ADIABATIC_NOSLIP_MOVING_G ||
+               bcType == ADIABATIC_NOSLIP_MOVING_P ||
+               bcType == SYMMETRY_G || bcType == SYMMETRY_P)
+      {
+        for (auto &pt:face) wallPts.insert(pt);
+      }
     }
 
   }
 
+  geo.nWall = wallPts.size();
+  geo.nOver = overPts.size();
+
+  geo.wallNodes.resize(0);
+  geo.overNodes.resize(0);
+  geo.wallNodes.reserve(geo.nWall);
+  geo.overNodes.reserve(geo.nOver);
+  for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
+  for (auto &pt:overPts) geo.overNodes.push_back(pt);
 }
 
 void set_face_nodes(GeoStruct &geo)
 {
   /* Define node indices for faces */
   geo.face_nodes.assign({geo.nFacesPerEle, geo.nNodesPerFace}, 0);
-
 
   if (geo.nDims == 2)
   {
@@ -933,7 +936,7 @@ void set_ele_adjacency(GeoStruct &geo)
     }
   }
 
-  /* Generate element adjacency */
+  /* Generate element adjacency (element to elements connectivity) */
   geo.ele_adj.assign({geo.nFacesPerEle, geo.nEles});
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
@@ -1222,7 +1225,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
-          geo.c2f(ele, n) = -1;
+          geo.ele2face(n, ele) = -1;
           continue;
         }
         else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */

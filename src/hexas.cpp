@@ -692,6 +692,8 @@ void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo->iblank_cell[ele] != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
         double dUtemp0 = dU_spts(spt, ele, n, 0);
@@ -734,6 +736,8 @@ void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo->iblank_cell[ele] != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
         double Ftemp0 = F_spts(spt, ele, n, 0);

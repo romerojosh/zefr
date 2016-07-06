@@ -47,10 +47,10 @@ struct CallbackFuncs
 };
 
 #ifdef _MPI
-void initialize(MPI_Comm comm_in, int gridID, char* input_file);
-#endif
-
+void initialize(MPI_Comm comm_in, char* inputFile, int nGrids=1, int gridID=0);
+#else
 void initialize(char* input_file);
+#endif
 
 void set_zefr_object(zefr *_ZEFR);
 

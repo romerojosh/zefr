@@ -172,13 +172,25 @@ int main(int argc, char* argv[])
 #endif
 
 /* ==== Add in interface functions for use from external code ==== */
-#define _BUILD_LIB  // for QT editing
+//#define _BUILD_LIB  // for QT editing
 //#define _MPI        // for QT editing
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
 
+#ifdef _MPI
+zefr::zefr(MPI_Comm comm_in, int n_grids, int grid_id)
+#else
 zefr::zefr(void)
+#endif
 {
+  // Basic constructor
+#ifndef _MPI
+  myComm = 0;
+  myGrid = 0;
+#else
+  mpi_init(comm_in, n_grids, grid_id);
+#endif
+
   /* Print out cool ascii art header */
   if (rank == 0)
   {
@@ -194,19 +206,14 @@ zefr::zefr(void)
     std::cout << std::endl;
   }
 
-  // Basic constructor
-#ifndef _MPI
-  myComm = 0;
-  myGrid = 0;
-#endif
-
   solver = NULL;
 }
 
 #ifdef _MPI
-void zefr::mpi_init(MPI_Comm comm_in, int grid_id)
+void zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
 {
   myComm = comm_in;
+  nGrids = n_grids;
   myGrid = grid_id;
 
   MPI_Comm_rank(myComm, &rank);
@@ -233,6 +240,7 @@ void zefr::read_input(char *inputfile)
 
   input.rank = rank;
   input.nRanks = nRanks;
+  input.overset = (nGrids > 1);
 }
 
 void zefr::setup_solver(void)
@@ -344,9 +352,9 @@ void zefr::get_extra_geo_data(int& nFaceTypes, int* nvert_face,
   nFaceTypes = 1;
   nvert_face = (int *)&geo->nNodesPerFace;
   nFaces_type = (int *)&geo->nFaces;
-  f2v = (int *)geo->face_nodes.data();
-  f2c = geo->f2c.data();
-  c2f = geo->c2f.data();
+  f2v = (int *)geo->face2nodes.data();
+  f2c = geo->face2eles.data();
+  c2f = geo->ele2face.data();
   iblank_face = geo->iblank_face.data();
   iblank_cell = geo->iblank_cell.data();
 }

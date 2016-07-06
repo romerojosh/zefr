@@ -86,8 +86,7 @@ struct GeoStruct
 
     unsigned int nBndFaces, nIntFaces, nMpiFaces, nOverFaces;
     std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
-    mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
-    std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
+    std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching ele2face / face2eles
 
     std::vector<int> iblank_node, iblank_cell, iblank_face; //! iblank values for nodes, cells, faces
     std::vector<int> faceType, currFaceType, currIblankCell, currIblankFace; //! Current cell/face status

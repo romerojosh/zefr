@@ -5,9 +5,11 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 
 inputfile = "input_channel"
+nGrids = 1
+gridID = 0
 
-ZEFR = zefr.zefr()
-ZEFR.mpi_init(comm,0)
+zefr.initialize(comm, "input_channel")
+ZEFR = zefr.get_zefr_object()
 ZEFR.read_input(inputfile)
 ZEFR.setup_solver()
 

@@ -3,25 +3,20 @@
 zefr *ZEFR = NULL;
 
 #ifdef _MPI
-void initialize(MPI_Comm comm_in, int gridID, char *input_file)
+void initialize(MPI_Comm comm_in, char *inputFile, int nGrids, int gridID)
 {
-  if (!ZEFR) ZEFR = new zefr();
+  if (!ZEFR) ZEFR = new zefr(comm_in, nGrids, gridID);
 
-  ZEFR->mpi_init(comm_in, gridID);
-  ZEFR->read_input(input_file);
+  ZEFR->read_input(inputFile);
 }
-#endif
-
+#else
 void initialize(char *input_file)
 {
   if (!ZEFR) ZEFR = new zefr();
 
-#ifdef _MPI
-  ZEFR->mpi_init(MPI_COMM_WORLD, 0);
-#endif
-
   ZEFR->read_input(input_file);
 }
+#endif
 
 void set_zefr_object(zefr *_ZEFR)
 {

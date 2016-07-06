@@ -25,8 +25,6 @@ class zefr
 {
 public:
 
-  zefr(void);
-
   /*! Assign MPI communicator and overset-grid ID
    *
    * For MPI cases, Python will call MPI_Init, so we should NOT do that here
@@ -34,7 +32,9 @@ public:
    * (1 communicator per grid)
    */
 #ifdef _MPI
-  void mpi_init(MPI_Comm comm_in, int grid_id=0);
+  zefr(MPI_Comm comm_in = MPI_COMM_WORLD, int n_grids = 1, int grid_id = 0);
+#else
+  zefr(void);
 #endif
 
   //! Read input file and set basic run parameters
@@ -90,6 +90,7 @@ private:
   // Generic data about the run
   int rank = 0, nRanks = 1;
   int myGrid = 0;  //! For overset: which grid this rank belongs to
+  int nGrids = 1;  //! For overset: # of grids in entire system
 
   // Basic ZEFR Solver Objects
   std::shared_ptr<FRSolver> solver;
@@ -103,6 +104,10 @@ private:
   std::ofstream hist_file;
   std::ofstream force_file;
   std::ofstream error_file;
+
+#ifdef _MPI
+  void mpi_init(MPI_Comm comm_in, int n_grids = 1, int grid_id = 0);
+#endif
 
   // Again, to simplify MPI vs. no-MPI compilation, this will be either an
   // MPI_Comm or an int
