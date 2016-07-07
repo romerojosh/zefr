@@ -14,16 +14,16 @@ struct BasicGeo
   int *wallNodes;   //! List of wall-boundary nodes
   int *overNodes;   //! List of overset-boundary nodes
   int nCellTypes;   //! # of different cell types (hex, tet, prism, etc.) [1 for now]
-  int *nvert_cell;  //! # of nodes per cell for each cell type
-  int *nCells_type; //! # of cells for each cell type
+  int nvert_cell;  //! # of nodes per cell for each cell type
+  int nCells_type; //! # of cells for each cell type
   int *c2v;         //! Cell-to-vertex connectivity (one cell type)
 };
 
 struct ExtraGeo
 {
   int nFaceTypes;   //! # of different face types (quad or tri) [1 for now]
-  int *nvert_face;  //! # of nodes per face
-  int *nFaces_type; //! # of faces for each face type
+  int nvert_face;  //! # of nodes per face
+  int nFaces_type; //! # of faces for each face type
   int *f2v;         //! Face-to-vertex connectivity (one face type)
   int *f2c;         //! Face-to-cell connectivity
   int *c2f;         //! Cell-to-face connectivity

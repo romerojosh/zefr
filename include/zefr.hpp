@@ -65,10 +65,10 @@ public:
   // Geometry Access Functions
   void get_basic_geo_data(int &btag, int &nnodes, double* xyz, int *iblank,
                           int &nwall, int &nover, int* wallNodes, int *overNodes,
-                          int &nCellTypes, int *nvert_cell, int *nCells_type,
+                          int &nCellTypes, int& nvert_cell, int& nCells_type,
                           int* c2v);
 
-  void get_extra_geo_data(int &nFaceTypes, int *nvert_face, int *nFaces_type,
+  void get_extra_geo_data(int &nFaceTypes, int& nvert_face, int& nFaces_type,
                           int *f2v, int *f2c, int *c2f, int *iblank_face,
                           int *iblank_cell);
 

@@ -48,8 +48,9 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
 
   if (input->overset)
   {
-    geo.iblank_cell.assign(geo.nEles, 1);
-    geo.iblank_face.assign(geo.nEles, 1);
+    geo.iblank_node.assign(geo.nNodes, NORMAL);
+    geo.iblank_cell.assign(geo.nEles, NORMAL);
+    geo.iblank_face.assign(geo.nFaces, NORMAL);
   }
 
   return geo;
@@ -62,7 +63,8 @@ void load_mesh_data(InputStruct *input, GeoStruct &geo)
   if (!f.is_open())
     ThrowException("Could not open specified mesh file!");
 
-  std::string param;
+  if (input->rank == 0)
+    std::cout << "Reading mesh file " << input->meshfile << std::endl;
 
   /* Process file information */
   /* Load boundary tags */
@@ -174,16 +176,16 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo)
   }
 
   f >> geo.nNodes;
-  geo.coord_nodes.assign({geo.nNodes, geo.nDims});
+  geo.coord_nodes.assign({geo.nDims, geo.nNodes});
   for (unsigned int node = 0; node < geo.nNodes; node++)
   {
     unsigned int vint;
     double vdouble;
     f >> vint;
     if (geo.nDims == 2)
-      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> vdouble;
+      f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> vdouble;
     else if (geo.nDims == 3)
-      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> geo.coord_nodes(node,2);
+      f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> geo.coord_nodes(2,node);
   }
 }
 
@@ -987,7 +989,7 @@ void couple_periodic_bnds(GeoStruct &geo)
       /* Get face node coordinates */
       for (unsigned int node = 0; node < nNodesPerFace; node++)
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
-          coords_face1(node, dim) = geo.coord_nodes(face1[node], dim);
+          coords_face1(node, dim) = geo.coord_nodes(dim, face1[node]);
 
       /* Compute centroid location */
       std::vector<double> c1(geo.nDims, 0.0);
@@ -1012,7 +1014,7 @@ void couple_periodic_bnds(GeoStruct &geo)
         /* Get face node coordinates */
         for (unsigned int node = 0; node < nNodesPerFace; node++)
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            coords_face2(node, dim) = geo.coord_nodes(face2[node], dim);
+            coords_face2(node, dim) = geo.coord_nodes(dim, face2[node]);
 
         /* Compute centroid location */
         std::vector<double> c2(geo.nDims, 0.0);
@@ -1594,6 +1596,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nGfpts = gfpt_bnd;
 #endif
 
+    geo.nFaces = geo.faceList.size();
+
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
 
@@ -1964,7 +1968,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
   /* Reduce node coordinate data to contain only partition local nodes */
   auto coord_nodes_glob = geo.coord_nodes;
-  geo.coord_nodes.assign({(unsigned int) uniqueNodes.size(), geo.nDims}, 0);
+  geo.coord_nodes.assign({geo.nDims, (unsigned int) uniqueNodes.size()}, 0);
   unsigned int idx = 0;
   for (unsigned int nd: uniqueNodes)
   {
@@ -1972,7 +1976,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     geo.node_map_p2g[idx] = nd; /* Map of parition node idx to global node idx */
 
     for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      geo.coord_nodes(idx, dim) = coord_nodes_glob(nd, dim);
+      geo.coord_nodes(dim, idx) = coord_nodes_glob(dim, nd);
 
     idx++;
   }

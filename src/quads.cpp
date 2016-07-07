@@ -205,7 +205,7 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
           for (unsigned int node = 0; node < nNodes; node++)
           {
             unsigned int gnd = geo->ele2nodes(node,ele);
-            jaco_spts(dimX, dimXi, spt, ele) += geo->coord_nodes(gnd,dimX) * dshape_spts(node, spt, dimXi); 
+            jaco_spts(dimX, dimXi, spt, ele) += geo->coord_nodes(dimX,gnd) * dshape_spts(node, spt, dimXi);
           }
         }
       }
@@ -254,7 +254,7 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
 
             unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
-            faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(gnd,dimX) * dshape_fpts(node, fpt, dimXi);
+            faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(dimX,gnd) * dshape_fpts(node, fpt, dimXi);
           }
         }
       }
@@ -273,7 +273,7 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
           for (unsigned int node = 0; node < nNodes; node++)
           {
             unsigned int gnd = geo->ele2nodes(node,ele);
-            jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(gnd,dimX) * dshape_ppts(node, ppt, dimXi); 
+            jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(dimX,gnd) * dshape_ppts(node, ppt, dimXi);
           }
         }
       }
@@ -291,7 +291,7 @@ void Quads::set_transforms(std::shared_ptr<Faces> faces)
           for (unsigned int node = 0; node < nNodes; node++)
           {
             unsigned int gnd = geo->ele2nodes(node, ele);
-            jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(gnd,dimX) * dshape_qpts(node,qpt,dimXi); 
+            jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(dimX,gnd) * dshape_qpts(node,qpt,dimXi);
           }
         }
       }

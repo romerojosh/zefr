@@ -142,7 +142,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_spts(spt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_spts(node, spt);
+          geo->coord_spts(spt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_spts(node, spt);
         }
       }
   
@@ -152,13 +152,13 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
+          geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_fpts(node, fpt);
 
           int gfpt = geo->fpt2gfpt(fpt,ele);
 
           /* Check if on ghost edge */
           if (gfpt != -1)
-            faces->coord(gfpt, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
+            faces->coord(gfpt, dim) += geo->coord_nodes(dim,gnd) * shape_fpts(node, fpt);
 
         }
       }
@@ -169,7 +169,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_ppts(ppt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_ppts(node, ppt);
+          geo->coord_ppts(ppt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_ppts(node, ppt);
         }
       }
 
@@ -179,7 +179,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         for (unsigned int node = 0; node < nNodes; node++)
         {
           unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_qpts(qpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_qpts(node, qpt);
+          geo->coord_qpts(qpt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_qpts(node, qpt);
         }
       }
     }
@@ -2090,7 +2090,7 @@ std::vector<double> Elements::getBoundingBox(int ele)
     unsigned int nd = geo->nd2gnd(node, ele);
     for (int dim = 0; dim < nDims; dim++)
     {
-      double pos = geo->coord_nodes(nd, dim);
+      double pos = geo->coord_nodes(dim,nd);
       bbox[dim]   = std::min(bbox[dim],  pos);
       bbox[dim+3] = std::max(bbox[dim+3],pos);
     }
@@ -2156,9 +2156,9 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
       {
         for (int j = 0; j < nDims; j++)
         {
-          grad(i,j) += geo->coord_nodes(nd,i)*dshape(nd,j);
+          grad(i,j) += geo->coord_nodes(i,nd)*dshape(nd,j);
         }
-        dx[i] -= shape(nd)*geo->coord_nodes(nd,i);
+        dx[i] -= shape(nd)*geo->coord_nodes(i,nd);
       }
     }
 

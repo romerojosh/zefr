@@ -166,6 +166,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "filt_maxLevels", input.filt_maxLevels, (unsigned int) 1);
 
   read_param(f, "overset", input.overset, false);
+  read_param_vec(f, "overset_grids", input.oversetGrids);
 
   read_param(f, "motion", input.motion, false);
 

@@ -172,7 +172,7 @@ int main(int argc, char* argv[])
 #endif
 
 /* ==== Add in interface functions for use from external code ==== */
-//#define _BUILD_LIB  // for QT editing
+#define _BUILD_LIB  // for QT editing
 //#define _MPI        // for QT editing
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
@@ -240,7 +240,12 @@ void zefr::read_input(char *inputfile)
 
   input.rank = rank;
   input.nRanks = nRanks;
-  input.overset = (nGrids > 1);
+  if (nGrids > 1) input.overset = true;
+
+  if (input.overset)
+  {
+    input.meshfile = input.oversetGrids[myGrid];
+  }
 }
 
 void zefr::setup_solver(void)
@@ -328,8 +333,8 @@ void zefr::write_error(void)
 
 void zefr::get_basic_geo_data(int& btag, int& nnodes, double* xyz, int* iblank,
                               int& nwall, int& nover, int* wallNodes,
-                              int* overNodes, int& nCellTypes, int* nvert_cell,
-                              int* nCells_type, int* c2v)
+                              int* overNodes, int& nCellTypes, int &nvert_cell,
+                              int &nCells_type, int* c2v)
 {
   btag = myGrid;
   nnodes = geo->nNodes;
@@ -340,18 +345,18 @@ void zefr::get_basic_geo_data(int& btag, int& nnodes, double* xyz, int* iblank,
   wallNodes = geo->wallNodes.data();
   overNodes = geo->overNodes.data();
   nCellTypes = 1;
-  nvert_cell = (int *)&geo->nNodesPerEle;
-  nCells_type = (int *)&geo->nEles;
+  nvert_cell = geo->nNodesPerEle;
+  nCells_type = geo->nEles;
   c2v = (int *)geo->nd2gnd.data();
 }
 
-void zefr::get_extra_geo_data(int& nFaceTypes, int* nvert_face,
-                              int* nFaces_type, int* f2v, int* f2c, int* c2f,
+void zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
+                              int& nFaces_type, int* f2v, int* f2c, int* c2f,
                               int* iblank_face, int* iblank_cell)
 {
   nFaceTypes = 1;
-  nvert_face = (int *)&geo->nNodesPerFace;
-  nFaces_type = (int *)&geo->nFaces;
+  nvert_face = geo->nNodesPerFace;
+  nFaces_type = geo->nFaces;
   f2v = (int *)geo->face2nodes.data();
   f2c = geo->face2eles.data();
   c2f = geo->ele2face.data();
