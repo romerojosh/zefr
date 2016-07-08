@@ -27,6 +27,8 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   geo.nDims = nDims;
   geo.input = input;
   geo.myComm = comm_in;
+  geo.gridID = input->gridID;
+  geo.gridRank = input->rank;
 
   load_mesh_data(input, geo);
 
@@ -691,7 +693,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
 void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 {
-  std::set<int> overPts, wallPts;
   if (geo.nDims == 2)
   {
     std::vector<unsigned int> face(geo.nNodesPerFace, 0);
@@ -732,22 +733,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       std::sort(face.begin(), face.end());
 //      if (bcType != OVERSET)
       geo.bnd_faces[face] = bcType;
-      if (bcType == OVERSET)
-      {
-        for (auto &pt:face) overPts.insert(pt);
-      }
-      else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
-               bcType == ISOTHERMAL_NOSLIP_G ||
-               bcType == ISOTHERMAL_NOSLIP_P ||
-               bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
-               bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
-               bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
-               bcType == ADIABATIC_NOSLIP_MOVING_G ||
-               bcType == ADIABATIC_NOSLIP_MOVING_P ||
-               bcType == SYMMETRY_G || bcType == SYMMETRY_P)
-      {
-        for (auto &pt:face) wallPts.insert(pt);
-      }
     }
   }
   else if (geo.nDims == 3)
@@ -823,35 +808,9 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       std::sort(face.begin(), face.end());
 //      if (bcType != OVERSET)
       geo.bnd_faces[face] = bcType;
-      if (bcType == OVERSET)
-      {
-        for (auto &pt:face) overPts.insert(pt);
-      }
-      else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
-               bcType == ISOTHERMAL_NOSLIP_G ||
-               bcType == ISOTHERMAL_NOSLIP_P ||
-               bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
-               bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
-               bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
-               bcType == ADIABATIC_NOSLIP_MOVING_G ||
-               bcType == ADIABATIC_NOSLIP_MOVING_P ||
-               bcType == SYMMETRY_G || bcType == SYMMETRY_P)
-      {
-        for (auto &pt:face) wallPts.insert(pt);
-      }
     }
 
   }
-
-  geo.nWall = wallPts.size();
-  geo.nOver = overPts.size();
-
-  geo.wallNodes.resize(0);
-  geo.overNodes.resize(0);
-  geo.wallNodes.reserve(geo.nWall);
-  geo.overNodes.reserve(geo.nOver);
-  for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
-  for (auto &pt:overPts) geo.overNodes.push_back(pt);
 }
 
 void set_face_nodes(GeoStruct &geo)
@@ -1202,6 +1161,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nFaces = 0;
     geo.faceList.resize(0);
 
+    std::set<int> overPts, wallPts;
+
     /* Begin loop through faces */
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
     {
@@ -1244,16 +1205,36 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           /* Check if face is on boundary */
           if (geo.bnd_faces.count(face))
           {
-            unsigned int bnd_id = geo.bnd_faces[face];
+            unsigned int bcType = geo.bnd_faces[face];
             for (auto &fpt : fpts)
             {
-              geo.gfpt2bnd.push_back(bnd_id);
+              geo.gfpt2bnd.push_back(bcType);
               fpt = gfpt_bnd;
               gfpt_bnd++;
             }
 
             bndface2fpts[face] = fpts;
             
+            /* Create lists of all wall- and overset-boundary nodes */
+            if (input->overset)
+            {
+              if (bcType == OVERSET)
+              {
+                for (auto &pt:face) overPts.insert(pt);
+              }
+              else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
+                       bcType == ISOTHERMAL_NOSLIP_G ||
+                       bcType == ISOTHERMAL_NOSLIP_P ||
+                       bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
+                       bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
+                       bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
+                       bcType == ADIABATIC_NOSLIP_MOVING_G ||
+                       bcType == ADIABATIC_NOSLIP_MOVING_P ||
+                       bcType == SYMMETRY_G || bcType == SYMMETRY_P)
+              {
+                for (auto &pt:face) wallPts.insert(pt);
+              }
+            }
           }
 #ifdef _MPI
           /* Check if face is on MPI boundary */
@@ -1362,6 +1343,18 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           }
         }
       }
+    }
+
+    if (input->overset)
+    {
+      geo.nWall = wallPts.size();
+      geo.nOver = overPts.size();
+      geo.wallNodes.resize(0);
+      geo.overNodes.resize(0);
+      geo.wallNodes.reserve(geo.nWall);
+      geo.overNodes.reserve(geo.nOver);
+      for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
+      for (auto &pt:overPts) geo.overNodes.push_back(pt);
     }
 
     /* Process MPI faces, if needed */

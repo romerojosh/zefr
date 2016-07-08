@@ -1962,17 +1962,21 @@ void FRSolver::compute_SER_dt()
   }
 }
 
-void FRSolver::write_solution(const std::string &prefix)
+void FRSolver::write_solution(const std::string &_prefix)
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
 #endif
+
+  std::string prefix = _prefix;
 
   unsigned int iter = current_iter;
   if (input->p_multi)
     iter = iter / input->mg_steps[0];
 
   if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
+
+  if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
 
   std::stringstream ss;
 #ifdef _MPI

@@ -34,6 +34,7 @@ struct InputStruct
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;
+  unsigned int gridID;
   unsigned int oversetMethod, nGrids, quad_order, motion_type;
   std::vector<std::string> oversetGrids;
 

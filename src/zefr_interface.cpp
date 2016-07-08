@@ -81,6 +81,8 @@ CallbackFuncs get_callback_funcs(void)
   call.donor_inclusion_test = donor_inclusion_test;
   call.donor_frac = donor_frac;
   call.convert_to_modal = convert_to_modal;
+
+  return call;
 }
 
 /* ---- TIOGA Callback Functions ---- */

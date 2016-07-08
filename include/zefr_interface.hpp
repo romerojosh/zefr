@@ -3,6 +3,9 @@
 
 #include "zefr.hpp"
 
+typedef void (gnpc)(int*,int*);
+typedef void (gnpf)(int*,int*);
+
 struct BasicGeo
 {
   int btag;         //! Body tag (aka grid ID)

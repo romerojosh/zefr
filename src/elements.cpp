@@ -18,7 +18,8 @@
 #include "elements_kernels.h"
 #include "solver_kernels.h"
 #endif
-
+using std::cout;
+using std::endl;
 void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 {
   myComm = comm_in;
@@ -2084,10 +2085,10 @@ std::vector<double> Elements::getBoundingBox(int ele)
 {
   std::vector<double> bbox = { INFINITY, INFINITY, INFINITY,
                               -INFINITY,-INFINITY,-INFINITY};
-
+assert(ele < nEles); /// DEBUGGING
   for (unsigned int node = 0; node < nNodes; node++)
   {
-    unsigned int nd = geo->nd2gnd(node, ele);
+    unsigned int nd = geo->ele2nodes(node, ele);
     for (int dim = 0; dim < nDims; dim++)
     {
       double pos = geo->coord_nodes(dim,nd);
@@ -2128,8 +2129,8 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   }
 
   // Use a relative tolerance to handle extreme grids
-  double h = min(xmax-xmin,ymax-ymin);
-  if (nDims==3) h = min(h,zmax-zmin);
+  double h = std::min(xmax-xmin,ymax-ymin);
+  if (nDims==3) h = std::min(h,zmax-zmin);
 
   double tol = 1e-12*h;
 
@@ -2141,7 +2142,9 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   int iterMax = 20;
   double norm = 1;
   rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
-  while (norm > tol && iter<iterMax) {
+
+  while (norm > tol && iter < iterMax)
+  {
     shape = calc_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
     dshape = calc_d_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
 
@@ -2151,12 +2154,12 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
     // if (params->motion) {
     for (int node = 0; node < nNodes; node++)
     {
-      int nd = geo->nd2gnd(node, ele);
+      int nd = geo->ele2nodes(node, ele);
       for (int i = 0; i < nDims; i++)
       {
         for (int j = 0; j < nDims; j++)
         {
-          grad(i,j) += geo->coord_nodes(i,nd)*dshape(nd,j);
+          grad(i,j) += geo->coord_nodes(i,nd)*dshape(node,j);
         }
         dx[i] -= shape(nd)*geo->coord_nodes(i,nd);
       }
@@ -2172,10 +2175,10 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
         delta[i] += ginv(i,j)*dx[j]/detJ;
 
     norm = 0;
-    for (int i=0; i<nDims; i++) {
+    for (int i = 0; i < nDims; i++) {
       norm += dx[i]*dx[i];
       rst[i] += delta[i];
-      rst[i] = max(min(rst[i],1.),-1.);
+      rst[i] = std::max(std::min(rst[i],1.),-1.);
     }
 
     iter++;

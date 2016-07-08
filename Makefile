@@ -12,7 +12,7 @@ CUFLAGS = -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
-DEBUG_FLAGS = -g
+DEBUG_FLAGS = -g -O1
 RELEASE_FLAGS = -Ofast
 
 ifeq ($(strip $(WARNINGS)),YES)

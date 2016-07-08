@@ -40,7 +40,7 @@ struct GeoStruct
     std::map<std::vector<unsigned int>, int> bnd_faces, per_bnd_rot;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
     std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
-    mdvector<unsigned int> nd2gnd, ppt_connect;
+    mdvector<unsigned int> ppt_connect;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
     mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
     mdvector<unsigned int> face_nodes;

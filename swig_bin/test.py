@@ -24,6 +24,8 @@ zefr.initialize(gridComm,inputFile,2,GridID)
 z = zefr.get_zefr_object()
 z.setup_solver()
 
+#z.write_solution();
+
 # Setup the TIOGA object; prepare to receive grid data
 tg.tioga_init_(Comm)
 
@@ -51,14 +53,21 @@ tg.tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
         cbs.get_q_index_face)
 
 # Perform overset connectivity / hole blanking
+print "Beginning connectivity"
 tg.tioga_preprocess_grids_()
 tg.tioga_performconnectivity_()
+print "Connectivity done."
+
+Comm.Barrier()
 
 # Run the solver
 z.write_residual()
-z.do_n_steps(10)
+tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
+z.do_step()
+#z.do_n_steps(10)
 z.write_residual()
 
 # Finalize - free memory
+print "Finishing run..."
 zefr.finalize()
 tg.tioga_delete_()
