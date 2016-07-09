@@ -1551,18 +1551,6 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
 
     case CHAR: /* Characteristic (from PyFR) */
     {
-      double nx = norm(fpt, 0, 0);
-      double ny = norm(fpt, 1, 0);
-      double gam = gamma;
-
-      /* Primitive Variables */
-      double rhoL = U(fpt, 0, 0);
-      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-
-      double rhoR = U(fpt, 0, 1);
-      double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-      double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
 
       /* Compute wall normal velocities */
       double VnL = 0.0; double VnR = 0.0;
@@ -1595,92 +1583,248 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
       double cstar = 0.25 * (gamma - 1) * (RL - RB);
       double ustarn = 0.5 * (RL + RB);
 
-      if (VnL < 0.0) /* Case 1: Inflow */
+      if (nDims == 2)
       {
-        /* Matrix Parameters */
-        double a1 = 0.5 * rhoR / cstar;
-        double a2 = gam / (rhoL * cL);
-        
-        double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
-        double b2 = nx / rhoL - a2 * uL;
-        double b3 = ny / rhoL - a2 * vL;
-        double b4 = a2 / cstar;
+        double nx = norm(fpt, 0, 0);
+        double ny = norm(fpt, 1, 0);
+        double gam = gamma;
 
-        double c1 = cstar * cstar / ((gam-1.0) * gam) + 0.5 * (uR*uR + vR*vR);
-        double c2 = uR * nx + vR * ny + cstar / gam;
+        /* Primitive Variables */
+        double rhoL = U(fpt, 0, 0);
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
 
-        /* Compute dURdUL */
-        dURdUL[0][0] = a1 * b1;
-        dURdUL[1][0] = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-        dURdUL[2][0] = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-        dURdUL[3][0] = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
+        double rhoR = U(fpt, 0, 1);
+        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
 
-        dURdUL[0][1] = a1 * b2;
-        dURdUL[1][1] = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-        dURdUL[2][1] = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-        dURdUL[3][1] = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
+        if (VnL < 0.0) /* Case 1: Inflow */
+        {
+          /* Matrix Parameters */
+          double a1 = 0.5 * rhoR / cstar;
+          double a2 = gam / (rhoL * cL);
+          
+          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+          double b2 = nx / rhoL - a2 * uL;
+          double b3 = ny / rhoL - a2 * vL;
+          double b4 = a2 / cstar;
 
-        dURdUL[0][2] = a1 * b3;
-        dURdUL[1][2] = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-        dURdUL[2][2] = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-        dURdUL[3][2] = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
+          double c1 = cstar * cstar / ((gam-1.0) * gam) + 0.5 * (uR*uR + vR*vR);
+          double c2 = uR * nx + vR * ny + cstar / gam;
 
-        dURdUL[0][3] = 0.5 * rhoR * b4;
-        dURdUL[1][3] = 0.5 * rhoR * (b4 * uR + a2 * nx);
-        dURdUL[2][3] = 0.5 * rhoR * (b4 * vR + a2 * ny);
-        dURdUL[3][3] = 0.5 * rhoR * (b4 * c1 + a2 * c2);
+          /* Compute dURdUL */
+          dURdUL[0][0] = a1 * b1;
+          dURdUL[1][0] = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+          dURdUL[2][0] = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+          dURdUL[3][0] = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
+
+          dURdUL[0][1] = a1 * b2;
+          dURdUL[1][1] = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+          dURdUL[2][1] = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+          dURdUL[3][1] = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
+
+          dURdUL[0][2] = a1 * b3;
+          dURdUL[1][2] = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+          dURdUL[2][2] = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+          dURdUL[3][2] = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
+
+          dURdUL[0][3] = 0.5 * rhoR * b4;
+          dURdUL[1][3] = 0.5 * rhoR * (b4 * uR + a2 * nx);
+          dURdUL[2][3] = 0.5 * rhoR * (b4 * vR + a2 * ny);
+          dURdUL[3][3] = 0.5 * rhoR * (b4 * c1 + a2 * c2);
+        }
+
+        else  /* Case 2: Outflow */
+        {
+          /* Matrix Parameters */
+          double a1 = gam * rhoR / (gam-1.0);
+          double a2 = gam / (rhoL * cL);
+          double a3 = (gam-1.0) / (gam * PL);
+          double a4 = (gam-1.0) / (2.0 * gam * cstar);
+          double a5 = rhoR * cstar * cstar / (gam-1.0) / (gam-1.0);
+          double a6 = rhoR * cstar / (2.0 * gam);
+
+          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+          double b2 = nx / rhoL - a2 * uL;
+          double b3 = ny / rhoL - a2 * vL;
+
+          double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
+          double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
+          double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
+          double c4 = ustarn * nx + uL - VnL * nx;
+
+          double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
+          double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
+          double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
+          double d4 = ustarn * ny + vL - VnL * ny;
+
+          double e1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
+          double e2 = a3 * uL + a4 * b2;
+          double e3 = a3 * vL + a4 * b3;
+          double e4 = a3 + a2 * a4;
+
+          double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
+
+          /* Compute dURdUL */
+          dURdUL[0][0] = a1 * e1;
+          dURdUL[1][0] = a1 * e1 * c4 + rhoR * c1;
+          dURdUL[2][0] = a1 * e1 * d4 + rhoR * d1;
+          dURdUL[3][0] = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
+
+          dURdUL[0][1] = a1 * e2;
+          dURdUL[1][1] = a1 * e2 * c4 + rhoR * c2;
+          dURdUL[2][1] = a1 * e2 * d4 + rhoR * d2;
+          dURdUL[3][1] = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
+
+          dURdUL[0][2] = a1 * e3;
+          dURdUL[1][2] = a1 * e3 * c4 + rhoR * c3;
+          dURdUL[2][2] = a1 * e3 * d4 + rhoR * d3;
+          dURdUL[3][2] = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
+
+          dURdUL[0][3] = a1 * e4;
+          dURdUL[1][3] = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
+          dURdUL[2][3] = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
+          dURdUL[3][3] = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
+        }
       }
-      else  /* Case 2: Outflow */
+
+      else if (nDims == 3)
       {
-        /* Matrix Parameters */
-        double a1 = gam * rhoR / (gam-1.0);
-        double a2 = gam / (rhoL * cL);
-        double a3 = (gam-1.0) / (gam * PL);
-        double a4 = (gam-1.0) / (2.0 * gam * cstar);
-        double a5 = rhoR * cstar * cstar / (gam-1.0) / (gam-1.0);
-        double a6 = rhoR * cstar / (2.0 * gam);
+        double nx = norm(fpt, 0, 0);
+        double ny = norm(fpt, 1, 0);
+        double nz = norm(fpt, 2, 0);
+        double gam = gamma;
 
-        double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
-        double b2 = nx / rhoL - a2 * uL;
-        double b3 = ny / rhoL - a2 * vL;
+        /* Primitive Variables */
+        double rhoL = U(fpt, 0, 0);
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+        double wL = U(fpt, 3, 0) / U(fpt, 0, 0);
 
-        double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
-        double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
-        double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
-        double c4 = ustarn * nx + uL - VnL * nx;
+        double rhoR = U(fpt, 0, 1);
+        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
+        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+        double wR = U(fpt, 3, 1) / U(fpt, 0, 1);
 
-        double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
-        double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
-        double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
-        double d4 = ustarn * ny + vL - VnL * ny;
+        if (VnL < 0.0) /* Case 1: Inflow */
+        {
+          /* Matrix Parameters */
+          double a1 = 0.5 * rhoR / cstar;
+          double a2 = gam / (rhoL * cL);
+          
+          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+          double b2 = nx / rhoL - a2 * uL;
+          double b3 = ny / rhoL - a2 * vL;
+          double b4 = nz / rhoL - a2 * wL;
+          double b5 = a2 / cstar;
 
-        double e1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
-        double e2 = a3 * uL + a4 * b2;
-        double e3 = a3 * vL + a4 * b3;
-        double e4 = a3 + a2 * a4;
+          double c1 = cstar * cstar / ((gam-1.0) * gam) + 0.5 * (uR*uR + vR*vR + wR*wR);
+          double c2 = uR * nx + vR * ny + wR * nz + cstar / gam;
 
-        double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
+          /* Compute dURdUL */
+          dURdUL[0][0] = a1 * b1;
+          dURdUL[1][0] = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+          dURdUL[2][0] = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+          dURdUL[3][0] = a1 * b1 * wR + 0.5 * rhoR * b1 * nz;
+          dURdUL[4][0] = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
 
-        /* Compute dURdUL */
-        dURdUL[0][0] = a1 * e1;
-        dURdUL[1][0] = a1 * e1 * c4 + rhoR * c1;
-        dURdUL[2][0] = a1 * e1 * d4 + rhoR * d1;
-        dURdUL[3][0] = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
+          dURdUL[0][1] = a1 * b2;
+          dURdUL[1][1] = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+          dURdUL[2][1] = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+          dURdUL[3][1] = a1 * b2 * wR + 0.5 * rhoR * b2 * nz;
+          dURdUL[4][1] = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
 
-        dURdUL[0][1] = a1 * e2;
-        dURdUL[1][1] = a1 * e2 * c4 + rhoR * c2;
-        dURdUL[2][1] = a1 * e2 * d4 + rhoR * d2;
-        dURdUL[3][1] = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
+          dURdUL[0][2] = a1 * b3;
+          dURdUL[1][2] = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+          dURdUL[2][2] = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+          dURdUL[3][2] = a1 * b3 * wR + 0.5 * rhoR * b3 * nz;
+          dURdUL[4][2] = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
 
-        dURdUL[0][2] = a1 * e3;
-        dURdUL[1][2] = a1 * e3 * c4 + rhoR * c3;
-        dURdUL[2][2] = a1 * e3 * d4 + rhoR * d3;
-        dURdUL[3][2] = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
+          dURdUL[0][3] = a1 * b4;
+          dURdUL[1][3] = a1 * b4 * uR + 0.5 * rhoR * b4 * nx;
+          dURdUL[2][3] = a1 * b4 * vR + 0.5 * rhoR * b4 * ny;
+          dURdUL[3][3] = a1 * b4 * wR + 0.5 * rhoR * b4 * nz;
+          dURdUL[4][3] = a1 * b4 * c1 + 0.5 * rhoR * b4 * c2;
 
-        dURdUL[0][3] = a1 * e4;
-        dURdUL[1][3] = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
-        dURdUL[2][3] = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
-        dURdUL[3][3] = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
+          dURdUL[0][4] = 0.5 * rhoR * b5;
+          dURdUL[1][4] = 0.5 * rhoR * (b5 * uR + a2 * nx);
+          dURdUL[2][4] = 0.5 * rhoR * (b5 * vR + a2 * ny);
+          dURdUL[3][4] = 0.5 * rhoR * (b5 * wR + a2 * nz);
+          dURdUL[4][4] = 0.5 * rhoR * (b5 * c1 + a2 * c2);
+        }
+
+        else  /* Case 2: Outflow */
+        {
+          /* Matrix Parameters */
+          double a1 = gam * rhoR / (gam-1.0);
+          double a2 = gam / (rhoL * cL);
+          double a3 = (gam-1.0) / (gam * PL);
+          double a4 = (gam-1.0) / (2.0 * gam * cstar);
+          double a5 = rhoR * cstar * cstar / (gam-1.0) / (gam-1.0);
+          double a6 = rhoR * cstar / (2.0 * gam);
+
+          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
+          double b2 = nx / rhoL - a2 * uL;
+          double b3 = ny / rhoL - a2 * vL;
+          double b4 = nz / rhoL - a2 * wL;
+
+          double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
+          double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
+          double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
+          double c4 = 0.5 * b4 * nx - nx * nz / rhoL;
+          double c5 = ustarn * nx + uL - VnL * nx;
+
+          double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
+          double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
+          double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
+          double d4 = 0.5 * b4 * ny - ny * nz / rhoL;
+          double d5 = ustarn * ny + vL - VnL * ny;
+
+          double e1 = 0.5 * b1 * nz - (VnL * nz + wL) / rhoL;
+          double e2 = 0.5 * b2 * nz - nx * nz / rhoL;
+          double e3 = 0.5 * b3 * nz - ny * nz / rhoL;
+          double e4 = 0.5 * b4 * nz + (1.0 - nz*nz) / rhoL;
+          double e5 = ustarn * nz + wL - VnL * nz;
+
+          double f1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
+          double f2 = a3 * uL + a4 * b2;
+          double f3 = a3 * vL + a4 * b3;
+          double f4 = a3 * wL + a4 * b4;
+          double f5 = a3 + a2 * a4;
+
+          double g1 = 0.5 * a1 * (c5*c5 + d5*d5 + e5*e5) + a5;
+
+          /* Compute dURdUL */
+          dURdUL[0][0] = a1 * f1;
+          dURdUL[1][0] = a1 * f1 * c5 + rhoR * c1;
+          dURdUL[2][0] = a1 * f1 * d5 + rhoR * d1;
+          dURdUL[3][0] = a1 * f1 * e5 + rhoR * e1;
+          dURdUL[4][0] = rhoR * (c1*c5 + d1*d5 + e1*e5) + f1 * g1 + a6 * b1;
+
+          dURdUL[0][1] = a1 * f2;
+          dURdUL[1][1] = a1 * f2 * c5 + rhoR * c2;
+          dURdUL[2][1] = a1 * f2 * d5 + rhoR * d2;
+          dURdUL[3][1] = a1 * f2 * e5 + rhoR * e2;
+          dURdUL[4][1] = rhoR * (c2*c5 + d2*d5 + e2*e5) + f2 * g1 + a6 * b2;
+
+          dURdUL[0][2] = a1 * f3;
+          dURdUL[1][2] = a1 * f3 * c5 + rhoR * c3;
+          dURdUL[2][2] = a1 * f3 * d5 + rhoR * d3;
+          dURdUL[3][2] = a1 * f3 * e5 + rhoR * e3;
+          dURdUL[4][2] = rhoR * (c3*c5 + d3*d5 + e3*e5) + f3 * g1 + a6 * b3;
+
+          dURdUL[0][3] = a1 * f4;
+          dURdUL[1][3] = a1 * f4 * c5 + rhoR * c4;
+          dURdUL[2][3] = a1 * f4 * d5 + rhoR * d4;
+          dURdUL[3][3] = a1 * f4 * e5 + rhoR * e4;
+          dURdUL[4][3] = rhoR * (c4*c5 + d4*d5 + e4*e5) + f4 * g1 + a6 * b4;
+
+          dURdUL[0][4] = a1 * f5;
+          dURdUL[1][4] = a1 * f5 * c5 + 0.5 * rhoR * a2 * nx;
+          dURdUL[2][4] = a1 * f5 * d5 + 0.5 * rhoR * a2 * ny;
+          dURdUL[3][4] = a1 * f5 * e5 + 0.5 * rhoR * a2 * nz;
+          dURdUL[4][4] = 0.5 * rhoR * a2 * (c5*nx + d5*ny + e5*nz) + f5 * g1 + a2 * a6;
+        }
       }
 
       break;
@@ -2654,8 +2798,6 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
     /* Compute speed of sound */
     double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
     double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
-
-    /* Compute normal velocities */
     double VnL = 0.0; double VnR = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -2663,64 +2805,65 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
       VnR += WR[dim+1]/WR[0] * norm[dim];
     }
 
-    /* Compute wavespeed */
-    double nx = norm[0];
-    double ny = norm[1];
+    /* Compute wavespeed and wavespeed derivative */
     double gam = gamma;
     double wSL = std::abs(VnL) + aL;
     double wSR = std::abs(VnR) + aR;
     if (wSL > wSR)
     {
       /* Determine direction */
-      int pmL = 0;
-      if (VnL > 0)
-      {
-        pmL = 1;
-      }
-      else if (VnL < 0)
-      {
-        pmL = -1;
-      }
+      int sgn = (VnL > 0) - (VnL < 0);
 
-      /* Compute derivative of wavespeed */
+      /* Primitive Variables */
       double rho = WL[0];
-      double u = WL[1]/WL[0];
-      double v = WL[2]/WL[0];
+      double V[nDims];
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        V[dim] = WL[dim+1] / WL[0];
+      }
 
+      /* Wavespeed */
       waveSp = wSL;
-      dwSdUL[0] = -pmL*VnL/rho - aL/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aL*rho);
-      dwSdUL[1] = pmL*nx/rho - gam * (gam-1.0) * u / (2.0*aL*rho);
-      dwSdUL[2] = pmL*ny/rho - gam * (gam-1.0) * v / (2.0*aL*rho);
-      dwSdUL[3] = gam * (gam-1.0) / (2.0*aL*rho);
+
+      /* Compute wavespeed derivative */
+      dwSdUL[0] = -sgn*VnL/rho - aL/(2.0*rho);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        dwSdUL[0] += gam * (gam-1.0) * V[dim]*V[dim] / (4.0*aL*rho);
+        dwSdUL[dim+1] = sgn*norm[dim]/rho - gam * (gam-1.0) * V[dim] / (2.0*aL*rho);
+      }
+      dwSdUL[nDims+1] = gam * (gam-1.0) / (2.0*aL*rho);
 
       for (unsigned int n = 0; n < nVars; n++)
       {
         dwSdUR[n] = 0;
       }
     }
+
     else
     {
       /* Determine direction */
-      int pmR = 0;
-      if (VnR > 0)
-      {
-        pmR = 1;
-      }
-      else if (VnR < 0)
-      {
-        pmR = -1;
-      }
+      int sgn = (VnR > 0) - (VnR < 0);
 
-      /* Compute derivative of wavespeed */
+      /* Primitive Variables */
       double rho = WR[0];
-      double u = WR[1]/WR[0];
-      double v = WR[2]/WR[0];
+      double V[nDims];
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        V[dim] = WR[dim+1] / WR[0];
+      }
 
+      /* Wavespeed */
       waveSp = wSR;
-      dwSdUR[0] = -pmR*VnR/rho - aR/(2.0*rho) + gam * (gam-1.0) * (u*u + v*v) / (4.0*aR*rho);
-      dwSdUR[1] = pmR*nx/rho - gam * (gam-1.0) * u / (2.0*aR*rho);
-      dwSdUR[2] = pmR*ny/rho - gam * (gam-1.0) * v / (2.0*aR*rho);
-      dwSdUR[3] = gam * (gam-1.0) / (2.0*aR*rho);
+
+      /* Compute wavespeed derivative */
+      dwSdUR[0] = -sgn*VnR/rho - aR/(2.0*rho);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        dwSdUR[0] += gam * (gam-1.0) * V[dim]*V[dim] / (4.0*aR*rho);
+        dwSdUR[dim+1] = sgn*norm[dim]/rho - gam * (gam-1.0) * V[dim] / (2.0*aR*rho);
+      }
+      dwSdUR[nDims+1] = gam * (gam-1.0) / (2.0*aR*rho);
 
       for (unsigned int n = 0; n < nVars; n++)
       {
@@ -2768,7 +2911,8 @@ void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUco
       rusanov_dFcdU<1, 2, AdvDiff><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
           waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
     else
-      ThrowException("rusanov_dFdUconv for 3D AdvDiff not implemented yet!");
+      rusanov_dFcdU<1, 3, AdvDiff><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
+          waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
   }
   else if (equation == Burgers)
   {
@@ -2776,7 +2920,8 @@ void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUco
       rusanov_dFcdU<1, 2, Burgers><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
           waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
     else
-      ThrowException("rusanov_dFdUconv for 3D Burgers not implemented yet!");
+      rusanov_dFcdU<1, 3, Burgers><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
+          waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
   }
   else if (equation == EulerNS)
   {
@@ -2784,7 +2929,8 @@ void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUco
       rusanov_dFcdU<4, 2, EulerNS><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
           waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
     else
-      ThrowException("rusanov_dFdUconv for 3D EulerNS not implemented yet!");
+      rusanov_dFcdU<5, 3, EulerNS><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
+          waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
   }
 }
 

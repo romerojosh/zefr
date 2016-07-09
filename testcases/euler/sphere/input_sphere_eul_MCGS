@@ -4,33 +4,43 @@ meshfile sphere_hex.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
-mesh_bound  wall_slip_g  wall_slip_g
+mesh_bound  wall_slip_g  wall_slip_p
 mesh_bound  char  char
 
 # Solver:
-order     3
-equation EulerNS    (AdvDiff, EulerNS)
+order     2
+equation EulerNS    (AdvDiff, Burgers, EulerNS)
 viscous  0
 spt_type Legendre
 serendipity 1
 
 # Timestepping:
 n_steps 10000
-dt_scheme RKj      (Euler, RK44, RK54)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.0001
-CFL	  1.0
+res_tol 1e-11
+dt_scheme MCGS      (Euler, RK44, RK54, MCGS)
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.01
+CFL	  4.0
 
-# Multigrid:
-p_multi 1
-smooth_steps 1
-rel_fac 1.00
-mg_levels 3 0
-mg_steps  2 5
+# CFL Adaptation
+adapt_CFL 1
+CFL_max 1e5
+CFL_ratio 2.0
+
+# Implicit
+SER 0
+stream_mode 0
+backsweep 0
+Jfreeze_freq 100
+nColors 6
+n_LHS_blocks 4
+
+restart 0
+restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix sphere_eul
+output_prefix sphere_eul_MCGS
 write_freq    1000
 report_freq   100
 res_type      1

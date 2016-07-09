@@ -1149,6 +1149,70 @@ void transform_dFdU_quad_wrapper(mdvector_gpu<double> &dFdU_spts,
   }
 }
 
+template <unsigned int nVars>
+__global__
+void transform_dFdU_hexa(mdvector_gpu<double> dFdU_spts, 
+    mdvector_gpu<double> inv_jaco_spts, unsigned int nSpts, 
+    unsigned int nEles)
+{
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  /* Get metric terms */
+  double inv_jaco[3][3];
+  inv_jaco[0][0] = inv_jaco_spts(0, 0, spt, ele);
+  inv_jaco[0][1] = inv_jaco_spts(0, 1, spt, ele);
+  inv_jaco[0][2] = inv_jaco_spts(0, 2, spt, ele);
+  inv_jaco[1][0] = inv_jaco_spts(1, 0, spt, ele);
+  inv_jaco[1][1] = inv_jaco_spts(1, 1, spt, ele);
+  inv_jaco[1][2] = inv_jaco_spts(1, 2, spt, ele);
+  inv_jaco[2][0] = inv_jaco_spts(2, 0, spt, ele);
+  inv_jaco[2][1] = inv_jaco_spts(2, 1, spt, ele);
+  inv_jaco[2][2] = inv_jaco_spts(2, 2, spt, ele);
+
+  for (unsigned int nj = 0; nj < nVars; nj++)
+  {
+    for (unsigned int ni = 0; ni < nVars; ni++)
+    {
+      double dFdUtemp0 = dFdU_spts(spt, ele, ni, nj, 0);
+      double dFdUtemp1 = dFdU_spts(spt, ele, ni, nj, 1);
+
+      dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * inv_jaco[0][0] +
+                                       dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco[0][1] +
+                                       dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco[0][2];
+
+      dFdU_spts(spt, ele, ni, nj, 1) = dFdUtemp0 * inv_jaco[1][0] +
+                                       dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco[1][1] +
+                                       dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco[1][2];  
+                                
+      dFdU_spts(spt, ele, ni, nj, 2) = dFdUtemp0 * inv_jaco[2][0]+ 
+                                       dFdUtemp1 * inv_jaco[2][1] +  
+                                       dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco[2][2]; 
+    }
+  }
+}
+
+void transform_dFdU_hexa_wrapper(mdvector_gpu<double> &dFdU_spts, 
+    mdvector_gpu<double> &inv_jaco_spts, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims,
+    unsigned int equation)
+{
+  unsigned int threads= 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+
+  if (equation == AdvDiff || equation == Burgers)
+  {
+    transform_dFdU_hexa<1><<<blocks, threads>>>(dFdU_spts, inv_jaco_spts, nSpts, nEles);
+  }
+  else if (equation == EulerNS)
+  {
+    transform_dFdU_hexa<5><<<blocks, threads>>>(dFdU_spts, inv_jaco_spts, nSpts, nEles);
+  }
+}
+
 __global__
 void compute_Uavg(mdvector_gpu<double> U_spts, 
     mdvector_gpu<double> Uavg, mdvector_gpu<double> jaco_det_spts, 
