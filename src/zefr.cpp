@@ -353,7 +353,9 @@ void zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank
 
 void zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
                               int& nFaces_type, int*& f2v, int*& f2c, int*& c2f,
-                              int*& iblank_face, int*& iblank_cell)
+                              int*& iblank_face, int*& iblank_cell,
+                              int &nOver, int*& overFaces, int &nMpiFaces, int*& mpiFaces, int*& procR,
+                              int*& faceIdR)
 {
   nFaceTypes = 1;
   nvert_face = geo->nNodesPerFace;
@@ -363,6 +365,17 @@ void zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
   c2f = geo->ele2face.data();
   iblank_face = geo->iblank_face.data();
   iblank_cell = geo->iblank_cell.data();
+  nOver = geo->overFaceList.size();
+  overFaces = geo->overFaceList.data();
+  nMpiFaces = geo->nMpiFaces;
+  mpiFaces = geo->mpiFaces.data();
+  procR = geo->procR.data();
+  faceIdR = geo->faceID_R.data();
+}
+
+double zefr::get_u_spt(int ele, int spt, int var)
+{
+  return solver->eles->U_spts(spt, ele, var);
 }
 
 double *zefr::get_u_spts(void)

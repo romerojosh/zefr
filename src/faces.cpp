@@ -26,7 +26,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   this->nVars = nVars;
   this->nDims = nDims;
 
-
   /* Allocate memory for solution structures */
   U.assign({nFpts, nVars, 2});
   Fconv.assign({nFpts, nVars, nDims, 2});
@@ -42,8 +41,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   }
 
   LDG_bias.assign({nFpts}, 0);
-
-
 
   /* Allocating memory for Riemann solvers */
   FL.assign(nVars, 0);
@@ -89,7 +86,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
       ddURddUL.assign({nVars, nVars, nDims, nDims});
     }
   }
-
 
   /* If running Euler/NS, allocate memory for pressure */
   if (input->equation == EulerNS)
@@ -3691,7 +3687,7 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
   /// TODO : faceMap for blanking [like eleMap]
 //  if (geo->faceMap.size() > 0) faceID = geo->faceMap[faceID];
 
-  int i = faceID * nFpts + fpt;
+  int i = faceID * geo->nFptsPerFace + fpt;
   ind    = std::distance(&U(0,0,1), &U(i,0,1));
   stride = std::distance(&U(i,0,1), &U(i,1,1));
 }

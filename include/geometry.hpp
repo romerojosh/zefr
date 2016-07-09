@@ -65,8 +65,9 @@ struct GeoStruct
     std::vector<int> nProcGrid;  //! Number of MPI processes assigned to each grid block
     std::vector<int> gridIdList; //! List of grid ID assigned to each rank
 
-    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
+    //std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
 #endif
+    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
@@ -87,6 +88,7 @@ struct GeoStruct
     unsigned int nBndFaces, nIntFaces, nMpiFaces, nOverFaces;
     std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
     std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching ele2face / face2eles
+    std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
 
     std::vector<int> iblank_node, iblank_cell, iblank_face; //! iblank values for nodes, cells, faces
     std::vector<int> faceType, currFaceType, currIblankCell, currIblankFace; //! Current cell/face status
@@ -96,6 +98,7 @@ struct GeoStruct
     std::vector<int> eleMap, faceMap;
     std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
     std::set<int> overFaces;  //! Ordered list of all current overset faces
+    std::vector<int> overFaceList;
 
     int nWall, nOver; //! Number of nodes on wall & overset boundaries
     std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists

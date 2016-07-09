@@ -70,9 +70,12 @@ public:
 
   void get_extra_geo_data(int &nFaceTypes, int& nvert_face, int& nFaces_type,
                           int*& f2v, int*& f2c, int*& c2f, int*& iblank_face,
-                          int*& iblank_cell);
+                          int*& iblank_cell, int& nOver, int*& overFaces,
+                          int& nMpiFaces, int*& mpiFaces, int*& procR,
+                          int*& faceIdR);
 
   // Solution-data access functions
+  double get_u_spt(int ele, int spt, int var);
   double *get_u_spts(void);
   double *get_u_fpts(void);
 

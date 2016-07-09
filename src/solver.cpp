@@ -1974,7 +1974,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   if (input->p_multi)
     iter = iter / input->mg_steps[0];
 
-  if (input->rank == 0) std::cout << "Writing data to file..." << std::endl;
+  if (input->rank == 0) std::cout << "Writing data to file..." << std::flush;
 
   if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
 
@@ -2000,7 +2000,6 @@ void FRSolver::write_solution(const std::string &_prefix)
     {
       f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
       f << std::endl;
-
     }
     else if (input->equation == EulerNS)
     {
@@ -2072,9 +2071,17 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
   f << "<!-- ITER " << iter << " -->" << std::endl;
 
+  int nEles = eles->nEles;
+  if (input->overset)
+  {
+    /* Remove blanked elements from total element count */
+    for (int ele = 0; ele < eles->nEles; ele++)
+      if (geo.iblank_cell[ele] != NORMAL) nEles--;
+  }
+
   f << "<UnstructuredGrid>" << std::endl;
-  f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";
-  f << "NumberOfCells=\"" << eles->nSubelements * eles->nEles << "\">";
+  f << "<Piece NumberOfPoints=\"" << eles->nPpts * nEles << "\" ";
+  f << "NumberOfCells=\"" << eles->nSubelements * nEles << "\">";
   f << std::endl;
 
   
@@ -2118,6 +2125,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<Cells>" << std::endl;
   f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
   f << "format=\"ascii\">"<< std::endl;
+  int count = 0; // To account for blanked elements
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
@@ -2125,10 +2133,11 @@ void FRSolver::write_solution(const std::string &_prefix)
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
       {
-        f << geo.ppt_connect(i, subele) + ele*eles->nPpts << " ";
+        f << geo.ppt_connect(i, subele) + count*eles->nPpts << " ";
       }
       f << std::endl;
     }
+    count++;
   }
   f << "</DataArray>" << std::endl;
 
@@ -2149,7 +2158,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" ";
   f << "format=\"ascii\">"<< std::endl;
-  unsigned int nCells = eles->nSubelements * eles->nEles;
+  unsigned int nCells = eles->nSubelements * nEles;
   if (eles->nDims == 2)
   {
     for (unsigned int cell = 0; cell < nCells; cell++)
@@ -2232,7 +2241,9 @@ void FRSolver::write_solution(const std::string &_prefix)
         for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
         {
           f << std::scientific << std::setprecision(16);
-          f << eles->U_ppts(ppt, ele, n) << " ";
+//          f << geo.iblank_cell[ele];
+          f << eles->U_ppts(ppt, ele, n);
+          f << " ";
         }
 
         f << std::endl;
@@ -2264,6 +2275,8 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "</UnstructuredGrid>" << std::endl;
   f << "</VTKFile>" << std::endl;
   f.close();
+
+  if (input->rank == 0) std::cout << "  Done." << std::endl;
 }
 
 void FRSolver::write_color()
@@ -2328,14 +2341,22 @@ void FRSolver::write_color()
   /* Write partition color to file in .vtu format */
   std::ofstream f(outputfile);
 
+  int nEles = eles->nEles;
+  if (input->overset)
+  {
+    /* Remove blanked elements from total element count */
+    for (int ele = 0; ele < eles->nEles; ele++)
+      if (geo.iblank_cell[ele] != NORMAL) nEles--;
+  }
+
   /* Write header */
   f << "<?xml version=\"1.0\"?>" << std::endl;
   f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
   f << "byte_order=\"LittleEndian\" ";
   f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
   f << "<UnstructuredGrid>" << std::endl;
-  f << "<Piece NumberOfPoints=\"" << eles->nPpts * eles->nEles << "\" ";
-  f << "NumberOfCells=\"" << eles->nSubelements * eles->nEles << "\">";
+  f << "<Piece NumberOfPoints=\"" << eles->nPpts * nEles << "\" ";
+  f << "NumberOfCells=\"" << eles->nSubelements * nEles << "\">";
   f << std::endl;
   
   /* Write plot point coordinates */
@@ -2348,6 +2369,7 @@ void FRSolver::write_color()
     // TODO: Change order of ppt structures for better looping 
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2376,6 +2398,7 @@ void FRSolver::write_color()
   f << "<Cells>" << std::endl;
   f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
   f << "format=\"ascii\">"<< std::endl;
+  int count = 0;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
@@ -2383,10 +2406,11 @@ void FRSolver::write_color()
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
       {
-        f << geo.ppt_connect(i, subele) + ele*eles->nPpts << " ";
+        f << geo.ppt_connect(i, subele) + count*eles->nPpts << " ";
       }
       f << std::endl;
     }
+    count++;
   }
   f << "</DataArray>" << std::endl;
 
@@ -2407,7 +2431,7 @@ void FRSolver::write_color()
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" ";
   f << "format=\"ascii\">"<< std::endl;
-  unsigned int nCells = eles->nSubelements * eles->nEles;
+  unsigned int nCells = eles->nSubelements * nEles;
   if (eles->nDims == 2)
   {
     for (unsigned int cell = 0; cell < nCells; cell++)
@@ -2473,25 +2497,42 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         eles->divF_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
     }
 
+  unsigned int nEles = 0;
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    /* Infinity norm */
-    if (input->res_type == 0)
-      res[n] =*std::max_element(&eles->divF_spts(0, 0, n, 0), 
-          &eles->divF_spts(0, 0, n+1, 0));
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        if (input->res_type == 0)
+          res[n] = std::max(res[n], std::abs(eles->divF_spts(spt,ele,n,0)));
 
-    /* L1 norm */
-    else if (input->res_type == 1)
-      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
-          &eles->divF_spts(0, 0, n+1, 0), 0.0, abs_sum<double>());
+        else if (input->res_type == 1)
+          res[n] += std::abs(eles->divF_spts(spt,ele,n,0));
 
-    /* L2 norm */
-    else if (input->res_type == 2)
-      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0), 
-            &eles->divF_spts(0, 0, n+1, 0), 0.0, square<double>());
+        else if (input->res_type == 2)
+          res[n] += eles->divF_spts(spt,ele,n,0) * eles->divF_spts(spt,ele,n,0);
+      }
+      nEles++;
+    }
+//    /* Infinity norm */
+//    if (input->res_type == 0)
+//      res[n] =*std::max_element(&eles->divF_spts(0, 0, n, 0),
+//          &eles->divF_spts(0, 0, n+1, 0));
+
+//    /* L1 norm */
+//    else if (input->res_type == 1)
+//      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0),
+//          &eles->divF_spts(0, 0, n+1, 0), 0.0, abs_sum<double>());
+
+//    /* L2 norm */
+//    else if (input->res_type == 2)
+//      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0),
+//            &eles->divF_spts(0, 0, n+1, 0), 0.0, square<double>());
   }
 
-  unsigned int nDoF =  (eles->nSpts * eles->nEles);
+  unsigned int nDoF =  (eles->nSpts * nEles);
 
   // HACK: Change nStages back
   if (input->dt_scheme == "MCGS")

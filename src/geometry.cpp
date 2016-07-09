@@ -1161,7 +1161,15 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nFaces = 0;
     geo.faceList.resize(0);
 
+    //std::vector<int> mpiFaces, procR, locF, locF_R;
+    geo.mpiFaces.resize(0);
+    geo.procR.resize(0);
+    geo.mpiLocF.resize(0);
+    geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
+    geo.face2eles.assign({2, unique_faces.size()}, -1);
+
     std::set<int> overPts, wallPts;
+    std::set<std::vector<unsigned int>> overFaces;
 
     /* Begin loop through faces */
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -1188,7 +1196,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
-          geo.ele2face(n, ele) = -1;
           continue;
         }
         else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
@@ -1202,6 +1209,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         std::vector<unsigned int> fpts(nFptsPerFace,0);
         if(!face_fpts.count(face))
         {
+          geo.ele2face(n, ele) = geo.nFaces;
+          geo.face2eles(0, geo.nFaces) = ele;
+
           /* Check if face is on boundary */
           if (geo.bnd_faces.count(face))
           {
@@ -1221,6 +1231,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               if (bcType == OVERSET)
               {
                 for (auto &pt:face) overPts.insert(pt);
+                overFaces.insert(face);
               }
               else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
                        bcType == ISOTHERMAL_NOSLIP_G ||
@@ -1242,6 +1253,15 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           {
             /* Add face to set to process later. */
             mpi_faces_to_process.insert(face);
+
+            // Additional MPI face connectivity data
+            geo.mpiFaces.push_back(geo.nFaces);
+            auto procs = geo.mpi_faces[face];
+            int p;
+            for (auto &proc:procs)
+              if (proc != rank) p = proc;
+            geo.procR.push_back(p);
+            geo.mpiLocF.push_back(n);
 
             for (auto &fpt : fpts)
             {
@@ -1270,10 +1290,16 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           }
 
           geo.faceList.push_back(face);
+          geo.nodes_to_face[face] = geo.nFaces;
+          geo.nFaces++;
         }
         /* If face has already been encountered, must assign existing global flux points */
         else
         {
+          int ff = geo.nodes_to_face[face];
+          geo.ele2face(n, ele) = ff;
+          geo.face2eles(1, ff) = ele;
+
           auto fpts = face_fpts[face];
           auto face0_ordered = geo.face2ordered[face];
           
@@ -1351,22 +1377,29 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       geo.nOver = overPts.size();
       geo.wallNodes.resize(0);
       geo.overNodes.resize(0);
+      geo.overFaceList.resize(0);
       geo.wallNodes.reserve(geo.nWall);
       geo.overNodes.reserve(geo.nOver);
       for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
       for (auto &pt:overPts) geo.overNodes.push_back(pt);
+      for (auto &face:overFaces)
+        geo.overFaceList.push_back(geo.nodes_to_face[face]);
     }
 
     /* Process MPI faces, if needed */
 #ifdef _MPI
+    geo.nMpiFaces = geo.mpiFaces.size();
+    geo.faceID_R.resize(geo.nMpiFaces);
     for (const auto &face : mpi_faces_to_process)
     {
       auto ranks = geo.mpi_faces[face];
       int sendRank = *std::min_element(ranks.begin(), ranks.end());
       int recvRank = *std::max_element(ranks.begin(), ranks.end());
 
-      /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
+      int faceID = geo.nodes_to_face[face];
+      int ff = findFirst(geo.mpiFaces, faceID);
 
+      /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
 
       /* If partition has minimum (of 2) ranks assigned to this face, use its flux point order. Send
        * information to other rank. */
@@ -1384,7 +1417,10 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           geo.fpt_buffer_map[recvRank].push_back(fpt);
 
         /* Send ordered face to paired rank */
+        MPI_Status temp;
         MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, geo.myComm);
+        MPI_Send(&faceID, 1, MPI_INT, recvRank, 0, geo.myComm);
+        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
       }
       else if (rank == recvRank)
       {
@@ -1395,6 +1431,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         /* Receive ordered face from paired rank */
         MPI_Status temp;
         MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, geo.myComm, &temp);
+        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, sendRank, 0, geo.myComm, &temp);
+        MPI_Send(&faceID, 1, MPI_INT, sendRank, 0, geo.myComm);
 
         /* Convert received face_ordered node indexing to partition local indexing */
         for (auto &nd : face_ordered_mpi)
@@ -1887,6 +1925,35 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   std::map<std::vector<unsigned int>, std::set<int>> face2ranks;    
   std::map<std::vector<unsigned int>, std::set<int>> mpi_faces_glob;
 
+  /// --- JACOB'S FACE CONNECTIVITY ADDITIONS ---
+//  std::set<int> myFaces, mpiFaces;
+//  geo.procR.resize(0);
+//  geo.mpiLocF.resize(0);
+//  geo.mpiLocF_R.resize(0);
+//  geo.faceID_R.resize(0);
+//  geo.gIC_R.resize(0);
+//  for (int ff = 0; ff < geo.nFaces; ff++)
+//  {
+//    int ic1 = geo.face2eles(0, ff);
+//    int ic2 = geo.face2eles(1, ff);
+//    int p1 = epart[ic1];
+//    int p2 = epart[ic2];
+
+//    if (p1 == rank || p2 == rank)
+//      myFaces.insert(ff);
+
+//    if (p1 == rank && p2 != rank)
+//    {
+//      mpiFaces.insert(ff);
+//      geo.procR.push_back(p2);
+//    }
+//    else if (p2 == rank && p1 != rank)
+//    {
+
+//    }
+//  }
+  /// --------------------------------------------
+
   /* Iterate over faces of complete mesh */
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
@@ -1906,7 +1973,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
       if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
       {
-        //geo.c2f(ele, n) = -1;
+        geo.ele2face(n, ele) = -2;
         continue;
       }
       else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */

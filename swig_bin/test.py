@@ -24,8 +24,6 @@ zefr.initialize(gridComm,inputFile,2,GridID)
 z = zefr.get_zefr_object()
 z.setup_solver()
 
-#z.write_solution();
-
 # Setup the TIOGA object; prepare to receive grid data
 tg.tioga_init_(Comm)
 
@@ -43,14 +41,16 @@ tg.tioga_registergrid_data_(geo.btag, geo.nnodes, geo.xyz, geo.iblank,
 tg.tioga_setcelliblank_(geoAB.iblank_cell)
 
 tg.tioga_register_face_data_(geoAB.f2c,geoAB.c2f,geoAB.iblank_face,
-        geoAB.nFaceTypes,geoAB.nvert_face,geoAB.nFaces_type,geoAB.f2v);
+        geoAB.nOverFaces,geoAB.nMpiFaces,geoAB.overFaces,geoAB.mpiFaces,
+        geoAB.procR,geoAB.mpiFidR,geoAB.nFaceTypes,geoAB.nvert_face,
+        geoAB.nFaces_type,geoAB.f2v);
 
 tg.tioga_set_highorder_callback_(cbs.get_nodes_per_cell,
         cbs.get_receptor_nodes, cbs.donor_inclusion_test,
         cbs.donor_frac, cbs.convert_to_modal)
 
 tg.tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
-        cbs.get_q_index_face)
+        cbs.get_q_index_face, cbs.get_q_spt)
 
 # Perform overset connectivity / hole blanking
 print "Beginning connectivity"
@@ -61,11 +61,16 @@ print "Connectivity done."
 Comm.Barrier()
 
 # Run the solver
+z.write_solution()
 z.write_residual()
-tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
+
+Comm.Barrier()
+
+#tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
 z.do_step()
 #z.do_n_steps(10)
 z.write_residual()
+z.write_solution()
 
 # Finalize - free memory
 print "Finishing run..."

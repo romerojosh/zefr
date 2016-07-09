@@ -2085,7 +2085,7 @@ std::vector<double> Elements::getBoundingBox(int ele)
 {
   std::vector<double> bbox = { INFINITY, INFINITY, INFINITY,
                               -INFINITY,-INFINITY,-INFINITY};
-assert(ele < nEles); /// DEBUGGING
+
   for (unsigned int node = 0; node < nNodes; node++)
   {
     unsigned int nd = geo->ele2nodes(node, ele);
@@ -2108,7 +2108,7 @@ assert(ele < nEles); /// DEBUGGING
 
 bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 {
-  /// // First, do a quick check to see if the point is even close to being in the element
+  // First, do a quick check to see if the point is even close to being in the element
   point pos = point(xyz);
 
   double xmin, ymin, zmin;
@@ -2161,7 +2161,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
         {
           grad(i,j) += geo->coord_nodes(i,nd)*dshape(node,j);
         }
-        dx[i] -= shape(nd)*geo->coord_nodes(i,nd);
+        dx[i] -= shape(node)*geo->coord_nodes(i,nd);
       }
     }
 
@@ -2190,16 +2190,17 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   return true;
 }
 
-void Elements::get_interp_weights(int cellID, double* rst, int* inode, double* weights, int& nweights, int buffSize)
+void Elements::get_interp_weights(int cellID, double* rst, int* inode,
+                                  double* weights, int& nweights, int buffSize)
 {
   /// TODO : modify TIOGA to use strides rather than 'point indices'
   /// TODO : implement eleMap (in geo?) like in Flurry
-  //assert(nSpts <= buffSize);
+  assert(nSpts <= buffSize);
   // cellID = eleMap[cellID];
   nweights = nSpts;
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {
     weights[spt] = this->calc_nodal_basis(spt, rst);
-    inode[spt] = cellID*nSpts + spt; //std::distance(&U_spts(0,0,0), &U_spts(spt,cellID,0));
+//    inode[spt] = cellID*nSpts + spt; //std::distance(&U_spts(0,0,0), &U_spts(spt,cellID,0));
   }
 }

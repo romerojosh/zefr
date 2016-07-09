@@ -48,6 +48,11 @@ BasicGeo get_basic_geo_data(void)
   return geo;
 }
 
+double get_q_spt(int ele, int spt, int var)
+{
+  return ZEFR->get_u_spt(ele,spt,var);
+}
+
 double* get_q_spts(void)
 {
   return ZEFR->get_u_spts();
@@ -64,7 +69,8 @@ ExtraGeo get_extra_geo_data(void)
 
   ZEFR->get_extra_geo_data(geo.nFaceTypes,geo.nvert_face,geo.nFaces_type,
                            geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,
-                           geo.iblank_cell);
+                           geo.iblank_cell,geo.nOverFaces,geo.overFaces,
+                           geo.nMpiFaces,geo.mpiFaces,geo.procR,geo.mpiFidR);
 
   return geo;
 }
@@ -81,6 +87,7 @@ CallbackFuncs get_callback_funcs(void)
   call.donor_inclusion_test = donor_inclusion_test;
   call.donor_frac = donor_frac;
   call.convert_to_modal = convert_to_modal;
+  call.get_q_spt = get_q_spt;
 
   return call;
 }

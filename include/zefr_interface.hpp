@@ -32,6 +32,12 @@ struct ExtraGeo
   int *c2f;         //! Cell-to-face connectivity
   int *iblank_cell; //! Cell iblank values
   int *iblank_face; //! Face iblank values
+  int nOverFaces;   //! # of explicitly-defined overset faces
+  int nMpiFaces;    //! # of MPI faces
+  int *overFaces;   //! List of explicitly-defined overset faces
+  int *mpiFaces;    //! List of MPI face ID's on this rank
+  int *procR;       //! Opposite rank for each MPI face
+  int *mpiFidR;     //! Face ID of MPI face on opposite rank
 };
 
 struct CallbackFuncs
@@ -47,6 +53,7 @@ struct CallbackFuncs
                      double* weights, double* rst, int* buffsize);
   void (*convert_to_modal)(int *cellID, int *nSpts, double *q_in, int *npts,
                            int *index_out, double *q_out);
+  double (*get_q_spt)(int cellID, int spt, int var);
 };
 
 #ifdef _MPI
@@ -71,6 +78,7 @@ CallbackFuncs get_callback_funcs(void);
 
 /* ==== Access functions for solution data ==== */
 
+double get_q_spt(int ele, int spt, int var);
 double *get_q_spts(void);
 double *get_q_fpts(void);
 
