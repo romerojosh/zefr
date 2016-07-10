@@ -183,6 +183,11 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
   }
 
+  /* Fix the coordinates assigned to all internal flux points */
+  for (unsigned int fpt = 0; fpt < geo->nGfpts_int; fpt++)
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      faces->coord(fpt, dim) *= 0.5;
+
   if (input->CFL_type == 2)
   {
     /* Allocate memory for tensor-line reference lengths */
