@@ -775,7 +775,43 @@ void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
 
 void Hexas::transform_dFdU()
 {
-  ThrowException("Implicit method not implemented for Hex element type yet!");
+#ifdef _CPU
+#pragma omp parallel for collapse(4)
+  for (unsigned int nj = 0; nj < nVars; nj++)
+  {
+    for (unsigned int ni = 0; ni < nVars; ni++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          double dFdUtemp0 = dFdU_spts(spt, ele, ni, nj, 0);
+          double dFdUtemp1 = dFdU_spts(spt, ele, ni, nj, 1);
+
+          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * inv_jaco_spts(0, 0, spt, ele) + 
+                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(0, 1, spt, ele) +  
+                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(0, 2, spt, ele); 
+
+          dFdU_spts(spt, ele, ni, nj, 1) = dFdUtemp0 * inv_jaco_spts(1, 0, spt, ele) + 
+                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(1, 1, spt, ele) +  
+                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(1, 2, spt, ele);  
+                                    
+          dFdU_spts(spt, ele, ni, nj, 2) = dFdUtemp0 * inv_jaco_spts(2, 0, spt, ele) + 
+                                           dFdUtemp1 * inv_jaco_spts(2, 1, spt, ele) +  
+                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(2, 2, spt, ele); 
+        }
+      }
+    }
+  }
+
+#endif
+
+#ifdef _GPU
+  transform_dFdU_hexa_wrapper(dFdU_spts_d, inv_jaco_spts_d, nSpts, nEles, nVars,
+      nDims, input->equation);
+  check_error();
+
+#endif
 }
 
 mdvector<double> Hexas::calc_shape(unsigned int shape_order,
