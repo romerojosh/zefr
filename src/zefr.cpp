@@ -411,10 +411,10 @@ void zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 {
   nNodes = (int)geo->nFptsPerFace;
 
-  int start_fpt = faceID * nNodes;
+  int start_fpt = geo->face2fpts(0, faceID);
   for (int fpt = 0; fpt < nNodes; fpt++)
     for (int dim = 0; dim < geo->nDims; dim++)
-      xyz[3*fpt+dim] = solver->faces->coord(start_fpt+fpt, dim);
+      xyz[3*fpt+dim] = solver->faces->coord(start_fpt + fpt, dim);
 }
 
 void zefr::get_q_index_face(int faceID, int fpt, int& ind, int& stride)

@@ -85,6 +85,8 @@ class Faces
 
     /* Vector to store request handles for non-blocking comms. */
     std::vector<MPI_Request> sreqs, rreqs;
+
+    mdvector<double> tmpOversetU; /// TODO: find better way?
 #endif
 
 #ifdef _GPU

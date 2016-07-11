@@ -1167,6 +1167,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.mpiLocF.resize(0);
     geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
     geo.face2eles.assign({2, unique_faces.size()}, -1);
+    geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
+    geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
 
     std::set<int> overPts, wallPts;
     std::set<std::vector<unsigned int>> overFaces;
@@ -1288,6 +1290,12 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
             ele2fpts[ele][n*nFptsPerFace + i] = fpts[i];
             ele2fpts_slot[ele][n*nFptsPerFace + i] = 0;
           }
+
+          for (auto &fpt : fpts)
+            geo.fpt2face[fpt] = geo.nFaces;
+
+          for (int j = 0; j < nFptsPerFace; j++)
+            geo.face2fpts(j, geo.nFaces) = fpts[j];
 
           geo.faceList.push_back(face);
           geo.nodes_to_face[face] = geo.nFaces;
@@ -1659,7 +1667,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   {
     ThrowException("nDims is not valid!");
   }
-
 }
 
 void setup_element_colors(InputStruct *input, GeoStruct &geo)

@@ -1974,7 +1974,8 @@ void FRSolver::write_solution(const std::string &_prefix)
   if (input->p_multi)
     iter = iter / input->mg_steps[0];
 
-  if (input->rank == 0) std::cout << "Writing data to file..." << std::flush;
+  if (input->gridID == 0 && input->rank == 0)
+    std::cout << "Writing data to file..." << std::endl;
 
   if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
 
@@ -2276,7 +2277,8 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "</VTKFile>" << std::endl;
   f.close();
 
-  if (input->rank == 0) std::cout << "  Done." << std::endl;
+//  if (input->gridID == 0 && input->rank == 0)
+//    std::cout << "  Done." << std::endl;
 }
 
 void FRSolver::write_color()

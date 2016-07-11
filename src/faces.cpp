@@ -126,7 +126,7 @@ void Faces::apply_bcs()
 #pragma omp parallel for private(VL,VR)
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+//    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -641,7 +641,7 @@ void Faces::apply_bcs_dU()
 #pragma omp parallel for 
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -855,7 +855,7 @@ void Faces::apply_bcs_dFdU()
 #pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -1583,7 +1583,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -1606,7 +1606,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -1630,7 +1630,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
-        if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
@@ -1663,7 +1663,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
-        if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
@@ -1717,7 +1717,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
@@ -1745,7 +1745,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
-        if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
         for (unsigned int slot = 0; slot < 2; slot++)
         {
@@ -1821,7 +1821,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
-        if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
         for (unsigned int slot = 0; slot < 2; slot++)
         {
@@ -2005,7 +2005,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for 
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
       double beta = input->ldg_b;
 
@@ -2094,7 +2094,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
@@ -2204,7 +2204,7 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, F, dW)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     /* Apply central flux at boundaries */
     double k = input->rus_k;
@@ -2312,7 +2312,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     double beta = input->ldg_b;
 
@@ -2412,7 +2412,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
           dFdUconv(fpt, 0, 0, dim, slot) = input->AdvDiff_A(dim);
         }
       }
@@ -2437,7 +2437,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
           dFdUconv(fpt, 0, 0, dim, slot) = U(fpt, 0, slot);
         }
       }
@@ -2460,7 +2460,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
           /* Primitive Variables */
           double rho = U(fpt, 0, slot);
@@ -2520,7 +2520,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
           /* Primitive Variables */
           double rho = U(fpt, 0, slot);
@@ -2650,7 +2650,7 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
           {
             for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
             {
-              if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+              if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
               // TODO: Can be removed if initialized to zero
               dFdUvisc(fpt, ni, nj, dim, slot) = 0;
@@ -2670,7 +2670,7 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
           /* Setting variables for convenience */
           /* States */
@@ -2765,7 +2765,7 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
           {
-            if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+            if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
             // TODO: Can be changed if initialized to zero
             dFddUvisc(fpt, ni, nj, 0, 0, slot) = -input->AdvDiff_D;
@@ -2787,7 +2787,7 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
-          if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
           /* Primitive Variables */
           double rho = U(fpt, 0, slot);
@@ -2948,7 +2948,7 @@ void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
   {
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
       double beta = input->ldg_b;
 
@@ -3024,7 +3024,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     /* Apply central flux at boundaries */
     double k = input->rus_k;
@@ -3231,7 +3231,7 @@ void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     /* Apply central flux at boundaries */
     double k = input->rus_k;
@@ -3383,7 +3383,7 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     /* Setting sign of beta (from HiFiLES) */
     double beta = input->ldg_b;
@@ -3562,7 +3562,7 @@ void Faces::transform_dFcdU()
       {
         for (unsigned int fpt = 0; fpt < nFpts; fpt++)
         {
-          if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
           dFcdU(fpt, ni, nj, slot, 0) *= dA(fpt);
           dFcdU(fpt, ni, nj, slot, 1) *= -dA(fpt); // Right state flux has opposite sign
@@ -3584,7 +3584,7 @@ void Faces::transform_dFcdU()
           {
             for (unsigned int fpt = 0; fpt < nFpts; fpt++)
             {
-              if (input->overset && geo->iblank_face[fpt/geo->nFptsPerFace] == HOLE) continue;
+              if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
               dFcddU(fpt, ni, nj, dim, slot, 0) *= dA(fpt);
               dFcddU(fpt, ni, nj, dim, slot, 1) *= -dA(fpt); // Right state flux has opposite sign
             }
@@ -3605,6 +3605,25 @@ void Faces::transform_dFcdU()
 #ifdef _MPI
 void Faces::send_U_data()
 {
+  /* This is kinda hacky, but I can't see any better way to get around the MPI
+   * datatype usage besides copying ALL the MPI data into a temp array */
+  tmpOversetU.assign({nVars,0,1,1});
+  if (input->overset)
+  {
+    int nPts = 0;
+    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
+    {
+      int ff = geo->fpt2face[fpt];
+      if (geo->iblank_face[ff] == FRINGE)
+      {
+        tmpOversetU.add_dim_1(nPts,0);
+        for (int k = 0; k < nVars; k++)
+          tmpOversetU(k, nPts) = U(fpt, k, 1);
+        nPts++;
+      }
+    }
+  }
+
   /* Stage all the non-blocking receives */
   unsigned int ridx = 0;
 
@@ -3647,7 +3666,6 @@ void Faces::send_U_data()
     int pairedRank = entry.first;
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
-
 #endif
 }
 
@@ -3702,6 +3720,21 @@ void Faces::recv_U_data()
   sync_stream(0);
 #endif
 
+  /* Copy interpolated overset data back into 'U' (overwrite junk MPI data) */
+  if (input->overset)
+  {
+    int nPts = 0;
+    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
+    {
+      int ff = geo->fpt2face[fpt];
+      if (geo->iblank_face[ff] == FRINGE)
+      {
+        for (int k = 0; k < nVars; k++)
+          U(fpt, k, 1) = tmpOversetU(k, nPts);
+        nPts++;
+      }
+    }
+  }
 }
 
 void Faces::send_dU_data()
@@ -3829,10 +3862,22 @@ void Faces::recv_dU_data()
 
 void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
 {
-  /// TODO : faceMap for blanking [like eleMap]
-//  if (geo->faceMap.size() > 0) faceID = geo->faceMap[faceID];
+  /* U : nFpts x nVars x 2 */
+  int i = geo->face2fpts(fpt, faceID);
+  int ic1 = geo->face2eles(0,faceID);
+  int ic2 = geo->face2eles(1,faceID);
 
-  int i = faceID * geo->nFptsPerFace + fpt;
-  ind    = std::distance(&U(0,0,1), &U(i,0,1));
-  stride = std::distance(&U(i,0,1), &U(i,1,1));
+  int side = -1;
+  if (ic1 > 0 && geo->iblank_cell[ic1] == NORMAL)
+    side = 1;
+  else if (ic2 > 0 && geo->iblank_cell[ic2] == NORMAL)
+    side = 0;
+  else
+  {
+    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell[ic1],geo->iblank_cell[ic2]);
+    ThrowException("Face not blanked but both elements are!");
+  }
+
+  ind    = std::distance(&U(0,0,0), &U(i,0,side));
+  stride = std::distance(&U(i,0,side), &U(i,1,side));
 }

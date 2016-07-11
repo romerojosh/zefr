@@ -66,11 +66,12 @@ z.write_residual()
 
 Comm.Barrier()
 
-#tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
-z.do_step()
-#z.do_n_steps(10)
-z.write_residual()
-z.write_solution()
+for iter in range(1,1000):
+    tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
+    z.do_step()
+    if iter%200 == 0:
+        z.write_residual()
+        z.write_solution()
 
 # Finalize - free memory
 print "Finishing run..."
