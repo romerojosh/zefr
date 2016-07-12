@@ -1,37 +1,40 @@
 #include "zefr_interface.hpp"
 
-zefr *ZEFR = NULL;
+Zefr *ZEFR = NULL;
+
+namespace zefr {
 
 #ifdef _MPI
 void initialize(MPI_Comm comm_in, char *inputFile, int nGrids, int gridID)
 {
-  if (!ZEFR) ZEFR = new zefr(comm_in, nGrids, gridID);
+  if (!ZEFR) ZEFR = new Zefr(comm_in, nGrids, gridID);
 
   ZEFR->read_input(inputFile);
 }
 #else
 void initialize(char *input_file)
 {
-  if (!ZEFR) ZEFR = new zefr();
+  if (!ZEFR) ZEFR = new Zefr();
 
   ZEFR->read_input(input_file);
 }
 #endif
 
-void set_zefr_object(zefr *_ZEFR)
+void set_zefr_object(Zefr *_ZEFR)
 {
   delete ZEFR;
 
   ZEFR = _ZEFR;
 }
 
-zefr* get_zefr_object(void)
+Zefr* get_zefr_object(void)
 {
   return ZEFR;
 }
 
 void finalize(void)
 {
+  ZEFR->write_wall_time();
   delete ZEFR;
 }
 
@@ -137,3 +140,5 @@ void convert_to_modal(int* cellID, int* nSpts, double* q_in, int* npts, int* ind
   for (int spt = 0; spt < (*nSpts); spt++)
     q_out[spt] = q_in[spt];
 }
+
+} /* namespace zefr */

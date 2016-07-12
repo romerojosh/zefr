@@ -98,6 +98,17 @@ swig: CXXFLAGS += -fPIC
 swig: $(SOBJS)
 	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
 
+.PHONY: lib
+lib: FLAGS += -D_BUILD_LIB
+lib: CXXFLAGS += -fPIC
+lib: $(SOBJS)
+	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
+
+.PHONY: test
+test: INCS += -I~/tioga/src/
+test: lib
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp $(BINDIR)/libzefr.so -L$(SWIGDIR)/lib -ltioga -Wl,-rpath=$(SWIGDIR)/lib/ -o $(SWIGDIR)/testZefr
+
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
 	@mkdir -p bin

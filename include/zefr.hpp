@@ -21,7 +21,7 @@ class PMGrid;
 #include "multigrid.hpp"
 #include "solver.hpp"
 
-class zefr
+class Zefr
 {
 public:
 
@@ -32,9 +32,9 @@ public:
    * (1 communicator per grid)
    */
 #ifdef _MPI
-  zefr(MPI_Comm comm_in = MPI_COMM_WORLD, int n_grids = 1, int grid_id = 0);
+  Zefr(MPI_Comm comm_in = MPI_COMM_WORLD, int n_grids = 1, int grid_id = 0);
 #else
-  zefr(void);
+  Zefr(void);
 #endif
 
   //! Read input file and set basic run parameters
@@ -56,6 +56,8 @@ public:
   void write_solution(void);
   void write_forces(void);
   void write_error(void);
+
+  void write_wall_time(void);
 
   // Other Misc. Functions
   InputStruct &get_input(void) { return input; }

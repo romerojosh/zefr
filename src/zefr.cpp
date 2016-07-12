@@ -178,9 +178,9 @@ int main(int argc, char* argv[])
 #include "zefr.hpp"
 
 #ifdef _MPI
-zefr::zefr(MPI_Comm comm_in, int n_grids, int grid_id)
+Zefr::Zefr(MPI_Comm comm_in, int n_grids, int grid_id)
 #else
-zefr::zefr(void)
+Zefr::Zefr(void)
 #endif
 {
   // Basic constructor
@@ -210,7 +210,7 @@ zefr::zefr(void)
 }
 
 #ifdef _MPI
-void zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
+void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
 {
   myComm = comm_in;
   nGrids = n_grids;
@@ -233,7 +233,7 @@ void zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
 }
 #endif
 
-void zefr::read_input(char *inputfile)
+void Zefr::read_input(char *inputfile)
 {
   if (rank == 0) std::cout << "Reading input file: " << inputfile <<  std::endl;
   input = read_input_file(inputfile);
@@ -249,7 +249,7 @@ void zefr::read_input(char *inputfile)
   }
 }
 
-void zefr::setup_solver(void)
+void Zefr::setup_solver(void)
 {
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   solver = std::make_shared<FRSolver>(&input);
@@ -286,7 +286,7 @@ void zefr::setup_solver(void)
   t_start = std::chrono::high_resolution_clock::now();
 }
 
-void zefr::do_step(void)
+void Zefr::do_step(void)
 {
   if (!input.p_multi)
   {
@@ -301,38 +301,47 @@ void zefr::do_step(void)
   input.iter++;
 }
 
-void zefr::do_n_steps(int n)
+void Zefr::do_n_steps(int n)
 {
   for (int i = 0; i < n; i++)
     do_step();
 }
 
-void zefr::extrapolate_u(void)
+void Zefr::extrapolate_u(void)
 {
   solver->eles->extrapolate_U(0, solver->eles->nEles);
 }
 
-void zefr::write_residual(void)
+void Zefr::write_residual(void)
 {
   solver->report_residuals(hist_file, t_start);
 }
 
-void zefr::write_solution(void)
+void Zefr::write_solution(void)
 {
   solver->write_solution(input.output_prefix);
 }
 
-void zefr::write_forces(void)
+void Zefr::write_forces(void)
 {
   solver->report_forces(force_file);
 }
 
-void zefr::write_error(void)
+void Zefr::write_error(void)
 {
   solver->report_error(error_file);
 }
 
-void zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank,
+void Zefr::write_wall_time(void)
+{
+  auto t2 = std::chrono::high_resolution_clock::now();
+
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t_start);
+  if (input.gridID == 0 && input.rank == 0)
+    std::cout << "Elapsed time: " << elapsed_time.count() << " s" << std::endl;
+}
+
+void Zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank,
                               int& nwall, int& nover, int*& wallNodes,
                               int*& overNodes, int& nCellTypes, int &nvert_cell,
                               int &nCells_type, int*& c2v)
@@ -351,7 +360,7 @@ void zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank
   c2v = (int *)&geo->ele2nodes(0,0);
 }
 
-void zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
+void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
                               int& nFaces_type, int*& f2v, int*& f2c, int*& c2f,
                               int*& iblank_face, int*& iblank_cell,
                               int &nOver, int*& overFaces, int &nMpiFaces, int*& mpiFaces, int*& procR,
@@ -373,32 +382,32 @@ void zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
   faceIdR = geo->faceID_R.data();
 }
 
-double zefr::get_u_spt(int ele, int spt, int var)
+double Zefr::get_u_spt(int ele, int spt, int var)
 {
   return solver->eles->U_spts(spt, ele, var);
 }
 
-double *zefr::get_u_spts(void)
+double *Zefr::get_u_spts(void)
 {
   return solver->eles->U_spts.data();
 }
 
-double *zefr::get_u_fpts(void)
+double *Zefr::get_u_fpts(void)
 {
   return solver->faces->U.data();
 }
 
-void zefr::get_nodes_per_cell(int &nNodes)
+void Zefr::get_nodes_per_cell(int &nNodes)
 {
   nNodes = (int)solver->eles->nSpts;
 }
 
-void zefr::get_nodes_per_face(int& nNodes)
+void Zefr::get_nodes_per_face(int& nNodes)
 {
   nNodes = (int)geo->nFptsPerFace;
 }
 
-void zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
+void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 {
   nNodes = (int)solver->eles->nSpts;
 
@@ -407,7 +416,7 @@ void zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
       xyz[3*spt+dim] = geo->coord_spts(spt, cellID, dim);
 }
 
-void zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
+void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 {
   nNodes = (int)geo->nFptsPerFace;
 
@@ -417,17 +426,17 @@ void zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
       xyz[3*fpt+dim] = solver->faces->coord(start_fpt + fpt, dim);
 }
 
-void zefr::get_q_index_face(int faceID, int fpt, int& ind, int& stride)
+void Zefr::get_q_index_face(int faceID, int fpt, int& ind, int& stride)
 {
   solver->faces->get_U_index(faceID,fpt,ind,stride);
 }
 
-void zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
+void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
   passFlag = solver->eles->getRefLoc(cellID,xyz,rst);
 }
 
-void zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
+void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
                       double* rst, int buffsize)
 {
   solver->eles->get_interp_weights(cellID,rst,inode,weights,nweights,buffsize);

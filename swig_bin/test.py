@@ -11,8 +11,13 @@ Comm = MPI.COMM_WORLD
 rank = Comm.Get_rank()
 nproc = Comm.Get_size()
 
-GridID = (rank%2) # Simple grid splitting for 2 grids
-#GridID = 0
+if nproc != 8:
+    GridID = (rank%2) # Simple grid splitting for 2 grids
+else:
+    if rank < 3:
+        GridID = 0;
+    else:
+        GridID = 1;
 
 gridComm = Comm.Split(GridID,rank)
 gridRank = gridComm.Get_rank()
@@ -23,6 +28,8 @@ inputFile = "input_sphere"
 zefr.initialize(gridComm,inputFile,2,GridID)
 z = zefr.get_zefr_object()
 z.setup_solver()
+
+inp = z.get_input()
 
 # Setup the TIOGA object; prepare to receive grid data
 tg.tioga_init_(Comm)
@@ -53,25 +60,28 @@ tg.tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
         cbs.get_q_index_face, cbs.get_q_spt)
 
 # Perform overset connectivity / hole blanking
-print "Beginning connectivity"
+print "Beginning connectivity..."
 tg.tioga_preprocess_grids_()
 tg.tioga_performconnectivity_()
-print "Connectivity done."
-
-Comm.Barrier()
+print "Connectivity complete."
 
 # Run the solver
 z.write_solution()
 z.write_residual()
 
-Comm.Barrier()
-
-for iter in range(1,1000):
+for iter in range(1,inp.n_steps+1):
     tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
     z.do_step()
-    if iter%200 == 0:
+    if iter%inp.report_freq == 0 or iter==0 or iter==inp.n_steps: # & GridID == 0:
         z.write_residual()
+    if iter%inp.write_freq == 0 or iter==0 or iter==inp.n_steps:
         z.write_solution()
+    if inp.force_freq > 0:
+        if iter%inp.force_freq == 0 or iter==0 or iter==inp.n_steps:
+            z.write_forces()
+    if inp.error_freq > 0:
+        if iter%inp.error_freq == 0 or iter==0 or iter==inp.n_steps:
+            z.write_error()
 
 # Finalize - free memory
 print "Finishing run..."

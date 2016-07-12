@@ -26,7 +26,7 @@ class Elements
   friend class PMGrid;
   friend class Filter;
 #ifdef _BUILD_LIB
-  friend class zefr;
+  friend class Zefr;
 #endif
   protected:
     InputStruct *input = NULL;

@@ -3,9 +3,6 @@
 
 #include "zefr.hpp"
 
-typedef void (gnpc)(int*,int*);
-typedef void (gnpf)(int*,int*);
-
 struct BasicGeo
 {
   int btag;         //! Body tag (aka grid ID)
@@ -56,15 +53,17 @@ struct CallbackFuncs
   double (*get_q_spt)(int cellID, int spt, int var);
 };
 
+namespace zefr {
+
 #ifdef _MPI
 void initialize(MPI_Comm comm_in, char* inputFile, int nGrids=1, int gridID=0);
 #else
 void initialize(char* input_file);
 #endif
 
-void set_zefr_object(zefr *_ZEFR);
+void set_zefr_object(Zefr *_ZEFR);
 
-zefr* get_zefr_object(void);
+Zefr* get_zefr_object(void);
 
 void finalize(void);
 
@@ -95,4 +94,5 @@ void donor_frac(int* cellID, double* xyz, int* nweights, int* inode,
 void convert_to_modal(int *cellID, int *nSpts, double *q_in, int *npts,
                       int *index_out, double *q_out);
 
+} /* namespace zefr */
 #endif /* _zefr_interface_hpp */

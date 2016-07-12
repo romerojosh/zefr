@@ -28,7 +28,7 @@
 
 class PMGrid;
 #ifdef _BUILD_LIB
-class zefr;
+class Zefr;
 #endif
 
 class FRSolver
@@ -36,7 +36,7 @@ class FRSolver
   friend class PMGrid;
   friend class Filter;
 #ifdef _BUILD_LIB
-  friend class zefr;
+  friend class Zefr;
 #endif
   private:
     InputStruct *input = NULL;

@@ -24,7 +24,8 @@ SOURCES += \
     src/faces_kernels.cu \
     src/funcs_kernels.cu \
     src/solver_kernels.cu \
-    src/zefr_interface.cpp
+    src/zefr_interface.cpp \
+    swig_bin/testZefr.cpp
 
 HEADERS += \
     include/elements_kernels.h \
@@ -49,5 +50,7 @@ HEADERS += \
     include/zefr_interface.hpp
 
 DISTFILES += \
-    swig_bin/zefr.i
+    swig_bin/zefr.i \
+    swig_bin/test.py \
+    swig_bin/Makefile
 

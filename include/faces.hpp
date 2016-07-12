@@ -32,7 +32,7 @@ class Faces
   friend class Hexas;
   friend class Filter;
 #ifdef _BUILD_LIB
-  friend class zefr;
+  friend class Zefr;
 #endif
 
   private:
