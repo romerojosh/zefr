@@ -108,6 +108,7 @@ lib: $(SOBJS)
 test: INCS += -I~/tioga/src/
 test: lib
 	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp $(BINDIR)/libzefr.so -L$(SWIGDIR)/lib -ltioga -Wl,-rpath=$(SWIGDIR)/lib/ -o $(SWIGDIR)/testZefr
+	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h

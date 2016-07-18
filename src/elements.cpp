@@ -2199,7 +2199,7 @@ void Elements::get_interp_weights(int cellID, double* rst, int* inode,
   /// TODO : modify TIOGA to use strides rather than 'point indices'
   /// TODO : implement eleMap (in geo?) like in Flurry
   assert(nSpts <= buffSize);
-  // cellID = eleMap[cellID];
+
   nweights = nSpts;
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {

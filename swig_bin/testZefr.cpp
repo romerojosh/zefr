@@ -1,3 +1,5 @@
+#include <valgrind/callgrind.h>
+
 #include "zefr_interface.hpp"
 #include "tiogaInterface.h"
 
@@ -8,27 +10,49 @@ using namespace std;
 int main(int argc, char *argv[])
 {
   MPI_Init(&argc,&argv);
+CALLGRIND_STOP_INSTRUMENTATION;
 
   int rank, size;
   MPI_Comm_rank(MPI_COMM_WORLD,&rank);
   MPI_Comm_size(MPI_COMM_WORLD,&size);
 
   int gridID = 0;
+  int nGrids = 2;
   if (size == 8)
   {
     gridID = (rank >= 3);
   }
+  else if (size == 3)
+  {
+    gridID = (rank > 0);
+  }
+  else if (size == 1)
+  {
+    gridID = 1;
+    nGrids = 1;
+  }
   else
   {
-    gridID = rank % 2;
+    gridID = (rank > (size/2));
   }
 
   MPI_Comm gridComm;
-  MPI_Comm_split(MPI_COMM_WORLD, gridID, rank, &gridComm);
+
+  bool oneGrid = false;
+  if (oneGrid)
+  {
+    nGrids = 1; gridID = 0;
+    gridComm = MPI_COMM_WORLD;
+  }
+  else
+  {
+    MPI_Comm_split(MPI_COMM_WORLD, gridID, rank, &gridComm);
+  }
+  cout << "Rank " << rank << ", GridID = " << gridID << ", nproc = " << size << endl;
 
   // Setup the ZEFR solver object
   char inputFile[] = "input_sphere";
-  zefr::initialize(gridComm, inputFile, 2, gridID);
+  zefr::initialize(gridComm, inputFile, nGrids, gridID);
 
   Zefr *z = zefr::get_zefr_object();
   z->setup_solver();
@@ -36,10 +60,13 @@ int main(int argc, char *argv[])
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
   CallbackFuncs cbs = zefr::get_callback_funcs();
-  InputStruct inp = z->get_input();
+  InputStruct &inp = z->get_input();
 
   double *U_spts = zefr::get_q_spts();
   double *U_fpts = zefr::get_q_fpts();
+
+  Timer tg_time;
+  tg_time.startTimer();
 
   // Setup the TIOGA connectivity object
   tioga_init_(MPI_COMM_WORLD);
@@ -61,31 +88,62 @@ int main(int argc, char *argv[])
 
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
       cbs.get_q_index_face, cbs.get_q_spt);
-
+if (nGrids >  1)
+{
   tioga_preprocess_grids_();
   tioga_performconnectivity_();
+}
+  tg_time.stopTimer();
+
+  // Output initial solution and grid
+  z->write_solution();
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  CALLGRIND_START_INSTRUMENTATION;
 
   // Run the solver loop now
-  z->write_solution();
-  z->write_residual();
+  Timer runTime("Compute Time: ");
+  Timer tgTime("Interp Time: ");
+  Timer mpiTime("MPI Wait Time: ");
+  inp.waitTimer = mpiTime;
 
   for (int iter = 1; iter <= inp.n_steps; iter++)
   {
-    tioga_dataupdate_ab(5,U_spts,U_fpts);
-    z->do_step();
+    tgTime.startTimer();
+    if (nGrids > 1)
+      tioga_dataupdate_ab(5,U_spts,U_fpts);
+    tgTime.stopTimer();
 
-    if (iter%inp.report_freq == 0 or iter == 0 or iter == inp.n_steps)
+    runTime.startTimer();
+    z->do_step();
+    runTime.stopTimer();
+
+    if (iter%inp.report_freq == 0 or iter == 1 or iter == inp.n_steps)
       z->write_residual();
 
-    if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)
-      z->write_solution();
+//    if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)
+//      z->write_solution();
 
-    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
-      z->write_forces();
+//    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
+//      z->write_forces();
 
-    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
-      z->write_error();
+//    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
+//      z->write_error();
   }
+  CALLGRIND_STOP_INSTRUMENTATION;
+
+  z->write_solution();
+
+//  if (rank == 0)
+//  {
+    std::cout << "Preprocessing/Connectivity Time: ";
+    tg_time.showTime(2);
+
+    tgTime.showTime(2);
+    runTime.showTime(2);
+//  }
+
+    inp.waitTimer.showTime();
 
   zefr::finalize();
   tioga_delete_();

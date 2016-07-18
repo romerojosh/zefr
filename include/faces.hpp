@@ -60,6 +60,9 @@ class Faces
     void recv_U_data();
     void send_dU_data();
     void recv_dU_data();
+
+    void send_U_data_blocked(void);
+    void recv_U_data_blocked(int mpiFaceID);
 #endif
 
   protected:
@@ -85,6 +88,11 @@ class Faces
 
     /* Vector to store request handles for non-blocking comms. */
     std::vector<MPI_Request> sreqs, rreqs;
+
+    /// JACOB'S ADDITIONS FOR TESTING NEW COMMUNICATION STRATEGY
+    std::vector<MPI_Request> sends, recvs;
+    MPI_Status status;
+    std::vector<mdvector<double>> buffUR, buffUL;
 
     mdvector<double> tmpOversetU; /// TODO: find better way?
 #endif

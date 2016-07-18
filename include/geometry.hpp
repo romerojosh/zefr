@@ -62,12 +62,9 @@ struct GeoStruct
     std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
     std::map<unsigned int, MPI_Datatype> mpi_types;
 
-    std::vector<int> nProcGrid;  //! Number of MPI processes assigned to each grid block
-    std::vector<int> gridIdList; //! List of grid ID assigned to each rank
-
-    //std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
-#endif
+    unsigned int nMpiFaces;
     std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
+#endif
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
@@ -85,7 +82,7 @@ struct GeoStruct
 
     InputStruct *input;
 
-    unsigned int nBndFaces, nIntFaces, nMpiFaces, nOverFaces;
+    unsigned int nBndFaces, nIntFaces, nOverFaces;
     std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
     std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching ele2face / face2eles
     std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
@@ -93,11 +90,8 @@ struct GeoStruct
     mdvector<int> face2fpts; //! Face index to fpt indices
 
     std::vector<int> iblank_node, iblank_cell, iblank_face; //! iblank values for nodes, cells, faces
-    std::vector<int> faceType, currFaceType, currIblankCell, currIblankFace; //! Current cell/face status
-    std::unordered_set<int> blankCells, blankFaces, unblankCells, unblankFaces;
 
     //! Map cell/face ID to 'non-blanked' list index (-1 for blanked cell/face)
-    std::vector<int> eleMap, faceMap;
     std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
     std::set<int> overFaces;  //! Ordered list of all current overset faces
     std::vector<int> overFaceList;
@@ -105,10 +99,10 @@ struct GeoStruct
     int nWall, nOver; //! Number of nodes on wall & overset boundaries
     std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists
 
-    unsigned int nGrids;             //! Number of distinct overset grids
-    int nProcsGrid;          //! Number of MPI processes assigned to current (overset) grid block
-    unsigned int gridID;             //! Which (overset) grid block is this process handling
-    int gridRank;           //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
+    unsigned int nGrids;  //! Number of distinct overset grids
+    int nProcsGrid;       //! Number of MPI processes assigned to current (overset) grid block
+    unsigned int gridID;  //! Which (overset) grid block is this process handling
+    int gridRank;         //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
     int rank;
     int nproc;
 
@@ -133,7 +127,6 @@ void shuffle_data_by_color(GeoStruct &geo);
 #ifdef _MPI
 void partition_geometry(GeoStruct &geo);
 void partition_geometry(InputStruct *input, GeoStruct &geo);
-void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo);
 #endif
 
 #endif /* geometry_hpp */

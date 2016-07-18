@@ -15,9 +15,9 @@ if nproc != 8:
     GridID = (rank%2) # Simple grid splitting for 2 grids
 else:
     if rank < 3:
-        GridID = 0;
+        GridID = 0
     else:
-        GridID = 1;
+        GridID = 1
 
 gridComm = Comm.Split(GridID,rank)
 gridRank = gridComm.Get_rank()
@@ -67,20 +67,19 @@ print "Connectivity complete."
 
 # Run the solver
 z.write_solution()
-z.write_residual()
 
 for iter in range(1,inp.n_steps+1):
     tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
     z.do_step()
-    if iter%inp.report_freq == 0 or iter==0 or iter==inp.n_steps: # & GridID == 0:
+    if iter%inp.report_freq == 0 or iter==1 or iter==inp.n_steps: # & GridID == 0:
         z.write_residual()
     if iter%inp.write_freq == 0 or iter==0 or iter==inp.n_steps:
         z.write_solution()
     if inp.force_freq > 0:
-        if iter%inp.force_freq == 0 or iter==0 or iter==inp.n_steps:
+        if iter%inp.force_freq == 0 or iter==inp.n_steps:
             z.write_forces()
     if inp.error_freq > 0:
-        if iter%inp.error_freq == 0 or iter==0 or iter==inp.n_steps:
+        if iter%inp.error_freq == 0 or iter==inp.n_steps:
             z.write_error()
 
 # Finalize - free memory

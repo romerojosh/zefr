@@ -106,12 +106,30 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     int pairedRank = entry.first;
     const auto &fpts = entry.second;
 
-    U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
-    U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+    if (input->viscous)
+    {
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+    }
+    else
+    {
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
+    }
   }
 
   sreqs.resize(geo->fpt_buffer_map.size());
   rreqs.resize(geo->fpt_buffer_map.size());
+
+  buffUR.resize(geo->nMpiFaces);
+  buffUL.resize(geo->nMpiFaces);
+  for (unsigned int i = 0; i < geo->nMpiFaces; i++)
+  {
+    buffUR[i].assign({geo->nFptsPerFace, nVars},0.0);  // Recv buffer per MPI face
+    buffUL[i].assign({geo->nFptsPerFace, nVars},0.0);  // Send buffer per MPI face
+  }
+  sends.resize(geo->nMpiFaces);
+  recvs.resize(geo->nMpiFaces);
 #endif
 
 }
@@ -3607,9 +3625,9 @@ void Faces::send_U_data()
 {
   /* This is kinda hacky, but I can't see any better way to get around the MPI
    * datatype usage besides copying ALL the MPI data into a temp array */
-  tmpOversetU.assign({nVars,0,1,1});
   if (input->overset)
   {
+    tmpOversetU.assign({nVars,0,1,1});
     int nPts = 0;
     for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
     {
@@ -3627,7 +3645,39 @@ void Faces::send_U_data()
   /* Stage all the non-blocking receives */
   unsigned int ridx = 0;
 
-#ifdef _CPU
+#ifdef _CPU // USING SEND/RECV BUFFERS
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+    ridx++;
+  }
+
+  unsigned int sidx = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int sendRank = entry.first;
+    const auto &fpts = entry.second;
+
+    /* Pack buffer of solution data at flux points in list */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+      {
+        U_sbuffs[sendRank](i, n) = U(fpts(i), n, 0);
+      }
+
+    }
+
+    /* Send buffer to paired rank */
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
+    sidx++;
+  }
+#endif
+
+#ifdef _CPU2  // USING DERIVED TYPES
   for (const auto &entry : geo->mpi_types)
   {
     int recvRank = entry.first;
@@ -3669,6 +3719,58 @@ void Faces::send_U_data()
 #endif
 }
 
+void Faces::send_U_data_blocked(void)
+{
+  for (unsigned int i = 0; i < geo->nMpiFaces; i++)
+  {
+    int ff = geo->mpiFaces[i];
+    int pR = geo->procR[i];
+    int ID = geo->mpiFaces[i];
+    int IDR = geo->faceID_R[i];
+
+    if (input->overset && geo->iblank_face[ff] != NORMAL)
+      continue;
+
+    MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &recvs[i]);
+
+    /* Pack buffer of solution data at flux points in list */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+      {
+        int gfpt = geo->face2fpts(fpt, ff);
+        buffUL[i](fpt, n) = U(gfpt, n, 0);
+      }
+
+    }
+
+    /* Send buffer to paired rank */
+    MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[i]);
+  }
+}
+
+void Faces::recv_U_data_blocked(int mpiFaceID)
+{
+  int ff = geo->mpiFaces[mpiFaceID];
+
+  if (input->overset && geo->iblank_face[ff] != NORMAL)
+    return;
+
+  input->waitTimer.startTimer();
+  MPI_Wait(&sends[mpiFaceID], &status);
+  MPI_Wait(&recvs[mpiFaceID], &status);
+  input->waitTimer.stopTimer();
+
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+    {
+      int gfpt = geo->face2fpts(fpt, ff);
+      U(gfpt, n, 1) = buffUR[mpiFaceID](fpt, n);
+    }
+  }
+}
+
 void Faces::recv_U_data()
 {
 #ifdef _GPU
@@ -3697,10 +3799,27 @@ void Faces::recv_U_data()
 #endif
 
   /* Wait for comms to finish */
+  input->waitTimer.startTimer();
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  input->waitTimer.stopTimer();
 
   /* Unpack buffer */
+#ifdef _CPU // USING SEND/RECV BUFFERS
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    auto &fpts = entry.second;
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+      {
+        U(fpts(i), n, 1) = U_rbuffs[recvRank](i, n);
+      }
+    }
+  }
+#endif
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 

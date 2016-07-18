@@ -1161,10 +1161,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nFaces = 0;
     geo.faceList.resize(0);
 
-    //std::vector<int> mpiFaces, procR, locF, locF_R;
+#ifdef _MPI
     geo.mpiFaces.resize(0);
     geo.procR.resize(0);
     geo.mpiLocF.resize(0);
+#endif
     geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
     geo.face2eles.assign({2, unique_faces.size()}, -1);
     geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
@@ -1517,7 +1518,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     MPI_Barrier(geo.myComm);
 
     /* Create MPI Derived type for sends/receives */
-    for (auto &entry : geo.fpt_buffer_map)
+    /*for (auto &entry : geo.fpt_buffer_map)
     {
       unsigned int sendRank = entry.first;
       auto fpts = entry.second;
@@ -1530,12 +1531,12 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           disp[i + var * fpts.size()] = fpts(i) + var * gfpt_mpi;
       }
       
-      MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]); 
+      MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]);
 
       MPI_Type_commit(&geo.mpi_types[sendRank]);
     }
 
-    MPI_Barrier(geo.myComm);
+    MPI_Barrier(geo.myComm);*/
 
 #endif
 
@@ -1827,13 +1828,14 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   /* Setup METIS */
   idx_t options[METIS_NOPTIONS];
   METIS_SetDefaultOptions(options);
-  
 
+  options[METIS_OPTION_NUMBERING] = 0;
   options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
   options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
   options[METIS_OPTION_DBGLVL] = 0;
   options[METIS_OPTION_CONTIG] = 1;
-  options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_GROW;
+  options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_NODE;
+  options[METIS_OPTION_NCUTS] = 5;
 
   /* Form eptr and eind arrays */
   std::vector<int> eptr(geo.nEles + 1); 
@@ -1867,8 +1869,8 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     nodes.clear();
 
     /* Loop over faces and search for boundaries */
-    /*
-    for (unsigned int k = 0; k < geo.nFacesPerEle; k++)
+
+    /*for (unsigned int k = 0; k < geo.nFacesPerEle; k++)
     {
       face.assign(geo.nNodesPerFace, 0);
 
@@ -1876,6 +1878,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       {
         face[nd] = geo.ele2nodes(geo.face_nodes(k, nd), i);
       }
+      std::sort(face.begin(),face.end());
 
       if (geo.bnd_faces.count(face))
       {
@@ -1883,25 +1886,28 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
         switch (bnd_id)
         {
-          case 6:
-            vwgt[i] += 0; break;
-          case 7:
-          case 8:
-          case 9:
-          case 10:
-          case 11:
-          case 12:
-            vwgt[i] += 0; break;
+          case CHAR:
+            vwgt[i] += 2; break;
+
+          case ISOTHERMAL_NOSLIP_G:
+          case ISOTHERMAL_NOSLIP_P:
+          case ADIABATIC_NOSLIP_G:
+          case ADIABATIC_NOSLIP_P:
+          case ISOTHERMAL_NOSLIP_MOVING_G:
+          case ISOTHERMAL_NOSLIP_MOVING_P:
+          case ADIABATIC_NOSLIP_MOVING_G:
+          case ADIABATIC_NOSLIP_MOVING_P:
+            vwgt[i] += 1; break;
+
+          case OVERSET:
+            vwgt[i] += 2; break;
 
           default:
             vwgt[i] += 0; break;
         }
-        vwgt[i]++;
+//        vwgt[i]++;
       }
-    }
-    */
-
-
+    }*/
   }
 
   int objval;
@@ -1931,35 +1937,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   //std::vector<unsigned int> face(geo.nNodesPerFace);
   std::map<std::vector<unsigned int>, std::set<int>> face2ranks;    
   std::map<std::vector<unsigned int>, std::set<int>> mpi_faces_glob;
-
-  /// --- JACOB'S FACE CONNECTIVITY ADDITIONS ---
-//  std::set<int> myFaces, mpiFaces;
-//  geo.procR.resize(0);
-//  geo.mpiLocF.resize(0);
-//  geo.mpiLocF_R.resize(0);
-//  geo.faceID_R.resize(0);
-//  geo.gIC_R.resize(0);
-//  for (int ff = 0; ff < geo.nFaces; ff++)
-//  {
-//    int ic1 = geo.face2eles(0, ff);
-//    int ic2 = geo.face2eles(1, ff);
-//    int p1 = epart[ic1];
-//    int p2 = epart[ic2];
-
-//    if (p1 == rank || p2 == rank)
-//      myFaces.insert(ff);
-
-//    if (p1 == rank && p2 != rank)
-//    {
-//      mpiFaces.insert(ff);
-//      geo.procR.push_back(p2);
-//    }
-//    else if (p2 == rank && p1 != rank)
-//    {
-
-//    }
-//  }
-  /// --------------------------------------------
 
   /* Iterate over faces of complete mesh */
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -2117,78 +2094,10 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   geo.nNodes = (unsigned int) uniqueNodes.size();
   geo.nEles = (unsigned int) myEles.size();
 
-}
-#endif
+  std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles;
+  std::cout << ", nMpiFaces = " << geo.mpi_faces.size() << std::endl;
 
-/*! ==== Overset-Related Functionality ==== */
-
-#ifdef _MPI
-void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo)
-{
-  
-  // Split the processes among the overset grids such that they are roughly balanced
-
-  // --- Read Number of Elements in Each Grid --- 
-
-  std::vector<int> nElesGrid(input->nGrids);
-  int nElesTotal = 0;
-
-  for (unsigned int i=0; i<input->nGrids; i++)
-  {
-    std::ifstream meshFile;
-    std::string str;
-    std::string fileName = input->oversetGrids[i];
-
-    meshFile.open(fileName.c_str());
-    if (!meshFile.is_open())
-      ThrowException("Unable to open mesh file.");
-
-    // Move cursor to $Elements
-    meshFile.clear();
-    meshFile.seekg(0, ios::beg);
-    while(1)
-    {
-      getline(meshFile,str);
-      if (str.find("$Elements")!=string::npos) break;
-      if(meshFile.eof()) ThrowException("$Elements tag not found in Gmsh file!");
-    }
-
-    // Read total number of interior + boundary elements
-    meshFile >> nElesGrid[i];
-    meshFile.close();
-
-    nElesTotal += nElesGrid[i];
-  }
-
-  // --- Balance the processes across the grids --- 
-
-  geo.nProcGrid.resize(input->nGrids);
-  for (unsigned int i=0; i<input->nGrids; i++)
-  {
-    double eleRatio = (double)nElesGrid[i]/nElesTotal;
-    geo.nProcGrid[i] = round(eleRatio*input->nRanks);
-  }
-
-  // --- Get the final gridID for this rank --- 
-
-  int g = 0;
-  int procSum = geo.nProcGrid[0];
-  while (procSum < input->rank+1 && g < input->nGrids-1)
-  {
-    g++;
-    procSum += geo.nProcGrid[g];
-  }
-  geo.gridID = g;
-
-  // --- Split MPI Processes Based Upon gridID: Create MPI_Comm for each grid --- 
-
-  MPI_Comm_split(Comm_World, geo.gridID, input->rank, &Comm_Grid);
-
-  MPI_Comm_rank(Comm_Grid,&geo.gridRank);
-  MPI_Comm_size(Comm_Grid,&geo.nProcsGrid);
-
-  geo.gridIdList.resize(input->nRanks);
-  MPI_Allgather(&geo.gridID,1,MPI_INT,geo.gridIdList.data(),1,MPI_INT,geo.myComm);
-  
+  if (input->rank == 0)
+    std::cout << "Total # MPI Faces: " << mpi_faces_glob.size() << std::endl;
 }
 #endif
