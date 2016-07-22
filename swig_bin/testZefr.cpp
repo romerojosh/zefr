@@ -5,8 +5,6 @@
 
 #include "mpi.h"
 
-using namespace std;
-
 int main(int argc, char *argv[])
 {
   MPI_Init(&argc,&argv);
@@ -33,8 +31,15 @@ CALLGRIND_STOP_INSTRUMENTATION;
   }
   else
   {
-    gridID = (rank > (size/2));
+    gridID = rank%nGrids; //(rank > (size/2));
   }
+
+  gridID = rank>0;
+//  // 2-sphere test case
+//  nGrids = 3;
+//  if (rank == 0) gridID = 0;
+//  if (rank == 1) gridID = 1;
+//  if (rank > 1) gridID = 2;
 
   MPI_Comm gridComm;
 
@@ -61,6 +66,7 @@ CALLGRIND_STOP_INSTRUMENTATION;
   ExtraGeo geoAB = zefr::get_extra_geo_data();
   CallbackFuncs cbs = zefr::get_callback_funcs();
   InputStruct &inp = z->get_input();
+  inp.overset = !oneGrid;
 
   double *U_spts = zefr::get_q_spts();
   double *U_fpts = zefr::get_q_fpts();
@@ -121,8 +127,8 @@ if (nGrids >  1)
     if (iter%inp.report_freq == 0 or iter == 1 or iter == inp.n_steps)
       z->write_residual();
 
-//    if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)
-//      z->write_solution();
+    if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)
+      z->write_solution();
 
 //    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
 //      z->write_forces();

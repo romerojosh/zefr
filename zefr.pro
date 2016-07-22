@@ -2,6 +2,9 @@ TEMPLATE = app
 CONFIG += console
 CONFIG -= qt
 
+DEFINES = _MPI _CPU
+#DEFINES += _GPU
+
 QMAKE_CXXFLAGS += -std=c++11
 
 INCLUDEPATH += $$PWD/include \

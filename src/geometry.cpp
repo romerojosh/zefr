@@ -284,12 +284,39 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 11:
         case 12:
           geo.nEles++;
-          geo.shape_order = 2; geo.nNodesPerEle = 20; break;
+          geo.shape_order = 2;
+          if (input->serendipity)
+            geo.nNodesPerEle = 20;
+          else
+            geo.nNodesPerEle = 27;
+          break;
+
+        case 92:
+          geo.nEles++;
+          geo.shape_order = 3;
+          geo.nNodesPerEle = 64;
+          break;
+
+        case 93:
+          geo.nEles++;
+          geo.shape_order = 4;
+          geo.nNodesPerEle = 125;
+          break;
+
+        case 94:
+          geo.nEles++;
+          geo.shape_order = 5;
+          geo.nNodesPerEle = 216;
+          break;
 
         case 2:
         case 3:
         case 9:
-        case 10:
+        case 10: // Quadratic (Lagrange) quad
+        case 16: // Quadratic (Serendipity) quad
+        case 36: // Cubic quad
+        case 37: // Quartic quad
+        case 38: // Quintic quad
           geo.nBnds++; break;
 
         default:
@@ -388,6 +415,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 3: /* 4-node Quadrilateral (skip)*/
         case 9: /* 6-node Triangle (skip) */
         case 10: /* 9-node Quadrilateral (skip) */
+        case 16: // Quadratic (Serendipity) quad
+        case 36: // Cubic quad
+        case 37: // Quartic quad
+        case 38: // Quintic quad
           std::getline(f,line); break;
 
         case 4: /* 4-node Tetrahedral */
@@ -575,14 +606,30 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           ele++; break;
         }
 
-        case 12: /* Triquadratic Hex (read as 20-node serendipity) */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-          f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
-          f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
-          f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
+        case 12: /* Triquadratic Hex */
+        {
+          if (input->serendipity) /* Read as 20-node serendipity */
+          {
+            f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+            f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
+            f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
+            f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
+            f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
+          }
+          else /* Read as 27-node Lagrange tensor-product */
+          {
+            for (unsigned int nd = 0; nd < 27; nd++)
+              f >> geo.ele2nodes(nd,ele);
+          }
           std::getline(f,line); ele++; break;
+        }
 
+        case 92: /* Cubic Hex */
+        case 93: /* Quartic Hex */
+        case 94: /* Quintic Hex */
+          for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
+            f >> geo.ele2nodes(nd,ele);
+          std::getline(f,line); ele++; break;
 
         default:
           ThrowException("Unrecognized element type detected!"); break;
@@ -782,6 +829,10 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
 
         case 10: /* 9-node Quadrilateral */
+        case 16: // Quadratic (Serendipity) quad
+        case 36: // Cubic quad
+        case 37: // Quartic quad
+        case 38: // Quintic quad
           f >> nTags;
           f >> bnd_id;
 
@@ -1518,7 +1569,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     MPI_Barrier(geo.myComm);
 
     /* Create MPI Derived type for sends/receives */
-    /*for (auto &entry : geo.fpt_buffer_map)
+    for (auto &entry : geo.fpt_buffer_map)
     {
       unsigned int sendRank = entry.first;
       auto fpts = entry.second;
@@ -1536,7 +1587,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       MPI_Type_commit(&geo.mpi_types[sendRank]);
     }
 
-    MPI_Barrier(geo.myComm);*/
+    MPI_Barrier(geo.myComm);
 
 #endif
 

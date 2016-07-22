@@ -173,7 +173,6 @@ int main(int argc, char* argv[])
 
 /* ==== Add in interface functions for use from external code ==== */
 //#define _BUILD_LIB  // for QT editing
-//#define _MPI        // for QT editing
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
 

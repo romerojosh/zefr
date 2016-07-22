@@ -120,6 +120,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   sreqs.resize(geo->fpt_buffer_map.size());
   rreqs.resize(geo->fpt_buffer_map.size());
+//  sstatuses.resize(sreqs.size());
+//  rstatuses.resize(rreqs.size());
 
   buffUR.resize(geo->nMpiFaces);
   buffUL.resize(geo->nMpiFaces);
@@ -128,8 +130,11 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     buffUR[i].assign({geo->nFptsPerFace, nVars},0.0);  // Recv buffer per MPI face
     buffUL[i].assign({geo->nFptsPerFace, nVars},0.0);  // Send buffer per MPI face
   }
-  sends.resize(geo->nMpiFaces);
+  sends.resize(2*geo->nMpiFaces);
   recvs.resize(geo->nMpiFaces);
+  sstatuses.resize(geo->nMpiFaces);
+  rstatuses.resize(geo->nMpiFaces);
+  new_statuses.resize(2*geo->nMpiFaces);
 #endif
 
 }
@@ -3643,19 +3648,19 @@ void Faces::send_U_data()
   }
 
   /* Stage all the non-blocking receives */
-  unsigned int ridx = 0;
+  nrecvs = 0;
 
-#ifdef _CPU // USING SEND/RECV BUFFERS
+#ifdef _CPU2 // USING SEND/RECV BUFFERS
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
-    ridx++;
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
+    nrecvs++;
   }
 
-  unsigned int sidx = 0;
+  nsends = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
@@ -3672,29 +3677,29 @@ void Faces::send_U_data()
     }
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
-    sidx++;
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[nsends]);
+    nsends++;
   }
 #endif
 
-#ifdef _CPU2  // USING DERIVED TYPES
+#ifdef _CPU  // USING DERIVED TYPES
   for (const auto &entry : geo->mpi_types)
   {
     int recvRank = entry.first;
     auto TYPE = entry.second;
 
-    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, myComm, &rreqs[ridx]);
-    ridx++;
+    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, myComm, &rreqs[nrecvs]);
+    nrecvs++;
   }
 
-  unsigned int sidx = 0;
+  nsends = 0;
   for (const auto &entry : geo->mpi_types)
   {
     int sendRank = entry.first;
     auto TYPE = entry.second;
 
-    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, myComm, &sreqs[sidx]);
-    sidx++;
+    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, myComm, &sreqs[nsends]);
+    nsends++;
   }
 
 #endif
@@ -3721,6 +3726,7 @@ void Faces::send_U_data()
 
 void Faces::send_U_data_blocked(void)
 {
+  n_reqs = 0;
   for (unsigned int i = 0; i < geo->nMpiFaces; i++)
   {
     int ff = geo->mpiFaces[i];
@@ -3731,7 +3737,7 @@ void Faces::send_U_data_blocked(void)
     if (input->overset && geo->iblank_face[ff] != NORMAL)
       continue;
 
-    MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &recvs[i]);
+    MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &sends[2*n_reqs+1]);
 
     /* Pack buffer of solution data at flux points in list */
     for (unsigned int n = 0; n < nVars; n++)
@@ -3745,8 +3751,22 @@ void Faces::send_U_data_blocked(void)
     }
 
     /* Send buffer to paired rank */
-    MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[i]);
+    MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[2*n_reqs]);
+
+    n_reqs++;
   }
+}
+
+void Faces::mpi_prod(void)
+{
+  int flag;
+  input->waitTimer.startTimer();
+  // Using blocked sends/recvs
+//  MPI_Testall(n_reqs, sends.data(), &flag, new_statuses.data());
+  // Using big (original) sends/recvs
+  MPI_Testall(nsends, sreqs.data(), &flag, sstatuses.data());
+  MPI_Testall(nrecvs, rreqs.data(), &flag, rstatuses.data());
+  input->waitTimer.stopTimer();
 }
 
 void Faces::recv_U_data_blocked(int mpiFaceID)
@@ -3756,9 +3776,19 @@ void Faces::recv_U_data_blocked(int mpiFaceID)
   if (input->overset && geo->iblank_face[ff] != NORMAL)
     return;
 
+  int ind = 0;
+  for (int i = 0; i < mpiFaceID; i++)
+  {
+    if (geo->iblank_face[geo->mpiFaces[i]] != NORMAL)
+      continue;
+
+    ind++;
+  }
+
   input->waitTimer.startTimer();
-  MPI_Wait(&sends[mpiFaceID], &status);
-  MPI_Wait(&recvs[mpiFaceID], &status);
+  MPI_Waitall(2, &sends[2*ind], &new_statuses[2*ind]);
+//  MPI_Wait(&sends[2*mpiFaceID], &status);
+//  MPI_Wait(&sends[2*mpiFaceID+1], &status);
   input->waitTimer.stopTimer();
 
   for (unsigned int n = 0; n < nVars; n++)
@@ -3805,7 +3835,7 @@ void Faces::recv_U_data()
   input->waitTimer.stopTimer();
 
   /* Unpack buffer */
-#ifdef _CPU // USING SEND/RECV BUFFERS
+#ifdef _CPU2 // USING SEND/RECV BUFFERS
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;

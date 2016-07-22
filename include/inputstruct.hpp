@@ -30,6 +30,8 @@ public:
 
   Timer(std::string prefix) { this->prefix = prefix; }
 
+  void setPrefix(std::string prefix) { this->prefix = prefix; }
+
   void startTimer(void)
   {
     tStart = std::chrono::high_resolution_clock::now();
@@ -38,8 +40,8 @@ public:
   void stopTimer(void)
   {
     tStop = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>( tStop - tStart ).count();
-    duration += (double)elapsed/1000.;
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>( tStop - tStart ).count();
+    duration += (double).001*elapsed;
   }
 
   void resetTimer(void)
@@ -50,7 +52,7 @@ public:
 
   double getTime(void)
   {
-    return duration;
+    return .001*duration;
   }
 
   void showTime(int precision = 2)
@@ -59,21 +61,19 @@ public:
 #ifdef _MPI
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 #endif
-//    if (rank == 0)
-//    {
-      cout.setf(ios::fixed, ios::floatfield);
-      if (duration > 60) {
-        int minutes = floor(duration/60);
-        double seconds = duration-(minutes*60);
-        cout << "Rank " << rank << ": " << prefix << minutes << "min ";
-        cout << setprecision(precision) << seconds << "s" << endl;
-      }
-      else
-      {
-        cout << "Rank " << rank << ": " << prefix;
-        cout << setprecision(precision) << duration << "s" << endl;
-      }
-//    }
+    std::cout.setf(ios::fixed, ios::floatfield);
+    double seconds = .001 * duration;
+    if (seconds > 60) {
+      int minutes = floor(seconds/60);
+      seconds = seconds - (minutes*60);
+      std::cout << "Rank " << rank << ": " << prefix << minutes << "min ";
+      std::cout << std::setprecision(precision) << seconds << "s" << std::endl;
+    }
+    else
+    {
+      std::cout << "Rank " << rank << ": " << prefix;
+      std::cout << std::setprecision(precision) << seconds << "s" << std::endl;
+    }
   }
 };
 

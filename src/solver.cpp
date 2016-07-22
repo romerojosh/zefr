@@ -594,16 +594,16 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
-//  faces->send_U_data();
-  faces->send_U_data_blocked();
+  faces->send_U_data();
+//  faces->send_U_data_blocked();
 #endif
 
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
-
+//faces->mpi_prod();
   /* Compute convective flux at solution points */
   eles->compute_Fconv(startEle, endEle);
-
+//faces->mpi_prod();
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
@@ -611,34 +611,38 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #ifdef _MPI
   /* Transform solution point fluxes from physical to reference space */
   eles->transform_flux(startEle, endEle);
-
+//faces->mpi_prod();
   /* Compute convective flux and parent space common flux at non-MPI flux points */
   faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
-
+//faces->mpi_prod();
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
-
+//faces->mpi_prod();
   /* Compute solution point contribution to divergence of flux */
   eles->compute_divF_spts(stage, startEle, endEle);
 
   /* Receive U data */
-  for (unsigned int i = 0; i < geo.nMpiFaces; i++)
-  {
-    int ff = geo.mpiFaces[i];
-    int fpt1 = geo.face2fpts(0, ff);
-    int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff);
+//  for (unsigned int i = 0; i < geo.nMpiFaces; i++)
+//  {
+//    int ff = geo.mpiFaces[i];
 
-    faces->recv_U_data_blocked(i);
+//    if (input->overset && geo.iblank_face[ff] != NORMAL) continue;
 
-    /* Complete computation on remaning flux points. */
-    faces->compute_Fconv(fpt1, fpt2);
-    faces->compute_common_F(fpt1, fpt2);
-  }
-//  /* Receive U data */
-//  faces->recv_U_data();
+//    faces->recv_U_data_blocked(i);
 
-//  /* Complete computation on remaning flux points. */
-//  faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-//  faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+//    /* Complete computation on remaning flux points. */
+
+//    int fpt1 = geo.face2fpts(0, ff);
+//    int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff)+1;
+
+//    faces->compute_Fconv(fpt1, fpt2);
+//    faces->compute_common_F(fpt1, fpt2);
+//  }
+  /* Receive U data */
+  faces->recv_U_data();
+
+  /* Complete computation on remaning flux points. */
+  faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+  faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
 
 #else
   /* Transform solution point fluxes from physical to reference space */
@@ -1564,7 +1568,8 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   if (input->dt_scheme != "MCGS")
   {
 #ifdef _CPU
-    U_ini = eles->U_spts;
+    if (nStages > 1)
+      U_ini = eles->U_spts;
 #endif
 
 #ifdef _GPU
@@ -1660,7 +1665,10 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     {
       compute_residual(nStages-1);
 #ifdef _CPU
-      eles->U_spts = U_ini;
+      if (nStages > 1)
+        eles->U_spts = U_ini;
+      else if (input->dt_type != 0)
+        compute_element_dt();
 #endif
 #ifdef _GPU
       device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.max_size());
@@ -1904,10 +1912,24 @@ void FRSolver::compute_element_dt()
 
   if (input->dt_type == 1) /* Global minimum */
   {
-    dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
+    if (input->overset)
+    {
+      double minDT = INFINITY;
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+        minDT = std::min(minDT, dt(ele));
+      }
+      dt(0) = minDT;
+    }
+    else
+    {
+      dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
+    }
 
 #ifdef _MPI
-    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, myComm);
+    /// TODO: If interfacing with other explicit solver, work together here
+    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 #endif
 
   }
