@@ -94,10 +94,12 @@ class Faces
 
     /// JACOB'S ADDITIONS FOR TESTING NEW COMMUNICATION STRATEGY
     std::vector<MPI_Request> sends, recvs;
-    std::vector<MPI_Status> new_statuses, sstatuses, rstatuses;
+    std::vector<MPI_Status> sstatuses, rstatuses;
+    std::array<MPI_Status,2> new_statuses;
     int n_reqs;
     MPI_Status status;
     std::vector<mdvector<double>> buffUR, buffUL;
+    std::array<std::vector<int>, 5> rot_permute;
 
     mdvector<double> tmpOversetU; /// TODO: find better way?
 #endif

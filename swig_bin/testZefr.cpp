@@ -41,6 +41,15 @@ CALLGRIND_STOP_INSTRUMENTATION;
 //  if (rank == 1) gridID = 1;
 //  if (rank > 1) gridID = 2;
 
+  bool sphereTest = true;
+  if (sphereTest)
+  {
+    if (nGrids == 2)
+      gridID = (rank>0);
+    else if (nGrids == 3)
+      gridID = (rank>0);
+  }
+
   MPI_Comm gridComm;
 
   bool oneGrid = false;
@@ -66,7 +75,8 @@ CALLGRIND_STOP_INSTRUMENTATION;
   ExtraGeo geoAB = zefr::get_extra_geo_data();
   CallbackFuncs cbs = zefr::get_callback_funcs();
   InputStruct &inp = z->get_input();
-  inp.overset = !oneGrid;
+
+  if (nGrids > 1) inp.overset = 1;
 
   double *U_spts = zefr::get_q_spts();
   double *U_fpts = zefr::get_q_fpts();
@@ -94,11 +104,13 @@ CALLGRIND_STOP_INSTRUMENTATION;
 
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
       cbs.get_q_index_face, cbs.get_q_spt);
-if (nGrids >  1)
-{
-  tioga_preprocess_grids_();
-  tioga_performconnectivity_();
-}
+
+
+  if (nGrids > 1)
+  {
+    tioga_preprocess_grids_();
+    tioga_performconnectivity_();
+  }
   tg_time.stopTimer();
 
   // Output initial solution and grid

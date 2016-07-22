@@ -1450,6 +1450,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #ifdef _MPI
     geo.nMpiFaces = geo.mpiFaces.size();
     geo.faceID_R.resize(geo.nMpiFaces);
+    geo.mpiRotR.resize(geo.nMpiFaces);
     for (const auto &face : mpi_faces_to_process)
     {
       auto ranks = geo.mpi_faces[face];
@@ -1481,6 +1482,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, geo.myComm);
         MPI_Send(&faceID, 1, MPI_INT, recvRank, 0, geo.myComm);
         MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
+        MPI_Recv(&geo.mpiRotR[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
       }
       else if (rank == recvRank)
       {
@@ -1512,6 +1514,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         {
           rot = 4;
         }
+
+        geo.mpiRotR[ff] = rot;
+        MPI_Send(&geo.mpiRotR[ff], 1, MPI_INT, sendRank, 0, geo.myComm);
 
         /* Based on rotation, append flux points to fpt_buffer_map (to be consistent with paired rank fpt order) */
         switch (rot)
@@ -1558,7 +1563,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
             } break;
         }
-
+if (rot!=1)
+{
+  std::cout << "Found rot! Rank " << input->rank;
+  std::cout << ", ff " << ff <<std::endl;
+}
       }
       else
       {

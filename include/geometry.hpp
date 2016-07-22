@@ -63,7 +63,7 @@ struct GeoStruct
     std::map<unsigned int, MPI_Datatype> mpi_types;
 
     unsigned int nMpiFaces;
-    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
+    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
 #endif
 
 #ifdef _GPU
@@ -91,7 +91,6 @@ struct GeoStruct
 
     std::vector<int> iblank_node, iblank_cell, iblank_face; //! iblank values for nodes, cells, faces
 
-    //! Map cell/face ID to 'non-blanked' list index (-1 for blanked cell/face)
     std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
     std::set<int> overFaces;  //! Ordered list of all current overset faces
     std::vector<int> overFaceList;
@@ -125,7 +124,6 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo);
 void shuffle_data_by_color(GeoStruct &geo);
 
 #ifdef _MPI
-void partition_geometry(GeoStruct &geo);
 void partition_geometry(InputStruct *input, GeoStruct &geo);
 #endif
 

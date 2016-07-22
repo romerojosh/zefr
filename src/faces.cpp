@@ -92,7 +92,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     P.assign({nFpts, 2});
 
   waveSp.assign({nFpts}, 0.0);
-  diffCo.assign({nFpts}, 0.0);
+  if (input->viscous)
+    diffCo.assign({nFpts}, 0.0);
 
   /* Allocate memory for geometry structures */
   norm.assign({nFpts, nDims, 2});
@@ -101,7 +102,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
 #ifdef _MPI
   /* Allocate memory for send/receive buffers */
-  for (const auto &entry : geo->fpt_buffer_map)
+  /*for (const auto &entry : geo->fpt_buffer_map)
   {
     int pairedRank = entry.first;
     const auto &fpts = entry.second;
@@ -119,10 +120,9 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   }
 
   sreqs.resize(geo->fpt_buffer_map.size());
-  rreqs.resize(geo->fpt_buffer_map.size());
-//  sstatuses.resize(sreqs.size());
-//  rstatuses.resize(rreqs.size());
+  rreqs.resize(geo->fpt_buffer_map.size());*/
 
+  /* ---- For buffer-style MPI sends/recvs ---- */
   buffUR.resize(geo->nMpiFaces);
   buffUL.resize(geo->nMpiFaces);
   for (unsigned int i = 0; i < geo->nMpiFaces; i++)
@@ -130,11 +130,35 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     buffUR[i].assign({geo->nFptsPerFace, nVars},0.0);  // Recv buffer per MPI face
     buffUL[i].assign({geo->nFptsPerFace, nVars},0.0);  // Send buffer per MPI face
   }
+  //sstatuses.resize(geo->nMpiFaces); // for big buffer w/o derived type
+  //rstatuses.resize(geo->nMpiFaces);
+  //sends.resize(geo->nMpiFaces); // for per-face buffers
+  //recvs.resize(geo->nMpiFaces);
   sends.resize(2*geo->nMpiFaces);
-  recvs.resize(geo->nMpiFaces);
-  sstatuses.resize(geo->nMpiFaces);
-  rstatuses.resize(geo->nMpiFaces);
-  new_statuses.resize(2*geo->nMpiFaces);
+
+  /// TODO: Could be useful somewhere else
+  unsigned int nFpts1D = input->order + 1;
+  unsigned int nFptsFace = geo->nFptsPerFace;
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[0].push_back(i * nFpts1D + j);
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[1].push_back(nFpts1D - i + j * nFpts1D - 1);
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[2].push_back(nFptsFace - i * nFpts1D - j - 1);
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[3].push_back(nFptsFace - (j+1) * nFpts1D + i);
+
+  // For 2D
+  for (unsigned int i = 0; i < nFptsFace; i++)
+    rot_permute[4].push_back(nFptsFace - i - 1);
 #endif
 
 }
@@ -3648,9 +3672,10 @@ void Faces::send_U_data()
   }
 
   /* Stage all the non-blocking receives */
-  nrecvs = 0;
 
-#ifdef _CPU2 // USING SEND/RECV BUFFERS
+  /* ---- USING SEND/RECV BUFFERS ---- */
+#ifdef _CPU2
+  nrecvs = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
@@ -3682,7 +3707,9 @@ void Faces::send_U_data()
   }
 #endif
 
-#ifdef _CPU  // USING DERIVED TYPES
+#ifdef _CPU
+  /* ---- Using derived types ---- */
+  nrecvs = 0;
   for (const auto &entry : geo->mpi_types)
   {
     int recvRank = entry.first;
@@ -3701,7 +3728,6 @@ void Faces::send_U_data()
     MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, myComm, &sreqs[nsends]);
     nsends++;
   }
-
 #endif
 
 #ifdef _GPU
@@ -3738,21 +3764,21 @@ void Faces::send_U_data_blocked(void)
       continue;
 
     MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &sends[2*n_reqs+1]);
+    //MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &recvs[i]);
 
     /* Pack buffer of solution data at flux points in list */
     for (unsigned int n = 0; n < nVars; n++)
     {
       for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
       {
-        int gfpt = geo->face2fpts(fpt, ff);
+        int rfpt = rot_permute[geo->mpiRotR[i]][fpt];
+        int gfpt = geo->face2fpts(rfpt, ff);
         buffUL[i](fpt, n) = U(gfpt, n, 0);
       }
-
     }
-
     /* Send buffer to paired rank */
     MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[2*n_reqs]);
-
+    //MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[i]);
     n_reqs++;
   }
 }
@@ -3762,7 +3788,7 @@ void Faces::mpi_prod(void)
   int flag;
   input->waitTimer.startTimer();
   // Using blocked sends/recvs
-//  MPI_Testall(n_reqs, sends.data(), &flag, new_statuses.data());
+  //  MPI_Testall(n_reqs, sends.data(), &flag, new_statuses.data());
   // Using big (original) sends/recvs
   MPI_Testall(nsends, sreqs.data(), &flag, sstatuses.data());
   MPI_Testall(nrecvs, rreqs.data(), &flag, rstatuses.data());
@@ -3776,19 +3802,21 @@ void Faces::recv_U_data_blocked(int mpiFaceID)
   if (input->overset && geo->iblank_face[ff] != NORMAL)
     return;
 
+  /* ---- Using 1 waitall instead of 2 waits... ---- */
   int ind = 0;
   for (int i = 0; i < mpiFaceID; i++)
   {
-    if (geo->iblank_face[geo->mpiFaces[i]] != NORMAL)
+    if (input->overset && geo->iblank_face[geo->mpiFaces[i]] != NORMAL)
       continue;
-
     ind++;
   }
 
   input->waitTimer.startTimer();
-  MPI_Waitall(2, &sends[2*ind], &new_statuses[2*ind]);
+  MPI_Waitall(2, &sends[2*ind], &new_statuses[0]);
 //  MPI_Wait(&sends[2*mpiFaceID], &status);
 //  MPI_Wait(&sends[2*mpiFaceID+1], &status);
+//  MPI_Wait(&sends[mpiFaceID], &status);
+//  MPI_Wait(&recvs[mpiFaceID], &status);
   input->waitTimer.stopTimer();
 
   for (unsigned int n = 0; n < nVars; n++)
@@ -3830,12 +3858,14 @@ void Faces::recv_U_data()
 
   /* Wait for comms to finish */
   input->waitTimer.startTimer();
-  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
-  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(nrecvs, rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(nsends, sreqs.data(), MPI_STATUSES_IGNORE);
   input->waitTimer.stopTimer();
 
   /* Unpack buffer */
-#ifdef _CPU2 // USING SEND/RECV BUFFERS
+
+  /* ---- USING SEND/RECV BUFFERS ---- */
+#ifdef _CPU2
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;

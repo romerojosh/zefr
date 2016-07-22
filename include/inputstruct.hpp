@@ -1,12 +1,18 @@
 #ifndef inputstruct_hpp
 #define inputstruct_hpp
 
+#include <chrono>
+#include <iomanip>
 #include <map>
 #include <string>
 #include <vector>
 #include <chrono>
 #include <string>
 #include <iomanip>
+
+#ifdef _MPI
+#include "mpi.h"
+#endif
 
 #ifdef _MPI
 #include "mpi.h"

@@ -593,9 +593,12 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 
 #ifdef _MPI
+  bool use_blocked = true;
   /* Commence sending U data to other processes */
-  faces->send_U_data();
-//  faces->send_U_data_blocked();
+  if (use_blocked)
+    faces->send_U_data_blocked();
+  else
+    faces->send_U_data();
 #endif
 
   /* Apply boundary conditions to state variables */
@@ -621,29 +624,29 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   eles->compute_divF_spts(stage, startEle, endEle);
 
   /* Receive U data */
-//  for (unsigned int i = 0; i < geo.nMpiFaces; i++)
-//  {
-//    int ff = geo.mpiFaces[i];
+  if (use_blocked)
+  {
+    for (unsigned int i = 0; i < geo.nMpiFaces; i++)
+    {
+      int ff = geo.mpiFaces[i];
 
-//    if (input->overset && geo.iblank_face[ff] != NORMAL) continue;
+      faces->recv_U_data_blocked(i);
 
-//    faces->recv_U_data_blocked(i);
+      int fpt1 = geo.face2fpts(0, ff);
+      int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff)+1;
 
-//    /* Complete computation on remaning flux points. */
+      faces->compute_Fconv(fpt1, fpt2);
+      faces->compute_common_F(fpt1, fpt2);
+    }
+  }
+  else
+  {
+    faces->recv_U_data();
 
-//    int fpt1 = geo.face2fpts(0, ff);
-//    int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff)+1;
-
-//    faces->compute_Fconv(fpt1, fpt2);
-//    faces->compute_common_F(fpt1, fpt2);
-//  }
-  /* Receive U data */
-  faces->recv_U_data();
-
-  /* Complete computation on remaning flux points. */
-  faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-  faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-
+    /* Complete computation on remaning flux points. */
+    faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+    faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
+  }
 #else
   /* Transform solution point fluxes from physical to reference space */
   eles->transform_flux(startEle, endEle);
@@ -1099,15 +1102,20 @@ void FRSolver::initialize_U()
   eles->Ucomm.assign({eles->nFpts, eles->nEles, eles->nVars});
   eles->U_ppts.assign({eles->nPpts, eles->nEles, eles->nVars});
   eles->U_qpts.assign({eles->nQpts, eles->nEles, eles->nVars});
-  eles->Uavg.assign({eles->nEles, eles->nVars});
+
+  if (input->squeeze)
+    eles->Uavg.assign({eles->nEles, eles->nVars});
 
   eles->F_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-  eles->F_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
+  //eles->F_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
   eles->Fcomm.assign({eles->nFpts, eles->nEles, eles->nVars});
 
-  eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-  eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
-  eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
+  if (input->viscous)
+  {
+    eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+    eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
+    eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
+  }
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
 
@@ -1568,7 +1576,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   if (input->dt_scheme != "MCGS")
   {
 #ifdef _CPU
-    if (nStages > 1)
+//    if (nStages > 1)
       U_ini = eles->U_spts;
 #endif
 
@@ -1665,10 +1673,10 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     {
       compute_residual(nStages-1);
 #ifdef _CPU
-      if (nStages > 1)
+//      if (nStages > 1)
         eles->U_spts = U_ini;
-      else if (input->dt_type != 0)
-        compute_element_dt();
+//      else if (input->dt_type != 0)
+//        compute_element_dt();
 #endif
 #ifdef _GPU
       device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.max_size());
@@ -1896,8 +1904,9 @@ void FRSolver::compute_element_dt()
           if (gfpt == -1)
             continue;
 
-          double dtinv_temp = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * eles->h_ref(fpt, ele)) +
-                              faces->diffCo(gfpt) / (get_cfl_limit_diff(order, input->ldg_b) * eles->h_ref(fpt, ele) * eles->h_ref(fpt, ele));
+          double dtinv_temp = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * eles->h_ref(fpt, ele));
+          if (input->viscous)
+            dtinv_temp += faces->diffCo(gfpt) / (get_cfl_limit_diff(order, input->ldg_b) * eles->h_ref(fpt, ele) * eles->h_ref(fpt, ele));
           dtinv[face] = std::max(dtinv[face], dtinv_temp);
         }
       }
@@ -2936,22 +2945,25 @@ void FRSolver::report_error(std::ofstream &f)
 #endif
 
   /* Extrapolate derivatives to quadrature points */
-  for (unsigned int dim = 0; dim < eles->nDims; dim++)
+  if (input->viscous)
   {
+    for (unsigned int dim = 0; dim < eles->nDims; dim++)
+    {
       auto &A = eles->oppE_qpts(0, 0);
       auto &B = eles->dU_spts(0, 0, 0, dim);
       auto &C = eles->dU_qpts(0, 0, 0, dim);
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B, 
-          eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts,
+                        eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B,
+                        eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-          eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B, 
-          eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts,
+                  eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B,
+                  eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
 #endif
 
+    }
   }
 
   std::vector<double> l2_error(2,0.0);
@@ -2981,11 +2993,13 @@ void FRSolver::report_error(std::ofstream &f)
                 flow_time, n, input);
           }
 
-          dU_true[0] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
-              flow_time, n, 0, input);
-          dU_true[1] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
-              flow_time, n, 1, input);
-          
+          if (input->viscous)
+          {
+            dU_true[0] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0,
+                                         flow_time, n, 0, input);
+            dU_true[1] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0,
+                                         flow_time, n, 1, input);
+          }
 
           /* Get quadrature point index and weight */
           unsigned int i = eles->idx_qpts(qpt,0);
