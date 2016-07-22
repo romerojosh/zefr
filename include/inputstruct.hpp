@@ -1,14 +1,80 @@
 #ifndef inputstruct_hpp
 #define inputstruct_hpp
 
+#include <chrono>
+#include <iomanip>
 #include <map>
 #include <string>
 #include <vector>
+
+#ifdef _MPI
+#include "mpi.h"
+#endif
 
 #include "mdvector.hpp"
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #endif
+
+class Timer
+{
+private:
+  std::chrono::high_resolution_clock::time_point tStart;
+  std::chrono::high_resolution_clock::time_point tStop;
+  double duration = 0;
+  std::string prefix = "Execution Time = ";
+public:
+
+  Timer(void) {}
+
+  Timer(std::string prefix) { this->prefix = prefix; }
+
+  void setPrefix(std::string prefix) { this->prefix = prefix; }
+
+  void startTimer(void)
+  {
+    tStart = std::chrono::high_resolution_clock::now();
+  }
+
+  void stopTimer(void)
+  {
+    tStop = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>( tStop - tStart ).count();
+    duration += (double).001*elapsed;
+  }
+
+  void resetTimer(void)
+  {
+    duration = 0;
+    tStart = std::chrono::high_resolution_clock::now();
+  }
+
+  double getTime(void)
+  {
+    return .001*duration;
+  }
+
+  void showTime(int precision = 2)
+  {
+    int rank = 0;
+#ifdef _MPI
+    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+#endif
+    std::cout.setf(ios::fixed, ios::floatfield);
+    double seconds = .001 * duration;
+    if (seconds > 60) {
+      int minutes = floor(seconds/60);
+      seconds = seconds - (minutes*60);
+      std::cout << "Rank " << rank << ": " << prefix << minutes << "min ";
+      std::cout << std::setprecision(precision) << seconds << "s" << std::endl;
+    }
+    else
+    {
+      std::cout << "Rank " << rank << ": " << prefix;
+      std::cout << std::setprecision(precision) << seconds << "s" << std::endl;
+    }
+  }
+};
 
 struct InputStruct
 {

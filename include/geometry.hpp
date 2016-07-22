@@ -62,12 +62,9 @@ struct GeoStruct
     std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
     std::map<unsigned int, MPI_Datatype> mpi_types;
 
-    std::vector<int> nProcGrid;  //! Number of MPI processes assigned to each grid block
-    std::vector<int> gridIdList; //! List of grid ID assigned to each rank
-
     //std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
 #endif
-    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiLocF_R, mpiPeriodic;
+    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
@@ -96,8 +93,6 @@ struct GeoStruct
     std::vector<int> faceType, currFaceType, currIblankCell, currIblankFace; //! Current cell/face status
     std::unordered_set<int> blankCells, blankFaces, unblankCells, unblankFaces;
 
-    //! Map cell/face ID to 'non-blanked' list index (-1 for blanked cell/face)
-    std::vector<int> eleMap, faceMap;
     std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
     std::set<int> overFaces;  //! Ordered list of all current overset faces
     std::vector<int> overFaceList;
@@ -131,9 +126,7 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo);
 void shuffle_data_by_color(GeoStruct &geo);
 
 #ifdef _MPI
-void partition_geometry(GeoStruct &geo);
 void partition_geometry(InputStruct *input, GeoStruct &geo);
-void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo);
 #endif
 
 #endif /* geometry_hpp */

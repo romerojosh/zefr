@@ -14,6 +14,7 @@ int main(int argc, char *argv[])
   MPI_Comm_size(MPI_COMM_WORLD,&size);
 
   int gridID = 0;
+  int nGrids = 2;
   if (size == 8)
   {
     gridID = (rank >= 3);
@@ -23,12 +24,21 @@ int main(int argc, char *argv[])
     gridID = rank % 2;
   }
 
+  bool sphereTest = true;
+  if (sphereTest)
+  {
+    if (nGrids == 2)
+      gridID = (rank>0);
+    else if (nGrids == 3)
+      gridID = (rank>0);
+  }
+
   MPI_Comm gridComm;
   MPI_Comm_split(MPI_COMM_WORLD, gridID, rank, &gridComm);
 
   // Setup the ZEFR solver object
   char inputFile[] = "input_sphere";
-  zefr::initialize(gridComm, inputFile, 2, gridID);
+  zefr::initialize(gridComm, inputFile, nGrids, gridID);
 
   Zefr *z = zefr::get_zefr_object();
   z->setup_solver();
@@ -36,7 +46,9 @@ int main(int argc, char *argv[])
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
   CallbackFuncs cbs = zefr::get_callback_funcs();
-  InputStruct inp = z->get_input();
+  InputStruct &inp = z->get_input();
+
+  if (nGrids > 1) inp.overset = 1;
 
   double *U_spts = zefr::get_q_spts();
   double *U_fpts = zefr::get_q_fpts();
@@ -62,19 +74,21 @@ int main(int argc, char *argv[])
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
       cbs.get_q_index_face, cbs.get_q_spt);
 
-  tioga_preprocess_grids_();
-  tioga_performconnectivity_();
+  if (nGrids > 1)
+  {
+    tioga_preprocess_grids_();
+    tioga_performconnectivity_();
+  }
 
   // Run the solver loop now
   z->write_solution();
-  z->write_residual();
 
   for (int iter = 1; iter <= inp.n_steps; iter++)
   {
     tioga_dataupdate_ab(5,U_spts,U_fpts);
     z->do_step();
 
-    if (iter%inp.report_freq == 0 or iter == 0 or iter == inp.n_steps)
+    if (iter%inp.report_freq == 0 or iter == 1 or iter == inp.n_steps)
       z->write_residual();
 
     if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)

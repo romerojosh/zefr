@@ -60,6 +60,9 @@ class Faces
     void recv_U_data();
     void send_dU_data();
     void recv_dU_data();
+
+    void send_U_data_blocked(void);
+    void recv_U_data_blocked(int mpiFaceID);
 #endif
 
   protected:
@@ -87,6 +90,12 @@ class Faces
     std::vector<MPI_Request> sreqs, rreqs;
 
     mdvector<double> tmpOversetU; /// TODO: find better way?
+
+    /// JACOB'S ADDITIONS FOR TESTING NEW COMMUNICATION STRATEGY
+    std::vector<MPI_Request> sends, recvs;
+    MPI_Status status;
+    std::vector<mdvector<double>> buffUR, buffUL;
+    std::array<std::vector<int>, 5> rot_permute;
 #endif
 
 #ifdef _GPU
