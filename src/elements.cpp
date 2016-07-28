@@ -42,7 +42,7 @@ void Elements::set_shape()
   shape_qpts.assign({nNodes, nQpts},1);
   dshape_spts.assign({nNodes, nSpts, nDims},1);
   dshape_fpts.assign({nNodes, nFpts, nDims},1);
-  dshape_ppts.assign({nNodes, nPpts, nDims},1);
+//  dshape_ppts.assign({nNodes, nPpts, nDims},1);
   dshape_qpts.assign({nNodes, nQpts, nDims},1);
 
 
@@ -98,8 +98,8 @@ void Elements::set_shape()
     {
       shape_ppts(node, ppt) = shape_val(node);
 
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_ppts(node, ppt, dim) = dshape_val(node, dim);
+//      for (unsigned int dim = 0; dim < nDims; dim++)
+//        dshape_ppts(node, ppt, dim) = dshape_val(node, dim);
     }
   }
   
@@ -2207,3 +2207,27 @@ void Elements::get_interp_weights(int cellID, double* rst, int* inode,
 //    inode[spt] = cellID*nSpts + spt; //std::distance(&U_spts(0,0,0), &U_spts(spt,cellID,0));
   }
 }
+
+#ifdef _GPU
+void Elements::donor_data_from_device(int* donorIDs, int nDonors)
+{
+  U_donors.assign({nSpts,nDonors,nVars},0,0);
+  U_donors_d.set_size(U_donors);
+
+  pack_donor_buffer_wrapper(U_spts_d,U_donors_d,donorIDs,nDonors,nSpts,nVars);
+
+  U_donors = U_donors_d;
+
+  for (int var = 0; var < nVars; var++)
+  {
+    for (int donor = 0; donor < nDonors; donor++)
+    {
+      unsigned int ele = donorIDs[donor];
+      for (int spt = 0; spt < nSpts; spt++)
+      {
+        U_spts(spt,ele,var) = U_donors(spt,donor,var);
+      }
+    }
+  }
+}
+#endif

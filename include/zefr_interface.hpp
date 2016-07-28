@@ -51,6 +51,9 @@ struct CallbackFuncs
   void (*convert_to_modal)(int *cellID, int *nSpts, double *q_in, int *npts,
                            int *index_out, double *q_out);
   double (*get_q_spt)(int cellID, int spt, int var);
+  double& (*get_q_fpt)(int faceID, int fpt, int var);
+  void (*donor_data_from_device)(int* donorIDs, int nDonors);
+  void (*fringe_data_to_device)(int* fringeIDs, int nFringe);
 };
 
 namespace zefr {
@@ -93,6 +96,13 @@ void donor_frac(int* cellID, double* xyz, int* nweights, int* inode,
                 double* weights, double* rst, int* buffsize);
 void convert_to_modal(int *cellID, int *nSpts, double *q_in, int *npts,
                       int *index_out, double *q_out);
+
+
+//! For runs using GPUs - prepare donor data by copying to host
+void donor_data_from_device(int *donorIDs, int nDonors);
+
+//! For runs using GPUs - copy updated fringe data to device
+void fringe_data_to_device(int *fringeIDs, int nFringe);
 
 } /* namespace zefr */
 #endif /* _zefr_interface_hpp */

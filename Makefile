@@ -6,9 +6,9 @@ endif
 
 CXX = g++
 AR = ar -rvs
-CU = nvcc
+CU = /usr/local/cuda-7.5/bin/nvcc
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas
-CUFLAGS = -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
+CUFLAGS = -std=c++11 -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
@@ -19,6 +19,7 @@ ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
 else
 	CXXFLAGS += $(WARN_OFF)
+	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result,-Wno-narrowing,-Wno-literal-suffix
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
@@ -64,7 +65,7 @@ endif
 
 ifeq ($(strip $(ARCH)),GPU)
 	FLAGS += -D_GPU
-	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas
+	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas -Wl,-rpath=$(strip $(CUDA_DIR))/lib64
 	INCS += -I$(strip $(CUDA_DIR))/include
 endif
 
@@ -101,6 +102,7 @@ swig: $(SOBJS)
 .PHONY: lib
 lib: FLAGS += -D_BUILD_LIB
 lib: CXXFLAGS += -fPIC
+lib: CUFLAGS += -Xcompiler -fPIC
 lib: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
 

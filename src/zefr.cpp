@@ -8,6 +8,8 @@
 #include "mpi.h"
 #ifdef _GPU
 #include "cuda_runtime.h"
+#include "elements_kernels.h"
+#include "solver_kernels.h"
 #endif
 #endif
 
@@ -15,7 +17,6 @@
 #include "macros.hpp"
 #include "multigrid.hpp"
 #include "solver.hpp"
-#include "solver_kernels.h"
 #include "filter.hpp"
 
 #ifndef _BUILD_LIB
@@ -172,7 +173,7 @@ int main(int argc, char* argv[])
 #endif
 
 /* ==== Add in interface functions for use from external code ==== */
-//#define _BUILD_LIB  // for QT editing
+#define _BUILD_LIB  // for QT editing
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
 
@@ -440,5 +441,28 @@ void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
 {
   solver->eles->get_interp_weights(cellID,rst,inode,weights,nweights,buffsize);
 }
+
+double& Zefr::get_u_fpt(int faceID, int fpt, int var)
+{
+  return solver->faces->get_u_fpt(faceID,fpt,var);
+}
+
+#ifdef _GPU
+void Zefr::donor_data_from_device(int *donorIDs, int nDonors)
+{
+  solver->eles->donor_data_from_device(donorIDs, nDonors);
+
+  check_error();
+}
+
+void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe)
+{
+//  solver->eles->U_fpts_d = solver->eles->U_fpts;
+  solver->faces->fringe_data_to_device(fringeIDs, nFringe);
+
+  check_error();
+}
+
+#endif
 
 #endif /* _BUILD_LIB */

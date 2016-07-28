@@ -56,6 +56,11 @@ double get_q_spt(int ele, int spt, int var)
   return ZEFR->get_u_spt(ele,spt,var);
 }
 
+double& get_q_fpt(int face, int fpt, int var)
+{
+  return ZEFR->get_u_fpt(face,fpt,var);
+}
+
 double* get_q_spts(void)
 {
   return ZEFR->get_u_spts();
@@ -91,6 +96,11 @@ CallbackFuncs get_callback_funcs(void)
   call.donor_frac = donor_frac;
   call.convert_to_modal = convert_to_modal;
   call.get_q_spt = get_q_spt;
+  call.get_q_fpt = get_q_fpt;
+
+  /* GPU-specific functions */
+  call.donor_data_from_device = donor_data_from_device;
+  call.fringe_data_to_device = fringe_data_to_device;
 
   return call;
 }
@@ -139,6 +149,20 @@ void convert_to_modal(int* cellID, int* nSpts, double* q_in, int* npts, int* ind
   *index_out = (*cellID) * (*nSpts);
   for (int spt = 0; spt < (*nSpts); spt++)
     q_out[spt] = q_in[spt];
+}
+
+void donor_data_from_device(int *donorIDs, int nDonors)
+{
+#ifdef _GPU
+  ZEFR->donor_data_from_device(donorIDs, nDonors);
+#endif
+}
+
+void fringe_data_to_device(int *fringeIDs, int nFringe)
+{
+#ifdef _GPU
+  ZEFR->fringe_data_to_device(fringeIDs, nFringe);
+#endif
 }
 
 } /* namespace zefr */

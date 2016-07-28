@@ -3,6 +3,7 @@
 
 #ifdef _MPI
 #define _mpi_comm MPI_Comm
+#include "mpi.h"
 #else
 #define _mpi_comm int
 #endif

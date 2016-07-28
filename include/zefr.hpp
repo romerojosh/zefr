@@ -90,6 +90,12 @@ public:
   void donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst);
   void donor_frac(int cellID, int& nweights, int* inode,
                   double* weights, double* rst, int buffsize);
+  double& get_u_fpt(int face, int fpt, int var);
+
+#ifdef _GPU
+  void donor_data_from_device(int *donorIDs, int nDonors);
+  void fringe_data_to_device(int *fringeIDs, int nFringe);
+#endif
 
 private:
   // Generic data about the run

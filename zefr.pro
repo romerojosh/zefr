@@ -2,7 +2,7 @@ TEMPLATE = app
 CONFIG += console
 CONFIG -= qt
 
-DEFINES = _MPI _CPU
+DEFINES = _MPI _GPU
 #DEFINES += _GPU
 
 QMAKE_CXXFLAGS += -std=c++11
@@ -55,5 +55,6 @@ HEADERS += \
 DISTFILES += \
     swig_bin/zefr.i \
     swig_bin/test.py \
-    swig_bin/Makefile
+    swig_bin/Makefile \
+    Makefile
 

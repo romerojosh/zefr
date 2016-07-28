@@ -4060,3 +4060,63 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
   ind    = std::distance(&U(0,0,0), &U(i,0,side));
   stride = std::distance(&U(i,0,side), &U(i,1,side));
 }
+
+double& Faces::get_u_fpt(int faceID, int fpt, int var)
+{
+  /* U : nFpts x nVars x 2 */
+  int i = geo->face2fpts(fpt, faceID);
+  int ic1 = geo->face2eles(0,faceID);
+  int ic2 = geo->face2eles(1,faceID);
+
+  if (ic1 > 0 && geo->iblank_cell[ic1] == NORMAL)
+    return U(i,var,1);
+  else if (ic2 > 0 && geo->iblank_cell[ic2] == NORMAL)
+    return U(i,var,0);
+  else
+  {
+    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell[ic1],geo->iblank_cell[ic2]);
+    ThrowException("Face not blanked but both elements are!");
+  }
+}
+
+#ifdef _GPU
+void Faces::fringe_data_to_device(int* fringeIDs, int nFringe)
+{
+  U_fringe.assign({geo->nFptsPerFace, nFringe, nVars});
+  fringe_fpts.assign({geo->nFptsPerFace, nFringe}, 0);
+  fringe_side.assign({geo->nFptsPerFace, nFringe}, 0);
+  for (int face = 0; face < nFringe; face++)
+  {
+    unsigned int side = 0;
+    int ic1 = geo->face2eles(0,fringeIDs[face]);
+    if (ic1 > 0 && geo->iblank_cell[ic1] == NORMAL)
+      side = 1;
+
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+    {
+      fringe_fpts(fpt,face) = geo->face2fpts(fpt, fringeIDs[face]);
+      fringe_side(fpt,face) = side;
+    }
+  }
+
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    for (unsigned int face = 0; face < nFringe; face++)
+    {
+      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+      {
+        unsigned int gfpt = fringe_fpts(fpt,face);
+        unsigned int side = fringe_side(fpt,face);
+        U_fringe(fpt,face,var) = U(gfpt,var,side);
+      }
+    }
+  }
+
+  U_fringe_d = U_fringe;
+  fringe_fpts_d = fringe_fpts;
+  fringe_side_d = fringe_side;
+
+  unpack_fringe_buffer_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,nFringe,geo->nFptsPerFace,nVars);
+}
+
+#endif

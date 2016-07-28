@@ -119,6 +119,14 @@ class Faces
 #endif
 #endif
 
+#ifdef _GPU
+    mdvector_gpu<double> U_fringe_d;
+    mdvector_gpu<unsigned int> fringe_fpts_d, fringe_side_d;
+
+    mdvector<double> U_fringe;
+    mdvector<unsigned int> fringe_fpts, fringe_side;
+#endif
+
   public:
     Faces(GeoStruct *geo, InputStruct *input, _mpi_comm comm_in);
     void setup(unsigned int nDims, unsigned int nVars);
@@ -136,6 +144,11 @@ class Faces
 
     //! Get location of right-state U data for a flux point
     void get_U_index(int faceID, int fpt, int& ind, int& stride);
+    double& get_u_fpt(int faceID, int fpt, int var);
+
+#ifdef _GPU
+    void fringe_data_to_device(int* fringeIDs, int nFringe);
+#endif
 };
 
 #endif /* faces_hpp */

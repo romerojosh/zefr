@@ -103,10 +103,10 @@ class mdvector
     void solve(mdvector<T>& x, const mdvector<T>& B) const;
 
     //! Methods to add to dimensions of an mdvector
-    void add_dim_0(unsigned int ind, const T& val);
-    void add_dim_1(unsigned int ind, const T& val);
-    void add_dim_2(unsigned int ind, const T& val);
-    void add_dim_3(unsigned int ind, const T& val);
+    void add_dim_0(int ind, const T& val);
+    void add_dim_1(int ind, const T& val);
+    void add_dim_2(int ind, const T& val);
+    void add_dim_3(int ind, const T& val);
 
     //! Methods to remove from dimensions of an mdvector
     void remove_dim_0(unsigned int ind);
@@ -379,7 +379,7 @@ T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int id
 }
 
 template<typename T>
-void mdvector<T>::add_dim_0(unsigned int ind, const T& val)
+void mdvector<T>::add_dim_0(int ind, const T& val)
 {
   if (ind == -1) ind = dims[0]; // Add to end by default
 
@@ -404,7 +404,7 @@ void mdvector<T>::add_dim_0(unsigned int ind, const T& val)
 }
 
 template<typename T>
-void mdvector<T>::add_dim_1(unsigned int ind, const T &val)
+void mdvector<T>::add_dim_1(int ind, const T &val)
 {
   if (ind == -1) ind = dims[1]; // Add to end by default
 
@@ -426,7 +426,7 @@ void mdvector<T>::add_dim_1(unsigned int ind, const T &val)
 }
 
 template<typename T>
-void mdvector<T>::add_dim_2(unsigned int ind, const T &val)
+void mdvector<T>::add_dim_2(int ind, const T &val)
 {
   if (ind == -1) ind = dims[2]; // Add to end by default
 
@@ -445,7 +445,7 @@ void mdvector<T>::add_dim_2(unsigned int ind, const T &val)
 }
 
 template<typename T>
-void mdvector<T>::add_dim_3(unsigned int ind, const T &val)
+void mdvector<T>::add_dim_3(int ind, const T &val)
 {
   if (ind == -1) ind = dims[3]; // Add to end by default
 

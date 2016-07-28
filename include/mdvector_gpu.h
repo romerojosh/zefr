@@ -38,6 +38,9 @@ class mdvector_gpu
 
     void free_data();
 
+    //! Allocated memory & dimensions of vec w/o copying values
+    void set_size(mdvector<T>& vec);
+
     //! Assignment (copy from host)
     mdvector_gpu<T>& operator= (mdvector<T>& vec);
 
@@ -94,6 +97,25 @@ void mdvector_gpu<T>::free_data()
     free_device_data(strides);
 
     allocated = false;
+  }
+}
+
+template <typename T>
+void mdvector_gpu<T>::set_size(mdvector<T>& vec)
+{
+  if (allocated && max_size_ != vec.max_size())
+    free_data();
+
+  if(!allocated)
+  {
+    size_ = vec.size();
+    max_size_ = vec.max_size();
+    ldim_ = vec.ldim();
+    allocate_device_data(values, max_size_);
+    allocate_device_data(strides, 6);
+
+    copy_to_device(strides, vec.strides_ptr(), 6);
+    allocated = true;
   }
 }
 

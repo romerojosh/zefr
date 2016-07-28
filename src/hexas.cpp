@@ -265,7 +265,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
   /* Allocate memory for jacobian matrices and determinant */
   jaco_spts.assign({nDims, nDims, nSpts, nEles});
   inv_jaco_spts.assign({nDims, nDims, nSpts, nEles});
-  jaco_ppts.assign({nDims, nDims, nPpts, nEles});
+//  jaco_ppts.assign({nDims, nDims, nPpts, nEles});
   jaco_qpts.assign({nDims, nDims, nQpts, nEles});
   jaco_det_spts.assign({nSpts, nEles});
   jaco_det_qpts.assign({nQpts, nEles});
@@ -348,23 +348,23 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
 
 
   /* Set jacobian matrix at plot points (do not need the determinant) */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-    {
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node,ele);
-            jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(dimX,gnd) * dshape_ppts(node, ppt, dimXi);
-          }
-        }
-      }
-    }
-  }
+//  for (unsigned int ele = 0; ele < nEles; ele++)
+//  {
+//    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+//    {
+//      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+//      {
+//        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+//        {
+//          for (unsigned int node = 0; node < nNodes; node++)
+//          {
+//            unsigned int gnd = geo->ele2nodes(node,ele);
+//            jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(dimX,gnd) * dshape_ppts(node, ppt, dimXi);
+//          }
+//        }
+//      }
+//    }
+//  }
   /* Set jacobian matrix and determinant at quadrature points */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {

@@ -67,7 +67,7 @@ public:
 #ifdef _MPI
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 #endif
-    std::cout.setf(ios::fixed, ios::floatfield);
+    std::cout.setf(std::ios::fixed, std::ios::floatfield);
     double seconds = .001 * duration;
     if (seconds > 60) {
       int minutes = floor(seconds/60);

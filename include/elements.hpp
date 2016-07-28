@@ -81,6 +81,8 @@ class Elements
 
     _mpi_comm myComm;
 
+    mdvector<double> U_donors;
+
 #ifdef _GPU
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d, oppDiv_fpts_d;
@@ -104,6 +106,8 @@ class Elements
     mdvector_gpu<double> dFcdU_fpts_d, dFdU_spts_d;
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
+
+    mdvector_gpu<double> U_donors_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);
@@ -167,6 +171,10 @@ class Elements
                             double* weights, int& nweights, int buffSize);
 
     std::vector<double> getBoundingBox(int ele);
+
+#ifdef _GPU
+    void donor_data_from_device(int* donorIDs, int nDonors);
+#endif
 };
 
 #endif /* elements_hpp */

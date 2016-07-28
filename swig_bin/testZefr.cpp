@@ -81,6 +81,15 @@ CALLGRIND_STOP_INSTRUMENTATION;
   double *U_spts = zefr::get_q_spts();
   double *U_fpts = zefr::get_q_fpts();
 
+//  MPI_Barrier(MPI_COMM_WORLD);
+//  if (rank==0)
+//  {
+//    std::cout << "Before TIOGA setup - Press enter to continue... " << std::flush;
+//    std::cin.clear();
+//    std::cin.get();
+//  }
+//  MPI_Barrier(MPI_COMM_WORLD);
+
   Timer tg_time;
   tg_time.startTimer();
 
@@ -103,7 +112,7 @@ CALLGRIND_STOP_INSTRUMENTATION;
       cbs.donor_frac, cbs.convert_to_modal);
 
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
-      cbs.get_q_index_face, cbs.get_q_spt);
+      cbs.get_q_index_face, cbs.get_q_spt, cbs.get_q_fpt);
 
 
   if (nGrids > 1)
@@ -152,16 +161,16 @@ CALLGRIND_STOP_INSTRUMENTATION;
 
   z->write_solution();
 
-//  if (rank == 0)
-//  {
-    std::cout << "Preprocessing/Connectivity Time: ";
-    tg_time.showTime(2);
+  std::cout << "Preprocessing/Connectivity Time: ";
+  tg_time.showTime(2);
 
-    tgTime.showTime(2);
-    runTime.showTime(2);
-//  }
+  MPI_Barrier(MPI_COMM_WORLD);
+  tgTime.showTime(2);
+  MPI_Barrier(MPI_COMM_WORLD);
+  runTime.showTime(2);
+  MPI_Barrier(MPI_COMM_WORLD);
 
-    inp.waitTimer.showTime();
+  inp.waitTimer.showTime();
 
   zefr::finalize();
   tioga_delete_();

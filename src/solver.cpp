@@ -55,6 +55,18 @@ void FRSolver::setup(_mpi_comm comm_in)
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
   geo = process_mesh(input, order, input->nDims, myComm);
 
+//MPI_Barrier(MPI_COMM_WORLD);
+//int rank;
+//MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//if (rank==0)
+//{
+//  std::cout << "Before face setup - Press enter to continue... " << std::flush;
+//  std::cin.clear();
+//  std::cin.ignore(256,'\n');
+//  std::cin.get();
+//}
+//MPI_Barrier(MPI_COMM_WORLD);
+
   if (input->rank == 0) std::cout << "Setting up elements and faces..." << std::endl;
 
   if (input->nDims == 2)
@@ -65,14 +77,49 @@ void FRSolver::setup(_mpi_comm comm_in)
   faces = std::make_shared<Faces>(&geo, input, myComm);
 
   faces->setup(eles->nDims, eles->nVars);
+//MPI_Barrier(MPI_COMM_WORLD);
+//if (rank==0)
+//{
+//  std::cout << "Before ele setup - Press enter to continue... " << std::flush;
+//  std::cin.clear();
+//  std::cin.ignore(256,'\n');
+//  std::cin.get();
+//}
+//MPI_Barrier(MPI_COMM_WORLD);
   eles->setup(faces, myComm);
 
-  if (input->rank == 0) std::cout << "Setting up timestepping..." << std::endl;
-  setup_update();
+//MPI_Barrier(MPI_COMM_WORLD);
+//if (rank==0)
+//{
+//  std::cout << "Before setup_update - Press enter to continue... " << std::flush;
+//  std::cin.clear();
+//  std::cin.ignore(256,'\n');
+//  std::cin.get();
+//}
+//MPI_Barrier(MPI_COMM_WORLD);
 
+  if (input->rank == 0) std::cout << "Setting up timestepping..." << std::endl;
+  setup_update();  
+//MPI_Barrier(MPI_COMM_WORLD);
+//if (rank==0)
+//{
+//  std::cout << "Before setup_output - Press enter to continue... " << std::flush;
+//  std::cin.clear();
+//  std::cin.ignore(256,'\n');
+//  std::cin.get();
+//}
+//MPI_Barrier(MPI_COMM_WORLD);
   if (input->rank == 0) std::cout << "Setting up output..." << std::endl;
   setup_output();
-
+//MPI_Barrier(MPI_COMM_WORLD);
+//if (rank==0)
+//{
+//  std::cout << "Before initialize_U - Press enter to continue... " << std::flush;
+//  std::cin.clear();
+//  std::cin.ignore(256,'\n');
+//  std::cin.get();
+//}
+//MPI_Barrier(MPI_COMM_WORLD);
   if (input->rank == 0) std::cout << "Initializing solution..." << std::endl;
   initialize_U();
 
@@ -1099,7 +1146,8 @@ void FRSolver::initialize_U()
   /* Solution and Flux Variables */
   eles->U_spts.assign({eles->nSpts, eles->nEles, eles->nVars});
   eles->U_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-  eles->Ucomm.assign({eles->nFpts, eles->nEles, eles->nVars});
+  if (input->viscous)
+    eles->Ucomm.assign({eles->nFpts, eles->nEles, eles->nVars});
   eles->U_ppts.assign({eles->nPpts, eles->nEles, eles->nVars});
   eles->U_qpts.assign({eles->nQpts, eles->nEles, eles->nVars});
 

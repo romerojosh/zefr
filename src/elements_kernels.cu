@@ -1387,3 +1387,29 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
   poly_squeeze<<<blocks, threads>>>(U_spts, U_fpts, Uavg, gamma, exps0, nSpts, nFpts,
       nEles, nVars, nDims);
 }
+
+__global__
+void pack_donor_buffer(mdvector_gpu<double> U_spts,
+    mdvector_gpu<double> U_donors, int* donorIDs, int nDonors,
+    unsigned int nSpts)
+{
+  const unsigned int var = blockIdx.y;
+  const unsigned int spt  = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int donor= (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || donor >= nDonors)
+    return;
+
+  const unsigned int ele = donorIDs[donor];
+  U_donors(spt, donor, var) = U_spts(spt, ele, var);
+}
+
+void pack_donor_buffer_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
+    unsigned int nSpts, unsigned int nVars)
+{
+  int threads= 192;
+  dim3 blocks((nDonors * nSpts + threads - 1)/ threads, nVars);
+
+  pack_donor_buffer<<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+}
