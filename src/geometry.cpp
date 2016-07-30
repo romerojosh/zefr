@@ -51,7 +51,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   if (input->overset)
   {
     geo.iblank_node.assign(geo.nNodes, NORMAL);
-    geo.iblank_cell.assign(geo.nEles, NORMAL);
+    geo.iblank_cell.assign({geo.nEles}, NORMAL);
     geo.iblank_face.assign(geo.nFaces, NORMAL);
   }
 

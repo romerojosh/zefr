@@ -89,7 +89,8 @@ struct GeoStruct
     std::vector<int> fpt2face; //! fpt index to face index
     mdvector<int> face2fpts; //! Face index to fpt indices
 
-    std::vector<int> iblank_node, iblank_cell, iblank_face; //! iblank values for nodes, cells, faces
+    std::vector<int> iblank_node, iblank_face; //! iblank values for nodes, cells, faces
+    mdvector<int> iblank_cell;
 
     std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
     std::set<int> overFaces;  //! Ordered list of all current overset faces
@@ -97,6 +98,13 @@ struct GeoStruct
 
     int nWall, nOver; //! Number of nodes on wall & overset boundaries
     std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists
+
+#ifdef _GPU
+    mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
+    mdvector<int> iblank_fpts;
+
+    std::map<unsigned int,unsigned int> fpt2side; // For all overset fringe points
+#endif
 
     unsigned int nGrids;  //! Number of distinct overset grids
     int nProcsGrid;       //! Number of MPI processes assigned to current (overset) grid block

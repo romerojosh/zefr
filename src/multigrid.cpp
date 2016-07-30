@@ -106,7 +106,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
     for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
       for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
       {
-        if (input->overset && grids[n]->geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
         for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
           solutions[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var);
@@ -141,7 +141,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
       for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
         for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
         {
-          if (input->overset && grids[n]->geo.iblank_cell[ele] != NORMAL) continue;
+          if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
           for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
             grids[n]->eles->divF_spts(spt, ele, var, 0) += sources[n](spt, ele, var);
@@ -184,7 +184,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
     for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
       for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
       {
-        if (input->overset && grids[n]->geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
         for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
           corrections[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var) - 
@@ -431,7 +431,7 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
   for (unsigned int n = 0; n < grid.eles->nVars; n++)
     for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
     {
-      if (input->overset && grids[n]->geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
         source(spt,ele,n) = grid.eles->divF_spts(spt,ele,n,0);

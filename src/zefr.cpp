@@ -173,7 +173,7 @@ int main(int argc, char* argv[])
 #endif
 
 /* ==== Add in interface functions for use from external code ==== */
-#define _BUILD_LIB  // for QT editing
+//#define _BUILD_LIB  // for QT editing
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
 
@@ -228,7 +228,8 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
+  cudaSetDevice(0);
+  //cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
 #endif
 }
 #endif
@@ -299,6 +300,10 @@ void Zefr::do_step(void)
   }
 
   input.iter++;
+
+#ifdef _GPU
+  // solver->faces->U = solver->faces->U_d; /// DEBUGGING
+#endif
 }
 
 void Zefr::do_n_steps(int n)
@@ -447,22 +452,36 @@ double& Zefr::get_u_fpt(int faceID, int fpt, int var)
   return solver->faces->get_u_fpt(faceID,fpt,var);
 }
 
+void Zefr::update_iblank_gpu(void)
+{
 #ifdef _GPU
+  geo->iblank_fpts.assign({geo->nGfpts}, 1);
+  for (unsigned int fpt = 0; fpt < geo->nGfpts; fpt++)
+  {
+    int face = geo->fpt2face[fpt];
+    geo->iblank_fpts(fpt) = geo->iblank_face[face];
+  }
+  geo->iblank_fpts_d = geo->iblank_fpts;
+  geo->iblank_cell_d = geo->iblank_cell;
+#endif
+}
+
 void Zefr::donor_data_from_device(int *donorIDs, int nDonors)
 {
+#ifdef _GPU
   solver->eles->donor_data_from_device(donorIDs, nDonors);
 
   check_error();
+#endif
 }
 
 void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe)
 {
-//  solver->eles->U_fpts_d = solver->eles->U_fpts;
+#ifdef _GPU
   solver->faces->fringe_data_to_device(fringeIDs, nFringe);
 
   check_error();
-}
-
 #endif
+}
 
 #endif /* _BUILD_LIB */

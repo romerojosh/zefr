@@ -70,6 +70,15 @@ Zefr* get_zefr_object(void);
 
 void finalize(void);
 
+bool use_gpus(void)
+{
+  #ifdef _GPU
+  return true;
+  #else
+  return false;
+  #endif
+}
+
 /* ==== Access functions for mesh data ==== */
 
 BasicGeo get_basic_geo_data(void);

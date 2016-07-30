@@ -114,6 +114,13 @@ CALLGRIND_STOP_INSTRUMENTATION;
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
       cbs.get_q_index_face, cbs.get_q_spt, cbs.get_q_fpt);
 
+  // If code was compiled to use GPUs, need additional callbacks
+  if (zefr::use_gpus())
+  {
+    std::cout << "Setting GPU-related callback functions" << std::endl;
+    tioga_set_ab_callback_gpu_(cbs.donor_data_from_device, 
+      cbs.fringe_data_to_device);
+  }
 
   if (nGrids > 1)
   {
@@ -122,6 +129,10 @@ CALLGRIND_STOP_INSTRUMENTATION;
   }
   tg_time.stopTimer();
 
+  // setup cell/face iblank data for use on GPU
+  if (zefr::use_gpus())
+    z->update_iblank_gpu();
+
   // Output initial solution and grid
   z->write_solution();
 
@@ -129,10 +140,9 @@ CALLGRIND_STOP_INSTRUMENTATION;
   CALLGRIND_START_INSTRUMENTATION;
 
   // Run the solver loop now
-  Timer runTime("Compute Time: ");
-  Timer tgTime("Interp Time: ");
-  Timer mpiTime("MPI Wait Time: ");
-  inp.waitTimer = mpiTime;
+  Timer runTime("ZEFR Compute Time: ");
+  Timer tgTime("TIOGA Interp Time: ");
+  inp.waitTimer.setPrefix("ZEFR MPI Time: ");
 
   for (int iter = 1; iter <= inp.n_steps; iter++)
   {

@@ -546,7 +546,7 @@ void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo->iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -582,7 +582,7 @@ void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo->iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -618,7 +618,7 @@ void Quads::transform_dFdU()
     {
       for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        if (input->overset && geo->iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
 
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {

@@ -696,7 +696,7 @@ void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo->iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -725,7 +725,7 @@ void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
 
 #ifdef _GPU
   transform_dU_hexa_wrapper(dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation);
+      nDims, input->equation, input->overset, geo->iblank_cell_d.data());
   //dU_spts = dU_spts_d;
   check_error();
 #endif
@@ -740,7 +740,7 @@ void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo->iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -769,7 +769,7 @@ void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   //F_spts_d = F_spts;
   transform_flux_hexa_wrapper(F_spts_d, inv_jaco_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation);
+      nDims, input->equation, input->overset, geo->iblank_cell_d.data());
 
   check_error();
 

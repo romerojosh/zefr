@@ -390,7 +390,7 @@ void FRSolver::restart(std::string restart_file)
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
           /// TODO: make sure this is setup correctly first
-          if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
           unsigned int spt = 0;
           for (unsigned int ppt = 0; ppt < nPpts; ppt++)
@@ -479,7 +479,7 @@ void FRSolver::solver_data_to_device()
     unsigned int N = eles->nSpts * eles->nVars;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
       eles->RHS_ptrs(ele) = eles->RHS_d.data() + ele * N;
 
@@ -494,7 +494,7 @@ void FRSolver::solver_data_to_device()
       unsigned int nElesMax = ceil(geo.nEles / (double) input->n_LHS_blocks);
       for (unsigned int ele = 0; ele < nElesMax; ele++)
       {
-        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
         eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
       }
@@ -503,7 +503,7 @@ void FRSolver::solver_data_to_device()
       {
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
           eles->LHSInv_ptrs(ele) = eles->LHSInv_d.data() + ele * (N * N);
         }
@@ -514,7 +514,7 @@ void FRSolver::solver_data_to_device()
       unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
       for (unsigned int ele = 0; ele < nElesMax; ele++)
       {
-        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
         eles->LHS_ptrs(ele) = eles->LHS_d.data() + ele * (N * N);
         if (input->inv_mode)
@@ -640,8 +640,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 
 #ifdef _MPI
-  bool use_blocked = true;
   /* Commence sending U data to other processes */
+  bool use_blocked = true;
+#ifdef _GPU
+  use_blocked = false;
+#endif
   if (use_blocked)
     faces->send_U_data_blocked();
   else
@@ -933,7 +936,7 @@ void FRSolver::compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsign
 #ifndef _NO_TNT
   for (unsigned int ele = 0; ele < endEle - startEle; ele++)
   {
-    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
     /* Copy LHS into TNT object */
     // TODO: Copy can now be removed. Need to investigate column-major TNT array views.
@@ -972,7 +975,7 @@ void FRSolver::compute_RHS(unsigned int color)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
@@ -1005,7 +1008,7 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
@@ -1051,7 +1054,7 @@ void FRSolver::compute_deltaU(unsigned int color)
 
   for (unsigned int ele = startEle; ele < endEle; ele++)
   {
-    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
     /* Create Array1D view of RHS */
     unsigned int N = eles->nSpts * eles->nVars;
@@ -1117,7 +1120,7 @@ void FRSolver::compute_U(unsigned int color)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
@@ -1359,7 +1362,7 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
         int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1381,7 +1384,8 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   U_to_faces_wrapper(eles->U_fpts_d, faces->U_d, eles->Ucomm_d, geo.fpt2gfpt_d,
       geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, eles->nDims,
-      input->equation, input->viscous, startEle, endEle);
+      input->equation, input->viscous, startEle, endEle, input->overset,
+      geo.iblank_cell_d.data());
 
   check_error();
 #endif
@@ -1395,7 +1399,7 @@ void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
         int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1413,7 +1417,8 @@ void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d,
       geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts,
-      eles->nDims, input->equation, startEle, endEle);
+      eles->nDims, input->equation, startEle, endEle, input->overset,
+      geo.iblank_cell_d.data());
 
   check_error();
 #endif
@@ -1430,7 +1435,7 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
     {
       for (unsigned int ele = startEle; ele < endEle; ele++)
       {
-        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
           int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1448,7 +1453,8 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 
 #ifdef _GPU
   dU_to_faces_wrapper(eles->dU_fpts_d, faces->dU_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
-      eles->nVars, eles->nEles, eles->nFpts, eles->nDims, input->equation);
+      eles->nVars, eles->nEles, eles->nFpts, eles->nDims, input->equation, 
+      input->overset, geo.iblank_cell_d.data());
 
   check_error();
 #endif
@@ -1462,7 +1468,7 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
       {
         int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1482,7 +1488,8 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
   /* Can reuse kernel here */
   U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, 
       geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, 
-      eles->nDims, input->equation, startEle, endEle);
+      eles->nDims, input->equation, startEle, endEle, input->overset, 
+      geo.iblank_cell_d.data());
 
   check_error();
 #endif
@@ -1498,7 +1505,7 @@ void FRSolver::dFcdU_from_faces()
     {
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
           int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1542,7 +1549,7 @@ void FRSolver::dFcdU_from_faces()
       {
         for (unsigned int ele = 0; ele < eles->nEles; ele++)
         {
-          if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
           for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
           {
             int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -1587,7 +1594,7 @@ void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned in
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
           double x = geo.coord_spts(spt, ele, 0);
@@ -1656,7 +1663,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
-            if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
             for (unsigned int spt = 0; spt < eles->nSpts; spt++)
             {
               if (input->dt_type != 2)
@@ -1678,7 +1685,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
-            if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
             for (unsigned int spt = 0; spt < eles->nSpts; spt++)
             {
               if (input->dt_type != 2)
@@ -1704,13 +1711,13 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       {
         RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
             rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-            input->equation, stage, last_stage, false);
+            input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
       }
       else
       {
         RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
             rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-            input->equation, stage, last_stage, false);
+            input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
       }
       check_error();
 #endif
@@ -1739,7 +1746,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
-              if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
               for (unsigned int spt = 0; spt < eles->nSpts; spt++)
                 if (input->dt_type != 2)
                 {
@@ -1759,7 +1766,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
-              if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
               for (unsigned int spt = 0; spt < eles->nSpts; spt++)
               {
                 if (input->dt_type != 2)
@@ -1783,13 +1790,13 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       {
         RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
             rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-            input->equation, 0, nStages, true);
+            input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
       }
       else
       {
         RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
             rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-            input->equation, 0, nStages, true);
+            input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
       }
 
       check_error();
@@ -1907,7 +1914,7 @@ void FRSolver::compute_element_dt()
 #pragma omp parallel for
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     { 
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
       for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
@@ -1940,7 +1947,7 @@ void FRSolver::compute_element_dt()
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     { 
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       /* Compute inverse of timestep in each face */
       std::vector<double> dtinv(2*eles->nDims);
       for (unsigned int face = 0; face < 2*eles->nDims; face++)
@@ -1974,7 +1981,7 @@ void FRSolver::compute_element_dt()
       double minDT = INFINITY;
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         minDT = std::min(minDT, dt(ele));
       }
       dt(0) = minDT;
@@ -1995,7 +2002,8 @@ void FRSolver::compute_element_dt()
 #ifdef _GPU
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfpt_d, 
       eles->weights_spts_d, eles->vol_d, eles->h_ref_d, eles->nSpts1D, CFL, input->ldg_b, order, 
-      input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims, myComm);
+      input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims, myComm,
+      input->overset, geo.iblank_cell_d.data());
 #endif
 }
 
@@ -2009,7 +2017,7 @@ void FRSolver::compute_SER_dt()
   {
     for (unsigned int ele =0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
@@ -2170,7 +2178,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     /* Remove blanked elements from total element count */
     for (int ele = 0; ele < eles->nEles; ele++)
-      if (geo.iblank_cell[ele] != NORMAL) nEles--;
+      if (geo.iblank_cell(ele) != NORMAL) nEles--;
   }
 
   f << "<UnstructuredGrid>" << std::endl;
@@ -2189,7 +2197,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     // TODO: Change order of ppt structures for better looping 
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2202,7 +2210,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2222,7 +2230,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   int count = 0; // To account for blanked elements
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
@@ -2240,7 +2248,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   unsigned int offset = eles->nNodesPerSubelement;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       f << offset << " ";
@@ -2306,7 +2314,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     f << "format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << std::scientific << std::setprecision(16) << eles->U_ppts(ppt, ele, 0);
@@ -2331,11 +2339,11 @@ void FRSolver::write_solution(const std::string &_prefix)
       
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
         {
           f << std::scientific << std::setprecision(16);
-//          f << geo.iblank_cell[ele];
+//          f << geo.iblank_cell(ele);
           f << eles->U_ppts(ppt, ele, n);
           f << " ";
         }
@@ -2353,7 +2361,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << filt.sensor(ele) << " ";
@@ -2441,7 +2449,7 @@ void FRSolver::write_color()
   {
     /* Remove blanked elements from total element count */
     for (int ele = 0; ele < eles->nEles; ele++)
-      if (geo.iblank_cell[ele] != NORMAL) nEles--;
+      if (geo.iblank_cell(ele) != NORMAL) nEles--;
   }
 
   /* Write header */
@@ -2464,7 +2472,7 @@ void FRSolver::write_color()
     // TODO: Change order of ppt structures for better looping 
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2477,7 +2485,7 @@ void FRSolver::write_color()
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
         f << geo.coord_ppts(ppt, ele, 0) << " ";
@@ -2496,7 +2504,7 @@ void FRSolver::write_color()
   int count = 0;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
@@ -2514,7 +2522,7 @@ void FRSolver::write_color()
   unsigned int offset = eles->nNodesPerSubelement;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
     for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
     {
       f << offset << " ";
@@ -2547,7 +2555,7 @@ void FRSolver::write_color()
   f << "format=\"ascii\">"<< std::endl;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
     for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
     {
       f << std::scientific << std::setprecision(16) << geo.ele_color(ele);
@@ -2573,6 +2581,10 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #ifdef _GPU
   eles->divF_spts = eles->divF_spts_d;
   dt = dt_d;
+
+  eles->U_spts = eles->U_spts_d; /// DEBUGGING
+  faces->U = faces->U_d; /// DEBUGGING
+  faces->Fcomm = faces->Fcomm_d; /// DEBUGGING
 #endif
 
   // HACK: Change nStages to compute the correct residual
@@ -2587,9 +2599,11 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   for (unsigned int n = 0; n < eles->nVars; n++)
     for (unsigned int ele =0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
         eles->divF_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
+      }
     }
 
   unsigned int nEles = 0;
@@ -2597,7 +2611,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   {
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
         if (input->res_type == 0)
@@ -3022,7 +3036,7 @@ void FRSolver::report_error(std::ofstream &f)
 #pragma omp for collapse (2)
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ele] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int qpt = 0; qpt < eles->nQpts; qpt++)
       {
         double U_true = 0.0;
@@ -3063,6 +3077,9 @@ void FRSolver::report_error(std::ofstream &f)
         double U_error;
         if (input->test_case == 2) // Couette flow case
         {
+          if (!input->viscous) 
+            ThrowException("Couette flow test case selected but viscosity disabled.");
+          
           double rho = eles->U_qpts(qpt, ele, 0);
           double u =  eles->U_qpts(qpt, ele, 1) / rho;
           double rho_dx = eles->dU_qpts(qpt, ele, 0, 0);
@@ -3096,8 +3113,11 @@ void FRSolver::report_error(std::ofstream &f)
         else
         {
           U_error = U_true - eles->U_qpts(qpt, ele, n);
-          dU_error[0] = dU_true[0] - eles->dU_qpts(qpt, ele, n, 0); 
-          dU_error[1] = dU_true[1] - eles->dU_qpts(qpt, ele, n, 1);
+          if (input->viscous)
+          {
+            dU_error[0] = dU_true[0] - eles->dU_qpts(qpt, ele, n, 0); 
+            dU_error[1] = dU_true[1] - eles->dU_qpts(qpt, ele, n, 1);
+          }
           vol = 1;
         }
 

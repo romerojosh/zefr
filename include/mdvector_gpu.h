@@ -29,7 +29,7 @@ class mdvector_gpu
     unsigned int* dims; 
     unsigned int* strides;
     unsigned int ldim_;
-    T* values;
+    T* values = NULL;
     bool allocated = false;
 
   public:

@@ -1,6 +1,6 @@
 # Geometry:
 nDims    2
-meshfile QuadBox_3x3.msh
+meshfile QuadBox_32x32.msh
 
 # Boundary Conditions
 mesh_bound  periodic  periodic

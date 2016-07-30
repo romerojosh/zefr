@@ -656,7 +656,8 @@ void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_spts_AdvDiff_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d, startEle, endEle);
+    compute_Fconv_spts_AdvDiff_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d, 
+      startEle, endEle, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -682,7 +683,8 @@ void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_spts_Burgers_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, startEle, endEle);
+    compute_Fconv_spts_Burgers_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, startEle, 
+      endEle, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -766,7 +768,8 @@ void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_spts_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma, startEle, endEle);
+    compute_Fconv_spts_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma, 
+      startEle, endEle, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -796,7 +799,8 @@ void Elements::compute_Fvisc(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fvisc_spts_AdvDiff_wrapper(F_spts_d, dU_spts_d, nSpts, nEles, nDims, input->AdvDiff_D);
+    compute_Fvisc_spts_AdvDiff_wrapper(F_spts_d, dU_spts_d, nSpts, nEles, nDims, 
+      input->AdvDiff_D, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -981,7 +985,8 @@ void Elements::compute_Fvisc(unsigned int startEle, unsigned int endEle)
 
 #ifdef _GPU
       compute_Fvisc_spts_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, nDims, 
-          input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
+          input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
+          input->overset, geo->iblank_cell_d.data());
       check_error();
 #endif
 
@@ -2211,10 +2216,17 @@ void Elements::get_interp_weights(int cellID, double* rst, int* inode,
 #ifdef _GPU
 void Elements::donor_data_from_device(int* donorIDs, int nDonors)
 {
+  if (nDonors == 0) return;
+
   U_donors.assign({nSpts,nDonors,nVars},0,0);
   U_donors_d.set_size(U_donors);
+  //U_donors_d = U_donors;
 
-  pack_donor_buffer_wrapper(U_spts_d,U_donors_d,donorIDs,nDonors,nSpts,nVars);
+  int* donorIDs_d;
+  allocate_device_data(donorIDs_d, nDonors);
+  copy_to_device(donorIDs_d, donorIDs, nDonors);
+
+  pack_donor_buffer_wrapper(U_spts_d,U_donors_d,donorIDs_d,nDonors,nSpts,nVars);
 
   U_donors = U_donors_d;
 
@@ -2229,5 +2241,7 @@ void Elements::donor_data_from_device(int* donorIDs, int nDonors)
       }
     }
   }
+
+  free_device_data(donorIDs_d);
 }
 #endif

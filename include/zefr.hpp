@@ -92,10 +92,10 @@ public:
                   double* weights, double* rst, int buffsize);
   double& get_u_fpt(int face, int fpt, int var);
 
-#ifdef _GPU
+  // GPU-related callback functions
+  void update_iblank_gpu(void);
   void donor_data_from_device(int *donorIDs, int nDonors);
   void fringe_data_to_device(int *fringeIDs, int nFringe);
-#endif
 
 private:
   // Generic data about the run

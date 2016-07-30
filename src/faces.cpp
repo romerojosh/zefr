@@ -102,7 +102,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
 #ifdef _MPI
   /* Allocate memory for send/receive buffers */
-  /*for (const auto &entry : geo->fpt_buffer_map)
+  for (const auto &entry : geo->fpt_buffer_map)
   {
     int pairedRank = entry.first;
     const auto &fpts = entry.second;
@@ -120,10 +120,10 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   }
 
   sreqs.resize(geo->fpt_buffer_map.size());
-  rreqs.resize(geo->fpt_buffer_map.size());*/
+  rreqs.resize(geo->fpt_buffer_map.size());
 
   /* ---- For buffer-style MPI sends/recvs ---- */
-  buffUR.resize(geo->nMpiFaces);
+  /*buffUR.resize(geo->nMpiFaces);
   buffUL.resize(geo->nMpiFaces);
   for (unsigned int i = 0; i < geo->nMpiFaces; i++)
   {
@@ -158,7 +158,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   // For 2D
   for (unsigned int i = 0; i < nFptsFace; i++)
-    rot_permute[4].push_back(nFptsFace - i - 1);
+    rot_permute[4].push_back(nFptsFace - i - 1);*/
 #endif
 
 }
@@ -1642,7 +1642,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, nFpts, nDims, input->AdvDiff_A_d,
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
     check_error();
 #endif
   }
@@ -1664,7 +1664,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_fpts_Burgers_wrapper(Fconv_d, U_d, nFpts, nDims, startFpt, endFpt);
+    compute_Fconv_fpts_Burgers_wrapper(Fconv_d, U_d, nFpts, nDims, startFpt, endFpt,
+      input->overset, geo->iblank_fpts_d.data());
     check_error();
 #endif
   }
@@ -1750,7 +1751,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
       compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma, 
-          startFpt, endFpt);
+          startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
       check_error();
 #endif
   }
@@ -1779,7 +1780,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_Fvisc_fpts_AdvDiff_wrapper(Fvisc_d, dU_d, nFpts, nDims, input->AdvDiff_D,
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
     check_error();
 #endif
 
@@ -1974,7 +1975,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #ifdef _GPU
     compute_Fvisc_fpts_EulerNS_wrapper(Fvisc_d, U_d, dU_d, nFpts, nDims, input->gamma, 
         input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
     check_error();
 
     //Fvisc = Fvisc_d;
@@ -1992,7 +1993,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
-        dA_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+        dA_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
+        input->overset, geo->iblank_fpts_d.data());
 
     check_error();
 
@@ -2029,7 +2031,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #ifdef _GPU
       LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, diffCo_d, LDG_bias_d, dA_d, 
           input->AdvDiff_D, input->gamma, input->mu, input->prandtl, input->ldg_b,
-          input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+          input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
+          input->overset, geo->iblank_fpts_d.data());
 
       check_error();
 #endif
@@ -2103,7 +2106,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, input->ldg_b, nFpts, nVars, nDims, LDG_bias_d, 
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
 
@@ -3652,6 +3655,7 @@ void Faces::transform_dFcdU()
 #ifdef _MPI
 void Faces::send_U_data()
 {
+#ifdef _CPU
   /* This is kinda hacky, but I can't see any better way to get around the MPI
    * datatype usage besides copying ALL the MPI data into a temp array */
   if (input->overset)
@@ -3670,6 +3674,7 @@ void Faces::send_U_data()
       }
     }
   }
+#endif
 
   /* Stage all the non-blocking receives */
 
@@ -3832,27 +3837,27 @@ void Faces::recv_U_data_blocked(int mpiFaceID)
 void Faces::recv_U_data()
 {
 #ifdef _GPU
-  unsigned int ridx = 0;
+  nrecvs = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
-    ridx++;
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
+    nrecvs++;
   }
 
-  unsigned int sidx = 0;
   sync_stream(1); 
 
+  nsends = 0;
   for (auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
-    sidx++;
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[nsends]);
+    nsends++;
   }
 #endif
 
@@ -3893,12 +3898,13 @@ void Faces::recv_U_data()
     int recvRank = entry.first;
     auto &fpts = entry.second;
 
-    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1);
+    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());
   }
 
   sync_stream(0);
 #endif
 
+#ifdef  _CPU
   /* Copy interpolated overset data back into 'U' (overwrite junk MPI data) */
   if (input->overset)
   {
@@ -3914,6 +3920,7 @@ void Faces::recv_U_data()
       }
     }
   }
+#endif
 }
 
 void Faces::send_dU_data()
@@ -4033,7 +4040,7 @@ void Faces::recv_dU_data()
     int recvRank = entry.first;
     auto &fpts = entry.second;
 
-    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims);
+    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, input->overset, geo->iblank_fpts_d.data());
   }
 #endif
 }
@@ -4047,13 +4054,13 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
   int ic2 = geo->face2eles(1,faceID);
 
   int side = -1;
-  if (ic1 > 0 && geo->iblank_cell[ic1] == NORMAL)
+  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
     side = 1;
-  else if (ic2 > 0 && geo->iblank_cell[ic2] == NORMAL)
+  else if (ic2 > 0 && geo->iblank_cell(ic2) == NORMAL)
     side = 0;
   else
   {
-    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell[ic1],geo->iblank_cell[ic2]);
+    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell(ic1),geo->iblank_cell(ic2));
     ThrowException("Face not blanked but both elements are!");
   }
 
@@ -4068,20 +4075,28 @@ double& Faces::get_u_fpt(int faceID, int fpt, int var)
   int ic1 = geo->face2eles(0,faceID);
   int ic2 = geo->face2eles(1,faceID);
 
-  if (ic1 > 0 && geo->iblank_cell[ic1] == NORMAL)
-    return U(i,var,1);
-  else if (ic2 > 0 && geo->iblank_cell[ic2] == NORMAL)
-    return U(i,var,0);
-  else
+  unsigned int side = 0;
+  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
   {
-    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell[ic1],geo->iblank_cell[ic2]);
+    side = 1;
+  }
+  else if (ic2 < 0 || geo->iblank_cell(ic2) != NORMAL)
+  {
+    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell(ic1),geo->iblank_cell(ic2));
     ThrowException("Face not blanked but both elements are!");
   }
+
+#ifdef _GPU
+    geo->fpt2side[i] = side;
+#endif
+  return U(i,var,side);
 }
 
 #ifdef _GPU
 void Faces::fringe_data_to_device(int* fringeIDs, int nFringe)
 {
+  if (nFringe == 0) return;
+
   U_fringe.assign({geo->nFptsPerFace, nFringe, nVars});
   fringe_fpts.assign({geo->nFptsPerFace, nFringe}, 0);
   fringe_side.assign({geo->nFptsPerFace, nFringe}, 0);
@@ -4089,7 +4104,7 @@ void Faces::fringe_data_to_device(int* fringeIDs, int nFringe)
   {
     unsigned int side = 0;
     int ic1 = geo->face2eles(0,fringeIDs[face]);
-    if (ic1 > 0 && geo->iblank_cell[ic1] == NORMAL)
+    if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
       side = 1;
 
     for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
@@ -4112,11 +4127,37 @@ void Faces::fringe_data_to_device(int* fringeIDs, int nFringe)
     }
   }
 
+  // int nFringePts = geo->fpt2side.size();
+  // U_fringe.assign({nFringePts, nVars});
+  // fringe_fpts.assign({nFringePts});
+  // fringe_side.assign({nFringePts});
+
+  // unsigned int fpt = 0;
+  // for (auto &pt:geo->fpt2side)
+  // {
+  //   fringe_fpts(fpt) = pt.first;
+  //   fringe_side(fpt) = pt.second;
+  //   fpt++;
+  // }
+
+  // for (unsigned int var = 0; var < nVars; var++)
+  // {
+  //   for (unsigned int fpt = 0; fpt < nFringePts; fpt++)
+  //   {
+  //     unsigned int gfpt = fringe_fpts(fpt);
+  //     unsigned int side = fringe_side(fpt);
+  //     U_fringe(fpt,var) = U(gfpt,var,side);
+  //   }
+  // }
+
   U_fringe_d = U_fringe;
   fringe_fpts_d = fringe_fpts;
   fringe_side_d = fringe_side;
 
-  unpack_fringe_buffer_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,nFringe,geo->nFptsPerFace,nVars);
+  // unpack_fringe_buffer_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,
+  //   nFringePts,geo->nFptsPerFace,nVars);
+  unpack_fringe_buffer_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,
+    nFringe,geo->nFptsPerFace,nVars);
 }
 
 #endif
