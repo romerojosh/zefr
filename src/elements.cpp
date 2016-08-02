@@ -2242,7 +2242,7 @@ void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
 {
   if (nDonors == 0) return;
 
-  dU_donors.assign({nSpts,nDonors,nVars*nDims},0,0);
+  dU_donors.assign({nSpts,nDonors,nVars,nDims},0,0);
   dU_donors_d.set_size(dU_donors);
 
   int* donorIDs_d;
