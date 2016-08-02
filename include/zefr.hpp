@@ -78,6 +78,7 @@ public:
 
   // Solution-data access functions
   double get_u_spt(int ele, int spt, int var);
+  double get_grad_spt(int ele, int spt, int dim, int var);
   double *get_u_spts(void);
   double *get_u_fpts(void);
 
@@ -86,16 +87,19 @@ public:
   void get_nodes_per_face(int& nNodes);
   void get_receptor_nodes(int cellID, int& nNodes, double* xyz);
   void get_face_nodes(int faceID, int& nNodes, double* xyz);
-  void get_q_index_face(int faceID, int fpt, int& ind, int& stride);
   void donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst);
   void donor_frac(int cellID, int& nweights, int* inode,
                   double* weights, double* rst, int buffsize);
   double& get_u_fpt(int face, int fpt, int var);
+  double& get_grad_fpt(int face, int fpt, int dim, int var);
 
   // GPU-related callback functions
   void update_iblank_gpu(void);
-  void donor_data_from_device(int *donorIDs, int nDonors);
-  void fringe_data_to_device(int *fringeIDs, int nFringe);
+  void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag);
+  void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag);
+
+  /// TODO: Reconsider organization
+  void set_dataUpdate_callback(void (*dataUpdate)(int, double*, double*, int));
 
 private:
   // Generic data about the run

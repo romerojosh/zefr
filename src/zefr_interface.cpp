@@ -56,9 +56,19 @@ double get_q_spt(int ele, int spt, int var)
   return ZEFR->get_u_spt(ele,spt,var);
 }
 
+double get_grad_spt(int ele, int spt, int dim, int var)
+{
+  return ZEFR->get_grad_spt(ele,spt,dim,var);
+}
+
 double& get_q_fpt(int face, int fpt, int var)
 {
   return ZEFR->get_u_fpt(face,fpt,var);
+}
+
+double& get_grad_fpt(int face, int fpt, int dim, int var)
+{
+  return ZEFR->get_grad_fpt(face,fpt,dim,var);
 }
 
 double* get_q_spts(void)
@@ -91,12 +101,13 @@ CallbackFuncs get_callback_funcs(void)
   call.get_nodes_per_face = get_nodes_per_face;
   call.get_receptor_nodes = get_receptor_nodes;
   call.get_face_nodes = get_face_nodes;
-  call.get_q_index_face = get_q_index_face;
   call.donor_inclusion_test = donor_inclusion_test;
   call.donor_frac = donor_frac;
   call.convert_to_modal = convert_to_modal;
   call.get_q_spt = get_q_spt;
+  call.get_grad_spt = get_grad_spt;
   call.get_q_fpt = get_q_fpt;
+  call.get_grad_fpt = get_grad_fpt;
 
   /* GPU-specific functions */
   call.donor_data_from_device = donor_data_from_device;
@@ -127,11 +138,6 @@ void get_face_nodes(int* faceID, int* nNodes, double* xyz)
   ZEFR->get_face_nodes(*faceID, *nNodes, xyz);
 }
 
-void get_q_index_face(int* faceID, int *fpt, int* ind, int* stride)
-{
-  ZEFR->get_q_index_face(*faceID, *fpt, *ind, *stride);
-}
-
 void donor_inclusion_test(int* cellID, double* xyz, int* passFlag, double* rst)
 {
   ZEFR->donor_inclusion_test(*cellID, xyz, *passFlag, rst);
@@ -151,17 +157,17 @@ void convert_to_modal(int* cellID, int* nSpts, double* q_in, int* npts, int* ind
     q_out[spt] = q_in[spt];
 }
 
-void donor_data_from_device(int *donorIDs, int nDonors)
+void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
 {
 #ifdef _GPU
-  ZEFR->donor_data_from_device(donorIDs, nDonors);
+  ZEFR->donor_data_from_device(donorIDs, nDonors, gradFlag);
 #endif
 }
 
-void fringe_data_to_device(int *fringeIDs, int nFringe)
+void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag)
 {
 #ifdef _GPU
-  ZEFR->fringe_data_to_device(fringeIDs, nFringe);
+  ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag);
 #endif
 }
 

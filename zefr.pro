@@ -2,7 +2,7 @@ TEMPLATE = app
 CONFIG += console
 CONFIG -= qt
 
-DEFINES = _MPI _GPU
+DEFINES = _MPI _GPU _BUILD_LIB
 #DEFINES += _GPU
 
 QMAKE_CXXFLAGS += -std=c++11

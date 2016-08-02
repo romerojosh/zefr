@@ -81,7 +81,7 @@ class Elements
 
     _mpi_comm myComm;
 
-    mdvector<double> U_donors;
+    mdvector<double> U_donors, dU_donors;
 
 #ifdef _GPU
     /* GPU data */
@@ -107,7 +107,7 @@ class Elements
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
 
-    mdvector_gpu<double> U_donors_d;
+    mdvector_gpu<double> U_donors_d, dU_donors_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);
@@ -167,13 +167,13 @@ class Elements
     int get_nSpts(void) { return (int)nSpts; }
     int get_nFpts(void) { return (int)nFpts; }
     bool getRefLoc(int ele, double* xyz, double* rst);
-    void get_interp_weights(int cellID, double* rst, int* inode,
-                            double* weights, int& nweights, int buffSize);
+    void get_interp_weights(double* rst, double* weights, int& nweights, int buffSize);
 
     std::vector<double> getBoundingBox(int ele);
 
 #ifdef _GPU
-    void donor_data_from_device(int* donorIDs, int nDonors);
+    void donor_u_from_device(int* donorIDs, int nDonors);
+    void donor_grad_from_device(int* donorIDs, int nDonors);
 #endif
 };
 

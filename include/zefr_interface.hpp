@@ -51,9 +51,11 @@ struct CallbackFuncs
   void (*convert_to_modal)(int *cellID, int *nSpts, double *q_in, int *npts,
                            int *index_out, double *q_out);
   double (*get_q_spt)(int cellID, int spt, int var);
+  double (*get_grad_spt)(int cellID, int spt, int dim, int var);
   double& (*get_q_fpt)(int faceID, int fpt, int var);
-  void (*donor_data_from_device)(int* donorIDs, int nDonors);
-  void (*fringe_data_to_device)(int* fringeIDs, int nFringe);
+  double& (*get_grad_fpt)(int faceID, int fpt, int dim, int var);
+  void (*donor_data_from_device)(int* donorIDs, int nDonors, int gradFlag);
+  void (*fringe_data_to_device)(int* fringeIDs, int nFringe, int gradFlag);
 };
 
 namespace zefr {
@@ -90,6 +92,7 @@ CallbackFuncs get_callback_funcs(void);
 /* ==== Access functions for solution data ==== */
 
 double get_q_spt(int ele, int spt, int var);
+double get_grad_spt(int ele, int spt, int dim, int var);
 double *get_q_spts(void);
 double *get_q_fpts(void);
 
@@ -99,19 +102,21 @@ void get_nodes_per_cell(int* cellID, int* nNodes);
 void get_nodes_per_face(int* faceID, int* nNodes);
 void get_receptor_nodes(int* cellID, int* nNodes, double* xyz);
 void get_face_nodes(int* faceID, int* nNodes, double* xyz);
-void get_q_index_face(int* faceID, int *fpt, int* ind, int* stride);
 void donor_inclusion_test(int* cellID, double* xyz, int* passFlag, double* rst);
 void donor_frac(int* cellID, double* xyz, int* nweights, int* inode,
                 double* weights, double* rst, int* buffsize);
 void convert_to_modal(int *cellID, int *nSpts, double *q_in, int *npts,
                       int *index_out, double *q_out);
 
+double& get_q_fpt(int face, int fpt, int var);
+double& get_grad_fpt(int face, int fpt, int dim, int var);
 
-//! For runs using GPUs - prepare donor data by copying to host
-void donor_data_from_device(int *donorIDs, int nDonors);
+/*! For runs using GPUs - prepare donor data by copying to host
+ * If gradFlag == 1, copy gradient instead of solution */
+void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
 
 //! For runs using GPUs - copy updated fringe data to device
-void fringe_data_to_device(int *fringeIDs, int nFringe);
+void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag);
 
 } /* namespace zefr */
 #endif /* _zefr_interface_hpp */

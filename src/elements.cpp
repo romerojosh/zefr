@@ -2198,35 +2198,28 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   return true;
 }
 
-void Elements::get_interp_weights(int cellID, double* rst, int* inode,
-                                  double* weights, int& nweights, int buffSize)
+void Elements::get_interp_weights(double* rst, double* weights, int& nweights, int buffSize)
 {
-  /// TODO : modify TIOGA to use strides rather than 'point indices'
-  /// TODO : implement eleMap (in geo?) like in Flurry
   assert(nSpts <= buffSize);
 
   nweights = nSpts;
   for (unsigned int spt = 0; spt < nSpts; spt++)
-  {
     weights[spt] = this->calc_nodal_basis(spt, rst);
-//    inode[spt] = cellID*nSpts + spt; //std::distance(&U_spts(0,0,0), &U_spts(spt,cellID,0));
-  }
 }
 
 #ifdef _GPU
-void Elements::donor_data_from_device(int* donorIDs, int nDonors)
+void Elements::donor_u_from_device(int* donorIDs, int nDonors)
 {
   if (nDonors == 0) return;
 
   U_donors.assign({nSpts,nDonors,nVars},0,0);
   U_donors_d.set_size(U_donors);
-  //U_donors_d = U_donors;
 
   int* donorIDs_d;
   allocate_device_data(donorIDs_d, nDonors);
   copy_to_device(donorIDs_d, donorIDs, nDonors);
 
-  pack_donor_buffer_wrapper(U_spts_d,U_donors_d,donorIDs_d,nDonors,nSpts,nVars);
+  pack_donor_u_wrapper(U_spts_d,U_donors_d,donorIDs_d,nDonors,nSpts,nVars);
 
   U_donors = U_donors_d;
 
@@ -2238,6 +2231,39 @@ void Elements::donor_data_from_device(int* donorIDs, int nDonors)
       for (int spt = 0; spt < nSpts; spt++)
       {
         U_spts(spt,ele,var) = U_donors(spt,donor,var);
+      }
+    }
+  }
+
+  free_device_data(donorIDs_d);
+}
+
+void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
+{
+  if (nDonors == 0) return;
+
+  dU_donors.assign({nSpts,nDonors,nVars*nDims},0,0);
+  dU_donors_d.set_size(dU_donors);
+
+  int* donorIDs_d;
+  allocate_device_data(donorIDs_d, nDonors);
+  copy_to_device(donorIDs_d, donorIDs, nDonors);
+
+  pack_donor_grad_wrapper(dU_spts_d,dU_donors_d,donorIDs_d,nDonors,nSpts,nVars,nDims);
+
+  dU_donors = dU_donors_d;
+
+  for (int dim = 0; dim < nDims; dim++)
+  {
+    for (int var = 0; var < nVars; var++)
+    {
+      for (int donor = 0; donor < nDonors; donor++)
+      {
+        unsigned int ele = donorIDs[donor];
+        for (int spt = 0; spt < nSpts; spt++)
+        {
+          dU_spts(spt,ele,var,dim) = dU_donors(spt,donor,var,dim);
+        }
       }
     }
   }

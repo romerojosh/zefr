@@ -619,6 +619,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
+  if (input->overset)
+    overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
+
   /* Extrapolate solution to flux points */
   eles->extrapolate_U(startEle, endEle);
 
@@ -638,10 +641,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[color - 1]; endEle = geo.ele_color_range[color];
   }
 
-
 #ifdef _MPI
   /* Commence sending U data to other processes */
-  bool use_blocked = true;
+  bool use_blocked = false;
 #ifdef _GPU
   use_blocked = false;
 #endif
@@ -751,6 +753,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
     faces->send_dU_data();
+
+    /* Interpolate gradient data to/from other grid(s) */
+    if (input->overset)
+      overset_interp(faces->nVars, eles->dU_spts.data(), faces->dU.data(), 1);
 
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
@@ -2581,10 +2587,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #ifdef _GPU
   eles->divF_spts = eles->divF_spts_d;
   dt = dt_d;
-
-  eles->U_spts = eles->U_spts_d; /// DEBUGGING
-  faces->U = faces->U_d; /// DEBUGGING
-  faces->Fcomm = faces->Fcomm_d; /// DEBUGGING
 #endif
 
   // HACK: Change nStages to compute the correct residual

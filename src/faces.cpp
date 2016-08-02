@@ -775,6 +775,10 @@ void Faces::apply_bcs_dU()
         //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
         //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 3, 1) / rho; 
       }
+      else if (bnd_id == OVERSET)
+      {
+        // Do nothing...? [need to treat same as internal]
+      }
       else
       {
         /* Compute energy gradient */
@@ -1968,6 +1972,12 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
           Fvisc(fpt, 4, 2, slot) = -(u * tauxz + v * tauyz + w * tauzz + (mu / input->prandtl) *
               input->gamma * de_dz);
         }
+
+//        if (input->rank == 3 && fpt==6851)
+//        {
+//          printf("FPT %d: Fvisc(1,1) [L/R] = %f / %f\n",fpt,Fvisc(fpt,1,1,0),Fvisc(fpt,1,1,1));
+//        }
+
       }
     }
 #endif
@@ -2392,12 +2402,22 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       }
     }
 
+//    int ff = geo->fpt2face[fpt];
+//    int ibl = geo->iblank_face[ff];
+//    if (input->rank == 3 && fpt==6851 && ibl == -1)
+//    {
+//      printf("fpt %d: FL[1] = %f, FR[1] = %f\n",fpt,FL[1],FR[1]);
+//    }
+
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
       WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
     }
-
+//    if (input->rank == 3 && fpt==6851 && ibl == -1)
+//    {
+//      printf("fpt %d: WL[1] = %f, WR[1] = %f\n",fpt,WL[1],WR[1]);
+//    }
     /* Get numerical diffusion coefficient */
     if (input->equation == AdvDiff || input->equation == Burgers)
     {
@@ -3928,6 +3948,26 @@ void Faces::send_dU_data()
   /* Stage all the non-blocking receives */
   unsigned int ridx = 0;
 #ifdef _CPU
+  /* This is kinda hacky, but I can't see any better way to get around the MPI
+   * datatype usage besides copying ALL the MPI data into a temp array */
+//  if (input->overset)
+//  {
+//    tmpOversetdU.assign({nVars,nDims,0});
+//    int nPts = 0;
+//    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
+//    {
+//      int ff = geo->fpt2face[fpt];
+//      if (geo->iblank_face[ff] == FRINGE)
+//      {
+//        tmpOversetdU.add_dim_1(nPts,0);
+//        for (int dim = 0; dim < nDims; dim++)
+//          for (int k = 0; k < nVars; k++)
+//            tmpOversetdU(k, dim, nPts) = dU(fpt, k, dim, 1);
+//        nPts++;
+//      }
+//    }
+//  }
+
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
@@ -4021,6 +4061,8 @@ void Faces::recv_dU_data()
       {
         for (unsigned int i = 0; i < fpts.size(); i++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpts(i)]] != NORMAL)
+            continue;
           dU(fpts(i), n, dim, 1) = U_rbuffs[recvRank](i, n, dim);
         }
       }
@@ -4077,23 +4119,27 @@ double& Faces::get_u_fpt(int faceID, int fpt, int var)
 
   unsigned int side = 0;
   if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
-  {
     side = 1;
-  }
-  else if (ic2 < 0 || geo->iblank_cell(ic2) != NORMAL)
-  {
-    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell(ic1),geo->iblank_cell(ic2));
-    ThrowException("Face not blanked but both elements are!");
-  }
 
-#ifdef _GPU
-    geo->fpt2side[i] = side;
-#endif
   return U(i,var,side);
 }
 
+double& Faces::get_grad_fpt(int faceID, int fpt, int var, int dim)
+{
+  /* U : nFpts x nVars x 2 */
+  int i = geo->face2fpts(fpt, faceID);
+  int ic1 = geo->face2eles(0,faceID);
+  int ic2 = geo->face2eles(1,faceID);
+
+  unsigned int side = 0;
+  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+    side = 1;
+
+  return dU(i,var,dim,side);
+}
+
 #ifdef _GPU
-void Faces::fringe_data_to_device(int* fringeIDs, int nFringe)
+void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 {
   if (nFringe == 0) return;
 
@@ -4127,37 +4173,42 @@ void Faces::fringe_data_to_device(int* fringeIDs, int nFringe)
     }
   }
 
-  // int nFringePts = geo->fpt2side.size();
-  // U_fringe.assign({nFringePts, nVars});
-  // fringe_fpts.assign({nFringePts});
-  // fringe_side.assign({nFringePts});
-
-  // unsigned int fpt = 0;
-  // for (auto &pt:geo->fpt2side)
-  // {
-  //   fringe_fpts(fpt) = pt.first;
-  //   fringe_side(fpt) = pt.second;
-  //   fpt++;
-  // }
-
-  // for (unsigned int var = 0; var < nVars; var++)
-  // {
-  //   for (unsigned int fpt = 0; fpt < nFringePts; fpt++)
-  //   {
-  //     unsigned int gfpt = fringe_fpts(fpt);
-  //     unsigned int side = fringe_side(fpt);
-  //     U_fringe(fpt,var) = U(gfpt,var,side);
-  //   }
-  // }
-
   U_fringe_d = U_fringe;
   fringe_fpts_d = fringe_fpts;
   fringe_side_d = fringe_side;
 
-  // unpack_fringe_buffer_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,
-  //   nFringePts,geo->nFptsPerFace,nVars);
-  unpack_fringe_buffer_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,
-    nFringe,geo->nFptsPerFace,nVars);
+  unpack_fringe_u_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,nFringe,
+      geo->nFptsPerFace,nVars);
 }
 
+void Faces::fringe_grad_to_device(int nFringe)
+{
+  /* NOTE: Expecting that fringe_u_to_device has already been called for the
+   * same set of fringe faces */
+
+  if (nFringe == 0) return;
+
+  dU_fringe.assign({geo->nFptsPerFace, nFringe, nVars, nDims});
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (unsigned int face = 0; face < nFringe; face++)
+      {
+        for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+        {
+          unsigned int gfpt = fringe_fpts(fpt,face);
+          unsigned int side = fringe_side(fpt,face);
+          dU_fringe(fpt,face,var,dim) = dU(gfpt,var,dim,side);
+        }
+      }
+    }
+  }
+
+  dU_fringe_d = dU_fringe;
+
+  unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
+      nFringe,geo->nFptsPerFace,nVars,nDims);
+}
 #endif

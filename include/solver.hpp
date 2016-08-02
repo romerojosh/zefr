@@ -119,6 +119,8 @@ class FRSolver
     void dFcdU_from_faces();
     void compute_SER_dt();
     void write_color();
+
+    void (*overset_interp)(int nVars, double* U_spts, double* U_fpts, int gradFlag);
 };
 
 #endif /* solver_hpp */

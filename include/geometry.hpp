@@ -102,8 +102,6 @@ struct GeoStruct
 #ifdef _GPU
     mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
     mdvector<int> iblank_fpts;
-
-    std::map<unsigned int,unsigned int> fpt2side; // For all overset fringe points
 #endif
 
     unsigned int nGrids;  //! Number of distinct overset grids

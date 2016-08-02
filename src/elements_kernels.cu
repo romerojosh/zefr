@@ -1424,9 +1424,8 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
 }
 
 __global__
-void pack_donor_buffer(mdvector_gpu<double> U_spts,
-    mdvector_gpu<double> U_donors, int* donorIDs, int nDonors,
-    unsigned int nSpts)
+void pack_donor_u(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_donors,
+    int* donorIDs, int nDonors, unsigned int nSpts, unsigned int nVars)
 {
   const unsigned int var = blockIdx.y;
   //const unsigned int spt  = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
@@ -1434,20 +1433,48 @@ void pack_donor_buffer(mdvector_gpu<double> U_spts,
   const unsigned int spt  = threadIdx.x;
   const unsigned int donor= blockIdx.x;
 
-  if (spt >= nSpts || donor >= nDonors || var >= 5)
+  if (spt >= nSpts || donor >= nDonors)
     return;
 
   const unsigned int ele = donorIDs[donor];
   U_donors(spt, donor, var) = U_spts(spt, ele, var);
 }
 
-void pack_donor_buffer_wrapper(mdvector_gpu<double> &U_spts,
+void pack_donor_u_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars)
 {
   int threads = nSpts;
   dim3 blocks(nDonors, nVars);
-  //dim3 blocks((nDonors + threads - 1)/ threads, nVars);
 
-  pack_donor_buffer<<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+  pack_donor_u<<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts, nVars);
+}
+
+__global__
+void pack_donor_grad(mdvector_gpu<double> dU_spts,
+    mdvector_gpu<double> dU_donors, int* donorIDs, int nDonors,
+    unsigned int nSpts, unsigned int nVars)
+{
+  const unsigned int var = blockIdx.y % nVars;
+  const unsigned int dim = blockIdx.y / nVars;
+  const unsigned int spt   = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int donor = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || donor >= nDonors)
+    return;
+
+  const unsigned int ele = donorIDs[donor];
+  dU_donors(spt, donor, var, dim) = dU_spts(spt, ele, var, dim);
+}
+
+void pack_donor_grad_wrapper(mdvector_gpu<double> &dU_spts,
+    mdvector_gpu<double> &dU_donors, int* donorIDs, int nDonors,
+    unsigned int nSpts, unsigned int nVars, unsigned int nDims)
+{
+  int threads = 192;
+  int nblock_x = (nDonors * nSpts + threads - 1) / threads;
+  dim3 blocks( nblock_x, nVars*nDims);
+
+  pack_donor_grad<<<blocks, threads>>>(dU_spts, dU_donors, donorIDs, nDonors,
+      nSpts, nVars);
 }

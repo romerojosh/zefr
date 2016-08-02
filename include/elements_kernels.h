@@ -103,8 +103,12 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
     unsigned int nFpts, unsigned int nEles, unsigned int nVars,
     unsigned int nDims);
 
-void pack_donor_buffer_wrapper(mdvector_gpu<double> &U_spts,
+void pack_donor_u_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars);
+
+void pack_donor_grad_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
+    unsigned int nSpts, unsigned int nVars, unsigned int nDims);
 
 #endif /* elements_kernels_h */

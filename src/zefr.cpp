@@ -300,10 +300,6 @@ void Zefr::do_step(void)
   }
 
   input.iter++;
-
-#ifdef _GPU
-  // solver->faces->U = solver->faces->U_d; /// DEBUGGING
-#endif
 }
 
 void Zefr::do_n_steps(int n)
@@ -392,6 +388,11 @@ double Zefr::get_u_spt(int ele, int spt, int var)
   return solver->eles->U_spts(spt, ele, var);
 }
 
+double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
+{
+  return solver->eles->dU_spts(spt, ele, var, dim);
+}
+
 double *Zefr::get_u_spts(void)
 {
   return solver->eles->U_spts.data();
@@ -431,11 +432,6 @@ void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
       xyz[3*fpt+dim] = solver->faces->coord(start_fpt + fpt, dim);
 }
 
-void Zefr::get_q_index_face(int faceID, int fpt, int& ind, int& stride)
-{
-  solver->faces->get_U_index(faceID,fpt,ind,stride);
-}
-
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
   passFlag = solver->eles->getRefLoc(cellID,xyz,rst);
@@ -444,12 +440,19 @@ void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* 
 void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
                       double* rst, int buffsize)
 {
-  solver->eles->get_interp_weights(cellID,rst,inode,weights,nweights,buffsize);
+  /* NOTE: inode is not used, and cellID is irrelevant when all cells are
+   * identical (tensor-product, one polynomial order) */
+  solver->eles->get_interp_weights(rst,weights,nweights,buffsize);
 }
 
 double& Zefr::get_u_fpt(int faceID, int fpt, int var)
 {
   return solver->faces->get_u_fpt(faceID,fpt,var);
+}
+
+double& Zefr::get_grad_fpt(int faceID, int fpt, int dim, int var)
+{
+  return solver->faces->get_grad_fpt(faceID,fpt,var,dim);
 }
 
 void Zefr::update_iblank_gpu(void)
@@ -466,22 +469,33 @@ void Zefr::update_iblank_gpu(void)
 #endif
 }
 
-void Zefr::donor_data_from_device(int *donorIDs, int nDonors)
+void Zefr::donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
 {
 #ifdef _GPU
-  solver->eles->donor_data_from_device(donorIDs, nDonors);
+  if (gradFlag == 0)
+    solver->eles->donor_u_from_device(donorIDs, nDonors);
+  else
+    solver->eles->donor_grad_from_device(donorIDs, nDonors);
 
   check_error();
 #endif
 }
 
-void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe)
+void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag)
 {
 #ifdef _GPU
-  solver->faces->fringe_data_to_device(fringeIDs, nFringe);
+  if (gradFlag == 0)
+    solver->faces->fringe_u_to_device(fringeIDs, nFringe);
+  else
+    solver->faces->fringe_grad_to_device(nFringe);
 
   check_error();
 #endif
+}
+
+void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, double *q_fpts, int gradFlag))
+{
+  solver->overset_interp = dataUpdate;
 }
 
 #endif /* _BUILD_LIB */

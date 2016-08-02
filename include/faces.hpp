@@ -102,6 +102,7 @@ class Faces
     std::array<std::vector<int>, 5> rot_permute;
 
     mdvector<double> tmpOversetU; /// TODO: find better way?
+    mdvector<double> tmpOversetdU; /// TODO: find better way?
 #endif
 
 #ifdef _GPU
@@ -120,10 +121,10 @@ class Faces
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> U_fringe_d;
+    mdvector_gpu<double> U_fringe_d, dU_fringe_d;
     mdvector_gpu<unsigned int> fringe_fpts_d, fringe_side_d;
 
-    mdvector<double> U_fringe;
+    mdvector<double> U_fringe, dU_fringe;
     mdvector<unsigned int> fringe_fpts, fringe_side;
 #endif
 
@@ -145,9 +146,11 @@ class Faces
     //! Get location of right-state U data for a flux point
     void get_U_index(int faceID, int fpt, int& ind, int& stride);
     double& get_u_fpt(int faceID, int fpt, int var);
+    double& get_grad_fpt(int faceID, int fpt, int var, int dim);
 
 #ifdef _GPU
-    void fringe_data_to_device(int* fringeIDs, int nFringe);
+    void fringe_u_to_device(int* fringeIDs, int nFringe);
+    void fringe_grad_to_device(int nFringe);
 #endif
 };
 

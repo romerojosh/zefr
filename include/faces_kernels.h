@@ -101,8 +101,12 @@ void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<doub
 void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars);
 
-void unpack_fringe_buffer_wrapper(mdvector_gpu<double> &U_fringe, mdvector_gpu<double> &U,
+void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe, mdvector_gpu<double> &U,
     mdvector_gpu<unsigned int> fringe_fpts, mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
     unsigned int nFpts, unsigned int nVars);
+
+void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe, mdvector_gpu<double> &dU,
+    mdvector_gpu<unsigned int> fringe_fpts, mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims);
 
 #endif /* faces_kernels_h */

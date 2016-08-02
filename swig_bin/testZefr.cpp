@@ -1,5 +1,3 @@
-#include <valgrind/callgrind.h>
-
 #include "zefr_interface.hpp"
 #include "tiogaInterface.h"
 
@@ -8,7 +6,6 @@
 int main(int argc, char *argv[])
 {
   MPI_Init(&argc,&argv);
-CALLGRIND_STOP_INSTRUMENTATION;
 
   int rank, size;
   MPI_Comm_rank(MPI_COMM_WORLD,&rank);
@@ -16,26 +13,11 @@ CALLGRIND_STOP_INSTRUMENTATION;
 
   int gridID = 0;
   int nGrids = 2;
-  if (size == 8)
-  {
-    gridID = (rank >= 3);
-  }
-  else if (size == 3)
-  {
-    gridID = (rank > 0);
-  }
-  else if (size == 1)
-  {
-    gridID = 1;
-    nGrids = 1;
-  }
-  else
-  {
-    gridID = rank%nGrids; //(rank > (size/2));
-  }
 
+  //gridID = rank%nGrids; //(rank > (size/2));
   gridID = rank>0;
-//  // 2-sphere test case
+
+  /* 2-sphere test case */
 //  nGrids = 3;
 //  if (rank == 0) gridID = 0;
 //  if (rank == 1) gridID = 1;
@@ -62,7 +44,6 @@ CALLGRIND_STOP_INSTRUMENTATION;
   {
     MPI_Comm_split(MPI_COMM_WORLD, gridID, rank, &gridComm);
   }
-  cout << "Rank " << rank << ", GridID = " << gridID << ", nproc = " << size << endl;
 
   // Setup the ZEFR solver object
   char inputFile[] = "input_sphere";
@@ -77,18 +58,6 @@ CALLGRIND_STOP_INSTRUMENTATION;
   InputStruct &inp = z->get_input();
 
   if (nGrids > 1) inp.overset = 1;
-
-  double *U_spts = zefr::get_q_spts();
-  double *U_fpts = zefr::get_q_fpts();
-
-//  MPI_Barrier(MPI_COMM_WORLD);
-//  if (rank==0)
-//  {
-//    std::cout << "Before TIOGA setup - Press enter to continue... " << std::flush;
-//    std::cin.clear();
-//    std::cin.get();
-//  }
-//  MPI_Barrier(MPI_COMM_WORLD);
 
   Timer tg_time;
   tg_time.startTimer();
@@ -107,20 +76,23 @@ CALLGRIND_STOP_INSTRUMENTATION;
       geoAB.procR,geoAB.mpiFidR,geoAB.nFaceTypes,geoAB.nvert_face,
       geoAB.nFaces_type,geoAB.f2v);
 
-  tioga_set_highorder_callback_(cbs.get_nodes_per_cell,
-      cbs.get_receptor_nodes, cbs.donor_inclusion_test,
-      cbs.donor_frac, cbs.convert_to_modal);
+  tioga_set_highorder_callback_(cbs.get_nodes_per_cell, cbs.get_receptor_nodes,
+      cbs.donor_inclusion_test, cbs.donor_frac, cbs.convert_to_modal);
 
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
-      cbs.get_q_index_face, cbs.get_q_spt, cbs.get_q_fpt);
+      cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt);
 
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())
   {
-    std::cout << "Setting GPU-related callback functions" << std::endl;
     tioga_set_ab_callback_gpu_(cbs.donor_data_from_device, 
       cbs.fringe_data_to_device);
   }
+
+  /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
+   * accomodate both multi-stage RK time stepping + viscous cases with gradient
+   * data interpolation */
+  z->set_dataUpdate_callback(tioga_dataupdate_ab);
 
   if (nGrids > 1)
   {
@@ -137,7 +109,6 @@ CALLGRIND_STOP_INSTRUMENTATION;
   z->write_solution();
 
   MPI_Barrier(MPI_COMM_WORLD);
-  CALLGRIND_START_INSTRUMENTATION;
 
   // Run the solver loop now
   Timer runTime("ZEFR Compute Time: ");
@@ -146,11 +117,6 @@ CALLGRIND_STOP_INSTRUMENTATION;
 
   for (int iter = 1; iter <= inp.n_steps; iter++)
   {
-    tgTime.startTimer();
-    if (nGrids > 1)
-      tioga_dataupdate_ab(5,U_spts,U_fpts);
-    tgTime.stopTimer();
-
     runTime.startTimer();
     z->do_step();
     runTime.stopTimer();
@@ -161,13 +127,12 @@ CALLGRIND_STOP_INSTRUMENTATION;
     if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)
       z->write_solution();
 
-//    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
-//      z->write_forces();
+    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
+      z->write_forces();
 
-//    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
-//      z->write_error();
+    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
+      z->write_error();
   }
-  CALLGRIND_STOP_INSTRUMENTATION;
 
   z->write_solution();
 
