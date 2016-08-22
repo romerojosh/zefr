@@ -1563,11 +1563,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
             } break;
         }
-if (rot!=1)
-{
-  std::cout << "Found rot! Rank " << input->rank;
-  std::cout << ", ff " << ff <<std::endl;
-}
       }
       else
       {

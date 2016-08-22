@@ -42,7 +42,6 @@ void Elements::set_shape()
   shape_qpts.assign({nNodes, nQpts},1);
   dshape_spts.assign({nNodes, nSpts, nDims},1);
   dshape_fpts.assign({nNodes, nFpts, nDims},1);
-//  dshape_ppts.assign({nNodes, nPpts, nDims},1);
   dshape_qpts.assign({nNodes, nQpts, nDims},1);
 
 
@@ -97,9 +96,6 @@ void Elements::set_shape()
     for (unsigned int node = 0; node < nNodes; node++)
     {
       shape_ppts(node, ppt) = shape_val(node);
-
-//      for (unsigned int dim = 0; dim < nDims; dim++)
-//        dshape_ppts(node, ppt, dim) = dshape_val(node, dim);
     }
   }
   
@@ -362,7 +358,6 @@ void Elements::setup_aux()
       oppE_qpts(qpt,spt) = calc_nodal_basis(spt, loc);
     }
   }
-
 }
 
 void Elements::calc_transforms(std::shared_ptr<Faces> faces)
@@ -415,46 +410,13 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
 #endif
 }
 
-//  if (e == 0 && input->rank == 0 && input->gridID != 1)
-//  {
-//    cout << "fpt " << fpt << ", gfpt " << gfpt << endl;
-//    cout << inv_jaco_fpts(fpt, e, 0, 0) << ", " << inv_jaco_fpts(fpt, e, 1, 0) << ", " << inv_jaco_fpts(fpt, e, 2, 0) << endl;
-//    cout << inv_jaco_fpts(fpt, e, 0, 1) << ", " << inv_jaco_fpts(fpt, e, 1, 1) << ", " << inv_jaco_fpts(fpt, e, 2, 1) << endl;
-//    cout << inv_jaco_fpts(fpt, e, 0, 2) << ", " << inv_jaco_fpts(fpt, e, 1, 2) << ", " << inv_jaco_fpts(fpt, e, 2, 2) << endl;
-//    cout << "Normal vector: dA = " << faces->dA(gfpt) << endl;
-//    cout << faces->norm(gfpt,0,slot) << endl;
-//    cout << faces->norm(gfpt,1,slot) << endl;
-//    cout << faces->norm(gfpt,2,slot) << endl;
-//  }
+  set_inverse_transforms(jaco_spts,inv_jaco_spts,jaco_det_spts,nSpts,nDims);
+  set_inverse_transforms(jaco_fpts,inv_jaco_fpts,jaco_det_fpts,nFpts,nDims);
 
+  /* --- Compute Element Volumes --- */
 #pragma omp parallel for collapse(2)
   for (unsigned int e = 0; e < nEles; e++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
-    {
-      if (nDims == 2)
-      {
-        // Determinant of transformation matrix
-        jaco_det_spts(spt,e) = jaco_spts(spt,e,0,0)*jaco_spts(spt,e,1,1)-jaco_spts(spt,e,0,1)*jaco_spts(spt,e,1,0);
-        // Inverse of transformation matrix (times its determinant)
-        inv_jaco_spts(spt,e,0,0) = jaco_spts(spt,e,1,1);  inv_jaco_spts(spt,e,1,0) =-jaco_spts(spt,e,0,1);
-        inv_jaco_spts(spt,e,0,1) =-jaco_spts(spt,e,1,0);  inv_jaco_spts(spt,e,1,1) = jaco_spts(spt,e,0,0);
-      }
-      else if (nDims == 3)
-      {
-        double xr = jaco_spts(spt,e,0,0);   double xs = jaco_spts(spt,e,0,1);   double xt = jaco_spts(spt,e,0,2);
-        double yr = jaco_spts(spt,e,1,0);   double ys = jaco_spts(spt,e,1,1);   double yt = jaco_spts(spt,e,1,2);
-        double zr = jaco_spts(spt,e,2,0);   double zs = jaco_spts(spt,e,2,1);   double zt = jaco_spts(spt,e,2,2);
-        jaco_det_spts(spt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
-
-        inv_jaco_spts(spt,e,0,0) = ys*zt - yt*zs;  inv_jaco_spts(spt,e,0,1) = xt*zs - xs*zt;  inv_jaco_spts(spt,e,0,2) = xs*yt - xt*ys;
-        inv_jaco_spts(spt,e,1,0) = yt*zr - yr*zt;  inv_jaco_spts(spt,e,1,1) = xr*zt - xt*zr;  inv_jaco_spts(spt,e,1,2) = xt*yr - xr*yt;
-        inv_jaco_spts(spt,e,2,0) = yr*zs - ys*zr;  inv_jaco_spts(spt,e,2,1) = xs*zr - xr*zs;  inv_jaco_spts(spt,e,2,2) = xr*ys - xs*yr;
-      }
-      if (jaco_det_spts(spt,e)<0) ThrowException("Negative Jacobian at solution points.");
-    }
-
-    /* Compute element volume */
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
       /* Get quadrature weight */
@@ -474,25 +436,6 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      if (nDims == 2)
-      {
-        jaco_det_fpts(fpt,e) = jaco_fpts(fpt,e,0,0)*jaco_fpts(fpt,e,1,1)-jaco_fpts(fpt,e,0,1)*jaco_fpts(fpt,e,1,0);
-        // Inverse of transformation matrix (times its determinant)
-        inv_jaco_fpts(fpt,e,0,0) = jaco_fpts(fpt,e,1,1);  inv_jaco_fpts(fpt,e,1,0) =-jaco_fpts(fpt,e,0,1);
-        inv_jaco_fpts(fpt,e,0,1) =-jaco_fpts(fpt,e,1,0);  inv_jaco_fpts(fpt,e,1,1) = jaco_fpts(fpt,e,0,0);
-      }
-      else if (nDims == 3)
-      {
-        double xr = jaco_fpts(fpt,e,0,0);   double xs = jaco_fpts(fpt,e,0,1);   double xt = jaco_fpts(fpt,e,0,2);
-        double yr = jaco_fpts(fpt,e,1,0);   double ys = jaco_fpts(fpt,e,1,1);   double yt = jaco_fpts(fpt,e,1,2);
-        double zr = jaco_fpts(fpt,e,2,0);   double zs = jaco_fpts(fpt,e,2,1);   double zt = jaco_fpts(fpt,e,2,2);
-        jaco_det_fpts(fpt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
-        // Inverse of transformation matrix (times its determinant)
-        inv_jaco_fpts(fpt,e,0,0) = ys*zt - yt*zs;  inv_jaco_fpts(fpt,e,0,1) = xt*zs - xs*zt;  inv_jaco_fpts(fpt,e,0,2) = xs*yt - xt*ys;
-        inv_jaco_fpts(fpt,e,1,0) = yt*zr - yr*zt;  inv_jaco_fpts(fpt,e,1,1) = xr*zt - xt*zr;  inv_jaco_fpts(fpt,e,1,2) = xt*yr - xr*yt;
-        inv_jaco_fpts(fpt,e,2,0) = yr*zs - ys*zr;  inv_jaco_fpts(fpt,e,2,1) = xs*zr - xr*zs;  inv_jaco_fpts(fpt,e,2,2) = xr*ys - xs*yr;
-      }
-
       int gfpt = geo->fpt2gfpt(fpt,e);
 
       /* Check if flux point is on ghost edge */
@@ -554,6 +497,39 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
         jaco_det_qpts(qpt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
       }
       if (jaco_det_qpts(qpt,e)<0) ThrowException("Negative Jacobian at quadrature point.");
+    }
+  }
+}
+
+void Elements::set_inverse_transforms(const mdvector<double> &jaco,
+               mdvector<double> &inv_jaco, mdvector<double> &jaco_det,
+               unsigned int nPts, unsigned int nDims)
+{
+#pragma omp parallel for collapse(2)
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int pt = 0; pt < nPts; pt++)
+    {
+      if (nDims == 2)
+      {
+        // Determinant of transformation matrix
+        jaco_det(pt,e) = jaco(pt,e,0,0)*jaco(pt,e,1,1)-jaco(pt,e,0,1)*jaco(pt,e,1,0);
+        // Inverse of transformation matrix (times its determinant)
+        inv_jaco(pt,e,0,0) = jaco(pt,e,1,1);  inv_jaco(pt,e,0,1) =-jaco(pt,e,0,1);
+        inv_jaco(pt,e,1,0) =-jaco(pt,e,1,0);  inv_jaco(pt,e,1,1) = jaco(pt,e,0,0);
+      }
+      else if (nDims == 3)
+      {
+        double xr = jaco(pt,e,0,0);   double xs = jaco(pt,e,0,1);   double xt = jaco(pt,e,0,2);
+        double yr = jaco(pt,e,1,0);   double ys = jaco(pt,e,1,1);   double yt = jaco(pt,e,1,2);
+        double zr = jaco(pt,e,2,0);   double zs = jaco(pt,e,2,1);   double zt = jaco(pt,e,2,2);
+        jaco_det(pt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
+
+        inv_jaco(pt,e,0,0) = ys*zt - yt*zs;  inv_jaco(pt,e,0,1) = xt*zs - xs*zt;  inv_jaco(pt,e,0,2) = xs*yt - xt*ys;
+        inv_jaco(pt,e,1,0) = yt*zr - yr*zt;  inv_jaco(pt,e,1,1) = xr*zt - xt*zr;  inv_jaco(pt,e,1,2) = xt*yr - xr*yt;
+        inv_jaco(pt,e,2,0) = yr*zs - ys*zr;  inv_jaco(pt,e,2,1) = xs*zr - xr*zs;  inv_jaco(pt,e,2,2) = xr*ys - xs*yr;
+      }
+      if (jaco_det(pt,e)<0) ThrowException("Negative Jacobian at solution points.");
     }
   }
 }

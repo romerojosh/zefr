@@ -118,7 +118,6 @@ class Elements
     void setup_aux();
 
     virtual void set_locs() = 0;
-    virtual void set_transforms(std::shared_ptr<Faces> faces) = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
     virtual mdvector<double> calc_shape(unsigned int shape_order,
                              const std::vector<double> &loc) = 0;
@@ -148,6 +147,14 @@ class Elements
     virtual void transform_flux(unsigned int startEle, unsigned int endEle) = 0;
     virtual void transform_dU(unsigned int startEle, unsigned int endEle) = 0;
 
+    //! Calculate geometric transforms
+    void calc_transforms(std::shared_ptr<Faces> faces);
+
+    //! Calculate inverse of geo transforms for a set of points
+    void set_inverse_transforms(const mdvector<double> &jaco,
+         mdvector<double> &inv_jaco, mdvector<double> &jaco_det,
+         unsigned int nPts, unsigned int nDims);
+
     /* Routines for implicit method */
 #ifdef _CPU
     void compute_localLHS(mdvector<double> &dt, unsigned int startEle, unsigned int endEle, unsigned int color = 1);
@@ -166,7 +173,6 @@ class Elements
     void poly_squeeze_ppts();
 
     /* Motion-related functions */
-    void calc_transforms(std::shared_ptr<Faces> faces);
 
     /* Functions required for overset interfacing */
     int get_nSpts(void) { return (int)nSpts; }

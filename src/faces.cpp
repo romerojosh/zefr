@@ -2218,13 +2218,6 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       waveSp(fpt) = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
     }
 
-//    if (fpt < 10)
-//    {
-//      cout << "gfpt " << fpt << endl;
-//      cout << "dA: " << dA(fpt) << endl;
-//      cout << "Normal: " << norm(fpt,0,0) << ", " << norm(fpt,1,0) << ", " << norm(fpt,2,0) << endl;
-//    }
-
     /* Compute common normal flux */
     if (LDG_bias(fpt) == 0)
     {

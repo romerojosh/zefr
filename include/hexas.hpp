@@ -15,7 +15,6 @@ class Hexas: public Elements
 {
   private:
     void set_locs();
-    void set_transforms(std::shared_ptr<Faces> faces);
     void set_normals(std::shared_ptr<Faces> faces);
 
     mdvector<double> calc_shape(unsigned int shape_order,
