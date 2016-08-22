@@ -47,6 +47,8 @@ class Elements
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts, inv_jaco_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
+    mdvector<double> jaco_fpts, jaco_det_fpts, inv_jaco_fpts;
+    mdvector<double> nodes, nodesRK;
     mdvector<double> vol;
     mdvector<double> weights_spts;
     mdvector<double> h_ref;
@@ -162,6 +164,9 @@ class Elements
     void compute_Uavg();
     void poly_squeeze();
     void poly_squeeze_ppts();
+
+    /* Motion-related functions */
+    void calc_transforms(std::shared_ptr<Faces> faces);
 
     /* Functions required for overset interfacing */
     int get_nSpts(void) { return (int)nSpts; }

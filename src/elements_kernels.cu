@@ -960,7 +960,7 @@ void transform_dU_hexa(mdvector_gpu<double> dU_spts,
     return;
 
   double inv_jaco[3][3];
-  inv_jaco[0][0] = inv_jaco_spts(0, 0, spt, ele);
+  inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
   inv_jaco[0][1] = inv_jaco_spts(0, 1, spt, ele);
   inv_jaco[0][2] = inv_jaco_spts(0, 2, spt, ele);
   inv_jaco[1][0] = inv_jaco_spts(1, 0, spt, ele);
@@ -1083,7 +1083,7 @@ void transform_flux_hexa(mdvector_gpu<double> F_spts,
 
   /* Get metric terms */
   double inv_jaco[3][3];
-  inv_jaco[0][0] = inv_jaco_spts(0, 0, spt, ele);
+  inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
   inv_jaco[0][1] = inv_jaco_spts(0, 1, spt, ele);
   inv_jaco[0][2] = inv_jaco_spts(0, 2, spt, ele);
   inv_jaco[1][0] = inv_jaco_spts(1, 0, spt, ele);
@@ -1198,7 +1198,7 @@ void transform_dFdU_hexa(mdvector_gpu<double> dFdU_spts,
 
   /* Get metric terms */
   double inv_jaco[3][3];
-  inv_jaco[0][0] = inv_jaco_spts(0, 0, spt, ele);
+  inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
   inv_jaco[0][1] = inv_jaco_spts(0, 1, spt, ele);
   inv_jaco[0][2] = inv_jaco_spts(0, 2, spt, ele);
   inv_jaco[1][0] = inv_jaco_spts(1, 0, spt, ele);

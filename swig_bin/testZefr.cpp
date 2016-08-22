@@ -23,15 +23,6 @@ int main(int argc, char *argv[])
 //  if (rank == 1) gridID = 1;
 //  if (rank > 1) gridID = 2;
 
-  bool sphereTest = true;
-  if (sphereTest)
-  {
-    if (nGrids == 2)
-      gridID = (rank>0);
-    else if (nGrids == 3)
-      gridID = (rank>0);
-  }
-
   MPI_Comm gridComm;
 
   bool oneGrid = false;
@@ -46,8 +37,15 @@ int main(int argc, char *argv[])
   }
 
   // Setup the ZEFR solver object
-  char inputFile[] = "input_sphere";
-  zefr::initialize(gridComm, inputFile, nGrids, gridID);
+  if (argc == 1)
+  {
+    char inputFile[] = "input_sphere";
+    zefr::initialize(gridComm, inputFile, nGrids, gridID);
+  }
+  else
+  {
+    zefr::initialize(gridComm, argv[1], nGrids, gridID);
+  }
 
   Zefr *z = zefr::get_zefr_object();
   z->setup_solver();

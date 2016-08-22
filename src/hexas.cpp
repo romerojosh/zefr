@@ -262,89 +262,102 @@ void Hexas::set_locs()
 
 void Hexas::set_transforms(std::shared_ptr<Faces> faces)
 {
-  /* Allocate memory for jacobian matrices and determinant */
-  jaco_spts.assign({nDims, nDims, nSpts, nEles});
-  inv_jaco_spts.assign({nDims, nDims, nSpts, nEles});
-//  jaco_ppts.assign({nDims, nDims, nPpts, nEles});
-  jaco_qpts.assign({nDims, nDims, nQpts, nEles});
-  jaco_det_spts.assign({nSpts, nEles});
-  jaco_det_qpts.assign({nQpts, nEles});
-  vol.assign({nEles});
 
-  /* Set jacobian matrix and determinant at solution points */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
-    {
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node,ele);
-            jaco_spts(dimX, dimXi, spt, ele) += geo->coord_nodes(dimX,gnd) * dshape_spts(node, spt, dimXi);
-          }
-        }
-      }
-      
-      double xr = jaco_spts(0, 0, spt, ele); double xs = jaco_spts(0, 1, spt, ele); double xt = jaco_spts(0, 2, spt, ele);
-      double yr = jaco_spts(1, 0, spt, ele); double ys = jaco_spts(1, 1, spt, ele); double yt = jaco_spts(1, 2, spt, ele);
-      double zr = jaco_spts(2, 0, spt, ele); double zs = jaco_spts(2, 1, spt, ele); double zt = jaco_spts(2, 2, spt, ele);
+//  if (input->rank == 0 && input->gridID != 1)
+//  {
+//    cout << "Old method: " << endl;
+//  }
+//  jaco_spts.assign({nSpts,nEles,nDims,nDims},0,0);
+//  inv_jaco_spts.assign({nSpts,nEles,nDims,nDims},0,0);
 
-      inv_jaco_spts(0, 0, spt, ele) = ys * zt - yt * zs; inv_jaco_spts(0, 1, spt, ele) = xt * zs - xs * zt; inv_jaco_spts(0, 2, spt, ele) = xs * yt - xt * ys;
-      inv_jaco_spts(1, 0, spt, ele) = yt * zr - yr * zt; inv_jaco_spts(1, 1, spt, ele) = xr * zt - xt * zr; inv_jaco_spts(1, 2, spt, ele) = xt * yr - xr * yt;
-      inv_jaco_spts(2, 0, spt, ele) = yr * zs - ys * zr; inv_jaco_spts(2, 1, spt, ele) = xs * zr - xr * zs; inv_jaco_spts(2, 2, spt, ele) = xr * ys - xs * yr;
+//  /* Set jacobian matrix and determinant at solution points */
+//  for (unsigned int ele = 0; ele < nEles; ele++)
+//  {
+//    for (unsigned int spt = 0; spt < nSpts; spt++)
+//    {
+//      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+//      {
+//        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+//        {
+//          for (unsigned int node = 0; node < nNodes; node++)
+//          {
+//            unsigned int gnd = geo->ele2nodes(node,ele);
+//            jaco_spts(spt, ele, dimX, dimXi) += geo->coord_nodes(dimX,gnd) * dshape_spts(node, spt, dimXi);
+//          }
+//        }
+//      }
 
-      jaco_det_spts(spt,ele) = xr * (ys * zt - yt * zs) - xs * (yr * zt - yt * zr) + 
-        xt * (yr * zs - ys * zr);
+//      double xr = jaco_spts(spt, ele, 0, 0); double xs = jaco_spts(spt, ele, 0, 1); double xt = jaco_spts(spt, ele, 0, 2);
+//      double yr = jaco_spts(spt, ele, 1, 0); double ys = jaco_spts(spt, ele, 1, 1); double yt = jaco_spts(spt, ele, 1, 2);
+//      double zr = jaco_spts(spt, ele, 2, 0); double zs = jaco_spts(spt, ele, 2, 1); double zt = jaco_spts(spt, ele, 2, 2);
 
-      if (jaco_det_spts(spt,ele) < 0.)
-        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
+//      inv_jaco_spts(spt, ele, 0, 0) = ys * zt - yt * zs; inv_jaco_spts(spt, ele, 1, 0) = xt * zs - xs * zt; inv_jaco_spts(spt, ele, 2, 0) = xs * yt - xt * ys;
+//      inv_jaco_spts(spt, ele, 0, 1) = yt * zr - yr * zt; inv_jaco_spts(spt, ele, 1, 1) = xr * zt - xt * zr; inv_jaco_spts(spt, ele, 2, 1) = xt * yr - xr * yt;
+//      inv_jaco_spts(spt, ele, 0, 2) = yr * zs - ys * zr; inv_jaco_spts(spt, ele, 1, 2) = xs * zr - xr * zs; inv_jaco_spts(spt, ele, 2, 2) = xr * ys - xs * yr;
 
-    }
+//      jaco_det_spts(spt,ele) = xr * (ys * zt - yt * zs) - xs * (yr * zt - yt * zr) +
+//        xt * (yr * zs - ys * zr);
 
-    /* Compute element volume */
-    for (unsigned int spt = 0; spt < nSpts; spt++)
-    {
-      /* Get quadrature weight */
-      unsigned int i = idx_spts(spt,0);
-      unsigned int j = idx_spts(spt,1);
-      unsigned int k = idx_spts(spt,2);
+//      if (jaco_det_spts(spt,ele) < 0.)
+//        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
 
-      double weight = weights_spts(i) * weights_spts(j) * weights_spts(k);
+//      if (ele == 0 && input->rank == 0 && input->gridID != 1)
+//      {
+//        cout << "spt " << spt << endl;
+//        cout << inv_jaco_spts(spt, ele, 0, 0) << ", " << inv_jaco_spts(spt, ele, 0, 1) << ", " << inv_jaco_spts(spt, ele, 0, 2) << endl;
+//        cout << inv_jaco_spts(spt, ele, 1, 0) << ", " << inv_jaco_spts(spt, ele, 1, 1) << ", " << inv_jaco_spts(spt, ele, 1, 2) << endl;
+//        cout << inv_jaco_spts(spt, ele, 2, 0) << ", " << inv_jaco_spts(spt, ele, 2, 1) << ", " << inv_jaco_spts(spt, ele, 2, 2) << endl;
+//      }
+//    }
 
-      vol(ele) += weight * jaco_det_spts(spt, ele);
-    }
+//    /* Compute element volume */
+//    for (unsigned int spt = 0; spt < nSpts; spt++)
+//    {
+//      /* Get quadrature weight */
+//      unsigned int i = idx_spts(spt,0);
+//      unsigned int j = idx_spts(spt,1);
+//      unsigned int k = idx_spts(spt,2);
 
-  }
+//      double weight = weights_spts(i) * weights_spts(j) * weights_spts(k);
 
-  /* Set jacobian matrix at face flux points (do not need the determinant) */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-    {
-      int gfpt = geo->fpt2gfpt(fpt,ele);
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node,ele);
+//      vol(ele) += weight * jaco_det_spts(spt, ele);
+//    }
 
-            /* Skip fpts on ghost edges */
-            if (gfpt == -1)
-              continue;
+//  }
 
-            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+//  /* Set jacobian matrix at face flux points (do not need the determinant) */
+//  for (unsigned int ele = 0; ele < nEles; ele++)
+//  {
+//    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+//    {
+//      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+//      int gfpt = geo->fpt2gfpt(fpt,ele);
 
-            faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(dimX,gnd) * dshape_fpts(node, fpt, dimXi);
-          }
-        }
-      }
-    }
-  }
+//      if (ele == 0 && input->rank == 0 && input->gridID != 1)
+//        cout << "fpt " << fpt << " / gfpt " << gfpt << endl;
+
+//      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+//      {
+//        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+//        {
+//          for (unsigned int node = 0; node < nNodes; node++)
+//          {
+//            unsigned int gnd = geo->ele2nodes(node,ele);
+
+//            /* Skip fpts on ghost edges */
+//            if (gfpt == -1)
+//              continue;
+
+//            faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(dimX,gnd) * dshape_fpts(node, fpt, dimXi);
+//          }
+//          if (ele == 0 && input->rank == 0 && input->gridID != 1)
+//          cout << faces->jaco(gfpt, dimX, dimXi, slot) << ", ";
+//        }
+//        if (ele == 0 && input->rank == 0 && input->gridID != 1)
+//        cout << endl;
+//      }
+//    }
+//  }
 
 
   /* Set jacobian matrix at plot points (do not need the determinant) */
@@ -365,35 +378,89 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
 //      }
 //    }
 //  }
-  /* Set jacobian matrix and determinant at quadrature points */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
-    {
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node, ele);
-            jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(dimX,gnd) * dshape_qpts(node,qpt,dimXi);
-          }
-        }
-      }
+//  /* Set jacobian matrix and determinant at quadrature points */
+//  for (unsigned int ele = 0; ele < nEles; ele++)
+//  {
+//    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
+//    {
+//      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
+//      {
+//        for (unsigned int dimX = 0; dimX < nDims; dimX++)
+//        {
+//          for (unsigned int node = 0; node < nNodes; node++)
+//          {
+//            unsigned int gnd = geo->ele2nodes(node, ele);
+//            jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(dimX,gnd) * dshape_qpts(node,qpt,dimXi);
+//          }
+//        }
+//      }
 
-      double xr = jaco_qpts(0, 0, qpt, ele); double xs = jaco_qpts(0, 1, qpt, ele); double xt = jaco_qpts(0, 2, qpt, ele);
-      double yr = jaco_qpts(1, 0, qpt, ele); double ys = jaco_qpts(1, 1, qpt, ele); double yt = jaco_qpts(1, 2, qpt, ele);
-      double zr = jaco_qpts(2, 0, qpt, ele); double zs = jaco_qpts(2, 1, qpt, ele); double zt = jaco_qpts(2, 2, qpt, ele);
+//      double xr = jaco_qpts(0, 0, qpt, ele); double xs = jaco_qpts(0, 1, qpt, ele); double xt = jaco_qpts(0, 2, qpt, ele);
+//      double yr = jaco_qpts(1, 0, qpt, ele); double ys = jaco_qpts(1, 1, qpt, ele); double yt = jaco_qpts(1, 2, qpt, ele);
+//      double zr = jaco_qpts(2, 0, qpt, ele); double zs = jaco_qpts(2, 1, qpt, ele); double zt = jaco_qpts(2, 2, qpt, ele);
 
-      jaco_det_qpts(qpt,ele) = xr * (ys * zt - yt * zs) - xs * (yr * zt - yt * zr) + 
-        xt * (yr * zs - ys * zr);
+//      jaco_det_qpts(qpt,ele) = xr * (ys * zt - yt * zs) - xs * (yr * zt - yt * zr) +
+//        xt * (yr * zs - ys * zr);
 
-      if (jaco_det_qpts(qpt,ele) < 0.)
-        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " qpt:" + std::to_string(qpt));
+//      if (jaco_det_qpts(qpt,ele) < 0.)
+//        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " qpt:" + std::to_string(qpt));
 
-    }
-  }
+//    }
+//  }
+
+//  /* Use transform to obtain physical normals at face flux points */
+//  mdvector<double> inv_jaco({nDims, nDims});
+//  faces->norm.fill(0.);
+//  faces->dA.fill(0.);
+//  for (unsigned int ele = 0; ele < nEles; ele++)
+//  {
+//    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+//    {
+//      int gfpt = geo->fpt2gfpt(fpt,ele);
+
+//      /* Check if flux point is on ghost edge */
+//      if (gfpt == -1)
+//        continue;
+
+//      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+
+//      double xr = faces->jaco(gfpt, 0, 0, slot); double xs = faces->jaco(gfpt, 0, 1, slot); double xt = faces->jaco(gfpt, 0, 2, slot);
+//      double yr = faces->jaco(gfpt, 1, 0, slot); double ys = faces->jaco(gfpt, 1, 1, slot); double yt = faces->jaco(gfpt, 1, 2, slot);
+//      double zr = faces->jaco(gfpt, 2, 0, slot); double zs = faces->jaco(gfpt, 2, 1, slot); double zt = faces->jaco(gfpt, 2, 2, slot);
+
+//      inv_jaco(0,0) = ys * zt - yt * zs; inv_jaco(0,1) = xt * zs - xs * zt; inv_jaco(0,2) = xs * yt - xt * ys;
+//      inv_jaco(1,0) = yt * zr - yr * zt; inv_jaco(1,1) = xr * zt - xt * zr; inv_jaco(1,2) = xt * yr - xr * yt;
+//      inv_jaco(2,0) = yr * zs - ys * zr; inv_jaco(2,1) = xs * zr - xr * zs; inv_jaco(2,2) = xr * ys - xs * yr;
+
+//      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+//      {
+//        for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+//        {
+//          faces->norm(gfpt, dim1, slot) += inv_jaco(dim2, dim1) * tnorm(fpt, dim2);
+//        }
+//      }
+
+//      if (slot == 0)
+//      {
+//        for (unsigned int dim = 0; dim < nDims; dim++)
+//          faces->dA(gfpt) += faces->norm(gfpt, dim, slot) * faces->norm(gfpt, dim, slot);
+
+//        faces->dA(gfpt) = std::sqrt(faces->dA(gfpt));
+//      }
+
+
+//      for (unsigned int dim = 0; dim < nDims; dim++)
+//        faces->norm(gfpt, dim, slot) /= faces->dA(gfpt);
+
+//      if (ele == 0 && input->rank == 0 && input->gridID != 1)
+//      {
+//        cout << "Normal vector: dA = " << faces->dA(gfpt) << endl;
+//        cout << faces->norm(gfpt,0,slot) << ", ";
+//        cout << faces->norm(gfpt,1,slot) << ", ";
+//        cout << faces->norm(gfpt,2,slot) << endl;
+//      }
+//    }
+//  }
 
 }
 
@@ -440,50 +507,50 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
 
   }
 
-  /* Use transform to obtain physical normals at face flux points */
-  mdvector<double> inv_jaco({nDims, nDims});
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-    {
-      int gfpt = geo->fpt2gfpt(fpt,ele);
+//  /* Use transform to obtain physical normals at face flux points */
+//  mdvector<double> inv_jaco({nDims, nDims});
+//  for (unsigned int ele = 0; ele < nEles; ele++)
+//  {
+//    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+//    {
+//      int gfpt = geo->fpt2gfpt(fpt,ele);
 
-      /* Check if flux point is on ghost edge */
-      if (gfpt == -1) 
-        continue;
+//      /* Check if flux point is on ghost edge */
+//      if (gfpt == -1)
+//        continue;
 
-      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+//      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
-      double xr = faces->jaco(gfpt, 0, 0, slot); double xs = faces->jaco(gfpt, 0, 1, slot); double xt = faces->jaco(gfpt, 0, 2, slot);
-      double yr = faces->jaco(gfpt, 1, 0, slot); double ys = faces->jaco(gfpt, 1, 1, slot); double yt = faces->jaco(gfpt, 1, 2, slot);
-      double zr = faces->jaco(gfpt, 2, 0, slot); double zs = faces->jaco(gfpt, 2, 1, slot); double zt = faces->jaco(gfpt, 2, 2, slot);
+//      double xr = faces->jaco(gfpt, 0, 0, slot); double xs = faces->jaco(gfpt, 0, 1, slot); double xt = faces->jaco(gfpt, 0, 2, slot);
+//      double yr = faces->jaco(gfpt, 1, 0, slot); double ys = faces->jaco(gfpt, 1, 1, slot); double yt = faces->jaco(gfpt, 1, 2, slot);
+//      double zr = faces->jaco(gfpt, 2, 0, slot); double zs = faces->jaco(gfpt, 2, 1, slot); double zt = faces->jaco(gfpt, 2, 2, slot);
 
-      inv_jaco(0,0) = ys * zt - yt * zs; inv_jaco(0,1) = xt * zs - xs * zt; inv_jaco(0,2) = xs * yt - xt * ys;
-      inv_jaco(1,0) = yt * zr - yr * zt; inv_jaco(1,1) = xr * zt - xt * zr; inv_jaco(1,2) = xt * yr - xr * yt;
-      inv_jaco(2,0) = yr * zs - ys * zr; inv_jaco(2,1) = xs * zr - xr * zs; inv_jaco(2,2) = xr * ys - xs * yr;
+//      inv_jaco(0,0) = ys * zt - yt * zs; inv_jaco(0,1) = xt * zs - xs * zt; inv_jaco(0,2) = xs * yt - xt * ys;
+//      inv_jaco(1,0) = yt * zr - yr * zt; inv_jaco(1,1) = xr * zt - xt * zr; inv_jaco(1,2) = xt * yr - xr * yt;
+//      inv_jaco(2,0) = yr * zs - ys * zr; inv_jaco(2,1) = xs * zr - xr * zs; inv_jaco(2,2) = xr * ys - xs * yr;
       
-      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-      {
-        for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-        {
-          faces->norm(gfpt, dim1, slot) += inv_jaco(dim2, dim1) * tnorm(fpt, dim2); 
-        }
-      }
+//      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+//      {
+//        for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+//        {
+//          faces->norm(gfpt, dim1, slot) += inv_jaco(dim2, dim1) * tnorm(fpt, dim2);
+//        }
+//      }
 
-      if (slot == 0)
-      {
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          faces->dA(gfpt) += faces->norm(gfpt, dim, slot) * faces->norm(gfpt, dim, slot);
+//      if (slot == 0)
+//      {
+//        for (unsigned int dim = 0; dim < nDims; dim++)
+//          faces->dA(gfpt) += faces->norm(gfpt, dim, slot) * faces->norm(gfpt, dim, slot);
 
-        faces->dA(gfpt) = std::sqrt(faces->dA(gfpt));
-      }
+//        faces->dA(gfpt) = std::sqrt(faces->dA(gfpt));
+//      }
                         
 
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        faces->norm(gfpt, dim, slot) /= faces->dA(gfpt);
+//      for (unsigned int dim = 0; dim < nDims; dim++)
+//        faces->norm(gfpt, dim, slot) /= faces->dA(gfpt);
 
-    }
-  }
+//    }
+//  }
 
 }
 
@@ -703,17 +770,17 @@ void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
         double dUtemp0 = dU_spts(spt, ele, n, 0);
         double dUtemp1 = dU_spts(spt, ele, n, 1);
 
-        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco_spts(0, 0, spt, ele) + 
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 0, spt, ele) +  
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 0, spt, ele);  
+        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco_spts(spt, ele, 0, 0) +
+                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 0) +
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 0);
 
-        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(0, 1, spt, ele) + 
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(1, 1, spt, ele) +  
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 1, spt, ele);  
+        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 1) +
+                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 1) +
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 1);
                                   
-        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(0, 2, spt, ele) + 
-                                  dUtemp1 * inv_jaco_spts(1, 2, spt, ele) +  
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(2, 2, spt, ele);  
+        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 2) +
+                                  dUtemp1 * inv_jaco_spts(spt, ele, 1, 2) +
+                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 2);
 
         dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
         dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
@@ -747,17 +814,27 @@ void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
         double Ftemp0 = F_spts(spt, ele, n, 0);
         double Ftemp1 = F_spts(spt, ele, n, 1);
 
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * inv_jaco_spts(0, 0, spt, ele) + 
-                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(0, 1, spt, ele) +  
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(0, 2, spt, ele); 
 
-        F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco_spts(1, 0, spt, ele) + 
-                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(1, 1, spt, ele) +  
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(1, 2, spt, ele);  
+//        if (ele == 0 && input->rank == 0 && input->gridID != 1)
+//        {
+//          cout << "spt " << spt << endl;
+//          cout << F_spts(spt, ele, n, 0) << ", "  << F_spts(spt, ele, n, 1) << ", "  << F_spts(spt, ele, n, 2) << endl;
+//          cout << inv_jaco_spts(spt, ele, 0, 0) << ", "  << inv_jaco_spts(spt, ele, 0, 1) << ", "  << inv_jaco_spts(spt, ele, 0, 2) << endl;
+//          cout << inv_jaco_spts(spt, ele, 1, 0) << ", "  << inv_jaco_spts(spt, ele, 1, 1) << ", "  << inv_jaco_spts(spt, ele, 1, 2) << endl;
+//          cout << inv_jaco_spts(spt, ele, 2, 0) << ", "  << inv_jaco_spts(spt, ele, 2, 1) << ", "  << inv_jaco_spts(spt, ele, 2, 2) << endl;
+//        }
+
+        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * inv_jaco_spts(spt, ele, 0, 0) +
+                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 0, 1) +
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 0, 2);
+
+        F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco_spts(spt, ele, 1, 0) +
+                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 1) +
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 1, 2);
                                   
-        F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco_spts(2, 0, spt, ele) + 
-                                  Ftemp1 * inv_jaco_spts(2, 1, spt, ele) +  
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(2, 2, spt, ele); 
+        F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco_spts(spt, ele, 2, 0) +
+                                  Ftemp1 * inv_jaco_spts(spt, ele, 2, 1) +
+                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 2);
 
       }
 
@@ -792,17 +869,17 @@ void Hexas::transform_dFdU()
           double dFdUtemp0 = dFdU_spts(spt, ele, ni, nj, 0);
           double dFdUtemp1 = dFdU_spts(spt, ele, ni, nj, 1);
 
-          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * inv_jaco_spts(0, 0, spt, ele) + 
-                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(0, 1, spt, ele) +  
-                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(0, 2, spt, ele); 
+          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * inv_jaco_spts(spt, ele, 0, 0) +
+                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(spt, ele, 0, 1) +
+                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(spt, ele, 0, 2);
 
-          dFdU_spts(spt, ele, ni, nj, 1) = dFdUtemp0 * inv_jaco_spts(1, 0, spt, ele) + 
-                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(1, 1, spt, ele) +  
-                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(1, 2, spt, ele);  
+          dFdU_spts(spt, ele, ni, nj, 1) = dFdUtemp0 * inv_jaco_spts(spt, ele, 1, 0) +
+                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(spt, ele, 1, 1) +
+                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(spt, ele, 1, 2);
                                     
-          dFdU_spts(spt, ele, ni, nj, 2) = dFdUtemp0 * inv_jaco_spts(2, 0, spt, ele) + 
-                                           dFdUtemp1 * inv_jaco_spts(2, 1, spt, ele) +  
-                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(2, 2, spt, ele); 
+          dFdU_spts(spt, ele, ni, nj, 2) = dFdUtemp0 * inv_jaco_spts(spt, ele, 2, 0) +
+                                           dFdUtemp1 * inv_jaco_spts(spt, ele, 2, 1) +
+                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(spt, ele, 2, 2);
         }
       }
     }

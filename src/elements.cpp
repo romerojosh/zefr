@@ -26,11 +26,11 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 
   set_locs();
   set_shape();
-  set_transforms(faces);
-  set_normals(faces);
-  setup_FR();
-  setup_aux();
   set_coords(faces);
+  set_normals(faces);
+  calc_transforms(faces);
+  setup_FR();
+  setup_aux();  
 }
 
 void Elements::set_shape()
@@ -130,64 +130,90 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   faces->coord.assign({geo->nGfpts, nDims});
   geo->coord_ppts.assign({nPpts, nEles, nDims});
   geo->coord_qpts.assign({nQpts, nEles, nDims});
+  nodes.assign({nNodes, nEles, nDims});
+  if (input->motion)
+  {
+    nodesRK.assign({nNodes, nEles, nDims});
+  }
 
+  /* Setup positions of all element's shape nodes in one array */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int node = 0; node < nNodes; node++)
+        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
 
+  if (input->motion)
+  {
+    nodesRK = nodes;
+  }
+
+  int ms = nSpts;
+  int mf = nFpts;
+  int mp = nPpts;
+  int mq = nQpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  auto &B = nodes(0,0,0);
+
+  /* Setup physical coordinates at solution points */
+  auto &As = shape_spts(0,0);
+  auto &Cs = geo->coord_spts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#endif
+
+  /* Setup physical coordinates at flux points */
+  auto &Af = shape_fpts(0,0);
+  auto &Cf = geo->coord_fpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasTrans, mf, n, k,
+              1.0, &Af, k, &B, n, 0.0, &Cf, mf);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+#endif
+
+  /* Setup physical coordinates at plot points */
+  auto &Ap = shape_ppts(0,0);
+  auto &Cp = geo->coord_ppts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
+#endif
+
+  /* Setup physical coordinates at quadrature points */
+  auto &Aq = shape_qpts(0,0);
+  auto &Cq = geo->coord_qpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#endif
+
+  /* Setup physical coordinates at flux points [in faces class] */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
-
-      /* Setup physical coordinates at solution points */
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_spts(spt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_spts(node, spt);
-        }
-      }
-  
-      /* Setup physical coordinates at flux points */
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
         int gfpt = geo->fpt2gfpt(fpt,ele);
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_fpts(node, fpt);
-
-          /* Check if on ghost edge */
-          if (gfpt != -1)
-            faces->coord(gfpt, dim) += geo->coord_nodes(dim,gnd) * shape_fpts(node, fpt);
-        }
-      }
-
-      /* Setup physical coordinates at plot points */
-      for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_ppts(ppt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_ppts(node, ppt);
-        }
-      }
-
-      /* Setup physical coordinates at quadrature points */
-      for (unsigned int qpt = 0; qpt < nQpts; qpt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_qpts(qpt, ele, dim) += geo->coord_nodes(dim,gnd) * shape_qpts(node, qpt);
-        }
+        /* Check if on ghost edge */
+        if (gfpt != -1)
+          faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
       }
     }
   }
-
-  /* Fix the coordinates assigned to all internal flux points */
-  for (unsigned int fpt = 0; fpt < geo->nGfpts_int; fpt++)
-    for (unsigned int dim = 0; dim < nDims; dim++)
-      faces->coord(fpt, dim) *= 0.5;
 
   if (input->CFL_type == 2)
   {
@@ -209,7 +235,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
           double dx = geo->coord_fpts(fpt1, ele, 0) - geo->coord_fpts(fpt2, ele, 0);
           double dy = geo->coord_fpts(fpt1, ele, 1) - geo->coord_fpts(fpt2, ele, 1);
-          double dist = std::sqrt(dx*dx + dy*dy); 
+          double dist = std::sqrt(dx*dx + dy*dy);
 
           h_ref(fpt1, ele) = dist;
           h_ref(fpt2, ele) = dist;
@@ -337,6 +363,199 @@ void Elements::setup_aux()
     }
   }
 
+}
+
+void Elements::calc_transforms(std::shared_ptr<Faces> faces)
+{
+  /* Allocate memory for jacobian matrices and determinant */
+  jaco_spts.assign({nSpts, nEles, nDims, nDims});
+  jaco_fpts.assign({nFpts, nEles, nDims, nDims});
+  jaco_qpts.assign({nQpts, nEles, nDims, nDims});
+  inv_jaco_spts.assign({nSpts, nEles, nDims, nDims});
+  inv_jaco_fpts.assign({nFpts, nEles, nDims, nDims});
+  jaco_det_spts.assign({nSpts, nEles});
+  jaco_det_fpts.assign({nFpts, nEles});
+  jaco_det_qpts.assign({nQpts, nEles});
+  vol.assign({nEles});
+
+  /* --- Calculate Transformation at Solution Points --- */
+
+  int ms = nSpts;
+  int mf = nFpts;
+  int mq = nQpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  jaco_spts.assign({nSpts,nEles,nDims,nDims});
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    auto &B = (input->motion) ? nodesRK(0,0,0) : nodes(0,0,0);
+    auto &As = dshape_spts(0, 0, dim);
+    auto &Af = dshape_fpts(0, 0, dim);
+    auto &Aq = dshape_qpts(0, 0, dim);
+    auto &Cs = jaco_spts(0, 0, 0, dim);
+    auto &Cf = jaco_fpts(0, 0, 0, dim);
+    auto &Cq = jaco_qpts(0, 0, 0, dim);
+
+#ifdef _OMP
+  omp_blocked_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, n, 0.0, &Cs, n);
+  omp_blocked_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, n, 0.0, &Cf, n);
+  omp_blocked_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, n, 0.0, &Cq, n);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#endif
+}
+
+//  if (e == 0 && input->rank == 0 && input->gridID != 1)
+//  {
+//    cout << "fpt " << fpt << ", gfpt " << gfpt << endl;
+//    cout << inv_jaco_fpts(fpt, e, 0, 0) << ", " << inv_jaco_fpts(fpt, e, 1, 0) << ", " << inv_jaco_fpts(fpt, e, 2, 0) << endl;
+//    cout << inv_jaco_fpts(fpt, e, 0, 1) << ", " << inv_jaco_fpts(fpt, e, 1, 1) << ", " << inv_jaco_fpts(fpt, e, 2, 1) << endl;
+//    cout << inv_jaco_fpts(fpt, e, 0, 2) << ", " << inv_jaco_fpts(fpt, e, 1, 2) << ", " << inv_jaco_fpts(fpt, e, 2, 2) << endl;
+//    cout << "Normal vector: dA = " << faces->dA(gfpt) << endl;
+//    cout << faces->norm(gfpt,0,slot) << endl;
+//    cout << faces->norm(gfpt,1,slot) << endl;
+//    cout << faces->norm(gfpt,2,slot) << endl;
+//  }
+
+#pragma omp parallel for collapse(2)
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      if (nDims == 2)
+      {
+        // Determinant of transformation matrix
+        jaco_det_spts(spt,e) = jaco_spts(spt,e,0,0)*jaco_spts(spt,e,1,1)-jaco_spts(spt,e,0,1)*jaco_spts(spt,e,1,0);
+        // Inverse of transformation matrix (times its determinant)
+        inv_jaco_spts(spt,e,0,0) = jaco_spts(spt,e,1,1);  inv_jaco_spts(spt,e,1,0) =-jaco_spts(spt,e,0,1);
+        inv_jaco_spts(spt,e,0,1) =-jaco_spts(spt,e,1,0);  inv_jaco_spts(spt,e,1,1) = jaco_spts(spt,e,0,0);
+      }
+      else if (nDims == 3)
+      {
+        double xr = jaco_spts(spt,e,0,0);   double xs = jaco_spts(spt,e,0,1);   double xt = jaco_spts(spt,e,0,2);
+        double yr = jaco_spts(spt,e,1,0);   double ys = jaco_spts(spt,e,1,1);   double yt = jaco_spts(spt,e,1,2);
+        double zr = jaco_spts(spt,e,2,0);   double zs = jaco_spts(spt,e,2,1);   double zt = jaco_spts(spt,e,2,2);
+        jaco_det_spts(spt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
+
+        inv_jaco_spts(spt,e,0,0) = ys*zt - yt*zs;  inv_jaco_spts(spt,e,0,1) = xt*zs - xs*zt;  inv_jaco_spts(spt,e,0,2) = xs*yt - xt*ys;
+        inv_jaco_spts(spt,e,1,0) = yt*zr - yr*zt;  inv_jaco_spts(spt,e,1,1) = xr*zt - xt*zr;  inv_jaco_spts(spt,e,1,2) = xt*yr - xr*yt;
+        inv_jaco_spts(spt,e,2,0) = yr*zs - ys*zr;  inv_jaco_spts(spt,e,2,1) = xs*zr - xr*zs;  inv_jaco_spts(spt,e,2,2) = xr*ys - xs*yr;
+      }
+      if (jaco_det_spts(spt,e)<0) ThrowException("Negative Jacobian at solution points.");
+    }
+
+    /* Compute element volume */
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      /* Get quadrature weight */
+      unsigned int i = idx_spts(spt,0);
+      unsigned int j = idx_spts(spt,1);
+      unsigned int k = idx_spts(spt,2);
+
+      double weight = weights_spts(i) * weights_spts(j) * weights_spts(k);
+
+      vol(e) += weight * jaco_det_spts(spt, e);
+    }
+  }
+
+  /* --- Calculate Transformation at Flux Points --- */
+#pragma omp parallel for collapse(2)
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      if (nDims == 2)
+      {
+        jaco_det_fpts(fpt,e) = jaco_fpts(fpt,e,0,0)*jaco_fpts(fpt,e,1,1)-jaco_fpts(fpt,e,0,1)*jaco_fpts(fpt,e,1,0);
+        // Inverse of transformation matrix (times its determinant)
+        inv_jaco_fpts(fpt,e,0,0) = jaco_fpts(fpt,e,1,1);  inv_jaco_fpts(fpt,e,1,0) =-jaco_fpts(fpt,e,0,1);
+        inv_jaco_fpts(fpt,e,0,1) =-jaco_fpts(fpt,e,1,0);  inv_jaco_fpts(fpt,e,1,1) = jaco_fpts(fpt,e,0,0);
+      }
+      else if (nDims == 3)
+      {
+        double xr = jaco_fpts(fpt,e,0,0);   double xs = jaco_fpts(fpt,e,0,1);   double xt = jaco_fpts(fpt,e,0,2);
+        double yr = jaco_fpts(fpt,e,1,0);   double ys = jaco_fpts(fpt,e,1,1);   double yt = jaco_fpts(fpt,e,1,2);
+        double zr = jaco_fpts(fpt,e,2,0);   double zs = jaco_fpts(fpt,e,2,1);   double zt = jaco_fpts(fpt,e,2,2);
+        jaco_det_fpts(fpt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
+        // Inverse of transformation matrix (times its determinant)
+        inv_jaco_fpts(fpt,e,0,0) = ys*zt - yt*zs;  inv_jaco_fpts(fpt,e,0,1) = xt*zs - xs*zt;  inv_jaco_fpts(fpt,e,0,2) = xs*yt - xt*ys;
+        inv_jaco_fpts(fpt,e,1,0) = yt*zr - yr*zt;  inv_jaco_fpts(fpt,e,1,1) = xr*zt - xt*zr;  inv_jaco_fpts(fpt,e,1,2) = xt*yr - xr*yt;
+        inv_jaco_fpts(fpt,e,2,0) = yr*zs - ys*zr;  inv_jaco_fpts(fpt,e,2,1) = xs*zr - xr*zs;  inv_jaco_fpts(fpt,e,2,2) = xr*ys - xs*yr;
+      }
+
+      int gfpt = geo->fpt2gfpt(fpt,e);
+
+      /* Check if flux point is on ghost edge */
+      if (gfpt == -1)
+        continue;
+
+      unsigned int slot = geo->fpt2gfpt_slot(fpt,e);
+
+      /* --- Calculate outward unit normal vector at flux point --- */
+      // Transform face normal from reference to physical space [JGinv .dot. tNorm]
+      for (uint dim1 = 0; dim1 < nDims; dim1++)
+      {
+        faces->norm(gfpt,dim1,slot) = 0.;
+        for (uint dim2 = 0; dim2 < nDims; dim2++)
+          faces->norm(gfpt,dim1,slot) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
+      }
+
+      // Store magnitude of face normal (equivalent to face area in finite-volume land)
+      if (slot == 0)
+      {
+        faces->dA(gfpt) = 0;
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->dA(gfpt) += faces->norm(gfpt,dim,slot)*faces->norm(gfpt,dim,slot);
+        faces->dA(gfpt) = sqrt(faces->dA(gfpt));
+      }
+
+      // Normalize
+      // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
+      // (A normal vector at a point doesn't make sense anyways)
+      if (std::fabs(faces->dA(gfpt)) < 1e-10)
+      {
+        faces->dA(gfpt) = 0.;
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->norm(gfpt,dim,slot) = 0;
+      }
+      else
+      {
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->norm(gfpt,dim,slot) /= faces->dA(gfpt);
+      }
+    }
+  }
+
+  /* Set jacobian matrix and determinant at quadrature points */
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
+    {
+      if (nDims == 2)
+      {
+        // Determinant of transformation matrix
+        jaco_det_qpts(qpt,e) = jaco_qpts(qpt,e,0,0)*jaco_qpts(qpt,e,1,1)-jaco_qpts(qpt,e,0,1)*jaco_qpts(qpt,e,1,0);
+      }
+      else if (nDims == 3)
+      {
+        double xr = jaco_qpts(qpt,e,0,0);   double xs = jaco_qpts(qpt,e,0,1);   double xt = jaco_qpts(qpt,e,0,2);
+        double yr = jaco_qpts(qpt,e,1,0);   double ys = jaco_qpts(qpt,e,1,1);   double yt = jaco_qpts(qpt,e,1,2);
+        double zr = jaco_qpts(qpt,e,2,0);   double zs = jaco_qpts(qpt,e,2,1);   double zt = jaco_qpts(qpt,e,2,2);
+        jaco_det_qpts(qpt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
+      }
+      if (jaco_det_qpts(qpt,e)<0) ThrowException("Negative Jacobian at quadrature point.");
+    }
+  }
 }
 
 void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)

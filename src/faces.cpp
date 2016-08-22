@@ -98,7 +98,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Allocate memory for geometry structures */
   norm.assign({nFpts, nDims, 2});
   dA.assign({nFpts},0.0);
-  jaco.assign({nFpts, nDims, nDims , 2});
+  jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
 
 #ifdef _MPI
   /* Allocate memory for send/receive buffers */
@@ -2217,6 +2217,13 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
       waveSp(fpt) = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
     }
+
+//    if (fpt < 10)
+//    {
+//      cout << "gfpt " << fpt << endl;
+//      cout << "dA: " << dA(fpt) << endl;
+//      cout << "Normal: " << norm(fpt,0,0) << ", " << norm(fpt,1,0) << ", " << norm(fpt,2,0) << endl;
+//    }
 
     /* Compute common normal flux */
     if (LDG_bias(fpt) == 0)
