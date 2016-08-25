@@ -103,11 +103,11 @@ struct InputStruct
   unsigned int rank, nRanks;
   unsigned int filt_on, sen_write, sen_norm, filt_maxLevels;
   double sen_Jfac, filt_gamma;
-  double iter, initIter, time, rkTime;
+  double iter = 0, initIter = 0, time = 0, rkTime = 0;
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;
-  unsigned int gridID;
+  unsigned int gridID = 0;
   unsigned int oversetMethod, nGrids, quad_order, motion_type;
   std::vector<std::string> oversetGrids;
 

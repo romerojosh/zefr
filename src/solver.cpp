@@ -515,6 +515,14 @@ void FRSolver::solver_data_to_device()
     eles->dU_fpts_d = eles->dU_fpts;
   }
 
+  if (input->motion)
+  {
+    eles->grid_vel_nodes_d eles->grid_vel_nodes;
+    eles->grid_vel_spts_d eles->grid_vel_spts;
+    eles->grid_vel_fpts_d eles->grid_vel_fpts;
+    eles->gradF_spts_d = eles->gradF_spts;
+  }
+
   /* Solution data structures (faces) */
   faces->U_d = faces->U;
   faces->Fconv_d = faces->Fconv;
@@ -609,25 +617,33 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
-//faces->mpi_prod();
+
   /* Compute convective flux at solution points */
   eles->compute_Fconv(startEle, endEle);
-//faces->mpi_prod();
+
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
 
 #ifdef _MPI
   /* Transform solution point fluxes from physical to reference space */
-  eles->transform_flux(startEle, endEle);
-//faces->mpi_prod();
+  if (!input->motion)
+    eles->transform_flux(startEle, endEle);
+
   /* Compute convective flux and parent space common flux at non-MPI flux points */
   faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
-//faces->mpi_prod();
+
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
-//faces->mpi_prod();
+
   /* Compute solution point contribution to divergence of flux */
-  eles->compute_divF_spts(stage, startEle, endEle);
+  if (input->motion)
+  {
+    eles->compute_gradF_spts(startEle, endEle);
+    eles->compute_dU0(startEle, endEle);
+    eles->transform_gradF_spts(stage, startEle, endEle);
+  }
+  else
+    eles->compute_divF_spts(stage, startEle, endEle);
 
   /* Receive U data */
   if (use_blocked)
@@ -763,8 +779,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Copy common flux data from face local storage to element local storage */
   F_from_faces(startEle, endEle);
 
-  /* Compute flux point contribution to divergence of flux */
-  eles->compute_divF_fpts(stage, startEle, endEle);
+  if (input->motion)
+  {
+    /* Add standard FR correction to flux divergence (requires extrapolation) */
+    eles->extrapolate_Fn(startEle, endEle, faces);
+    eles->correct_divF_spts(stage, startEle, endEle);
+  }
+  else
+  {
+    /* Compute flux point contribution to divergence of flux */
+    eles->compute_divF_fpts(stage, startEle, endEle);
+  }
 
   /* Add source term (if required) */
   if (input->source)
@@ -1121,14 +1146,24 @@ void FRSolver::initialize_U()
   //eles->F_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
   eles->Fcomm.assign({eles->nFpts, eles->nEles, eles->nVars});
 
-  if (input->viscous)
+  if (input->viscous or input->motion)
   {
     eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+  }
+
+  if (input->viscous)
+  {
     eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
   }
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
+
+  if (input->motion)
+  {
+    eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims, eles->nDims});
+    eles->dFn_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+  }
 
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
@@ -1591,7 +1626,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   if (input->dt_scheme != "MCGS")
   {
 #ifdef _CPU
-//    if (nStages > 1)
+    if (nStages > 1)
       U_ini = eles->U_spts;
 #endif
 
@@ -1604,8 +1639,6 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     /* Main stage loop. Complete for Jameson-style RK timestepping */
     for (unsigned int stage = 0; stage < nSteps; stage++)
     {
-      compute_residual(stage);
-
       /* If in first stage, compute stable timestep */
       if (stage == 0)
       {
@@ -1615,6 +1648,11 @@ void FRSolver::update(const mdvector_gpu<double> &source)
           compute_element_dt();
         }
       }
+
+      if (stage > 0)
+        move(input->time + rk_alpha(stage-1)*dt(0));
+
+      compute_residual(stage);
 
 #ifdef _CPU
       if (source.size() == 0)
@@ -1683,15 +1721,19 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
     }
 
+    double fac = (nStages > 1) ? rk_alpha(nStages-2) : 0.0;
+
+    move(input->time + fac*dt(0));
+
     /* Final stage combining residuals for full Butcher table style RK timestepping*/
     if (input->dt_scheme != "RKj")
     {
       compute_residual(nStages-1);
 #ifdef _CPU
-//      if (nStages > 1)
+      if (nStages > 1)
         eles->U_spts = U_ini;
-//      else if (input->dt_type != 0)
-//        compute_element_dt();
+      else if (input->dt_type != 0)
+        compute_element_dt();
 #endif
 #ifdef _GPU
       device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.max_size());
@@ -1844,6 +1886,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     }
   }
 
+  input->time += dt(0);
   flow_time += dt(0);
   current_iter++;
 }
@@ -2041,8 +2084,8 @@ void FRSolver::write_solution(const std::string &_prefix)
   if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
 
   std::stringstream ss;
-#ifdef _MPI
 
+#ifdef _MPI
   /* Write .pvtu file on rank 0 if running in parallel */
   if (input->rank == 0)
   {
@@ -2081,6 +2124,11 @@ void FRSolver::write_solution(const std::string &_prefix)
     if (input->filt_on && input->sen_write)
     {
       f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+    if (input->motion)
+    {
+      f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" format=\"ascii\"/>";
       f << std::endl;
     }
 
@@ -2303,7 +2351,6 @@ void FRSolver::write_solution(const std::string &_prefix)
         for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
         {
           f << std::scientific << std::setprecision(16);
-//          f << geo.iblank_cell(ele);
           f << eles->U_ppts(ppt, ele, n);
           f << " ";
         }
@@ -2313,6 +2360,7 @@ void FRSolver::write_solution(const std::string &_prefix)
       f << "</DataArray>" << std::endl;
     }
   }
+
   if (input->filt_on && input->sen_write)
   {
 #ifdef _GPU
@@ -2331,15 +2379,34 @@ void FRSolver::write_solution(const std::string &_prefix)
     f << "</DataArray>" << std::endl;
   }
 
+  if (input->motion)
+  {
+    eles->get_grid_velocity_ppts();
+
+    f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        for (unsigned int dim = 0; dim < eles->nDims; dim++)
+        {
+          f << std::scientific << std::setprecision(16) << eles->grid_vel_ppts(ppt, ele, 0);
+          f  << " ";
+        }
+        if (eles->nDims == 2) f << 0.0 << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
 
   f << "</PointData>" << std::endl;
   f << "</Piece>" << std::endl;
   f << "</UnstructuredGrid>" << std::endl;
   f << "</VTKFile>" << std::endl;
   f.close();
-
-//  if (input->gridID == 0 && input->rank == 0)
-//    std::cout << "  Done." << std::endl;
 }
 
 void FRSolver::write_color()
@@ -3126,4 +3193,13 @@ void FRSolver::filter_solution()
     filt.apply_sensor();
     status = filt.apply_filter(level);
   }
+}
+
+void FRSolver::move(double time)
+{
+  if (!input->motion) return;
+
+  move_grid(input, geo, time);
+
+  eles->move(faces);
 }

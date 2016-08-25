@@ -32,7 +32,8 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
       */
       
-      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y);
+      //val =  std::sin(2 * M_PI * x/10.) + std::sin(2 * M_PI * y/10.);
+      val = std::exp(-x*x-y*y);
 
       //val =  step((x - input->AdvDiff_A(0) * t));
     }

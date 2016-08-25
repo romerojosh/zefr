@@ -46,6 +46,8 @@ struct GeoStruct
     mdvector<unsigned int> face_nodes;
     mdvector<int> ele_adj;
 
+    mdvector<double> grid_vel_nodes, coords_init;
+
     unsigned int nColors;
     mdvector<unsigned int> ele_color;
 
@@ -110,9 +112,6 @@ struct GeoStruct
     int gridRank;         //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
     int rank;
     int nproc;
-
-public:
-
 };
 
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in);
@@ -132,5 +131,7 @@ void shuffle_data_by_color(GeoStruct &geo);
 #ifdef _MPI
 void partition_geometry(InputStruct *input, GeoStruct &geo);
 #endif
+
+void move_grid(InputStruct *input, GeoStruct &geo, double time);
 
 #endif /* geometry_hpp */

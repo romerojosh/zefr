@@ -75,6 +75,8 @@ void load_mesh_data(InputStruct *input, GeoStruct &geo)
   /* Load node coordinate data */
   read_node_coords(f, geo);
 
+  if (input->motion)
+    geo.coords_init = geo.coord_nodes;
 
   /* Load element connectivity data */
   read_element_connectivity(f, geo, input);
@@ -188,7 +190,7 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo)
       f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> vdouble;
     else if (geo.nDims == 3)
       f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> geo.coord_nodes(2,node);
-  }
+  }   
 }
 
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input)
@@ -778,7 +780,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
       /* Sort for consistency and add to map*/
       std::sort(face.begin(), face.end());
-//      if (bcType != OVERSET)
       geo.bnd_faces[face] = bcType;
     }
   }
@@ -857,7 +858,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       int bcType = geo.bnd_ids[bnd_id];
 
       std::sort(face.begin(), face.end());
-//      if (bcType != OVERSET)
       geo.bnd_faces[face] = bcType;
     }
 
@@ -1433,6 +1433,17 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
     if (input->overset)
     {
+      // Find any additional surfaces used for closing wall/overset volumes
+      for (auto &bnd : geo.bnd_faces)
+      {
+        if (bnd.second == WALL_CLOSURE)
+          for (auto &pt : bnd.first)
+            wallPts.insert(pt);
+        else if (bnd.second == OVERSET_CLOSURE)
+          for (auto &pt : bnd.first)
+            overPts.insert(pt);
+      }
+
       geo.nWall = wallPts.size();
       geo.nOver = overPts.size();
       geo.wallNodes.resize(0);
@@ -2080,6 +2091,8 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     idx++;
   }
 
+  if (input->motion) geo.coords_init = geo.coord_nodes;
+
   /* Renumber connectivity data using partition local indexing (via geo.node_map_g2p)*/
   for (unsigned int ele = 0; ele < myEles.size(); ele++)
     for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
@@ -2156,3 +2169,131 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     std::cout << "Total # MPI Faces: " << mpi_faces_glob.size() << std::endl;
 }
 #endif
+
+void move_grid(InputStruct *input, GeoStruct &geo, double time)
+{
+  uint nNodes = geo.nNodes;
+
+  switch (input->motion_type)
+  {
+    case 1:
+    {
+      double t0 = 10;
+      double Atx = 2;
+      double Aty = 2;
+      double DX = 5;/// 0.5 * input->periodicDX; /// TODO
+      double DY = 5;/// 0.5 * input->periodicDY; /// TODO
+      #pragma omp parallel for
+      for (int node = 0; node < nNodes; node++)
+      {
+        /// Taken from Kui, AIAA-2010-5031-661
+        double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node);
+        geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
+        geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
+        geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
+        geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
+      }
+      break;
+    }
+    case 2:
+    {
+      double t0 = 10.*sqrt(5.);
+      double DX = 5;
+      double DY = 5;
+      double DZ = 5;
+      double Atx = 4;
+      double Aty = 8;
+      double Atz = 4;
+      if (geo.nDims == 2)
+      {
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes; node++)
+        {
+          /// Taken from Liang-Miyaji
+          double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node);
+          geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
+          geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
+          geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
+          geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
+        }
+      }
+      else
+      {
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes; node++)
+        {
+          /// Taken from Liang-Miyaji
+          double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node); double z0 = geo.coords_init(2,node);
+          geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atx*pi*time/t0);
+          geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Aty*pi*time/t0);
+          geo.coord_nodes(2,node) = z0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atz*pi*time/t0);
+          geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atx*pi*time/t0);
+          geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Aty*pi*time/t0);
+          geo.grid_vel_nodes(2,node) = Atz*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atz*pi*time/t0);
+        }
+      }
+      break;
+    }
+    case 3:
+    {
+      if (geo.gridID==0)
+      {
+        /// Liangi-Miyaji with easily-modifiable domain width
+        double t0 = 10.*sqrt(5.);
+        double width = 5.;
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes; node++)
+        {
+          geo.coord_nodes(0,node) = geo.coords_init(0,node) + sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*sin(4*pi*time/t0);
+          geo.coord_nodes(1,node) = geo.coords_init(1,node) + sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*sin(8*pi*time/t0);
+          geo.grid_vel_nodes(0,node) = 4.*pi/t0*sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*cos(4*pi*time/t0);
+          geo.grid_vel_nodes(1,node) = 8.*pi/t0*sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*cos(8*pi*time/t0);
+        }
+      }
+      break;
+    }
+    case 4:
+    {
+      /// Rigid oscillation in a circle
+      if (geo.gridID == 0)
+      {
+        double Ax = input->moveAx; // Amplitude  (m)
+        double Ay = input->moveAy; // Amplitude  (m)
+        double fx = input->moveFx; // Frequency  (Hz)
+        double fy = input->moveFy; // Frequency  (Hz)
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes ; node++)
+        {
+          geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
+          geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
+          geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
+          geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
+        }
+      }
+      break;
+    }
+    case 5:
+    {
+      /// Radial Expansion / Contraction
+      if (geo.gridID == 0) {
+        double Ar = 0;///input->moveAr; /// TODO
+        double Fr = 0;///input->moveFr; /// TODO
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes ; node++)
+        {
+          double r = 1;///rv0(node,0) + Ar*(1. - cos(2.*pi*Fr*time)); /// TODO
+          double rdot = 2.*pi*Ar*Fr*sin(2.*pi*Fr*time);
+          double theta = 1;///rv0(node,1); /// TODO
+          double psi = 1;///rv0(node,2); /// TODO
+          geo.coord_nodes(0,node) = r*sin(psi)*cos(theta);
+          geo.coord_nodes(1,node) = r*sin(psi)*sin(theta);
+          geo.coord_nodes(2,node) = r*cos(psi);
+          geo.grid_vel_nodes(0,node) = rdot*sin(psi)*cos(theta);
+          geo.grid_vel_nodes(1,node) = rdot*sin(psi)*sin(theta);
+          geo.grid_vel_nodes(2,node) = rdot*cos(psi);
+        }
+      }
+      break;
+    }
+  }
+}

@@ -100,6 +100,12 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   dA.assign({nFpts},0.0);
   jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
 
+  /* Moving-grid-related structures */
+  if (input->motion)
+  {
+    Vg.assign({nFpts, nDims, 2}, 0.0);
+  }
+
 #ifdef _MPI
   /* Allocate memory for send/receive buffers */
   for (const auto &entry : geo->fpt_buffer_map)
@@ -1972,12 +1978,6 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
           Fvisc(fpt, 4, 2, slot) = -(u * tauxz + v * tauyz + w * tauzz + (mu / input->prandtl) *
               input->gamma * de_dz);
         }
-
-//        if (input->rank == 3 && fpt==6851)
-//        {
-//          printf("FPT %d: Fvisc(1,1) [L/R] = %f / %f\n",fpt,Fvisc(fpt,1,1,0),Fvisc(fpt,1,1,1));
-//        }
-
       }
     }
 #endif
@@ -2176,6 +2176,14 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
     }
 
+    double eig = 0;
+    double Vgn = 0;
+    if (input->motion)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        Vgn += Vg(fpt, dim, 0) * norm(fpt, dim, 0);
+    }
+
     /* Get numerical wavespeed */
     if (input->equation == AdvDiff)
     {
@@ -2186,7 +2194,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = std::abs(An);
+      eig = std::abs(An);
+      waveSp(fpt) = std::abs(An - Vgn);
     }
     else if (input->equation == Burgers)
     {
@@ -2199,7 +2208,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         AnR += WR[0] * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = std::max(std::abs(AnL), std::abs(AnR));
+      eig = std::max(std::abs(AnL), std::abs(AnR));
+      waveSp(fpt) = std::max(std::abs(AnL - Vgn), std::abs(AnR - Vgn));
     }
     else if (input->equation == EulerNS)
     {
@@ -2215,7 +2225,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      eig = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      waveSp(fpt) = std::max(std::abs(VnL-Vgn) + aL, std::abs(VnR-Vgn) + aR);
     }
 
     /* Compute common normal flux */
@@ -2223,7 +2234,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
+        double F = (0.5 * (FR[n]+FL[n]) - 0.5 * eig * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
 
         /* Correct for positive parent space sign convention */
         Fcomm(fpt, n, 0) = F;

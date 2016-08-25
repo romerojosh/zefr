@@ -257,6 +257,28 @@ double Quads::calc_d_nodal_basis_spts(unsigned int spt,
 
 }
 
+double Quads::calc_d_nodal_basis_fr(unsigned int spt,
+              const std::vector<double> &loc, unsigned int dim)
+{
+  /* Get indices for Lagrange polynomial evaluation */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+
+  double val = 0.0;
+
+  if (dim == 0)
+  {
+      val = Lagrange_d1(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
+  }
+  else
+  {
+      val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange_d1(loc_spts_1D, j, loc[1]);
+  }
+
+  return val;
+
+}
+
 double Quads::calc_d_nodal_basis_fpts(unsigned int fpt,
               const std::vector<double> &loc, unsigned int dim)
 {
@@ -399,11 +421,11 @@ void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
       {
         double dUtemp = dU_spts(spt, ele, n, 0);
 
-        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) - 
-                                  dU_spts(spt, ele, n, 1) * jaco_spts(1, 0, spt, ele); 
+        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(spt, ele, 1, 1) -
+                                  dU_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 1, 0);
 
-        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
-                                  dUtemp * jaco_spts(0, 1, spt, ele);
+        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 0) -
+                                  dUtemp * jaco_spts(spt, ele, 0, 1);
 
         dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
         dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
@@ -435,10 +457,10 @@ void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
       {
         double Ftemp = F_spts(spt, ele, n, 0);
 
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
-                                 F_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
-        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
-                                 Ftemp * jaco_spts(1, 0, spt, ele);
+        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(spt, ele, 1, 1)
+                               - F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 1);
+        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 0)
+                               - Ftemp * jaco_spts(spt, ele, 1, 0);
       }
     }
   }
@@ -471,10 +493,10 @@ void Quads::transform_dFdU()
         {
           double dFdUtemp = dFdU_spts(spt, ele, ni, nj, 0);
 
-          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * jaco_spts(1, 1, spt, ele) -
-                                           dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 1, spt, ele);
-          dFdU_spts(spt, ele, ni, nj, 1) = dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 0, spt, ele) -
-                                           dFdUtemp * jaco_spts(1, 0, spt, ele);
+          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * jaco_spts(spt, ele, 1, 1) -
+                                           dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(spt, ele, 0, 1);
+          dFdU_spts(spt, ele, ni, nj, 1) = dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(spt, ele, 0, 0) -
+                                           dFdUtemp * jaco_spts(spt, ele, 1, 0);
         }
       }
     }

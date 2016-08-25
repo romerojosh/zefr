@@ -74,6 +74,8 @@ class Faces
     mdvector<int> LDG_bias;
     std::vector<double> FL, FR, WL, WR;
 
+    mdvector<double> Vg;  //! Grid velocity
+
     /* Structures for implicit method */
     bool CPU_flag; // Temporary flag for global implicit method
     mdvector<double> dFdUconv, dFdUvisc, dFddUvisc; 

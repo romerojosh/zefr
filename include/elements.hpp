@@ -48,11 +48,17 @@ class Elements
     mdvector<double> jaco_spts, jaco_det_spts, inv_jaco_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
     mdvector<double> jaco_fpts, jaco_det_fpts, inv_jaco_fpts;
-    mdvector<double> nodes, nodesRK;
+    mdvector<double> nodes;
     mdvector<double> vol;
     mdvector<double> weights_spts;
     mdvector<double> h_ref;
     std::vector<double> weights_qpts;
+
+    /* Moving-Grid related structures */
+    mdvector<double> grid_vel_nodes, grid_vel_spts, grid_vel_fpts, grid_vel_ppts;
+    mdvector<double> dF_spts;
+    mdvector<double> oppD0, oppE_Fn;
+    mdvector<double> dFn_fpts, tempF_fpts;
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
@@ -98,6 +104,10 @@ class Elements
     mdvector_gpu<double> weights_spts_d;
     mdvector_gpu<double> h_ref_d;
 
+    /* Motion Related */
+    mdvector_gpu<double> grid_vel_nodes_d, grid_vel_spts_d, grid_vel_fpts_d, grid_vel_ppts_d;
+    mdvector_gpu<double> gradF_spts;
+
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
 
@@ -132,6 +142,8 @@ class Elements
     virtual double calc_d_nodal_basis_fpts(unsigned int fpt,
                    const std::vector<double> &loc, unsigned int dim) = 0;
 
+    virtual double calc_d_nodal_basis_fr(unsigned int spt,
+                   const std::vector<double>& loc, unsigned int dim) = 0;
 
   public:
     void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
@@ -186,6 +198,20 @@ class Elements
     void donor_u_from_device(int* donorIDs, int nDonors);
     void donor_grad_from_device(int* donorIDs, int nDonors);
 #endif
+
+    void move(std::shared_ptr<Faces> faces);
+    void update_point_coords(std::shared_ptr<Faces> faces);
+    void update_grid_velocities(std::shared_ptr<Faces> faces);
+    void compute_gradF_spts(unsigned int startEle, unsigned int endEle);
+    void transform_gradF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void compute_dU0(unsigned int startEle, unsigned int endEle);
+
+    //! Extrapolated discontinuous normal flux to get delta-Fn at fpts
+    void extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::shared_ptr<Faces> faces);
+
+    //! 'Standard' (non-DFR) correction procedure
+    void correct_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void get_grid_velocity_ppts(void);
 };
 
 #endif /* elements_hpp */

@@ -42,6 +42,7 @@ class Quads: public Elements
 
     /* Routines for implicit method */
     void transform_dFdU();
+    double calc_d_nodal_basis_fr(unsigned int spt, const std::vector<double>& loc, unsigned int dim);
 };
 
 #endif /* quads_hpp */

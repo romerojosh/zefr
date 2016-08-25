@@ -121,6 +121,8 @@ class FRSolver
     void write_color();
 
     void (*overset_interp)(int nVars, double* U_spts, double* U_fpts, int gradFlag);
+
+    void move(double time);
 };
 
 #endif /* solver_hpp */

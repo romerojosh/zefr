@@ -69,7 +69,9 @@ enum BC_TYPE {
   ADIABATIC_NOSLIP_MOVING_G,
   OVERSET,
   SYMMETRY_P,
-  SYMMETRY_G
+  SYMMETRY_G,
+  WALL_CLOSURE,
+  OVERSET_CLOSURE
 };
 
 extern std::map<std::string,int> bcStr2Num;

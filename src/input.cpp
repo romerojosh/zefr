@@ -30,6 +30,8 @@ std::map<std::string,int> bcStr2Num = {
   {"overset", OVERSET},
   {"symmetry_p", SYMMETRY_P},
   {"symmetry_g", SYMMETRY_G},
+  {"wall_closure", WALL_CLOSURE},
+  {"overset_closure", OVERSET_CLOSURE},
 };
 
 InputStruct read_input_file(std::string inputfile)
@@ -169,6 +171,17 @@ InputStruct read_input_file(std::string inputfile)
   read_param_vec(f, "overset_grids", input.oversetGrids);
 
   read_param(f, "motion", input.motion, false);
+  if (input.motion)
+  {
+    read_param(f, "motion_type", input.motion_type);
+    if (input.motion_type == 4)
+    {
+      read_param(f, "moveAx", input.moveAx);
+      read_param(f, "moveAy", input.moveAy);
+      read_param(f, "moveFx", input.moveFx);
+      read_param(f, "moveFy", input.moveFy);
+    }
+  }
 
   f.close();
 
