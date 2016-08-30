@@ -91,6 +91,25 @@ void transform_dFdU_hexa_wrapper(mdvector_gpu<double> &dFdU_spts,
     unsigned int nEles, unsigned int nVars, unsigned int nDims,
     unsigned int equation);
 
+void transform_gradF_quad_wrapper(mdvector_gpu<double> &divF_spts,
+    mdvector_gpu<double> &dF_spts, mdvector_gpu<double> &jaco_spts,
+    mdvector_gpu<double> &grid_vel_spts, mdvector_gpu<double> &dU_spts,
+    unsigned int nSpts, unsigned int nEles, unsigned int stage,
+    unsigned int equation, bool overset = false, int* iblank = NULL);
+
+void transform_gradF_hexa_wrapper(mdvector_gpu<double> &divF_spts,
+    mdvector_gpu<double> &dF_spts, mdvector_gpu<double> &jaco_spts,
+    mdvector_gpu<double> &grid_vel_spts, mdvector_gpu<double> &dU_spts,
+    unsigned int nSpts, unsigned int nEles, unsigned int stage,
+    unsigned int equation, bool overset = false, int* iblank = NULL);
+
+void extrapolate_Fn_wrapper(mdvector_gpu<double> oppE,
+    mdvector_gpu<double> F_spts, mdvector_gpu<double> tempF_fpts,
+    mdvector_gpu<double> dFn_fpts, mdvector_gpu<double> norm,
+    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt,
+    mdvector_gpu<int> fpt2slot, unsigned int nSpts, unsigned int nFpts,
+    unsigned int nEles, unsigned int nDims, unsigned int nVars, bool motion);
+
 /* Additional wrappers */
 void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 
     mdvector_gpu<double> &Uavg, mdvector_gpu<double> &jaco_det_spts, 
@@ -103,10 +122,36 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
     unsigned int nFpts, unsigned int nEles, unsigned int nVars,
     unsigned int nDims);
 
+//! Update point coordinates or velocities for moving grids
+void update_coords_wrapper(mdvector_gpu<double> &nodes,
+    mdvector_gpu<double> &g_nodes,  mdvector_gpu<double> &shape_spts,
+    mdvector_gpu<double> &shape_fpts, mdvector_gpu<double> &coord_spts,
+    mdvector_gpu<double> &coord_fpts, mdvector_gpu<double> &coord_faces,
+    mdvector_gpu<int> &ele2node, mdvector_gpu<int> fpt2gfpt, unsigned int nSpts,
+    unsigned int nFpts, unsigned int nNodes, unsigned int nEles,
+    unsigned int nDims);
+
+void update_h_ref_wrapper(mdvector_gpu<double>& h_ref,
+    mdvector_gpu<double>& coord_fpts, unsigned int nEles, unsigned int nFpts, unsigned int nPts1D,
+    unsigned int nDims);
+
+void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &jaco_spts,
+    mdvector_gpu<double> &jaco_fpts, mdvector_gpu<double> &inv_jaco_spts,
+    mdvector_gpu<double> &inv_jaco_fpts, mdvector_gpu<double> &jaco_det_spts,
+    mdvector_gpu<double> &dshape_spts, mdvector_gpu<double> &dshape_fpts,
+    int nSpts, int nFpts, int nNodes, int nEles, int nDims);
+
+void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
+    mdvector_gpu<double> &inv_jaco, mdvector_gpu<double> &tnorm,
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2slot, int nFpts,
+    int nEles, int nDims);
+
+//! For overset grid interpolation
 void pack_donor_u_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars);
 
+//! For overset grid interpolation
 void pack_donor_grad_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars, unsigned int nDims);

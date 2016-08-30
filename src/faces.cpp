@@ -103,7 +103,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Moving-grid-related structures */
   if (input->motion)
   {
-    Vg.assign({nFpts, nDims, 2}, 0.0);
+    Vg.assign({nFpts, nDims}, 0.0);
   }
 
 #ifdef _MPI
@@ -173,13 +173,13 @@ void Faces::apply_bcs()
 {
 #ifdef _CPU
   /* Create some useful variables outside loop */
-  std::array<double, 3> VL, VR;
+  std::array<double, 3> VL, VR, VG;
 
   /* Loop over boundary flux points */
 #pragma omp parallel for private(VL,VR)
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-//    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -440,6 +440,12 @@ void Faces::apply_bcs()
         for (unsigned int dim = 0; dim < nDims; dim++)
           momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN[dim] -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+        }
+
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Set boundary state with cancelled normal velocity */
@@ -477,6 +483,12 @@ void Faces::apply_bcs()
         for (unsigned int dim = 0; dim < nDims; dim++)
           momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+        }
+
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Set boundary state to reflect normal velocity */
@@ -504,6 +516,12 @@ void Faces::apply_bcs()
           momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
         }
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            VG[dim] = U(fpt, 0, 0) * Vg(fpt, dim);
+        }
+
         momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momF);
@@ -513,9 +531,9 @@ void Faces::apply_bcs()
         
         U(fpt, 0, 1) = PR / (input->R_ref * TR);
 
-        /* Set velocity to zero */
+        /* Set velocity to zero (or wall velocity) */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = 0.0;
+          U(fpt, dim+1, 1) = VG[dim];
 
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
 
@@ -597,14 +615,20 @@ void Faces::apply_bcs()
           momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
         }
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            VG[dim] = U(fpt, 0, 0) * Vg(fpt, dim);
+        }
+
         momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = PL; 
 
-        /* Set right state (common) velocity to zero */
+        /* Set right state (common) velocity to zero (or wall velocity) */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = 0.0;
+          U(fpt, dim+1, 1) = VG[dim];
 
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
 
@@ -2003,8 +2027,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
-        dA_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
-        input->overset, geo->iblank_fpts_d.data());
+        dA_d, Vg_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
+        input->motion, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
 
@@ -2181,7 +2205,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     if (input->motion)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
-        Vgn += Vg(fpt, dim, 0) * norm(fpt, dim, 0);
+        Vgn += Vg(fpt, dim) * norm(fpt, dim, 0);
     }
 
     /* Get numerical wavespeed */

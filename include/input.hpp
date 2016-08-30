@@ -16,6 +16,8 @@
 #define _mpi_comm int
 #endif
 
+extern double pi;
+
 enum EQN {AdvDiff = 0, EulerNS = 1, Burgers = 2};
 
 /*! Enumeration for original, mesh-file-defined face type */

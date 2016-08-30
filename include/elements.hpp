@@ -100,13 +100,18 @@ class Elements
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, divF_spts_d;
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;
+    mdvector_gpu<double> jaco_fpts_d, inv_jaco_fpts_d;
     mdvector_gpu<double> vol_d;
     mdvector_gpu<double> weights_spts_d;
     mdvector_gpu<double> h_ref_d;
 
     /* Motion Related */
     mdvector_gpu<double> grid_vel_nodes_d, grid_vel_spts_d, grid_vel_fpts_d, grid_vel_ppts_d;
-    mdvector_gpu<double> gradF_spts;
+    mdvector_gpu<double> nodes_d, shape_spts_d, shape_fpts_d, dshape_spts_d, dshape_fpts_d;
+    mdvector_gpu<double> tnorm_d;
+    mdvector_gpu<double> dF_spts_d;
+    mdvector_gpu<double> oppD0_d, oppE_Fn_d;
+    mdvector_gpu<double> dFn_fpts_d, tempF_fpts_d;
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;

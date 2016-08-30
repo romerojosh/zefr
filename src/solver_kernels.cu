@@ -20,6 +20,8 @@
 #define FRINGE -1
 #define NORMAL 1
 
+#define PI 3.141592653589793
+
 static const unsigned int MAX_GRID_DIM = 65535;
 
 /* Create handles for default (0) and concurrent (1-16) streams */
@@ -63,6 +65,7 @@ template void allocate_device_data<double>(double* &device_data, unsigned int si
 template void allocate_device_data<double*>(double** &device_data, unsigned int size);
 template void allocate_device_data<unsigned int>(unsigned int* &device_data, unsigned int size);
 template void allocate_device_data<int>(int* &device_data, unsigned int size);
+template void allocate_device_data<MotionVars>(MotionVars* &device_data, unsigned int size);
 
 
 template <typename T>
@@ -76,6 +79,7 @@ template void free_device_data<double>(double* &device_data);
 template void free_device_data<double*>(double** &device_data);
 template void free_device_data<unsigned int>(unsigned int* &device_data);
 template void free_device_data<int>(int* &device_data);
+template void free_device_data<MotionVars>(MotionVars* &device_data);
 
 template <typename T>
 void copy_to_device(T* device_data, const T* host_data, unsigned int size, int stream)
@@ -87,7 +91,6 @@ void copy_to_device(T* device_data, const T* host_data, unsigned int size, int s
   else 
   {
     cudaMemcpyAsync(device_data, host_data, size * sizeof(T), cudaMemcpyHostToDevice, stream_handles[stream]);
-
   }
   check_error();
 }
@@ -97,6 +100,7 @@ template void copy_to_device<double>(double* device_data, const double* host_dat
 template void copy_to_device<double*>(double** device_data, double* const* host_data, unsigned int size, int stream);
 template void copy_to_device<unsigned int>(unsigned int* device_data, const unsigned int* host_data, unsigned int size, int stream);
 template void copy_to_device<int>(int* device_data, const int* host_data,  unsigned int size, int stream);
+template void copy_to_device<MotionVars>(MotionVars* device_data, const MotionVars* host_data,  unsigned int size, int stream);
 
 template <typename T>
 void copy_from_device(T* host_data, const T* device_data, unsigned int size, int stream)
@@ -181,6 +185,12 @@ void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* 
     int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream)
 {
   cublasDgemm(cublas_handles[stream], CUBLAS_OP_N, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
+}
+
+void cublasDGEMM_transA_wrapper(int M, int N, int K, const double alpha, const double* A,
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream)
+{
+  cublasDgemm(cublas_handles[stream], CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
@@ -1092,3 +1102,121 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 }
 
 #endif
+
+__global__
+void move_grid(mdvector_gpu<double> &coords, mdvector_gpu<double> coords_0, mdvector_gpu<double> &Vg,
+    MotionVars *params, unsigned int nNodes, unsigned int nDims, int motion_type, double time, int gridID = 0)
+{
+  unsigned int node = blockDim.x * blockIdx.x + threadIdx.x;
+
+  switch (motion_type)
+  {
+    case 1:
+    {
+      double t0 = 10;
+      double Atx = 2;
+      double Aty = 2;
+      double DX = 5;/// 0.5 * input->periodicDX; /// TODO
+      double DY = 5;/// 0.5 * input->periodicDY; /// TODO
+      /// Taken from Kui, AIAA-2010-5031-661
+      double x0 = coords_0(0,node); double y0 = coords_0(1,node);
+      coords(0,node) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);
+      coords(1,node) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Aty*PI*time/t0);
+      Vg(0,node) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Atx*PI*time/t0);
+      Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
+      break;
+    }
+    case 2:
+    {
+      double t0 = 10.*sqrt(5.);
+      double DX = 5;
+      double DY = 5;
+      double DZ = 5;
+      double Atx = 4;
+      double Aty = 8;
+      double Atz = 4;
+      if (nDims == 2)
+      {
+        /// Taken from Liang-Miyaji
+        double x0 = coords_0(0,node); double y0 = coords_0(1,node);
+        coords(0,node) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);
+        coords(1,node) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Aty*PI*time/t0);
+        Vg(0,node) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Atx*PI*time/t0);
+        Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
+      }
+      else
+      {
+        /// Taken from Liang-Miyaji
+        double x0 = coords_0(0,node); double y0 = coords_0(1,node); double z0 = coords_0(2,node);
+        coords(0,node) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Atx*PI*time/t0);
+        coords(1,node) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Aty*PI*time/t0);
+        coords(2,node) = z0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Atz*PI*time/t0);
+        Vg(0,node) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Atx*PI*time/t0);
+        Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Aty*PI*time/t0);
+        Vg(2,node) = Atz*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Atz*PI*time/t0);
+      }
+      break;
+    }
+    case 3:
+    {
+      if (gridID==0)
+      {
+        /// Liangi-Miyaji with easily-modifiable domain width
+        double t0 = 10.*sqrt(5.);
+        double width = 5.;
+        coords(0,node) = coords_0(0,node) + sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*sin(4*PI*time/t0);
+        coords(1,node) = coords_0(1,node) + sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*sin(8*PI*time/t0);
+        Vg(0,node) = 4.*PI/t0*sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*cos(4*PI*time/t0);
+        Vg(1,node) = 8.*PI/t0*sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*cos(8*PI*time/t0);
+      }
+      break;
+    }
+    case 4:
+    {
+      /// Rigid oscillation in a circle
+      if (gridID == 0)
+      {
+        double Ax = params->moveAx; // Amplitude  (m)
+        double Ay = params->moveAy; // Amplitude  (m)
+        double fx = params->moveFx; // Frequency  (Hz)
+        double fy = params->moveFy; // Frequency  (Hz)
+        coords(0,node) = coords_0(0,node) + Ax*sin(2.*PI*fx*time);
+        coords(1,node) = coords_0(1,node) + Ay*(1-cos(2.*PI*fy*time));
+        Vg(0,node) = 2.*PI*fx*Ax*cos(2.*PI*fx*time);
+        Vg(1,node) = 2.*PI*fy*Ay*sin(2.*PI*fy*time);
+      }
+      break;
+    }
+    case 5:
+    {
+      /// Radial Expansion / Contraction
+      if (gridID == 0) {
+        double Ar = 0;///input->moveAr; /// TODO
+        double Fr = 0;///input->moveFr; /// TODO
+        double r = 1;///rv0(node,0) + Ar*(1. - cos(2.*pi*Fr*time)); /// TODO
+        double rdot = 2.*PI*Ar*Fr*sin(2.*PI*Fr*time);
+        double theta = 1;///rv0(node,1); /// TODO
+        double psi = 1;///rv0(node,2); /// TODO
+        coords(0,node) = r*sin(psi)*cos(theta);
+        coords(1,node) = r*sin(psi)*sin(theta);
+        coords(2,node) = r*cos(psi);
+        Vg(0,node) = rdot*sin(psi)*cos(theta);
+        Vg(1,node) = rdot*sin(psi)*sin(theta);
+        Vg(2,node) = rdot*cos(psi);
+      }
+      break;
+    }
+  }
+}
+
+void move_grid_wrapper(mdvector_gpu<double> &coords,
+    mdvector_gpu<double> coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
+    unsigned int nNodes, unsigned int nDims, int motion_type, double time,
+    int gridID)
+{
+  int threads = 192;
+  int blocks = (nNodes + threads - 1) / threads;
+
+  move_grid<<<blocks, threads>>>(coords, coords_0, Vg, params, nNodes, nDims,
+      motion_type, time, gridID);
+}

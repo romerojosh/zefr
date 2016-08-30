@@ -41,9 +41,9 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     {
       
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
-             std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
-             std::sin(M_PI * (y - input->AdvDiff_A(1) * t))*
-             std::sin(M_PI * (z - input->AdvDiff_A(2) * t));
+             std::sin(.2 * M_PI * (x - input->AdvDiff_A(0) * t))*
+             std::sin(.2 * M_PI * (y - input->AdvDiff_A(1) * t))*
+             std::sin(.2 * M_PI * (z - input->AdvDiff_A(2) * t));
       
       //val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
     }
@@ -59,7 +59,7 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
 
       double rho = std::pow(1.0 - (G * G * (input->gamma - 1.))/(8.0 * input->gamma * 
                 M_PI * M_PI) * std::exp(f), 1.0/(input->gamma - 1.0)); 
-      double Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f); 
+      double Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f);
       double Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
       double P = std::pow(rho, input->gamma);
 

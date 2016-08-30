@@ -86,6 +86,11 @@ class FRSolver
 
     void compute_element_dt();
 
+#ifdef _GPU
+    // For moving grids
+    MotionVars *motion_vars, *motion_vars_d;
+#endif
+
   public:
     double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);

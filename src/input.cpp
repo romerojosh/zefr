@@ -7,6 +7,8 @@
 #include "input.hpp"
 #include "macros.hpp"
 
+double pi = 3.141592653589793;
+
 std::map<std::string,int> bcStr2Num = {
   {"none", NONE},
   {"fluid", NONE},
@@ -127,7 +129,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "AdvDiff_Ax", input.AdvDiff_A(0), 1.0);
   read_param(f, "AdvDiff_Ay", input.AdvDiff_A(1), 1.0);
   read_param(f, "AdvDiff_Az", input.AdvDiff_A(2), 1.0);
-  read_param(f, "AdvDiff_D", input.AdvDiff_D, 0.1);
+  if (input.viscous)
+    read_param(f, "AdvDiff_D", input.AdvDiff_D, 0.1);
+  else
+    input.AdvDiff_D = 0;
 
   read_param(f, "T_gas", input.T_gas, 291.15);
   read_param(f, "gamma", input.gamma, 1.4);

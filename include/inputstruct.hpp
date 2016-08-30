@@ -111,7 +111,8 @@ struct InputStruct
   unsigned int oversetMethod, nGrids, quad_order, motion_type;
   std::vector<std::string> oversetGrids;
 
-  double moveAx, moveAy, moveFx, moveFy;
+  double moveAx, moveAy, moveAz;
+  double moveFx, moveFy, moveFz;
 
   /* --- Additional Mesh Variables --- */
   std::map<std::string,std::string> meshBounds;

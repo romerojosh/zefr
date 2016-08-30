@@ -113,6 +113,8 @@ class Faces
     mdvector_gpu<double> dA_d, waveSp_d, diffCo_d;
     mdvector_gpu<int> LDG_bias_d;
 
+    mdvector_gpu<double> Vg_d;
+
     /* Structures for implicit method */
     mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;
     mdvector_gpu<double> dFcdU_d, dUcdU_d;

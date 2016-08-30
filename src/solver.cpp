@@ -26,6 +26,10 @@
 #include "mpi.h"
 #endif
 
+#ifdef _BUILD_LIB
+#include "tiogaInterface.h"
+#endif
+
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
@@ -37,7 +41,6 @@
 #include <jama_lu.h>
 #endif
 
-//FRSolver::FRSolver(const InputStruct *input, int order)
 FRSolver::FRSolver(InputStruct *input, int order)
 {
   this->input = input;
@@ -511,16 +514,42 @@ void FRSolver::solver_data_to_device()
   if (input->viscous)
   {
     eles->Ucomm_d = eles->Ucomm;
-    eles->dU_spts_d = eles->dU_spts;
     eles->dU_fpts_d = eles->dU_fpts;
+  }
+
+  if (input->viscous or input->motion)
+  {
+    eles->dU_spts_d = eles->dU_spts;
   }
 
   if (input->motion)
   {
-    eles->grid_vel_nodes_d eles->grid_vel_nodes;
-    eles->grid_vel_spts_d eles->grid_vel_spts;
-    eles->grid_vel_fpts_d eles->grid_vel_fpts;
-    eles->gradF_spts_d = eles->gradF_spts;
+    eles->grid_vel_nodes_d = eles->grid_vel_nodes;
+    eles->grid_vel_spts_d = eles->grid_vel_spts;
+    eles->grid_vel_fpts_d = eles->grid_vel_fpts;
+    eles->shape_spts_d = eles->shape_spts;
+    eles->shape_fpts_d = eles->shape_fpts;
+    eles->dshape_spts_d = eles->dshape_spts;
+    eles->dshape_fpts_d = eles->dshape_fpts;
+    eles->jaco_spts_d = eles->jaco_spts;
+    eles->inv_jaco_spts_d = eles->inv_jaco_spts;
+    eles->dF_spts_d = eles->dF_spts;
+    eles->dFn_fpts_d = eles->dFn_fpts;
+    eles->tempF_fpts_d = eles->tempF_fpts;
+
+    /* Moving-grid parameters for convenience / ease of future additions
+     * (add to input.hpp, then also here) */
+    motion_vars = new MotionVars[1];
+
+    motion_vars->moveAx = input->moveAx;
+    motion_vars->moveAy = input->moveAy;
+    motion_vars->moveAz = input->moveAz;
+    motion_vars->moveFx = input->moveFx;
+    motion_vars->moveFy = input->moveFy;
+    motion_vars->moveFz = input->moveFz;
+
+    allocate_device_data(motion_vars_d, sizeof(MotionVars));
+    copy_to_device(motion_vars_d, motion_vars, sizeof(MotionVars));
   }
 
   /* Solution data structures (faces) */
@@ -542,6 +571,12 @@ void FRSolver::solver_data_to_device()
     faces->Fvisc_d = faces->Fvisc;
   }
 
+  if (input->motion)
+  {
+    faces->Vg_d = faces->Vg;
+    faces->coord_d = faces->coord;
+  }
+
   /* Additional data */
   /* Geometry */
   geo.fpt2gfpt_d = geo.fpt2gfpt;
@@ -549,6 +584,12 @@ void FRSolver::solver_data_to_device()
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
   geo.coord_spts_d = geo.coord_spts;
+
+  if (input->motion)
+  {
+    geo.grid_vel_nodes_d = geo.grid_vel_nodes;
+    geo.coord_fpts_d = geo.coord_fpts;
+  }
 
   /* Input parameters */
   input->V_fs_d = input->V_fs;
@@ -581,8 +622,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
-  if (input->overset)
-    overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
+//  if (input->overset)
+//    overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
 
   /* Extrapolate solution to flux points */
   eles->extrapolate_U(startEle, endEle);
@@ -627,7 +668,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 #ifdef _MPI
   /* Transform solution point fluxes from physical to reference space */
-  if (!input->motion)
+  if (!input->motion) // || input->gridID != 0)
     eles->transform_flux(startEle, endEle);
 
   /* Compute convective flux and parent space common flux at non-MPI flux points */
@@ -636,7 +677,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
 
   /* Compute solution point contribution to divergence of flux */
-  if (input->motion)
+  if (input->motion) // and input->gridID == 0)
   {
     eles->compute_gradF_spts(startEle, endEle);
     eles->compute_dU0(startEle, endEle);
@@ -779,7 +820,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Copy common flux data from face local storage to element local storage */
   F_from_faces(startEle, endEle);
 
-  if (input->motion)
+  if (input->motion) // and input->gridID == 0)
   {
     /* Add standard FR correction to flux divergence (requires extrapolation) */
     eles->extrapolate_Fn(startEle, endEle, faces);
@@ -1163,6 +1204,7 @@ void FRSolver::initialize_U()
   {
     eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims, eles->nDims});
     eles->dFn_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+    eles->tempF_fpts.assign({eles->nFpts, eles->nEles});
   }
 
   /* Allocate memory for implicit method data structures */
@@ -1651,6 +1693,15 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
       if (stage > 0)
         move(input->time + rk_alpha(stage-1)*dt(0));
+
+#ifdef _BUILD_LIB
+      // Update the overset connectivity to the new grid positions
+      if (input->overset && input->motion)
+      {
+        tioga_preprocess_grids_();
+        tioga_performconnectivity_();
+      }
+#endif
 
       compute_residual(stage);
 
@@ -2619,15 +2670,15 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   std::vector<double> res(eles->nVars,0.0);
 
 #pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < eles->nVars; n++)
-    for (unsigned int ele =0; ele < eles->nEles; ele++)
-    {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-      {
-        eles->divF_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
-      }
-    }
+//  for (unsigned int n = 0; n < eles->nVars; n++)
+//    for (unsigned int ele =0; ele < eles->nEles; ele++)
+//    {
+//      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+//      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+//      {
+//        eles->divF_spts(spt, ele, n, 0) /= eles->jaco_det_spts(spt, ele);
+//      }
+//    }
 
   unsigned int nEles = 0;
   for (unsigned int n = 0; n < eles->nVars; n++)
@@ -2638,13 +2689,16 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
         if (input->res_type == 0)
-          res[n] = std::max(res[n], std::abs(eles->divF_spts(spt,ele,n,0)));
+          res[n] = std::max(res[n], std::abs(eles->divF_spts(spt,ele,n,0)
+                                             / eles->jaco_det_spts(spt, ele)));
 
         else if (input->res_type == 1)
-          res[n] += std::abs(eles->divF_spts(spt,ele,n,0));
+          res[n] += std::abs(eles->divF_spts(spt,ele,n,0)
+                             / eles->jaco_det_spts(spt, ele));
 
         else if (input->res_type == 2)
-          res[n] += eles->divF_spts(spt,ele,n,0) * eles->divF_spts(spt,ele,n,0);
+          res[n] += eles->divF_spts(spt,ele,n,0) * eles->divF_spts(spt,ele,n,0)
+                  / (eles->jaco_det_spts(spt, ele) * eles->jaco_det_spts(spt, ele));
       }
       nEles++;
     }
@@ -3199,7 +3253,14 @@ void FRSolver::move(double time)
 {
   if (!input->motion) return;
 
+#ifdef _CPU
   move_grid(input, geo, time);
+#endif
+
+#ifdef _GPU
+  move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
+      motion_vars_d, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
+#endif
 
   eles->move(faces);
 }

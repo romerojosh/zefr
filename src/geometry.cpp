@@ -2039,7 +2039,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       /* If two ranks assigned to same face, add to map of "MPI" faces */
       if (face2ranks[face].size() == 2)
       {
-        mpi_faces_glob[face] = face2ranks[face];  
+        mpi_faces_glob[face] = face2ranks[face];
       }
     }
   }
@@ -2257,18 +2257,18 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       /// Rigid oscillation in a circle
       if (geo.gridID == 0)
       {
-        double Ax = input->moveAx; // Amplitude  (m)
-        double Ay = input->moveAy; // Amplitude  (m)
-        double fx = input->moveFx; // Frequency  (Hz)
-        double fy = input->moveFy; // Frequency  (Hz)
-        #pragma omp parallel for
-        for (uint node = 0; node < nNodes ; node++)
-        {
-          geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
-          geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
-          geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
-          geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
-        }
+//        double Ax = input->moveAx; // Amplitude  (m)
+//        double Ay = input->moveAy; // Amplitude  (m)
+//        double fx = input->moveFx; // Frequency  (Hz)
+//        double fy = input->moveFy; // Frequency  (Hz)
+//        #pragma omp parallel for
+//        for (uint node = 0; node < nNodes ; node++)
+//        {
+//          geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
+//          geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
+//          geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
+//          geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
+//        }
       }
       break;
     }

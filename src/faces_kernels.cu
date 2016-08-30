@@ -2211,25 +2211,39 @@ __global__
 void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
-    mdvector_gpu<double> dA, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
-    unsigned int endFpt, bool overset = false, int* iblank = NULL)
+    mdvector_gpu<double> dA, mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
+    unsigned int endFpt, bool motion = false, bool overset = false, int* iblank = NULL)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
   if (fpt >= endFpt)
     return;
 
-  if (overset)
-    if (iblank[fpt] == 0)
-      return;
+  if (overset and iblank[fpt] == 0)
+    return;
 
   double FL[nVars]; double FR[nVars];
   double WL[nVars]; double WR[nVars];
-  double norm[nDims]; 
+  double norm[nDims], VG[nDims];
+  double Vgn = 0.0;
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     norm[dim] = norm_gfpts(fpt, dim, 0);
+  }
+
+  if (motion)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      VG[dim] = Vg(fpt, dim, 0);
+      Vgn += VG[dim] * norm[dim];
+    }
+  }
+  else
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      VG[dim] = 0.0;
   }
 
   /* Initialize FL, FR */
@@ -2255,7 +2269,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   }
 
   /* Get numerical wavespeed */
-  double waveSp = 0.;
+  double waveSp = 0., eig = 0.;
   if (equation == AdvDiff) 
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -2263,9 +2277,9 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       waveSp += AdvDiff_A(dim) * norm[dim];
     }
 
-    waveSp_gfpts(fpt) = waveSp;
+    waveSp_gfpts(fpt) = waveSp - Vgn;
 
-    waveSp = std::abs(waveSp);
+    eig = std::abs(waveSp);
   }
   else if (equation == Burgers) 
   {
@@ -2278,11 +2292,9 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       AnR += WR[0] * norm[dim];
     }
 
-    waveSp = max(std::abs(AnL), std::abs(AnR));
-
     // NOTE: Can I just store absolute of waveSp?
-    waveSp_gfpts(fpt) = waveSp;
-    waveSp = std::abs(waveSp);
+    waveSp_gfpts(fpt) = max(std::abs(AnL - Vgn), std::abs(AnR - Vgn));
+    eig = std::abs(max(std::abs(AnL), std::abs(AnR)));
   }
   else if (equation == EulerNS)
   {
@@ -2298,7 +2310,18 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       VnR += WR[dim+1]/WR[0] * norm[dim];
     }
 
+    if (motion)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        Vgn += Vg(fpt, dim, 0) * norm[dim];
+      }
+    }
+
     //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+    eig = std::abs(VnL - Vgn) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
+    eig = max(waveSp, std::abs(VnR - Vgn) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
+
     waveSp = std::abs(VnL) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
     waveSp = max(waveSp, std::abs(VnR) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
 
@@ -2330,7 +2353,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp * (1.0 - rus_k) * (WR[n]-WL[n])) * dA(fpt);
+      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * eig * (1.0 - rus_k) * (WR[n]-WL[n])) * dA(fpt);
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
@@ -2341,9 +2364,10 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, double gamma, double rus_k, unsigned int nFpts, 
-    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt,
-    bool overset, int* iblank)
+    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double> Vg,
+    double gamma, double rus_k, unsigned int nFpts, unsigned int nVars,
+    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt,
+    bool motion, bool overset, int* iblank)
 {
   unsigned int threads = 256;
   //unsigned int blocks = (nFpts + threads - 1)/threads;
@@ -2358,28 +2382,28 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   {
     if (nDims == 2)
       rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
+          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
     else
       rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, overset, iblank);
+          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
   }
   else if (equation == Burgers)
   {
     if (nDims == 2)
       rusanov_flux<1, 2, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
+          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
     else
       rusanov_flux<1, 3, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, overset, iblank);
+          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt);
+          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
     else
       rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, gamma, rus_k, nFpts, startFpt, endFpt, overset, iblank);
+          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
   }
 }
 

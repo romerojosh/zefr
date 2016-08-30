@@ -11,6 +11,13 @@
 template<typename T>
 class mdvector_gpu;
 
+//! For ease of access to moving-grid params in CUDA
+struct MotionVars
+{
+  double moveAx, moveAy, moveAz;
+  double moveFx, moveFy, moveFz;
+};
+
 /* TODO: Move these general operators to a different file (aux_kernels.h/cu) */
 void check_error();
 
@@ -36,6 +43,10 @@ void sync_stream(unsigned int stream);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream = 0);
+
+// cublasDGEMM with transposed 'A'
+void cublasDGEMM_transA_wrapper(int M, int N, int K, const double alpha, const double* A,
     int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream = 0);
 
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
@@ -123,5 +134,9 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
     int* iblank = NULL);
 #endif
 
+void move_grid_wrapper(mdvector_gpu<double> &coords,
+    mdvector_gpu<double> coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
+    unsigned int nNodes, unsigned int nDims, int motion_type, double time,
+    int gridID = 0);
 
 #endif /* solver_kernels_h */

@@ -107,7 +107,7 @@ lib: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
 
 .PHONY: test
-test: INCS += -I~/tioga/src/
+test: INCS += -I$(SWIGDIR)
 test: lib
 	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
 	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib/ -o $(SWIGDIR)/testZefr
