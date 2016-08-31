@@ -51,6 +51,9 @@ double determinant(double* mat, unsigned int M)
         // Add in the minor's determinant
         Det += sign*determinant(Minor,M-1)*mat[M*row+0];
       }
+
+      delete[] Minor;
+
       break;
     }
   }
@@ -90,9 +93,9 @@ void adjoint(double *mat, double *adj, int M)
       adj[M*col+row] = sign*determinant(Minor,M-1);
     }
   }
+
+  delete[] Minor;
 }
-
-
 
 template <unsigned int nDims>
 __global__
@@ -992,10 +995,10 @@ void transform_dU_quad(mdvector_gpu<double> dU_spts,
     return;
 
   double jaco[2][2];
-  jaco[0][0] = jaco_spts(0, 0, spt, ele);
-  jaco[0][1] = jaco_spts(0, 1, spt, ele);
-  jaco[1][0] = jaco_spts(1, 0, spt, ele);
-  jaco[1][1] = jaco_spts(1, 1, spt, ele);
+  jaco[0][0] = jaco_spts(spt, ele, 0, 0);
+  jaco[0][1] = jaco_spts(spt, ele, 0, 1);
+  jaco[1][0] = jaco_spts(spt, ele, 1, 0);
+  jaco[1][1] = jaco_spts(spt, ele, 1, 1);
   double jaco_det = jaco_det_spts(spt,ele);
 
   for (unsigned int var = 0; var < nVars; var++)
@@ -1047,14 +1050,14 @@ void transform_dU_hexa(mdvector_gpu<double> dU_spts,
 
   double inv_jaco[3][3];
   inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
-  inv_jaco[0][1] = inv_jaco_spts(0, 1, spt, ele);
-  inv_jaco[0][2] = inv_jaco_spts(0, 2, spt, ele);
-  inv_jaco[1][0] = inv_jaco_spts(1, 0, spt, ele);
-  inv_jaco[1][1] = inv_jaco_spts(1, 1, spt, ele);
-  inv_jaco[1][2] = inv_jaco_spts(1, 2, spt, ele);
-  inv_jaco[2][0] = inv_jaco_spts(2, 0, spt, ele);
-  inv_jaco[2][1] = inv_jaco_spts(2, 1, spt, ele);
-  inv_jaco[2][2] = inv_jaco_spts(2, 2, spt, ele);
+  inv_jaco[0][1] = inv_jaco_spts(spt, ele, 0, 1);
+  inv_jaco[0][2] = inv_jaco_spts(spt, ele, 0, 2);
+  inv_jaco[1][0] = inv_jaco_spts(spt, ele, 1, 0);
+  inv_jaco[1][1] = inv_jaco_spts(spt, ele, 1, 1);
+  inv_jaco[1][2] = inv_jaco_spts(spt, ele, 1, 2);
+  inv_jaco[2][0] = inv_jaco_spts(spt, ele, 2, 0);
+  inv_jaco[2][1] = inv_jaco_spts(spt, ele, 2, 1);
+  inv_jaco[2][2] = inv_jaco_spts(spt, ele, 2, 2);
   double jaco_det = jaco_det_spts(spt,ele);
 
   for (unsigned int n = 0; n < nVars; n++)
@@ -1115,10 +1118,10 @@ void transform_flux_quad(mdvector_gpu<double> F_spts,
 
   /* Get metric terms */
   double jaco[2][2];
-  jaco[0][0] = jaco_spts(0, 0, spt, ele);
-  jaco[0][1] = jaco_spts(0, 1, spt, ele);
-  jaco[1][0] = jaco_spts(1, 0, spt, ele);
-  jaco[1][1] = jaco_spts(1, 1, spt, ele);
+  jaco[0][0] = jaco_spts(spt, ele, 0, 0);
+  jaco[0][1] = jaco_spts(spt, ele, 0, 1);
+  jaco[1][0] = jaco_spts(spt, ele, 1, 0);
+  jaco[1][1] = jaco_spts(spt, ele, 1, 1);
 
   double F[2];
 
@@ -1170,14 +1173,14 @@ void transform_flux_hexa(mdvector_gpu<double> F_spts,
   /* Get metric terms */
   double inv_jaco[3][3];
   inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
-  inv_jaco[0][1] = inv_jaco_spts(0, 1, spt, ele);
-  inv_jaco[0][2] = inv_jaco_spts(0, 2, spt, ele);
-  inv_jaco[1][0] = inv_jaco_spts(1, 0, spt, ele);
-  inv_jaco[1][1] = inv_jaco_spts(1, 1, spt, ele);
-  inv_jaco[1][2] = inv_jaco_spts(1, 2, spt, ele);
-  inv_jaco[2][0] = inv_jaco_spts(2, 0, spt, ele);
-  inv_jaco[2][1] = inv_jaco_spts(2, 1, spt, ele);
-  inv_jaco[2][2] = inv_jaco_spts(2, 2, spt, ele);
+  inv_jaco[0][1] = inv_jaco_spts(spt, ele, 0, 1);
+  inv_jaco[0][2] = inv_jaco_spts(spt, ele, 0, 2);
+  inv_jaco[1][0] = inv_jaco_spts(spt, ele, 1, 0);
+  inv_jaco[1][1] = inv_jaco_spts(spt, ele, 1, 1);
+  inv_jaco[1][2] = inv_jaco_spts(spt, ele, 1, 2);
+  inv_jaco[2][0] = inv_jaco_spts(spt, ele, 2, 0);
+  inv_jaco[2][1] = inv_jaco_spts(spt, ele, 2, 1);
+  inv_jaco[2][2] = inv_jaco_spts(spt, ele, 2, 2);
 
   for (unsigned int n = 0; n < nVars; n++)
   {
@@ -1233,10 +1236,10 @@ void transform_dFdU_quad(mdvector_gpu<double> dFdU_spts,
 
   /* Get metric terms */
   double jaco[2][2];
-  jaco[0][0] = jaco_spts(0, 0, spt, ele);
-  jaco[0][1] = jaco_spts(0, 1, spt, ele);
-  jaco[1][0] = jaco_spts(1, 0, spt, ele);
-  jaco[1][1] = jaco_spts(1, 1, spt, ele);
+  jaco[0][0] = jaco_spts(spt, ele, 0, 0);
+  jaco[0][1] = jaco_spts(spt, ele, 0, 1);
+  jaco[1][0] = jaco_spts(spt, ele, 1, 0);
+  jaco[1][1] = jaco_spts(spt, ele, 1, 1);
 
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
@@ -1285,14 +1288,14 @@ void transform_dFdU_hexa(mdvector_gpu<double> dFdU_spts,
   /* Get metric terms */
   double inv_jaco[3][3];
   inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
-  inv_jaco[0][1] = inv_jaco_spts(0, 1, spt, ele);
-  inv_jaco[0][2] = inv_jaco_spts(0, 2, spt, ele);
-  inv_jaco[1][0] = inv_jaco_spts(1, 0, spt, ele);
-  inv_jaco[1][1] = inv_jaco_spts(1, 1, spt, ele);
-  inv_jaco[1][2] = inv_jaco_spts(1, 2, spt, ele);
-  inv_jaco[2][0] = inv_jaco_spts(2, 0, spt, ele);
-  inv_jaco[2][1] = inv_jaco_spts(2, 1, spt, ele);
-  inv_jaco[2][2] = inv_jaco_spts(2, 2, spt, ele);
+  inv_jaco[0][1] = inv_jaco_spts(spt, ele, 0, 1);
+  inv_jaco[0][2] = inv_jaco_spts(spt, ele, 0, 2);
+  inv_jaco[1][0] = inv_jaco_spts(spt, ele, 1, 0);
+  inv_jaco[1][1] = inv_jaco_spts(spt, ele, 1, 1);
+  inv_jaco[1][2] = inv_jaco_spts(spt, ele, 1, 2);
+  inv_jaco[2][0] = inv_jaco_spts(spt, ele, 2, 0);
+  inv_jaco[2][1] = inv_jaco_spts(spt, ele, 2, 1);
+  inv_jaco[2][2] = inv_jaco_spts(spt, ele, 2, 2);
 
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
@@ -1352,7 +1355,7 @@ void transform_gradF_quad(mdvector_gpu<double> divF_spts,
     return;
 
   /* Get metric terms */
-  double jaco[9], S[9];
+  double jaco[9];
   jaco[0] = jaco_spts(spt, ele, 0, 0);
   jaco[1] = jaco_spts(spt, ele, 0, 1);
   jaco[2] = jaco_spts(spt, ele, 1, 0);
@@ -1423,8 +1426,27 @@ void transform_gradF_hexa(mdvector_gpu<double> divF_spts,
   jaco[4*1+3] = grid_vel_spts(spt, ele, 1);
   jaco[4*2+3] = grid_vel_spts(spt, ele, 2);
   jaco[4*3+3] = 1;
+//  double jaco[4][4], S[4][4];
+//  jaco[0][0] = jaco_spts(spt, ele, 0, 0);
+//  jaco[0][1] = jaco_spts(spt, ele, 0, 1);
+//  jaco[0][2] = jaco_spts(spt, ele, 0, 2);
+//  jaco[1][0] = jaco_spts(spt, ele, 1, 0);
+//  jaco[1][1] = jaco_spts(spt, ele, 1, 1);
+//  jaco[1][2] = jaco_spts(spt, ele, 1, 2);
+//  jaco[2][0] = jaco_spts(spt, ele, 2, 0);
+//  jaco[2][1] = jaco_spts(spt, ele, 2, 1);
+//  jaco[2][2] = jaco_spts(spt, ele, 2, 2);
+//  jaco[3][0] = 0.;
+//  jaco[3][1] = 0.;
+//  jaco[3][2] = 0.;
+
+//  jaco[4*0+3] = grid_vel_spts(spt, ele, 0);
+//  jaco[4*1+3] = grid_vel_spts(spt, ele, 1);
+//  jaco[4*2+3] = grid_vel_spts(spt, ele, 2);
+//  jaco[4*3+3] = 1;
 
   adjoint(jaco, S, 4);
+//  double det = jaco
 
   for (unsigned int n = 0; n < nVars; n++)
     divF_spts(spt, ele, n, stage) = 0;
@@ -1489,11 +1511,11 @@ void normal_flux(mdvector_gpu<double> tempF, mdvector_gpu<double> dFn,
   dFn(fpt,ele,var) -= tempF(fpt,ele) * norm(gfpt,dim,slot) * dA(gfpt);
 }
 
-void extrapolate_Fn_wrapper(mdvector_gpu<double> oppE,
-    mdvector_gpu<double> F_spts, mdvector_gpu<double> tempF_fpts,
-    mdvector_gpu<double> dFn_fpts, mdvector_gpu<double> norm,
-    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt,
-    mdvector_gpu<int> fpt2slot, unsigned int nSpts, unsigned int nFpts,
+void extrapolate_Fn_wrapper(mdvector_gpu<double> &oppE,
+    mdvector_gpu<double> &F_spts, mdvector_gpu<double> &tempF_fpts,
+    mdvector_gpu<double> &dFn_fpts, mdvector_gpu<double> &norm,
+    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt,
+    mdvector_gpu<int> &fpt2slot, unsigned int nSpts, unsigned int nFpts,
     unsigned int nEles, unsigned int nDims, unsigned int nVars, bool motion)
 {
   int threads = 192;
@@ -1714,8 +1736,8 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
 }
 
 __global__
-void copy_coords_ele(mdvector_gpu<double> &nodes, mdvector_gpu<double> &g_nodes,
-    mdvector_gpu<int> &ele2node, unsigned int nEles, unsigned int nNodes)
+void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
+    mdvector_gpu<int> ele2node, unsigned int nEles, unsigned int nNodes)
 {
   int node = (blockDim.x * blockIdx.x + threadIdx.x) % nNodes;
   int ele =  (blockDim.x * blockIdx.x + threadIdx.x) / nNodes;
@@ -1728,8 +1750,8 @@ void copy_coords_ele(mdvector_gpu<double> &nodes, mdvector_gpu<double> &g_nodes,
 }
 
 __global__
-void copy_coords_face(mdvector_gpu<double> &coord, mdvector_gpu<double> &e_coord,
-    mdvector_gpu<int> &fpt2gfpt, unsigned int nEles, unsigned int nFpts)
+void copy_coords_face(mdvector_gpu<double> coord, mdvector_gpu<double> e_coord,
+    mdvector_gpu<int> fpt2gfpt, unsigned int nEles, unsigned int nFpts)
 {
   int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   int ele =  (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
@@ -1749,36 +1771,36 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
     mdvector_gpu<double> &g_nodes,  mdvector_gpu<double> &shape_spts,
     mdvector_gpu<double> &shape_fpts, mdvector_gpu<double> &coord_spts,
     mdvector_gpu<double> &coord_fpts, mdvector_gpu<double> &coord_faces,
-    mdvector_gpu<int> &ele2node, mdvector_gpu<int> fpt2gfpt, unsigned int nSpts,
+    mdvector_gpu<int> &ele2node, mdvector_gpu<int> &fpt2gfpt, unsigned int nSpts,
     unsigned int nFpts, unsigned int nNodes, unsigned int nEles,
     unsigned int nDims)
 {
   int threads = 192;
-  dim3 blocks = ((nEles * nNodes + threads - 1) / threads, nDims);
+  dim3 blocksE((nEles * nNodes + threads - 1) / threads, nDims);
 
-  copy_coords_ele<<<threads, blocks>>>(nodes, g_nodes, ele2node, nEles, nNodes);
+  copy_coords_ele<<<threads, blocksE>>>(nodes, g_nodes, ele2node, nEles, nNodes);
 
   double *B = nodes.data();
 
   double *As = shape_spts.data();
   double *Cs = coord_spts.data();
 
-  cublasDGEMM_wrapper(nSpts, nEles * nDims, nNodes, 1.0, As, shape_spts.ldim(),
-      B, nodes.ldim(), 0.0, Cs, coord_spts.ldim());
+  cublasDGEMM_transA_wrapper(nSpts, nEles * nDims, nNodes, 1.0, As,
+      shape_spts.ldim(), B, nodes.ldim(), 0.0, Cs, coord_spts.ldim());
 
   double *Af = shape_fpts.data();
   double *Cf = coord_fpts.data();
 
-  cublasDGEMM_wrapper(nFpts, nEles * nDims, nNodes, 1.0, Af, shape_fpts.ldim(),
-      B, nodes.ldim(), 0.0, Cf, coord_fpts.ldim());
+  cublasDGEMM_transA_wrapper(nFpts, nEles * nDims, nNodes, 1.0, Af,
+      shape_fpts.ldim(), B, nodes.ldim(), 0.0, Cf, coord_fpts.ldim());
 
-  blocks = ((nEles * nFpts + threads - 1) / threads, nDims);
-  copy_coords_face<<<threads, blocks>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
+  dim3 blocksF((nEles * nFpts + threads - 1) / threads, nDims);
+  copy_coords_face<<<threads, blocksF>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
 }
 
 template<unsigned int nDims>
 __global__
-void update_h_ref(mdvector_gpu<double> &h_ref, mdvector_gpu<double> &coord_fpts,
+void update_h_ref(mdvector_gpu<double> h_ref, mdvector_gpu<double> coord_fpts,
     unsigned int nEles, unsigned int nFpts, unsigned int nPts1D)
 {
   int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
@@ -1825,8 +1847,8 @@ void update_h_ref_wrapper(mdvector_gpu<double> &h_ref,
 }
 
 __global__
-void inverse_transform_quad(mdvector_gpu<double> &jaco, mdvector_gpu<double> &inv_jaco,
-    double *jaco_det, int nEles, int nPts)
+void inverse_transform_quad(mdvector_gpu<double> jaco,
+    mdvector_gpu<double> inv_jaco, double *jaco_det, int nEles, int nPts)
 {
   int pt = (blockDim.x * blockIdx.x + threadIdx.x) % nPts;
   int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nPts;
@@ -1844,8 +1866,8 @@ void inverse_transform_quad(mdvector_gpu<double> &jaco, mdvector_gpu<double> &in
 }
 
 __global__
-void inverse_transform_hexa(mdvector_gpu<double> &jaco,
-    mdvector_gpu<double> &inv_jaco, double* jaco_det, int nEles, int nPts)
+void inverse_transform_hexa(mdvector_gpu<double> jaco,
+    mdvector_gpu<double> inv_jaco, double* jaco_det, int nEles, int nPts)
 {
   int pt = (blockDim.x * blockIdx.x + threadIdx.x) % nPts;
   int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nPts;
@@ -1917,9 +1939,9 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
 }
 
 __global__
-void calc_normals(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
-    mdvector_gpu<double> &inv_jaco, mdvector_gpu<double> &tnorm,
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2slot, int nFpts, int nEles, int nDims)
+void calc_normals(mdvector_gpu<double> norm, mdvector_gpu<double> dA,
+    mdvector_gpu<double> inv_jaco, mdvector_gpu<double> tnorm,
+    mdvector_gpu<int> fpt2gfpt, mdvector_gpu<int> fpt2slot, int nFpts, int nEles, int nDims)
 {
   int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;

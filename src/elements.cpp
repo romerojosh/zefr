@@ -623,6 +623,8 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
         nVars * nEles), dU_spts_d.ldim(), 0.0, dU_fpts_d.data() + dim * 
         (dU_fpts_d.ldim() * nVars * nEles), dU_fpts_d.ldim());
   }
+
+  check_error();
 #endif
 }
 
@@ -693,6 +695,8 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
   extrapolate_Fn_wrapper(oppE_d, F_spts_d, tempF_fpts_d, dFn_fpts_d,
       faces->norm_d, faces->dA_d, geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nSpts,
       nFpts, nEles, nDims, nVars, input->motion);
+
+  check_error();
 #endif
 }
 
@@ -805,6 +809,7 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
           U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
     }
   }
+  check_error();
 #endif
 }
 
@@ -930,6 +935,7 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
       }
     }
   }
+  check_error();
 #endif
 }
 
@@ -1039,14 +1045,15 @@ void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsi
     for (unsigned int var = 0; var < nVars; var++)
     {
       auto *A = oppD_d.data() + dim * (oppD_d.ldim() * nSpts);
-      auto *B = F_spts_d.data() + startEle * F_spts_d.ldim() + var * (F_spts_d.ldim() * nEles) + dim * (F_spts_d.ldim() * nEles * nVars);
-      auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+      auto *B = F_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
+      auto *C = divF_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * stage));
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
           A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
     }
   }
+  check_error();
 #endif
 }
 
@@ -2588,23 +2595,25 @@ void Elements::move(std::shared_ptr<Faces> faces)
 #endif
 
 #ifdef _GPU
- update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
-     shape_fpts_d, geo->coord_spts_d, geo->coord_fpts_d, faces->coord_d,
-     geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nEles, nNodes, nDims);
+  update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
+      shape_fpts_d, geo->coord_spts_d, geo->coord_fpts_d, faces->coord_d,
+      geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
 
- update_coords_wrapper(grid_vel_nodes_d, geo->grid_vel_nodes_d, shape_spts_d,
-     shape_fpts_d, grid_vel_spts_d, grid_vel_fpts_d, faces->Vg_d,
-     geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nEles, nNodes, nDims);
+  update_coords_wrapper(grid_vel_nodes_d, geo->grid_vel_nodes_d, shape_spts_d,
+      shape_fpts_d, grid_vel_spts_d, grid_vel_fpts_d, faces->Vg_d,
+      geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
 
- calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
-     inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
-     nFpts, nNodes, nEles, nDims);
+  calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
+      inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
+      nFpts, nNodes, nEles, nDims);
 
- calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
-     geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nFpts, nEles, nDims);
+  calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
+      geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nFpts, nEles, nDims);
 
- if (input->CFL == 2)
-   update_h_ref_wrapper(h_ref_d, geo->coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+  if (input->CFL == 2)
+    update_h_ref_wrapper(h_ref_d, geo->coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+
+  check_error();
 #endif
 }
 
@@ -2652,28 +2661,6 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
               1.0, &Af, k, &B, k, 0.0, &Cf, mf);
 #endif
 
-  /* Setup physical coordinates at plot points */
-  auto &Ap = shape_ppts(0,0);
-  auto &Cp = geo->coord_ppts(0,0,0);
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
-              1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
-#else
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
-              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
-#endif
-
-  /* Setup physical coordinates at quadrature points */
-  auto &Aq = shape_qpts(0,0);
-  auto &Cq = geo->coord_qpts(0,0,0);
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
-              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
-#else
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
-              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
-#endif
-
   /* Setup physical coordinates at flux points [in faces class] */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
@@ -2717,6 +2704,49 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
       }
     }
   }
+}
+
+void Elements::update_plot_point_coords(void)
+{
+#ifdef _GPU
+  // Copy back, since updated only on GPU
+  geo->coord_nodes = geo->coord_nodes_d;
+
+#pragma omp parallel for collapse(3)
+  for (uint node = 0; node < nNodes; node++)
+    for (uint ele = 0; ele < nEles; ele++)
+      for (uint dim = 0; dim < nDims; dim++)
+        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+#endif
+
+  int mp = nPpts;
+  int mq = nQpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  auto &B = nodes(0,0,0);
+
+  /* Setup physical coordinates at plot points */
+  auto &Ap = shape_ppts(0,0);
+  auto &Cp = geo->coord_ppts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
+#endif
+
+  /* Setup physical coordinates at quadrature points */
+  auto &Aq = shape_qpts(0,0);
+  auto &Cq = geo->coord_qpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#endif
 }
 
 void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
@@ -2946,6 +2976,8 @@ void Elements::donor_u_from_device(int* donorIDs, int nDonors)
   }
 
   free_device_data(donorIDs_d);
+
+  check_error();
 }
 
 void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
@@ -2979,5 +3011,7 @@ void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
   }
 
   free_device_data(donorIDs_d);
+
+  check_error();
 }
 #endif

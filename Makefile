@@ -8,7 +8,7 @@ CXX = g++
 AR = ar -rvs
 CU = /usr/local/cuda-7.5/bin/nvcc
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas
-CUFLAGS = -std=c++11 -arch=sm_20 -O3 -use_fast_math --default-stream per-thread
+CUFLAGS = -std=c++11 -arch=sm_20 --default-stream per-thread -O3 -use_fast_math
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 

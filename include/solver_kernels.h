@@ -19,7 +19,15 @@ struct MotionVars
 };
 
 /* TODO: Move these general operators to a different file (aux_kernels.h/cu) */
-void check_error();
+#define check_error() \
+{ \
+  cudaError_t err = cudaGetLastError(); \
+  if (err != cudaSuccess) \
+  { \
+    std::cout << __FILE__ << ":" << __LINE__ << ":" << __func__ << ": " << std::endl; \
+    ThrowException(cudaGetErrorString(err)); \
+  } \
+}
 
 void start_cublas();
 
@@ -135,7 +143,7 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 #endif
 
 void move_grid_wrapper(mdvector_gpu<double> &coords,
-    mdvector_gpu<double> coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
+    mdvector_gpu<double>& coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,
     int gridID = 0);
 

@@ -406,6 +406,7 @@ void FRSolver::solver_data_to_device()
   /* FR operators */
   eles->oppE_d = eles->oppE;
   eles->oppD_d = eles->oppD;
+  eles->oppD0_d = eles->oppD0;
   eles->oppD_fpts_d = eles->oppD_fpts;
   eles->oppDiv_fpts_d = eles->oppDiv_fpts;
 
@@ -524,6 +525,7 @@ void FRSolver::solver_data_to_device()
 
   if (input->motion)
   {
+    eles->nodes_d = eles->nodes;
     eles->grid_vel_nodes_d = eles->grid_vel_nodes;
     eles->grid_vel_spts_d = eles->grid_vel_spts;
     eles->grid_vel_fpts_d = eles->grid_vel_fpts;
@@ -532,7 +534,10 @@ void FRSolver::solver_data_to_device()
     eles->dshape_spts_d = eles->dshape_spts;
     eles->dshape_fpts_d = eles->dshape_fpts;
     eles->jaco_spts_d = eles->jaco_spts;
+    eles->jaco_fpts_d = eles->jaco_fpts;
     eles->inv_jaco_spts_d = eles->inv_jaco_spts;
+    eles->inv_jaco_fpts_d = eles->inv_jaco_fpts;
+    eles->tnorm_d = eles->tnorm;
     eles->dF_spts_d = eles->dF_spts;
     eles->dFn_fpts_d = eles->dFn_fpts;
     eles->tempF_fpts_d = eles->tempF_fpts;
@@ -548,8 +553,8 @@ void FRSolver::solver_data_to_device()
     motion_vars->moveFy = input->moveFy;
     motion_vars->moveFz = input->moveFz;
 
-    allocate_device_data(motion_vars_d, sizeof(MotionVars));
-    copy_to_device(motion_vars_d, motion_vars, sizeof(MotionVars));
+    allocate_device_data(motion_vars_d, 1);
+    copy_to_device(motion_vars_d, motion_vars, 1);
   }
 
   /* Solution data structures (faces) */
@@ -587,6 +592,9 @@ void FRSolver::solver_data_to_device()
 
   if (input->motion)
   {
+    geo.ele2nodes_d = geo.ele2nodes;
+    geo.coord_nodes_d = geo.coord_nodes;
+    geo.coords_init_d = geo.coords_init;
     geo.grid_vel_nodes_d = geo.grid_vel_nodes;
     geo.coord_fpts_d = geo.coord_fpts;
   }
@@ -622,8 +630,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
-//  if (input->overset)
-//    overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
+  if (input->overset)
+  {
+    exit(0);
+    overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
+  }
 
   /* Extrapolate solution to flux points */
   eles->extrapolate_U(startEle, endEle);
@@ -665,7 +676,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
-
 #ifdef _MPI
   /* Transform solution point fluxes from physical to reference space */
   if (!input->motion) // || input->gridID != 0)
@@ -2058,6 +2068,8 @@ void FRSolver::compute_element_dt()
       eles->weights_spts_d, eles->vol_d, eles->h_ref_d, eles->nSpts1D, CFL, input->ldg_b, order, 
       input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims, myComm,
       input->overset, geo.iblank_cell_d.data());
+
+  check_error();
 #endif
 }
 
@@ -2220,7 +2232,6 @@ void FRSolver::write_solution(const std::string &_prefix)
   /* Write parition solution to file in .vtu format */
   std::ofstream f(outputfile);
 
-
   /* Write header */
   f << "<?xml version=\"1.0\"?>" << std::endl;
   f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
@@ -2238,6 +2249,11 @@ void FRSolver::write_solution(const std::string &_prefix)
     /* Remove blanked elements from total element count */
     for (int ele = 0; ele < eles->nEles; ele++)
       if (geo.iblank_cell(ele) != NORMAL) nEles--;
+  }
+
+  if (input->motion)
+  {
+    eles->update_plot_point_coords();
   }
 
   f << "<UnstructuredGrid>" << std::endl;
@@ -3260,6 +3276,8 @@ void FRSolver::move(double time)
 #ifdef _GPU
   move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
       motion_vars_d, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
+
+  check_error();
 #endif
 
   eles->move(faces);

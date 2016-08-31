@@ -103,11 +103,11 @@ void transform_gradF_hexa_wrapper(mdvector_gpu<double> &divF_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int stage,
     unsigned int equation, bool overset = false, int* iblank = NULL);
 
-void extrapolate_Fn_wrapper(mdvector_gpu<double> oppE,
-    mdvector_gpu<double> F_spts, mdvector_gpu<double> tempF_fpts,
-    mdvector_gpu<double> dFn_fpts, mdvector_gpu<double> norm,
-    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt,
-    mdvector_gpu<int> fpt2slot, unsigned int nSpts, unsigned int nFpts,
+void extrapolate_Fn_wrapper(mdvector_gpu<double>& oppE,
+    mdvector_gpu<double>& F_spts, mdvector_gpu<double>& tempF_fpts,
+    mdvector_gpu<double>& dFn_fpts, mdvector_gpu<double>& norm,
+    mdvector_gpu<double>& dA, mdvector_gpu<int>& fpt2gfpt,
+    mdvector_gpu<int>& fpt2slot, unsigned int nSpts, unsigned int nFpts,
     unsigned int nEles, unsigned int nDims, unsigned int nVars, bool motion);
 
 /* Additional wrappers */
@@ -127,7 +127,7 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
     mdvector_gpu<double> &g_nodes,  mdvector_gpu<double> &shape_spts,
     mdvector_gpu<double> &shape_fpts, mdvector_gpu<double> &coord_spts,
     mdvector_gpu<double> &coord_fpts, mdvector_gpu<double> &coord_faces,
-    mdvector_gpu<int> &ele2node, mdvector_gpu<int> fpt2gfpt, unsigned int nSpts,
+    mdvector_gpu<int> &ele2node, mdvector_gpu<int>& fpt2gfpt, unsigned int nSpts,
     unsigned int nFpts, unsigned int nNodes, unsigned int nEles,
     unsigned int nDims);
 

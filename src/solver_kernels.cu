@@ -28,16 +28,18 @@ static const unsigned int MAX_GRID_DIM = 65535;
 static std::vector<cublasHandle_t> cublas_handles(17);
 static std::vector<cudaStream_t> stream_handles(17);
 
-void check_error()
-{
-#ifndef _NO_CUDA_ERROR
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess)
-  {
-    ThrowException(cudaGetErrorString(err));
-  }
-#endif
-}
+//void check_error()
+//{
+//#ifndef _NO_CUDA_ERROR
+//  cudaError_t err = cudaGetLastError();
+//  if (err != cudaSuccess)
+//  {
+//    std::cout << __FILE__ << ":" << __LINE__ << ":" << __func__ << ": ";
+//    _(cudaGetErrorString(err));
+//    //ThrowException(cudaGetErrorString(err));
+//  }
+//#endif
+//}
 
 void start_cublas()
 {
@@ -1104,10 +1106,13 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 #endif
 
 __global__
-void move_grid(mdvector_gpu<double> &coords, mdvector_gpu<double> coords_0, mdvector_gpu<double> &Vg,
+void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvector_gpu<double> Vg,
     MotionVars *params, unsigned int nNodes, unsigned int nDims, int motion_type, double time, int gridID = 0)
 {
   unsigned int node = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (node >= nNodes)
+    return;
 
   switch (motion_type)
   {
@@ -1210,13 +1215,12 @@ void move_grid(mdvector_gpu<double> &coords, mdvector_gpu<double> coords_0, mdve
 }
 
 void move_grid_wrapper(mdvector_gpu<double> &coords,
-    mdvector_gpu<double> coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
+    mdvector_gpu<double> &coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,
     int gridID)
 {
   int threads = 192;
   int blocks = (nNodes + threads - 1) / threads;
-
   move_grid<<<blocks, threads>>>(coords, coords_0, Vg, params, nNodes, nDims,
       motion_type, time, gridID);
 }

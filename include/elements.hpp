@@ -217,6 +217,7 @@ class Elements
     //! 'Standard' (non-DFR) correction procedure
     void correct_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void get_grid_velocity_ppts(void);
+    void update_plot_point_coords();
 };
 
 #endif /* elements_hpp */

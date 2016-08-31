@@ -443,7 +443,7 @@ void Faces::apply_bcs()
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN[dim] -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
         }
 
         U(fpt, 0, 1) = U(fpt, 0, 0);
@@ -3791,7 +3791,7 @@ void Faces::send_U_data()
 #endif
 
 #ifdef _GPU
-  sync_stream(0);
+  //sync_stream(0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
@@ -3805,8 +3805,11 @@ void Faces::send_U_data()
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
+    _(pairedRank);
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
+
+  check_error();
 #endif
 }
 
@@ -3902,7 +3905,7 @@ void Faces::recv_U_data()
     nrecvs++;
   }
 
-  sync_stream(1); 
+  sync_stream(1);
 
   nsends = 0;
   for (auto &entry : geo->fpt_buffer_map)
@@ -3952,11 +3955,12 @@ void Faces::recv_U_data()
   {
     int recvRank = entry.first;
     auto &fpts = entry.second;
-
     unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());
   }
 
   sync_stream(0);
+
+  check_error();
 #endif
 
 #ifdef  _CPU
@@ -4074,6 +4078,7 @@ void Faces::send_dU_data()
     sidx++;
   }
 
+  check_error();
 #endif
 }
 
@@ -4119,6 +4124,8 @@ void Faces::recv_dU_data()
 
     unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, input->overset, geo->iblank_fpts_d.data());
   }
+
+  check_error();
 #endif
 }
 #endif
@@ -4214,6 +4221,8 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 
   unpack_fringe_u_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,nFringe,
       geo->nFptsPerFace,nVars);
+
+  check_error();
 }
 
 void Faces::fringe_grad_to_device(int nFringe)
@@ -4245,5 +4254,7 @@ void Faces::fringe_grad_to_device(int nFringe)
 
   unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
       nFringe,geo->nFptsPerFace,nVars,nDims);
+
+  check_error();
 }
 #endif

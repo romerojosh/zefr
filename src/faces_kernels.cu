@@ -3055,8 +3055,8 @@ void unpack_fringe_u(mdvector_gpu<double> U_fringe,
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
-    mdvector_gpu<double> &U, mdvector_gpu<unsigned int> fringe_fpts,
-    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe, unsigned int nFpts, unsigned int nVars)
+    mdvector_gpu<double> &U, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe, unsigned int nFpts, unsigned int nVars)
 {
   int threads = nFpts;
   dim3 blocks(nFringe, nVars);
@@ -3085,8 +3085,8 @@ void unpack_fringe_grad(mdvector_gpu<double> dU_fringe,
 }
 
 void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
-    mdvector_gpu<double> &dU, mdvector_gpu<unsigned int> fringe_fpts,
-    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
+    mdvector_gpu<double> &dU, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   int threads  = 192;
