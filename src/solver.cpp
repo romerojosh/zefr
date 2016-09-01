@@ -678,7 +678,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   {
 #ifdef _MPI
   /* Transform solution point fluxes from physical to reference space */
-  if (!input->motion) // || input->gridID != 0)
+  if (input->motion)
+  {
+    eles->compute_gradF_spts(startEle, endEle);
+    eles->compute_dU0(startEle, endEle);
+    sync_stream(0);
+  }
+  else
     eles->transform_flux(startEle, endEle);
 
   /* Compute convective flux and parent space common flux at non-MPI flux points */
@@ -687,10 +693,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
 
   /* Compute solution point contribution to divergence of flux */
-  if (input->motion) // and input->gridID == 0)
+  if (input->motion)
   {
-    eles->compute_gradF_spts(startEle, endEle);
-    eles->compute_dU0(startEle, endEle);
     eles->transform_gradF_spts(stage, startEle, endEle);
   }
   else
@@ -2254,6 +2258,9 @@ void FRSolver::write_solution(const std::string &_prefix)
   if (input->motion)
   {
     eles->update_plot_point_coords();
+#ifdef _GPU
+    eles->grid_vel_nodes = eles->grid_vel_nodes_d;
+#endif
   }
 
   f << "<UnstructuredGrid>" << std::endl;

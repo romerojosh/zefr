@@ -8,7 +8,7 @@ CXX = g++
 AR = ar -rvs
 CU = /usr/local/cuda-7.5/bin/nvcc
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas
-CUFLAGS = -std=c++11 -arch=sm_20 --default-stream per-thread -O3 -use_fast_math
+CUFLAGS = -std=c++11 -arch=sm_20 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
@@ -24,8 +24,10 @@ endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
 	CXXFLAGS += $(DEBUG_FLAGS)
+	CUFLAGS += -g -O1
 else
 	CXXFLAGS += $(RELEASE_FLAGS)
+	CUFLAGS += -O3 -use_fast_math
 endif
 
 # Setting OpenMP flags

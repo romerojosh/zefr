@@ -645,7 +645,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 
   #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, disFn_fpts.ldim());
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, disFn_fpts.ldim());
   #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
@@ -690,7 +690,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 #endif
 
 #ifdef _GPU
-  dFn_fpts_d = Fcomm_d;
+  device_copy(dFn_fpts_d, Fcomm_d, Fcomm_d.size());
 
   extrapolate_Fn_wrapper(oppE_d, F_spts_d, tempF_fpts_d, dFn_fpts_d,
       faces->norm_d, faces->dA_d, geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nSpts,
@@ -772,8 +772,8 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
 
 void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
 {
-#ifdef _CPU
   /* Compute derivative of solution at solution points (Order-P FR basis) */
+#ifdef _CPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int var = 0; var < nVars; var++)
@@ -796,7 +796,6 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-  /* Compute contribution to derivative from solution at solution points */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int var = 0; var < nVars; var++)
@@ -805,7 +804,7 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
       auto B = U_spts_d.data() + nSpts * (startEle + nEles * var);
       auto C = dU_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
 
-      cublasDGEMM_wrapper(nSpts, nEles, nSpts, 1.0, A, oppD0_d.ldim(), B,
+      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0, A, oppD0_d.ldim(), B,
           U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
     }
   }
@@ -931,7 +930,7 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
 
         /* Compute contribution to derivative from solution at solution points */
         cublasDGEMM_wrapper(m, n, k, 1.0, A, oppD0_d.ldim(), B, F_spts_d.ldim(),
-            0., C, dF_spts_d.ldim(), 0);
+            0., C, dF_spts_d.ldim());
       }
     }
   }

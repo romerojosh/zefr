@@ -1355,19 +1355,19 @@ void transform_gradF_quad(mdvector_gpu<double> divF_spts,
     return;
 
   /* Get metric terms */
-  double jaco[9];
-  jaco[0] = jaco_spts(spt, ele, 0, 0);
-  jaco[1] = jaco_spts(spt, ele, 0, 1);
-  jaco[2] = jaco_spts(spt, ele, 1, 0);
-  jaco[3] = jaco_spts(spt, ele, 1, 1);
+  double jaco[2][2];
+  jaco[0][0] = jaco_spts(spt, ele, 0, 0);
+  jaco[0][1] = jaco_spts(spt, ele, 0, 1);
+  jaco[1][0] = jaco_spts(spt, ele, 1, 0);
+  jaco[1][1] = jaco_spts(spt, ele, 1, 1);
 
-  double A = grid_vel_spts(spt,ele,1) * jaco[1] - grid_vel_spts(spt,ele,0) * jaco[3];
-  double B = grid_vel_spts(spt,ele,0) * jaco[2] - grid_vel_spts(spt,ele,1) * jaco[0];
+  double A = grid_vel_spts(spt,ele,1) * jaco[0][1] - grid_vel_spts(spt,ele,0) * jaco[1][1];
+  double B = grid_vel_spts(spt,ele,0) * jaco[1][0] - grid_vel_spts(spt,ele,1) * jaco[0][0];
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    divF_spts(spt,ele,n,stage)  =  dF_spts(spt,ele,n,0,0)*jaco[3] - dF_spts(spt,ele,n,1,0)*jaco[1] + dU_spts(spt,ele,n,0)*A;
-    divF_spts(spt,ele,n,stage) += -dF_spts(spt,ele,n,0,1)*jaco[2] + dF_spts(spt,ele,n,1,1)*jaco[0] + dU_spts(spt,ele,n,1)*B;
+    divF_spts(spt,ele,n,stage)  =  dF_spts(spt,ele,n,0,0)*jaco[1][1] - dF_spts(spt,ele,n,1,0)*jaco[0][1] + dU_spts(spt,ele,n,0)*A;
+    divF_spts(spt,ele,n,stage) += -dF_spts(spt,ele,n,0,1)*jaco[1][0] + dF_spts(spt,ele,n,1,1)*jaco[0][0] + dU_spts(spt,ele,n,1)*B;
   }
 }
 
@@ -1499,7 +1499,7 @@ void normal_flux(mdvector_gpu<double> tempF, mdvector_gpu<double> dFn,
   const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
 
-  if (fpt >= nFpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
   int gfpt = fpt2gfpt(fpt,ele);
@@ -1536,10 +1536,16 @@ void extrapolate_Fn_wrapper(mdvector_gpu<double> &oppE,
         auto C = tempF_fpts.data();
 
         cublasDGEMM_wrapper(M, N, K, 1., A, oppE.ldim(), B, F_spts.ldim(), 0.,
-                            C, tempF_fpts.ldim());
+                            C, tempF_fpts.ldim(), 0);
+
+        sync_stream(0);
+        check_error();
 
         normal_flux<<<blocks, threads>>>(tempF_fpts, dFn_fpts, norm, dA,
             fpt2gfpt, fpt2slot, nFpts, nEles, dim, var);
+
+        sync_stream(0);
+        check_error();
       }
     }
   }
@@ -1778,7 +1784,7 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
   int threads = 192;
   dim3 blocksE((nEles * nNodes + threads - 1) / threads, nDims);
 
-  copy_coords_ele<<<threads, blocksE>>>(nodes, g_nodes, ele2node, nEles, nNodes);
+  copy_coords_ele<<<blocksE,threads>>>(nodes, g_nodes, ele2node, nEles, nNodes);
 
   double *B = nodes.data();
 
@@ -1795,7 +1801,8 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
       shape_fpts.ldim(), B, nodes.ldim(), 0.0, Cf, coord_fpts.ldim());
 
   dim3 blocksF((nEles * nFpts + threads - 1) / threads, nDims);
-  copy_coords_face<<<threads, blocksF>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
+
+  copy_coords_face<<<blocksF,threads>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
 }
 
 template<unsigned int nDims>
@@ -1838,11 +1845,11 @@ void update_h_ref_wrapper(mdvector_gpu<double> &h_ref,
 
   if (nDims == 2)
   {
-    update_h_ref<2><<<threads, blocks>>>(h_ref, coord_fpts, nEles, nFpts, nPts1D);
+    update_h_ref<2><<<blocks,threads>>>(h_ref, coord_fpts, nEles, nFpts, nPts1D);
   }
   else
   {
-    update_h_ref<3><<<threads, blocks>>>(h_ref, coord_fpts, nEles, nFpts, nPts1D);
+    update_h_ref<3><<<blocks,threads>>>(h_ref, coord_fpts, nEles, nFpts, nPts1D);
   }
 }
 
@@ -1922,18 +1929,18 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
 
   if (nDims == 2)
   {
-    inverse_transform_quad<<<threads,blocksS>>>(jaco_spts,inv_jaco_spts,
+    inverse_transform_quad<<<blocksS,threads>>>(jaco_spts,inv_jaco_spts,
         jaco_det_spts.data(),nEles,nSpts);
 
-    inverse_transform_quad<<<threads,blocksF>>>(jaco_fpts,inv_jaco_fpts,
+    inverse_transform_quad<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
         NULL,nEles,nFpts);
   }
   else
   {
-    inverse_transform_hexa<<<threads,blocksS>>>(jaco_spts,inv_jaco_spts,
+    inverse_transform_hexa<<<blocksS,threads>>>(jaco_spts,inv_jaco_spts,
         jaco_det_spts.data(),nEles,nSpts);
 
-    inverse_transform_hexa<<<threads,blocksF>>>(jaco_fpts,inv_jaco_fpts,
+    inverse_transform_hexa<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
         NULL,nEles,nFpts);
   }
 }
@@ -1956,7 +1963,7 @@ void calc_normals(mdvector_gpu<double> norm, mdvector_gpu<double> dA,
 
   int slot = fpt2slot(fpt,ele);
 
-  dA(gfpt) = 0.0;
+  double DA = 0.0;
   for (int dim1 = 0; dim1 < nDims; dim1++)
   {
     norm(gfpt,dim1,slot) = 0.0;
@@ -1965,10 +1972,18 @@ void calc_normals(mdvector_gpu<double> norm, mdvector_gpu<double> dA,
       norm(gfpt,dim1,slot) += inv_jaco(fpt,ele,dim2,dim1) * tnorm(fpt,dim2);
     }
 
-    dA(gfpt) += norm(gfpt,dim1,slot) * norm(gfpt,dim1,slot);
+    DA += norm(gfpt,dim1,slot) * norm(gfpt,dim1,slot);
   }
 
-  dA(gfpt) = sqrt(dA(gfpt));
+  DA = sqrt(DA);
+
+  for (int dim = 0; dim < nDims; dim++)
+  {
+    norm(gfpt,dim,slot) /= DA;
+  }
+
+  if (slot == 0)
+    dA(gfpt) = DA;
 }
 
 void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
@@ -1979,7 +1994,7 @@ void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
   int threads = 192;
   int blocks = (nFpts * nEles + threads - 1) / threads;
 
-  calc_normals<<<threads,blocks>>>(norm,dA,inv_jaco,tnorm,fpt2gfpt,fpt2slot,
+  calc_normals<<<blocks,threads>>>(norm,dA,inv_jaco,tnorm,fpt2gfpt,fpt2slot,
       nFpts,nEles,nDims);
 }
 

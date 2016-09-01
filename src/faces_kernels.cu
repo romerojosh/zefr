@@ -2236,7 +2236,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      VG[dim] = Vg(fpt, dim, 0);
+      VG[dim] = Vg(fpt, dim);
       Vgn += VG[dim] * norm[dim];
     }
   }
@@ -2277,7 +2277,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       waveSp += AdvDiff_A(dim) * norm[dim];
     }
 
-    waveSp_gfpts(fpt) = waveSp - Vgn;
+    waveSp_gfpts(fpt) = std::abs(waveSp - Vgn);
 
     eig = std::abs(waveSp);
   }
@@ -2319,11 +2319,11 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     }
 
     //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
-    eig = std::abs(VnL - Vgn) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
-    eig = max(waveSp, std::abs(VnR - Vgn) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
+    waveSp = std::abs(VnL - Vgn) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
+    waveSp = max(waveSp, std::abs(VnR - Vgn) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
 
-    waveSp = std::abs(VnL) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
-    waveSp = max(waveSp, std::abs(VnR) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
+    eig = std::abs(VnL) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
+    eig = max(eig, std::abs(VnR) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
 
     // NOTE: Can I just store absolute of waveSp?
     waveSp_gfpts(fpt) = waveSp;
@@ -2358,13 +2358,12 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       Fcomm(fpt, n, 1) = -F;
     }
   }
-
 }
 
 void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double> Vg,
+    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double> &Vg,
     double gamma, double rus_k, unsigned int nFpts, unsigned int nVars,
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt,
     bool motion, bool overset, int* iblank)
