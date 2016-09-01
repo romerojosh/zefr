@@ -6,7 +6,9 @@ endif
 
 CXX = g++
 AR = ar -rvs
-CU = /usr/local/cuda-7.5/bin/nvcc
+ifeq ($(CU),)
+  CU = nvcc
+endif
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas
 CUFLAGS = -std=c++11 -arch=sm_20 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
@@ -58,6 +60,9 @@ ifeq ($(strip $(MPI)),YES)
 	FLAGS += -D_MPI
 	INCS += -I$(strip $(METIS_DIR))/include -I$(strip $(MPI_INC_DIR))
 	LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
+ifneq ($(MPI_LIB_DIR),)
+  LIBS += -L$(MPI_LIB_DIR) -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
+endif
 endif
 
 # Setting Architecture flags
