@@ -632,7 +632,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   if (input->overset)
   {
-    exit(0);
     overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
   }
 
@@ -1695,6 +1694,8 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     /* Main stage loop. Complete for Jameson-style RK timestepping */
     for (unsigned int stage = 0; stage < nSteps; stage++)
     {
+      compute_residual(stage);
+
       /* If in first stage, compute stable timestep */
       if (stage == 0)
       {
@@ -1704,20 +1705,6 @@ void FRSolver::update(const mdvector_gpu<double> &source)
           compute_element_dt();
         }
       }
-
-      if (stage > 0)
-        move(input->time + rk_alpha(stage-1)*dt(0));
-
-#ifdef _BUILD_LIB
-      // Update the overset connectivity to the new grid positions
-      if (input->overset && input->motion)
-      {
-        tioga_preprocess_grids_();
-        tioga_performconnectivity_();
-      }
-#endif
-
-      compute_residual(stage);
 
 #ifdef _CPU
       if (source.size() == 0)
@@ -1784,11 +1771,19 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       }
       check_error();
 #endif
+
+      // Update grid to position of next time step
+      move(input->time + rk_alpha(stage)*dt(0));
+
+#ifdef _BUILD_LIB
+      // Update the overset connectivity to the new grid positions
+      if (input->overset && input->motion)
+      {
+        tioga_preprocess_grids_();
+        tioga_performconnectivity_();
+      }
+#endif
     }
-
-    double fac = (nStages > 1) ? rk_alpha(nStages-2) : 0.0;
-
-    move(input->time + fac*dt(0));
 
     /* Final stage combining residuals for full Butcher table style RK timestepping*/
     if (input->dt_scheme != "RKj")
@@ -1954,6 +1949,19 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   input->time += dt(0);
   flow_time += dt(0);
   current_iter++;
+
+  // Update grid to end of time step (if not already done so)
+  if (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1))
+    move(input->time);
+
+#ifdef _BUILD_LIB
+    // Update the overset connectivity to the new grid positions
+    if (input->overset && input->motion)
+    {
+      tioga_preprocess_grids_();
+      tioga_performconnectivity_();
+    }
+#endif
 }
 
 void FRSolver::compute_element_dt()

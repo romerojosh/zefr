@@ -28,19 +28,6 @@ static const unsigned int MAX_GRID_DIM = 65535;
 static std::vector<cublasHandle_t> cublas_handles(17);
 static std::vector<cudaStream_t> stream_handles(17);
 
-//void check_error()
-//{
-//#ifndef _NO_CUDA_ERROR
-//  cudaError_t err = cudaGetLastError();
-//  if (err != cudaSuccess)
-//  {
-//    std::cout << __FILE__ << ":" << __LINE__ << ":" << __func__ << ": ";
-//    _(cudaGetErrorString(err));
-//    //ThrowException(cudaGetErrorString(err));
-//  }
-//#endif
-//}
-
 void start_cublas()
 {
   cublasCreate(&cublas_handles[0]);

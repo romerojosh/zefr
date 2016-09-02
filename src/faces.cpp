@@ -3791,7 +3791,7 @@ void Faces::send_U_data()
 #endif
 
 #ifdef _GPU
-  //sync_stream(0);
+  sync_stream(0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
@@ -3805,7 +3805,6 @@ void Faces::send_U_data()
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
-    _(pairedRank);
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
 
