@@ -226,9 +226,9 @@ void apply_nondim(InputStruct &input)
    * This is for performance, to avoid taking an exponent of a number close to 1
    * in the characteristic boundary condition. */
   input.T_ref = input.T_fs;
-  input.rho_ref = 0.5*input.rho_fs;
-  input.P_ref = input.rho_ref * V_fs_mag * V_fs_mag;
-  input.mu_ref = input.rho_ref * V_fs_mag * input.L_fs;
+  input.rho_ref = input.rho_fs;
+  input.P_ref = input.rho_fs * V_fs_mag * V_fs_mag;
+  input.mu_ref = input.rho_fs * V_fs_mag * input.L_fs;
   input.R_ref = input.R * input.T_fs / (V_fs_mag * V_fs_mag);
   input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
   input.c_sth = input.S / input.T_gas;

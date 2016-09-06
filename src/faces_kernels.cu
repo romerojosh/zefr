@@ -712,9 +712,10 @@ __global__
 void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, double rho_fs, 
     mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
-    double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> norm_fs, 
-    mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, 
-    mdvector_gpu<unsigned int> per_fpt_list, mdvector_gpu<int> LDG_bias)
+    double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> Vg,
+    mdvector_gpu<double> norm_fs, mdvector_gpu<double> norm,
+    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list,
+    mdvector_gpu<int> LDG_bias, bool motion = false)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -979,6 +980,12 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       for (unsigned int dim = 0; dim < nDims; dim++)
         momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
 
+      if (motion)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+      }
+
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
       /* Set boundary state with cancelled normal velocity */
@@ -1016,6 +1023,12 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       for (unsigned int dim = 0; dim < nDims; dim++)
         momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
 
+      if (motion)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+      }
+
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1048,11 +1061,30 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       
       U(fpt, 0, 1) = PR / (R_ref * TR);
 
-      /* Set velocity to zero */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        U(fpt, dim+1, 1) = 0.0;
+      if (motion)
+      {
+        /* Set momentum to rhoR * wall's grid velocity */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = U(fpt, 0, 1) * Vg(fpt, dim);
+      }
+      else
+      {
+        /* Set momentum to zero */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = 0.0;
+      }
 
       U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
+
+      if (motion)
+      {
+        /* Add wall-velocity component to prescribe energy */
+        double vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          vsq += Vg(fpt, dim) * Vg(fpt, dim);
+
+        U(fpt, nDims+1, 1) += 0.5 * U(fpt, 0, 1) * vsq;
+      }
 
       /* Set LDG bias */
       LDG_bias(fpt) = -1;
@@ -1125,12 +1157,31 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
       double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
       double PR = PL; 
 
-      /* Set velocity to zero */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        U(fpt, dim+1, 1) = 0.0;
+      if (motion)
+      {
+        /* Set momentum to rhoR * wall's grid velocity */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = U(fpt, 0, 1) * Vg(fpt, dim);
+      }
+      else
+      {
+        /* Set momentum to zero */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = 0.0;
+      }
 
       /* Recompute energy */
       U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
+
+      if (motion)
+      {
+        /* Add wall-velocity component to prescribe energy */
+        double vsq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          vsq += Vg(fpt, dim) * Vg(fpt, dim);
+
+        U(fpt, nDims+1, 1) += 0.5 * U(fpt, 0, 1) * vsq;
+      }
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
@@ -1198,9 +1249,10 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
-    double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &norm_fs, 
-    mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, 
-    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation)
+    double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &Vg,
+    mdvector_gpu<double> &norm_fs,  mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd,
+    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation,
+    bool motion)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
@@ -1211,28 +1263,28 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
     {
       if (nDims == 2)
         apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
       else
         apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
     }
     else if (equation == Burgers)
     {
       if (nDims == 2)
         apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
       else
         apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
     }
     else if (equation == EulerNS)
     {
       if (nDims == 2)
         apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
       else
         apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias);
+            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
     }
   }
 }
@@ -2308,14 +2360,6 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     {
       VnL += WL[dim+1]/WL[0] * norm[dim];
       VnR += WR[dim+1]/WR[0] * norm[dim];
-    }
-
-    if (motion)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        Vgn += Vg(fpt, dim, 0) * norm[dim];
-      }
     }
 
     //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);

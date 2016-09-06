@@ -18,7 +18,7 @@
 #include "elements_kernels.h"
 #include "solver_kernels.h"
 #endif
-
+#define _DEBUG
 void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 {
   myComm = comm_in;
@@ -772,6 +772,22 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
 
 void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
 {
+  /* If running a viscous simulation, use dU that was already computed
+   * NOTE: the point is to keep a copy of dU wrt reference domain coords */
+  if (input->viscous)
+  {
+#ifdef _CPU
+    std::copy(dU_spts.data(),dU_spts.data()+dU_spts.size(),dUr_spts.data());
+#endif
+
+#ifdef _GPU
+    device_copy(dUr_spts_d, dU_spts_d, dU_spts_d.size());
+    check_error();
+#endif
+
+    return;
+  }
+
   /* Compute derivative of solution at solution points (Order-P FR basis) */
 #ifdef _CPU
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -780,7 +796,7 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
     {
       auto &A = oppD0(0, 0, dim);
       auto &B = U_spts(0, startEle, var);
-      auto &C = dU_spts(0, startEle, var, dim);
+      auto &C = dUr_spts(0, startEle, var, dim);
 
 #ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
@@ -789,7 +805,7 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
 #else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
                   endEle - startEle, nSpts, 1.0, &A, oppD0.ldim(), &B, U_spts.ldim(),
-                  0.0, &C, dU_spts.ldim());
+                  0.0, &C, dUr_spts.ldim());
 #endif
     }
   }
@@ -802,10 +818,10 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
     {
       auto A = oppD0_d.data() + nSpts * nSpts * dim;
       auto B = U_spts_d.data() + nSpts * (startEle + nEles * var);
-      auto C = dU_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
+      auto C = dUr_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
 
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0, A, oppD0_d.ldim(), B,
-          U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
+          U_spts_d.ldim(), 0.0, C, dUr_spts_d.ldim());
     }
   }
   check_error();
@@ -952,9 +968,8 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
         double B = grid_vel_spts(spt,e,0)*jaco_spts(spt,e,1,0) - grid_vel_spts(spt,e,1)*jaco_spts(spt,e,0,0);
         for (uint k = 0; k < nVars; k++)
         {
-          dF_spts(spt,e,k,0,0) =  dF_spts(spt,e,k,0,0)*jaco_spts(spt,e,1,1) - dF_spts(spt,e,k,1,0)*jaco_spts(spt,e,0,1) + dU_spts(spt,e,k,0)*A;
-          dF_spts(spt,e,k,1,1) = -dF_spts(spt,e,k,0,1)*jaco_spts(spt,e,1,0) + dF_spts(spt,e,k,1,1)*jaco_spts(spt,e,0,0) + dU_spts(spt,e,k,1)*B;
-          divF_spts(spt,e,k,stage) = dF_spts(spt,e,k,0,0) + dF_spts(spt,e,k,1,1);
+          divF_spts(spt,e,k,stage) =  dF_spts(spt,e,k,0,0)*jaco_spts(spt,e,1,1) - dF_spts(spt,e,k,1,0)*jaco_spts(spt,e,0,1) + dUr_spts(spt,e,k,0)*A;
+          divF_spts(spt,e,k,stage)+= -dF_spts(spt,e,k,0,1)*jaco_spts(spt,e,1,0) + dF_spts(spt,e,k,1,1)*jaco_spts(spt,e,0,0) + dUr_spts(spt,e,k,1)*B;
         }
       }
     }
@@ -986,7 +1001,7 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
 
         for (uint dim = 0; dim < nDims; dim++)
           for (uint k = 0; k < nVars; k++)
-            divF_spts(spt,e,k,stage) += dU_spts(spt,e,k,dim)*S(dim,nDims);
+            divF_spts(spt,e,k,stage) += dUr_spts(spt,e,k,dim)*S(dim,nDims);
       }
     }
   }
@@ -996,18 +1011,17 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
   if (nDims == 2)
   {
     transform_gradF_quad_wrapper(divF_spts_d, dF_spts_d, jaco_spts_d, grid_vel_spts_d,
-        dU_spts_d, nSpts, nEles, stage, input->equation, input->overset,
+        dUr_spts_d, nSpts, nEles, stage, input->equation, input->overset,
         geo->iblank_cell_d.data());
   }
   else
   {
     transform_gradF_hexa_wrapper(divF_spts_d, dF_spts_d, jaco_spts_d, grid_vel_spts_d,
-        dU_spts_d, nSpts, nEles, stage, input->equation, input->overset,
+        dUr_spts_d, nSpts, nEles, stage, input->equation, input->overset,
         geo->iblank_cell_d.data());
   }
   check_error();
 #endif
-
 }
 
 void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
@@ -1479,12 +1493,11 @@ void Elements::compute_Fvisc(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-      compute_Fvisc_spts_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, nDims, 
-          input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
-          input->overset, geo->iblank_cell_d.data());
-      check_error();
+    compute_Fvisc_spts_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, nDims,
+                                       input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
+                                       input->overset, geo->iblank_cell_d.data());
+    check_error();
 #endif
-
   }
 }
 
@@ -2754,7 +2767,6 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-//        grid_vel_nodes(node, ele, dim) = geo->coord_nodes(dim, geo->ele2nodes(node,ele));
         grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(dim, geo->ele2nodes(node,ele));
 
   int ms = nSpts;
@@ -2821,6 +2833,7 @@ void Elements::get_grid_velocity_ppts(void)
   auto &A = shape_ppts(0,0);
   auto &B = grid_vel_nodes(0,0,0);
   auto &C = grid_vel_ppts(0,0,0);
+
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
               1.0, &A, k, &B, k, 0.0, &C, m);

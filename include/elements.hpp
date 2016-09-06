@@ -56,7 +56,7 @@ class Elements
 
     /* Moving-Grid related structures */
     mdvector<double> grid_vel_nodes, grid_vel_spts, grid_vel_fpts, grid_vel_ppts;
-    mdvector<double> dF_spts;
+    mdvector<double> dF_spts, dUr_spts;
     mdvector<double> oppD0, oppE_Fn;
     mdvector<double> dFn_fpts, tempF_fpts;
 
@@ -109,7 +109,7 @@ class Elements
     mdvector_gpu<double> grid_vel_nodes_d, grid_vel_spts_d, grid_vel_fpts_d, grid_vel_ppts_d;
     mdvector_gpu<double> nodes_d, shape_spts_d, shape_fpts_d, dshape_spts_d, dshape_fpts_d;
     mdvector_gpu<double> tnorm_d;
-    mdvector_gpu<double> dF_spts_d;
+    mdvector_gpu<double> dF_spts_d, dUr_spts_d;
     mdvector_gpu<double> oppD0_d, oppE_Fn_d;
     mdvector_gpu<double> dFn_fpts_d, tempF_fpts_d;
 

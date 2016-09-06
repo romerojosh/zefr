@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
+  cudaSetDevice(rank%nDevices); // Hardcoded for ICME nodes for now.
 #endif
 #else
   comm = 0;

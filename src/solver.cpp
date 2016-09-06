@@ -514,13 +514,9 @@ void FRSolver::solver_data_to_device()
 
   if (input->viscous)
   {
+    eles->dU_spts_d = eles->dU_spts;
     eles->Ucomm_d = eles->Ucomm;
     eles->dU_fpts_d = eles->dU_fpts;
-  }
-
-  if (input->viscous or input->motion)
-  {
-    eles->dU_spts_d = eles->dU_spts;
   }
 
   if (input->motion)
@@ -533,11 +529,10 @@ void FRSolver::solver_data_to_device()
     eles->shape_fpts_d = eles->shape_fpts;
     eles->dshape_spts_d = eles->dshape_spts;
     eles->dshape_fpts_d = eles->dshape_fpts;
-    eles->jaco_spts_d = eles->jaco_spts;
     eles->jaco_fpts_d = eles->jaco_fpts;
-    eles->inv_jaco_spts_d = eles->inv_jaco_spts;
     eles->inv_jaco_fpts_d = eles->inv_jaco_fpts;
     eles->tnorm_d = eles->tnorm;
+    eles->dUr_spts_d = eles->dUr_spts;
     eles->dF_spts_d = eles->dF_spts;
     eles->dFn_fpts_d = eles->dFn_fpts;
     eles->tempF_fpts_d = eles->tempF_fpts;
@@ -623,6 +618,12 @@ void FRSolver::solver_data_to_device()
 void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 {
   unsigned int startEle = 0; unsigned int endEle = eles->nEles;
+  unsigned int startFpt = 0; unsigned int endFpt = geo.nGfpts;
+
+#ifdef _MPI
+  endFpt = geo.nGfpts_int + geo.nGfpts_bnd;
+  unsigned int startFptMpi = endFpt;
+#endif
 
   /* If using coloring, modify range to extrapolate data from previously updated colors */
   if (color && geo.nColors > 1)
@@ -675,94 +676,82 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
-#ifdef _MPI
-  /* Transform solution point fluxes from physical to reference space */
-  if (input->motion)
-  {
-    eles->compute_gradF_spts(startEle, endEle);
-    eles->compute_dU0(startEle, endEle);
-    sync_stream(0);
-  }
-  else
-    eles->transform_flux(startEle, endEle);
-
-  /* Compute convective flux and parent space common flux at non-MPI flux points */
-  faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
-
-  faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
-
-  /* Compute solution point contribution to divergence of flux */
-  if (input->motion)
-  {
-    eles->transform_gradF_spts(stage, startEle, endEle);
-  }
-  else
-    eles->compute_divF_spts(stage, startEle, endEle);
-
-  /* Receive U data */
-  if (use_blocked)
-  {
-    for (unsigned int i = 0; i < geo.nMpiFaces; i++)
+    /* Transform solution point fluxes from physical to reference space */
+    if (input->motion)
     {
-      int ff = geo.mpiFaces[i];
-
-      faces->recv_U_data_blocked(i);
-
-      int fpt1 = geo.face2fpts(0, ff);
-      int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff)+1;
-
-      faces->compute_Fconv(fpt1, fpt2);
-      faces->compute_common_F(fpt1, fpt2);
+      eles->compute_gradF_spts(startEle, endEle);
+      eles->compute_dU0(startEle, endEle);
     }
-  }
-  else
-  {
-    faces->recv_U_data();
+    else
+      eles->transform_flux(startEle, endEle);
 
-    /* Complete computation on remaning flux points. */
-    faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-    faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-  }
-#else
-  /* Transform solution point fluxes from physical to reference space */
-  eles->transform_flux(startEle, endEle);
+    /* Compute convective flux and parent space common flux at non-MPI flux points */
+    faces->compute_Fconv(startFpt, endFpt);
 
-  /* Compute convective and parent space common fluxes at flux points */
-  faces->compute_Fconv(0, geo.nGfpts);
-  faces->compute_common_F(0, geo.nGfpts);
+    faces->compute_common_F(startFpt, endFpt);
 
-  /* Compute solution point contribution to divergence of flux */
-  eles->compute_divF_spts(stage, startEle, endEle);
+    /* Compute solution point contribution to divergence of flux */
+    if (input->motion)
+    {
+      eles->transform_gradF_spts(stage, startEle, endEle);
+    }
+    else
+      eles->compute_divF_spts(stage, startEle, endEle);
 
+#ifdef _MPI
+    /* Receive U data */
+    if (use_blocked)
+    {
+      for (unsigned int i = 0; i < geo.nMpiFaces; i++)
+      {
+        int ff = geo.mpiFaces[i];
+
+        faces->recv_U_data_blocked(i);
+
+        int fpt1 = geo.face2fpts(0, ff);
+        int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff)+1;
+
+        faces->compute_Fconv(fpt1, fpt2);
+        faces->compute_common_F(fpt1, fpt2);
+      }
+    }
+    else
+    {
+      faces->recv_U_data();
+
+      /* Complete computation on remaning flux points. */
+      faces->compute_Fconv(startFptMpi, geo.nGfpts);
+      faces->compute_common_F(startFptMpi, geo.nGfpts);
+    }
 #endif
   }
 
   /* If running viscous, use this scheduling */
   else
   {
-#ifdef _MPI
     /* Compute common interface solution at non-MPI flux points */
-    faces->compute_common_U(0, geo.nGfpts_int + geo.nGfpts_bnd);
+    faces->compute_common_U(startFpt, endFpt);
 
+#ifdef _MPI
     /* Receieve U data */
     faces->recv_U_data();
 
     //TODO: Do more work during this MPI transfer. Plenty of opportunities.
     
     /* Finish computation of common interface solution */
-    faces->compute_common_U(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-
-#else
-    /* Compute common interface solution at flux points */
-    faces->compute_common_U(0, geo.nGfpts);
+    faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
     /* Copy solution data at flux points from face local to element local
      * storage */
     U_from_faces(startEle, endEle);
 
-    /* Compute gradient of state variables at solution points */
+    /* Compute (corrected) gradient of state variables at solution points */
     eles->compute_dU(startEle, endEle);
+
+    /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
+    if (input->motion)
+      eles->compute_dU0(startEle, endEle);
 
     /* Transform gradient of state variables to physical space from 
      * reference space */
@@ -781,6 +770,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Interpolate gradient data to/from other grid(s) */
     if (input->overset)
       overset_interp(faces->nVars, eles->dU_spts.data(), faces->dU.data(), 1);
+#endif
 
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
@@ -788,46 +778,37 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Compute viscous flux at solution points */
     eles->compute_Fvisc(startEle, endEle);
     
-    /* Transform solution point fluxes from physical to reference space */
-    eles->transform_flux(startEle, endEle);
+    if (input->motion)
+    {
+      /* Use Liang-Miyaji Chain-Rule form to compute divF */
+      eles->compute_gradF_spts(startEle, endEle);
 
-    /* Compute solution point contribution to divergence of flux */
-    eles->compute_divF_spts(stage, startEle, endEle);
+      eles->transform_gradF_spts(stage, startEle, endEle);
+    }
+    else
+    {
+      /* Transform solution point fluxes from physical to reference space */
+      eles->transform_flux(startEle, endEle);
+
+      /* Compute solution point contribution to divergence of flux */
+      eles->compute_divF_spts(stage, startEle, endEle);
+    }
 
     /* Compute viscous and convective flux and common interface flux 
      * at non-MPI flux points */
-    faces->compute_Fvisc(0, geo.nGfpts_int + geo.nGfpts_bnd);
-    faces->compute_Fconv(0, geo.nGfpts_int + geo.nGfpts_bnd);
-    faces->compute_common_F(0, geo.nGfpts_int + geo.nGfpts_bnd);
+    faces->compute_Fvisc(startFpt, endFpt);
+    faces->compute_Fconv(startFpt, endFpt);
+    faces->compute_common_F(startFpt, endFpt);
 
+#ifdef _MPI
     /* Receive gradient data */
     faces->recv_dU_data();
 
     /* Complete computation of fluxes */
-    faces->compute_Fvisc(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-    faces->compute_Fconv(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-    faces->compute_common_F(geo.nGfpts_int + geo.nGfpts_bnd, geo.nGfpts);
-
-#else
-    /* Apply boundary conditions to the gradient */
-    faces->apply_bcs_dU();
-
-    /* Compute viscous flux at solution points */
-    eles->compute_Fvisc(startEle, endEle);
-
-    /* Transform solution point fluxes from physical to reference space */
-    eles->transform_flux(startEle, endEle);
-
-    /* Compute solution point contribution to divergence of flux */
-    eles->compute_divF_spts(stage, startEle, endEle);
-
-    /* Compute viscous and convective flux and common interface fluxes 
-     * at flux points*/ 
-    faces->compute_Fvisc(0, geo.nGfpts);
-    faces->compute_Fconv(0, geo.nGfpts);
-    faces->compute_common_F(0, geo.nGfpts);
+    faces->compute_Fvisc(startFptMpi, geo.nGfpts);
+    faces->compute_Fconv(startFptMpi, geo.nGfpts);
+    faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
-
   }
 
   /* Copy common flux data from face local storage to element local storage */
@@ -1200,13 +1181,9 @@ void FRSolver::initialize_U()
   //eles->F_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
   eles->Fcomm.assign({eles->nFpts, eles->nEles, eles->nVars});
 
-  if (input->viscous or input->motion)
-  {
-    eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-  }
-
   if (input->viscous)
   {
+    eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
   }
@@ -1215,6 +1192,7 @@ void FRSolver::initialize_U()
 
   if (input->motion)
   {
+    eles->dUr_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims, eles->nDims});
     eles->dFn_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
     eles->tempF_fpts.assign({eles->nFpts, eles->nEles});
@@ -2474,7 +2452,8 @@ void FRSolver::write_solution(const std::string &_prefix)
       {
         for (unsigned int dim = 0; dim < eles->nDims; dim++)
         {
-          f << std::scientific << std::setprecision(16) << eles->grid_vel_ppts(ppt, ele, 0);
+          f << std::scientific << std::setprecision(16);
+          f << eles->grid_vel_ppts(ppt, ele, dim);
           f  << " ";
         }
         if (eles->nDims == 2) f << 0.0 << " ";
@@ -2700,7 +2679,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
   std::vector<double> res(eles->nVars,0.0);
 
-#pragma omp parallel for collapse(3)
+//#pragma omp parallel for collapse(3)
 //  for (unsigned int n = 0; n < eles->nVars; n++)
 //    for (unsigned int ele =0; ele < eles->nEles; ele++)
 //    {
@@ -2733,6 +2712,10 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
       }
       nEles++;
     }
+  }
+
+//  for (unsigned int n = 0; n < eles->nVars; n++)
+//  {
 //    /* Infinity norm */
 //    if (input->res_type == 0)
 //      res[n] =*std::max_element(&eles->divF_spts(0, 0, n, 0),
@@ -2747,7 +2730,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 //    else if (input->res_type == 2)
 //      res[n] = std::accumulate(&eles->divF_spts(0, 0, n, 0),
 //            &eles->divF_spts(0, 0, n+1, 0), 0.0, square<double>());
-  }
+//  }
 
   unsigned int nDoF =  (eles->nSpts * nEles);
 

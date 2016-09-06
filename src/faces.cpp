@@ -704,7 +704,7 @@ void Faces::apply_bcs()
 #ifdef _GPU
   apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
       input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
-      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation);
+      Vg_d, input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation, input->motion);
 
   check_error();
 #endif
@@ -2031,9 +2031,6 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
         input->motion, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
-
-    //Fcomm = Fcomm_d;
-    //waveSp = waveSp_d;
 #endif
   }
   else if (input->fconv_type == "Roe")
@@ -2437,22 +2434,12 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       }
     }
 
-//    int ff = geo->fpt2face[fpt];
-//    int ibl = geo->iblank_face[ff];
-//    if (input->rank == 3 && fpt==6851 && ibl == -1)
-//    {
-//      printf("fpt %d: FL[1] = %f, FR[1] = %f\n",fpt,FL[1],FR[1]);
-//    }
-
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
       WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
     }
-//    if (input->rank == 3 && fpt==6851 && ibl == -1)
-//    {
-//      printf("fpt %d: WL[1] = %f, WR[1] = %f\n",fpt,WL[1],WR[1]);
-//    }
+
     /* Get numerical diffusion coefficient */
     if (input->equation == AdvDiff || input->equation == Burgers)
     {
@@ -3903,7 +3890,7 @@ void Faces::recv_U_data()
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
     nrecvs++;
   }
-
+check_error();
   sync_stream(1);
 
   nsends = 0;
@@ -3917,7 +3904,7 @@ void Faces::recv_U_data()
     nsends++;
   }
 #endif
-
+check_error();
   /* Wait for comms to finish */
   input->waitTimer.startTimer();
   MPI_Waitall(nrecvs, rreqs.data(), MPI_STATUSES_IGNORE);
@@ -3925,7 +3912,7 @@ void Faces::recv_U_data()
   input->waitTimer.stopTimer();
 
   /* Unpack buffer */
-
+check_error();
   /* ---- USING SEND/RECV BUFFERS ---- */
 #ifdef _CPU2
   for (const auto &entry : geo->fpt_buffer_map)

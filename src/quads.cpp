@@ -467,13 +467,10 @@ void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-  //F_spts_d = F_spts;
   transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars,
       nDims, input->equation, startEle, endEle);
 
   check_error();
-
-  //F_spts = F_spts_d;
 #endif
 }
 

@@ -1860,7 +1860,7 @@ void inverse_transform_quad(mdvector_gpu<double> jaco,
   int pt = (blockDim.x * blockIdx.x + threadIdx.x) % nPts;
   int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nPts;
 
-  if (ele > nEles)
+  if (ele >= nEles)
     return;
 
   // Determinant of transformation matrix
@@ -1879,7 +1879,7 @@ void inverse_transform_hexa(mdvector_gpu<double> jaco,
   int pt = (blockDim.x * blockIdx.x + threadIdx.x) % nPts;
   int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nPts;
 
-  if (ele > nEles)
+  if (ele >= nEles)
     return;
 
   double xr = jaco(pt,ele,0,0);  double xs = jaco(pt,ele,0,1);  double xt = jaco(pt,ele,0,2);
