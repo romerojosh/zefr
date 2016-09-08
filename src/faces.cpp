@@ -3890,7 +3890,7 @@ void Faces::recv_U_data()
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
     nrecvs++;
   }
-check_error();
+
   sync_stream(1);
 
   nsends = 0;
@@ -3904,7 +3904,7 @@ check_error();
     nsends++;
   }
 #endif
-check_error();
+
   /* Wait for comms to finish */
   input->waitTimer.startTimer();
   MPI_Waitall(nrecvs, rreqs.data(), MPI_STATUSES_IGNORE);
@@ -3912,7 +3912,7 @@ check_error();
   input->waitTimer.stopTimer();
 
   /* Unpack buffer */
-check_error();
+
   /* ---- USING SEND/RECV BUFFERS ---- */
 #ifdef _CPU2
   for (const auto &entry : geo->fpt_buffer_map)
