@@ -30,6 +30,10 @@ struct GeoStruct
     unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
     unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
     bool per_bnd_flag = false;
+
+    /* Connectivity Data */
+    mdvector<int> ele2nodes, ele2face, face2nodes, face2eles, face2eles_idx;
+
     std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
     std::vector<unsigned int> ele_color_range, ele_color_nEles;
     mdvector<unsigned int> gfpt2bnd, per_fpt_list;
@@ -49,6 +53,8 @@ struct GeoStruct
     std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
     std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
     std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
+    std::map<std::vector<unsigned int>, unsigned int> face2bnd;
+    std::vector<std::vector<int>> boundFaces; //! List of face IDs for each mesh-defined boundary
 
 #ifdef _MPI
     unsigned int nGfpts_mpi;
@@ -81,6 +87,9 @@ struct GeoStruct
     std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
     mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
     std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
+    std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
+    std::vector<int> fpt2face; //! fpt index to face index
+    mdvector<int> face2fpts; //! Face index to fpt indices
 
     unsigned int nGrids;             //! Number of distinct overset grids
     int nProcsGrid;          //! Number of MPI processes assigned to current (overset) grid block

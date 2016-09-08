@@ -109,6 +109,7 @@ int main(int argc, char* argv[])
 
   /* Write initial solution */
   solver.write_solution(input.output_prefix);
+  solver.write_surfaces(input.output_prefix);
   if (input.dt_scheme == "MCGS")
   {
     solver.write_color();
@@ -141,6 +142,7 @@ int main(int argc, char* argv[])
     if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
     {
       solver.write_solution(input.output_prefix);
+      solver.write_surfaces(input.output_prefix);
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))

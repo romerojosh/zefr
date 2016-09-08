@@ -147,11 +147,13 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
     {
       geo.bnd_ids.push_back(bcStr2Num[bcStr]);
       geo.bcNames.push_back(bcName);
-      geo.bcIdMap[bcid] = geo.nBounds; // Map Gmsh bcid to Flurry bound index
+      geo.bcIdMap[bcid] = geo.nBounds; // Map Gmsh bcid to ZEFR bound index
       if (geo.bnd_ids.back() == PERIODIC) geo.per_bnd_flag = true;
       geo.nBounds++;
     }
   }
+
+  geo.boundFaces.resize(geo.nBounds);
 }
 
 void read_node_coords(std::ifstream &f, GeoStruct &geo)
@@ -634,8 +636,8 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
       /* Sort for consistency and add to map*/
       std::sort(face.begin(), face.end());
-      if (bcType != OVERSET)
-        geo.bnd_faces[face] = bcType;
+      geo.bnd_faces[face] = bcType;
+      geo.face2bnd[face] = bnd_id;
     }
   }
   else if (geo.nDims == 3)
@@ -710,8 +712,8 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       int bcType = geo.bnd_ids[bnd_id];
 
       std::sort(face.begin(), face.end());
-      if (bcType != OVERSET)
-        geo.bnd_faces[face] = bcType;
+      geo.bnd_faces[face] = bcType;
+      geo.face2bnd[face] = bnd_id;
     }
 
   }
@@ -1066,6 +1068,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nFaces = 0;
     geo.faceList.resize(0);
 
+    geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
+    geo.face2eles.assign({2, unique_faces.size()}, -1);
+
     /* Begin loop through faces */
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
     {
@@ -1105,6 +1110,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         std::vector<unsigned int> fpts(nFptsPerFace,0);
         if(!face_fpts.count(face))
         {
+          geo.ele2face(n, ele) = geo.nFaces;
+          geo.face2eles(0, geo.nFaces) = ele;
+
           /* Check if face is on boundary */
           if (geo.bnd_faces.count(face))
           {
@@ -1117,7 +1125,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
             }
 
             bndface2fpts[face] = fpts;
-            
+
+            int bnd = geo.face2bnd[face];
+            geo.boundFaces[bnd].push_back(geo.nFaces);
           }
 #ifdef _MPI
           /* Check if face is on MPI boundary */
@@ -1153,10 +1163,16 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           }
 
           geo.faceList.push_back(face);
+          geo.nodes_to_face[face] = geo.nFaces;
+          geo.nFaces++;
         }
         /* If face has already been encountered, must assign existing global flux points */
         else
         {
+          int ff = geo.nodes_to_face[face];
+          geo.ele2face(n, ele) = ff;
+          geo.face2eles(1, ff) = ele;
+
           auto fpts = face_fpts[face];
           auto face0_ordered = geo.face2ordered[face];
           
@@ -1851,10 +1867,38 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   /* Reduce boundary faces data to contain only faces on local partition. Also
    * reindex via geo.node_map_g2p */
   auto bnd_faces_glob = geo.bnd_faces;
+  auto face2bnd_glob = geo.face2bnd;
   geo.bnd_faces.clear();
-  
+  geo.face2bnd.clear();
+
   /* Iterate over all boundary faces */
   for (auto entry : bnd_faces_glob)
+  {
+    std::vector<unsigned int> bnd_face = entry.first;
+    int bcType = entry.second;
+
+    /* If all nodes are on this partition, keep face data */
+    bool myFace = true;
+    for (auto nd : bnd_face)
+    {
+      if (!uniqueNodes.count(nd))
+      {
+        myFace = false;
+      }
+    }
+
+    if (myFace)
+    {
+      /* Renumber nodes and store */
+      for (auto &nd : bnd_face)
+      {
+        nd = geo.node_map_g2p[nd];
+      }
+      geo.bnd_faces[bnd_face] = bcType;
+    }
+  }
+
+  for (auto entry : face2bnd_glob)
   {
     std::vector<unsigned int> bnd_face = entry.first;
     int bnd_id = entry.second;
@@ -1876,7 +1920,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       {
         nd = geo.node_map_g2p[nd];
       }
-      geo.bnd_faces[bnd_face] = bnd_id;
+      geo.face2bnd[bnd_face] = bnd_id;
     }
   }
 
