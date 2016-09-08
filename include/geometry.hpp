@@ -55,6 +55,8 @@ struct GeoStruct
     std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
     std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
     std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
+    std::map<std::vector<unsigned int>, unsigned int> face2bnd;
+    std::vector<std::vector<int>> boundFaces; //! List of face IDs for each mesh-defined boundary
 
     _mpi_comm myComm;
 #ifdef _MPI
@@ -88,7 +90,8 @@ struct GeoStruct
 
     unsigned int nBndFaces, nIntFaces, nOverFaces;
     std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
-    std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching ele2face / face2eles
+///    mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
+    std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
     std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
     std::vector<int> fpt2face; //! fpt index to face index
     mdvector<int> face2fpts; //! Face index to fpt indices

@@ -104,6 +104,7 @@ class FRSolver
     void update(const mdvector_gpu<double> &source = mdvector_gpu<double>());
 #endif
     void write_solution(const std::string &_prefix);
+    void write_surfaces(const std::string &_prefix);
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
