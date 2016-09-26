@@ -30,7 +30,8 @@ SOURCES += \
     src/funcs_kernels.cu \
     src/solver_kernels.cu \
     src/zefr_interface.cpp \
-    swig_bin/testZefr.cpp
+    swig_bin/testZefr.cpp \
+    src/filter.cpp
 
 HEADERS += \
     include/elements_kernels.h \
@@ -58,5 +59,6 @@ DISTFILES += \
     swig_bin/zefr.i \
     swig_bin/test.py \
     swig_bin/Makefile \
-    Makefile
+    Makefile \
+    src/filter_kernels.cu
 

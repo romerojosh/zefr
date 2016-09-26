@@ -28,6 +28,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   geo.input = input;
   geo.myComm = comm_in;
   geo.gridID = input->gridID;
+  geo.rank = input->rank;
   geo.gridRank = input->rank;
 
   load_mesh_data(input, geo);
@@ -196,7 +197,7 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo)
 }
 
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input)
-{ 
+{
   /* Move cursor to $Elements */
   f.clear();
   f.seekg(0, f.beg);
@@ -651,92 +652,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     }
   }
 
-
-  /* Setup additional connectivity structures */
+  /* Setup face-node maps for easier processing */
   set_face_nodes(geo);
-
-  std::vector<int> face;
-  std::set<std::vector<int>> processed;
-  std::vector<std::vector<int>> face2nodes, face2eles, face2eles_idx; /* Temporary data structures for easier processing */
-
-  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
-  int face_idx = 0;
-
-  /* Iterate over element faces */
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-  {
-    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
-    {
-      face.assign(geo.nNodesPerFace, 0);
-
-      for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
-      {
-        face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
-      }
-
-      /* Check if face is collapsed */
-      std::set<unsigned int> nodes;
-      for (auto node : face)
-        nodes.insert(node);
-
-      if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
-      {
-        continue;
-      }
-      else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
-      {
-        face.assign(nodes.begin(), nodes.end());
-      }
-
-      /* Sort face for consistency */
-      std::sort(face.begin(), face.end());
-
-      /* If face has not been encountered yet, create associated connectivity entries */
-      if (!processed.count(face))
-      {
-        face2nodes.push_back(face);
-        processed.insert(face);
-
-        geo.ele2face(n, ele) = face_idx;
-
-        face2eles.emplace_back();
-        face2eles[face_idx].push_back(ele);
-        face2eles_idx.emplace_back();
-        face2eles_idx[face_idx].push_back(n);
-
-        face_idx++;
-      }
-
-      /* Otherwise, find existing entry to modify */
-      else
-      {
-        auto iter = std::find(face2nodes.begin(), face2nodes.end(), face);
-        unsigned int idx = std::distance(face2nodes.begin(), iter); 
-        face2eles[idx].push_back(ele);
-        face2eles_idx[idx].push_back(n);
-      }
-    }
-  }
-
-  /* Copy to contiguous data structures */
-  geo.nFaces = face2nodes.size();
-  geo.face2nodes.assign({geo.nNodesPerFace, geo.nFaces});
-  geo.face2eles.assign({2, geo.nFaces}, -1);
-  geo.face2eles_idx.assign({2, geo.nFaces}, -1);
-
-  for (unsigned int face = 0; face < geo.nFaces; face++)
-  {
-    for (unsigned int nd = 0; nd < geo.nNodesPerFace; nd++)
-    {
-      geo.face2nodes(nd, face) = face2nodes[face][nd];
-    }
-
-    for (unsigned int i = 0; i < face2eles[face].size(); i++)
-    {
-      geo.face2eles(i, face) = face2eles[face][i];
-      geo.face2eles_idx(i, face) = face2eles_idx[face][i];
-    }
-  }
 
   /* Rewind file */
   f.seekg(pos);
@@ -1216,6 +1133,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nFaces = 0;
     geo.faceList.resize(0);
 
+    /* Additional Connectivity Arrays */
 #ifdef _MPI
     geo.mpiFaces.resize(0);
     geo.procR.resize(0);
@@ -2030,7 +1948,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
       if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
       {
-        geo.ele2face(n, ele) = -2;
         continue;
       }
       else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */

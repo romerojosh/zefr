@@ -17,7 +17,23 @@ int main(int argc, char *argv[])
   //gridID = rank%nGrids; //(rank > (size/2));
   gridID = rank>0;
 
+  /* Basic sphere test case */
+  nGrids = 2;
+  if (rank == 0) gridID = 0;
+  if (rank > 0) gridID = 1;
+
   /* 2-sphere test case */
+  nGrids = 3;
+  if (rank == 0) gridID = 0;
+  if (rank == 1) gridID = 1;
+  if (rank > 1) gridID = 2;
+
+  /* 2-Grid TSTO test case */
+//  nGrids = 2;
+//  if (rank <= 1) gridID = 0;
+//  if (rank > 1) gridID = 1;
+
+  /* 3-Grid TSTO test case */
 //  nGrids = 3;
 //  if (rank == 0) gridID = 0;
 //  if (rank == 1) gridID = 1;

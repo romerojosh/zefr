@@ -323,6 +323,7 @@ void Zefr::write_residual(void)
 void Zefr::write_solution(void)
 {
   solver->write_solution(input.output_prefix);
+  solver->write_surfaces(input.output_prefix);
 }
 
 void Zefr::write_forces(void)
