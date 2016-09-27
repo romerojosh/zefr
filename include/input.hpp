@@ -33,7 +33,7 @@ struct InputStruct
   double exps0, s_factor;
   unsigned int rank, nRanks;
   unsigned int shockcapture, sen_norm, limiter, filt2on;
-  double sen_Jfac, alpha, filtexp, nonlin_exp;
+  double sen_Jfac, alpha, filtexp, nonlin_exp, filtexp2, alpha2;
 
   /* SWLBLI stuff */
   double rho_fs2, u_fs2, v_fs2, P_fs2, mu2;

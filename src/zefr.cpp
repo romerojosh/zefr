@@ -35,7 +35,7 @@ int main(int argc, char* argv[])
   //   ThrowException("Not enough GPUs for this run. Allocate more!");
   // }
 
-  cudaSetDevice(rank%6);
+  cudaSetDevice(rank%8);
 #endif
 
 #endif

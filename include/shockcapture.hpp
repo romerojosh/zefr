@@ -29,7 +29,7 @@ class ShockCapture
 	unsigned int order;
 
     mdvector<double> Vander, VanderInv, Vander_d1;
-    mdvector<double> Vander2D, Vander2DInv, Vander2D_tr, Vander2DInv_tr;
+    mdvector<double> Vander2D, VanderND, VanderNDInv;
     mdvector<double> Conc, oppS_1D, oppS, filt, filt2;
     mdvector<double> KS, U_spts, U_filt;
     double threshJ, normalTol;
@@ -46,7 +46,6 @@ class ShockCapture
     void setup_expfilter_matrix();
     void setup_threshold();
     void setup_oppS();
-    void bring_to_square(uint ele, uint var, double Ulow, double Uhigh);
 
   public:
     mdvector<double> sensor; 
@@ -61,13 +60,9 @@ class ShockCapture
 #endif
     void setup(InputStruct *input, FRSolver &solver);
     void apply_sensor();
-    void compute_Umodal();
-    void compute_Unodal();
-    void limiter();
     void apply_expfilter();
     void apply_expfilter_type2();
 
 };
-
 
 #endif /* shockcapture_hpp */

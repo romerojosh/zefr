@@ -1478,6 +1478,21 @@ void partition_geometry(GeoStruct &geo)
         face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
       }
 
+      /* Check if face is collapsed */
+       std::set<unsigned int> nodes;
+       for (auto node : face)
+         nodes.insert(node);
+ 
+       if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
+       {
+         //geo.c2f(ele, n) = -1;
+         continue;
+       }
+       else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
+       {
+         face.assign(nodes.begin(), nodes.end());
+       }
+
       /* Sort for consistency */
       std::sort(face.begin(), face.end());
       

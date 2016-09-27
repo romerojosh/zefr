@@ -43,7 +43,7 @@ void normalize_data_wrapper(mdvector_gpu<double>& U_spts, double normalTol, unsi
 __global__
 void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor, 
     mdvector_gpu<unsigned int> sensor_bool, double threshJ, unsigned int order, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, double Q)
+    unsigned int nEles, unsigned int nVars, unsigned int nDims, double Q)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -54,7 +54,7 @@ void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
   for (unsigned int var = 0; var < nVars; var++)
   {
     double sen = 0.0;
-    for (unsigned int row = 0; row < 2 * nSpts; row++)
+    for (unsigned int row = 0; row < nDims * nSpts; row++)
     {
       KS(row, ele, var) = pow(order+1,Q/2) * pow(abs(KS(row, ele, var)), Q);
       //KS(row, ele, var) = order * (KS(row, ele, var) * KS(row, ele, var));
@@ -70,12 +70,12 @@ void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
 
 void compute_max_sensor_wrapper(mdvector_gpu<double>& KS, mdvector_gpu<double>& sensor, 
     unsigned int order, double& max_sensor, mdvector_gpu<unsigned int>& sensor_bool, double threshJ, 
-    unsigned int nSpts, unsigned int nEles, unsigned int nVars, double Q)
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, double Q)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nEles + threads - 1)/threads;
 
-  compute_max_sensor<<<blocks, threads>>>(KS, sensor, sensor_bool, threshJ, order, nSpts, nEles, nVars, Q);
+  compute_max_sensor<<<blocks, threads>>>(KS, sensor, sensor_bool, threshJ, order, nSpts, nEles, nVars, nDims, Q);
 
 
   /* Get max sensor value using thrust */

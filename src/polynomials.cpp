@@ -71,39 +71,84 @@ double Legendre_d1(unsigned int P, double xi)
 }
 
 // Evaluate 2D legendre basis
-double Legendre2D(unsigned int in_mode, mdvector<double> loc, unsigned int order)
+double LegendreND(unsigned int in_mode, mdvector<double> loc, unsigned int order, unsigned int nDims)
 {
   double leg_basis;
-  unsigned int n_dof=(order+1)*(order+1);
-
-  if(in_mode<n_dof)
+  if(nDims == 2)
   {
-    unsigned int i,j,k;
-    unsigned int mode;
-    double normCi, normCj;
-    mode = 0;
-    #pragma omp parallel for
-    for (k=0;k<order*order+1;k++)
+    unsigned int n_dof=(order+1)*(order+1);
+
+    if(in_mode<n_dof)
     {
-      for (j=0;j<k+1;j++)
+      unsigned int i,j,k;
+      unsigned int mode;
+      double normCi, normCj;
+      mode = 0;
+      #pragma omp parallel for
+      for(k=0;k<=2*order;k++)
       {
-        i = k-j;
-        if(i<=order && j<=order)
+        for(j=0;j<k+1;j++)
         {
-          if(mode==in_mode) // found the correct mode
+          i = k-j;
+          if(i<=order && j<=order) // Order would be (0,2) (1,1) (2,0) ... any hierarchical ordering is fine
           {
-	          normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
-            normCj = std::sqrt(2.0 / (2.0 * j + 1.0)); 
-            leg_basis = Legendre(i,loc(0))*Legendre(j,loc(1))/(normCi*normCj);
+            if(mode==in_mode) // found the correct mode 
+            {
+  	          normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
+              normCj = std::sqrt(2.0 / (2.0 * j + 1.0)); 
+              leg_basis = Legendre(i,loc(0))*Legendre(j,loc(1))/(normCi*normCj);
+            }
+            mode++;
           }
-          mode++;
         }
       }
     }
+    else
+    {
+      cout << "ERROR: Invalid mode when evaluating Legendre basis ...." << endl;
+    }
+  }
+  else if(nDims == 3)
+  {
+    unsigned int n_dof=(order+1)*(order+1)*(order+1);
+
+    if(in_mode<n_dof)
+    {
+      unsigned int i,j,k,l;
+      unsigned int mode;
+      double normCi, normCj,normCk;
+      mode = 0;
+      #pragma omp parallel for
+      for(l=0;l<=3*order;l++)
+      {
+        for(k=0;k<=l;k++)
+        {
+          for(j=0;j<=l-k;j++)
+          {
+            i = l-k-j;
+            if(i<=order && j<=order && k <=order)
+            {
+              if(mode==in_mode) // found the correct mode
+              {
+                normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
+                normCj = std::sqrt(2.0 / (2.0 * j + 1.0));
+                normCk = std::sqrt(2.0 / (2.0 * k + 1.0)); 
+                leg_basis = Legendre(i,loc(0))*Legendre(j,loc(1))*Legendre(k,loc(2))/(normCi*normCj*normCk);
+              }
+              mode++;
+            }
+          }
+        }
+      }
+    }
+    else
+    {
+      cout << "ERROR: Invalid mode when evaluating Legendre basis ...." << endl;
+    }    
   }
   else
   {
-    cout << "ERROR: Invalid mode when evaluating Legendre basis ...." << endl;
+    cout << "ERROR: Legendre basis not implemented for higher than 3 dimensions" << endl;
   }
   
   return leg_basis;

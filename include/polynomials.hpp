@@ -47,14 +47,14 @@ double Legendre(unsigned int P, double xi);
  */
 double Legendre_d1(unsigned int P, double xi);
 
-//! Evaluates the 2D Legendre modal basis at loc.
+//! Evaluates the N-D multidimensional Legendre modal basis at loc.
 /*!
  * \param in_mode  Mode to evaluate
  * \param loc      mdvector of size giving [xi,eta] of the point
  * \param order    order of the polynomial basis (overall)
  * \return 	   Value of mode in_mode at loc.
  */
-double Legendre2D(unsigned int in_mode, mdvector<double> loc, unsigned int order);
+double LegendreND(unsigned int in_mode, mdvector<double> loc, unsigned int order, unsigned int nDims);
 
 
 #endif /* polynomials_hpp */

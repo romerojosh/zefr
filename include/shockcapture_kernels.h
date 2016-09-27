@@ -5,7 +5,7 @@ void normalize_data_wrapper(mdvector_gpu<double>& U_spts, double normalTol, unsi
 
 void compute_max_sensor_wrapper(mdvector_gpu<double>& KS, mdvector_gpu<double>& sensor, 
     unsigned int order, double& max_sensor, mdvector_gpu<uint>& sensor_bool, double threshJ, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, double Q);
+    unsigned int nEles, unsigned int nVars, unsigned int nDims, double Q);
 
 void copy_filtered_solution_wrapper(mdvector_gpu<double>& U_spts_filt, mdvector_gpu<double>& U_spts, 
     mdvector_gpu<double>& sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars, int type);
