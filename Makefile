@@ -9,8 +9,9 @@ AR = ar -rvs
 ifeq ($(CU),)
   CU = nvcc
 endif
+
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas
-CUFLAGS = -std=c++11 -arch=sm_20 --default-stream per-thread
+CUFLAGS = -std=c++11 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
@@ -45,7 +46,7 @@ ifeq ($(strip $(BLAS)),STANDARD)
 endif
 
 ifeq ($(strip $(BLAS)),OPENBLAS)
-	LIBS = -L$(BLAS_LIB_DIR)/lib -lopenblas
+	LIBS = -L$(BLAS_LIB_DIR) -lopenblas
 endif
 
 ifeq ($(strip $(BLAS)),$(strip ATLAS))
@@ -58,8 +59,8 @@ INCS = -I$(strip $(BLAS_INC_DIR))
 ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
-	INCS += -I$(strip $(METIS_DIR))/include -I$(strip $(MPI_INC_DIR))
-	LIBS += -L$(strip $(METIS_DIR))/lib -lmetis 
+	INCS += -I$(strip $(METIS_INC_DIR)) -I$(strip $(MPI_INC_DIR))
+	LIBS += -L$(strip $(METIS_LIB_DIR)) -lmetis 
 ifneq ($(MPI_LIB_DIR),)
   LIBS += -L$(MPI_LIB_DIR) -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
@@ -72,8 +73,22 @@ endif
 
 ifeq ($(strip $(ARCH)),GPU)
 	FLAGS += -D_GPU
-	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas -Wl,-rpath=$(strip $(CUDA_DIR))/lib64
+	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas -lnvToolsExt -Wl,-rpath=$(strip $(CUDA_DIR))/lib64
 	INCS += -I$(strip $(CUDA_DIR))/include
+
+ifeq ($(CU),)
+  CUFLAGS += -arch=sm_20
+else
+	
+ifeq ($(strip $(SM)),FERMI)
+  CUFLAGS += -arch=sm_20
+endif
+
+ifeq ($(strip $(SM)),KEPLER)
+  CUFLAGS += -arch=sm_35
+endif
+
+endif
 endif
 
 # Including external template libraries
