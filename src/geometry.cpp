@@ -32,11 +32,15 @@ enum MESH_FORMAT {
   GMSH, PYFR
 };
 
-GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
+GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in)
 {
   GeoStruct geo;
   geo.nDims = nDims;
   geo.input = input;
+  geo.myComm = comm_in;
+  geo.gridID = input->gridID;
+  geo.rank = input->rank;
+  geo.gridRank = input->rank;
 
   int format;
 
@@ -73,6 +77,13 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
     load_mesh_data_pyfr(input, geo);
 
     setup_global_fpts_pyfr(input, geo, order);
+  }
+
+  if (input->overset)
+  {
+    geo.iblank_node.assign(geo.nNodes, NORMAL);
+    geo.iblank_cell.assign({geo.nEles}, NORMAL);
+    geo.iblank_face.assign(geo.nFaces, NORMAL);
   }
 
   return geo;
@@ -346,7 +357,8 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   if (!f.is_open())
     ThrowException("Could not open specified mesh file!");
 
-  std::string param;
+  if (input->rank == 0)
+    std::cout << "Reading mesh file " << input->meshfile << std::endl;
 
   /* Process file information */
   /* Load boundary tags */
@@ -355,12 +367,12 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   /* Load node coordinate data */
   read_node_coords(f, geo);
 
+  if (input->motion)
+    geo.coords_init = geo.coord_nodes;
 
   /* Load element connectivity data */
   read_element_connectivity(f, geo, input);
   read_boundary_faces(f, geo);
-
-  set_face_nodes(geo);
 
   set_ele_adjacency(geo);
 
@@ -462,21 +474,21 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo)
   }
 
   f >> geo.nNodes;
-  geo.coord_nodes.assign({geo.nNodes, geo.nDims});
+  geo.coord_nodes.assign({geo.nDims, geo.nNodes});
   for (unsigned int node = 0; node < geo.nNodes; node++)
   {
     unsigned int vint;
     double vdouble;
     f >> vint;
     if (geo.nDims == 2)
-      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> vdouble;
+      f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> vdouble;
     else if (geo.nDims == 3)
-      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> geo.coord_nodes(node,2);
-  }
+      f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> geo.coord_nodes(2,node);
+  }   
 }
 
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input)
-{ 
+{
   /* Move cursor to $Elements */
   f.clear();
   f.seekg(0, f.beg);
@@ -568,12 +580,39 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 11:
         case 12:
           geo.nEles++;
-          geo.shape_order = 2; geo.nNodesPerEle = 20; break;
+          geo.shape_order = 2;
+          if (input->serendipity)
+            geo.nNodesPerEle = 20;
+          else
+            geo.nNodesPerEle = 27;
+          break;
+
+        case 92:
+          geo.nEles++;
+          geo.shape_order = 3;
+          geo.nNodesPerEle = 64;
+          break;
+
+        case 93:
+          geo.nEles++;
+          geo.shape_order = 4;
+          geo.nNodesPerEle = 125;
+          break;
+
+        case 94:
+          geo.nEles++;
+          geo.shape_order = 5;
+          geo.nNodesPerEle = 216;
+          break;
 
         case 2:
         case 3:
         case 9:
-        case 10:
+        case 10: // Quadratic (Lagrange) quad
+        case 16: // Quadratic (Serendipity) quad
+        case 36: // Cubic quad
+        case 37: // Quartic quad
+        case 38: // Quintic quad
           geo.nBnds++; break;
 
         default:
@@ -615,7 +654,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
         case 2: /* 3-node Triangle */
           f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
-          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele);
+          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); 
           ele++; break;
 
         case 3: /* 4-node Quadrilateral */
@@ -623,13 +662,13 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           ele++; break;
 
         case 9: /* 6-node Triangle */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele); 
           f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(7,ele);
           geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); geo.ele2nodes(6,ele) = geo.ele2nodes(2,ele);
 
           if (!input->serendipity)
           {
-            //TODO set geo.nd2gnd(8,ele) to centroid
+            //TODO set geo.ele2nodes(8,ele) to centroid
             ThrowException("Biquadratic quad to triangles not implemented yet! Set serendipity = 1!");
           }
 
@@ -672,6 +711,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 3: /* 4-node Quadrilateral (skip)*/
         case 9: /* 6-node Triangle (skip) */
         case 10: /* 9-node Quadrilateral (skip) */
+        case 16: // Quadratic (Serendipity) quad
+        case 36: // Cubic quad
+        case 37: // Quartic quad
+        case 38: // Quintic quad
           std::getline(f,line); break;
 
         case 4: /* 4-node Tetrahedral */
@@ -859,14 +902,30 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           ele++; break;
         }
 
-        case 12: /* Triquadratic Hex (read as 20-node serendipity) */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-          f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
-          f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
-          f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
+        case 12: /* Triquadratic Hex */
+        {
+          if (input->serendipity) /* Read as 20-node serendipity */
+          {
+            f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+            f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
+            f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
+            f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
+            f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
+          }
+          else /* Read as 27-node Lagrange tensor-product */
+          {
+            for (unsigned int nd = 0; nd < 27; nd++)
+              f >> geo.ele2nodes(nd,ele);
+          }
           std::getline(f,line); ele++; break;
+        }
 
+        case 92: /* Cubic Hex */
+        case 93: /* Quartic Hex */
+        case 94: /* Quintic Hex */
+          for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
+            f >> geo.ele2nodes(nd,ele);
+          std::getline(f,line); ele++; break;
 
         default:
           ThrowException("Unrecognized element type detected!"); break;
@@ -875,6 +934,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     }
   }
 
+  /* Correct node values to be 0-indexed */
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
@@ -882,6 +942,9 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       geo.ele2nodes(n,ele)--;
     }
   }
+
+  /* Setup face-node maps for easier processing */
+  set_face_nodes(geo);
 
   /* Rewind file */
   f.seekg(pos);
@@ -891,7 +954,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 {
   if (geo.nDims == 2)
   {
-    std::vector<unsigned int> face(geo.nNodesPerFace,0);
+    std::vector<unsigned int> face(geo.nNodesPerFace, 0);
     for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
     {
       unsigned int vint, ele_type, bnd_id, nTags;
@@ -949,7 +1012,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
           for (unsigned int i = 0; i < nTags - 1; i++)
             f >> vint;
-
           
           face.assign(3,0);
           f >> face[0] >> face[1] >> face[2]; 
@@ -979,6 +1041,10 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 
 
         case 10: /* 9-node Quadrilateral */
+        case 16: // Quadratic (Serendipity) quad
+        case 36: // Cubic quad
+        case 37: // Quartic quad
+        case 38: // Quintic quad
           f >> nTags;
           f >> bnd_id;
 
@@ -1008,14 +1074,12 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
     }
 
   }
-
 }
 
 void set_face_nodes(GeoStruct &geo)
 {
   /* Define node indices for faces */
   geo.face_nodes.assign({geo.nFacesPerEle, geo.nNodesPerFace}, 0);
-
 
   if (geo.nDims == 2)
   {
@@ -1096,7 +1160,7 @@ void set_ele_adjacency(GeoStruct &geo)
     }
   }
 
-  /* Generate element adjacency */
+  /* Generate element adjacency (element to elements connectivity) */
   geo.ele_adj.assign({geo.nFacesPerEle, geo.nEles});
   for (unsigned int ele = 0; ele < geo.nEles; ele++)
   {
@@ -1133,6 +1197,7 @@ void couple_periodic_bnds(GeoStruct &geo)
   mdvector<double> coords_face1, coords_face2;
   coords_face1.assign({geo.nNodesPerFace,geo.nDims});
   coords_face2.assign({geo.nNodesPerFace,geo.nDims});
+
   /* Loop over boundary faces */
   for (auto &bnd_face : geo.bnd_faces)
   {
@@ -1146,7 +1211,7 @@ void couple_periodic_bnds(GeoStruct &geo)
       /* Get face node coordinates */
       for (unsigned int node = 0; node < nNodesPerFace; node++)
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
-          coords_face1(node, dim) = geo.coord_nodes(face1[node], dim);
+          coords_face1(node, dim) = geo.coord_nodes(dim, face1[node]);
 
       /* Compute centroid location */
       std::vector<double> c1(geo.nDims, 0.0);
@@ -1171,7 +1236,7 @@ void couple_periodic_bnds(GeoStruct &geo)
         /* Get face node coordinates */
         for (unsigned int node = 0; node < nNodesPerFace; node++)
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            coords_face2(node, dim) = geo.coord_nodes(face2[node], dim);
+            coords_face2(node, dim) = geo.coord_nodes(dim, face2[node]);
 
         /* Compute centroid location */
         std::vector<double> c2(geo.nDims, 0.0);
@@ -1295,7 +1360,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #ifdef _MPI
     geo.nGfpts_mpi = 0;
     int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(geo.myComm, &rank);
 #endif
 
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -1359,8 +1424,19 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nFaces = 0;
     geo.faceList.resize(0);
 
+    /* Additional Connectivity Arrays */
+#ifdef _MPI
+    geo.mpiFaces.resize(0);
+    geo.procR.resize(0);
+    geo.mpiLocF.resize(0);
+#endif
     geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
     geo.face2eles.assign({2, unique_faces.size()}, -1);
+    geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
+    geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
+
+    std::set<int> overPts, wallPts;
+    std::set<std::vector<unsigned int>> overFaces;
 
     /* Begin loop through faces */
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
@@ -1387,7 +1463,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
         {
-          //geo.c2f(ele, n) = -1;
           continue;
         }
         else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
@@ -1407,15 +1482,37 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           /* Check if face is on boundary */
           if (geo.bnd_faces.count(face))
           {
-            unsigned int bnd_id = geo.bnd_faces[face];
+            unsigned int bcType = geo.bnd_faces[face];
             for (auto &fpt : fpts)
             {
-              geo.gfpt2bnd.push_back(bnd_id);
+              geo.gfpt2bnd.push_back(bcType);
               fpt = gfpt_bnd;
               gfpt_bnd++;
             }
 
             bndface2fpts[face] = fpts;
+            
+            /* Create lists of all wall- and overset-boundary nodes */
+            if (input->overset)
+            {
+              if (bcType == OVERSET)
+              {
+                for (auto &pt:face) overPts.insert(pt);
+                overFaces.insert(face);
+              }
+              else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
+                       bcType == ISOTHERMAL_NOSLIP_G ||
+                       bcType == ISOTHERMAL_NOSLIP_P ||
+                       bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
+                       bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
+                       bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
+                       bcType == ADIABATIC_NOSLIP_MOVING_G ||
+                       bcType == ADIABATIC_NOSLIP_MOVING_P ||
+                       bcType == SYMMETRY_G || bcType == SYMMETRY_P)
+              {
+                for (auto &pt:face) wallPts.insert(pt);
+              }
+            }
 
             int bnd = geo.face2bnd[face];
             geo.boundFaces[bnd].push_back(geo.nFaces);
@@ -1426,6 +1523,15 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           {
             /* Add face to set to process later. */
             mpi_faces_to_process.insert(face);
+
+            // Additional MPI face connectivity data
+            geo.mpiFaces.push_back(geo.nFaces);
+            auto procs = geo.mpi_faces[face];
+            int p;
+            for (auto &proc:procs)
+              if (proc != rank) p = proc;
+            geo.procR.push_back(p);
+            geo.mpiLocF.push_back(n);
 
             for (auto &fpt : fpts)
             {
@@ -1452,6 +1558,12 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
             ele2fpts[ele][n*nFptsPerFace + i] = fpts[i];
             ele2fpts_slot[ele][n*nFptsPerFace + i] = 0;
           }
+
+          for (auto &fpt : fpts)
+            geo.fpt2face[fpt] = geo.nFaces;
+
+          for (int j = 0; j < nFptsPerFace; j++)
+            geo.face2fpts(j, geo.nFaces) = fpts[j];
 
           geo.faceList.push_back(face);
           geo.nodes_to_face[face] = geo.nFaces;
@@ -1535,16 +1647,47 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       }
     }
 
+    if (input->overset)
+    {
+      // Find any additional surfaces used for closing wall/overset volumes
+      for (auto &bnd : geo.bnd_faces)
+      {
+        if (bnd.second == WALL_CLOSURE)
+          for (auto &pt : bnd.first)
+            wallPts.insert(pt);
+        else if (bnd.second == OVERSET_CLOSURE)
+          for (auto &pt : bnd.first)
+            overPts.insert(pt);
+      }
+
+      geo.nWall = wallPts.size();
+      geo.nOver = overPts.size();
+      geo.wallNodes.resize(0);
+      geo.overNodes.resize(0);
+      geo.overFaceList.resize(0);
+      geo.wallNodes.reserve(geo.nWall);
+      geo.overNodes.reserve(geo.nOver);
+      for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
+      for (auto &pt:overPts) geo.overNodes.push_back(pt);
+      for (auto &face:overFaces)
+        geo.overFaceList.push_back(geo.nodes_to_face[face]);
+    }
+
     /* Process MPI faces, if needed */
 #ifdef _MPI
+    geo.nMpiFaces = geo.mpiFaces.size();
+    geo.faceID_R.resize(geo.nMpiFaces);
+    geo.mpiRotR.resize(geo.nMpiFaces);
     for (const auto &face : mpi_faces_to_process)
     {
       auto ranks = geo.mpi_faces[face];
       int sendRank = *std::min_element(ranks.begin(), ranks.end());
       int recvRank = *std::max_element(ranks.begin(), ranks.end());
 
-      /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
+      int faceID = geo.nodes_to_face[face];
+      int ff = findFirst(geo.mpiFaces, faceID);
 
+      /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
 
       /* If partition has minimum (of 2) ranks assigned to this face, use its flux point order. Send
        * information to other rank. */
@@ -1562,7 +1705,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           geo.fpt_buffer_map[recvRank].push_back(fpt);
 
         /* Send ordered face to paired rank */
-        MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, MPI_COMM_WORLD);
+        MPI_Status temp;
+        MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, geo.myComm);
+        MPI_Send(&faceID, 1, MPI_INT, recvRank, 0, geo.myComm);
+        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
+        MPI_Recv(&geo.mpiRotR[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
       }
       else if (rank == recvRank)
       {
@@ -1572,7 +1719,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         /* Receive ordered face from paired rank */
         MPI_Status temp;
-        MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, MPI_COMM_WORLD, &temp);
+        MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, geo.myComm, &temp);
+        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, sendRank, 0, geo.myComm, &temp);
+        MPI_Send(&faceID, 1, MPI_INT, sendRank, 0, geo.myComm);
 
         /* Convert received face_ordered node indexing to partition local indexing */
         for (auto &nd : face_ordered_mpi)
@@ -1592,6 +1741,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         {
           rot = 4;
         }
+
+        geo.mpiRotR[ff] = rot;
+        MPI_Send(&geo.mpiRotR[ff], 1, MPI_INT, sendRank, 0, geo.myComm);
 
         /* Based on rotation, append flux points to fpt_buffer_map (to be consistent with paired rank fpt order) */
         switch (rot)
@@ -1638,7 +1790,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
             } break;
         }
-
       }
       else
       {
@@ -1646,7 +1797,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       }
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(geo.myComm);
 
     /* Create MPI Derived type for sends/receives */
     for (auto &entry : geo.fpt_buffer_map)
@@ -1662,12 +1813,12 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           disp[i + var * fpts.size()] = fpts(i) + var * gfpt_mpi;
       }
       
-      MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]); 
+      MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]);
 
       MPI_Type_commit(&geo.mpi_types[sendRank]);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(geo.myComm);
 
 #endif
 
@@ -1767,6 +1918,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nGfpts = gfpt_bnd;
 #endif
 
+    geo.nFaces = geo.faceList.size();
+
     geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
     geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
 
@@ -1797,7 +1950,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   {
     ThrowException("nDims is not valid!");
   }
-
 }
 
 void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int order)
@@ -2094,7 +2246,7 @@ void shuffle_data_by_color(GeoStruct &geo)
   }
 
   /* TODO: Consider an in-place permutation to save memory */
-  auto nd2gnd_temp = geo.ele2nodes;
+  auto ele2nodes_temp = geo.ele2nodes;
   auto fpt2gfpt_temp = geo.fpt2gfpt;
   auto fpt2gfpt_slot_temp = geo.fpt2gfpt_slot;
 
@@ -2107,7 +2259,7 @@ void shuffle_data_by_color(GeoStruct &geo)
 
       for (unsigned int node = 0; node < geo.nNodesPerEle; node++)
       {
-        geo.ele2nodes(node, ele1) = nd2gnd_temp(node, ele2);
+        geo.ele2nodes(node, ele1) = ele2nodes_temp(node, ele2);
       }
 
       for (unsigned int fpt = 0; fpt < geo.nFptsPerFace * geo.nFacesPerEle; fpt++) 
@@ -2147,19 +2299,20 @@ void shuffle_data_by_color(GeoStruct &geo)
 void partition_geometry(InputStruct *input, GeoStruct &geo)
 {
   int rank, nRanks;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+  MPI_Comm_rank(geo.myComm, &rank);
+  MPI_Comm_size(geo.myComm, &nRanks);
 
   /* Setup METIS */
   idx_t options[METIS_NOPTIONS];
   METIS_SetDefaultOptions(options);
-  
 
+  options[METIS_OPTION_NUMBERING] = 0;
   options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
   options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
   options[METIS_OPTION_DBGLVL] = 0;
   options[METIS_OPTION_CONTIG] = 1;
-  options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_GROW;
+  options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_NODE;
+  options[METIS_OPTION_NCUTS] = 5;
 
   /* Form eptr and eind arrays */
   std::vector<int> eptr(geo.nEles + 1); 
@@ -2193,15 +2346,16 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     nodes.clear();
 
     /* Loop over faces and search for boundaries */
-    /*
-    for (unsigned int k = 0; k < geo.nFacesPerEle; k++)
+
+    /*for (unsigned int k = 0; k < geo.nFacesPerEle; k++)
     {
       face.assign(geo.nNodesPerFace, 0);
 
       for (unsigned int nd = 0; nd < geo.nNodesPerFace; nd++)
       {
-        face[nd] = geo.nd2gnd(geo.face_nodes(k, nd), i);
+        face[nd] = geo.ele2nodes(geo.face_nodes(k, nd), i);
       }
+      std::sort(face.begin(),face.end());
 
       if (geo.bnd_faces.count(face))
       {
@@ -2209,25 +2363,28 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
         switch (bnd_id)
         {
-          case 6:
-            vwgt[i] += 0; break;
-          case 7:
-          case 8:
-          case 9:
-          case 10:
-          case 11:
-          case 12:
-            vwgt[i] += 0; break;
+          case CHAR:
+            vwgt[i] += 2; break;
+
+          case ISOTHERMAL_NOSLIP_G:
+          case ISOTHERMAL_NOSLIP_P:
+          case ADIABATIC_NOSLIP_G:
+          case ADIABATIC_NOSLIP_P:
+          case ISOTHERMAL_NOSLIP_MOVING_G:
+          case ISOTHERMAL_NOSLIP_MOVING_P:
+          case ADIABATIC_NOSLIP_MOVING_G:
+          case ADIABATIC_NOSLIP_MOVING_P:
+            vwgt[i] += 1; break;
+
+          case OVERSET:
+            vwgt[i] += 2; break;
 
           default:
             vwgt[i] += 0; break;
         }
-        vwgt[i]++;
+//        vwgt[i]++;
       }
-    }
-    */
-
-
+    }*/
   }
 
   int objval;
@@ -2277,7 +2434,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
       if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
       {
-        //geo.c2f(ele, n) = -1;
         continue;
       }
       else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
@@ -2293,19 +2449,19 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       /* If two ranks assigned to same face, add to map of "MPI" faces */
       if (face2ranks[face].size() == 2)
       {
-        mpi_faces_glob[face] = face2ranks[face];  
+        mpi_faces_glob[face] = face2ranks[face];
       }
     }
   }
 
   /* Reduce connectivity to contain only partition local elements */
-  auto nd2gnd_glob = geo.ele2nodes;
+  auto ele2nodes_glob = geo.ele2nodes;
   geo.ele2nodes.assign({geo.nNodesPerEle, (unsigned int) myEles.size()},0);
   for (unsigned int ele = 0; ele < myEles.size(); ele++)
   {
     for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
     {
-      geo.ele2nodes(nd, ele) = nd2gnd_glob(nd, myEles[ele]);
+      geo.ele2nodes(nd, ele) = ele2nodes_glob(nd, myEles[ele]);
     }
   }
 
@@ -2332,7 +2488,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
   /* Reduce node coordinate data to contain only partition local nodes */
   auto coord_nodes_glob = geo.coord_nodes;
-  geo.coord_nodes.assign({(unsigned int) uniqueNodes.size(), geo.nDims}, 0);
+  geo.coord_nodes.assign({geo.nDims, (unsigned int) uniqueNodes.size()}, 0);
   unsigned int idx = 0;
   for (unsigned int nd: uniqueNodes)
   {
@@ -2340,10 +2496,12 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     geo.node_map_p2g[idx] = nd; /* Map of parition node idx to global node idx */
 
     for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      geo.coord_nodes(idx, dim) = coord_nodes_glob(nd, dim);
+      geo.coord_nodes(dim, idx) = coord_nodes_glob(dim, nd);
 
     idx++;
   }
+
+  if (input->motion) geo.coords_init = geo.coord_nodes;
 
   /* Renumber connectivity data using partition local indexing (via geo.node_map_g2p)*/
   for (unsigned int ele = 0; ele < myEles.size(); ele++)
@@ -2442,78 +2600,138 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   geo.nNodes = (unsigned int) uniqueNodes.size();
   geo.nEles = (unsigned int) myEles.size();
 
+  std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles;
+  std::cout << ", nMpiFaces = " << geo.mpi_faces.size() << std::endl;
+
+  if (input->rank == 0)
+    std::cout << "Total # MPI Faces: " << mpi_faces_glob.size() << std::endl;
 }
 #endif
 
-/*! ==== Overset-Related Functionality ==== */
-
-#ifdef _MPI
-void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo)
+void move_grid(InputStruct *input, GeoStruct &geo, double time)
 {
-  
-  // Split the processes among the overset grids such that they are roughly balanced
+  uint nNodes = geo.nNodes;
 
-  // --- Read Number of Elements in Each Grid --- 
-
-  std::vector<int> nElesGrid(input->nGrids);
-  int nElesTotal = 0;
-
-  for (unsigned int i=0; i<input->nGrids; i++)
+  switch (input->motion_type)
   {
-    std::ifstream meshFile;
-    std::string str;
-    std::string fileName = input->oversetGrids[i];
-
-    meshFile.open(fileName.c_str());
-    if (!meshFile.is_open())
-      ThrowException("Unable to open mesh file.");
-
-    // Move cursor to $Elements
-    meshFile.clear();
-    meshFile.seekg(0, ios::beg);
-    while(1)
+    case 1:
     {
-      getline(meshFile,str);
-      if (str.find("$Elements")!=string::npos) break;
-      if(meshFile.eof()) ThrowException("$Elements tag not found in Gmsh file!");
+      double t0 = 10;
+      double Atx = 2;
+      double Aty = 2;
+      double DX = 5;/// 0.5 * input->periodicDX; /// TODO
+      double DY = 5;/// 0.5 * input->periodicDY; /// TODO
+      #pragma omp parallel for
+      for (int node = 0; node < nNodes; node++)
+      {
+        /// Taken from Kui, AIAA-2010-5031-661
+        double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node);
+        geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
+        geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
+        geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
+        geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
+      }
+      break;
     }
-
-    // Read total number of interior + boundary elements
-    meshFile >> nElesGrid[i];
-    meshFile.close();
-
-    nElesTotal += nElesGrid[i];
+    case 2:
+    {
+      double t0 = 10.*sqrt(5.);
+      double DX = 5;
+      double DY = 5;
+      double DZ = 5;
+      double Atx = 4;
+      double Aty = 8;
+      double Atz = 4;
+      if (geo.nDims == 2)
+      {
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes; node++)
+        {
+          /// Taken from Liang-Miyaji
+          double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node);
+          geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
+          geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
+          geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
+          geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
+        }
+      }
+      else
+      {
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes; node++)
+        {
+          /// Taken from Liang-Miyaji
+          double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node); double z0 = geo.coords_init(2,node);
+          geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atx*pi*time/t0);
+          geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Aty*pi*time/t0);
+          geo.coord_nodes(2,node) = z0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atz*pi*time/t0);
+          geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atx*pi*time/t0);
+          geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Aty*pi*time/t0);
+          geo.grid_vel_nodes(2,node) = Atz*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atz*pi*time/t0);
+        }
+      }
+      break;
+    }
+    case 3:
+    {
+      if (geo.gridID==0)
+      {
+        /// Liangi-Miyaji with easily-modifiable domain width
+        double t0 = 10.*sqrt(5.);
+        double width = 5.;
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes; node++)
+        {
+          geo.coord_nodes(0,node) = geo.coords_init(0,node) + sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*sin(4*pi*time/t0);
+          geo.coord_nodes(1,node) = geo.coords_init(1,node) + sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*sin(8*pi*time/t0);
+          geo.grid_vel_nodes(0,node) = 4.*pi/t0*sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*cos(4*pi*time/t0);
+          geo.grid_vel_nodes(1,node) = 8.*pi/t0*sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*cos(8*pi*time/t0);
+        }
+      }
+      break;
+    }
+    case 4:
+    {
+      /// Rigid oscillation in a circle
+      if (geo.gridID == 0)
+      {
+//        double Ax = input->moveAx; // Amplitude  (m)
+//        double Ay = input->moveAy; // Amplitude  (m)
+//        double fx = input->moveFx; // Frequency  (Hz)
+//        double fy = input->moveFy; // Frequency  (Hz)
+//        #pragma omp parallel for
+//        for (uint node = 0; node < nNodes ; node++)
+//        {
+//          geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
+//          geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
+//          geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
+//          geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
+//        }
+      }
+      break;
+    }
+    case 5:
+    {
+      /// Radial Expansion / Contraction
+      if (geo.gridID == 0) {
+        double Ar = 0;///input->moveAr; /// TODO
+        double Fr = 0;///input->moveFr; /// TODO
+        #pragma omp parallel for
+        for (uint node = 0; node < nNodes ; node++)
+        {
+          double r = 1;///rv0(node,0) + Ar*(1. - cos(2.*pi*Fr*time)); /// TODO
+          double rdot = 2.*pi*Ar*Fr*sin(2.*pi*Fr*time);
+          double theta = 1;///rv0(node,1); /// TODO
+          double psi = 1;///rv0(node,2); /// TODO
+          geo.coord_nodes(0,node) = r*sin(psi)*cos(theta);
+          geo.coord_nodes(1,node) = r*sin(psi)*sin(theta);
+          geo.coord_nodes(2,node) = r*cos(psi);
+          geo.grid_vel_nodes(0,node) = rdot*sin(psi)*cos(theta);
+          geo.grid_vel_nodes(1,node) = rdot*sin(psi)*sin(theta);
+          geo.grid_vel_nodes(2,node) = rdot*cos(psi);
+        }
+      }
+      break;
+    }
   }
-
-  // --- Balance the processes across the grids --- 
-
-  geo.nProcGrid.resize(input->nGrids);
-  for (unsigned int i=0; i<input->nGrids; i++)
-  {
-    double eleRatio = (double)nElesGrid[i]/nElesTotal;
-    geo.nProcGrid[i] = round(eleRatio*input->nRanks);
-  }
-
-  // --- Get the final gridID for this rank --- 
-
-  int g = 0;
-  int procSum = geo.nProcGrid[0];
-  while (procSum < input->rank+1 && g < input->nGrids-1)
-  {
-    g++;
-    procSum += geo.nProcGrid[g];
-  }
-  geo.gridID = g;
-
-  // --- Split MPI Processes Based Upon gridID: Create MPI_Comm for each grid --- 
-
-  MPI_Comm_split(Comm_World, geo.gridID, input->rank, &Comm_Grid);
-
-  MPI_Comm_rank(Comm_Grid,&geo.gridRank);
-  MPI_Comm_size(Comm_Grid,&geo.nProcsGrid);
-
-  geo.gridIdList.resize(input->nRanks);
-  MPI_Allgather(&geo.gridID,1,MPI_INT,geo.gridIdList.data(),1,MPI_INT,MPI_COMM_WORLD);
-  
 }
-#endif

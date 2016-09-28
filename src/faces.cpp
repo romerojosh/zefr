@@ -13,18 +13,18 @@
 #include "solver_kernels.h"
 #endif
 
-Faces::Faces(GeoStruct *geo, InputStruct *input)
+Faces::Faces(GeoStruct *geo, InputStruct *input, _mpi_comm comm_in)
 {
   this->input = input;
   this->geo = geo;
   nFpts = geo->nGfpts;
+  myComm = comm_in;
 }
 
 void Faces::setup(unsigned int nDims, unsigned int nVars)
 {
   this->nVars = nVars;
   this->nDims = nDims;
-
 
   /* Allocate memory for solution structures */
   U.assign({nFpts, nVars, 2});
@@ -41,8 +41,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   }
 
   LDG_bias.assign({nFpts}, 0);
-
-
 
   /* Allocating memory for Riemann solvers */
   FL.assign(nVars, 0);
@@ -89,18 +87,24 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     }
   }
 
-
   /* If running Euler/NS, allocate memory for pressure */
   if (input->equation == EulerNS)
     P.assign({nFpts, 2});
 
   waveSp.assign({nFpts}, 0.0);
-  diffCo.assign({nFpts}, 0.0);
+  if (input->viscous)
+    diffCo.assign({nFpts}, 0.0);
 
   /* Allocate memory for geometry structures */
   norm.assign({nFpts, nDims, 2});
   dA.assign({nFpts},0.0);
-  jaco.assign({nFpts, nDims, nDims , 2});
+  jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
+
+  /* Moving-grid-related structures */
+  if (input->motion)
+  {
+    Vg.assign({nFpts, nDims}, 0.0);
+  }
 
 #ifdef _MPI
   /* Allocate memory for send/receive buffers */
@@ -109,12 +113,58 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     int pairedRank = entry.first;
     const auto &fpts = entry.second;
 
-    U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
-    U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+    if (input->viscous)
+    {
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+    }
+    else
+    {
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
+    }
   }
 
   sreqs.resize(geo->fpt_buffer_map.size());
   rreqs.resize(geo->fpt_buffer_map.size());
+
+  /* ---- For buffer-style MPI sends/recvs ---- */
+  /*buffUR.resize(geo->nMpiFaces);
+  buffUL.resize(geo->nMpiFaces);
+  for (unsigned int i = 0; i < geo->nMpiFaces; i++)
+  {
+    buffUR[i].assign({geo->nFptsPerFace, nVars},0.0);  // Recv buffer per MPI face
+    buffUL[i].assign({geo->nFptsPerFace, nVars},0.0);  // Send buffer per MPI face
+  }
+  //sstatuses.resize(geo->nMpiFaces); // for big buffer w/o derived type
+  //rstatuses.resize(geo->nMpiFaces);
+  //sends.resize(geo->nMpiFaces); // for per-face buffers
+  //recvs.resize(geo->nMpiFaces);
+  sends.resize(2*geo->nMpiFaces);
+
+  /// TODO: Could be useful somewhere else
+  unsigned int nFpts1D = input->order + 1;
+  unsigned int nFptsFace = geo->nFptsPerFace;
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[0].push_back(i * nFpts1D + j);
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[1].push_back(nFpts1D - i + j * nFpts1D - 1);
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[2].push_back(nFptsFace - i * nFpts1D - j - 1);
+
+  for (unsigned int j = 0; j < nFpts1D; j++)
+    for (unsigned int i = 0; i < nFpts1D; i++)
+      rot_permute[3].push_back(nFptsFace - (j+1) * nFpts1D + i);
+
+  // For 2D
+  for (unsigned int i = 0; i < nFptsFace; i++)
+    rot_permute[4].push_back(nFptsFace - i - 1);*/
 #endif
 
 }
@@ -123,12 +173,13 @@ void Faces::apply_bcs()
 {
 #ifdef _CPU
   /* Create some useful variables outside loop */
-  std::array<double, 3> VL, VR;
+  std::array<double, 3> VL, VR, VG;
 
   /* Loop over boundary flux points */
 #pragma omp parallel for private(VL,VR)
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -389,6 +440,12 @@ void Faces::apply_bcs()
         for (unsigned int dim = 0; dim < nDims; dim++)
           momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+        }
+
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Set boundary state with cancelled normal velocity */
@@ -426,6 +483,12 @@ void Faces::apply_bcs()
         for (unsigned int dim = 0; dim < nDims; dim++)
           momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+        }
+
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Set boundary state to reflect normal velocity */
@@ -453,6 +516,12 @@ void Faces::apply_bcs()
           momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
         }
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            VG[dim] = U(fpt, 0, 0) * Vg(fpt, dim);
+        }
+
         momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momF);
@@ -462,9 +531,9 @@ void Faces::apply_bcs()
         
         U(fpt, 0, 1) = PR / (input->R_ref * TR);
 
-        /* Set velocity to zero */
+        /* Set velocity to zero (or wall velocity) */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = 0.0;
+          U(fpt, dim+1, 1) = VG[dim];
 
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
 
@@ -546,14 +615,20 @@ void Faces::apply_bcs()
           momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
         }
 
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            VG[dim] = U(fpt, 0, 0) * Vg(fpt, dim);
+        }
+
         momF /= U(fpt, 0, 0);
 
         double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
         double PR = PL; 
 
-        /* Set right state (common) velocity to zero */
+        /* Set right state (common) velocity to zero (or wall velocity) */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = 0.0;
+          U(fpt, dim+1, 1) = VG[dim];
 
         U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
 
@@ -617,6 +692,11 @@ void Faces::apply_bcs()
         ThrowException("WALL_NS_ADI_MOVE_G not implemented yet!");
 
       }
+
+      case OVERSET:
+      {
+        // Do nothing [works similarly to MPI]
+      }
     } 
   }
 #endif
@@ -624,7 +704,7 @@ void Faces::apply_bcs()
 #ifdef _GPU
   apply_bcs_wrapper(U_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
       input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
-      input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation);
+      Vg_d, input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, LDG_bias_d, input->equation, input->motion);
 
   check_error();
 #endif
@@ -638,6 +718,8 @@ void Faces::apply_bcs_dU()
 #pragma omp parallel for 
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Apply specified boundary condition */
@@ -722,6 +804,10 @@ void Faces::apply_bcs_dU()
         /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
         //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
         //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 3, 1) / rho; 
+      }
+      else if (bnd_id == OVERSET)
+      {
+        // Do nothing...? [need to treat same as internal]
       }
       else
       {
@@ -850,6 +936,8 @@ void Faces::apply_bcs_dFdU()
 #pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Copy right state values */
@@ -1576,6 +1664,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         Fconv(fpt, 0, dim, 0) = input->AdvDiff_A(dim) * U(fpt, 0, 0);
@@ -1586,7 +1676,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, nFpts, nDims, input->AdvDiff_A_d,
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
     check_error();
 #endif
   }
@@ -1597,6 +1687,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         Fconv(fpt, 0, dim, 0) = 0.5 * U(fpt, 0, 0) * U(fpt, 0, 0);
@@ -1606,7 +1698,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_fpts_Burgers_wrapper(Fconv_d, U_d, nFpts, nDims, startFpt, endFpt);
+    compute_Fconv_fpts_Burgers_wrapper(Fconv_d, U_d, nFpts, nDims, startFpt, endFpt,
+      input->overset, geo->iblank_fpts_d.data());
     check_error();
 #endif
   }
@@ -1619,6 +1712,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
           /* Compute some primitive variables (keep pressure)*/
@@ -1650,6 +1745,8 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
         for (unsigned int slot = 0; slot < 2; slot ++)
         {
           // Compute some primitive variables (keep pressure)
@@ -1688,7 +1785,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
       compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma, 
-          startFpt, endFpt);
+          startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
       check_error();
 #endif
   }
@@ -1702,6 +1799,8 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(3)
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         for (unsigned int n = 0; n < nVars; n++)
@@ -1715,7 +1814,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_Fvisc_fpts_AdvDiff_wrapper(Fvisc_d, dU_d, nFpts, nDims, input->AdvDiff_D,
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
     check_error();
 #endif
 
@@ -1728,6 +1827,8 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for collapse(2)
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
         for (unsigned int slot = 0; slot < 2; slot++)
         {
           /* Setting variables for convenience */
@@ -1802,6 +1903,8 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
         for (unsigned int slot = 0; slot < 2; slot++)
         {
           /* Setting variables for convenience */
@@ -1906,7 +2009,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #ifdef _GPU
     compute_Fvisc_fpts_EulerNS_wrapper(Fvisc_d, U_d, dU_d, nFpts, nDims, input->gamma, 
         input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
     check_error();
 
     //Fvisc = Fvisc_d;
@@ -1924,12 +2027,10 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
-        dA_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+        dA_d, Vg_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
+        input->motion, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
-
-    //Fcomm = Fcomm_d;
-    //waveSp = waveSp_d;
 #endif
   }
   else if (input->fconv_type == "Roe")
@@ -1961,7 +2062,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #ifdef _GPU
       LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, diffCo_d, LDG_bias_d, dA_d, 
           input->AdvDiff_D, input->gamma, input->mu, input->prandtl, input->ldg_b,
-          input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
+          input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
+          input->overset, geo->iblank_fpts_d.data());
 
       check_error();
 #endif
@@ -1984,6 +2086,8 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for 
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
       double beta = input->ldg_b;
 
       /* Setting sign of beta (from HiFiLES) */
@@ -2033,7 +2137,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, input->ldg_b, nFpts, nVars, nDims, LDG_bias_d, 
-        startFpt, endFpt);
+        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
 
@@ -2071,6 +2175,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     /* Initialize FL, FR */
     std::fill(FL.begin(), FL.end(), 0.0);
     std::fill(FR.begin(), FR.end(), 0.0);
@@ -2091,6 +2197,14 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
     }
 
+    double eig = 0;
+    double Vgn = 0;
+    if (input->motion)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        Vgn += Vg(fpt, dim) * norm(fpt, dim, 0);
+    }
+
     /* Get numerical wavespeed */
     if (input->equation == AdvDiff)
     {
@@ -2101,7 +2215,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = std::abs(An);
+      eig = std::abs(An);
+      waveSp(fpt) = std::abs(An - Vgn);
     }
     else if (input->equation == Burgers)
     {
@@ -2114,7 +2229,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         AnR += WR[0] * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = std::max(std::abs(AnL), std::abs(AnR));
+      eig = std::max(std::abs(AnL), std::abs(AnR));
+      waveSp(fpt) = std::max(std::abs(AnL - Vgn), std::abs(AnR - Vgn));
     }
     else if (input->equation == EulerNS)
     {
@@ -2130,7 +2246,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
       }
 
-      waveSp(fpt) = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      eig = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      waveSp(fpt) = std::max(std::abs(VnL-Vgn) + aL, std::abs(VnR-Vgn) + aR);
     }
 
     /* Compute common normal flux */
@@ -2138,7 +2255,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        double F = (0.5 * (FR[n]+FL[n]) - 0.5 * waveSp(fpt) * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
+        double F = (0.5 * (FR[n]+FL[n]) - 0.5 * eig * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
 
         /* Correct for positive parent space sign convention */
         Fcomm(fpt, n, 0) = F;
@@ -2179,6 +2296,8 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, F, dW)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     /* Apply central flux at boundaries */
     double k = input->rus_k;
 
@@ -2285,6 +2404,8 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     double beta = input->ldg_b;
 
     /* Setting sign of beta (from HiFiLES) */
@@ -2383,6 +2504,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
           dFdUconv(fpt, 0, 0, dim, slot) = input->AdvDiff_A(dim);
         }
       }
@@ -2407,6 +2529,7 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
           dFdUconv(fpt, 0, 0, dim, slot) = U(fpt, 0, slot);
         }
       }
@@ -2429,6 +2552,8 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
           /* Primitive Variables */
           double rho = U(fpt, 0, slot);
           double u = U(fpt, 1, slot) / U(fpt, 0, slot);
@@ -2487,6 +2612,8 @@ void Faces::compute_dFdUconv(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
           /* Primitive Variables */
           double rho = U(fpt, 0, slot);
           double u = U(fpt, 1, slot) / U(fpt, 0, slot);
@@ -2615,6 +2742,8 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
           {
             for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
             {
+              if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
               // TODO: Can be removed if initialized to zero
               dFdUvisc(fpt, ni, nj, dim, slot) = 0;
             }
@@ -2633,6 +2762,8 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
           /* Setting variables for convenience */
           /* States */
           double rho = U(fpt, 0, slot);
@@ -2726,6 +2857,8 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
           {
+            if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
             // TODO: Can be changed if initialized to zero
             dFddUvisc(fpt, ni, nj, 0, 0, slot) = -input->AdvDiff_D;
             dFddUvisc(fpt, ni, nj, 1, 0, slot) = 0;
@@ -2746,6 +2879,8 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
           /* Primitive Variables */
           double rho = U(fpt, 0, slot);
           double u = U(fpt, 1, slot) / U(fpt, 0, slot);
@@ -2905,6 +3040,8 @@ void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
   {
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
+      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
       double beta = input->ldg_b;
 
       /* Setting sign of beta (from HiFiLES) */
@@ -2979,6 +3116,8 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for firstprivate(WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     /* Apply central flux at boundaries */
     double k = input->rus_k;
 
@@ -3184,6 +3323,8 @@ void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     /* Apply central flux at boundaries */
     double k = input->rus_k;
 
@@ -3334,6 +3475,8 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
     /* Setting sign of beta (from HiFiLES) */
     double beta = input->ldg_b;
     if (nDims == 2)
@@ -3511,6 +3654,8 @@ void Faces::transform_dFcdU()
       {
         for (unsigned int fpt = 0; fpt < nFpts; fpt++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
           dFcdU(fpt, ni, nj, slot, 0) *= dA(fpt);
           dFcdU(fpt, ni, nj, slot, 1) *= -dA(fpt); // Right state flux has opposite sign
         }
@@ -3531,6 +3676,7 @@ void Faces::transform_dFcdU()
           {
             for (unsigned int fpt = 0; fpt < nFpts; fpt++)
             {
+              if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
               dFcddU(fpt, ni, nj, dim, slot, 0) *= dA(fpt);
               dFcddU(fpt, ni, nj, dim, slot, 1) *= -dA(fpt); // Right state flux has opposite sign
             }
@@ -3551,29 +3697,84 @@ void Faces::transform_dFcdU()
 #ifdef _MPI
 void Faces::send_U_data()
 {
+#ifdef _CPU
+  /* This is kinda hacky, but I can't see any better way to get around the MPI
+   * datatype usage besides copying ALL the MPI data into a temp array */
+  if (input->overset)
+  {
+    tmpOversetU.assign({nVars,0,1,1});
+    int nPts = 0;
+    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
+    {
+      int ff = geo->fpt2face[fpt];
+      if (geo->iblank_face[ff] == FRINGE)
+      {
+        tmpOversetU.add_dim_1(nPts,0);
+        for (int k = 0; k < nVars; k++)
+          tmpOversetU(k, nPts) = U(fpt, k, 1);
+        nPts++;
+      }
+    }
+  }
+#endif
+
   /* Stage all the non-blocking receives */
-  unsigned int ridx = 0;
+
+  /* ---- USING SEND/RECV BUFFERS ---- */
+#ifdef _CPU2
+  nrecvs = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
+    nrecvs++;
+  }
+
+  nsends = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int sendRank = entry.first;
+    const auto &fpts = entry.second;
+
+    /* Pack buffer of solution data at flux points in list */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+      {
+        U_sbuffs[sendRank](i, n) = U(fpts(i), n, 0);
+      }
+
+    }
+
+    /* Send buffer to paired rank */
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[nsends]);
+    nsends++;
+  }
+#endif
 
 #ifdef _CPU
+  /* ---- Using derived types ---- */
+  nrecvs = 0;
   for (const auto &entry : geo->mpi_types)
   {
     int recvRank = entry.first;
     auto TYPE = entry.second;
 
-    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
-    ridx++;
+    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, myComm, &rreqs[nrecvs]);
+    nrecvs++;
   }
 
-  unsigned int sidx = 0;
+  nsends = 0;
   for (const auto &entry : geo->mpi_types)
   {
     int sendRank = entry.first;
     auto TYPE = entry.second;
 
-    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
-    sidx++;
+    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, myComm, &sreqs[nsends]);
+    nsends++;
   }
-
 #endif
 
 #ifdef _GPU
@@ -3594,41 +3795,140 @@ void Faces::send_U_data()
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
 
+  check_error();
 #endif
+}
+
+void Faces::send_U_data_blocked(void)
+{
+  n_reqs = 0;
+  for (unsigned int i = 0; i < geo->nMpiFaces; i++)
+  {
+    int ff = geo->mpiFaces[i];
+    int pR = geo->procR[i];
+    int ID = geo->mpiFaces[i];
+    int IDR = geo->faceID_R[i];
+
+    if (input->overset && geo->iblank_face[ff] != NORMAL)
+      continue;
+
+    MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &sends[2*n_reqs+1]);
+    //MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &recvs[i]);
+
+    /* Pack buffer of solution data at flux points in list */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+      {
+        int rfpt = rot_permute[geo->mpiRotR[i]][fpt];
+        int gfpt = geo->face2fpts(rfpt, ff);
+        buffUL[i](fpt, n) = U(gfpt, n, 0);
+      }
+    }
+    /* Send buffer to paired rank */
+    MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[2*n_reqs]);
+    //MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[i]);
+    n_reqs++;
+  }
+}
+
+void Faces::mpi_prod(void)
+{
+  int flag;
+  input->waitTimer.startTimer();
+  // Using blocked sends/recvs
+  //  MPI_Testall(n_reqs, sends.data(), &flag, new_statuses.data());
+  // Using big (original) sends/recvs
+  MPI_Testall(nsends, sreqs.data(), &flag, sstatuses.data());
+  MPI_Testall(nrecvs, rreqs.data(), &flag, rstatuses.data());
+  input->waitTimer.stopTimer();
+}
+
+void Faces::recv_U_data_blocked(int mpiFaceID)
+{
+  int ff = geo->mpiFaces[mpiFaceID];
+
+  if (input->overset && geo->iblank_face[ff] != NORMAL)
+    return;
+
+  /* ---- Using 1 waitall instead of 2 waits... ---- */
+  int ind = 0;
+  for (int i = 0; i < mpiFaceID; i++)
+  {
+    if (input->overset && geo->iblank_face[geo->mpiFaces[i]] != NORMAL)
+      continue;
+    ind++;
+  }
+
+  input->waitTimer.startTimer();
+  MPI_Waitall(2, &sends[2*ind], &new_statuses[0]);
+//  MPI_Wait(&sends[2*mpiFaceID], &status);
+//  MPI_Wait(&sends[2*mpiFaceID+1], &status);
+//  MPI_Wait(&sends[mpiFaceID], &status);
+//  MPI_Wait(&recvs[mpiFaceID], &status);
+  input->waitTimer.stopTimer();
+
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+    {
+      int gfpt = geo->face2fpts(fpt, ff);
+      U(gfpt, n, 1) = buffUR[mpiFaceID](fpt, n);
+    }
+  }
 }
 
 void Faces::recv_U_data()
 {
 #ifdef _GPU
-  unsigned int ridx = 0;
+  nrecvs = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
-    ridx++;
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
+    nrecvs++;
   }
 
-  unsigned int sidx = 0;
-  sync_stream(1); 
+  sync_stream(1);
 
+  nsends = 0;
   for (auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
-    sidx++;
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[nsends]);
+    nsends++;
   }
 #endif
 
   /* Wait for comms to finish */
-  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
-  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  input->waitTimer.startTimer();
+  MPI_Waitall(nrecvs, rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(nsends, sreqs.data(), MPI_STATUSES_IGNORE);
+  input->waitTimer.stopTimer();
 
   /* Unpack buffer */
+
+  /* ---- USING SEND/RECV BUFFERS ---- */
+#ifdef _CPU2
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    auto &fpts = entry.second;
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+      {
+        U(fpts(i), n, 1) = U_rbuffs[recvRank](i, n);
+      }
+    }
+  }
+#endif
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
@@ -3641,13 +3941,31 @@ void Faces::recv_U_data()
   {
     int recvRank = entry.first;
     auto &fpts = entry.second;
-
-    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1);
+    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());
   }
 
   sync_stream(0);
+
+  check_error();
 #endif
 
+#ifdef  _CPU
+  /* Copy interpolated overset data back into 'U' (overwrite junk MPI data) */
+  if (input->overset)
+  {
+    int nPts = 0;
+    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
+    {
+      int ff = geo->fpt2face[fpt];
+      if (geo->iblank_face[ff] == FRINGE)
+      {
+        for (int k = 0; k < nVars; k++)
+          U(fpt, k, 1) = tmpOversetU(k, nPts);
+        nPts++;
+      }
+    }
+  }
+#endif
 }
 
 void Faces::send_dU_data()
@@ -3655,12 +3973,32 @@ void Faces::send_dU_data()
   /* Stage all the non-blocking receives */
   unsigned int ridx = 0;
 #ifdef _CPU
+  /* This is kinda hacky, but I can't see any better way to get around the MPI
+   * datatype usage besides copying ALL the MPI data into a temp array */
+//  if (input->overset)
+//  {
+//    tmpOversetdU.assign({nVars,nDims,0});
+//    int nPts = 0;
+//    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
+//    {
+//      int ff = geo->fpt2face[fpt];
+//      if (geo->iblank_face[ff] == FRINGE)
+//      {
+//        tmpOversetdU.add_dim_1(nPts,0);
+//        for (int dim = 0; dim < nDims; dim++)
+//          for (int k = 0; k < nVars; k++)
+//            tmpOversetdU(k, dim, nPts) = dU(fpt, k, dim, 1);
+//        nPts++;
+//      }
+//    }
+//  }
+
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
 #endif
@@ -3670,7 +4008,7 @@ void Faces::send_dU_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, MPI_COMM_WORLD, &rreqs[ridx]);
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
 #endif
@@ -3695,7 +4033,7 @@ void Faces::send_dU_data()
     }
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
     sidx++;
   }
 #endif
@@ -3722,10 +4060,11 @@ void Faces::send_dU_data()
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, MPI_COMM_WORLD, &sreqs[sidx]);
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
     sidx++;
   }
 
+  check_error();
 #endif
 }
 
@@ -3748,6 +4087,8 @@ void Faces::recv_dU_data()
       {
         for (unsigned int i = 0; i < fpts.size(); i++)
         {
+          if (input->overset && geo->iblank_face[geo->fpt2face[fpts(i)]] != NORMAL)
+            continue;
           dU(fpts(i), n, dim, 1) = U_rbuffs[recvRank](i, n, dim);
         }
       }
@@ -3767,9 +4108,139 @@ void Faces::recv_dU_data()
     int recvRank = entry.first;
     auto &fpts = entry.second;
 
-    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims);
+    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, input->overset, geo->iblank_fpts_d.data());
   }
+
+  check_error();
 #endif
 }
 #endif
 
+void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
+{
+  /* U : nFpts x nVars x 2 */
+  int i = geo->face2fpts(fpt, faceID);
+  int ic1 = geo->face2eles(0,faceID);
+  int ic2 = geo->face2eles(1,faceID);
+
+  int side = -1;
+  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+    side = 1;
+  else if (ic2 > 0 && geo->iblank_cell(ic2) == NORMAL)
+    side = 0;
+  else
+  {
+    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell(ic1),geo->iblank_cell(ic2));
+    ThrowException("Face not blanked but both elements are!");
+  }
+
+  ind    = std::distance(&U(0,0,0), &U(i,0,side));
+  stride = std::distance(&U(i,0,side), &U(i,1,side));
+}
+
+double& Faces::get_u_fpt(int faceID, int fpt, int var)
+{
+  /* U : nFpts x nVars x 2 */
+  int i = geo->face2fpts(fpt, faceID);
+  int ic1 = geo->face2eles(0,faceID);
+  int ic2 = geo->face2eles(1,faceID);
+
+  unsigned int side = 0;
+  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+    side = 1;
+
+  return U(i,var,side);
+}
+
+double& Faces::get_grad_fpt(int faceID, int fpt, int var, int dim)
+{
+  /* U : nFpts x nVars x 2 */
+  int i = geo->face2fpts(fpt, faceID);
+  int ic1 = geo->face2eles(0,faceID);
+  int ic2 = geo->face2eles(1,faceID);
+
+  unsigned int side = 0;
+  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+    side = 1;
+
+  return dU(i,var,dim,side);
+}
+
+#ifdef _GPU
+void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
+{
+  if (nFringe == 0) return;
+
+  U_fringe.assign({geo->nFptsPerFace, nFringe, nVars});
+  fringe_fpts.assign({geo->nFptsPerFace, nFringe}, 0);
+  fringe_side.assign({geo->nFptsPerFace, nFringe}, 0);
+  for (int face = 0; face < nFringe; face++)
+  {
+    unsigned int side = 0;
+    int ic1 = geo->face2eles(0,fringeIDs[face]);
+    if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+      side = 1;
+
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+    {
+      fringe_fpts(fpt,face) = geo->face2fpts(fpt, fringeIDs[face]);
+      fringe_side(fpt,face) = side;
+    }
+  }
+
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    for (unsigned int face = 0; face < nFringe; face++)
+    {
+      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+      {
+        unsigned int gfpt = fringe_fpts(fpt,face);
+        unsigned int side = fringe_side(fpt,face);
+        U_fringe(fpt,face,var) = U(gfpt,var,side);
+      }
+    }
+  }
+
+  U_fringe_d = U_fringe;
+  fringe_fpts_d = fringe_fpts;
+  fringe_side_d = fringe_side;
+
+  unpack_fringe_u_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,nFringe,
+      geo->nFptsPerFace,nVars);
+
+  check_error();
+}
+
+void Faces::fringe_grad_to_device(int nFringe)
+{
+  /* NOTE: Expecting that fringe_u_to_device has already been called for the
+   * same set of fringe faces */
+
+  if (nFringe == 0) return;
+
+  dU_fringe.assign({geo->nFptsPerFace, nFringe, nVars, nDims});
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (unsigned int face = 0; face < nFringe; face++)
+      {
+        for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+        {
+          unsigned int gfpt = fringe_fpts(fpt,face);
+          unsigned int side = fringe_side(fpt,face);
+          dU_fringe(fpt,face,var,dim) = dU(gfpt,var,dim,side);
+        }
+      }
+    }
+  }
+
+  dU_fringe_d = dU_fringe;
+
+  unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
+      nFringe,geo->nFptsPerFace,nVars,nDims);
+
+  check_error();
+}
+#endif

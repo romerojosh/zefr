@@ -22,13 +22,22 @@
 #include <jama_lu.h>
 #endif
 
+#ifdef _BUILD_LIB
+#include "zefr.hpp"
+#endif
+
 class PMGrid;
+#ifdef _BUILD_LIB
+class Zefr;
+#endif
 
 class FRSolver
 {
   friend class PMGrid;
   friend class Filter;
-  
+#ifdef _BUILD_LIB
+  friend class Zefr;
+#endif
   private:
     InputStruct *input = NULL;
     GeoStruct geo;
@@ -58,6 +67,8 @@ class FRSolver
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
 #endif
 
+    _mpi_comm myComm;
+
     void initialize_U();
     void restart(std::string restart_file);
     void setup_update();
@@ -75,10 +86,15 @@ class FRSolver
 
     void compute_element_dt();
 
+#ifdef _GPU
+    // For moving grids
+    MotionVars *motion_vars, *motion_vars_d;
+#endif
+
   public:
     double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);
-    void setup();
+    void setup(_mpi_comm comm_in);
     void compute_residual(unsigned int stage, unsigned int color = 0);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
@@ -109,6 +125,10 @@ class FRSolver
     void dFcdU_from_faces();
     void compute_SER_dt();
     void write_color();
+
+    void (*overset_interp)(int nVars, double* U_spts, double* U_fpts, int gradFlag);
+
+    void move(double time);
 };
 
 #endif /* solver_hpp */

@@ -13,7 +13,7 @@
 #endif
 
 //void PMGrid::setup(int order, const InputStruct *input, FRSolver &solver)
-void PMGrid::setup(InputStruct *input, FRSolver &solver)
+void PMGrid::setup(InputStruct *input, FRSolver &solver, _mpi_comm comm_in)
 {
   this-> order = input->order;
   this-> input = input;
@@ -51,7 +51,7 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver)
     if (input->rank == 0) std::cout << "P_pro = " << P_pro << std::endl;
     if (input->rank == 0) std::cout << "P_res = " << P_res << std::endl;
     grids.push_back(std::make_shared<FRSolver>(input, P));
-    grids[n]->setup();
+    grids[n]->setup(comm_in);
     grids[n]->eles->setup_PMG(P_pro, P_res);
 
     /* Allocate memory for corrections and source terms */
@@ -105,8 +105,12 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 #pragma omp parallel for collapse(3)
     for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
       for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
+      {
+        if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+
         for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
           solutions[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var);
+      }
 #endif
 
 #ifdef _GPU
@@ -136,8 +140,12 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 #pragma omp parallel for collapse(3)
       for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
         for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
+        {
+          if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+
           for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
             grids[n]->eles->divF_spts(spt, ele, var, 0) += sources[n](spt, ele, var);
+        }
 #endif
 
 #ifdef _GPU
@@ -175,9 +183,13 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 #pragma omp parallel for collapse(3)
     for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
       for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
+      {
+        if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+
         for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
           corrections[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var) - 
             solutions[n](spt, ele, var);
+      }
 #endif
 
 #ifdef _GPU
@@ -418,8 +430,12 @@ void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
 #pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < grid.eles->nVars; n++)
     for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
+    {
+      if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
         source(spt,ele,n) = grid.eles->divF_spts(spt,ele,n,0);
+    }
 
   /* Update residual on current coarse grid */
   grid.compute_residual(0);

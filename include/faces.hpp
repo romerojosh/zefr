@@ -16,6 +16,10 @@
 #include "mdvector_gpu.h"
 #endif
 
+#ifdef _BUILD_LIB
+#include "zefr.hpp"
+#endif
+
 class FRSolver;
 class Elements;
 class Quads;
@@ -26,7 +30,10 @@ class Faces
   friend class Elements;
   friend class Quads;
   friend class Hexas;
-	friend class Filter;
+  friend class Filter;
+#ifdef _BUILD_LIB
+  friend class Zefr;
+#endif
 
   private:
     InputStruct *input = NULL;
@@ -53,6 +60,11 @@ class Faces
     void recv_U_data();
     void send_dU_data();
     void recv_dU_data();
+
+    void send_U_data_blocked(void);
+    void recv_U_data_blocked(int mpiFaceID);
+
+    void mpi_prod(void);
 #endif
 
   protected:
@@ -61,6 +73,8 @@ class Faces
     mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
     std::vector<double> FL, FR, WL, WR;
+
+    mdvector<double> Vg;  //! Grid velocity
 
     /* Structures for implicit method */
     bool CPU_flag; // Temporary flag for global implicit method
@@ -71,12 +85,26 @@ class Faces
     mdvector<double> dFdURconv, dUcdUR, dFdURvisc, dFddURvisc;
     mdvector<double> dURdUL, ddURddUL;
 
+    _mpi_comm myComm;
 #ifdef _MPI
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
     std::map<unsigned int, mdvector<double>> U_sbuffs, U_rbuffs;
 
     /* Vector to store request handles for non-blocking comms. */
     std::vector<MPI_Request> sreqs, rreqs;
+    int nsends, nrecvs;
+
+    /// JACOB'S ADDITIONS FOR TESTING NEW COMMUNICATION STRATEGY
+    std::vector<MPI_Request> sends, recvs;
+    std::vector<MPI_Status> sstatuses, rstatuses;
+    std::array<MPI_Status,2> new_statuses;
+    int n_reqs;
+    MPI_Status status;
+    std::vector<mdvector<double>> buffUR, buffUL;
+    std::array<std::vector<int>, 5> rot_permute;
+
+    mdvector<double> tmpOversetU; /// TODO: find better way?
+    mdvector<double> tmpOversetdU; /// TODO: find better way?
 #endif
 
 #ifdef _GPU
@@ -84,6 +112,8 @@ class Faces
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<double> dA_d, waveSp_d, diffCo_d;
     mdvector_gpu<int> LDG_bias_d;
+
+    mdvector_gpu<double> Vg_d;
 
     /* Structures for implicit method */
     mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;
@@ -94,8 +124,16 @@ class Faces
 #endif
 #endif
 
+#ifdef _GPU
+    mdvector_gpu<double> U_fringe_d, dU_fringe_d;
+    mdvector_gpu<unsigned int> fringe_fpts_d, fringe_side_d;
+
+    mdvector<double> U_fringe, dU_fringe;
+    mdvector<unsigned int> fringe_fpts, fringe_side;
+#endif
+
   public:
-    Faces(GeoStruct *geo, InputStruct *input);
+    Faces(GeoStruct *geo, InputStruct *input, _mpi_comm comm_in);
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U(unsigned int startFpt, unsigned int endFpt);
     void compute_common_F(unsigned int startFpt, unsigned int endFpt);
@@ -108,6 +146,16 @@ class Faces
     void compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt);
     void compute_dUcdU(unsigned int startFpt, unsigned int endFpt);
     void compute_dFcdU(unsigned int startFpt, unsigned int endFpt);
+
+    //! Get location of right-state U data for a flux point
+    void get_U_index(int faceID, int fpt, int& ind, int& stride);
+    double& get_u_fpt(int faceID, int fpt, int var);
+    double& get_grad_fpt(int faceID, int fpt, int var, int dim);
+
+#ifdef _GPU
+    void fringe_u_to_device(int* fringeIDs, int nFringe);
+    void fringe_grad_to_device(int nFringe);
+#endif
 };
 
 #endif /* faces_hpp */

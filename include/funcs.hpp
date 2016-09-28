@@ -82,4 +82,20 @@ unsigned int step(const T& val)
     return T(0) <= val;
 }
 
+//std::ostream& operator<<(std::ostream &os, const point &pt);
+
+mdvector<double> adjoint(const mdvector<double> &mat);
+
+double determinant(const mdvector<double> &mat);
+
+template<typename T>
+int findFirst(const std::vector<T>& vec, T val)
+{
+  for (int i = 0; i < vec.size(); i++)
+    if (vec[i] == val)
+      return i;
+
+  return -1;
+}
+
 #endif /* funcs_hpp */

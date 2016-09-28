@@ -2,5 +2,15 @@
 *.vtu
 *.pvtu
 *.o
+*.so
+*.pyc
 *.cp
 *.dat
+*.out
+*.out.*
+*.pro.user
+
+# Ignore folders likely to contain binaries and output files
+bin/*
+swig_bin/*
+testcases/*

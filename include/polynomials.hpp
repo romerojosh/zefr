@@ -14,6 +14,9 @@
  */
 double Lagrange(std::vector<double> xiGrid, unsigned int mode, double xi);
 
+/// Because Jacob is too lazy to convert all his copied code from Flurry
+double Lagrange(std::vector<double> xiGrid, double xi, unsigned int mode);
+
 //! Evaluates the first derivative of the Lagrange function corresponding to the specified mode 
 //!  on xiGrid at location xi.
 /*!
@@ -25,6 +28,9 @@ double Lagrange(std::vector<double> xiGrid, unsigned int mode, double xi);
  * \return Value of first derivative of the Lagrange function at xi.
  */
 double Lagrange_d1(std::vector<double> xiGrid, unsigned int mode, double xi);
+
+/// Because Jacob is too lazy to convert all his copied code from Flurry
+double dLagrange(std::vector<double> xiGrid, double xi, unsigned int mode);
 
 //! Evaluates the Legendre polynomial of degree P at location xi.
 /*!

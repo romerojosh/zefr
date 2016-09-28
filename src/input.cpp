@@ -7,6 +7,8 @@
 #include "input.hpp"
 #include "macros.hpp"
 
+double pi = 3.141592653589793;
+
 std::map<std::string,int> bcStr2Num = {
   {"none", NONE},
   {"fluid", NONE},
@@ -30,6 +32,8 @@ std::map<std::string,int> bcStr2Num = {
   {"overset", OVERSET},
   {"symmetry_p", SYMMETRY_P},
   {"symmetry_g", SYMMETRY_G},
+  {"wall_closure", WALL_CLOSURE},
+  {"overset_closure", OVERSET_CLOSURE},
 };
 
 InputStruct read_input_file(std::string inputfile)
@@ -125,7 +129,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "AdvDiff_Ax", input.AdvDiff_A(0), 1.0);
   read_param(f, "AdvDiff_Ay", input.AdvDiff_A(1), 1.0);
   read_param(f, "AdvDiff_Az", input.AdvDiff_A(2), 1.0);
-  read_param(f, "AdvDiff_D", input.AdvDiff_D, 0.1);
+  if (input.viscous)
+    read_param(f, "AdvDiff_D", input.AdvDiff_D, 0.1);
+  else
+    input.AdvDiff_D = 0;
 
   read_param(f, "T_gas", input.T_gas, 291.15);
   read_param(f, "gamma", input.gamma, 1.4);
@@ -166,8 +173,20 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "filt_maxLevels", input.filt_maxLevels, (unsigned int) 1);
 
   read_param(f, "overset", input.overset, false);
+  read_param_vec(f, "overset_grids", input.oversetGrids);
 
   read_param(f, "motion", input.motion, false);
+  if (input.motion)
+  {
+    read_param(f, "motion_type", input.motion_type);
+    if (input.motion_type == 4)
+    {
+      read_param(f, "moveAx", input.moveAx);
+      read_param(f, "moveAy", input.moveAy);
+      read_param(f, "moveFx", input.moveFx);
+      read_param(f, "moveFy", input.moveFy);
+    }
+  }
 
   f.close();
 
@@ -202,7 +221,10 @@ void apply_nondim(InputStruct &input)
         (input.T_fs + input.S));
   }
 
-  /* Set reference quantities for nondimensionalization */
+  /* -- Set reference quantities for nondimensionalization --
+   * Note that we are setting rho_ref s.t. we get a 'normalized' density of 2.
+   * This is for performance, to avoid taking an exponent of a number close to 1
+   * in the characteristic boundary condition. */
   input.T_ref = input.T_fs;
   input.rho_ref = input.rho_fs;
   input.P_ref = input.rho_fs * V_fs_mag * V_fs_mag;

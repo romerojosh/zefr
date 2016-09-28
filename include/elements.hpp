@@ -14,13 +14,20 @@
 #include "mdvector_gpu.h"
 #endif
 
+#ifdef _BUILD_LIB
+#include "zefr.hpp"
+#endif
+
 class FRSolver;
 class PMGrid;
 class Elements
 {
   friend class FRSolver;
   friend class PMGrid;
-	friend class Filter;
+  friend class Filter;
+#ifdef _BUILD_LIB
+  friend class Zefr;
+#endif
   protected:
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
@@ -40,10 +47,18 @@ class Elements
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts, inv_jaco_spts;
     mdvector<double> jaco_ppts, jaco_qpts, jaco_det_qpts;
+    mdvector<double> jaco_fpts, jaco_det_fpts, inv_jaco_fpts;
+    mdvector<double> nodes;
     mdvector<double> vol;
     mdvector<double> weights_spts;
     mdvector<double> h_ref;
     std::vector<double> weights_qpts;
+
+    /* Moving-Grid related structures */
+    mdvector<double> grid_vel_nodes, grid_vel_spts, grid_vel_fpts, grid_vel_ppts;
+    mdvector<double> dF_spts, dUr_spts;
+    mdvector<double> oppD0, oppE_Fn;
+    mdvector<double> dFn_fpts, tempF_fpts;
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
@@ -72,6 +87,9 @@ class Elements
     mdvector<double> CtempSF;
     mdvector<double> CtempFSN, CtempFSN2;
 
+    _mpi_comm myComm;
+
+    mdvector<double> U_donors, dU_donors;
 
 #ifdef _GPU
     /* GPU data */
@@ -82,9 +100,18 @@ class Elements
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, divF_spts_d;
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;
+    mdvector_gpu<double> jaco_fpts_d, inv_jaco_fpts_d;
     mdvector_gpu<double> vol_d;
     mdvector_gpu<double> weights_spts_d;
     mdvector_gpu<double> h_ref_d;
+
+    /* Motion Related */
+    mdvector_gpu<double> grid_vel_nodes_d, grid_vel_spts_d, grid_vel_fpts_d, grid_vel_ppts_d;
+    mdvector_gpu<double> nodes_d, shape_spts_d, shape_fpts_d, dshape_spts_d, dshape_fpts_d;
+    mdvector_gpu<double> tnorm_d;
+    mdvector_gpu<double> dF_spts_d, dUr_spts_d;
+    mdvector_gpu<double> oppD0_d, oppE_Fn_d;
+    mdvector_gpu<double> dFn_fpts_d, tempF_fpts_d;
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
@@ -96,6 +123,8 @@ class Elements
     mdvector_gpu<double> dFcdU_fpts_d, dFdU_spts_d;
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
+
+    mdvector_gpu<double> U_donors_d, dU_donors_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);
@@ -104,22 +133,25 @@ class Elements
     void setup_aux();
 
     virtual void set_locs() = 0;
-    virtual void set_transforms(std::shared_ptr<Faces> faces) = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
     virtual mdvector<double> calc_shape(unsigned int shape_order,
-                            std::vector<double> &loc) = 0;
+                             const std::vector<double> &loc) = 0;
     virtual mdvector<double> calc_d_shape(unsigned int shape_order,
-                            std::vector<double> &loc) = 0;
+                             const std::vector<double> &loc) = 0;
 
-    virtual double calc_nodal_basis(unsigned int spt, std::vector<double> &loc) = 0;
-    virtual double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
-                                   unsigned int dim) = 0;
-    virtual double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
-                                   unsigned int dim) = 0;
+    virtual double calc_nodal_basis(unsigned int spt,
+                   const std::vector<double> &loc) = 0;
+    virtual double calc_nodal_basis(unsigned int spt, double *loc) = 0;
+    virtual double calc_d_nodal_basis_spts(unsigned int spt,
+                   const std::vector<double> &loc, unsigned int dim) = 0;
+    virtual double calc_d_nodal_basis_fpts(unsigned int fpt,
+                   const std::vector<double> &loc, unsigned int dim) = 0;
 
+    virtual double calc_d_nodal_basis_fr(unsigned int spt,
+                   const std::vector<double>& loc, unsigned int dim) = 0;
 
   public:
-    void setup(std::shared_ptr<Faces> faces);
+    void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
     virtual void setup_PMG(int pro_order, int res_order) = 0;
     void extrapolate_U(unsigned int startEle, unsigned int endEle);
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);
@@ -131,6 +163,14 @@ class Elements
     void compute_Fvisc(unsigned int startEle, unsigned int endEle);
     virtual void transform_flux(unsigned int startEle, unsigned int endEle) = 0;
     virtual void transform_dU(unsigned int startEle, unsigned int endEle) = 0;
+
+    //! Calculate geometric transforms
+    void calc_transforms(std::shared_ptr<Faces> faces);
+
+    //! Calculate inverse of geo transforms for a set of points
+    void set_inverse_transforms(const mdvector<double> &jaco,
+         mdvector<double> &inv_jaco, mdvector<double> &jaco_det,
+         unsigned int nPts, unsigned int nDims);
 
     /* Routines for implicit method */
 #ifdef _CPU
@@ -148,6 +188,36 @@ class Elements
     void compute_Uavg();
     void poly_squeeze();
     void poly_squeeze_ppts();
+
+    /* Motion-related functions */
+
+    /* Functions required for overset interfacing */
+    int get_nSpts(void) { return (int)nSpts; }
+    int get_nFpts(void) { return (int)nFpts; }
+    bool getRefLoc(int ele, double* xyz, double* rst);
+    void get_interp_weights(double* rst, double* weights, int& nweights, int buffSize);
+
+    std::vector<double> getBoundingBox(int ele);
+
+#ifdef _GPU
+    void donor_u_from_device(int* donorIDs, int nDonors);
+    void donor_grad_from_device(int* donorIDs, int nDonors);
+#endif
+
+    void move(std::shared_ptr<Faces> faces);
+    void update_point_coords(std::shared_ptr<Faces> faces);
+    void update_grid_velocities(std::shared_ptr<Faces> faces);
+    void compute_gradF_spts(unsigned int startEle, unsigned int endEle);
+    void transform_gradF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void compute_dU0(unsigned int startEle, unsigned int endEle);
+
+    //! Extrapolated discontinuous normal flux to get delta-Fn at fpts
+    void extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::shared_ptr<Faces> faces);
+
+    //! 'Standard' (non-DFR) correction procedure
+    void correct_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void get_grid_velocity_ppts(void);
+    void update_plot_point_coords();
 };
 
 #endif /* elements_hpp */

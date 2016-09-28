@@ -182,132 +182,6 @@ void Quads::set_locs()
 
 }
 
-
-void Quads::set_transforms(std::shared_ptr<Faces> faces)
-{
-  /* Allocate memory for jacobian matrices and determinant */
-  jaco_spts.assign({nDims, nDims, nSpts, nEles});
-  jaco_ppts.assign({nDims, nDims, nPpts, nEles});
-  jaco_qpts.assign({nDims, nDims, nQpts, nEles});
-  jaco_det_spts.assign({nSpts, nEles});
-  jaco_det_qpts.assign({nQpts, nEles});
-  vol.assign({nEles});
-
-  /* Set jacobian matrix and determinant at solution points */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
-    {
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node,ele);
-            jaco_spts(dimX, dimXi, spt, ele) += geo->coord_nodes(gnd,dimX) * dshape_spts(node, spt, dimXi); 
-          }
-        }
-      }
-
-      jaco_det_spts(spt,ele) = jaco_spts(0,0,spt,ele) * jaco_spts(1,1,spt,ele) -
-                               jaco_spts(0,1,spt,ele) * jaco_spts(1,0,spt,ele); 
-
-
-      if (jaco_det_spts(spt,ele) < 0.)
-        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " spt:" + std::to_string(spt));
-
-    }
-
-    /* Compute element area */
-    for (unsigned int spt = 0; spt < nSpts; spt++)
-    {
-      /* Get quadrature weight */
-      unsigned int i = idx_spts(spt,0);
-      unsigned int j = idx_spts(spt,1);
-      double weight = weights_spts(i) * weights_spts(j);
-
-      vol(ele) += weight * jaco_det_spts(spt, ele);
-    }
-
-  }
-
-
-
-  /* Set jacobian matrix at face flux points (do not need the determinant) */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-    {
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node,ele);
-            int gfpt = geo->fpt2gfpt(fpt,ele);
-
-            /* Skip fpts on ghost edges */
-            if (gfpt == -1)
-              continue;
-
-            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
-
-            faces->jaco(gfpt, dimX, dimXi, slot) += geo->coord_nodes(gnd,dimX) * dshape_fpts(node, fpt, dimXi);
-          }
-        }
-      }
-    }
-  }
-
-  /* Set jacobian matrix and determinant at plot points (do not need the determinant) */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-    {
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node,ele);
-            jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(gnd,dimX) * dshape_ppts(node, ppt, dimXi); 
-          }
-        }
-      }
-    }
-  }
-  /* Set jacobian matrix and determinant at quadrature points */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
-    {
-      for (unsigned int dimXi = 0; dimXi < nDims; dimXi++)
-      {
-        for (unsigned int dimX = 0; dimX < nDims; dimX++)
-        {
-          for (unsigned int node = 0; node < nNodes; node++)
-          {
-            unsigned int gnd = geo->ele2nodes(node, ele);
-            jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(gnd,dimX) * dshape_qpts(node,qpt,dimXi); 
-          }
-        }
-      }
-
-      jaco_det_qpts(qpt,ele) = jaco_qpts(0,0,qpt,ele) * jaco_qpts(1,1,qpt,ele) -
-                               jaco_qpts(0,1,qpt,ele) * jaco_qpts(1,0,qpt,ele); 
-
-
-      if (jaco_det_qpts(qpt,ele) < 0.)
-        ThrowException("Nonpositive Jacobian detected: ele: " + std::to_string(ele) + " qpt:" + std::to_string(qpt));
-
-    }
-  }
-
-}
-
 void Quads::set_normals(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for normals */
@@ -336,36 +210,9 @@ void Quads::set_normals(std::shared_ptr<Faces> faces)
     }
 
   }
-
-  /* Use transform to obtain physical normals at face flux points */
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-    {
-      int gfpt = geo->fpt2gfpt(fpt,ele);
-
-      /* Check if flux point is on ghost edge */
-      if (gfpt == -1) 
-        continue;
-
-      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
-
-      faces->norm(gfpt, 0, slot) = faces->jaco(gfpt, 1, 1, slot) * tnorm(fpt, 0) - 
-                                 faces->jaco(gfpt, 1, 0, slot) * tnorm(fpt, 1);
-      faces->norm(gfpt, 1, slot) = -faces->jaco(gfpt, 0, 1, slot) * tnorm(fpt, 0) + 
-                                 faces->jaco(gfpt, 0, 0, slot) * tnorm(fpt, 1);
-
-      faces->dA(gfpt) = std::sqrt(faces->norm(gfpt, 0, slot)*faces->norm(gfpt, 0, slot) + 
-                        faces->norm(gfpt, 1, slot)*faces->norm(gfpt, 1, slot));
-
-      faces->norm(gfpt, 0, slot) /= faces->dA(gfpt);
-      faces->norm(gfpt, 1, slot) /= faces->dA(gfpt);
-    }
-  }
-
 }
 
-double Quads::calc_nodal_basis(unsigned int spt, std::vector<double> &loc)
+double Quads::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
 {
   /* Get indices for Lagrange polynomial evaluation */
   unsigned int i = idx_spts(spt,0);
@@ -376,7 +223,19 @@ double Quads::calc_nodal_basis(unsigned int spt, std::vector<double> &loc)
   return val;
 }
 
-double Quads::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, unsigned int dim)
+double Quads::calc_nodal_basis(unsigned int spt, double *loc)
+{
+  /* Get indices for Lagrange polynomial evaluation */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+
+  double val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
+
+  return val;
+}
+
+double Quads::calc_d_nodal_basis_spts(unsigned int spt,
+              const std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
@@ -398,7 +257,30 @@ double Quads::calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc
 
 }
 
-double Quads::calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, unsigned int dim)
+double Quads::calc_d_nodal_basis_fr(unsigned int spt,
+              const std::vector<double> &loc, unsigned int dim)
+{
+  /* Get indices for Lagrange polynomial evaluation */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+
+  double val = 0.0;
+
+  if (dim == 0)
+  {
+      val = Lagrange_d1(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
+  }
+  else
+  {
+      val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange_d1(loc_spts_1D, j, loc[1]);
+  }
+
+  return val;
+
+}
+
+double Quads::calc_d_nodal_basis_fpts(unsigned int fpt,
+              const std::vector<double> &loc, unsigned int dim)
 {
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
@@ -533,15 +415,17 @@ void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
         double dUtemp = dU_spts(spt, ele, n, 0);
 
-        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) - 
-                                  dU_spts(spt, ele, n, 1) * jaco_spts(1, 0, spt, ele); 
+        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(spt, ele, 1, 1) -
+                                  dU_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 1, 0);
 
-        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
-                                  dUtemp * jaco_spts(0, 1, spt, ele);
+        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 0) -
+                                  dUtemp * jaco_spts(spt, ele, 0, 1);
 
         dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
         dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
@@ -567,27 +451,26 @@ void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
     {
+      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
+
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
         double Ftemp = F_spts(spt, ele, n, 0);
 
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(1, 1, spt, ele) -
-                                 F_spts(spt, ele, n, 1) * jaco_spts(0, 1, spt, ele);
-        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(0, 0, spt, ele) -
-                                 Ftemp * jaco_spts(1, 0, spt, ele);
+        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(spt, ele, 1, 1)
+                               - F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 1);
+        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 0)
+                               - Ftemp * jaco_spts(spt, ele, 1, 0);
       }
     }
   }
 #endif
 
 #ifdef _GPU
-  //F_spts_d = F_spts;
   transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars,
       nDims, input->equation, startEle, endEle);
 
   check_error();
-
-  //F_spts = F_spts_d;
 #endif
 }
 
@@ -601,14 +484,16 @@ void Quads::transform_dFdU()
     {
       for (unsigned int ele = 0; ele < nEles; ele++)
       {
+        if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
+
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
           double dFdUtemp = dFdU_spts(spt, ele, ni, nj, 0);
 
-          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * jaco_spts(1, 1, spt, ele) -
-                                           dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 1, spt, ele);
-          dFdU_spts(spt, ele, ni, nj, 1) = dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(0, 0, spt, ele) -
-                                           dFdUtemp * jaco_spts(1, 0, spt, ele);
+          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * jaco_spts(spt, ele, 1, 1) -
+                                           dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(spt, ele, 0, 1);
+          dFdU_spts(spt, ele, ni, nj, 1) = dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(spt, ele, 0, 0) -
+                                           dFdUtemp * jaco_spts(spt, ele, 1, 0);
         }
       }
     }
@@ -623,7 +508,7 @@ void Quads::transform_dFdU()
 }
 
 mdvector<double> Quads::calc_shape(unsigned int shape_order, 
-    std::vector<double> &loc)
+                                   const std::vector<double> &loc)
 {
   mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
@@ -691,7 +576,7 @@ mdvector<double> Quads::calc_shape(unsigned int shape_order,
 }
 
 mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
-                          std::vector<double> &loc)
+                                     const std::vector<double> &loc)
 {
   mdvector<double> dshape_val({nNodes, nDims}, 0.0);
   double xi = loc[0];

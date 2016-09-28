@@ -103,10 +103,10 @@ class mdvector
     void solve(mdvector<T>& x, const mdvector<T>& B) const;
 
     //! Methods to add to dimensions of an mdvector
-    void add_dim_0(unsigned int ind, const T& val);
-    void add_dim_1(unsigned int ind, const T& val);
-    void add_dim_2(unsigned int ind, const T& val);
-    void add_dim_3(unsigned int ind, const T& val);
+    void add_dim_0(int ind, const T& val);
+    void add_dim_1(int ind, const T& val);
+    void add_dim_2(int ind, const T& val);
+    void add_dim_3(int ind, const T& val);
 
     //! Methods to remove from dimensions of an mdvector
     void remove_dim_0(unsigned int ind);
@@ -379,8 +379,10 @@ T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int id
 }
 
 template<typename T>
-void mdvector<T>::add_dim_0(unsigned int ind, const T& val)
+void mdvector<T>::add_dim_0(int ind, const T& val)
 {
+  if (ind == -1) ind = dims[0]; // Add to end by default
+
   /* Insert new 'row' of memory */
   unsigned int stride0 = dims[0]*dims[1]*dims[2];
   unsigned int stride1 = dims[0]*dims[1];
@@ -402,8 +404,10 @@ void mdvector<T>::add_dim_0(unsigned int ind, const T& val)
 }
 
 template<typename T>
-void mdvector<T>::add_dim_1(unsigned int ind, const T &val)
+void mdvector<T>::add_dim_1(int ind, const T &val)
 {
+  if (ind == -1) ind = dims[1]; // Add to end by default
+
   /* Insert new 'column' of memory */
   unsigned int stride0 = dims[0]*dims[1]*dims[2];
   unsigned int stride1 = dims[0]*dims[1];
@@ -422,8 +426,10 @@ void mdvector<T>::add_dim_1(unsigned int ind, const T &val)
 }
 
 template<typename T>
-void mdvector<T>::add_dim_2(unsigned int ind, const T &val)
+void mdvector<T>::add_dim_2(int ind, const T &val)
 {
+  if (ind == -1) ind = dims[2]; // Add to end by default
+
   /* Insert new 'page' of memory */
   unsigned int stride   = dims[0]*dims[1]*dims[2];
   unsigned int pageSize = dims[0]*dims[1];
@@ -439,8 +445,10 @@ void mdvector<T>::add_dim_2(unsigned int ind, const T &val)
 }
 
 template<typename T>
-void mdvector<T>::add_dim_3(unsigned int ind, const T &val)
+void mdvector<T>::add_dim_3(int ind, const T &val)
 {
+  if (ind == -1) ind = dims[3]; // Add to end by default
+
   /* Insert new 'book' of memory */
   unsigned int bookSize = dims[0]*dims[1]*dims[2];
   auto it = values.begin() + bookSize*ind;

@@ -35,7 +35,7 @@ struct GeoStruct
 {
     unsigned int nEles = 0; 
     unsigned int nBnds = 0;
-    unsigned int nDims, nNodes, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
+    unsigned int nDims, nNodes, nFaces, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
     unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
     bool per_bnd_flag = false;
 
@@ -54,6 +54,8 @@ struct GeoStruct
     mdvector<unsigned int> face_nodes;
     mdvector<int> ele_adj;
 
+    mdvector<double> grid_vel_nodes, coords_init;
+
     unsigned int nColors;
     mdvector<unsigned int> ele_color;
 
@@ -71,6 +73,7 @@ struct GeoStruct
 
     std::vector<int> pyfr2zefr_face, zefr2pyfr_face;
 
+    _mpi_comm myComm;
 #ifdef _MPI
     unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
@@ -78,14 +81,16 @@ struct GeoStruct
     std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
     std::map<unsigned int, MPI_Datatype> mpi_types;
 
-    std::vector<int> nProcGrid;  //! Number of MPI processes assigned to each grid block
-    std::vector<int> gridIdList; //! List of grid ID assigned to each rank
+    unsigned int nMpiFaces;
+    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
 #endif
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
     mdvector_gpu<unsigned int> gfpt2bnd_d, per_fpt_list_d;
-    mdvector_gpu<double> coord_spts_d;
+    mdvector_gpu<double> coord_spts_d, coord_fpts_d;
+    mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
+    mdvector_gpu<int> ele2nodes_d;
 #ifdef _MPI
     std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif
@@ -98,26 +103,38 @@ struct GeoStruct
 
     InputStruct *input;
 
-    unsigned int nFaces, nBndFaces;
+    unsigned int nBndFaces, nIntFaces, nOverFaces;
     std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
-    mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
+///    mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
     std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
     std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
     std::vector<int> fpt2face; //! fpt index to face index
     mdvector<int> face2fpts; //! Face index to fpt indices
 
-    unsigned int nGrids;             //! Number of distinct overset grids
-    int nProcsGrid;          //! Number of MPI processes assigned to current (overset) grid block
-    unsigned int gridID;             //! Which (overset) grid block is this process handling
-    int gridRank;           //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
+    std::vector<int> iblank_node, iblank_face; //! iblank values for nodes, cells, faces
+    mdvector<int> iblank_cell;
+
+    std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
+    std::set<int> overFaces;  //! Ordered list of all current overset faces
+    std::vector<int> overFaceList;
+
+    int nWall, nOver; //! Number of nodes on wall & overset boundaries
+    std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists
+
+#ifdef _GPU
+    mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
+    mdvector<int> iblank_fpts;
+#endif
+
+    unsigned int nGrids;  //! Number of distinct overset grids
+    int nProcsGrid;       //! Number of MPI processes assigned to current (overset) grid block
+    unsigned int gridID;  //! Which (overset) grid block is this process handling
+    int gridRank;         //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
     int rank;
     int nproc;
-
-public:
-
 };
 
-GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims);
+GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in);
 void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo);
 void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo);
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input);
@@ -134,9 +151,9 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo);
 void shuffle_data_by_color(GeoStruct &geo);
 
 #ifdef _MPI
-void partition_geometry(GeoStruct &geo);
 void partition_geometry(InputStruct *input, GeoStruct &geo);
-void splitGridProcs(const MPI_Comm &Comm_World, MPI_Comm &Comm_Grid, InputStruct *input, GeoStruct &geo);
 #endif
+
+void move_grid(InputStruct *input, GeoStruct &geo, double time);
 
 #endif /* geometry_hpp */

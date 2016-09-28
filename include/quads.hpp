@@ -15,19 +15,22 @@ class Quads: public Elements
 {
   private:
     void set_locs();
-    void set_transforms(std::shared_ptr<Faces> faces);
     void set_normals(std::shared_ptr<Faces> faces);
 
     mdvector<double> calc_shape(unsigned int shape_order,
-                      std::vector<double> &loc);
+                                const std::vector<double> &loc);
 
     mdvector<double> calc_d_shape(unsigned int shape_order,
-                       std::vector<double> &loc);
+                                  const std::vector<double> &loc);
 
-    double calc_nodal_basis(unsigned int spt, std::vector<double> &loc);
-    double calc_d_nodal_basis_spts(unsigned int spt, std::vector<double> &loc, 
+    double calc_nodal_basis(unsigned int spt,
+                            const std::vector<double> &loc);
+    double calc_nodal_basis(unsigned int spt, double *loc);
+    double calc_d_nodal_basis_spts(unsigned int spt,
+                                   const std::vector<double> &loc,
                                    unsigned int dim);
-    double calc_d_nodal_basis_fpts(unsigned int fpt, std::vector<double> &loc, 
+    double calc_d_nodal_basis_fpts(unsigned int fpt,
+                                   const std::vector<double> &loc,
                                    unsigned int dim);
 
   public:
@@ -39,6 +42,7 @@ class Quads: public Elements
 
     /* Routines for implicit method */
     void transform_dFdU();
+    double calc_d_nodal_basis_fr(unsigned int spt, const std::vector<double>& loc, unsigned int dim);
 };
 
 #endif /* quads_hpp */

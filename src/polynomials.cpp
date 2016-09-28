@@ -4,6 +4,11 @@
 #include "polynomials.hpp"
 
 
+double Lagrange(std::vector<double> xiGrid, double xi, unsigned int mode)
+{
+  return Lagrange(xiGrid, mode, xi);
+}
+
 double Lagrange(std::vector<double> xiGrid, unsigned int mode, double xi)
 {
   double val = 1.0;
@@ -16,6 +21,11 @@ double Lagrange(std::vector<double> xiGrid, unsigned int mode, double xi)
       val *= (xi - xiGrid[i])/(xiGrid[mode] - xiGrid[i]);
 
   return val;
+}
+
+double dLagrange(std::vector<double> xiGrid, double xi, unsigned int mode)
+{
+  return Lagrange_d1(xiGrid, mode, xi);
 }
 
 double Lagrange_d1(std::vector<double> xiGrid, unsigned int mode, double xi)

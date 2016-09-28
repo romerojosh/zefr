@@ -18,16 +18,18 @@
 #include "elements_kernels.h"
 #include "solver_kernels.h"
 #endif
-
-void Elements::setup(std::shared_ptr<Faces> faces)
+#define _DEBUG
+void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 {
+  myComm = comm_in;
+
   set_locs();
   set_shape();
-  set_transforms(faces);
-  set_normals(faces);
-  setup_FR();
-  setup_aux();
   set_coords(faces);
+  set_normals(faces);
+  calc_transforms(faces);
+  setup_FR();
+  setup_aux();  
 }
 
 void Elements::set_shape()
@@ -39,9 +41,28 @@ void Elements::set_shape()
   shape_qpts.assign({nNodes, nQpts},1);
   dshape_spts.assign({nNodes, nSpts, nDims},1);
   dshape_fpts.assign({nNodes, nFpts, nDims},1);
-  dshape_ppts.assign({nNodes, nPpts, nDims},1);
   dshape_qpts.assign({nNodes, nQpts, nDims},1);
 
+  if (input->motion)
+  {
+    geo->grid_vel_nodes.assign({nDims, geo->nNodes}, 0.0);
+
+    grid_vel_nodes.assign({nNodes, nEles, nDims}, 0.);
+    grid_vel_spts.assign({nSpts, nEles, nDims}, 0.);
+    grid_vel_fpts.assign({nFpts, nEles, nDims}, 0.);
+    grid_vel_ppts.assign({nPpts, nEles, nDims}, 0.);
+  }
+
+  /* Allocate memory for jacobian matrices and determinant */
+  jaco_spts.assign({nSpts, nEles, nDims, nDims});
+  jaco_fpts.assign({nFpts, nEles, nDims, nDims});
+  jaco_qpts.assign({nQpts, nEles, nDims, nDims});
+  inv_jaco_spts.assign({nSpts, nEles, nDims, nDims});
+  inv_jaco_fpts.assign({nFpts, nEles, nDims, nDims});
+  jaco_det_spts.assign({nSpts, nEles});
+  jaco_det_fpts.assign({nFpts, nEles});
+  jaco_det_qpts.assign({nQpts, nEles});
+  vol.assign({nEles});
 
   std::vector<double> loc(nDims,0.0);
 
@@ -94,9 +115,6 @@ void Elements::set_shape()
     for (unsigned int node = 0; node < nNodes; node++)
     {
       shape_ppts(node, ppt) = shape_val(node);
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        dshape_ppts(node, ppt, dim) = dshape_val(node, dim);
     }
   }
   
@@ -127,66 +145,81 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   faces->coord.assign({geo->nGfpts, nDims});
   geo->coord_ppts.assign({nPpts, nEles, nDims});
   geo->coord_qpts.assign({nQpts, nEles, nDims});
+  nodes.assign({nNodes, nEles, nDims});
 
+  /* Setup positions of all element's shape nodes in one array */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
+      for (unsigned int node = 0; node < nNodes; node++)
+        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
 
+  int ms = nSpts;
+  int mf = nFpts;
+  int mp = nPpts;
+  int mq = nQpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  auto &B = nodes(0,0,0);
+
+  /* Setup physical coordinates at solution points */
+  auto &As = shape_spts(0,0);
+  auto &Cs = geo->coord_spts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#endif
+
+  /* Setup physical coordinates at flux points */
+  auto &Af = shape_fpts(0,0);
+  auto &Cf = geo->coord_fpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasTrans, mf, n, k,
+              1.0, &Af, k, &B, n, 0.0, &Cf, mf);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+#endif
+
+  /* Setup physical coordinates at plot points */
+  auto &Ap = shape_ppts(0,0);
+  auto &Cp = geo->coord_ppts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
+#endif
+
+  /* Setup physical coordinates at quadrature points */
+  auto &Aq = shape_qpts(0,0);
+  auto &Cq = geo->coord_qpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#endif
+
+  /* Setup physical coordinates at flux points [in faces class] */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
-
-      /* Setup physical coordinates at solution points */
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_spts(spt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_spts(node, spt);
-        }
-      }
-  
-      /* Setup physical coordinates at flux points */
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_fpts(fpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
-
-          int gfpt = geo->fpt2gfpt(fpt,ele);
-
-          /* Check if on ghost edge */
-          if (gfpt != -1)
-            faces->coord(gfpt, dim) += geo->coord_nodes(gnd,dim) * shape_fpts(node, fpt);
-
-        }
-      }
-
-          /* Setup physical coordinates at plot points */
-      for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_ppts(ppt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_ppts(node, ppt);
-        }
-      }
-
-      /* Setup physical coordinates at quadrature points */
-      for (unsigned int qpt = 0; qpt < nQpts; qpt++)
-      {
-        for (unsigned int node = 0; node < nNodes; node++)
-        {
-          unsigned int gnd = geo->ele2nodes(node, ele);
-          geo->coord_qpts(qpt, ele, dim) += geo->coord_nodes(gnd,dim) * shape_qpts(node, qpt);
-        }
+        int gfpt = geo->fpt2gfpt(fpt,ele);
+        /* Check if on ghost edge */
+        if (gfpt != -1)
+          faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
       }
     }
   }
-
-  /* Fix the coordinates assigned to all internal flux points */
-  for (unsigned int fpt = 0; fpt < geo->nGfpts_int; fpt++)
-    for (unsigned int dim = 0; dim < nDims; dim++)
-      faces->coord(fpt, dim) *= 0.5;
 
   if (input->CFL_type == 2)
   {
@@ -208,7 +241,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
           double dx = geo->coord_fpts(fpt1, ele, 0) - geo->coord_fpts(fpt2, ele, 0);
           double dy = geo->coord_fpts(fpt1, ele, 1) - geo->coord_fpts(fpt2, ele, 1);
-          double dist = std::sqrt(dx*dx + dy*dy); 
+          double dist = std::sqrt(dx*dx + dy*dy);
 
           h_ref(fpt1, ele) = dist;
           h_ref(fpt2, ele) = dist;
@@ -226,7 +259,9 @@ void Elements::setup_FR()
 {
   /* Allocate memory for FR operators */
   oppE.assign({nFpts, nSpts});
+  oppE_Fn.assign({nFpts, nSpts, nDims});
   oppD.assign({nSpts, nSpts, nDims});
+  oppD0.assign({nSpts, nSpts, nDims});
   oppD_fpts.assign({nSpts, nFpts, nDims});
   oppDiv_fpts.assign({nSpts, nFpts});
 
@@ -243,6 +278,12 @@ void Elements::setup_FR()
     }
   }
 
+  /* Setup spt to fpt extrapolation operator for normal flux (oppE_Fn) */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        oppE_Fn(fpt,spt,dim) = oppE(fpt,spt) * tnorm(fpt,dim);
+
   /* Setup differentiation operator (oppD) for solution points */
   /* Note: Can set up for standard FR eventually. Trying to keep things simple.. */
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -255,6 +296,22 @@ void Elements::setup_FR()
           loc[d] = loc_spts(ispt , d);
 
         oppD(ispt,jspt,dim) = calc_d_nodal_basis_spts(jspt, loc, dim);
+      }
+    }
+  }
+
+  /* Setup differentiation operator (oppD) for solution points */
+  /* Note: This one is the 'traditional' FR derivative [fpts not included] */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int jspt = 0; jspt < nSpts; jspt++)
+    {
+      for (unsigned int ispt = 0; ispt < nSpts; ispt++)
+      {
+        for (unsigned int d = 0; d < nDims; d++)
+          loc[d] = loc_spts(ispt , d);
+
+        oppD0(ispt,jspt,dim) = calc_d_nodal_basis_fr(jspt, loc, dim);
       }
     }
   }
@@ -285,7 +342,7 @@ void Elements::setup_FR()
       if (nDims == 2) 
       {
         int face = fpt / nSpts1D;
-        if (face == 0 or face == 3) // Bottom and Right face
+        if (face == 0 or face == 3) // Bottom and Left face
           fac = -1;
       }
       else if (nDims == 3)
@@ -335,7 +392,170 @@ void Elements::setup_aux()
       oppE_qpts(qpt,spt) = calc_nodal_basis(spt, loc);
     }
   }
+}
 
+void Elements::calc_transforms(std::shared_ptr<Faces> faces)
+{
+  /* --- Calculate Transformation at Solution Points --- */
+
+  int ms = nSpts;
+  int mf = nFpts;
+  int mq = nQpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    auto &B = nodes(0,0,0);
+    auto &As = dshape_spts(0, 0, dim);
+    auto &Af = dshape_fpts(0, 0, dim);
+    auto &Aq = dshape_qpts(0, 0, dim);
+    auto &Cs = jaco_spts(0, 0, 0, dim);
+    auto &Cf = jaco_fpts(0, 0, 0, dim);
+    auto &Cq = jaco_qpts(0, 0, 0, dim);
+
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#endif
+  }
+
+  set_inverse_transforms(jaco_spts,inv_jaco_spts,jaco_det_spts,nSpts,nDims);
+  set_inverse_transforms(jaco_fpts,inv_jaco_fpts,jaco_det_fpts,nFpts,nDims);
+
+  /* --- Compute Element Volumes --- */
+#pragma omp parallel for collapse(2)
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      /* Get quadrature weight */
+      unsigned int i = idx_spts(spt,0);
+      unsigned int j = idx_spts(spt,1);
+
+
+      double weight = weights_spts(i) * weights_spts(j);
+
+      if (nDims == 3)
+        weight *= weights_spts(idx_spts(spt,2));
+
+      vol(e) += weight * jaco_det_spts(spt, e);
+    }
+  }
+
+  /* --- Calculate Transformation at Flux Points --- */
+#pragma omp parallel for collapse(2)
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      int gfpt = geo->fpt2gfpt(fpt,e);
+
+      /* Check if flux point is on ghost edge */
+      if (gfpt == -1)
+        continue;
+
+      unsigned int slot = geo->fpt2gfpt_slot(fpt,e);
+
+      /* --- Calculate outward unit normal vector at flux point --- */
+      // Transform face normal from reference to physical space [JGinv .dot. tNorm]
+      for (uint dim1 = 0; dim1 < nDims; dim1++)
+      {
+        faces->norm(gfpt,dim1,slot) = 0.;
+        for (uint dim2 = 0; dim2 < nDims; dim2++)
+          faces->norm(gfpt,dim1,slot) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
+      }
+
+      // Store magnitude of face normal (equivalent to face area in finite-volume land)
+      if (slot == 0)
+      {
+        faces->dA(gfpt) = 0;
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->dA(gfpt) += faces->norm(gfpt,dim,slot)*faces->norm(gfpt,dim,slot);
+        faces->dA(gfpt) = sqrt(faces->dA(gfpt));
+      }
+
+      // Normalize
+      // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
+      // (A normal vector at a point doesn't make sense anyways)
+      if (std::fabs(faces->dA(gfpt)) < 1e-10)
+      {
+        faces->dA(gfpt) = 0.;
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->norm(gfpt,dim,slot) = 0;
+      }
+      else
+      {
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->norm(gfpt,dim,slot) /= faces->dA(gfpt);
+      }
+    }
+  }
+
+  /* Set jacobian matrix and determinant at quadrature points */
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int qpt = 0; qpt < nQpts; qpt++)
+    {
+      if (nDims == 2)
+      {
+        // Determinant of transformation matrix
+        jaco_det_qpts(qpt,e) = jaco_qpts(qpt,e,0,0)*jaco_qpts(qpt,e,1,1)-jaco_qpts(qpt,e,0,1)*jaco_qpts(qpt,e,1,0);
+      }
+      else if (nDims == 3)
+      {
+        double xr = jaco_qpts(qpt,e,0,0);   double xs = jaco_qpts(qpt,e,0,1);   double xt = jaco_qpts(qpt,e,0,2);
+        double yr = jaco_qpts(qpt,e,1,0);   double ys = jaco_qpts(qpt,e,1,1);   double yt = jaco_qpts(qpt,e,1,2);
+        double zr = jaco_qpts(qpt,e,2,0);   double zs = jaco_qpts(qpt,e,2,1);   double zt = jaco_qpts(qpt,e,2,2);
+        jaco_det_qpts(qpt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
+      }
+      if (jaco_det_qpts(qpt,e)<0) ThrowException("Negative Jacobian at quadrature point.");
+    }
+  }
+}
+
+void Elements::set_inverse_transforms(const mdvector<double> &jaco,
+               mdvector<double> &inv_jaco, mdvector<double> &jaco_det,
+               unsigned int nPts, unsigned int nDims)
+{
+#pragma omp parallel for collapse(2)
+  for (unsigned int e = 0; e < nEles; e++)
+  {
+    for (unsigned int pt = 0; pt < nPts; pt++)
+    {
+      if (nDims == 2)
+      {
+        // Determinant of transformation matrix
+        jaco_det(pt,e) = jaco(pt,e,0,0)*jaco(pt,e,1,1)-jaco(pt,e,0,1)*jaco(pt,e,1,0);
+        // Inverse of transformation matrix (times its determinant)
+        inv_jaco(pt,e,0,0) = jaco(pt,e,1,1);  inv_jaco(pt,e,0,1) =-jaco(pt,e,0,1);
+        inv_jaco(pt,e,1,0) =-jaco(pt,e,1,0);  inv_jaco(pt,e,1,1) = jaco(pt,e,0,0);
+      }
+      else if (nDims == 3)
+      {
+        double xr = jaco(pt,e,0,0);   double xs = jaco(pt,e,0,1);   double xt = jaco(pt,e,0,2);
+        double yr = jaco(pt,e,1,0);   double ys = jaco(pt,e,1,1);   double yt = jaco(pt,e,1,2);
+        double zr = jaco(pt,e,2,0);   double zs = jaco(pt,e,2,1);   double zt = jaco(pt,e,2,2);
+        jaco_det(pt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
+
+        inv_jaco(pt,e,0,0) = ys*zt - yt*zs;  inv_jaco(pt,e,0,1) = xt*zs - xs*zt;  inv_jaco(pt,e,0,2) = xs*yt - xt*ys;
+        inv_jaco(pt,e,1,0) = yt*zr - yr*zt;  inv_jaco(pt,e,1,1) = xr*zt - xt*zr;  inv_jaco(pt,e,1,2) = xt*yr - xr*yt;
+        inv_jaco(pt,e,2,0) = yr*zs - ys*zr;  inv_jaco(pt,e,2,1) = xs*zr - xr*zs;  inv_jaco(pt,e,2,2) = xr*ys - xs*yr;
+      }
+      if (jaco_det(pt,e)<0) ThrowException("Negative Jacobian at solution points.");
+    }
+  }
 }
 
 void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
@@ -403,6 +623,80 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
         nVars * nEles), dU_spts_d.ldim(), 0.0, dU_fpts_d.data() + dim * 
         (dU_fpts_d.ldim() * nVars * nEles), dU_fpts_d.ldim());
   }
+
+  check_error();
+#endif
+}
+
+void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::shared_ptr<Faces> faces)
+{
+#ifdef _CPU
+  dFn_fpts = Fcomm;
+
+  if (input->motion)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppE(0, 0);
+        auto &B = F_spts(0, startEle, var, dim);
+        auto &C = tempF_fpts(0, startEle);
+
+  #ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, disFn_fpts.ldim());
+  #else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
+  #endif
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+          {
+            int gfpt = geo->fpt2gfpt(fpt,ele);
+
+            /* Check if flux point is on ghost edge */
+            if (gfpt == -1)
+              continue;
+
+            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * faces->norm(gfpt,dim,slot) * faces->dA(gfpt);
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppE_Fn(0, 0, dim);
+        auto &B = F_spts(0, startEle, var, dim);
+        auto &C = dFn_fpts(0, startEle, var);
+
+  #ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, disFn_fpts.ldim());
+  #else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, dFn_fpts.ldim());
+  #endif
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  device_copy(dFn_fpts_d, Fcomm_d, Fcomm_d.size());
+
+  extrapolate_Fn_wrapper(oppE_d, F_spts_d, tempF_fpts_d, dFn_fpts_d,
+      faces->norm_d, faces->dA_d, geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nSpts,
+      nFpts, nEles, nDims, nVars, input->motion);
+
+  check_error();
 #endif
 }
 
@@ -474,6 +768,64 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
   }
 #endif
 
+}
+
+void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
+{
+  /* If running a viscous simulation, use dU that was already computed
+   * NOTE: the point is to keep a copy of dU wrt reference domain coords */
+  if (input->viscous)
+  {
+#ifdef _CPU
+    std::copy(dU_spts.data(),dU_spts.data()+dU_spts.size(),dUr_spts.data());
+#endif
+
+#ifdef _GPU
+    device_copy(dUr_spts_d, dU_spts_d, dU_spts_d.size());
+    check_error();
+#endif
+
+    return;
+  }
+
+  /* Compute derivative of solution at solution points (Order-P FR basis) */
+#ifdef _CPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      auto &A = oppD0(0, 0, dim);
+      auto &B = U_spts(0, startEle, var);
+      auto &C = dUr_spts(0, startEle, var, dim);
+
+#ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
+                        endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(),
+                        0.0, &C, dU_spts.ldim());
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
+                  endEle - startEle, nSpts, 1.0, &A, oppD0.ldim(), &B, U_spts.ldim(),
+                  0.0, &C, dUr_spts.ldim());
+#endif
+    }
+  }
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      auto A = oppD0_d.data() + nSpts * nSpts * dim;
+      auto B = U_spts_d.data() + nSpts * (startEle + nEles * var);
+      auto C = dUr_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
+
+      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0, A, oppD0_d.ldim(), B,
+          U_spts_d.ldim(), 0.0, C, dUr_spts_d.ldim());
+    }
+  }
+  check_error();
+#endif
 }
 
 void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle)
@@ -550,6 +902,128 @@ void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned 
 #endif
 }
 
+void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
+{
+  int m = nSpts;
+  int n = endEle - startEle;
+  int k = nSpts;
+
+#ifdef _CPU
+  /* Compute contribution to divergence from flux at solution points */
+  for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+  {
+    for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppD0(0, 0, dim2);
+        auto &B = F_spts(0, startEle, var, dim1);
+        auto &C = dF_spts(0, startEle, var, dim1, dim2);
+
+#ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                          1.0, &A, oppD.ldim(), &B, F_spts.ldim(), 0., &C, gradF_spts.ldim());
+#else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                    1.0, &A, oppD0.ldim(), &B, F_spts.ldim(), 0., &C, dF_spts.ldim());
+#endif
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  // nSpts, nEles, nVars, nDims, nDims
+  for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+  {
+    for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto *A = oppD0_d.data() + (nSpts * nSpts) * dim2;
+        auto *B = F_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim1));
+        auto *C = dF_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * (dim1 + nDims * dim2)));
+
+        /* Compute contribution to derivative from solution at solution points */
+        cublasDGEMM_wrapper(m, n, k, 1.0, A, oppD0_d.ldim(), B, F_spts_d.ldim(),
+            0., C, dF_spts_d.ldim());
+      }
+    }
+  }
+  check_error();
+#endif
+}
+
+void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+  if (nDims == 2)
+  {
+#pragma omp parallel for collapse(2)
+    for (uint spt = 0; spt < nSpts; spt++)
+    {
+      for (uint e = startEle; e < endEle; e++)
+      {
+        double A = grid_vel_spts(spt,e,1)*jaco_spts(spt,e,0,1) - grid_vel_spts(spt,e,0)*jaco_spts(spt,e,1,1);
+        double B = grid_vel_spts(spt,e,0)*jaco_spts(spt,e,1,0) - grid_vel_spts(spt,e,1)*jaco_spts(spt,e,0,0);
+        for (uint k = 0; k < nVars; k++)
+        {
+          divF_spts(spt,e,k,stage) =  dF_spts(spt,e,k,0,0)*jaco_spts(spt,e,1,1) - dF_spts(spt,e,k,1,0)*jaco_spts(spt,e,0,1) + dUr_spts(spt,e,k,0)*A;
+          divF_spts(spt,e,k,stage)+= -dF_spts(spt,e,k,0,1)*jaco_spts(spt,e,1,0) + dF_spts(spt,e,k,1,1)*jaco_spts(spt,e,0,0) + dUr_spts(spt,e,k,1)*B;
+        }
+      }
+    }
+  }
+  else
+  {
+#pragma omp parallel for collapse(2)
+    for (uint spt = 0; spt < nSpts; spt++)
+    {
+      for (uint e = nVars; e < endEle; e++)
+      {
+        for (uint k = 0; k < nVars; k++)
+          divF_spts(spt,e,k,stage) = 0;
+
+        mdvector<double> Jacobian({nDims+1,nDims+1});
+        Jacobian(nDims,nDims) = 1;
+        for (uint i = 0; i < nDims; i++)
+        {
+          for (uint j = 0; j < nDims; j++)
+            Jacobian(i,j) = jaco_spts(spt,e,i,j);
+          Jacobian(i,nDims) = grid_vel_spts(spt,e,i);
+        }
+        auto S = adjoint(Jacobian);
+
+        for (uint dim1 = 0; dim1 < nDims; dim1++)
+          for (uint dim2 = 0; dim2 < nDims; dim2++)
+            for (uint k = 0; k < nVars; k++)
+              divF_spts(spt,e,k,stage) += dF_spts(spt,e,k,dim1,dim2)*S(dim2,dim1);
+
+        for (uint dim = 0; dim < nDims; dim++)
+          for (uint k = 0; k < nVars; k++)
+            divF_spts(spt,e,k,stage) += dUr_spts(spt,e,k,dim)*S(dim,nDims);
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  if (nDims == 2)
+  {
+    transform_gradF_quad_wrapper(divF_spts_d, dF_spts_d, jaco_spts_d, grid_vel_spts_d,
+        dUr_spts_d, nSpts, nEles, stage, input->equation, input->overset,
+        geo->iblank_cell_d.data());
+  }
+  else
+  {
+    transform_gradF_hexa_wrapper(divF_spts_d, dF_spts_d, jaco_spts_d, grid_vel_spts_d,
+        dUr_spts_d, nSpts, nEles, stage, input->equation, input->overset,
+        geo->iblank_cell_d.data());
+  }
+  check_error();
+#endif
+}
+
 void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
@@ -584,16 +1058,16 @@ void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsi
     for (unsigned int var = 0; var < nVars; var++)
     {
       auto *A = oppD_d.data() + dim * (oppD_d.ldim() * nSpts);
-      auto *B = F_spts_d.data() + startEle * F_spts_d.ldim() + var * (F_spts_d.ldim() * nEles) + dim * (F_spts_d.ldim() * nEles * nVars);
-      auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+      auto *B = F_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
+      auto *C = divF_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * stage));
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
           A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
     }
   }
+  check_error();
 #endif
-
 }
 
 void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle)
@@ -633,6 +1107,42 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
 
 }
 
+void Elements::correct_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+  /* Compute contribution to divergence from common flux at flux points */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto &A = oppDiv_fpts(0, 0); // Identical to FR-DG correction operator
+    auto &B = dFn_fpts(0, startEle, var);
+    auto &C = divF_spts(0, startEle, var, stage);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
+        endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, dFn_fpts.ldim(), 1.0, &C, divF_spts.ldim());
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
+        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, dFn_fpts.ldim(), 1.0, &C, divF_spts.ldim());
+#endif
+  }
+#endif
+
+#ifdef _GPU
+  /* Compute contribution to derivative from common solution at flux points */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto *A = oppDiv_fpts_d.data();
+    auto *B = dFn_fpts_d.data() + startEle * dFn_fpts_d.ldim() + var * (dFn_fpts_d.ldim() * nEles);
+    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+
+    cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
+        A, oppDiv_fpts_d.ldim(), B, dFn_fpts_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
+  }
+
+  check_error();
+#endif
+}
+
 void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 {
   if (input->equation == AdvDiff)
@@ -655,7 +1165,8 @@ void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_spts_AdvDiff_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d, startEle, endEle);
+    compute_Fconv_spts_AdvDiff_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d, 
+      startEle, endEle, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -681,7 +1192,8 @@ void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_spts_Burgers_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, startEle, endEle);
+    compute_Fconv_spts_Burgers_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, startEle, 
+      endEle, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -765,7 +1277,8 @@ void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fconv_spts_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma, startEle, endEle);
+    compute_Fconv_spts_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma, 
+      startEle, endEle, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -795,7 +1308,8 @@ void Elements::compute_Fvisc(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-    compute_Fvisc_spts_AdvDiff_wrapper(F_spts_d, dU_spts_d, nSpts, nEles, nDims, input->AdvDiff_D);
+    compute_Fvisc_spts_AdvDiff_wrapper(F_spts_d, dU_spts_d, nSpts, nEles, nDims, 
+      input->AdvDiff_D, input->overset, geo->iblank_cell_d.data());
     check_error();
 #endif
 
@@ -979,11 +1493,11 @@ void Elements::compute_Fvisc(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-      compute_Fvisc_spts_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, nDims, 
-          input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis);
-      check_error();
+    compute_Fvisc_spts_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, nDims,
+                                       input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
+                                       input->overset, geo->iblank_cell_d.data());
+    check_error();
 #endif
-
   }
 }
 
@@ -1571,11 +2085,11 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             {
               double Cvisc0temp = Cvisc0(i, j, 0);
 
-              Cvisc0(i, j, 0) = Cvisc0(i, j, 0) * jaco_spts(1, 1, i, ele) -
-                                Cvisc0(i, j, 1) * jaco_spts(1, 0, i, ele);
+              Cvisc0(i, j, 0) = Cvisc0(i, j, 0) * jaco_spts(i, ele, 1, 1) -
+                                Cvisc0(i, j, 1) * jaco_spts(i, ele, 1, 0);
 
-              Cvisc0(i, j, 1) = Cvisc0(i, j, 1) * jaco_spts(0, 0, i, ele) -
-                                Cvisc0temp * jaco_spts(0, 1, i, ele);
+              Cvisc0(i, j, 1) = Cvisc0(i, j, 1) * jaco_spts(i, ele, 0, 0) -
+                                Cvisc0temp * jaco_spts(i, ele, 0, 1);
 
               Cvisc0(i, j, 0) /= jaco_det_spts(i, ele);
               Cvisc0(i, j, 1) /= jaco_det_spts(i, ele);
@@ -1605,11 +2119,11 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             {
               double CdFddU0temp = CdFddU0(i, j, 0);
 
-              CdFddU0(i, j, 0) = CdFddU0(i, j, 0) * jaco_spts(1, 1, i, ele) -
-                                 CdFddU0(i, j, 1) * jaco_spts(0, 1, i, ele);
+              CdFddU0(i, j, 0) = CdFddU0(i, j, 0) * jaco_spts(i, ele, 1, 1) -
+                                 CdFddU0(i, j, 1) * jaco_spts(i, ele, 0, 1);
 
-              CdFddU0(i, j, 1) = CdFddU0(i, j, 1) * jaco_spts(0, 0, i, ele) -
-                                 CdFddU0temp * jaco_spts(1, 0, i, ele);
+              CdFddU0(i, j, 1) = CdFddU0(i, j, 1) * jaco_spts(i, ele, 0, 0) -
+                                 CdFddU0temp * jaco_spts(i, ele, 1, 0);
             }
           }
 
@@ -1738,11 +2252,11 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
                     {
                       double CviscNtemp = CviscN(i, j, 0, face2);
 
-                      CviscN(i, j, 0, face2) = CviscN(i, j, 0, face2) * jaco_spts(1, 1, i, eleN) -
-                                               CviscN(i, j, 1, face2) * jaco_spts(1, 0, i, eleN);
+                      CviscN(i, j, 0, face2) = CviscN(i, j, 0, face2) * jaco_spts(i, eleN, 1, 1) -
+                                               CviscN(i, j, 1, face2) * jaco_spts(i, eleN, 1, 0);
 
-                      CviscN(i, j, 1, face2) = CviscN(i, j, 1, face2) * jaco_spts(0, 0, i, eleN) -
-                                               CviscNtemp * jaco_spts(0, 1, i, eleN);
+                      CviscN(i, j, 1, face2) = CviscN(i, j, 1, face2) * jaco_spts(i, eleN, 0, 0) -
+                                               CviscNtemp * jaco_spts(i, eleN, 0, 1);
 
                       CviscN(i, j, 0, face2) /= jaco_det_spts(i, eleN);
                       CviscN(i, j, 1, face2) /= jaco_det_spts(i, eleN);
@@ -2083,3 +2597,433 @@ void Elements::poly_squeeze_ppts()
 
 }
 
+void Elements::move(std::shared_ptr<Faces> faces)
+{
+#ifdef _CPU
+  update_point_coords(faces);
+  update_grid_velocities(faces);
+  if (input->motion_type != 4) // don't do for rigid motion
+    calc_transforms(faces);
+#endif
+
+#ifdef _GPU
+  update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
+      shape_fpts_d, geo->coord_spts_d, geo->coord_fpts_d, faces->coord_d,
+      geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
+
+  update_coords_wrapper(grid_vel_nodes_d, geo->grid_vel_nodes_d, shape_spts_d,
+      shape_fpts_d, grid_vel_spts_d, grid_vel_fpts_d, faces->Vg_d,
+      geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
+
+  calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
+      inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
+      nFpts, nNodes, nEles, nDims);
+
+  calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
+      geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nFpts, nEles, nDims);
+
+  if (input->CFL == 2)
+    update_h_ref_wrapper(h_ref_d, geo->coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+
+  check_error();
+#endif
+}
+
+void Elements::update_point_coords(std::shared_ptr<Faces> faces)
+{
+#ifdef _GPU
+  // Copy back, since updated only on GPU
+  geo->coord_nodes = geo->coord_nodes_d;
+#endif
+
+#pragma omp parallel for collapse(3)
+  for (uint node = 0; node < nNodes; node++)
+    for (uint ele = 0; ele < nEles; ele++)
+      for (uint dim = 0; dim < nDims; dim++)
+        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+
+  int ms = nSpts;
+  int mf = nFpts;
+  int mp = nPpts;
+  int mq = nQpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  auto &B = nodes(0,0,0);
+
+  /* Setup physical coordinates at solution points */
+  auto &As = shape_spts(0,0);
+  auto &Cs = geo->coord_spts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#endif
+
+  /* Setup physical coordinates at flux points */
+  auto &Af = shape_fpts(0,0);
+  auto &Cf = geo->coord_fpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasTrans, mf, n, k,
+              1.0, &Af, k, &B, n, 0.0, &Cf, mf);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+#endif
+
+  /* Setup physical coordinates at flux points [in faces class] */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      {
+        int gfpt = geo->fpt2gfpt(fpt,ele);
+        /* Check if on ghost edge */
+        if (gfpt != -1)
+          faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
+      }
+    }
+  }
+
+  if (input->CFL_type == 2)
+  {
+    /* Compute tensor-line lengths */
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      for (unsigned int fpt = 0; fpt < nFpts/2; fpt++)
+      {
+        if (nDims == 2)
+        {
+          /* Some indexing to pair up opposing flux points in 2D (on Quad) */
+          unsigned int idx = fpt % nSpts1D;
+          unsigned int fpt1 = fpt;
+          unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
+
+          double dx = geo->coord_fpts(fpt1, ele, 0) - geo->coord_fpts(fpt2, ele, 0);
+          double dy = geo->coord_fpts(fpt1, ele, 1) - geo->coord_fpts(fpt2, ele, 1);
+          double dist = std::sqrt(dx*dx + dy*dy);
+
+          h_ref(fpt1, ele) = dist;
+          h_ref(fpt2, ele) = dist;
+        }
+        else
+        {
+          ThrowException("h_ref computation not setup in 3D yet!");
+        }
+      }
+    }
+  }
+}
+
+void Elements::update_plot_point_coords(void)
+{
+#ifdef _GPU
+  // Copy back, since updated only on GPU
+  geo->coord_nodes = geo->coord_nodes_d;
+
+#pragma omp parallel for collapse(3)
+  for (uint node = 0; node < nNodes; node++)
+    for (uint ele = 0; ele < nEles; ele++)
+      for (uint dim = 0; dim < nDims; dim++)
+        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+#endif
+
+  int mp = nPpts;
+  int mq = nQpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  auto &B = nodes(0,0,0);
+
+  /* Setup physical coordinates at plot points */
+  auto &Ap = shape_ppts(0,0);
+  auto &Cp = geo->coord_ppts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
+#endif
+
+  /* Setup physical coordinates at quadrature points */
+  auto &Aq = shape_qpts(0,0);
+  auto &Cq = geo->coord_qpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+#endif
+}
+
+void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
+{
+#pragma omp parallel for collapse(3)
+  for (uint node = 0; node < nNodes; node++)
+    for (uint ele = 0; ele < nEles; ele++)
+      for (uint dim = 0; dim < nDims; dim++)
+        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(dim, geo->ele2nodes(node,ele));
+
+  int ms = nSpts;
+  int mf = nFpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  auto &B = grid_vel_nodes(0,0,0);
+
+  /* Interpolate grid velocities to solution points */
+  auto &As = shape_spts(0,0);
+  auto &Cs = grid_vel_spts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+#endif
+
+  /* Interpolate grid velocities to flux points */
+  auto &Af = shape_fpts(0,0);
+  auto &Cf = grid_vel_fpts(0,0,0);
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+#endif
+
+  /* Store grid velocity in face class */
+#pragma omp parallel for collapse(2)
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    {
+      int gfpt = geo->fpt2gfpt(fpt,ele);
+
+      /* Check if flux point is on ghost edge */
+      if (gfpt == -1)
+        continue;
+
+      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+
+      if (slot != 0)
+        continue;
+
+      for (uint dim = 0; dim < nDims; dim++)
+      {
+        faces->Vg(gfpt, dim) = grid_vel_fpts(fpt, ele, dim);
+      }
+    }
+  }
+}
+
+void Elements::get_grid_velocity_ppts(void)
+{
+  int m = nPpts;
+  int k = nNodes;
+  int n = nEles * nDims;
+
+  /* Interpolate grid velocities to plot points */
+  auto &A = shape_ppts(0,0);
+  auto &B = grid_vel_nodes(0,0,0);
+  auto &C = grid_vel_ppts(0,0,0);
+
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
+              1.0, &A, k, &B, k, 0.0, &C, m);
+#else
+  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
+              1.0, &A, k, &B, k, 0.0, &C, m);
+#endif
+}
+
+std::vector<double> Elements::getBoundingBox(int ele)
+{
+  std::vector<double> bbox = { INFINITY, INFINITY, INFINITY,
+                              -INFINITY,-INFINITY,-INFINITY};
+
+  for (unsigned int node = 0; node < nNodes; node++)
+  {
+    unsigned int nd = geo->ele2nodes(node, ele);
+    for (int dim = 0; dim < nDims; dim++)
+    {
+      double pos = geo->coord_nodes(dim,nd);
+      bbox[dim]   = std::min(bbox[dim],  pos);
+      bbox[dim+3] = std::max(bbox[dim+3],pos);
+    }
+  }
+
+  if (nDims == 2)
+  {
+    bbox[2] = 0;
+    bbox[5] = 0;
+  }
+
+  return bbox;
+}
+
+bool Elements::getRefLoc(int ele, double* xyz, double* rst)
+{
+  // First, do a quick check to see if the point is even close to being in the element
+  point pos = point(xyz);
+
+  double xmin, ymin, zmin;
+  double xmax, ymax, zmax;
+  xmin = ymin = zmin =  1e15;
+  xmax = ymax = zmax = -1e15;
+  double eps = 1e-10;
+
+  auto box = getBoundingBox(ele);
+  xmin = box[0];  ymin = box[1];  zmin = box[2];
+  xmax = box[3];  ymax = box[4];  zmax = box[5];
+
+  if (pos.x < xmin-eps || pos.y < ymin-eps || pos.z < zmin-eps ||
+      pos.x > xmax+eps || pos.y > ymax+eps || pos.z > zmax+eps) {
+    // Point does not lie within cell - return an obviously bad ref position
+    rst[0] = 99.; rst[1] = 99.; rst[2] = 99.;
+    return false;
+  }
+
+  // Use a relative tolerance to handle extreme grids
+  double h = std::min(xmax-xmin,ymax-ymin);
+  if (nDims==3) h = std::min(h,zmax-zmin);
+
+  double tol = 1e-12*h;
+
+  mdvector<double> shape({nNodes});
+  mdvector<double> dshape({nNodes,nDims});
+  mdvector<double> grad({nDims,nDims});
+
+  int iter = 0;
+  int iterMax = 20;
+  double norm = 1;
+  rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
+
+  while (norm > tol && iter < iterMax)
+  {
+    shape = calc_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
+    dshape = calc_d_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
+
+    point dx = pos;
+    grad.fill(0);
+    for (int node = 0; node < nNodes; node++)
+    {
+      int nd = geo->ele2nodes(node, ele);
+      for (int i = 0; i < nDims; i++)
+      {
+        for (int j = 0; j < nDims; j++)
+        {
+          grad(i,j) += geo->coord_nodes(i,nd)*dshape(node,j);
+        }
+        dx[i] -= shape(node)*geo->coord_nodes(i,nd);
+      }
+    }
+
+    double detJ = determinant(grad);
+
+    auto ginv = adjoint(grad);
+
+    point delta = {0,0,0};
+    for (int i=0; i<nDims; i++)
+      for (int j=0; j<nDims; j++)
+        delta[i] += ginv(i,j)*dx[j]/detJ;
+
+    norm = 0;
+    for (int i = 0; i < nDims; i++) {
+      norm += dx[i]*dx[i];
+      rst[i] += delta[i];
+      rst[i] = std::max(std::min(rst[i],1.),-1.);
+    }
+
+    iter++;
+    if (iter == iterMax) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void Elements::get_interp_weights(double* rst, double* weights, int& nweights, int buffSize)
+{
+  assert(nSpts <= buffSize);
+
+  nweights = nSpts;
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+    weights[spt] = this->calc_nodal_basis(spt, rst);
+}
+
+#ifdef _GPU
+void Elements::donor_u_from_device(int* donorIDs, int nDonors)
+{
+  if (nDonors == 0) return;
+
+  U_donors.assign({nSpts,nDonors,nVars},0,0);
+  U_donors_d.set_size(U_donors);
+
+  int* donorIDs_d;
+  allocate_device_data(donorIDs_d, nDonors);
+  copy_to_device(donorIDs_d, donorIDs, nDonors);
+
+  pack_donor_u_wrapper(U_spts_d,U_donors_d,donorIDs_d,nDonors,nSpts,nVars);
+
+  U_donors = U_donors_d;
+
+  for (int var = 0; var < nVars; var++)
+  {
+    for (int donor = 0; donor < nDonors; donor++)
+    {
+      unsigned int ele = donorIDs[donor];
+      for (int spt = 0; spt < nSpts; spt++)
+      {
+        U_spts(spt,ele,var) = U_donors(spt,donor,var);
+      }
+    }
+  }
+
+  free_device_data(donorIDs_d);
+
+  check_error();
+}
+
+void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
+{
+  if (nDonors == 0) return;
+
+  dU_donors.assign({nSpts,nDonors,nVars,nDims},0,0);
+  dU_donors_d.set_size(dU_donors);
+
+  int* donorIDs_d;
+  allocate_device_data(donorIDs_d, nDonors);
+  copy_to_device(donorIDs_d, donorIDs, nDonors);
+
+  pack_donor_grad_wrapper(dU_spts_d,dU_donors_d,donorIDs_d,nDonors,nSpts,nVars,nDims);
+
+  dU_donors = dU_donors_d;
+
+  for (int dim = 0; dim < nDims; dim++)
+  {
+    for (int var = 0; var < nVars; var++)
+    {
+      for (int donor = 0; donor < nDonors; donor++)
+      {
+        unsigned int ele = donorIDs[donor];
+        for (int spt = 0; spt < nSpts; spt++)
+        {
+          dU_spts(spt,ele,var,dim) = dU_donors(spt,donor,var,dim);
+        }
+      }
+    }
+  }
+
+  free_device_data(donorIDs_d);
+
+  check_error();
+}
+#endif
