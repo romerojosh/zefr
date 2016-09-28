@@ -16,6 +16,10 @@
 
 enum EQN {AdvDiff = 0, EulerNS = 1, Burgers = 2};
 
+enum ELE_TYPE {
+  TRI, QUAD, TET, HEX, PRI, PYR
+};
+
 /*! Enumeration for original, mesh-file-defined face type */
 enum FACE_TYPE {
   HOLE_FACE = -1,
@@ -71,6 +75,166 @@ enum BC_TYPE {
 };
 
 extern std::map<std::string,int> bcStr2Num;
+
+/*! Useful 3D point object with simple geometric functions */
+struct point
+{
+  double x, y, z;
+
+  point() {
+    x = 0;
+    y = 0;
+    z = 0;
+  }
+
+  point (double _x, double _y, double _z) {
+    x = _x;
+    y = _y;
+    z = _z;
+  }
+
+  point(double* pt, int nDims=3) {
+    x = pt[0];
+    y = pt[1];
+    if (nDims==3)
+      z = pt[2];
+    else
+      z = 0;
+  }
+
+  void zero() {
+    x = 0;
+    y = 0;
+    z = 0;
+  }
+
+  double& operator[](int ind) {
+    switch(ind) {
+      case 0:
+        return x;
+      case 1:
+        return y;
+      case 2:
+        return z;
+      default:
+        std::cout << "ind = " << ind << ": " << std::flush;
+        ThrowException("Invalid index for point struct.");
+    }
+  }
+
+  double operator[](int ind) const {
+    switch(ind) {
+      case 0:
+        return x;
+      case 1:
+        return y;
+      case 2:
+        return z;
+      default:
+        std::cout << "ind = " << ind << ": " << std::flush;
+        ThrowException("Invalid index for point struct.");
+    }
+  }
+
+  point operator=(double* a) {
+    struct point pt;
+    pt.x = a[0];
+    pt.y = a[1];
+    pt.z = a[2];
+    return pt;
+  }
+
+  point operator-(point b) {
+    struct point c;
+    c.x = x - b.x;
+    c.y = y - b.y;
+    c.z = z - b.z;
+    return c;
+  }
+
+  point operator+(point b) {
+    struct point c;
+    c.x = x + b.x;
+    c.y = y + b.y;
+    c.z = z + b.z;
+    return c;
+  }
+
+  point operator/(point b) {
+    struct point c;
+    c.x = x / b.x;
+    c.y = y / b.y;
+    c.z = z / b.z;
+    return c;
+  }
+
+  point& operator+=(point b) {
+    x += b.x;
+    y += b.y;
+    z += b.z;
+    return *this;
+  }
+
+  point& operator-=(point b) {
+    x -= b.x;
+    y -= b.y;
+    z -= b.z;
+    return *this;
+  }
+
+  point& operator+=(double* b) {
+    x += b[0];
+    y += b[1];
+    z += b[2];
+    return *this;
+  }
+
+  point& operator-=(double* b) {
+    x -= b[0];
+    y -= b[1];
+    z -= b[2];
+    return *this;
+  }
+
+  point& operator/=(double a) {
+    x /= a;
+    y /= a;
+    z /= a;
+    return *this;
+  }
+
+  point& operator*=(double a) {
+    x *= a;
+    y *= a;
+    z *= a;
+    return *this;
+  }
+
+  double operator*(point b) {
+    return x*b.x + y*b.y + z*b.z;
+  }
+
+  void abs(void) {
+    x = std::abs(x);
+    y = std::abs(y);
+    z = std::abs(z);
+  }
+
+  double norm(void) {
+    return std::sqrt(x*x+y*y+z*z);
+  }
+
+  point cross(point b) {
+    point v;
+    v.x = y*b.z - z*b.y;
+    v.y = z*b.x - x*b.z;
+    v.z = x*b.y - y*b.x;
+    return v;
+  }
+};
+
+//! For clearer notation when a vector is implied, rather than a point
+typedef struct point Vec3;
 
 struct InputStruct
 {

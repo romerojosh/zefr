@@ -278,7 +278,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(node,ele);
+            unsigned int gnd = geo->ele2nodes(node,ele);
             jaco_spts(dimX, dimXi, spt, ele) += geo->coord_nodes(gnd,dimX) * dshape_spts(node, spt, dimXi); 
           }
         }
@@ -327,7 +327,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(node,ele);
+            unsigned int gnd = geo->ele2nodes(node,ele);
 
             /* Skip fpts on ghost edges */
             if (gfpt == -1)
@@ -354,7 +354,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(node,ele);
+            unsigned int gnd = geo->ele2nodes(node,ele);
             jaco_ppts(dimX,dimXi,ppt,ele) += geo->coord_nodes(gnd,dimX) * dshape_ppts(node, ppt, dimXi); 
           }
         }
@@ -372,7 +372,7 @@ void Hexas::set_transforms(std::shared_ptr<Faces> faces)
         {
           for (unsigned int node = 0; node < nNodes; node++)
           {
-            unsigned int gnd = geo->nd2gnd(node, ele);
+            unsigned int gnd = geo->ele2nodes(node, ele);
             jaco_qpts(dimX,dimXi,qpt,ele) += geo->coord_nodes(gnd,dimX) * dshape_qpts(node,qpt,dimXi); 
           }
         }

@@ -21,34 +21,325 @@
 #include "macros.hpp"
 #include "mdvector.hpp"
 
+#ifndef _NO_HDF5
+#include "H5Cpp.h"
+#ifndef _H5_NO_NAMESPACE
+using namespace H5;
+#endif
+#endif
+
+enum MESH_FORMAT {
+  GMSH, PYFR
+};
+
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims)
 {
   GeoStruct geo;
   geo.nDims = nDims;
   geo.input = input;
 
-  load_mesh_data(input, geo);
+  int format;
 
-  if (input->dt_scheme == "MCGS")
+  if (input->meshfile.find(".msh") != std::string::npos)
+    format = GMSH;
+  else if (input->meshfile.find(".pyfr") != std::string::npos)
+    format = PYFR;
+  else
+    ThrowException("Unrecognized mesh format - expecting *.msh or *.pyfrm.");
+
+  if (format == GMSH)
   {
-    setup_element_colors(input, geo);
-  }
+    load_mesh_data_gmsh(input, geo);
+
+    if (input->dt_scheme == "MCGS")
+    {
+      setup_element_colors(input, geo);
+    }
 
 #ifdef _MPI
-  partition_geometry(input, geo);
+    partition_geometry(input, geo);
 #endif
 
-  setup_global_fpts(input, geo, order);
+    setup_global_fpts(input, geo, order);
 
-  if (input->dt_scheme == "MCGS")
+    if (input->dt_scheme == "MCGS")
+    {
+      shuffle_data_by_color(geo);
+    }
+  }
+
+  else if (format == PYFR)
   {
-    shuffle_data_by_color(geo);
+    load_mesh_data_pyfr(input, geo);
+
+    setup_global_fpts_pyfr(input, geo, order);
   }
 
   return geo;
 }
 
-void load_mesh_data(InputStruct *input, GeoStruct &geo)
+
+//typedef struct {
+//  std::vector<std::string> obj_names;
+//  std::vector<hid_t> obj_ids;
+//} h5obj_data;
+
+///** Operator function for H5_Iterate */
+//herr_t file_info(hid_t loc_id, const char *name, void *opdata)
+//{
+//  h5obj_data *od = (h5obj_data*)opdata;
+
+//  od->obj_names.push_back(std::string(name));
+//  od->obj_ids.push_back(loc_id);
+
+//  return 0;
+//}
+
+void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
+{
+  std::cout << "****************************************" << std::endl;
+
+  H5File file(input->meshfile, H5F_ACC_RDONLY);
+
+  // Load the names of all datasets into a vector so we can more easily
+  // process each one
+
+  std::vector<std::string> dsNames;
+
+  ssize_t nObjs = file.getNumObjs();
+
+  for (int i  = 0; i < nObjs; i++)
+  {
+    if (file.getObjTypeByIdx(i) == H5G_DATASET)
+    {
+      dsNames.push_back(file.getObjnameByIdx(i));
+      //std::cout << "DataSet name " << i << ": " << dsNames.back() << std::endl;
+    }
+  }
+
+  // Read the mesh ID, config, and stats strings
+  DataSet dset = file.openDataSet("mesh_uuid");
+  DataType dtype = dset.getDataType();
+  DataSpace dspace(H5S_SCALAR);
+  dset.read(geo.mesh_uuid, dtype, dspace);
+  dset.close();
+
+  // Oops - only for solution files.  my bad. move this later
+//  dset = file.openDataSet("config");
+//  dset.read(geo.config, dtype, dspace);
+//  dset.close();
+
+//  dset = file.openDataSet("stats");
+//  dset.read(geo.stats, dtype, dspace);
+//  dset.close();
+
+
+  // Figure out # of dimensions
+  for (auto &name : dsNames)
+  {
+    /// TODO: add support for reading triangles, tets, etc.
+    /// (nEles += _, read into tmp array, duplicate node 2 like with Gmsh)
+    if (name.find("spt_quad") == std::string::npos &&
+        name.find("spt_hex") == std::string::npos)
+      continue;
+
+    auto DS = file.openDataSet(name);
+    auto ds = DS.getSpace();
+
+    std::vector<hsize_t> dims(3);
+    hsize_t max_dims = 3;
+    int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+
+    if (ds_rank != 3 or DS.getTypeClass() != H5T_FLOAT)
+      ThrowException("Cannot read element nodes from PyFR mesh file - wrong data type.");
+
+    geo.nDims = dims[2];
+    geo.nEles = dims[1];
+    geo.nNodesPerEle = dims[0];
+    if (dims[0] == 8)
+    {
+      input->serendipity = 1;
+      geo.shape_order = 2;
+    }
+    else
+      geo.shape_order = std::sqrt(dims[0]) - 1;
+
+    geo.ele_nodes.assign({geo.nNodesPerEle, geo.nEles, geo.nDims}, 0);
+
+    DS.read(geo.ele_nodes.data(), PredType::NATIVE_DOUBLE);
+
+    /// TODO: change Gmsh reading / geo setup so this isn't needed
+    geo.coord_nodes.assign({geo.nDims, geo.nEles*geo.nNodesPerEle});
+    geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
+
+    int gnd = 0;
+    for (int ele = 0; ele < geo.nEles; ele++)
+    {
+      for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+      {
+        for (int d = 0; d < geo.nDims; d++)
+          geo.coord_nodes(gnd, d) = geo.ele_nodes(nd, ele, d);
+        geo.ele2nodes(nd, ele) = gnd;
+        gnd++;
+      }
+    }
+  }
+
+  if (geo.nDims == 3)
+  {
+    geo.pyfr2zefr_face = {0,4,3,5,2,1};
+    geo.zefr2pyfr_face = {0,5,4,2,1,3};
+  }
+  else if (geo.nDims == 2)
+  {
+    geo.pyfr2zefr_face = {0,1,2,3};
+    geo.zefr2pyfr_face = {0,1,2,3};
+  }
+
+
+  // ----- Read element / face connectivity -----
+
+  for (auto &name : dsNames)
+  {
+    if (name.substr(0,4) == "con_")
+    {
+      auto DS = file.openDataSet(name);
+      auto ds = DS.getSpace();
+
+      std::vector<hsize_t> dims(3);
+      hsize_t max_dims = 3;
+      int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+
+      if (ds_rank != 2 or DS.getTypeClass() != H5T_COMPOUND)
+        ThrowException("Cannot read internal connectivity from PyFR mesh file - expecting compound data type of rank 2.");
+
+      hid_t char4_t = H5Tcopy(H5T_C_S1);
+      H5Tset_size(char4_t, 5); // 4 chars + null-termination character
+
+      CompType fcon_t(sizeof(face_con));
+      fcon_t.insertMember("f0", HOFFSET(face_con, c_type), char4_t);
+      fcon_t.insertMember("f1", HOFFSET(face_con, ic), PredType::NATIVE_INT);
+      fcon_t.insertMember("f2", HOFFSET(face_con, loc_f), PredType::NATIVE_SHORT);
+
+      geo.nFaces = dims[1];
+
+      geo.face_list.resize(2*geo.nFaces);
+      DS.read(geo.face_list.data(), fcon_t);
+
+//      for (int f = 0; f < geo.nFaces; f++)
+//      {
+//        auto f1 = temp_conn[f];
+//        auto f2 = temp_conn[geo.nFaces+f];
+//        std::cout << f1.f_type << ", " << f1.ic << ", " << f1.loc_f << " | ";
+//        std::cout << f2.f_type << ", " << f2.ic << ", " << f2.loc_f << std::endl;
+//      }
+
+      break;
+    }
+  }
+
+  // Setup Zefr-style ele-to-face connectivity
+  geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
+  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
+  for (int f = 0; f < geo.nFaces; f++)
+  {
+    auto &f1 = geo.face_list[f];
+    auto &f2 = geo.face_list[geo.nFaces+f];
+    f1.loc_f = geo.pyfr2zefr_face[f1.loc_f];
+    f2.loc_f = geo.pyfr2zefr_face[f2.loc_f];
+    geo.ele2face(f1.loc_f, f1.ic) = f;
+    geo.ele2face(f2.loc_f, f2.ic) = f;
+  }
+
+  // ----- Read boundary conditions -----
+
+  geo.nBounds = 0;
+  geo.bound_faces.resize(0);
+  for (auto &name : dsNames)
+  {
+    if (name.substr(0,5) == "bcon_")
+    {
+      std::string bcName = name;
+      size_t ind = bcName.find("_");
+      bcName.erase(bcName.begin(),bcName.begin() + ind+1);
+      ind = bcName.find("_p");
+      bcName.erase(bcName.begin()+ind,bcName.end());
+
+      std::cout << "Reading boundary " << bcName << std::endl; /// DEBUGGING
+
+      // Convert to lowercase to make matching easier
+      std::transform(bcName.begin(), bcName.end(), bcName.begin(), ::tolower);
+
+      // First, map mesh boundary to boundary name in input file
+      if (!input->meshBounds.count(bcName))
+      {
+        std::string errS = "Unrecognized mesh boundary: \"" + bcName + "\"\n";
+        errS += "Boundary names in input file must match those in mesh file.";
+        ThrowException(errS.c_str());
+      }
+
+      // Map the mesh boundary name to the input-file-specified Zefr boundary condition
+      std::string bcStr = input->meshBounds[bcName];
+
+      // Next, check that the requested boundary condition exists
+      if (!bcStr2Num.count(bcStr))
+      {
+        std::string errS = "Unrecognized boundary condition: \"" + bcStr + "\"";
+        ThrowException(errS.c_str());
+      }
+
+      geo.bnd_ids.push_back(bcStr2Num[bcStr]);
+      geo.bcNames.push_back(bcName);
+      geo.bcIdMap[geo.nBounds] = geo.nBounds; // Map Gmsh bcid to ZEFR bound index
+      if (geo.bnd_ids.back() == PERIODIC) geo.per_bnd_flag = true; /// TODO: not support?
+
+      auto DS = file.openDataSet(name);
+      auto ds = DS.getSpace();
+
+      int ds_rank = ds.getSimpleExtentNdims();
+      std::vector<hsize_t> dims(ds_rank);
+      ds.getSimpleExtentDims(dims.data());
+
+      if (ds_rank != 1 or DS.getTypeClass() != H5T_COMPOUND)
+        ThrowException("Cannot read boundary condition from PyFR mesh file - expecting compound data type of rank 1.");
+
+      hid_t char4_t = H5Tcopy(H5T_C_S1);
+      H5Tset_size(char4_t, 5); // 4 chars + null-termination character
+
+      CompType fcon_t(sizeof(face_con));
+      fcon_t.insertMember("f0", HOFFSET(face_con, c_type), char4_t);
+      fcon_t.insertMember("f1", HOFFSET(face_con, ic), PredType::NATIVE_INT);
+      fcon_t.insertMember("f2", HOFFSET(face_con, loc_f), PredType::NATIVE_SHORT);
+
+      geo.bound_faces.emplace_back();
+      geo.bound_faces[geo.nBounds].resize(dims[0]);
+      DS.read(geo.bound_faces[geo.nBounds].data(), fcon_t);
+
+      for (auto &face : geo.bound_faces[geo.nBounds])
+        face.loc_f = geo.pyfr2zefr_face[face.loc_f];
+
+      geo.nBounds++;
+    }
+  }
+
+  std::cout << "-----------------------" << std::endl;
+  std::cout << "Done reading PyFR mesh." << std::endl;
+  std::cout << "-----------------------" << std::endl;
+
+  /* To load:
+  bcon_bcwalllower_p0      Dataset {8}
+  bcon_bcwallupper_p0      Dataset {8}
+  con_p0                   Dataset {2, 81}
+  mesh_uuid                Dataset {SCALAR}
+  spt_quad_p0              Dataset {4, 37, 2}
+  spt_tri_p0               Dataset {3, 10, 2}
+  */
+
+  /// TODO: load by rank (look for '_p[rank]')
+  /// TODO: Load MPI face connectivity ( '_p[myrank][rank2]' )
+}
+
+void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
 {
   std::ifstream f(input->meshfile);
 
@@ -295,7 +586,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
   f.seekg(pos);
 
   /* Allocate memory for element connectivity */
-  geo.nd2gnd.assign({geo.nNodesPerEle, geo.nEles});
+  geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
 
   /* Read element connectivity (skip boundaries in this loop) */
   unsigned int ele = 0;
@@ -323,18 +614,18 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           std::getline(f,line); break;
 
         case 2: /* 3-node Triangle */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
-          geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele); 
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
+          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele);
           ele++; break;
 
         case 3: /* 4-node Quadrilateral */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
           ele++; break;
 
         case 9: /* 6-node Triangle */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele); 
-          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(7,ele);
-          geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele); geo.nd2gnd(6,ele) = geo.nd2gnd(2,ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
+          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(7,ele);
+          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); geo.ele2nodes(6,ele) = geo.ele2nodes(2,ele);
 
           if (!input->serendipity)
           {
@@ -345,27 +636,27 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           ele++; break;
 
         case 10: /* 9-node Quadilateral */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
-          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
           if (!input->serendipity)
-            f >> geo.nd2gnd(8,ele);
+            f >> geo.ele2nodes(8,ele);
           else
             f >> vint;
           ele++; break;
 
         case 36: /* 16-node Quadilateral */
           for (int n = 0; n < 16; n++)
-            f >> geo.nd2gnd(n, ele);
+            f >> geo.ele2nodes(n, ele);
           ele++; break;
 
         case 37: /* 25-node Quadilateral */
           for (int n = 0; n < 25; n++)
-            f >> geo.nd2gnd(n, ele);
+            f >> geo.ele2nodes(n, ele);
           ele++; break;
 
         case 38: /* 36-node Quadilateral */
           for (int n = 0; n < 36; n++)
-            f >> geo.nd2gnd(n, ele);
+            f >> geo.ele2nodes(n, ele);
           ele++; break;
 
         default:
@@ -406,10 +697,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           }
 
           /* Set minimum node to "top" collapsed node */
-          geo.nd2gnd(4, ele) = min_node;
-          geo.nd2gnd(5, ele) = min_node;
-          geo.nd2gnd(6, ele) = min_node;
-          geo.nd2gnd(7, ele) = min_node;
+          geo.ele2nodes(4, ele) = min_node;
+          geo.ele2nodes(5, ele) = min_node;
+          geo.ele2nodes(6, ele) = min_node;
+          geo.ele2nodes(7, ele) = min_node;
 
           nodes.erase(it_min);
 
@@ -426,40 +717,40 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           }
           if (min_pos == 0 || min_pos == 2)
           {
-            geo.nd2gnd(0, ele) = nodes[1];
-            geo.nd2gnd(1, ele) = nodes[0];
-            geo.nd2gnd(2, ele) = nodes[2];
-            geo.nd2gnd(3, ele) = nodes[2];
+            geo.ele2nodes(0, ele) = nodes[1];
+            geo.ele2nodes(1, ele) = nodes[0];
+            geo.ele2nodes(2, ele) = nodes[2];
+            geo.ele2nodes(3, ele) = nodes[2];
           }
           else if (min_pos == 1 || min_pos == 3)
           {
-            geo.nd2gnd(0, ele) = nodes[0];
-            geo.nd2gnd(1, ele) = nodes[1];
-            geo.nd2gnd(2, ele) = nodes[2];
-            geo.nd2gnd(3, ele) = nodes[2];
+            geo.ele2nodes(0, ele) = nodes[0];
+            geo.ele2nodes(1, ele) = nodes[1];
+            geo.ele2nodes(2, ele) = nodes[2];
+            geo.ele2nodes(3, ele) = nodes[2];
           }
 
           ele++; break;
         }
 
         case 5: /* 8-node Hexahedral */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
-          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
           ele++; break;
 
         case 6: /* 6-node Prism */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele);
-          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele);
-          geo.nd2gnd(3,ele) = geo.nd2gnd(2,ele);
-          geo.nd2gnd(7,ele) = geo.nd2gnd(6,ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
+          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele);
+          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele);
+          geo.ele2nodes(7,ele) = geo.ele2nodes(6,ele);
           ele++; break;
 
         case 7: /* 5-node Pyramid */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1, ele) >> geo.nd2gnd(2, ele);
-          f >> geo.nd2gnd(3, ele) >> geo.nd2gnd(4,ele);
-          geo.nd2gnd(5, ele) = geo.nd2gnd(4, ele);
-          geo.nd2gnd(6, ele) = geo.nd2gnd(4, ele);
-          geo.nd2gnd(7, ele) = geo.nd2gnd(4, ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1, ele) >> geo.ele2nodes(2, ele);
+          f >> geo.ele2nodes(3, ele) >> geo.ele2nodes(4,ele);
+          geo.ele2nodes(5, ele) = geo.ele2nodes(4, ele);
+          geo.ele2nodes(6, ele) = geo.ele2nodes(4, ele);
+          geo.ele2nodes(7, ele) = geo.ele2nodes(4, ele);
           ele++; break;
 
         case 11: /* 10-node Tetrahedron (read as collapsed 20-node serendipity) */
@@ -494,10 +785,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           std::cout << ele << " " << min_pos << std::endl;
 
           /* Set minimum node to "top" collapsed node */
-          geo.nd2gnd(4, ele) = min_vert; geo.nd2gnd(5, ele) = min_vert;
-          geo.nd2gnd(6, ele) = min_vert; geo.nd2gnd(7, ele) = min_vert;
-          geo.nd2gnd(16,ele) =  min_vert; geo.nd2gnd(17,ele) = min_vert;
-          geo.nd2gnd(18,ele) =  min_vert; geo.nd2gnd(19,ele) = min_vert;
+          geo.ele2nodes(4, ele) = min_vert; geo.ele2nodes(5, ele) = min_vert;
+          geo.ele2nodes(6, ele) = min_vert; geo.ele2nodes(7, ele) = min_vert;
+          geo.ele2nodes(16,ele) =  min_vert; geo.ele2nodes(17,ele) = min_vert;
+          geo.ele2nodes(18,ele) =  min_vert; geo.ele2nodes(19,ele) = min_vert;
 
           verts.erase(it_min);
 
@@ -540,40 +831,40 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           }
           if (min_pos == 0 || min_pos == 2)
           {
-            geo.nd2gnd(0, ele) = verts[1];
-            geo.nd2gnd(1, ele) = verts[0];
-            geo.nd2gnd(2, ele) = verts[2];
-            geo.nd2gnd(3, ele) = verts[2];
+            geo.ele2nodes(0, ele) = verts[1];
+            geo.ele2nodes(1, ele) = verts[0];
+            geo.ele2nodes(2, ele) = verts[2];
+            geo.ele2nodes(3, ele) = verts[2];
 
-            geo.nd2gnd(8,ele) =  bverts[0]; geo.nd2gnd(9,ele) = bverts[2];
-            geo.nd2gnd(10,ele) = verts[2]; geo.nd2gnd(11,ele) = bverts[1];
+            geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[2];
+            geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[1];
 
-            geo.nd2gnd(12,ele) =  mverts[1]; geo.nd2gnd(13,ele) = mverts[0];
-            geo.nd2gnd(14,ele) =  mverts[2]; geo.nd2gnd(15,ele) = mverts[2];
+            geo.ele2nodes(12,ele) =  mverts[1]; geo.ele2nodes(13,ele) = mverts[0];
+            geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
           }
           else if (min_pos == 1 || min_pos == 3)
           {
-            geo.nd2gnd(0, ele) = verts[0];
-            geo.nd2gnd(1, ele) = verts[1];
-            geo.nd2gnd(2, ele) = verts[2];
-            geo.nd2gnd(3, ele) = verts[2];
+            geo.ele2nodes(0, ele) = verts[0];
+            geo.ele2nodes(1, ele) = verts[1];
+            geo.ele2nodes(2, ele) = verts[2];
+            geo.ele2nodes(3, ele) = verts[2];
 
-            geo.nd2gnd(8,ele) =  bverts[0]; geo.nd2gnd(9,ele) = bverts[1];
-            geo.nd2gnd(10,ele) = verts[2]; geo.nd2gnd(11,ele) = bverts[2];
+            geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[1];
+            geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[2];
 
-            geo.nd2gnd(12,ele) =  mverts[0]; geo.nd2gnd(13,ele) = mverts[1];
-            geo.nd2gnd(14,ele) =  mverts[2]; geo.nd2gnd(15,ele) = mverts[2];
+            geo.ele2nodes(12,ele) =  mverts[0]; geo.ele2nodes(13,ele) = mverts[1];
+            geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
           }
 
           ele++; break;
         }
 
         case 12: /* Triquadratic Hex (read as 20-node serendipity) */
-          f >> geo.nd2gnd(0,ele) >> geo.nd2gnd(1,ele) >> geo.nd2gnd(2,ele) >> geo.nd2gnd(3,ele);
-          f >> geo.nd2gnd(4,ele) >> geo.nd2gnd(5,ele) >> geo.nd2gnd(6,ele) >> geo.nd2gnd(7,ele);
-          f >> geo.nd2gnd(8,ele) >> geo.nd2gnd(11,ele) >> geo.nd2gnd(12,ele) >> geo.nd2gnd(9,ele);
-          f >> geo.nd2gnd(13,ele) >> geo.nd2gnd(10,ele) >> geo.nd2gnd(14,ele) >> geo.nd2gnd(15,ele);
-          f >> geo.nd2gnd(16,ele) >> geo.nd2gnd(19,ele) >> geo.nd2gnd(17,ele) >> geo.nd2gnd(18,ele);
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
+          f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
+          f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
+          f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
           std::getline(f,line); ele++; break;
 
 
@@ -588,7 +879,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
   {
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
     {
-      geo.nd2gnd(n,ele)--;
+      geo.ele2nodes(n,ele)--;
     }
   }
 
@@ -783,7 +1074,7 @@ void set_ele_adjacency(GeoStruct &geo)
 
       for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
       {
-        face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+        face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
       }
 
       /* Check if face is collapsed */
@@ -815,7 +1106,7 @@ void set_ele_adjacency(GeoStruct &geo)
 
       for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
       {
-        face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+        face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
       }
 
       std::sort(face.begin(), face.end());
@@ -1015,7 +1306,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
         {
-          face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+          face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
         }
 
         /* Check if face is collapsed */
@@ -1084,7 +1375,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         /* Get face nodes and sort for consistency */
         for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
         {
-          face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+          face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
         }
 
         auto face_ordered = face;
@@ -1493,7 +1784,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
         {
-          face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+          face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
         }
 
         std::sort(face.begin(), face.end());
@@ -1507,6 +1798,201 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     ThrowException("nDims is not valid!");
   }
 
+}
+
+void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int order)
+{
+  if (input->rank == 0)
+    std::cout << "Setting up global flux point connectivity..." << std::endl;
+
+  /* Form set of unique faces */
+  if (geo.nDims != 2 && geo.nDims != 3)
+    ThrowException("Improper value for nDims - should be 2 or 3.");
+
+  unsigned int nFptsPerFace = (order + 1);
+  unsigned int nFpts1D = (order + 1);
+  if (geo.nDims == 3)
+    nFptsPerFace *= (order + 1);
+
+  unsigned int nVars = 1;
+  if (input->equation == EulerNS)
+    nVars = geo.nDims + 2;
+
+  geo.nFptsPerFace = nFptsPerFace;
+
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> face_fpts;
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
+  std::vector<std::vector<int>> ele2fpts(geo.nEles);
+  std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
+
+  std::vector<unsigned int> face(geo.nNodesPerFace,0);
+
+  /* Determine number of interior global flux points */
+  std::set<std::vector<unsigned int>> unique_faces;
+  geo.nGfpts_int = geo.face_list.size() * nFptsPerFace;
+
+  /* Determine total number of boundary faces and flux points */
+  geo.nBndFaces = 0;
+  for (auto &vec : geo.bound_faces)
+  {
+    geo.nBndFaces += vec.size();
+  }
+  geo.nGfpts_bnd = geo.nBndFaces * nFptsPerFace;
+
+#ifdef _MPI
+  /* Determine total number of MPI flux points */
+  geo.nGfpts_mpi = geo.mpiface_list.size() * nFptsPerFace;
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
+
+  geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+  geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+
+  // --- Handy map to grab the nodes making up each face ---
+  std::map<int,mdvector<int>> ct2fv;
+  ct2fv[HEX].assign({6, 4});
+  ct2fv[QUAD].assign({4, 2});
+
+  // Ordering: Bottom, Top, Left, Right, Front, Back
+  std::vector<int> tmp = {0,1,2,3, 5,4,7,6, 0,3,7,4, 2,1,5,6, 1,0,4,5, 3,2,6,7};
+  for (int i = 0; i < 6; i++)
+    for (int j = 0; j < 4; j++)
+      ct2fv[HEX](i,j) = tmp[i*4+j];
+
+  for (int i = 0; i < 4; i++)
+  {
+    ct2fv[QUAD](i,0) = i;
+    ct2fv[QUAD](i,1) = (i==3) ? 0 : i+1;
+  }
+
+  /* Based on rotation, couple flux points */
+  mdvector<int> ROT({5, nFptsPerFace});
+  for (uint i = 0; i < nFpts1D; i++)
+  {
+    if (geo.nDims == 3)
+    {
+      for (uint j = 0; j < nFpts1D; j++)
+      {
+        ROT(0, i + j*nFpts1D) = i*nFpts1D + j;
+        ROT(1, i + j*nFpts1D) = nFpts1D - i + j*nFpts1D - 1;
+        ROT(2, i + j*nFpts1D) = nFptsPerFace - i * nFpts1D - j - 1;
+        ROT(3, i + j*nFpts1D) = nFptsPerFace - (j+1) * nFpts1D + i;
+      }
+    }
+    else
+    {
+      ROT(4, i) = nFptsPerFace - i - 1;
+    }
+  }
+
+  // Counter for total global flux points so far
+  unsigned int gfpt = 0;
+
+  // Begin by looping over all internal / periodic faces
+  for (int ff = 0; ff < geo.nFaces; ff++)
+  {
+    auto faceL = geo.face_list[ff];
+    auto faceR = geo.face_list[ff+geo.nFaces];
+    int eL = faceL.ic;
+    int eR = faceR.ic;
+
+    // Determine relative rotation using ordered faces-vertex lists
+    unsigned int rot = 0;
+    if (geo.nDims == 3)
+    {
+      // Find relative rotation ('rot tag')
+      int nd = ct2fv[HEX](faceL.loc_f, 0);
+      double x = geo.ele_nodes(nd, eL, 0);
+      double y = geo.ele_nodes(nd, eL, 1);
+      double z = (geo.nDims == 2) ? 0. : geo.ele_nodes(nd, eL, 2);
+      point pt1(x,y,z);
+
+      nd = ct2fv[HEX](faceR.loc_f, 0);
+      x = geo.ele_nodes(nd, eR, 0);
+      y = geo.ele_nodes(nd, eR, 1);
+      z = (geo.nDims == 2) ? 0. : geo.ele_nodes(nd, eR, 2);
+      point pt2(x,y,z);
+
+      while (point(pt2-pt1).norm() > 1e-9)
+      {
+        rot++;
+
+        nd = ct2fv[HEX](faceR.loc_f, rot);
+        pt2.x = geo.ele_nodes(nd, eR, 0);
+        pt2.y = geo.ele_nodes(nd, eR, 1);
+        pt2.z = (geo.nDims == 2) ? 0. : geo.ele_nodes(nd, eR, 2);
+      }
+    }
+    else
+    {
+      rot = 4;
+    }
+
+    // Setup global flux point IDs within left/right eles
+    for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+    {
+      geo.fpt2gfpt(faceL.loc_f*nFptsPerFace + fpt, eL) = gfpt;
+      geo.fpt2gfpt(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = gfpt;
+      geo.fpt2gfpt_slot(faceL.loc_f*nFptsPerFace + fpt, eL) = 0;
+      geo.fpt2gfpt_slot(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = 1;
+      gfpt++;
+    }
+  }
+
+  // Counter of total boundary flux points so far
+  unsigned int gfpt_bnd = 0;
+
+  // Setup boundary-face flux points
+  geo.gfpt2bnd.assign({geo.nGfpts_bnd});
+  for (uint bnd = 0; bnd < geo.nBounds; bnd++)
+  {
+    for (auto &face : geo.bound_faces[bnd])
+    {
+      int ele = face.ic;
+      int n = face.loc_f;
+      for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+      {
+        geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
+        geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+        geo.gfpt2bnd(gfpt_bnd) = geo.bnd_ids[bnd];
+        gfpt_bnd++;
+        gfpt++;
+      }
+    }
+  }
+
+
+//    /* Check if face is on boundary */
+//    if (geo.bnd_faces.count(face))
+//    {
+//      unsigned int bnd_id = geo.bnd_faces[face];
+//      for (auto &fpt : fpts)
+//      {
+//        geo.gfpt2bnd.push_back(bnd_id);
+//        fpt = gfpt_bnd;
+//        gfpt_bnd++;
+//      }
+
+//      bndface2fpts[face] = fpts;
+
+//      int bnd = geo.face2bnd[face];
+//      geo.boundFaces[bnd].push_back(geo.nFaces);
+//    }
+//#ifdef _MPI
+//    /* Check if face is on MPI boundary */
+//    else if (geo.mpi_faces.count(face))
+//    {
+//      /* Add face to set to process later. */
+//      mpi_faces_to_process.insert(face);
+
+//      for (auto &fpt : fpts)
+//      {
+//        fpt = gfpt_mpi;
+//        gfpt_mpi++;
+//      }
+//    }
+//#endif
 }
 
 void setup_element_colors(InputStruct *input, GeoStruct &geo)
@@ -1608,7 +2094,7 @@ void shuffle_data_by_color(GeoStruct &geo)
   }
 
   /* TODO: Consider an in-place permutation to save memory */
-  auto nd2gnd_temp = geo.nd2gnd;
+  auto nd2gnd_temp = geo.ele2nodes;
   auto fpt2gfpt_temp = geo.fpt2gfpt;
   auto fpt2gfpt_slot_temp = geo.fpt2gfpt_slot;
 
@@ -1621,7 +2107,7 @@ void shuffle_data_by_color(GeoStruct &geo)
 
       for (unsigned int node = 0; node < geo.nNodesPerEle; node++)
       {
-        geo.nd2gnd(node, ele1) = nd2gnd_temp(node, ele2);
+        geo.ele2nodes(node, ele1) = nd2gnd_temp(node, ele2);
       }
 
       for (unsigned int fpt = 0; fpt < geo.nFptsPerFace * geo.nFacesPerEle; fpt++) 
@@ -1688,8 +2174,8 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   {
     for (unsigned int j = 0; j < geo.nCornerNodes;  j++)
     {
-      eind[j + n] = geo.nd2gnd(j, i);
-      nodes.insert(geo.nd2gnd(j,i));
+      eind[j + n] = geo.ele2nodes(j, i);
+      nodes.insert(geo.ele2nodes(j,i));
     } 
 
     /* Check for collapsed edge (not fully general yet)*/
@@ -1781,7 +2267,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       face.assign(geo.nNodesPerFace, 0);
       for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
       {
-        face[i] = geo.nd2gnd(geo.face_nodes(n, i), ele);
+        face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
       }
 
       /* Check if face is collapsed */
@@ -1813,13 +2299,13 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   }
 
   /* Reduce connectivity to contain only partition local elements */
-  auto nd2gnd_glob = geo.nd2gnd;
-  geo.nd2gnd.assign({geo.nNodesPerEle, (unsigned int) myEles.size()},0);
+  auto nd2gnd_glob = geo.ele2nodes;
+  geo.ele2nodes.assign({geo.nNodesPerEle, (unsigned int) myEles.size()},0);
   for (unsigned int ele = 0; ele < myEles.size(); ele++)
   {
     for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
     {
-      geo.nd2gnd(nd, ele) = nd2gnd_glob(nd, myEles[ele]);
+      geo.ele2nodes(nd, ele) = nd2gnd_glob(nd, myEles[ele]);
     }
   }
 
@@ -1840,7 +2326,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   {
     for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
     {
-      uniqueNodes.insert(geo.nd2gnd(nd, ele));
+      uniqueNodes.insert(geo.ele2nodes(nd, ele));
     }
   }
 
@@ -1862,7 +2348,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   /* Renumber connectivity data using partition local indexing (via geo.node_map_g2p)*/
   for (unsigned int ele = 0; ele < myEles.size(); ele++)
     for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
-      geo.nd2gnd(nd, ele) = geo.node_map_g2p[geo.nd2gnd(nd, ele)];
+      geo.ele2nodes(nd, ele) = geo.node_map_g2p[geo.ele2nodes(nd, ele)];
 
   /* Reduce boundary faces data to contain only faces on local partition. Also
    * reindex via geo.node_map_g2p */
