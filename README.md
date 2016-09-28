@@ -67,9 +67,11 @@ If you would like to develop code for ZEFR, please follow these guidelines:
 - Try to generate both the CPU and GPU implementation and test for consistency. The code uses custom multidimensional vector objects (**mdvector** and **mdvector_gpu**) which should ease some of the translation of regular C++ code to CUDA kernels. You can simply pass **mdvector_gpu** objects into your kernels by value and you can use them in an identical manner to the **mdvector** objects in the serial code. To create a functional kernel, it should be nearly a straight copy and paste job.
 - Most importantly, have fun! 
 
-##Additional Remarks:
+## Additional Remarks:
 This code is still in the development phase and as such, documentation within the source is a bit sparse (though much of the code should be straightforward). I will be adding more documentation, at least of the class methods and variables soon. 
 
+## License:
+This code is currently released under the GNU General Public License Version 3.0. See LICENSE for details.
  
 
 

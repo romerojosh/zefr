@@ -1,3 +1,22 @@
+/* Copyright (C) 2016 Aerospace Computing Laboratory (ACL).
+ * See AUTHORS for contributors to this source code.
+ *
+ * This file is part of ZEFR.
+ *
+ * ZEFR is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * ZEFR is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with ZEFR.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -18,6 +37,7 @@
 #include "elements_kernels.h"
 #include "solver_kernels.h"
 #endif
+
 #define _DEBUG
 void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 {
