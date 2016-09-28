@@ -114,6 +114,7 @@ int main(int argc, char* argv[])
   /* Write initial solution */
   solver.write_solution(input.output_prefix);
   solver.write_surfaces(input.output_prefix);
+  solver.write_solution_pyfr(input.output_prefix);
   if (input.dt_scheme == "MCGS")
   {
     solver.write_color();

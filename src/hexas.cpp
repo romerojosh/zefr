@@ -39,6 +39,10 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
 //    nNodes = (shape_order+1) * (shape_order+1) * (shape_order+1);
 //  }
   
+  geo->nFacesPerEle = 6;
+  geo->nNodesPerFace = 4;
+  geo->nCornerNodes = 8;
+
   /* If order argument is not provided, use order in input file */
   if (order == -1)
   {

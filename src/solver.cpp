@@ -41,6 +41,13 @@
 #include <jama_lu.h>
 #endif
 
+#ifndef _NO_HDF5
+#include "H5Cpp.h"
+#ifndef _H5_NO_NAMESPACE
+using namespace H5;
+#endif
+#endif
+
 FRSolver::FRSolver(InputStruct *input, int order)
 {
   this->input = input;
@@ -2118,6 +2125,60 @@ void FRSolver::compute_SER_dt()
       }
     }
   }
+}
+
+void FRSolver::write_solution_pyfr(const std::string &prefix)
+{
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
+  std::stringstream ss;
+  ss << input->output_prefix << "/";
+  ss << prefix << "_" << input->iter << ".pyfrs";
+  std::string filename(ss.str());
+
+  if (input->rank == 0)
+    std::cout << "Writing data to file " << filename << std::endl;
+
+  H5File file(filename, H5F_ACC_TRUNC);
+
+  // Setup config and stats strings
+  std::string config = geo.config;
+  std::string stats = geo.stats;
+  /// TODO: parse / add stuff / etc.
+
+  DataSpace dspace(H5S_SCALAR);
+
+  // Create a datatype for a std::string
+  hid_t string_type = H5Tcopy (H5T_C_S1);
+  H5Tset_size (string_type, H5T_VARIABLE);
+
+  DataSet dset = file.createDataSet("config", string_type, dspace);
+  dset.write(config, string_type, dspace);
+  dset.close();
+
+  dset = file.createDataSet("stats", string_type, dspace);
+  dset.write(stats, string_type, dspace);
+  dset.close();
+
+  // Write mesh ID
+  dset = file.createDataSet("mesh_uuid", string_type, dspace);
+  dset.write(geo.mesh_uuid, string_type, dspace);
+  dset.close();
+
+  dspace.close();
+  auto dims_ = eles->U_spts.get_strides();
+
+  hsize_t dims[3] = {dims_[0],dims_[1],dims_[2]};
+
+  DataSpace dspaceU(3, dims);
+  std::string solname = "spt_";
+  solname += (geo.nDims == 2) ? "quad" : "hex";
+  solname += "_p" + std::to_string(input->rank); /// TODO: write per rank in parallel...
+  dset = file.createDataSet(solname, PredType::NATIVE_FLOAT, dspaceU);
+  dset.write(eles->U_spts.data(), PredType::NATIVE_FLOAT, dspaceU);
+  dset.close();
 }
 
 void FRSolver::write_solution(const std::string &_prefix)

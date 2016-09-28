@@ -148,10 +148,13 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   nodes.assign({nNodes, nEles, nDims});
 
   /* Setup positions of all element's shape nodes in one array */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-    for (unsigned int ele = 0; ele < nEles; ele++)
-      for (unsigned int node = 0; node < nNodes; node++)
-        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+  if (input->meshfile.find(".pyfr") != std::string::npos)
+    nodes = geo->ele_nodes; /// TODO: setup for Gmsh grids as well
+  else
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int node = 0; node < nNodes; node++)
+          nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
 
   int ms = nSpts;
   int mf = nFpts;
@@ -232,8 +235,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       for (unsigned int fpt = 0; fpt < nFpts/2; fpt++)
       {
         if (nDims == 2)
-        {
-          /* Some indexing to pair up flux points in 2D (on Quad) */
+        {          /* Some indexing to pair up flux points in 2D (on Quad) */
           unsigned int idx = fpt % nSpts1D;
           unsigned int fpt1 = fpt;
           unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;

@@ -108,8 +108,6 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
 
 void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 {
-  std::cout << "****************************************" << std::endl;
-
   H5File file(input->meshfile, H5F_ACC_RDONLY);
 
   // Load the names of all datasets into a vector so we can more easily
@@ -135,16 +133,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   dset.read(geo.mesh_uuid, dtype, dspace);
   dset.close();
 
-  // Oops - only for solution files.  my bad. move this later
-//  dset = file.openDataSet("config");
-//  dset.read(geo.config, dtype, dspace);
-//  dset.close();
-
-//  dset = file.openDataSet("stats");
-//  dset.read(geo.stats, dtype, dspace);
-//  dset.close();
-
-
   // Figure out # of dimensions
   for (auto &name : dsNames)
   {
@@ -167,6 +155,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.nDims = dims[2];
     geo.nEles = dims[1];
     geo.nNodesPerEle = dims[0];
+    geo.nNodes = geo.nEles * geo.nNodesPerEle;
     if (dims[0] == 8)
     {
       input->serendipity = 1;
@@ -175,21 +164,29 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     else
       geo.shape_order = std::sqrt(dims[0]) - 1;
 
-    geo.ele_nodes.assign({geo.nNodesPerEle, geo.nEles, geo.nDims}, 0);
+    mdvector<double> tmp_nodes({dims[2],dims[1],dims[0]}); // NOTE: We use col-major, HDF5 uses row-major
 
-    DS.read(geo.ele_nodes.data(), PredType::NATIVE_DOUBLE);
+    DS.read(tmp_nodes.data(), PredType::NATIVE_DOUBLE);
 
     /// TODO: change Gmsh reading / geo setup so this isn't needed
+    geo.ele_nodes.assign({geo.nNodesPerEle, geo.nEles, geo.nDims});
     geo.coord_nodes.assign({geo.nDims, geo.nEles*geo.nNodesPerEle});
     geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
+
+    std::map<int,std::vector<int>> node_map;  /// TODO: map from x/y/z ordering to Gmsh [zefr] node ordering
+    node_map[QUAD] = {0,1,3,2};
 
     int gnd = 0;
     for (int ele = 0; ele < geo.nEles; ele++)
     {
       for (int nd = 0; nd < geo.nNodesPerEle; nd++)
       {
+        auto ndmap = node_map[QUAD];
         for (int d = 0; d < geo.nDims; d++)
-          geo.coord_nodes(gnd, d) = geo.ele_nodes(nd, ele, d);
+        {
+          geo.coord_nodes(gnd, d)   = tmp_nodes(d, ele, ndmap[nd]);
+          geo.ele_nodes(nd, ele, d) = tmp_nodes(d, ele, ndmap[nd]);
+        }
         geo.ele2nodes(nd, ele) = gnd;
         gnd++;
       }
@@ -236,14 +233,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
       geo.face_list.resize(2*geo.nFaces);
       DS.read(geo.face_list.data(), fcon_t);
-
-//      for (int f = 0; f < geo.nFaces; f++)
-//      {
-//        auto f1 = temp_conn[f];
-//        auto f2 = temp_conn[geo.nFaces+f];
-//        std::cout << f1.f_type << ", " << f1.ic << ", " << f1.loc_f << " | ";
-//        std::cout << f2.f_type << ", " << f2.ic << ", " << f2.loc_f << std::endl;
-//      }
 
       break;
     }
@@ -332,19 +321,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       geo.nBounds++;
     }
   }
-
-  std::cout << "-----------------------" << std::endl;
-  std::cout << "Done reading PyFR mesh." << std::endl;
-  std::cout << "-----------------------" << std::endl;
-
-  /* To load:
-  bcon_bcwalllower_p0      Dataset {8}
-  bcon_bcwallupper_p0      Dataset {8}
-  con_p0                   Dataset {2, 81}
-  mesh_uuid                Dataset {SCALAR}
-  spt_quad_p0              Dataset {4, 37, 2}
-  spt_tri_p0               Dataset {3, 10, 2}
-  */
 
   /// TODO: load by rank (look for '_p[rank]')
   /// TODO: Load MPI face connectivity ( '_p[myrank][rank2]' )
@@ -1971,16 +1947,9 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     nVars = geo.nDims + 2;
 
   geo.nFptsPerFace = nFptsPerFace;
-
-  std::map<std::vector<unsigned int>, std::vector<unsigned int>> face_fpts;
-  std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
-  std::vector<std::vector<int>> ele2fpts(geo.nEles);
-  std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
-
-  std::vector<unsigned int> face(geo.nNodesPerFace,0);
+  geo.nNodesPerFace = (geo.nDims == 2) ? 2 : 4;
 
   /* Determine number of interior global flux points */
-  std::set<std::vector<unsigned int>> unique_faces;
   geo.nGfpts_int = geo.face_list.size() * nFptsPerFace;
 
   /* Determine total number of boundary faces and flux points */
@@ -1991,12 +1960,15 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   }
   geo.nGfpts_bnd = geo.nBndFaces * nFptsPerFace;
 
+  geo.nGfpts_mpi = 0;
 #ifdef _MPI
   /* Determine total number of MPI flux points */
   geo.nGfpts_mpi = geo.mpiface_list.size() * nFptsPerFace;
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
+
+  geo.nGfpts = geo.nGfpts_int + geo.nGfpts_bnd + geo.nGfpts_mpi;
 
   geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
   geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});

@@ -34,6 +34,10 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   else
     nNodes = 4*(shape_order); // Serendipity Elements
   
+  geo->nFacesPerEle = 4;
+  geo->nNodesPerFace = 2;
+  geo->nCornerNodes = 4;
+
   /* If order argument is not provided, use order in input file */
   if (order == -1)
   {
