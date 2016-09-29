@@ -21,7 +21,7 @@ res_tol 1e-11
 dt_scheme MCGS     (Euler, RK44, RK54, MCGS)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.1
-CFL	  25.0
+CFL	  20.0
 
 # CFL Adaptation
 adapt_CFL 1
@@ -33,7 +33,6 @@ restart_file channel_48x16_MCGS/channel_48x16_MCGS_000002700.vtu
 
 # Implicit
 SER 0
-inv_mode 1
 stream_mode 0
 backsweep 0
 Jfreeze_freq 100

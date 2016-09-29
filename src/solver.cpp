@@ -1949,7 +1949,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   current_iter++;
 
   // Update grid to end of time step (if not already done so)
-  if (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1))
+  if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
     move(input->time);
 
 #ifdef _BUILD_LIB
