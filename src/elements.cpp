@@ -452,7 +452,9 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
   }
 
   set_inverse_transforms(jaco_spts,inv_jaco_spts,jaco_det_spts,nSpts,nDims);
-  set_inverse_transforms(jaco_fpts,inv_jaco_fpts,jaco_det_fpts,nFpts,nDims);
+
+  mdvector<double> nullvec;
+  set_inverse_transforms(jaco_fpts,inv_jaco_fpts,nullvec,nFpts,nDims);
 
   /* --- Compute Element Volumes --- */
 #pragma omp parallel for collapse(2)
@@ -557,7 +559,8 @@ void Elements::set_inverse_transforms(const mdvector<double> &jaco,
       if (nDims == 2)
       {
         // Determinant of transformation matrix
-        jaco_det(pt,e) = jaco(pt,e,0,0)*jaco(pt,e,1,1)-jaco(pt,e,0,1)*jaco(pt,e,1,0);
+        if (jaco_det.size()) jaco_det(pt,e) = jaco(pt,e,0,0)*jaco(pt,e,1,1)-jaco(pt,e,0,1)*jaco(pt,e,1,0);
+
         // Inverse of transformation matrix (times its determinant)
         inv_jaco(pt,e,0,0) = jaco(pt,e,1,1);  inv_jaco(pt,e,0,1) =-jaco(pt,e,0,1);
         inv_jaco(pt,e,1,0) =-jaco(pt,e,1,0);  inv_jaco(pt,e,1,1) = jaco(pt,e,0,0);
@@ -567,13 +570,14 @@ void Elements::set_inverse_transforms(const mdvector<double> &jaco,
         double xr = jaco(pt,e,0,0);   double xs = jaco(pt,e,0,1);   double xt = jaco(pt,e,0,2);
         double yr = jaco(pt,e,1,0);   double ys = jaco(pt,e,1,1);   double yt = jaco(pt,e,1,2);
         double zr = jaco(pt,e,2,0);   double zs = jaco(pt,e,2,1);   double zt = jaco(pt,e,2,2);
-        jaco_det(pt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
+        if (jaco_det.size()) jaco_det(pt,e) = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
 
         inv_jaco(pt,e,0,0) = ys*zt - yt*zs;  inv_jaco(pt,e,0,1) = xt*zs - xs*zt;  inv_jaco(pt,e,0,2) = xs*yt - xt*ys;
         inv_jaco(pt,e,1,0) = yt*zr - yr*zt;  inv_jaco(pt,e,1,1) = xr*zt - xt*zr;  inv_jaco(pt,e,1,2) = xt*yr - xr*yt;
         inv_jaco(pt,e,2,0) = yr*zs - ys*zr;  inv_jaco(pt,e,2,1) = xs*zr - xr*zs;  inv_jaco(pt,e,2,2) = xr*ys - xs*yr;
       }
-      if (jaco_det(pt,e)<0) ThrowException("Negative Jacobian at solution points.");
+
+      if (jaco_det.size() and jaco_det(pt,e) < 0) ThrowException("Negative Jacobian at solution points.");
     }
   }
 }
