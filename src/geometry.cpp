@@ -553,7 +553,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
               min_pos = i;
           }
 
-          std::cout << ele << " " << min_pos << std::endl;
+          //std::cout << ele << " " << min_pos << std::endl;
 
           /* Set minimum node to "top" collapsed node */
           geo.ele2nodes(4, ele) = min_vert; geo.ele2nodes(5, ele) = min_vert;
@@ -900,6 +900,13 @@ void set_ele_adjacency(GeoStruct &geo)
       {
         face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
       }
+
+      /* Reduce to only unique nodes to deal with triangular collapsed face */
+      std::set<unsigned int> nodes;
+      for (auto node : face)
+        nodes.insert(node);
+
+      face.assign(nodes.begin(), nodes.end());
 
       std::sort(face.begin(), face.end());
 

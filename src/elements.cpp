@@ -2392,7 +2392,6 @@ void Elements::compute_Uavg()
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
       double sum = 0.0;
-      double vol = 0.0;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -2401,18 +2400,20 @@ void Elements::compute_Uavg()
         unsigned int j = idx_spts(spt,1);
         double weight = weights_spts(i) * weights_spts(j);
 
+        if (nDims == 3)
+          weight *= weights_spts(idx_spts(spt,2));
+
         sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
-        vol += weight * jaco_det_spts(spt, ele);
       }
 
-      Uavg(ele, n) = sum / vol; 
+      Uavg(ele, n) = sum / vol(ele); 
 
     }
   }
 #endif
 
 #ifdef _GPU
-  compute_Uavg_wrapper(U_spts_d, Uavg_d, jaco_det_spts_d, weights_spts_d, nSpts, nEles, nVars, order);
+  compute_Uavg_wrapper(U_spts_d, Uavg_d, jaco_det_spts_d, weights_spts_d, vol_d, nSpts, nEles, nVars, nDims, order);
 #endif
 }
 
@@ -2473,9 +2474,13 @@ void Elements::poly_squeeze()
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
       double rho = U_spts(spt, ele, 0);
-      double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
-          U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
-      double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
+
+      momF /= U_spts(spt, ele, 0);
+
+      double P = (input->gamma - 1.0) * (U_spts(spt, ele, nDims + 1) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -2485,9 +2490,12 @@ void Elements::poly_squeeze()
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       double rho = U_fpts(fpt, ele, 0);
-      double momF = (U_fpts(fpt, ele, 1) * U_fpts(fpt,ele,1) + U_spts(fpt, ele, 2) * 
-          U_fpts(fpt, ele,2)) / U_fpts(fpt, ele, 0);
-      double P = (input->gamma - 1.0) * (U_fpts(fpt, ele, 3) - 0.5 * momF);
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momF += U_fpts(fpt, ele, dim + 1) * U_fpts(fpt, ele, dim + 1);
+
+      momF /= U_fpts(fpt, ele, 0);
+      double P = (input->gamma - 1.0) * (U_fpts(fpt, ele, nDims + 1) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -2505,7 +2513,7 @@ void Elements::poly_squeeze()
         Vsq += V[dim] * V[dim];
       }
 
-      double e = Uavg(ele, 3);
+      double e = Uavg(ele, nDims + 1);
       double P = (input->gamma - 1.0) * (e - 0.5 * rho * Vsq);
 
       double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
