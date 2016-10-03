@@ -19,6 +19,8 @@
 #include "solver.hpp"
 #include "filter.hpp"
 
+#include "funcs.hpp"
+
 #ifndef _BUILD_LIB
 int main(int argc, char* argv[])
 {
@@ -70,7 +72,6 @@ int main(int argc, char* argv[])
     std::cout << std::endl;
   }
 
-
   std::string inputfile = argv[1];
 
   if (rank == 0) std::cout << "Reading input file: " << inputfile <<  std::endl;
@@ -113,8 +114,12 @@ int main(int argc, char* argv[])
 
   /* Write initial solution */
   solver.write_solution(input.output_prefix);
-  solver.write_surfaces(input.output_prefix);
-  solver.write_solution_pyfr(input.output_prefix);
+  if (input.plot_surfaces)
+    solver.write_surfaces(input.output_prefix);
+
+  if (input.write_type)
+    solver.write_solution_pyfr(input.output_prefix);
+
   if (input.dt_scheme == "MCGS")
   {
     solver.write_color();
@@ -150,6 +155,8 @@ int main(int argc, char* argv[])
     {
       solver.write_solution(input.output_prefix);
       solver.write_surfaces(input.output_prefix);
+      if (input.write_type)
+        solver.write_solution_pyfr(input.output_prefix);
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))

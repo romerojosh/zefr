@@ -71,6 +71,7 @@ class FRSolver
 
     void initialize_U();
     void restart(std::string restart_file);
+    void restart_pyfr(const std::string &restart_file);
     void setup_update();
     void setup_output();
 

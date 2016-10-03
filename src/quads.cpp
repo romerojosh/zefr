@@ -569,8 +569,7 @@ mdvector<double> Quads::calc_shape(unsigned int shape_order,
     shape_val(6) = 0.5*(1.-xi)*(1.+xi)*(1.+eta);
     shape_val(7) = 0.5*(1.-xi)*(1.+eta)*(1.-eta);
   }
-    
-  
+
   else
   {
     ThrowException("Serendipty element support up to quadratic elements only!");

@@ -718,6 +718,7 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
   }
   else
   {
+    /// TODO: use new gmsh_to_structured_hex function instead (reduce all this to single loop)
     int nSide = cbrt(nNodes);
 
     if (nSide*nSide*nSide != nNodes)
@@ -736,7 +737,7 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
     int isOdd = nSide % 2;
 
     /* Recursion for all high-order Lagrange elements:
-         * 8 corners, each edge's points, interior face points, volume points */
+     * 8 corners, each edge's points, interior face points, volume points */
     int nPts = 0;
     for (int i = 0; i < nLevels; i++) {
       // Corners

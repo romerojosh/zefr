@@ -105,6 +105,9 @@ struct InputStruct
   double sen_Jfac, filt_gamma;
   double iter = 0, initIter = 0, time = 0, rkTime = 0;
 
+  /* --- I/O --- */
+  short write_type, plot_surfaces;
+
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;
   unsigned int gridID = 0;
@@ -115,7 +118,7 @@ struct InputStruct
   double moveFx, moveFy, moveFz;
 
   /* --- Additional Mesh Variables --- */
-  std::map<std::string,std::string> meshBounds;
+  std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 
   /* Implicit Parameters */
   bool SER, inv_mode, stream_mode, backsweep, LU_pivot;

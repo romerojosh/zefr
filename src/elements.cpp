@@ -224,6 +224,11 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
   }
 
+//  if (input->rank == 1)
+//    for (int ele = 0; ele < nEles; ele++)
+//      for (int fpt = 0; fpt < nFpts; fpt++)
+//        printf("%d, %d: (%f,%f)\n",ele,fpt,geo->coord_fpts(fpt,ele,0),geo->coord_fpts(fpt,ele,1));
+
   if (input->CFL_type == 2)
   {
     /* Allocate memory for tensor-line reference lengths */
