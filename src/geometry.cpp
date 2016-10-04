@@ -305,8 +305,10 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.nEles++;
           geo.shape_order = 1; geo.nNodesPerEle = 8; break;
 
+        /* Triqudratic (or serendipity) Hex/Tet/Prism */
         case 11:
         case 12:
+        case 13:
           geo.nEles++;
           geo.shape_order = 2;
           if (input->serendipity)
@@ -526,6 +528,11 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
         case 11: /* 10-node Tetrahedron (read as collapsed 20-node serendipity) */
         {
+          if (!input->serendipity)
+          {
+            ThrowException("Quadratic tet to triquadratic hex not implemented yet! Set serendipity = 1!");
+          }
+
           /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
            * fully tetrahedral meshes. */
           std::vector<unsigned int> nodes(10,0);
@@ -645,6 +652,30 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
             for (unsigned int nd = 0; nd < 27; nd++)
               f >> geo.ele2nodes(nd,ele);
           }
+          std::getline(f,line); ele++; break;
+        }
+
+        case 13: /* 18-node Prism (read as collapsed 20-node serendipity from 15-node prism) */
+        {
+          if (!input->serendipity)
+          {
+            ThrowException("Quadratic prism to triquadratic hex not implemented yet! Set serendipity = 1!");
+          }
+
+          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
+          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele);
+
+          f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele);
+          f >> geo.ele2nodes(9,ele) >> geo.ele2nodes(13,ele) >> geo.ele2nodes(14,ele);
+
+          f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele);
+
+          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele);
+          geo.ele2nodes(7,ele) = geo.ele2nodes(6,ele);
+          geo.ele2nodes(10,ele) = geo.ele2nodes(2,ele); 
+          geo.ele2nodes(15,ele) = geo.ele2nodes(14,ele);
+          geo.ele2nodes(18,ele) = geo.ele2nodes(6,ele);
+
           std::getline(f,line); ele++; break;
         }
 
