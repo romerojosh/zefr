@@ -60,6 +60,18 @@
 #include <jama_lu.h>
 #endif
 
+#ifndef _NO_HDF5
+#include "H5Cpp.h"
+#ifndef _H5_NO_NAMESPACE
+using namespace H5;
+#endif
+#ifdef _MPI
+  #ifdef H5_HAVE_PARALLEL
+//    #define _USE_H5_PARALLEL
+  #endif
+#endif
+#endif
+
 FRSolver::FRSolver(InputStruct *input, int order)
 {
   this->input = input;
@@ -102,7 +114,14 @@ void FRSolver::setup(_mpi_comm comm_in)
   if (input->restart)
   {
     if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
-    restart(input->restart_file);
+
+    if (input->restart_file.find(".vtu")  != std::string::npos or
+        input->restart_file.find(".pvtu") != std::string::npos)
+      restart(input->restart_file);
+    else if (input->restart_file.find(".pyfr") != std::string::npos)
+      restart_pyfr(input->restart_file);
+    else
+      ThrowException("Unknown file type for restart file.");
   }
 
   if (input->filt_on)
@@ -160,6 +179,8 @@ void FRSolver::setup_update()
 
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
+    rk_alpha.assign({nStages});
+    rk_beta.assign({nStages});
 
     /* Forward or Forward/Backward sweep */
     nCounter = geo.nColors;
@@ -1424,6 +1445,9 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         faces->U(gfpt, n, slot) = eles->U_fpts(fpt, ele, n);
+//        if (input->rank == 0)
+//          printf("%d, %d, %d, %d, %d, %f\n",ele,fpt,gfpt,slot,n,faces->U(gfpt,n,slot));
+          //printf("%d, %d --> gfpt %d: U[%d][%d] = %f\n",ele,fpt,gfpt,slot,n,faces->U(gfpt,n,slot));
       }
     }
   }
@@ -2137,6 +2161,369 @@ void FRSolver::compute_SER_dt()
       }
     }
   }
+}
+
+void FRSolver::write_solution_pyfr(const std::string &prefix)
+{
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
+  std::stringstream ss;
+  ss << input->output_prefix << "/";
+  ss << prefix << "-" << input->iter << ".pyfrs";
+  std::string filename(ss.str());
+
+  if (input->rank == 0)
+    std::cout << "Writing data to file " << filename << std::endl;
+
+  // Create a dataspace and datatype for a std::string
+  DataSpace dspace(H5S_SCALAR);
+  hid_t string_type = H5Tcopy (H5T_C_S1);
+  H5Tset_size (string_type, H5T_VARIABLE);
+
+  // Setup config and stats strings
+
+  /* --- Config String --- */
+  ss.str(""); ss.clear();
+  ss << "[constants]" << std::endl;
+  ss << "gamma = 1.4" << std::endl;
+  ss << std::endl;
+
+  ss << "[solver]" << std::endl;
+  ss << "system = ";
+  if (input->equation == NAVIER_STOKES)
+  {
+    if (input->viscous)
+      ss << "navier-stokes" << std::endl;
+    else
+      ss << "euler" << std::endl;
+  }
+  else
+  {
+    if (input->viscous)
+      ss << "advection-diffusion" << std::endl;
+    else
+      ss << "advection" << std::endl;
+  }
+  ss << "order = " << input->order << std::endl;
+  ss << std::endl;
+
+  if (geo.nDims == 2)
+    ss << "[solver-elements-quad]" << std::endl;
+  else
+    ss << "[solver-elements-hex]" << std::endl;
+  ss << "soln-pt = gauss-legendre" << std::endl;
+  ss << std::endl;
+
+  std::string config = ss.str();
+
+  /* --- Stats String --- */
+  ss.str(""); ss.clear();
+  ss << "[data]" << std::endl;
+  if (input->equation == NAVIER_STOKES)
+  {
+    ss << "fields = rho,rhou,rhov,";
+    if (geo.nDims == 3)
+      ss << "rhoW,";
+    ss << "E" << std::endl;
+  }
+  else
+  {
+    ss << "fields = u" << std::endl;
+  }
+  ss << "prefix = soln" << std::endl;
+  ss << std::endl;
+
+  ss << "[solver-time-integrator]" << std::endl;
+  ss << "tcurr = " << input->time << std::endl;
+  //ss << "wall-time = " << input->??"
+  ss << std::endl;
+
+  std::string stats = ss.str();
+
+  int nEles = eles->nEles;
+  int nVars = eles->nVars;
+  int nSpts = eles->nSpts;
+
+#ifdef _USE_H5_PARALLEL
+  FileCreatPropList h5_mpi_plist = H5Pcreate(H5P_FILE_ACCESS);
+  MPI_Info info;
+  MPI_Info_create(&info);
+  H5Pset_fapl_mpio(h5_mpi_plist, geo.myComm, info);
+  MPI_Barrier(MPI_COMM_WORLD);
+  H5File file(filename, H5F_ACC_TRUNC, h5_mpi_plist);
+
+  std::vector<int> n_eles_p(input->nRanks);
+  MPI_Allgather(&nEles, 1, MPI_INT, n_eles_p.data(), 1, MPI_INT, geo.myComm);
+
+  /* --- Write Data to File --- */
+
+  for (int p = 0; p < input->nRanks; p++)
+  {
+    nEles = n_eles_p[p];
+
+    hsize_t dims[3] = {nSpts, nVars, nEles}; /// NOTE: We are col-major, HDF5 is row-major
+
+    DataSpace dspaceU(3, dims);
+    std::string solname = "soln_";
+    solname += (geo.nDims == 2) ? "quad" : "hex";
+    solname += "_p" + std::to_string(p);
+    DataSet dsetU = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+
+    if (p == input->rank)
+    {
+      mdvector<double> u_tmp({nEles, nVars, nSpts});
+      for (int ele = 0; ele < nEles; ele++)
+        for (int var = 0; var < nVars; var++)
+          for (int spt = 0; spt < nSpts; spt++)
+            u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+
+      dsetU.write(u_tmp.data(), PredType::NATIVE_DOUBLE, dspaceU);
+    }
+
+    dsetU.close();
+  }
+
+  DataSet dset = file.createDataSet("config", string_type, dspace);
+  if (input->rank == 0)
+    dset.write(config, string_type, dspace);
+  dset.close();
+
+  dset = file.createDataSet("stats", string_type, dspace);
+  if (input->rank == 0)
+    dset.write(stats, string_type, dspace);
+  dset.close();
+
+  // Write mesh ID
+  dset = file.createDataSet("mesh_uuid", string_type, dspace);
+  if (input->rank == 0)
+    dset.write(geo.mesh_uuid, string_type, dspace);
+  dset.close();
+
+  dspace.close();
+#else
+
+#ifdef _MPI
+  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
+  std::vector<std::vector<double>> data_p(input->nRanks);
+  if (input->rank == 0)
+  {
+    uint ind = 0;
+    data_p[0].resize(nEles * nVars * nSpts);  // Create transposed copy
+    for (int spt = 0; spt < nSpts; spt++)
+    {
+      for (int var = 0; var < nVars; var++)
+      {
+        for (int ele = 0; ele < nEles; ele++)
+        {
+          data_p[0][ind] = eles->U_spts(spt,ele,var);
+          ind++;
+        }
+      }
+    }
+  }
+
+  /* --- Gather all the data onto Rank 0 for writing --- */
+
+  std::vector<int> nEles_p(input->nRanks);
+  MPI_Allgather(&nEles, 1, MPI_INT, nEles_p.data(), 1, MPI_INT, geo.myComm);
+
+  for (int p = 1; p < input->nRanks; p++)
+  {
+    int nEles = nEles_p[p];
+    int size = nEles * nSpts * nVars;
+
+    if (input->rank == 0)
+    {
+      data_p[p].resize(size);
+      MPI_Status status;
+      MPI_Recv(data_p[p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
+    }
+    else
+    {
+      if (p == input->rank)
+      {
+        mdvector<double> u_tmp({nEles, nVars, nSpts});
+        for (int ele = 0; ele < nEles; ele++)
+          for (int var = 0; var < nVars; var++)
+            for (int spt = 0; spt < nSpts; spt++)
+              u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+
+        MPI_Send(u_tmp.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+      }
+    }
+
+    MPI_Barrier(geo.myComm);
+  }
+
+  /* --- Write Data to File (on Rank 0) --- */
+
+  if (input->rank == 0)
+  {
+    H5File file(filename, H5F_ACC_TRUNC);
+
+    // Write out all the data
+    DataSet dset = file.createDataSet("config", string_type, dspace);
+    dset.write(config, string_type, dspace);
+    dset.close();
+
+    dset = file.createDataSet("stats", string_type, dspace);
+    dset.write(stats, string_type, dspace);
+    dset.close();
+
+    // Write mesh ID
+    dset = file.createDataSet("mesh_uuid", string_type, dspace);
+    dset.write(geo.mesh_uuid, string_type, dspace);
+    dset.close();
+
+    dspace.close();
+
+    std::string sol_prefix = "soln_";
+    sol_prefix += (geo.nDims == 2) ? "quad" : "hex";
+    sol_prefix += "_p";
+    for (int p = 0; p < input->nRanks; p++)
+    {
+      nEles = nEles_p[p];
+      hsize_t dims[3] = {nSpts, nVars, nEles};
+      DataSpace dspaceU(3, dims);
+
+      std::string solname = sol_prefix + std::to_string(p);
+      dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+      dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+      dspaceU.close();
+      dset.close();
+    }
+  }
+#else
+  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
+  mdvector<double> u_tmp({nEles, nVars, nSpts});
+  for (int ele = 0; ele < nEles; ele++)
+    for (int var = 0; var < nVars; var++)
+      for (int spt = 0; spt < nSpts; spt++)
+        u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+
+  hsize_t dims[3] = {nSpts, nVars, nEles}; /// NOTE: We are col-major, HDF5 is row-major
+
+  /* --- Write Data to File --- */
+
+  H5File file(filename, H5F_ACC_TRUNC);
+
+  DataSet dset = file.createDataSet("config", string_type, dspace);
+  dset.write(config, string_type, dspace);
+  dset.close();
+
+  dset = file.createDataSet("stats", string_type, dspace);
+  dset.write(stats, string_type, dspace);
+  dset.close();
+
+  // Write mesh ID
+  dset = file.createDataSet("mesh_uuid", string_type, dspace);
+  dset.write(geo.mesh_uuid, string_type, dspace);
+  dset.close();
+
+  dspace.close();
+
+  DataSpace dspaceU(3, dims);
+  std::string solname = "soln_";
+  solname += (geo.nDims == 2) ? "quad" : "hex";
+  solname += "_p" + std::to_string(input->rank);
+  dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+  dset.write(u_tmp.data(), PredType::NATIVE_DOUBLE, dspaceU);
+  dset.close();
+#endif // no MPI
+
+#endif // no USE_H5_PARALLEL
+}
+
+void FRSolver::restart_pyfr(const std::string &restart_file)
+{
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
+  //std::stringstream ss;
+  //ss << input->output_prefix << "/";
+  //ss << restart_file << "-" << input->restart_iter << ".pyfrs";
+  //std::string filename(ss.str());
+  std::string filename = restart_file;
+
+  std::string str = filename;
+  size_t ind = str.find("-");
+  str.erase(str.begin(), str.begin()+ind+1);
+  ind = str.find(".pyfrs");
+  str.erase(str.begin()+ind,str.end());
+  std::stringstream ss(str);
+  ss >> restart_iter;
+  current_iter = restart_iter;
+  input->iter = restart_iter;
+  input->initIter = restart_iter;
+
+  if (input->rank == 0)
+    std::cout << "Reading data from file " << filename << std::endl;
+
+  H5File file(filename, H5F_ACC_RDONLY);
+
+  // Read the mesh ID string
+  std::string mesh_uuid;
+
+  DataSet dset = file.openDataSet("mesh_uuid");
+  DataType dtype = dset.getDataType();
+  DataSpace dspace(H5S_SCALAR);
+
+  dset.read(mesh_uuid, dtype, dspace);
+  dset.close();
+
+  if (mesh_uuid != geo.mesh_uuid)
+    ThrowException("Restart Error - Mesh and solution files do not mesh [mesh_uuid].");
+
+  // Read the config string
+  dset = file.openDataSet("config");
+  dset.read(geo.config, dtype, dspace);
+  dset.close();
+
+  // Read the stats string
+  dset = file.openDataSet("stats");
+  dset.read(geo.stats, dtype, dspace);
+  dset.close();
+
+  // Read the solution data
+  std::string solname = "soln_";
+  solname += (geo.nDims == 2) ? "quad" : "hex";
+  solname += "_p" + std::to_string(input->rank); /// TODO: write per rank in parallel...
+
+  dset = file.openDataSet(solname);
+  auto ds = dset.getSpace();
+
+  std::vector<hsize_t> dims(3);
+  hsize_t max_dims = 3;
+  int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+
+  if (ds_rank != 3)
+    ThrowException("Improper DataSpace rank for solution data.");
+
+  // Create a datatype for a std::string
+  hid_t string_type = H5Tcopy (H5T_C_S1);
+  H5Tset_size (string_type, H5T_VARIABLE);
+
+  int nEles = eles->nEles;
+  int nVars = eles->nVars;
+  int nSpts = eles->nSpts;
+
+  if (dims[2] != nEles || dims[1] != nVars || dims[0] != nSpts)
+    ThrowException("Size of solution data set does not match that from mesh.");
+
+  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
+  mdvector<double> u_tmp({nEles, nVars, nSpts});
+
+  dset.read(u_tmp.data(), PredType::NATIVE_DOUBLE);
+  dset.close();
+
+  eles->U_spts.assign({nSpts,nEles,nVars});
+  for (int ele = 0; ele < nEles; ele++)
+    for (int var = 0; var < nVars; var++)
+      for (int spt = 0; spt < nSpts; spt++)
+        eles->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
 }
 
 void FRSolver::write_solution(const std::string &_prefix)

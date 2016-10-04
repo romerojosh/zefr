@@ -28,6 +28,7 @@
 #include "points.hpp"
 #include "polynomials.hpp"
 #include "hexas.hpp"
+#include "funcs.hpp"
 
 #include "cblas.h"
 
@@ -47,17 +48,12 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   /* Generic hexahedral geometry */
   nDims = 3;
   nFaces = 6;
-  //nNodes = (shape_order+1)*(shape_order+1); // Lagrange Elements
   nNodes = geo->nNodesPerEle;
-//  if (shape_order == 1)
-//    nNodes = 8;
-//  else if (shape_order == 2 && input->serendipity)
-//    nNodes = 20;
-//  else
-//  {
-//    nNodes = (shape_order+1) * (shape_order+1) * (shape_order+1);
-//  }
   
+  geo->nFacesPerEle = 6;
+  geo->nNodesPerFace = 4;
+  geo->nCornerNodes = 8;
+
   /* If order argument is not provided, use order in input file */
   if (order == -1)
   {
@@ -691,20 +687,8 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
   unsigned int j = 0;
   unsigned int k = 0;
 
-  /* Trilinear hexahedral/8-node Serendipity */
-  if (shape_order == 1)
-  {
-    shape_val(0) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
-    shape_val(1) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 0, mu);
-    shape_val(2) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
-    shape_val(3) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 0, mu);
-    shape_val(4) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    shape_val(5) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 0, eta) * Lagrange({-1.,1.}, 1, mu);
-    shape_val(6) = Lagrange({-1.,1.}, 1, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
-    shape_val(7) = Lagrange({-1.,1.}, 0, xi) * Lagrange({-1.,1.}, 1, eta) * Lagrange({-1.,1.}, 1, mu);
-  }
   /* 20-node Seredipity */
-  else if (nNodes == 20 || (shape_order == 2 and input->serendipity))
+  if (nNodes == 20 || (shape_order == 2 and input->serendipity))
   {
     /* Corner Nodes */
     shape_val(0) = 0.125 * (1. - xi) * (1. - eta) * (1. - mu) * (-xi - eta - mu - 2.); 
@@ -747,225 +731,19 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
     for (int i=0; i<nSide; i++)
       xlist[i] = -1. + i*dxi;
 
-    int nLevels = nSide / 2;
-    int isOdd = nSide % 2;
+    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
 
-    /* Recursion for all high-order Lagrange elements:
-         * 8 corners, each edge's points, interior face points, volume points */
-    int nPts = 0;
-    for (int i = 0; i < nLevels; i++) {
-      // Corners
-      int i2 = (nSide-1) - i;
-      shape_val(nPts+0) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i);
-      shape_val(nPts+1) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i);
-      shape_val(nPts+2) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i);
-      shape_val(nPts+3) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i);
-      shape_val(nPts+4) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i2);
-      shape_val(nPts+5) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i2);
-      shape_val(nPts+6) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i2);
-      shape_val(nPts+7) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i2);
-      nPts += 8;
-
-      // Edges
-      int nSide2 = nSide - 2 * (i+1);
-      for (int j = 0; j < nSide2; j++) {
-        // Edges around 'bottom'
-        shape_val(nPts+0*nSide2+j) = Lagrange(xlist, xi, i+1+j) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i);
-        shape_val(nPts+3*nSide2+j) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i);
-        shape_val(nPts+5*nSide2+j) = Lagrange(xlist, xi, i2-1-j) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i);
-        shape_val(nPts+1*nSide2+j) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i);
-
-        // 'Vertical' edges
-        shape_val(nPts+2*nSide2+j) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i+1+j);
-        shape_val(nPts+4*nSide2+j) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i+1+j);
-        shape_val(nPts+6*nSide2+j) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i+1+j);
-        shape_val(nPts+7*nSide2+j) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i+1+j);
-
-        // Edges around 'top'
-        shape_val(nPts+8*nSide2+j) = Lagrange(xlist, xi, i+1+j) * Lagrange(xlist, eta, i) * Lagrange(xlist, mu, i2);
-        shape_val(nPts+10*nSide2+j) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i2);
-        shape_val(nPts+11*nSide2+j) = Lagrange(xlist, xi, i2-1-j) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i2);
-        shape_val(nPts+9*nSide2+j) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i2);
-      }
-      nPts += 12*nSide2;
-
-      /* --- Faces [Use recursion from quadrilaterals] --- */
-
-      int nLevels2 = nSide2 / 2;
-      int isOdd2 = nSide2 % 2;
-
-      // --- Bottom face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        shape_val(nPts+0) = Lagrange(xlist, xi, j) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, i);
-        shape_val(nPts+1) = Lagrange(xlist, xi, j) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i);
-        shape_val(nPts+2) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i);
-        shape_val(nPts+3) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, i);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          shape_val(nPts+0*nSide3+k) = Lagrange(xlist, xi, j) * Lagrange(xlist, eta, j+1+k) * Lagrange(xlist, mu, i);
-          shape_val(nPts+1*nSide3+k) = Lagrange(xlist, xi, j+1+k) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i);
-          shape_val(nPts+2*nSide3+k) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, i);
-          shape_val(nPts+3*nSide3+k) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, i);
+    int pt = 0;
+    for (int k = 0; k < nSide; k++)
+    {
+      for (int j = 0; j < nSide; j++)
+      {
+        for (int i = 0; i < nSide; i++)
+        {
+          shape_val(ijk2gmsh[pt]) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, k);
+          pt++;
         }
-        nPts += 4*nSide3;
       }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        shape_val(nPts) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, i);
-        nPts += 1;
-      }
-
-      // --- Front face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        shape_val(nPts+0) = Lagrange(xlist, xi, j) * Lagrange(xlist, mu, j) * Lagrange(xlist, eta, i);
-        shape_val(nPts+1) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j) * Lagrange(xlist, eta, i);
-        shape_val(nPts+2) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i);
-        shape_val(nPts+3) = Lagrange(xlist, xi, j) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          shape_val(nPts+0*nSide3+k) = Lagrange(xlist, xi, j+1+k) * Lagrange(xlist, mu, j) * Lagrange(xlist, eta, i);
-          shape_val(nPts+1*nSide3+k) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j+1+k) * Lagrange(xlist, eta, i);
-          shape_val(nPts+2*nSide3+k) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i);
-          shape_val(nPts+3*nSide3+k) = Lagrange(xlist, xi, j) * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, eta, i);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        shape_val(nPts) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, mu, nSide/2) * Lagrange(xlist, eta, i);
-        nPts += 1;
-      }
-
-      // --- Left face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        shape_val(nPts+0) = Lagrange(xlist, eta, j) * Lagrange(xlist, mu, j) * Lagrange(xlist, xi, i);
-        shape_val(nPts+1) = Lagrange(xlist, eta, j) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i);
-        shape_val(nPts+2) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i);
-        shape_val(nPts+3) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j) * Lagrange(xlist, xi, i);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          shape_val(nPts+0*nSide3+k) = Lagrange(xlist, eta, j) * Lagrange(xlist, mu, j+1+k) * Lagrange(xlist, xi, i);
-          shape_val(nPts+1*nSide3+k) = Lagrange(xlist, eta, j+1+k) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i);
-          shape_val(nPts+2*nSide3+k) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, xi, i);
-          shape_val(nPts+3*nSide3+k) = Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, j) * Lagrange(xlist, xi, i);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        shape_val(nPts) = Lagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, nSide/2) * Lagrange(xlist, xi, i);
-        nPts += 1;
-      }
-
-      // --- Right face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        shape_val(nPts+0) = Lagrange(xlist, eta, j) * Lagrange(xlist, mu, j) * Lagrange(xlist, xi, i2);
-        shape_val(nPts+1) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j) * Lagrange(xlist, xi, i2);
-        shape_val(nPts+2) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i2);
-        shape_val(nPts+3) = Lagrange(xlist, eta, j) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i2);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          shape_val(nPts+0*nSide3+k) = Lagrange(xlist, eta, j+1+k) * Lagrange(xlist, mu, j) * Lagrange(xlist, xi, i2);
-          shape_val(nPts+1*nSide3+k) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j+1+k) * Lagrange(xlist, xi, i2);
-          shape_val(nPts+2*nSide3+k) = Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i2);
-          shape_val(nPts+3*nSide3+k) = Lagrange(xlist, eta, j) * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, xi, i2);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        shape_val(nPts) = Lagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, nSide/2) * Lagrange(xlist, xi, i2);
-        nPts += 1;
-      }
-
-      // --- Back face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        shape_val(nPts+0) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j) * Lagrange(xlist, eta, i2);
-        shape_val(nPts+1) = Lagrange(xlist, xi, j) * Lagrange(xlist, mu, j) * Lagrange(xlist, eta, i2);
-        shape_val(nPts+2) = Lagrange(xlist, xi, j) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i2);
-        shape_val(nPts+3) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i2);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          shape_val(nPts+0*nSide3+k) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, mu, j) * Lagrange(xlist, eta, i2);
-          shape_val(nPts+1*nSide3+k) = Lagrange(xlist, xi, j) * Lagrange(xlist, mu, j+1+k) * Lagrange(xlist, eta, i2);
-          shape_val(nPts+2*nSide3+k) = Lagrange(xlist, xi, j+1+k) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i2);
-          shape_val(nPts+3*nSide3+k) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, eta, i2);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        shape_val(nPts) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, mu, nSide/2) * Lagrange(xlist, eta, i2);
-        nPts += 1;
-      }
-
-      // --- Top face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        shape_val(nPts+0) = Lagrange(xlist, xi, j) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, i2);
-        shape_val(nPts+1) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, i2);
-        shape_val(nPts+2) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i2);
-        shape_val(nPts+3) = Lagrange(xlist, xi, j) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i2);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          shape_val(nPts+0*nSide3+k) = Lagrange(xlist, xi, j+1+k) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, i2);
-          shape_val(nPts+1*nSide3+k) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j+1+k) * Lagrange(xlist, mu, i2);
-          shape_val(nPts+2*nSide3+k) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i2);
-          shape_val(nPts+3*nSide3+k) = Lagrange(xlist, xi, j) * Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, i2);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        shape_val(nPts) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, i2);
-        nPts += 1;
-      }
-    }
-
-    // Center node for even-ordered Lagrange quads (odd value of nSide)
-    if (isOdd) {
-      shape_val(nNodes-1) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, nSide/2);
     }
   }
 
@@ -1063,407 +841,21 @@ mdvector<double> Hexas::calc_d_shape(unsigned int shape_order,
     for (int i=0; i<nSide; i++)
       xlist[i] = -1. + i*dxi;
 
-    int nLevels = nSide / 2;
-    int isOdd = nSide % 2;
+    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
 
-    /* Recursion for all high-order Lagrange elements:
-     * 8 corners, each edge's points, interior face points, volume points */
-    int nPts = 0;
-    for (int i = 0; i < nLevels; i++) {
-      // Corners
-      int i2 = (nSide-1) - i;
-      dshape_val((nPts+0),0) = dLagrange(xlist, xi, i)  * Lagrange(xlist, eta, i)  * Lagrange(xlist, mu, i);
-      dshape_val((nPts+1),0) = dLagrange(xlist, xi, i2) * Lagrange(xlist, eta, i)  * Lagrange(xlist, mu, i);
-      dshape_val((nPts+2),0) = dLagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i);
-      dshape_val((nPts+3),0) = dLagrange(xlist, xi, i)  * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i);
-      dshape_val((nPts+4),0) = dLagrange(xlist, xi, i)  * Lagrange(xlist, eta, i)  * Lagrange(xlist, mu, i2);
-      dshape_val((nPts+5),0) = dLagrange(xlist, xi, i2) * Lagrange(xlist, eta, i)  * Lagrange(xlist, mu, i2);
-      dshape_val((nPts+6),0) = dLagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i2);
-      dshape_val((nPts+7),0) = dLagrange(xlist, xi, i)  * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i2);
-
-      dshape_val((nPts+0),1) = Lagrange(xlist, xi, i)  * dLagrange(xlist, eta, i)  * Lagrange(xlist, mu, i);
-      dshape_val((nPts+1),1) = Lagrange(xlist, xi, i2) * dLagrange(xlist, eta, i)  * Lagrange(xlist, mu, i);
-      dshape_val((nPts+2),1) = Lagrange(xlist, xi, i2) * dLagrange(xlist, eta, i2) * Lagrange(xlist, mu, i);
-      dshape_val((nPts+3),1) = Lagrange(xlist, xi, i)  * dLagrange(xlist, eta, i2) * Lagrange(xlist, mu, i);
-      dshape_val((nPts+4),1) = Lagrange(xlist, xi, i)  * dLagrange(xlist, eta, i)  * Lagrange(xlist, mu, i2);
-      dshape_val((nPts+5),1) = Lagrange(xlist, xi, i2) * dLagrange(xlist, eta, i)  * Lagrange(xlist, mu, i2);
-      dshape_val((nPts+6),1) = Lagrange(xlist, xi, i2) * dLagrange(xlist, eta, i2) * Lagrange(xlist, mu, i2);
-      dshape_val((nPts+7),1) = Lagrange(xlist, xi, i)  * dLagrange(xlist, eta, i2) * Lagrange(xlist, mu, i2);
-
-      dshape_val((nPts+0),2) = Lagrange(xlist, xi, i)  * Lagrange(xlist, eta, i)  * dLagrange(xlist, mu, i);
-      dshape_val((nPts+1),2) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i)  * dLagrange(xlist, mu, i);
-      dshape_val((nPts+2),2) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * dLagrange(xlist, mu, i);
-      dshape_val((nPts+3),2) = Lagrange(xlist, xi, i)  * Lagrange(xlist, eta, i2) * dLagrange(xlist, mu, i);
-      dshape_val((nPts+4),2) = Lagrange(xlist, xi, i)  * Lagrange(xlist, eta, i)  * dLagrange(xlist, mu, i2);
-      dshape_val((nPts+5),2) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i)  * dLagrange(xlist, mu, i2);
-      dshape_val((nPts+6),2) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * dLagrange(xlist, mu, i2);
-      dshape_val((nPts+7),2) = Lagrange(xlist, xi, i)  * Lagrange(xlist, eta, i2) * dLagrange(xlist, mu, i2);
-      nPts += 8;
-
-      // Edges
-      int nSide2 = nSide - 2 * (i+1);
-      for (int j = 0; j < nSide2; j++) {
-        // Edges around 'bottom'
-        dshape_val((nPts+0*nSide2+j),0) = dLagrange(xlist, xi, i+1+j)  * Lagrange(xlist, eta, i)      * Lagrange(xlist, mu, i);
-        dshape_val((nPts+3*nSide2+j),0) = dLagrange(xlist, xi, i2)     * Lagrange(xlist, eta, i+1+j)  * Lagrange(xlist, mu, i);
-        dshape_val((nPts+5*nSide2+j),0) = dLagrange(xlist, xi, i2-1-j) * Lagrange(xlist, eta, i2)     * Lagrange(xlist, mu, i);
-        dshape_val((nPts+1*nSide2+j),0) = dLagrange(xlist, xi, i)      * Lagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i);
-
-        dshape_val((nPts+0*nSide2+j),1) = Lagrange(xlist, xi, i+1+j)  * dLagrange(xlist, eta, i)      * Lagrange(xlist, mu, i);
-        dshape_val((nPts+3*nSide2+j),1) = Lagrange(xlist, xi, i2)     * dLagrange(xlist, eta, i+1+j)  * Lagrange(xlist, mu, i);
-        dshape_val((nPts+5*nSide2+j),1) = Lagrange(xlist, xi, i2-1-j) * dLagrange(xlist, eta, i2)     * Lagrange(xlist, mu, i);
-        dshape_val((nPts+1*nSide2+j),1) = Lagrange(xlist, xi, i)      * dLagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i);
-
-        dshape_val((nPts+0*nSide2+j),2) = Lagrange(xlist, xi, i+1+j)  * Lagrange(xlist, eta, i)      * dLagrange(xlist, mu, i);
-        dshape_val((nPts+3*nSide2+j),2) = Lagrange(xlist, xi, i2)     * Lagrange(xlist, eta, i+1+j)  * dLagrange(xlist, mu, i);
-        dshape_val((nPts+5*nSide2+j),2) = Lagrange(xlist, xi, i2-1-j) * Lagrange(xlist, eta, i2)     * dLagrange(xlist, mu, i);
-        dshape_val((nPts+1*nSide2+j),2) = Lagrange(xlist, xi, i)      * Lagrange(xlist, eta, i+1+j) * dLagrange(xlist, mu, i);
-
-        // 'Vertical' edges
-        dshape_val((nPts+2*nSide2+j),0) = dLagrange(xlist, xi, i)  * Lagrange(xlist, eta, i)  * Lagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+4*nSide2+j),0) = dLagrange(xlist, xi, i2) * Lagrange(xlist, eta, i)  * Lagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+6*nSide2+j),0) = dLagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+7*nSide2+j),0) = dLagrange(xlist, xi, i)  * Lagrange(xlist, eta, i2) * Lagrange(xlist, mu, i+1+j);
-
-        dshape_val((nPts+2*nSide2+j),1) = Lagrange(xlist, xi, i)  * dLagrange(xlist, eta, i)  * Lagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+4*nSide2+j),1) = Lagrange(xlist, xi, i2) * dLagrange(xlist, eta, i)  * Lagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+6*nSide2+j),1) = Lagrange(xlist, xi, i2) * dLagrange(xlist, eta, i2) * Lagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+7*nSide2+j),1) = Lagrange(xlist, xi, i)  * dLagrange(xlist, eta, i2) * Lagrange(xlist, mu, i+1+j);
-
-        dshape_val((nPts+2*nSide2+j),2) = Lagrange(xlist, xi, i)  * Lagrange(xlist, eta, i)  * dLagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+4*nSide2+j),2) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i)  * dLagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+6*nSide2+j),2) = Lagrange(xlist, xi, i2) * Lagrange(xlist, eta, i2) * dLagrange(xlist, mu, i+1+j);
-        dshape_val((nPts+7*nSide2+j),2) = Lagrange(xlist, xi, i)  * Lagrange(xlist, eta, i2) * dLagrange(xlist, mu, i+1+j);
-
-        // Edges around 'top'
-        dshape_val((nPts+ 8*nSide2+j),0) = dLagrange(xlist, xi, i+1+j)  * Lagrange(xlist, eta, i)     * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+10*nSide2+j),0) = dLagrange(xlist, xi, i2)     * Lagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+11*nSide2+j),0) = dLagrange(xlist, xi, i2-1-j) * Lagrange(xlist, eta, i2)    * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+ 9*nSide2+j),0) = dLagrange(xlist, xi, i)      * Lagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i2);
-
-        dshape_val((nPts+ 8*nSide2+j),1) = Lagrange(xlist, xi, i+1+j)  * dLagrange(xlist, eta, i)     * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+10*nSide2+j),1) = Lagrange(xlist, xi, i2)     * dLagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+11*nSide2+j),1) = Lagrange(xlist, xi, i2-1-j) * dLagrange(xlist, eta, i2)    * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+ 9*nSide2+j),1) = Lagrange(xlist, xi, i)      * dLagrange(xlist, eta, i+1+j) * Lagrange(xlist, mu, i2);
-
-        dshape_val((nPts+ 8*nSide2+j),2) = Lagrange(xlist, xi, i+1+j)  * Lagrange(xlist, eta, i)     * dLagrange(xlist, mu, i2);
-        dshape_val((nPts+10*nSide2+j),2) = Lagrange(xlist, xi, i2)     * Lagrange(xlist, eta, i+1+j) * dLagrange(xlist, mu, i2);
-        dshape_val((nPts+11*nSide2+j),2) = Lagrange(xlist, xi, i2-1-j) * Lagrange(xlist, eta, i2)    * dLagrange(xlist, mu, i2);
-        dshape_val((nPts+ 9*nSide2+j),2) = Lagrange(xlist, xi, i)      * Lagrange(xlist, eta, i+1+j) * dLagrange(xlist, mu, i2);
-      }
-      nPts += 12*nSide2;
-
-      /* --- Faces [Use recursion from quadrilaterals] --- */
-
-      int nLevels2 = nSide2 / 2;
-      int isOdd2 = nSide2 % 2;
-
-      // --- Bottom face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        dshape_val((nPts+0),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, i);
-        dshape_val((nPts+1),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i);
-        dshape_val((nPts+2),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i);
-        dshape_val((nPts+3),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, i);
-
-        dshape_val((nPts+0),1) = Lagrange(xlist, xi, j)  * dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, i);
-        dshape_val((nPts+1),1) = Lagrange(xlist, xi, j)  * dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, i);
-        dshape_val((nPts+2),1) = Lagrange(xlist, xi, j2) * dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, i);
-        dshape_val((nPts+3),1) = Lagrange(xlist, xi, j2) * dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, i);
-
-        dshape_val((nPts+0),2) = Lagrange(xlist, xi, j)  * Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, i);
-        dshape_val((nPts+1),2) = Lagrange(xlist, xi, j)  * Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, i);
-        dshape_val((nPts+2),2) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, i);
-        dshape_val((nPts+3),2) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, i);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          dshape_val((nPts+0*nSide3+k),0) = dLagrange(xlist, xi, j)      * Lagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, i);
-          dshape_val((nPts+1*nSide3+k),0) = dLagrange(xlist, xi, j+1+k)  * Lagrange(xlist, eta, j2)     * Lagrange(xlist, mu, i);
-          dshape_val((nPts+2*nSide3+k),0) = dLagrange(xlist, xi, j2)     * Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, i);
-          dshape_val((nPts+3*nSide3+k),0) = dLagrange(xlist, xi, j2-1-k) * Lagrange(xlist, eta, j)      * Lagrange(xlist, mu, i);
-
-          dshape_val((nPts+0*nSide3+k),1) = Lagrange(xlist, xi, j)      * dLagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, i);
-          dshape_val((nPts+1*nSide3+k),1) = Lagrange(xlist, xi, j+1+k)  * dLagrange(xlist, eta, j2)     * Lagrange(xlist, mu, i);
-          dshape_val((nPts+2*nSide3+k),1) = Lagrange(xlist, xi, j2)     * dLagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, i);
-          dshape_val((nPts+3*nSide3+k),1) = Lagrange(xlist, xi, j2-1-k) * dLagrange(xlist, eta, j)      * Lagrange(xlist, mu, i);
-
-          dshape_val((nPts+0*nSide3+k),2) = Lagrange(xlist, xi, j)      * Lagrange(xlist, eta, j+1+k)  * dLagrange(xlist, mu, i);
-          dshape_val((nPts+1*nSide3+k),2) = Lagrange(xlist, xi, j+1+k)  * Lagrange(xlist, eta, j2)     * dLagrange(xlist, mu, i);
-          dshape_val((nPts+2*nSide3+k),2) = Lagrange(xlist, xi, j2)     * Lagrange(xlist, eta, j2-1-k) * dLagrange(xlist, mu, i);
-          dshape_val((nPts+3*nSide3+k),2) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, eta, j)      * dLagrange(xlist, mu, i);
+    int pt = 0;
+    for (int k = 0; k < nSide; k++)
+    {
+      for (int j = 0; j < nSide; j++)
+      {
+        for (int i = 0; i < nSide; i++)
+        {
+          dshape_val(ijk2gmsh[pt],0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
+          dshape_val(ijk2gmsh[pt],1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
+          dshape_val(ijk2gmsh[pt],2) =  Lagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) * dLagrange(xlist, mu, k);
+          pt++;
         }
-        nPts += 4*nSide3;
       }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        dshape_val((nPts),0) = dLagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2)  * Lagrange(xlist, mu, i);
-        dshape_val((nPts),1) = Lagrange(xlist, xi, nSide/2)  * dLagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, i);
-        dshape_val((nPts),2) = Lagrange(xlist, xi, nSide/2)  * Lagrange(xlist, eta, nSide/2)  * dLagrange(xlist, mu, i);
-        nPts += 1;
-      }
-
-      // --- Front face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        dshape_val((nPts+0),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, mu, j)  * Lagrange(xlist, eta, i);
-        dshape_val((nPts+1),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, mu, j)  * Lagrange(xlist, eta, i);
-        dshape_val((nPts+2),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i);
-        dshape_val((nPts+3),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i);
-
-        dshape_val((nPts+0),1) = Lagrange(xlist, xi, j)  * Lagrange(xlist, mu, j)  * dLagrange(xlist, eta, i);
-        dshape_val((nPts+1),1) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j)  * dLagrange(xlist, eta, i);
-        dshape_val((nPts+2),1) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j2) * dLagrange(xlist, eta, i);
-        dshape_val((nPts+3),1) = Lagrange(xlist, xi, j)  * Lagrange(xlist, mu, j2) * dLagrange(xlist, eta, i);
-
-        dshape_val((nPts+0),2) = Lagrange(xlist, xi, j)  * dLagrange(xlist, mu, j)  * Lagrange(xlist, eta, i);
-        dshape_val((nPts+1),2) = Lagrange(xlist, xi, j2) * dLagrange(xlist, mu, j)  * Lagrange(xlist, eta, i);
-        dshape_val((nPts+2),2) = Lagrange(xlist, xi, j2) * dLagrange(xlist, mu, j2) * Lagrange(xlist, eta, i);
-        dshape_val((nPts+3),2) = Lagrange(xlist, xi, j)  * dLagrange(xlist, mu, j2) * Lagrange(xlist, eta, i);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          dshape_val((nPts+0*nSide3+k),0) = dLagrange(xlist, xi, j+1+k)  * Lagrange(xlist, mu, j)      * Lagrange(xlist, eta, i);
-          dshape_val((nPts+1*nSide3+k),0) = dLagrange(xlist, xi, j2)     * Lagrange(xlist, mu, j+1+k)  * Lagrange(xlist, eta, i);
-          dshape_val((nPts+2*nSide3+k),0) = dLagrange(xlist, xi, j2-1-k) * Lagrange(xlist, mu, j2)     * Lagrange(xlist, eta, i);
-          dshape_val((nPts+3*nSide3+k),0) = dLagrange(xlist, xi, j)      * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, eta, i);
-
-          dshape_val((nPts+0*nSide3+k),1) = Lagrange(xlist, xi, j+1+k)  * Lagrange(xlist, mu, j)      * dLagrange(xlist, eta, i);
-          dshape_val((nPts+1*nSide3+k),1) = Lagrange(xlist, xi, j2)     * Lagrange(xlist, mu, j+1+k)  * dLagrange(xlist, eta, i);
-          dshape_val((nPts+2*nSide3+k),1) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, mu, j2)     * dLagrange(xlist, eta, i);
-          dshape_val((nPts+3*nSide3+k),1) = Lagrange(xlist, xi, j)      * Lagrange(xlist, mu, j2-1-k) * dLagrange(xlist, eta, i);
-
-          dshape_val((nPts+0*nSide3+k),2) = Lagrange(xlist, xi, j+1+k)  * dLagrange(xlist, mu, j)      * Lagrange(xlist, eta, i);
-          dshape_val((nPts+1*nSide3+k),2) = Lagrange(xlist, xi, j2)     * dLagrange(xlist, mu, j+1+k)  * Lagrange(xlist, eta, i);
-          dshape_val((nPts+2*nSide3+k),2) = Lagrange(xlist, xi, j2-1-k) * dLagrange(xlist, mu, j2)     * Lagrange(xlist, eta, i);
-          dshape_val((nPts+3*nSide3+k),2) = Lagrange(xlist, xi, j)      * dLagrange(xlist, mu, j2-1-k) * Lagrange(xlist, eta, i);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        dshape_val((nPts),0) = dLagrange(xlist, xi, nSide/2) * Lagrange(xlist, mu, nSide/2)  * Lagrange(xlist, eta, i);
-        dshape_val((nPts),1) = Lagrange(xlist, xi, nSide/2)  * Lagrange(xlist, mu, nSide/2)  * dLagrange(xlist, eta, i);
-        dshape_val((nPts),2) = Lagrange(xlist, xi, nSide/2)  * dLagrange(xlist, mu, nSide/2) * Lagrange(xlist, eta, i);
-        nPts += 1;
-      }
-
-      // --- Left face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        dshape_val((nPts+0),0) = Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, j)  * dLagrange(xlist, xi, i);
-        dshape_val((nPts+1),0) = Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, j2) * dLagrange(xlist, xi, i);
-        dshape_val((nPts+2),0) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j2) * dLagrange(xlist, xi, i);
-        dshape_val((nPts+3),0) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j)  * dLagrange(xlist, xi, i);
-
-        dshape_val((nPts+0),1) = dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, j)  * Lagrange(xlist, xi, i);
-        dshape_val((nPts+1),1) = dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i);
-        dshape_val((nPts+2),1) = dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i);
-        dshape_val((nPts+3),1) = dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, j)  * Lagrange(xlist, xi, i);
-
-        dshape_val((nPts+0),2) = Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, j)  * Lagrange(xlist, xi, i);
-        dshape_val((nPts+1),2) = Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, j2) * Lagrange(xlist, xi, i);
-        dshape_val((nPts+2),2) = Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, j2) * Lagrange(xlist, xi, i);
-        dshape_val((nPts+3),2) = Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, j)  * Lagrange(xlist, xi, i);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          dshape_val((nPts+0*nSide3+k),0) = Lagrange(xlist, eta, j)      * Lagrange(xlist, mu, j+1+k)  * dLagrange(xlist, xi, i);
-          dshape_val((nPts+1*nSide3+k),0) = Lagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, j2)     * dLagrange(xlist, xi, i);
-          dshape_val((nPts+2*nSide3+k),0) = Lagrange(xlist, eta, j2)     * Lagrange(xlist, mu, j2-1-k) * dLagrange(xlist, xi, i);
-          dshape_val((nPts+3*nSide3+k),0) = Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, j)      * dLagrange(xlist, xi, i);
-
-          dshape_val((nPts+0*nSide3+k),1) = dLagrange(xlist, eta, j)      * Lagrange(xlist, mu, j+1+k)  * Lagrange(xlist, xi, i);
-          dshape_val((nPts+1*nSide3+k),1) = dLagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, j2)     * Lagrange(xlist, xi, i);
-          dshape_val((nPts+2*nSide3+k),1) = dLagrange(xlist, eta, j2)     * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, xi, i);
-          dshape_val((nPts+3*nSide3+k),1) = dLagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, j)      * Lagrange(xlist, xi, i);
-
-          dshape_val((nPts+0*nSide3+k),2) = Lagrange(xlist, eta, j)      * dLagrange(xlist, mu, j+1+k)  * Lagrange(xlist, xi, i);
-          dshape_val((nPts+1*nSide3+k),2) = Lagrange(xlist, eta, j+1+k)  * dLagrange(xlist, mu, j2)     * Lagrange(xlist, xi, i);
-          dshape_val((nPts+2*nSide3+k),2) = Lagrange(xlist, eta, j2)     * dLagrange(xlist, mu, j2-1-k) * Lagrange(xlist, xi, i);
-          dshape_val((nPts+3*nSide3+k),2) = Lagrange(xlist, eta, j2-1-k) * dLagrange(xlist, mu, j)      * Lagrange(xlist, xi, i);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        dshape_val((nPts),0) = Lagrange(xlist, eta, nSide/2)  * Lagrange(xlist, mu, nSide/2)  * dLagrange(xlist, xi, i);
-        dshape_val((nPts),1) = dLagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, nSide/2)  * Lagrange(xlist, xi, i);
-        dshape_val((nPts),2) = Lagrange(xlist, eta, nSide/2)  * dLagrange(xlist, mu, nSide/2) * Lagrange(xlist, xi, i);
-        nPts += 1;
-      }
-
-      // --- Right face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        dshape_val((nPts+0),0) = Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, j)  * dLagrange(xlist, xi, i2);
-        dshape_val((nPts+1),0) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j)  * dLagrange(xlist, xi, i2);
-        dshape_val((nPts+2),0) = Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, j2) * dLagrange(xlist, xi, i2);
-        dshape_val((nPts+3),0) = Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, j2) * dLagrange(xlist, xi, i2);
-
-        dshape_val((nPts+0),1) = dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, j)  * Lagrange(xlist, xi, i2);
-        dshape_val((nPts+1),1) = dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, j)  * Lagrange(xlist, xi, i2);
-        dshape_val((nPts+2),1) = dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i2);
-        dshape_val((nPts+3),1) = dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, j2) * Lagrange(xlist, xi, i2);
-
-        dshape_val((nPts+0),2) = Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, j)  * Lagrange(xlist, xi, i2);
-        dshape_val((nPts+1),2) = Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, j)  * Lagrange(xlist, xi, i2);
-        dshape_val((nPts+2),2) = Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, j2) * Lagrange(xlist, xi, i2);
-        dshape_val((nPts+3),2) = Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, j2) * Lagrange(xlist, xi, i2);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          dshape_val((nPts+0*nSide3+k),0) = Lagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, j)      * dLagrange(xlist, xi, i2);
-          dshape_val((nPts+1*nSide3+k),0) = Lagrange(xlist, eta, j2)     * Lagrange(xlist, mu, j+1+k)  * dLagrange(xlist, xi, i2);
-          dshape_val((nPts+2*nSide3+k),0) = Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, j2)     * dLagrange(xlist, xi, i2);
-          dshape_val((nPts+3*nSide3+k),0) = Lagrange(xlist, eta, j)      * Lagrange(xlist, mu, j2-1-k) * dLagrange(xlist, xi, i2);
-
-          dshape_val((nPts+0*nSide3+k),1) = dLagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, j)      * Lagrange(xlist, xi, i2);
-          dshape_val((nPts+1*nSide3+k),1) = dLagrange(xlist, eta, j2)     * Lagrange(xlist, mu, j+1+k)  * Lagrange(xlist, xi, i2);
-          dshape_val((nPts+2*nSide3+k),1) = dLagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, j2)     * Lagrange(xlist, xi, i2);
-          dshape_val((nPts+3*nSide3+k),1) = dLagrange(xlist, eta, j)      * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, xi, i2);
-
-          dshape_val((nPts+0*nSide3+k),2) = Lagrange(xlist, eta, j+1+k)  * dLagrange(xlist, mu, j)      * Lagrange(xlist, xi, i2);
-          dshape_val((nPts+1*nSide3+k),2) = Lagrange(xlist, eta, j2)     * dLagrange(xlist, mu, j+1+k)  * Lagrange(xlist, xi, i2);
-          dshape_val((nPts+2*nSide3+k),2) = Lagrange(xlist, eta, j2-1-k) * dLagrange(xlist, mu, j2)     * Lagrange(xlist, xi, i2);
-          dshape_val((nPts+3*nSide3+k),2) = Lagrange(xlist, eta, j)      * dLagrange(xlist, mu, j2-1-k) * Lagrange(xlist, xi, i2);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        dshape_val((nPts),0) = Lagrange(xlist, eta, nSide/2)  * Lagrange(xlist, mu, nSide/2)  * dLagrange(xlist, xi, i2);
-        dshape_val((nPts),1) = dLagrange(xlist, eta, nSide/2)  * Lagrange(xlist, mu, nSide/2) * Lagrange(xlist, xi, i2);
-        dshape_val((nPts),2) = Lagrange(xlist, eta, nSide/2) * dLagrange(xlist, mu, nSide/2)  * Lagrange(xlist, xi, i2);
-        nPts += 1;
-      }
-
-      // --- Back face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        dshape_val((nPts+0),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, mu, j)  * Lagrange(xlist, eta, i2);
-        dshape_val((nPts+1),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, mu, j)  * Lagrange(xlist, eta, i2);
-        dshape_val((nPts+2),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i2);
-        dshape_val((nPts+3),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, mu, j2) * Lagrange(xlist, eta, i2);
-
-        dshape_val((nPts+0),1) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j)  * dLagrange(xlist, eta, i2);
-        dshape_val((nPts+1),1) = Lagrange(xlist, xi, j)  * Lagrange(xlist, mu, j)  * dLagrange(xlist, eta, i2);
-        dshape_val((nPts+2),1) = Lagrange(xlist, xi, j)  * Lagrange(xlist, mu, j2) * dLagrange(xlist, eta, i2);
-        dshape_val((nPts+3),1) = Lagrange(xlist, xi, j2) * Lagrange(xlist, mu, j2) * dLagrange(xlist, eta, i2);
-
-        dshape_val((nPts+0),2) = Lagrange(xlist, xi, j2) * dLagrange(xlist, mu, j)  * Lagrange(xlist, eta, i2);
-        dshape_val((nPts+1),2) = Lagrange(xlist, xi, j)  * dLagrange(xlist, mu, j)  * Lagrange(xlist, eta, i2);
-        dshape_val((nPts+2),2) = Lagrange(xlist, xi, j)  * dLagrange(xlist, mu, j2) * Lagrange(xlist, eta, i2);
-        dshape_val((nPts+3),2) = Lagrange(xlist, xi, j2) * dLagrange(xlist, mu, j2) * Lagrange(xlist, eta, i2);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          dshape_val((nPts+0*nSide3+k),0) = dLagrange(xlist, xi, j2-1-k) * Lagrange(xlist, mu, j)      * Lagrange(xlist, eta, i2);
-          dshape_val((nPts+1*nSide3+k),0) = dLagrange(xlist, xi, j)      * Lagrange(xlist, mu, j+1+k)  * Lagrange(xlist, eta, i2);
-          dshape_val((nPts+2*nSide3+k),0) = dLagrange(xlist, xi, j+1+k)  * Lagrange(xlist, mu, j2)     * Lagrange(xlist, eta, i2);
-          dshape_val((nPts+3*nSide3+k),0) = dLagrange(xlist, xi, j2)     * Lagrange(xlist, mu, j2-1-k) * Lagrange(xlist, eta, i2);
-
-          dshape_val((nPts+0*nSide3+k),1) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, mu, j)      * dLagrange(xlist, eta, i2);
-          dshape_val((nPts+1*nSide3+k),1) = Lagrange(xlist, xi, j)      * Lagrange(xlist, mu, j+1+k)  * dLagrange(xlist, eta, i2);
-          dshape_val((nPts+2*nSide3+k),1) = Lagrange(xlist, xi, j+1+k)  * Lagrange(xlist, mu, j2)     * dLagrange(xlist, eta, i2);
-          dshape_val((nPts+3*nSide3+k),1) = Lagrange(xlist, xi, j2)     * Lagrange(xlist, mu, j2-1-k) * dLagrange(xlist, eta, i2);
-
-          dshape_val((nPts+0*nSide3+k),2) = Lagrange(xlist, xi, j2-1-k) * dLagrange(xlist, mu, j)      * Lagrange(xlist, eta, i2);
-          dshape_val((nPts+1*nSide3+k),2) = Lagrange(xlist, xi, j)      * dLagrange(xlist, mu, j+1+k)  * Lagrange(xlist, eta, i2);
-          dshape_val((nPts+2*nSide3+k),2) = Lagrange(xlist, xi, j+1+k)  * dLagrange(xlist, mu, j2)     * Lagrange(xlist, eta, i2);
-          dshape_val((nPts+3*nSide3+k),2) = Lagrange(xlist, xi, j2)     * dLagrange(xlist, mu, j2-1-k) * Lagrange(xlist, eta, i2);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        dshape_val((nPts),0) = dLagrange(xlist, xi, nSide/2) * Lagrange(xlist, mu, nSide/2) * Lagrange(xlist, eta, i2);
-        dshape_val((nPts),1) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, mu, nSide/2) * dLagrange(xlist, eta, i2);
-        dshape_val((nPts),2) = Lagrange(xlist, xi, nSide/2) * dLagrange(xlist, mu, nSide/2) * Lagrange(xlist, eta, i2);
-        nPts += 1;
-      }
-
-      // --- Top face ---
-      for (int j0 = 0; j0 < nLevels2; j0++) {
-        // Corners
-        int j = j0 + i + 1;
-        int j2 = i + 1 + (nSide2-1) - j0;
-        dshape_val((nPts+0),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+1),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, eta, j)  * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+2),0) = dLagrange(xlist, xi, j2) * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+3),0) = dLagrange(xlist, xi, j)  * Lagrange(xlist, eta, j2) * Lagrange(xlist, mu, i2);
-
-        dshape_val((nPts+0),1) = Lagrange(xlist, xi, j)  * dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+1),1) = Lagrange(xlist, xi, j2) * dLagrange(xlist, eta, j)  * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+2),1) = Lagrange(xlist, xi, j2) * dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, i2);
-        dshape_val((nPts+3),1) = Lagrange(xlist, xi, j)  * dLagrange(xlist, eta, j2) * Lagrange(xlist, mu, i2);
-
-        dshape_val((nPts+0),2) = Lagrange(xlist, xi, j)  * Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, i2);
-        dshape_val((nPts+1),2) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j)  * dLagrange(xlist, mu, i2);
-        dshape_val((nPts+2),2) = Lagrange(xlist, xi, j2) * Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, i2);
-        dshape_val((nPts+3),2) = Lagrange(xlist, xi, j)  * Lagrange(xlist, eta, j2) * dLagrange(xlist, mu, i2);
-        nPts += 4;
-
-        // Edges: Bottom, right, top, left
-        int nSide3 = nSide2 - 2 * (j0+1);
-        for (int k = 0; k < nSide3; k++) {
-          dshape_val((nPts+0*nSide3+k),0) = dLagrange(xlist, xi, j+1+k)  * Lagrange(xlist, eta, j)      * Lagrange(xlist, mu, i2);
-          dshape_val((nPts+1*nSide3+k),0) = dLagrange(xlist, xi, j2)     * Lagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, i2);
-          dshape_val((nPts+2*nSide3+k),0) = dLagrange(xlist, xi, j2-1-k) * Lagrange(xlist, eta, j2)     * Lagrange(xlist, mu, i2);
-          dshape_val((nPts+3*nSide3+k),0) = dLagrange(xlist, xi, j)      * Lagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, i2);
-
-          dshape_val((nPts+0*nSide3+k),1) = Lagrange(xlist, xi, j+1+k)  * dLagrange(xlist, eta, j)      * Lagrange(xlist, mu, i2);
-          dshape_val((nPts+1*nSide3+k),1) = Lagrange(xlist, xi, j2)     * dLagrange(xlist, eta, j+1+k)  * Lagrange(xlist, mu, i2);
-          dshape_val((nPts+2*nSide3+k),1) = Lagrange(xlist, xi, j2-1-k) * dLagrange(xlist, eta, j2)     * Lagrange(xlist, mu, i2);
-          dshape_val((nPts+3*nSide3+k),1) = Lagrange(xlist, xi, j)      * dLagrange(xlist, eta, j2-1-k) * Lagrange(xlist, mu, i2);
-
-          dshape_val((nPts+0*nSide3+k),2) = Lagrange(xlist, xi, j+1+k)  * Lagrange(xlist, eta, j)      * dLagrange(xlist, mu, i2);
-          dshape_val((nPts+1*nSide3+k),2) = Lagrange(xlist, xi, j2)     * Lagrange(xlist, eta, j+1+k)  * dLagrange(xlist, mu, i2);
-          dshape_val((nPts+2*nSide3+k),2) = Lagrange(xlist, xi, j2-1-k) * Lagrange(xlist, eta, j2)     * dLagrange(xlist, mu, i2);
-          dshape_val((nPts+3*nSide3+k),2) = Lagrange(xlist, xi, j)      * Lagrange(xlist, eta, j2-1-k) * dLagrange(xlist, mu, i2);
-        }
-        nPts += 4*nSide3;
-      }
-
-      // Center node for even-ordered Lagrange quads (odd value of nSide)
-      if (isOdd2) {
-        dshape_val((nPts),0) = dLagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, i2);
-        dshape_val((nPts),1) = Lagrange(xlist, xi, nSide/2) * dLagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, i2);
-        dshape_val((nPts),2) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2) * dLagrange(xlist, mu, i2);
-        nPts += 1;
-      }
-    }
-
-    // Center node for even-ordered Lagrange quads (odd value of nSide)
-    if (isOdd) {
-      dshape_val((nNodes-1),0) = dLagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, nSide/2);
-      dshape_val((nNodes-1),1) = Lagrange(xlist, xi, nSide/2) * dLagrange(xlist, eta, nSide/2) * Lagrange(xlist, mu, nSide/2);
-      dshape_val((nNodes-1),2) = Lagrange(xlist, xi, nSide/2) * Lagrange(xlist, eta, nSide/2) * dLagrange(xlist, mu, nSide/2);
     }
   }
 

@@ -2214,6 +2214,11 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     for (unsigned int n = 0; n < nVars; n++)
     {
       WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
+//      if (input->rank == 0)
+//        printf("Rank %d: fpt %d: (%f,%f): [%d] %f / %f\n",input->rank,fpt,coord(fpt,0),coord(fpt,1),n,WL[n],WR[n]);
+
+//      if (std::abs(WL[n]-WR[n]) > .1)
+//        printf("%d: fpt %d: %f / %f\n",input->rank,fpt,WL[n],WR[n]);
     }
 
     double eig = 0;

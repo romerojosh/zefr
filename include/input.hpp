@@ -39,6 +39,10 @@ extern double pi;
 
 enum EQN {AdvDiff = 0, EulerNS = 1, Burgers = 2};
 
+enum ELE_TYPE {
+  TRI, QUAD, TET, HEX, PRI, PYR
+};
+
 /*! Enumeration for original, mesh-file-defined face type */
 enum FACE_TYPE {
   HOLE_FACE = -1,
