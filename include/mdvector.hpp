@@ -64,7 +64,7 @@ class mdvector
     mdvector(std::vector<unsigned int> dims, T value = 0, bool pad = false, bool pinned = false);
 
     //! Setup operator
-    void assign(std::vector<unsigned int> dims, T value = 0, bool pad = false, bool pinned = false);
+    void assign(std::vector<unsigned int> dims, T value = T(), bool pad = false, bool pinned = false);
 
     //! Push back operator (for compatibility)
     void push_back(T value); 

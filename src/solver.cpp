@@ -95,10 +95,14 @@ void FRSolver::setup(_mpi_comm comm_in)
   if (input->restart)
   {
     if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
-    if (input->write_type == 0)
+
+    if (input->restart_file.find(".vtu")  != std::string::npos or
+        input->restart_file.find(".pvtu") != std::string::npos)
       restart(input->restart_file);
-    else
+    else if (input->restart_file.find(".pyfr") != std::string::npos)
       restart_pyfr(input->restart_file);
+    else
+      ThrowException("Unknown file type for restart file.");
   }
 
   if (input->filt_on)
@@ -2424,6 +2428,17 @@ void FRSolver::restart_pyfr(const std::string &restart_file)
   //ss << restart_file << "-" << input->restart_iter << ".pyfrs";
   //std::string filename(ss.str());
   std::string filename = restart_file;
+
+  std::string str = filename;
+  size_t ind = str.find("-");
+  str.erase(str.begin(), str.begin()+ind+1);
+  ind = str.find(".pyfrs");
+  str.erase(str.begin()+ind,str.end());
+  std::stringstream ss(str);
+  ss >> restart_iter;
+  current_iter = restart_iter;
+  input->iter = restart_iter;
+  input->initIter = restart_iter;
 
   if (input->rank == 0)
     std::cout << "Reading data from file " << filename << std::endl;

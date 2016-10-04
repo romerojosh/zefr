@@ -107,7 +107,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "LU_pivot", input.LU_pivot, false);
 
   read_param(f, "output_prefix", input.output_prefix);
-  read_param(f, "write_type", input.write_type, (short)0);
+  read_param(f, "write_paraview", input.write_paraview, (short)1);
+  read_param(f, "write_pyfr", input.write_pyfr, (short)0);
   read_param(f, "plot_surfaces", input.plot_surfaces, (short)1);
   read_param(f, "write_freq", input.write_freq);
   read_param(f, "report_freq", input.report_freq);

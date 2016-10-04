@@ -494,7 +494,7 @@ std::vector<int> structured_to_gmsh_quad(unsigned int nNodes)
   auto ijk2gmsh = gmsh2ijk;
 
   for (int i = 0; i < nNodes; i++)
-    ijk2gmsh[gmsh2ijk[i]] = i;
+    ijk2gmsh[i] = findFirst(gmsh2ijk,i);
 
   return ijk2gmsh;
 }
@@ -505,7 +505,7 @@ std::vector<int> structured_to_gmsh_hex(unsigned int nNodes)
   auto ijk2gmsh = gmsh2ijk;
 
   for (int i = 0; i < nNodes; i++)
-    ijk2gmsh[gmsh2ijk[i]] = i;
+    ijk2gmsh[i] = findFirst(gmsh2ijk,i);
 
   return ijk2gmsh;
 }

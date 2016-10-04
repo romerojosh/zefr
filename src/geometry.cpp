@@ -87,23 +87,6 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   return geo;
 }
 
-
-//typedef struct {
-//  std::vector<std::string> obj_names;
-//  std::vector<hid_t> obj_ids;
-//} h5obj_data;
-
-///** Operator function for H5_Iterate */
-//herr_t file_info(hid_t loc_id, const char *name, void *opdata)
-//{
-//  h5obj_data *od = (h5obj_data*)opdata;
-
-//  od->obj_names.push_back(std::string(name));
-//  od->obj_ids.push_back(loc_id);
-
-//  return 0;
-//}
-
 void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 {
   H5File file(input->meshfile, H5F_ACC_RDONLY);
@@ -140,7 +123,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   dset.read(geo.mesh_uuid, dtype, dspace);
   dset.close();
 
-  /// TODO: check that mesh partitioning matches MPI partitioning (nproc == max of '_p[rank]')
   std::regex r_con("(con_p)(\\d+)$");
   int max_rank = 0;
   for (std::string name : dsNames)
@@ -203,15 +185,14 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.coord_nodes.assign({geo.nDims, geo.nEles*geo.nNodesPerEle});
     geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
 
-    auto ndmap = (geo.nDims == 2) ? structured_to_gmsh_quad(geo.nNodesPerEle)
-                                  : structured_to_gmsh_hex(geo.nNodesPerEle);
+    auto ndmap = (geo.nDims == 2) ? gmsh_to_structured_quad(geo.nNodesPerEle)
+                                  : gmsh_to_structured_hex(geo.nNodesPerEle);
 
     int gnd = 0;
     for (int ele = 0; ele < geo.nEles; ele++)
     {
       for (int nd = 0; nd < geo.nNodesPerEle; nd++)
       {
-        //auto ndmap = node_map[QUAD];
         for (int d = 0; d < geo.nDims; d++)
         {
           geo.coord_nodes(gnd, d)   = tmp_nodes(d, ele, ndmap[nd]);
@@ -257,7 +238,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     CompType fcon_t = fcon_type; // NOTE: HDF5 segfaults if you try to re-use a CompType in more than one read
 
-    geo.face_list.resize(2*geo.nIntFaces);
+    geo.face_list.assign({geo.nIntFaces,2});
     DS.read(geo.face_list.data(), fcon_t);
 
     break;
@@ -268,8 +249,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
   for (int f = 0; f < geo.nIntFaces; f++)
   {
-    auto &f1 = geo.face_list[f];
-    auto &f2 = geo.face_list[geo.nIntFaces+f];
+    auto &f1 = geo.face_list(f,0);
+    auto &f2 = geo.face_list(f,1);
     f1.loc_f = geo.pyfr2zefr_face[f1.loc_f];
     f2.loc_f = geo.pyfr2zefr_face[f2.loc_f];
     geo.ele2face(f1.loc_f, f1.ic) = f;
@@ -2084,8 +2065,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   // Begin by looping over all internal / periodic faces
   for (int ff = 0; ff < geo.nIntFaces; ff++)
   {
-    auto faceL = geo.face_list[ff];
-    auto faceR = geo.face_list[ff+geo.nIntFaces];
+    auto faceL = geo.face_list(ff,0);
+    auto faceR = geo.face_list(ff,1);
     int eL = faceL.ic;
     int eR = faceR.ic;
 

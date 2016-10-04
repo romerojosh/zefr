@@ -106,7 +106,7 @@ struct InputStruct
   double iter = 0, initIter = 0, time = 0, rkTime = 0;
 
   /* --- I/O --- */
-  short write_type, plot_surfaces;
+  short write_paraview, write_pyfr, plot_surfaces;
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;

@@ -14,7 +14,7 @@ CUFLAGS = -std=c++11 -arch=sm_20 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
-DEBUG_FLAGS = -g -O1
+DEBUG_FLAGS = -g -O0
 
 RELEASE_FLAGS = -Ofast
 

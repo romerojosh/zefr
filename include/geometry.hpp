@@ -67,7 +67,7 @@ struct GeoStruct
     std::vector<std::vector<int>> boundFaces; //! List of face IDs for each mesh-defined boundary
 
     //! --- New additions for PyFR format (consider re-organizing) ---
-    std::vector<face_con> face_list;
+    mdvector<face_con> face_list;
     std::vector<std::vector<face_con>> bound_faces;
 #ifdef _MPI
     std::map<int,std::vector<face_con>> mpi_conn;
