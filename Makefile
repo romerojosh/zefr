@@ -65,6 +65,7 @@ ifeq ($(strip $(MPI)),YES)
 ifneq ($(MPI_LIB_DIR),)
 	LIBS += -L$(MPI_LIB_DIR) -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
+endif
 
 # Setting HDF5 flags
 ifneq ($(strip $(HDF5)),NO)

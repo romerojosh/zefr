@@ -30,7 +30,9 @@
 #include "hexas.hpp"
 #include "funcs.hpp"
 
+extern "C" {
 #include "cblas.h"
+}
 
 #ifdef _GPU
 #include "elements_kernels.h"

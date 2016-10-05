@@ -27,7 +27,9 @@
 #include <queue>
 #include <vector>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #include "elements.hpp"
 #include "faces.hpp"

@@ -23,7 +23,9 @@
 #include <memory>
 #include <string>
 
-#include <cblas.h>
+extern "C" {
+#include "cblas.h"
+}
 
 #include "elements.hpp"
 #include "faces.hpp"

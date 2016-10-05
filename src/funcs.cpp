@@ -25,7 +25,9 @@
 
 #include <cmath>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #ifdef _OMP
 #include "omp.h"

@@ -20,7 +20,9 @@
 #include <iostream>
 #include <memory>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #include "funcs.hpp"
 #include "input.hpp"

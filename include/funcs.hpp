@@ -22,7 +22,9 @@
 
 #include <cmath>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #include "input.hpp"
 #include "mdvector.hpp"
