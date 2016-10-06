@@ -341,8 +341,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  geo.nMpiFaces = 0;
 #ifdef _MPI
+  geo.nMpiFaces = 0;
   // Read MPI boundaries for this rank
   pcon += "p";
   geo.send_ranks.resize(0);
@@ -382,10 +382,10 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   std::sort(geo.send_ranks.begin(), geo.send_ranks.end());
 #endif
 
-  geo.nFaces = geo.nIntFaces + geo.nBndFaces + geo.nMpiFaces;
-
-  if (input->rank == 0)
-    printf("nIntFaces %d, nBndFaces %d, nMpiFaces %d\n",geo.nIntFaces,geo.nBndFaces,geo.nMpiFaces);
+  geo.nFaces = geo.nIntFaces + geo.nBndFaces;
+#ifdef _MPI
+  geo.nFaces += geo.nMpiFaces;
+#endif
 }
 
 void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
@@ -2028,9 +2028,11 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   }
   geo.nGfpts_bnd = geo.nBndFaces * nFptsPerFace;
 
-  geo.nGfpts_mpi = 0;
+  geo.nGfpts = geo.nGfpts_int + geo.nGfpts_bnd;
+
 #ifdef _MPI
   /* Determine total number of MPI flux points */
+  geo.nGfpts_mpi = 0;
   geo.nMpiFaces = 0;
   for (auto &vec : geo.mpi_conn)
   {
@@ -2039,9 +2041,10 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   geo.nGfpts_mpi = geo.nMpiFaces * nFptsPerFace;
   int rank;
   MPI_Comm_rank(geo.myComm, &rank);
+
+  geo.nGfpts += geo.nGfpts_mpi;
 #endif
 
-  geo.nGfpts = geo.nGfpts_int + geo.nGfpts_bnd + geo.nGfpts_mpi;
 
   geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
   geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
@@ -2152,6 +2155,11 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     }
   }
 
+  /* -- Stuff required for overset grids -- */
+  int eType = (geo.nDims == 2) ? QUAD : HEX;
+  std::set<int> overPts, wallPts;
+  geo.overFaceList.resize(0);
+
   // Counter of total boundary flux points so far
   unsigned int gfpt_bnd = 0;
 
@@ -2171,7 +2179,49 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         gfpt_bnd++;
         gfpt++;
       }
+
+      // Create lists of all wall- and overset-boundary nodes
+      if (input->overset)
+      {
+        int bcType = geo.bnd_ids[bnd];
+        if (bcType == OVERSET)
+        {
+          for (int j = 0; j < geo.nNodesPerFace; j++)
+            overPts.insert(geo.ele2nodes(ct2fv[eType](j, n), ele));
+
+          int ff = geo.ele2face(n, ele);
+          geo.overFaceList.push_back(ff);
+        }
+        else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
+                 bcType == ISOTHERMAL_NOSLIP_G ||
+                 bcType == ISOTHERMAL_NOSLIP_P ||
+                 bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
+                 bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
+                 bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
+                 bcType == ADIABATIC_NOSLIP_MOVING_G ||
+                 bcType == ADIABATIC_NOSLIP_MOVING_P ||
+                 bcType == SYMMETRY_G || bcType == SYMMETRY_P)
+        {
+          for (int j = 0; j < geo.nNodesPerFace; j++)
+            wallPts.insert(geo.ele2nodes(ct2fv[eType](j, n), ele));
+        }
+      }
+
     }
+  }
+
+  if (input->overset)
+  {
+    geo.nWall = wallPts.size();
+    geo.nOver = overPts.size();
+    geo.wallNodes.resize(0);
+    geo.overNodes.resize(0);
+    geo.wallNodes.reserve(geo.nWall);
+    geo.overNodes.reserve(geo.nOver);
+    for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
+    for (auto &pt:overPts) geo.overNodes.push_back(pt);
+    std::sort(geo.overFaceList.begin(),geo.overFaceList.end());
+    geo.overFaceList.erase( std::unique(geo.overFaceList.begin(),geo.overFaceList.end()), geo.overFaceList.end() );
   }
 
 #ifdef _MPI

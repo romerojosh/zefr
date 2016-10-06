@@ -124,7 +124,8 @@ $(TARGET): $(OBJS)
 # Build the Python extension module (shared library) using SWIG
 .PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
-swig: CXXFLAGS += -fPIC
+swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC
+swig: LIBS += -L$(TIOGA_LIB_DIR)/ -ltioga -Wl,-rpath=$(TIOGA_LIB_DIR)
 swig: $(SOBJS)
 	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
 
@@ -132,6 +133,7 @@ swig: $(SOBJS)
 lib: FLAGS += -D_BUILD_LIB
 lib: CXXFLAGS += -fPIC
 lib: CUFLAGS += -Xcompiler -fPIC
+lib: LIBS += -L$(TIOGA_LIB_DIR)/ -ltioga -Wl,-rpath=$(TIOGA_LIB_DIR)
 lib: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
 
@@ -139,7 +141,7 @@ lib: $(SOBJS)
 test: INCS += -I$(SWIGDIR)
 test: lib
 	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib/ -o $(SWIGDIR)/testZefr
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(TIOGA_LIB_DIR) -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) -o $(SWIGDIR)/testZefr
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h

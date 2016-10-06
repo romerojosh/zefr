@@ -1,6 +1,7 @@
 import sys
 import os
-TIOGA_DIR = os.getcwd() + '/TIOGA/'
+#TIOGA_DIR = os.getcwd() + '/TIOGA/'
+TIOGA_DIR = '/home/jcrabill/tioga/src/'
 sys.path.append(TIOGA_DIR)
 
 from mpi4py import MPI
@@ -11,13 +12,16 @@ Comm = MPI.COMM_WORLD
 rank = Comm.Get_rank()
 nproc = Comm.Get_size()
 
-if nproc != 8:
-    GridID = (rank%2) # Simple grid splitting for 2 grids
-else:
-    if rank < 3:
-        GridID = 0
-    else:
-        GridID = 1
+#if nproc != 8:
+#    GridID = (rank%2) # Simple grid splitting for 2 grids
+#else:
+#    if rank < 3:
+#        GridID = 0
+#    else:
+#        GridID = 1
+
+nGrids = 2
+GridID = rank%2
 
 gridComm = Comm.Split(GridID,rank)
 gridRank = gridComm.Get_rank()
@@ -25,7 +29,7 @@ gridSize = gridComm.Get_size()
 
 # Setup the ZEFR solver object; process the grids
 inputFile = "input_sphere"
-zefr.initialize(gridComm,inputFile,2,GridID)
+zefr.initialize(gridComm,inputFile,nGrids,GridID)
 z = zefr.get_zefr_object()
 z.setup_solver()
 
@@ -57,20 +61,27 @@ tg.tioga_set_highorder_callback_(cbs.get_nodes_per_cell,
         cbs.donor_frac, cbs.convert_to_modal)
 
 tg.tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
-        cbs.get_q_index_face, cbs.get_q_spt)
+        cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt)
+
+if zefr.use_gpus():
+    tg.tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,
+            cbs.fringe_data_to_device)
+
+z.set_dataUpdate_callback(tg.tioga_dataupdate_ab)
 
 # Perform overset connectivity / hole blanking
-print "Beginning connectivity..."
-tg.tioga_preprocess_grids_()
-tg.tioga_performconnectivity_()
-print "Connectivity complete."
+if nGrids > 1:
+    print "Beginning connectivity..."
+    tg.tioga_preprocess_grids_()
+    tg.tioga_performconnectivity_()
+    print "Connectivity complete."
 
 # Run the solver
 z.write_solution()
 
 for iter in range(1,inp.n_steps+1):
-    tg.tioga_dataupdate_ab(5,U_spts,U_fpts)
     z.do_step()
+
     if iter%inp.report_freq == 0 or iter==1 or iter==inp.n_steps: # & GridID == 0:
         z.write_residual()
     if iter%inp.write_freq == 0 or iter==0 or iter==inp.n_steps:
