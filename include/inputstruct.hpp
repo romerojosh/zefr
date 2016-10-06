@@ -126,6 +126,7 @@ struct InputStruct
 
   /* --- I/O --- */
   short write_paraview, write_pyfr, plot_surfaces;
+  int restart_iter;
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;

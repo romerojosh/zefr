@@ -2173,19 +2173,26 @@ void FRSolver::compute_SER_dt()
   }
 }
 
-void FRSolver::write_solution_pyfr(const std::string &prefix)
+void FRSolver::write_solution_pyfr(const std::string &_prefix)
 {
 #ifdef _GPU
   eles->U_spts = eles->U_spts_d;
 #endif
 
-  std::stringstream ss;
-  ss << input->output_prefix << "/";
-  ss << prefix << "-" << input->iter << ".pyfrs";
-  std::string filename(ss.str());
+  std::string prefix = _prefix;
 
-  if (input->rank == 0)
+  if (input->overset) prefix += "-G" + std::to_string(input->gridID);
+
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->mg_steps[0];
+
+  std::string filename = input->output_prefix + "/" + prefix + "-" + std::to_string(iter) + ".pyfrs";
+
+  if (input->gridID == 0 && input->rank == 0)
     std::cout << "Writing data to file " << filename << std::endl;
+
+  std::stringstream ss;
 
   // Create a dataspace and datatype for a std::string
   DataSpace dspace(H5S_SCALAR);
