@@ -1004,6 +1004,25 @@ void couple_periodic_bnds(GeoStruct &geo)
           paired = true;
           geo.per_bnd_pairs[face1] = face2;
 
+          /* Add element adjacency information to periodic boundaries */
+          // TODO: Seems to work, needs to be checked
+          //std::sort(face1.begin(),face1.end());
+          int f1 = geo.nodes_to_face[face1];
+          int f2 = geo.nodes_to_face[face2];
+          int ele1 = geo.face2eles(0, f1); 
+          int ele2 = geo.face2eles(0, f2); 
+          for (int n = 0; n < geo.nFacesPerEle; n++)
+          {
+            if (geo.ele2face(n, ele1) == f1)
+              geo.ele_adj(n, ele1) = ele2;
+
+            if (geo.ele2face(n, ele2) == f2)
+            {
+             geo.ele_adj(n, ele2) = ele1;
+             //geo.ele2face(n, ele2) = f1;
+            }
+          }
+
           /* Fill in map coupling nodes */
           for (unsigned int node1 = 0; node1 < nNodesPerFace; node1++)
           {
@@ -1055,6 +1074,17 @@ void couple_periodic_bnds(GeoStruct &geo)
         ThrowException("Unpaired periodic face detected. Check your mesh.");
     }
   }
+
+  /*
+  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  {
+    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+    {
+      std::cout << geo.ele_adj(n, ele) << " ";
+    }
+  }
+  std::cout << std::endl;
+  */
 }
 
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
