@@ -15,7 +15,8 @@ CUFLAGS = -std=c++11 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
-DEBUG_FLAGS = -g -O1
+DEBUG_FLAGS = -g -O0
+
 RELEASE_FLAGS = -Ofast
 
 ifeq ($(strip $(WARNINGS)),YES)
@@ -62,8 +63,14 @@ ifeq ($(strip $(MPI)),YES)
 	INCS += -I$(strip $(METIS_INC_DIR)) -I$(strip $(MPI_INC_DIR))
 	LIBS += -L$(strip $(METIS_LIB_DIR)) -lmetis 
 ifneq ($(MPI_LIB_DIR),)
-  LIBS += -L$(MPI_LIB_DIR) -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
+	LIBS += -L$(MPI_LIB_DIR) -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
+endif
+
+# Setting HDF5 flags
+ifneq ($(strip $(HDF5)),NO)
+	INCS += -I$(strip $(HDF5_INC))/
+	LIBS += -L$(strip $(HDF5_LIB))/ -lhdf5 -lhdf5_cpp
 endif
 
 # Setting Architecture flags

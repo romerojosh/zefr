@@ -24,6 +24,7 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <regex>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -40,6 +41,17 @@
 #include "macros.hpp"
 #include "mdvector.hpp"
 
+#ifndef _NO_HDF5
+#include "H5Cpp.h"
+#ifndef _H5_NO_NAMESPACE
+using namespace H5;
+#endif
+#endif
+
+enum MESH_FORMAT {
+  GMSH, PYFR
+};
+
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in)
 {
   GeoStruct geo;
@@ -50,7 +62,19 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   geo.rank = input->rank;
   geo.gridRank = input->rank;
 
-  load_mesh_data(input, geo);
+  int format;
+
+  if (input->meshfile.find(".msh") != std::string::npos)
+    format = GMSH;
+  else if (input->meshfile.find(".pyfr") != std::string::npos)
+    format = PYFR;
+  else
+    ThrowException("Unrecognized mesh format - expecting *.msh or *.pyfrm.");
+
+  if (format == GMSH)
+    load_mesh_data_gmsh(input, geo);
+  else
+    load_mesh_data_pyfr(input, geo);
 
   if (input->dt_scheme == "MCGS")
   {
@@ -58,10 +82,14 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   }
 
 #ifdef _MPI
-  partition_geometry(input, geo);
+  if (format == GMSH)
+    partition_geometry(input, geo);
 #endif
 
-  setup_global_fpts(input, geo, order);
+  if (format == GMSH)
+    setup_global_fpts(input, geo, order);
+  else
+    setup_global_fpts_pyfr(input, geo, order);
 
   if (input->dt_scheme == "MCGS")
   {
@@ -78,7 +106,289 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   return geo;
 }
 
-void load_mesh_data(InputStruct *input, GeoStruct &geo)
+void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
+{
+  H5File file(input->meshfile, H5F_ACC_RDONLY);
+
+  ssize_t nObjs = file.getNumObjs();
+
+  // ---- Create compound data type for reading face connectivity ----
+
+  hid_t char4_t = H5Tcopy(H5T_C_S1);
+  H5Tset_size(char4_t, 5); // 4 chars + null-termination character
+
+  // NOTE: HDF5 will segfault if you try to use this CompType more than once
+  CompType fcon_type(sizeof(face_con));
+  fcon_type.insertMember("f0", HOFFSET(face_con, c_type), char4_t);
+  fcon_type.insertMember("f1", HOFFSET(face_con, ic), PredType::NATIVE_INT);
+  fcon_type.insertMember("f2", HOFFSET(face_con, loc_f), PredType::NATIVE_SHORT);
+
+  // Load the names of all datasets into a vector so we can more easily
+  // process each one
+
+  std::vector<std::string> dsNames;
+  for (int i  = 0; i < nObjs; i++)
+  {
+    if (file.getObjTypeByIdx(i) == H5G_DATASET)
+    {
+      dsNames.push_back(file.getObjnameByIdx(i));
+    }
+  }
+
+  // Read the mesh ID string
+  DataSet dset = file.openDataSet("mesh_uuid");
+  DataType dtype = dset.getDataType();
+  DataSpace dspace(H5S_SCALAR);
+  dset.read(geo.mesh_uuid, dtype, dspace);
+  dset.close();
+
+  std::regex r_con("(con_p)(\\d+)$");
+  int max_rank = 0;
+  for (std::string name : dsNames)
+  {
+    if (!std::regex_match(name, r_con))
+      continue;
+
+    std::stringstream ss(name.substr(5,name.length()));
+    int _rank; ss >> _rank;
+    max_rank = max(_rank, max_rank);
+  }
+
+  if (max_rank != input->nRanks-1)
+    ThrowException("Wrong number of ranks - MPI size should match # of mesh partitions.");
+
+  // Figure out # of dimensions
+  for (auto &name : dsNames)
+  {
+    std::string qcon = "spt_quad_p" + std::to_string(input->rank);
+    std::string hcon = "spt_hex_p" + std::to_string(input->rank);
+    /// TODO: add support for reading triangles, tets, etc.
+    /// (nEles += _, read into tmp array, duplicate node 2 like with Gmsh)
+    if (name.find(qcon) == std::string::npos &&
+        name.find(hcon) == std::string::npos)
+      continue;
+
+    auto DS = file.openDataSet(name);
+    auto ds = DS.getSpace();
+
+    std::vector<hsize_t> dims(3);
+    hsize_t max_dims = 3;
+    int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+
+    if (ds_rank != 3 or DS.getTypeClass() != H5T_FLOAT)
+      ThrowException("Cannot read element nodes from PyFR mesh file - wrong data type.");
+
+    geo.nDims = dims[2];
+    geo.nEles = dims[1];
+    geo.nNodesPerEle = dims[0];
+    geo.nNodes = geo.nEles * geo.nNodesPerEle;
+    if ((dims[0] == 8 && geo.nDims == 2) || (dims[0] == 20 && geo.nDims == 3))
+    {
+      input->serendipity = 1;
+      geo.shape_order = 2;
+    }
+    else
+    {
+      if (geo.nDims == 2)
+        geo.shape_order = std::sqrt(dims[0]) - 1;
+      else
+        geo.shape_order = std::cbrt(dims[0]) - 1;
+    }
+
+    mdvector<double> tmp_nodes({dims[2],dims[1],dims[0]}); // NOTE: We use col-major, HDF5 uses row-major
+
+    DS.read(tmp_nodes.data(), PredType::NATIVE_DOUBLE);
+
+    /// TODO: change Gmsh reading / geo setup so this isn't needed
+    geo.ele_nodes.assign({geo.nNodesPerEle, geo.nEles, geo.nDims});
+    geo.coord_nodes.assign({geo.nDims, geo.nEles*geo.nNodesPerEle});
+    geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
+
+    auto ndmap = (geo.nDims == 2) ? gmsh_to_structured_quad(geo.nNodesPerEle)
+                                  : gmsh_to_structured_hex(geo.nNodesPerEle);
+
+    int gnd = 0;
+    for (int ele = 0; ele < geo.nEles; ele++)
+    {
+      for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+      {
+        for (int d = 0; d < geo.nDims; d++)
+        {
+          geo.coord_nodes(gnd, d)   = tmp_nodes(d, ele, ndmap[nd]);
+          geo.ele_nodes(nd, ele, d) = tmp_nodes(d, ele, ndmap[nd]);
+        }
+        geo.ele2nodes(nd, ele) = gnd;
+        gnd++;
+      }
+    }
+  }
+
+  if (geo.nDims == 3)
+  {
+    geo.pyfr2zefr_face = {0,4,3,5,2,1};
+    geo.zefr2pyfr_face = {0,5,4,2,1,3};
+  }
+  else if (geo.nDims == 2)
+  {
+    geo.pyfr2zefr_face = {0,1,2,3};
+    geo.zefr2pyfr_face = {0,1,2,3};
+  }
+
+
+  // ----- Read interior element / face connectivity -----
+
+  std::string pcon = "con_p" + std::to_string(input->rank);
+  for (auto &name : dsNames)
+  {
+    if (name != pcon)
+      continue;
+
+    auto DS = file.openDataSet(name);
+    auto ds = DS.getSpace();
+
+    std::vector<hsize_t> dims(2);
+    hsize_t max_dims = 2;
+    int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+
+    if (ds_rank != 2 or DS.getTypeClass() != H5T_COMPOUND)
+      ThrowException("Cannot read internal connectivity from PyFR mesh file - expecting compound data type of rank 2.");
+
+    geo.nIntFaces = dims[1];
+
+    CompType fcon_t = fcon_type; // NOTE: HDF5 segfaults if you try to re-use a CompType in more than one read
+
+    geo.face_list.assign({geo.nIntFaces,2});
+    DS.read(geo.face_list.data(), fcon_t);
+
+    break;
+  }
+
+  // Setup Zefr-style ele-to-face connectivity
+  geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
+  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
+  for (int f = 0; f < geo.nIntFaces; f++)
+  {
+    auto &f1 = geo.face_list(f,0);
+    auto &f2 = geo.face_list(f,1);
+    f1.loc_f = geo.pyfr2zefr_face[f1.loc_f];
+    f2.loc_f = geo.pyfr2zefr_face[f2.loc_f];
+    geo.ele2face(f1.loc_f, f1.ic) = f;
+    geo.ele2face(f2.loc_f, f2.ic) = f;
+  }
+
+  // ----- Read boundary conditions -----
+
+  geo.nBounds = 0;
+  geo.nBndFaces = 0;
+  geo.bound_faces.resize(0);
+  for (auto &name : dsNames)
+  {
+    if (name.substr(0,5) == "bcon_")
+    {
+      std::string bcName = name;
+      size_t ind = bcName.find("_");
+      bcName.erase(bcName.begin(),bcName.begin() + ind+1);
+      ind = bcName.find("_p");
+      bcName.erase(bcName.begin()+ind,bcName.end());
+
+      // Convert to lowercase to make matching easier
+      std::transform(bcName.begin(), bcName.end(), bcName.begin(), ::tolower);
+
+      // First, map mesh boundary to boundary name in input file
+      if (!input->meshBounds.count(bcName))
+      {
+        std::string errS = "Unrecognized mesh boundary: \"" + bcName + "\"\n";
+        errS += "Boundary names in input file must match those in mesh file.";
+        ThrowException(errS.c_str());
+      }
+
+      // Map the mesh boundary name to the input-file-specified Zefr boundary condition
+      std::string bcStr = input->meshBounds[bcName];
+
+      // Next, check that the requested boundary condition exists
+      if (!bcStr2Num.count(bcStr))
+      {
+        std::string errS = "Unrecognized boundary condition: \"" + bcStr + "\"";
+        ThrowException(errS.c_str());
+      }
+
+      geo.bnd_ids.push_back(bcStr2Num[bcStr]);
+      geo.bcNames.push_back(bcName);
+      geo.bcIdMap[geo.nBounds] = geo.nBounds; // Map Gmsh bcid to ZEFR bound index
+      if (geo.bnd_ids.back() == PERIODIC) geo.per_bnd_flag = true; /// TODO: not support?
+
+      auto DS = file.openDataSet(name);
+      auto ds = DS.getSpace();
+
+      int ds_rank = ds.getSimpleExtentNdims();
+      std::vector<hsize_t> dims(ds_rank);
+      ds.getSimpleExtentDims(dims.data());
+
+      if (ds_rank != 1 or DS.getTypeClass() != H5T_COMPOUND)
+        ThrowException("Cannot read boundary condition from PyFR mesh file - expecting compound data type of rank 1.");
+
+      CompType fcon_t = fcon_type; // NOTE: HDF5 segfaults if you try to re-use a CompType in more than one read
+
+      geo.bound_faces.emplace_back();
+      geo.bound_faces[geo.nBounds].resize(dims[0]);
+      DS.read(geo.bound_faces[geo.nBounds].data(), fcon_t);
+
+      for (auto &face : geo.bound_faces[geo.nBounds])
+        face.loc_f = geo.pyfr2zefr_face[face.loc_f];
+
+      geo.nBndFaces += dims[0];
+      geo.nBounds++;
+    }
+  }
+
+  geo.nMpiFaces = 0;
+#ifdef _MPI
+  // Read MPI boundaries for this rank
+  pcon += "p";
+  geo.send_ranks.resize(0);
+  for (auto &name : dsNames)
+  {
+    if (name.substr(0,pcon.length()) != pcon)
+      continue;
+
+    // Get the opposite rank
+    int rank2;
+    std::stringstream ss(name.substr(pcon.length(),name.length()-pcon.length()));
+    ss >> rank2;
+    geo.send_ranks.push_back(rank2);
+
+    // Read the connectivity for this MPI boundary
+    auto DS = file.openDataSet(name);
+    auto ds = DS.getSpace();
+
+    int ds_rank = ds.getSimpleExtentNdims();
+    std::vector<hsize_t> dims(ds_rank);
+    ds.getSimpleExtentDims(dims.data());
+
+    if (ds_rank != 1 or DS.getTypeClass() != H5T_COMPOUND)
+      ThrowException("Cannot read MPI connectivity from PyFR mesh file - expecting compound data type of rank 1.");
+
+    CompType fcon_t = fcon_type;
+
+    geo.mpi_conn[rank2].resize(dims[0]);
+    DS.read(geo.mpi_conn[rank2].data(), fcon_t);
+
+    for (auto &face : geo.mpi_conn[rank2])
+      face.loc_f = geo.pyfr2zefr_face[face.loc_f];
+
+    geo.nMpiFaces += dims[0];
+  }
+
+  std::sort(geo.send_ranks.begin(), geo.send_ranks.end());
+#endif
+
+  geo.nFaces = geo.nIntFaces + geo.nBndFaces + geo.nMpiFaces;
+
+  if (input->rank == 0)
+    printf("nIntFaces %d, nBndFaces %d, nMpiFaces %d\n",geo.nIntFaces,geo.nBndFaces,geo.nMpiFaces);
+}
+
+void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
 {
   std::ifstream f(input->meshfile);
 
@@ -553,7 +863,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
               min_pos = i;
           }
 
-          std::cout << ele << " " << min_pos << std::endl;
+          //std::cout << ele << " " << min_pos << std::endl;
 
           /* Set minimum node to "top" collapsed node */
           geo.ele2nodes(4, ele) = min_vert; geo.ele2nodes(5, ele) = min_vert;
@@ -901,6 +1211,13 @@ void set_ele_adjacency(GeoStruct &geo)
         face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
       }
 
+      /* Reduce to only unique nodes to deal with triangular collapsed face */
+      std::set<unsigned int> nodes;
+      for (auto node : face)
+        nodes.insert(node);
+
+      face.assign(nodes.begin(), nodes.end());
+
       std::sort(face.begin(), face.end());
 
       if (face2eles.count(face))
@@ -1100,7 +1417,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     unsigned int nVars = 1;
     if (input->equation == EulerNS)
       nVars = geo.nDims + 2;
-
 
     geo.nFptsPerFace = nFptsPerFace;
 
@@ -1708,6 +2024,348 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   {
     ThrowException("nDims is not valid!");
   }
+}
+
+void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int order)
+{
+  if (input->rank == 0)
+    std::cout << "Setting up global flux point connectivity..." << std::endl;
+
+  /* Form set of unique faces */
+  if (geo.nDims != 2 && geo.nDims != 3)
+    ThrowException("Improper value for nDims - should be 2 or 3.");
+
+  unsigned int nFptsPerFace = (order + 1);
+  unsigned int nFpts1D = (order + 1);
+  if (geo.nDims == 3)
+    nFptsPerFace *= (order + 1);
+
+  unsigned int nVars = 1;
+  if (input->equation == EulerNS)
+    nVars = geo.nDims + 2;
+
+  geo.nFptsPerFace = nFptsPerFace;
+  geo.nNodesPerFace = (geo.nDims == 2) ? 2 : 4;
+
+  /* Determine number of interior global flux points */
+  geo.nGfpts_int = geo.nIntFaces * nFptsPerFace;
+
+  /* Determine total number of boundary faces and flux points */
+  geo.nBndFaces = 0;
+  for (auto &vec : geo.bound_faces)
+  {
+    geo.nBndFaces += vec.size();
+  }
+  geo.nGfpts_bnd = geo.nBndFaces * nFptsPerFace;
+
+  geo.nGfpts_mpi = 0;
+#ifdef _MPI
+  /* Determine total number of MPI flux points */
+  geo.nMpiFaces = 0;
+  for (auto &vec : geo.mpi_conn)
+  {
+    geo.nMpiFaces += vec.second.size();
+  }
+  geo.nGfpts_mpi = geo.nMpiFaces * nFptsPerFace;
+  int rank;
+  MPI_Comm_rank(geo.myComm, &rank);
+#endif
+
+  geo.nGfpts = geo.nGfpts_int + geo.nGfpts_bnd + geo.nGfpts_mpi;
+
+  geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+  geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+
+  // --- Handy map to grab the nodes making up each face ---
+  std::map<int,mdvector<int>> ct2fv;
+  ct2fv[HEX].assign({6, 4});
+  ct2fv[QUAD].assign({4, 2});
+
+  // Ordering: Bottom, Top, Left, Right, Front, Back
+  std::vector<int> tmp = {0,1,2,3, 5,4,7,6, 0,3,7,4, 2,1,5,6, 1,0,4,5, 3,2,6,7};
+  for (int i = 0; i < 6; i++)
+    for (int j = 0; j < 4; j++)
+      ct2fv[HEX](i,j) = tmp[i*4+j];
+
+  for (int i = 0; i < 4; i++)
+  {
+    ct2fv[QUAD](i,0) = i;
+    ct2fv[QUAD](i,1) = (i==3) ? 0 : i+1;
+  }
+
+  int etype = (geo.nDims == 2) ? QUAD : HEX;
+
+  /* Based on rotation, couple flux points */
+  mdvector<int> ROT({5, nFptsPerFace});
+  for (uint i = 0; i < nFpts1D; i++)
+  {
+    if (geo.nDims == 3)
+    {
+      for (uint j = 0; j < nFpts1D; j++)
+      {
+        ROT(0, i + j*nFpts1D) = i*nFpts1D + j;
+        ROT(1, i + j*nFpts1D) = nFpts1D - i + j*nFpts1D - 1;
+        ROT(2, i + j*nFpts1D) = nFptsPerFace - i * nFpts1D - j - 1;
+        ROT(3, i + j*nFpts1D) = nFptsPerFace - (j+1) * nFpts1D + i;
+      }
+    }
+    else
+    {
+      ROT(4, i) = nFptsPerFace - i - 1;
+    }
+  }
+
+  // Counter for total global flux points so far
+  unsigned int gfpt = 0;
+
+  // Begin by looping over all internal / periodic faces
+  for (int ff = 0; ff < geo.nIntFaces; ff++)
+  {
+    auto faceL = geo.face_list(ff,0);
+    auto faceR = geo.face_list(ff,1);
+    int eL = faceL.ic;
+    int eR = faceR.ic;
+
+    // Determine relative rotation using ordered faces-vertex lists
+    unsigned int rot = 0;
+    if (geo.nDims == 3)
+    {
+      point fc1, fc2;
+      for (int n = 0; n < geo.nNodesPerFace; n++)
+      {
+        int nd1 = ct2fv[HEX](faceL.loc_f, n);
+        int nd2 = ct2fv[HEX](faceR.loc_f, n);
+        for (int d = 0; d < geo.nDims; d++)
+        {
+          fc1[d] += geo.ele_nodes(nd1, eL, d) / geo.nNodesPerFace;
+          fc2[d] += geo.ele_nodes(nd2, eR, d) / geo.nNodesPerFace;
+        }
+      }
+
+      Vec3 dx = fc2 - fc1; // To account for displacement of periodic faces
+
+      // Find relative rotation ('rot tag')
+      int nd1 = ct2fv[HEX](faceL.loc_f, 0);
+      int nd2 = ct2fv[HEX](faceR.loc_f, 0);
+      point pt1, pt2;
+      for (int d = 0; d < geo.nDims; d++)
+      {
+        pt1[d] = geo.ele_nodes(nd1, eL, d);
+        pt2[d] = geo.ele_nodes(nd2, eR, d) - dx[d];
+      }
+
+      while (point(pt2-pt1).norm() > 1e-9 && rot < 4)
+      {
+        rot++;
+
+        nd2 = ct2fv[HEX](faceR.loc_f, rot);
+        for (int d = 0; d < geo.nDims; d++)
+          pt2[d] = geo.ele_nodes(nd2, eR, d) - dx[d];
+      }
+
+      if (rot == 4)
+        ThrowException("Error determining relative rotation of interior faces.");
+    }
+    else
+    {
+      rot = 4;
+    }
+
+    // Setup global flux point IDs within left/right eles
+    for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+    {
+      geo.fpt2gfpt(faceL.loc_f*nFptsPerFace + fpt, eL) = gfpt;
+      geo.fpt2gfpt(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = gfpt;
+      geo.fpt2gfpt_slot(faceL.loc_f*nFptsPerFace + fpt, eL) = 0;
+      geo.fpt2gfpt_slot(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = 1;
+      gfpt++;
+    }
+  }
+
+  // Counter of total boundary flux points so far
+  unsigned int gfpt_bnd = 0;
+
+  // Setup boundary-face flux points
+  geo.gfpt2bnd.assign({geo.nGfpts_bnd});
+  for (uint bnd = 0; bnd < geo.nBounds; bnd++)
+  {
+    for (auto &face : geo.bound_faces[bnd])
+    {
+      int ele = face.ic;
+      int n = face.loc_f;
+      for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+      {
+        geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
+        geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+        geo.gfpt2bnd(gfpt_bnd) = geo.bnd_ids[bnd];
+        gfpt_bnd++;
+        gfpt++;
+      }
+    }
+  }
+
+#ifdef _MPI
+  unsigned int mpiFace = geo.nIntFaces + geo.nBndFaces;
+  unsigned int mface = 0;
+  geo.faceID_R.resize(geo.nMpiFaces);
+  //geo.mpiRotR.resize(geo.nMpiFaces); // NOTE: only required for blocked-style [per-face] MPI communication pattern
+  for (auto &p2 : geo.send_ranks)
+  {
+    int nFaces = geo.mpi_conn[p2].size();
+
+    mdvector<double> face_pt({geo.nDims, 2*nFaces});
+    std::vector<int> rot_tag(nFaces, 0);
+
+    if (rank < p2)
+    {
+      if (geo.nDims == 3)
+      {
+        // Send face node '0' to 'right' rank
+        for (int ff = 0; ff < nFaces; ff++)
+        {
+          auto face = geo.mpi_conn[p2][ff];
+          int ic = face.ic;
+          int f = face.loc_f;
+          // 'First' node of face
+          for (int d = 0; d < geo.nDims; d++)
+          {
+            face_pt(d,ff) = geo.ele_nodes(ct2fv[etype](f,0),ic,d);
+            face_pt(d,ff+nFaces) = 0.;
+          }
+
+          // Centroid of face
+          for (int n = 0; n < geo.nNodesPerFace; n++)
+            for (int d = 0; d < geo.nDims; d++)
+              face_pt(d,ff+nFaces) += geo.ele_nodes(ct2fv[etype](f,n),ic,d) / geo.nNodesPerFace;
+        }
+
+        MPI_Send(face_pt.data(), 2*nFaces*geo.nDims, MPI_DOUBLE, p2, 0, geo.myComm);
+      }
+
+      // Setup MPI flux points
+      for (int ff = 0; ff < nFaces; ff++)
+      {
+        auto face = geo.mpi_conn[p2][ff];
+        int ele = face.ic;
+        int n = face.loc_f;
+        for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+        {
+          geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
+          geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+          geo.fpt_buffer_map[p2].push_back(gfpt);
+          gfpt++;
+        }
+
+        MPI_Status status;
+        MPI_Send(&mpiFace, 1, MPI_INT, p2, 0, geo.myComm);
+        MPI_Recv(&geo.faceID_R[mface], 1, MPI_INT, p2, 0, geo.myComm, &status);
+        //MPI_Recv(&geo.mpiRotR[mpiff], 1, MPI_INT, recvRank, 0, geo.myComm, &status);
+        geo.procR.push_back(p2);
+        mpiFace++;
+        mface++;
+      }
+    }
+    else // 'right' side of MPI boundary
+    {
+      if (geo.nDims == 3)
+      {
+        // Receive face nodes from 'left' rank
+        MPI_Status status;
+        MPI_Recv(face_pt.data(), 2*nFaces*geo.nDims, MPI_DOUBLE, p2, 0, geo.myComm, &status);
+
+        // Determine rotation tag for each face
+        for (int ff = 0; ff < nFaces; ff++)
+        {
+          auto face = geo.mpi_conn[p2][ff];
+          int ic = face.ic;
+
+          point fc1 = point(&face_pt(0, ff+nFaces));
+          point fc2;
+          for (int n = 0; n < geo.nNodesPerFace; n++)
+          {
+            int nd = ct2fv[HEX](face.loc_f, n);
+            for (int d = 0; d < geo.nDims; d++)
+              fc2[d] += geo.ele_nodes(nd, ic, d) / geo.nNodesPerFace;
+          }
+
+          Vec3 dx = fc2 - fc1; // To account for possible displacement of periodic boundaries
+
+          int nd = ct2fv[HEX](face.loc_f, 0);
+
+          point pt1 = point(&face_pt(0, ff));
+          point pt2;
+          for (int d = 0; d < geo.nDims; d++)
+            pt2[d] = geo.ele_nodes(nd, ic, d) - dx[d];
+
+          while (point(pt2-pt1).norm() > 1e-9)
+          {
+            rot_tag[ff]++;
+
+            nd = ct2fv[HEX](face.loc_f, rot_tag[ff]);
+            for (int d = 0; d < geo.nDims; d++)
+              pt2[d] = geo.ele_nodes(nd, ic, d) - dx[d];
+          }
+        }
+      }
+      else
+      {
+        rot_tag.assign(nFaces,4);
+      }
+
+      // Setup MPI flux points
+      std::vector<int> fpts(nFptsPerFace);
+      for (int ff = 0; ff < nFaces; ff++)
+      {
+        auto face = geo.mpi_conn[p2][ff];
+        int ele = face.ic;
+        int n = face.loc_f;
+        for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+        {
+          geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
+          geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+          fpts[fpt] = gfpt;
+          gfpt++;
+        }
+
+        for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+        {
+          geo.fpt_buffer_map[p2].push_back(fpts[ROT(rot_tag[ff],fpt)]);
+        }
+
+        MPI_Status status;
+        MPI_Recv(&geo.faceID_R[mface], 1, MPI_INT, p2, 0, geo.myComm, &status);
+        MPI_Send(&mpiFace, 1, MPI_INT, p2, 0, geo.myComm);
+        //MPI_Send(&rot_tag[mface], 1, MPI_INT, recvRank, 0, geo.myComm);
+        geo.procR.push_back(p2);
+        mpiFace++;
+        mface++;
+      }
+    }
+  }
+
+  MPI_Barrier(geo.myComm);
+
+  /* Create MPI Derived type for sends/receives */
+  for (auto &entry : geo.fpt_buffer_map)
+  {
+    unsigned int sendRank = entry.first;
+    auto fpts = entry.second;
+    std::vector<int> block_len(nVars * fpts.size(), 1);
+    std::vector<int> disp(nVars * fpts.size(), 0);
+
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+        disp[i + var * fpts.size()] = fpts(i) + var * geo.nGfpts;
+    }
+
+    MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]);
+
+    MPI_Type_commit(&geo.mpi_types[sendRank]);
+  }
+
+  MPI_Barrier(geo.myComm);
+#endif
 }
 
 void setup_element_colors(InputStruct *input, GeoStruct &geo)

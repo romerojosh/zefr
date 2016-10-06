@@ -28,8 +28,11 @@
 #include "points.hpp"
 #include "polynomials.hpp"
 #include "quads.hpp"
+#include "funcs.hpp"
 
+extern "C" {
 #include "cblas.h"
+}
 
 #ifdef _GPU
 #include "elements_kernels.h"
@@ -53,6 +56,10 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   else
     nNodes = 4*(shape_order); // Serendipity Elements
   
+  geo->nFacesPerEle = 4;
+  geo->nNodesPerFace = 2;
+  geo->nCornerNodes = 4;
+
   /* If order argument is not provided, use order in input file */
   if (order == -1)
   {
@@ -533,47 +540,8 @@ mdvector<double> Quads::calc_shape(unsigned int shape_order,
   double xi = loc[0]; 
   double eta = loc[1];
 
-  /* Lagrange Elements (or linear serendipity) */
-  if (!input->serendipity or (shape_order == 1 and input->serendipity))
-  {
-    int nNodes1D = shape_order + 1;
-    auto loc_nodes = Shape_pts(shape_order);
-
-    int nLevels = nNodes1D / 2;
-
-    /* Set shape values via recursive strategy (from Flurry) */
-    int node = 0;
-    for (int i = 0; i < nLevels; i++)
-    {
-      /* Corner Nodes */
-      int i2 = (nNodes1D - 1) - i;
-      shape_val(node) = Lagrange(loc_nodes, i, xi) * Lagrange(loc_nodes, i, eta);
-      shape_val(node + 1) = Lagrange(loc_nodes, i2, xi) * Lagrange(loc_nodes, i, eta);
-      shape_val(node + 2) = Lagrange(loc_nodes, i2, xi) * Lagrange(loc_nodes, i2, eta);
-      shape_val(node + 3) = Lagrange(loc_nodes, i, xi) * Lagrange(loc_nodes, i2, eta);
-
-      node += 4;
-
-      int nEdgeNodes = nNodes1D - 2 * (i + 1);
-      for (int j = 0; j < nEdgeNodes; j++)
-      {
-        shape_val(node + j) = Lagrange(loc_nodes, i + 1 + j, xi) * Lagrange(loc_nodes, i, eta);
-        shape_val(node + nEdgeNodes + j) = Lagrange(loc_nodes, i2, xi) * Lagrange(loc_nodes, i + 1 + j, eta);
-        shape_val(node + 2*nEdgeNodes + j) = Lagrange(loc_nodes, i2 - 1 - j, xi) * Lagrange(loc_nodes, i2, eta);
-        shape_val(node + 3*nEdgeNodes + j) = Lagrange(loc_nodes, i, xi) * Lagrange(loc_nodes, i2 - 1 - j, eta);
-      }
-
-      node += 4 * nEdgeNodes;
-    }
-    /* Add center node in odd case */
-    if (nNodes1D % 2 != 0)
-    {
-      shape_val(nNodes - 1) = Lagrange(loc_nodes, nNodes1D/2, xi) * Lagrange(loc_nodes, nNodes1D/2, eta);
-    }
-  }
-
   /* 8-node Serendipity Element */
-  else if (shape_order == 2 and input->serendipity)
+  if (shape_order == 2 and input->serendipity)
   {
     shape_val(0) = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi);
     shape_val(1) = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi);
@@ -584,11 +552,35 @@ mdvector<double> Quads::calc_shape(unsigned int shape_order,
     shape_val(6) = 0.5*(1.-xi)*(1.+xi)*(1.+eta);
     shape_val(7) = 0.5*(1.-xi)*(1.+eta)*(1.-eta);
   }
-    
-  
+
+  /* Lagrange Elements */
   else
   {
-    ThrowException("Serendipty element support up to quadratic elements only!");
+    int nSide = sqrt(nNodes);
+
+    if (nSide*nSide != nNodes)
+    {
+      std::cout << "nNodes = " << nNodes << std::endl;
+      ThrowException("For Lagrange quad of order N, must have (N+1)^2 shape points.");
+    }
+
+    std::vector<double> xlist(nSide);
+    double dxi = 2./(nSide-1);
+
+    for (int i=0; i<nSide; i++)
+      xlist[i] = -1. + i*dxi;
+
+    auto ijk2gmsh = structured_to_gmsh_quad(nNodes);
+
+    int pt = 0;
+    for (int j = 0; j < nSide; j++)
+    {
+      for (int i = 0; i < nSide; i++)
+      {
+        shape_val(ijk2gmsh[pt]) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, j);
+        pt++;
+      }
+    }
   }
 
   return shape_val;
@@ -601,57 +593,8 @@ mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
   double xi = loc[0];
   double eta = loc[1];
 
-  /* Lagrange Elements (or linear serendipity) */
-  if (!input->serendipity or (shape_order == 1 and input->serendipity))
-  {
-    int nNodes1D = shape_order + 1;
-    auto loc_nodes = Shape_pts(shape_order);
-
-    int nLevels = nNodes1D / 2;
-
-    /* Set shape values via recursive strategy (from Flurry) */
-    int node = 0;
-    for (int i = 0; i < nLevels; i++)
-    {
-      /* Corner Nodes */
-      int i2 = (nNodes1D - 1) - i;
-      dshape_val(node, 0) = Lagrange_d1(loc_nodes, i, xi) * Lagrange(loc_nodes, i, eta);
-      dshape_val(node + 1, 0) = Lagrange_d1(loc_nodes, i2, xi) * Lagrange(loc_nodes, i, eta);
-      dshape_val(node + 2, 0) = Lagrange_d1(loc_nodes, i2, xi) * Lagrange(loc_nodes, i2, eta);
-      dshape_val(node + 3, 0) = Lagrange_d1(loc_nodes, i, xi) * Lagrange(loc_nodes, i2, eta);
-
-      dshape_val(node, 1) = Lagrange(loc_nodes, i, xi) * Lagrange_d1(loc_nodes, i, eta);
-      dshape_val(node + 1, 1) = Lagrange(loc_nodes, i2, xi) * Lagrange_d1(loc_nodes, i, eta);
-      dshape_val(node + 2, 1) = Lagrange(loc_nodes, i2, xi) * Lagrange_d1(loc_nodes, i2, eta);
-      dshape_val(node + 3, 1) = Lagrange(loc_nodes, i, xi) * Lagrange_d1(loc_nodes, i2, eta);
-      node += 4;
-
-      int nEdgeNodes = nNodes1D - 2 * (i + 1);
-      for (int j = 0; j < nEdgeNodes; j++)
-      {
-        dshape_val(node + j, 0) = Lagrange_d1(loc_nodes, i + 1 + j, xi) * Lagrange(loc_nodes, i, eta);
-        dshape_val(node + nEdgeNodes + j, 0) = Lagrange_d1(loc_nodes, i2, xi) * Lagrange(loc_nodes, i + 1 + j, eta);
-        dshape_val(node + 2*nEdgeNodes + j, 0) = Lagrange_d1(loc_nodes, i2 - 1 - j, xi) * Lagrange(loc_nodes, i2, eta);
-        dshape_val(node + 3*nEdgeNodes + j, 0) = Lagrange_d1(loc_nodes, i, xi) * Lagrange(loc_nodes, i2 - 1 - j, eta);
-
-        dshape_val(node + j, 1) = Lagrange(loc_nodes, i + 1 + j, xi) * Lagrange_d1(loc_nodes, i, eta);
-        dshape_val(node + nEdgeNodes + j, 1) = Lagrange(loc_nodes, i2, xi) * Lagrange_d1(loc_nodes, i + 1 + j, eta);
-        dshape_val(node + 2*nEdgeNodes + j, 1) = Lagrange(loc_nodes, i2 - 1 - j, xi) * Lagrange_d1(loc_nodes, i2, eta);
-        dshape_val(node + 3*nEdgeNodes + j, 1) = Lagrange(loc_nodes, i, xi) * Lagrange_d1(loc_nodes, i2 - 1 - j, eta);
-      }
-
-      node += 4 * nEdgeNodes;
-    }
-    /* Add center node in odd case */
-    if (nNodes1D % 2 != 0)
-    {
-      dshape_val(nNodes - 1, 0) = Lagrange_d1(loc_nodes, nNodes1D/2, xi) * Lagrange(loc_nodes, nNodes1D/2, eta);
-      dshape_val(nNodes - 1, 1) = Lagrange(loc_nodes, nNodes1D/2, xi) * Lagrange_d1(loc_nodes, nNodes1D/2, eta);
-    }
-  }
-
   /* 8-node Serendipity Element */
-  else if (shape_order == 2 and input->serendipity)
+  if (shape_order == 2 and input->serendipity)
   {
       dshape_val(0, 0) = -0.25*(-1.+eta)*(2.*xi+eta);
       dshape_val(1, 0) = 0.25*(-1.+eta)*(eta - 2.*xi);
@@ -672,6 +615,36 @@ mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
       dshape_val(7, 1) = eta*(-1.+xi);
   }
 
+  /* Lagrange Elements */
+  else
+  {
+    int nSide = sqrt(nNodes);
+
+    if (nSide*nSide != nNodes)
+    {
+      std::cout << "nNodes = " << nNodes << std::endl;
+      ThrowException("For Lagrange quad of order N, must have (N+1)^2 shape points.");
+    }
+
+    std::vector<double> xlist(nSide);
+    double dxi = 2./(nSide-1);
+
+    for (int i=0; i<nSide; i++)
+      xlist[i] = -1. + i*dxi;
+
+    auto ijk2gmsh = structured_to_gmsh_quad(nNodes);
+
+    int pt = 0;
+    for (int j = 0; j < nSide; j++)
+    {
+      for (int i = 0; i < nSide; i++)
+      {
+        dshape_val(ijk2gmsh[pt], 0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j);
+        dshape_val(ijk2gmsh[pt], 1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j);
+        pt++;
+      }
+    }
+  }
 
   return dshape_val;
 }

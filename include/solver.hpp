@@ -90,6 +90,7 @@ class FRSolver
 
     void initialize_U();
     void restart(std::string restart_file);
+    void restart_pyfr(const std::string &restart_file);
     void setup_update();
     void setup_output();
 
@@ -123,6 +124,7 @@ class FRSolver
     void update(const mdvector_gpu<double> &source = mdvector_gpu<double>());
 #endif
     void write_solution(const std::string &_prefix);
+    void write_solution_pyfr(const std::string &_prefix);
     void write_surfaces(const std::string &_prefix);
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);

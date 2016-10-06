@@ -1,10 +1,11 @@
 # Geometry:
 nDims    2
-meshfile naca_32x32_b2.msh
+#meshfile naca_32x32_b2.msh
+meshfile naca_32x32_b2.pyfrm
 
 # Boundary Conditions
 mesh_bound  char  char
-mesh_bound  wall_slip_p  wall_slip_p
+mesh_bound  wall_slip  wall_slip_p
 mesh_bound  fluid  fluid
 
 # Solver:
@@ -16,7 +17,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 100000
 res_tol 1e-11
-dt_scheme MCGS      (Euler, RK44, RK54, MCGS)
+dt_scheme RK44      (Euler, RK44, RK54, MCGS)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
 CFL	  1.5

@@ -42,6 +42,14 @@
 #include "mpi.h"
 #endif
 
+//! Struct for reading/storing face connectivity from PyFR mesh format
+typedef struct {
+  char c_type[5];
+  int ic;
+  short loc_f;
+  char tag; // Optional tag
+} face_con;
+
 struct GeoStruct
 {
     unsigned int nEles = 0; 
@@ -61,7 +69,7 @@ struct GeoStruct
     std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
     mdvector<unsigned int> ppt_connect;
     mdvector<int> fpt2gfpt, fpt2gfpt_slot;
-    mdvector<double> coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
+    mdvector<double> ele_nodes, coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
     mdvector<unsigned int> face_nodes;
     mdvector<int> ele_adj;
 
@@ -76,6 +84,17 @@ struct GeoStruct
     std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
     std::map<std::vector<unsigned int>, unsigned int> face2bnd;
     std::vector<std::vector<int>> boundFaces; //! List of face IDs for each mesh-defined boundary
+
+    //! --- New additions for PyFR format (consider re-organizing) ---
+    mdvector<face_con> face_list;
+    std::vector<std::vector<face_con>> bound_faces;
+#ifdef _MPI
+    std::map<int,std::vector<face_con>> mpi_conn;
+    std::vector<int> send_ranks;
+#endif
+    std::string mesh_uuid, config, stats;
+
+    std::vector<int> pyfr2zefr_face, zefr2pyfr_face;
 
     _mpi_comm myComm;
 #ifdef _MPI
@@ -139,7 +158,8 @@ struct GeoStruct
 };
 
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in);
-void load_mesh_data(InputStruct *input, GeoStruct &geo);
+void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo);
+void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo);
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input);
 void read_node_coords(std::ifstream &f, GeoStruct &geo);
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input);
@@ -148,6 +168,7 @@ void set_face_nodes(GeoStruct &geo);
 void set_ele_adjacency(GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order);
+void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int order);
 void pair_periodic_gfpts(GeoStruct &geo);
 void setup_element_colors(InputStruct *input, GeoStruct &geo);
 void shuffle_data_by_color(GeoStruct &geo);

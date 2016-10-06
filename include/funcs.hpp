@@ -22,7 +22,9 @@
 
 #include <cmath>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #include "input.hpp"
 #include "mdvector.hpp"
@@ -116,5 +118,13 @@ int findFirst(const std::vector<T>& vec, T val)
 
   return -1;
 }
+
+//! Map a structured ijk-type index to the equivalent Gmsh node index
+std::vector<int> structured_to_gmsh_quad(unsigned int nNodes);
+std::vector<int> structured_to_gmsh_hex(unsigned int nNodes);
+
+//! Map a Gmsh node index to the equivalent structured ijk-type index
+std::vector<int> gmsh_to_structured_quad(unsigned int nNodes);
+std::vector<int> gmsh_to_structured_hex(unsigned int nNodes);
 
 #endif /* funcs_hpp */

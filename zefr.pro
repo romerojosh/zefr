@@ -4,8 +4,8 @@ CONFIG -= qt
 
 DEFINES = _MPI
 DEFINES += _CPU
-DEFINES += _GPU
-DEFINES += _BUILD_LIB
+#DEFINES += _GPU
+#DEFINES += _BUILD_LIB
 
 QMAKE_CXXFLAGS += -std=c++11
 
@@ -53,7 +53,8 @@ HEADERS += \
     include/solver.hpp \
     include/zefr.hpp \
     include/inputstruct.hpp \
-    include/zefr_interface.hpp
+    include/zefr_interface.hpp \
+    include/inputstruct.hpp
 
 DISTFILES += \
     swig_bin/zefr.i \
