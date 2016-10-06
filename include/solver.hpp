@@ -147,7 +147,9 @@ class FRSolver
     void compute_SER_dt();
     void write_color();
 
-    void (*overset_interp)(int nVars, double* U_spts, double* U_fpts, int gradFlag);
+#ifdef _BUILD_LIB
+    Zefr *ZEFR;
+#endif
 
     void move(double time);
 };

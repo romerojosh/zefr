@@ -23,10 +23,10 @@ int main(int argc, char *argv[])
   if (rank > 0) gridID = 1;
 
   /* 2-sphere test case */
-  nGrids = 3;
-  if (rank == 0) gridID = 0;
-  if (rank == 1) gridID = 1;
-  if (rank > 1) gridID = 2;
+//  nGrids = 3;
+//  if (rank == 0) gridID = 0;
+//  if (rank == 1) gridID = 1;
+//  if (rank > 1) gridID = 2;
 
   /* 2-Grid TSTO test case */
 //  nGrids = 2;
@@ -105,8 +105,8 @@ int main(int argc, char *argv[])
 
   /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
    * accomodate both multi-stage RK time stepping + viscous cases with gradient
-   * data interpolation */
-  z->set_dataUpdate_callback(tioga_dataupdate_ab);
+   * data interpolation.  Likewise with moving grids and connectivity update */
+  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_, tioga_dataupdate_ab);
 
   if (nGrids > 1)
   {

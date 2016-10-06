@@ -285,6 +285,7 @@ void Zefr::setup_solver(void)
 {
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   solver = std::make_shared<FRSolver>(&input);
+  solver->ZEFR = this;
   solver->setup(myComm);
 
   if (input.p_multi)
@@ -531,7 +532,15 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag)
 
 void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, double *q_fpts, int gradFlag))
 {
-  solver->overset_interp = dataUpdate;
+  overset_interp = dataUpdate;
+}
+
+void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
+                         void (*dataUpdate)(int, double*, double*, int))
+{
+  tg_preprocess = preprocess;
+  tg_process_connectivity = connect;
+  overset_interp = dataUpdate;
 }
 
 #endif /* _BUILD_LIB */

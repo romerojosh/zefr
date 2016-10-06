@@ -4,8 +4,8 @@ CONFIG -= qt
 
 DEFINES = _MPI
 DEFINES += _CPU
-#DEFINES += _GPU
-#DEFINES += _BUILD_LIB
+DEFINES += _GPU
+DEFINES += _BUILD_LIB
 
 QMAKE_CXXFLAGS += -std=c++11
 
@@ -29,6 +29,7 @@ SOURCES += \
     src/faces_kernels.cu \
     src/funcs_kernels.cu \
     src/solver_kernels.cu \
+    src/filter_kernels.cu \
     src/zefr_interface.cpp \
     swig_bin/testZefr.cpp \
     src/filter.cpp
@@ -54,12 +55,12 @@ HEADERS += \
     include/zefr.hpp \
     include/inputstruct.hpp \
     include/zefr_interface.hpp \
-    include/inputstruct.hpp
+    include/inputstruct.hpp \
+    include/filter_kernels.h
 
 DISTFILES += \
     swig_bin/zefr.i \
     swig_bin/test.py \
     swig_bin/Makefile \
-    Makefile \
-    src/filter_kernels.cu
+    Makefile
 
