@@ -21,7 +21,7 @@ nproc = Comm.Get_size()
 #        GridID = 1
 
 nGrids = 2
-GridID = rank%2
+GridID = rank%nGrids
 
 gridComm = Comm.Split(GridID,rank)
 gridRank = gridComm.Get_rank()
@@ -64,10 +64,12 @@ tg.tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
         cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt)
 
 if zefr.use_gpus():
+    print "Setting GPU callback functions"
     tg.tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,
             cbs.fringe_data_to_device)
 
-z.set_dataUpdate_callback(tg.tioga_dataupdate_ab)
+z.set_tioga_callbacks(tg.tioga_preprocess_grids_, 
+        tg.tioga_performconnectivity_, tg.tioga_dataupdate_ab)
 
 # Perform overset connectivity / hole blanking
 if nGrids > 1:
@@ -76,8 +78,13 @@ if nGrids > 1:
     tg.tioga_performconnectivity_()
     print "Connectivity complete."
 
+if zefr.use_gpus():
+    z.update_iblank_gpu()
+
 # Run the solver
 z.write_solution()
+
+Comm.Barrier
 
 for iter in range(1,inp.n_steps+1):
     z.do_step()

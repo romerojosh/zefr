@@ -48,7 +48,7 @@ extern "C" {
 #endif
 
 #ifdef _BUILD_LIB
-#include "tiogaInterface.h"
+//#include "tiogaInterface.h"
 #endif
 
 #ifdef _GPU
@@ -674,10 +674,12 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
+#ifdef _BUILD_LIB
   if (input->overset)
   {
-    overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
+    ZEFR->overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
   }
+#endif
 
   /* Extrapolate solution to flux points */
   eles->extrapolate_U(startEle, endEle);
@@ -811,8 +813,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     faces->send_dU_data();
 
     /* Interpolate gradient data to/from other grid(s) */
+#ifdef _BUILD_LIB
     if (input->overset)
-      overset_interp(faces->nVars, eles->dU_spts.data(), faces->dU.data(), 1);
+      ZEFR->overset_interp(faces->nVars, eles->dU_spts.data(), faces->dU.data(), 1);
+#endif
 #endif
 
     /* Apply boundary conditions to the gradient */
@@ -1803,8 +1807,11 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       // Update the overset connectivity to the new grid positions
       if (input->overset && input->motion)
       {
-        tioga_preprocess_grids_();
-        tioga_performconnectivity_();
+        ZEFR->tg_preprocess();
+        ZEFR->tg_process_connectivity();
+#ifdef _GPU
+        ZEFR->update_iblank_gpu();
+#endif
       }
 #endif
     }
@@ -1982,8 +1989,8 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     // Update the overset connectivity to the new grid positions
     if (input->overset && input->motion)
     {
-      tioga_preprocess_grids_();
-      tioga_performconnectivity_();
+      ZEFR->tg_preprocess();
+      ZEFR->tg_process_connectivity();
     }
 #endif
 }
