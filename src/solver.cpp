@@ -1253,23 +1253,17 @@ void FRSolver::initialize_U()
       ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
     } 
 
-    /* Maximum number of unique matrices possible per element */
-    unsigned int nMat = eles->nFaces + 1;
-
     eles->dFdU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
     eles->dFcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
     if(input->viscous)
     {
-      nMat += eles->nFaces * (eles->nFaces - 1);
-
       eles->dUcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
       /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
       eles->dFddU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
       eles->dFcddU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
     }
-
       
     if (!input->stream_mode)
     {
@@ -1606,13 +1600,11 @@ void FRSolver::dFcdU_from_faces()
             {
               eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot) + 
                                                       faces->dFcdU(gfpt, ni, nj, notslot, slot);
+              continue;
             }
           }
-          else
-          {
-            eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
-            eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
-          }
+          eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
+          eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
         }
       }
     }
@@ -1643,6 +1635,22 @@ void FRSolver::dFcdU_from_faces()
 
             eles->dUcdU_fpts(fpt, ele, ni, nj, 0) = faces->dUcdU(gfpt, ni, nj, slot);
             eles->dUcdU_fpts(fpt, ele, ni, nj, 1) = faces->dUcdU(gfpt, ni, nj, notslot);
+
+            /* Combine dFcddU on non-periodic boundaries */
+            // TODO: might need to move this to faces
+            if (gfpt >= (int)geo.nGfpts_int && gfpt < (int)(geo.nGfpts_int + geo.nGfpts_bnd))
+            {
+              unsigned int bnd_id = geo.gfpt2bnd(gfpt - geo.nGfpts_int);
+              if (bnd_id != PERIODIC)
+              {
+                for (unsigned int dim = 0; dim < eles->nDims; dim++)
+                {
+                  eles->dFcddU_fpts(fpt, ele, ni, nj, dim, 0) = faces->dFcddU(gfpt, ni, nj, dim, slot, slot) +
+                                                                faces->dFcddU(gfpt, ni, nj, dim, notslot, slot);
+                }
+                continue;
+              }
+            }
 
             for (unsigned int dim = 0; dim < eles->nDims; dim++)
             {

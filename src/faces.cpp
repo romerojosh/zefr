@@ -1020,6 +1020,11 @@ void Faces::apply_bcs_dFdU()
     /* Apply specified boundary condition */
     switch(bnd_id)
     {
+      case PERIODIC:/* Periodic */
+      {
+        break;
+      }
+
       case SUB_OUT: /* Subsonic Outlet */
       {
         /* Primitive Variables */
