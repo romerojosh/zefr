@@ -125,6 +125,7 @@ $(TARGET): $(OBJS)
 .PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
 swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC
+swig: INCS += -I$(TIOGA_INC_DIR)/
 swig: CUFLAGS += -Xcompiler -fPIC
 swig: $(SOBJS)
 	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
@@ -138,7 +139,7 @@ lib: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
 
 .PHONY: test
-test: INCS += -I$(SWIGDIR)
+test: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test: lib
 	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
 	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(TIOGA_LIB_DIR) -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) -o $(SWIGDIR)/testZefr
