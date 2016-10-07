@@ -214,7 +214,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       {
         for (int d = 0; d < geo.nDims; d++)
         {
-          geo.coord_nodes(gnd, d)   = tmp_nodes(d, ele, ndmap[nd]);
+          geo.coord_nodes(d, gnd)   = tmp_nodes(d, ele, ndmap[nd]);
           geo.ele_nodes(nd, ele, d) = tmp_nodes(d, ele, ndmap[nd]);
         }
         geo.ele2nodes(nd, ele) = gnd;
@@ -261,19 +261,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     DS.read(geo.face_list.data(), fcon_t);
 
     break;
-  }
-
-  // Setup Zefr-style ele-to-face connectivity
-  geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
-  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
-  for (int f = 0; f < geo.nIntFaces; f++)
-  {
-    auto &f1 = geo.face_list(f,0);
-    auto &f2 = geo.face_list(f,1);
-    f1.loc_f = geo.pyfr2zefr_face[f1.loc_f];
-    f2.loc_f = geo.pyfr2zefr_face[f2.loc_f];
-    geo.ele2face(f1.loc_f, f1.ic) = f;
-    geo.ele2face(f2.loc_f, f2.ic) = f;
   }
 
   // ----- Read boundary conditions -----
@@ -385,6 +372,48 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.nFaces = geo.nIntFaces + geo.nBndFaces;
 #ifdef _MPI
   geo.nFaces += geo.nMpiFaces;
+#endif
+
+  // Finish setting up ele-to-face / face-to-ele connectivity
+
+  geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
+  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
+  geo.face2eles.assign({2, geo.nFaces}, -1);
+  for (int f = 0; f < geo.nIntFaces; f++)
+  {
+    auto &f1 = geo.face_list(f,0);
+    auto &f2 = geo.face_list(f,1);
+    f1.loc_f = geo.pyfr2zefr_face[f1.loc_f];
+    f2.loc_f = geo.pyfr2zefr_face[f2.loc_f];
+    geo.ele2face(f1.loc_f, f1.ic) = f;
+    geo.ele2face(f2.loc_f, f2.ic) = f;
+    geo.face2eles(0, f) = f1.ic;
+    geo.face2eles(1, f) = f2.ic;
+  }
+
+  int fid = geo.nIntFaces;
+  for (int bnd = 0; bnd < geo.nBnds; bnd++)
+  {
+    for (int ff = 0; ff < geo.bound_faces[bnd].size(); ff++)
+    {
+      auto f = geo.bound_faces[bnd][ff];
+      geo.ele2face(f.loc_f, f.ic) = fid;
+      geo.face2eles(0, fid) = f.ic;
+      fid++;
+    }
+  }
+
+#ifdef _MPI
+  for (auto &p : geo.send_ranks)
+  {
+    for (int ff = 0; ff < geo.mpi_conn[p].size(); ff++)
+    {
+      auto f = geo.mpi_conn[p][ff];
+      geo.ele2face(f.loc_f, f.ic) = fid;
+      geo.face2eles(0, fid) = f.ic;
+      fid++;
+    }
+  }
 #endif
 }
 
@@ -2075,7 +2104,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   geo.nGfpts += geo.nGfpts_mpi;
 #endif
 
-
+  geo.face2fpts.assign({nFptsPerFace, geo.nFaces}, -1);
+  geo.fpt2face.assign(geo.nGfpts, -1);
   geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
   geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
 
@@ -2181,6 +2211,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
       geo.fpt2gfpt(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = gfpt;
       geo.fpt2gfpt_slot(faceL.loc_f*nFptsPerFace + fpt, eL) = 0;
       geo.fpt2gfpt_slot(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = 1;
+      geo.face2fpts(fpt, ff) = gfpt;
+      geo.fpt2face[gfpt] = ff;
       gfpt++;
     }
   }
@@ -2195,19 +2227,25 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 
   // Setup boundary-face flux points
   geo.gfpt2bnd.assign({geo.nGfpts_bnd});
+  uint fid = geo.nIntFaces;
   for (uint bnd = 0; bnd < geo.nBounds; bnd++)
   {
     for (auto &face : geo.bound_faces[bnd])
     {
       int ele = face.ic;
       int n = face.loc_f;
+
+      // Setup the flux points for the face
       for (int fpt = 0; fpt < nFptsPerFace; fpt++)
       {
         geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
         geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
         geo.gfpt2bnd(gfpt_bnd) = geo.bnd_ids[bnd];
+        geo.face2fpts(fpt, fid) = gfpt;
+        geo.fpt2face[gfpt] = fid;
         gfpt_bnd++;
         gfpt++;
+        fid++;
       }
 
       // Create lists of all wall- and overset-boundary nodes
@@ -2258,6 +2296,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   unsigned int mpiFace = geo.nIntFaces + geo.nBndFaces;
   unsigned int mface = 0;
   geo.faceID_R.resize(geo.nMpiFaces);
+  geo.mpiFaces.resize(geo.nMpiFaces);
+  geo.procR.resize(geo.nMpiFaces);
   //geo.mpiRotR.resize(geo.nMpiFaces); // NOTE: only required for blocked-style [per-face] MPI communication pattern
   for (auto &p2 : geo.send_ranks)
   {
@@ -2303,6 +2343,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
           geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
           geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
           geo.fpt_buffer_map[p2].push_back(gfpt);
+          geo.face2fpts(fpt, mpiFace) = gfpt;
+          geo.fpt2face[gfpt] = mpiFace;
           gfpt++;
         }
 
@@ -2310,6 +2352,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         MPI_Send(&mpiFace, 1, MPI_INT, p2, 0, geo.myComm);
         MPI_Recv(&geo.faceID_R[mface], 1, MPI_INT, p2, 0, geo.myComm, &status);
         //MPI_Recv(&geo.mpiRotR[mpiff], 1, MPI_INT, recvRank, 0, geo.myComm, &status);
+        geo.mpiFaces.push_back(mpiFace);
         geo.procR.push_back(p2);
         mpiFace++;
         mface++;
@@ -2373,6 +2416,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         {
           geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
           geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+          geo.face2fpts(fpt, mpiFace) = gfpt;
+          geo.fpt2face[gfpt] = mpiFace;
           fpts[fpt] = gfpt;
           gfpt++;
         }
@@ -2392,6 +2437,9 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
       }
     }
   }
+
+  if (mface != geo.nMpiFaces)
+    ThrowException("Unused MPI Faces exist within PyFR mesh!");
 
   MPI_Barrier(geo.myComm);
 

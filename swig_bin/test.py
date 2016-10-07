@@ -2,7 +2,9 @@ import sys
 import os
 #TIOGA_DIR = os.getcwd() + '/TIOGA/'
 TIOGA_DIR = '/home/jcrabill/tioga/src/'
+ZEFR_DIR = '/home/jcrabill/zefr/swig_bin/'
 sys.path.append(TIOGA_DIR)
+sys.path.append(ZEFR_DIR)
 
 from mpi4py import MPI
 import zefr
@@ -64,7 +66,7 @@ tg.tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
         cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt)
 
 if zefr.use_gpus():
-    print "Setting GPU callback functions"
+    print("Setting GPU callback functions")
     tg.tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,
             cbs.fringe_data_to_device)
 
@@ -73,10 +75,10 @@ z.set_tioga_callbacks(tg.tioga_preprocess_grids_,
 
 # Perform overset connectivity / hole blanking
 if nGrids > 1:
-    print "Beginning connectivity..."
+    print("Beginning connectivity...")
     tg.tioga_preprocess_grids_()
     tg.tioga_performconnectivity_()
-    print "Connectivity complete."
+    print("Connectivity complete.")
 
 if zefr.use_gpus():
     z.update_iblank_gpu()
@@ -100,7 +102,9 @@ for iter in range(1,inp.n_steps+1):
         if iter%inp.error_freq == 0 or iter==inp.n_steps:
             z.write_error()
 
+z.write_solution()
+
 # Finalize - free memory
-print "Finishing run..."
+print("Finishing run...")
 zefr.finalize()
 tg.tioga_delete_()

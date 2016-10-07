@@ -2563,7 +2563,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     iter = iter / input->mg_steps[0];
 
   if (input->gridID == 0 && input->rank == 0)
-    std::cout << "Writing data to file..." << std::endl;
+    std::cout << "Writing data to file for case " << prefix << "..." << std::endl;
 
   if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
 
