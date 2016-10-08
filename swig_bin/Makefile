@@ -1,9 +1,9 @@
-SWIG = /home/jcrabill/local/bin/swig -c++ -python
+#SWIG = /home/jcrabill/local/bin/swig -c++ -python
+SWIG = swig -c++ -python
 TARGET = _zefr.so
 
 SWIG_OBJS = zefr_wrap.o
-#SWIG_INCS = -I/usr/include/python2.7 -I/usr/local/lib/python2.7/dist-packages/mpi4py/include/
-SWIG_INCS = -I/home/jcrabill/Workspace/pyfr-venv/lib/python3.5/site-packages/mpi4py/include -I/home/jcrabill/local/include/python3.5m
+SWIG_INCS = -I$(strip $(PYTHON_INC_DIR))/ -I$(strip $(MPI4PY_INC_DIR))/
 SWIG_LIBS = 
 
 $(TARGET): $(SOBJS) $(SWIG_OBJS)

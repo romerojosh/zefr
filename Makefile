@@ -61,7 +61,7 @@ ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
 	INCS += -I$(strip $(METIS_INC_DIR)) -I$(strip $(MPI_INC_DIR))
-	LIBS += -L$(strip $(METIS_LIB_DIR)) -lmetis 
+	LIBS += -L$(strip $(METIS_LIB_DIR)) -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
 ifneq ($(MPI_LIB_DIR),)
 	LIBS += -L$(MPI_LIB_DIR) -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
@@ -69,8 +69,8 @@ endif
 
 # Setting HDF5 flags
 ifneq ($(strip $(HDF5)),NO)
-	INCS += -I$(strip $(HDF5_INC))/
-	LIBS += -L$(strip $(HDF5_LIB))/ -lhdf5 -lhdf5_cpp
+	INCS += -I$(strip $(HDF5_INC_DIR))/
+	LIBS += -L$(strip $(HDF5_LIB_DIR))/ -lhdf5 -lhdf5_cpp
 endif
 
 # Setting Architecture flags
@@ -128,7 +128,7 @@ swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC
 swig: INCS += -I$(TIOGA_INC_DIR)/
 swig: CUFLAGS += -Xcompiler -fPIC
 swig: $(SOBJS)
-	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)'
+	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)' PYTHON_INC_DIR='$(PYTHON_INC_DIR)' MPI4PY_INC_DIR='$(MPI4PY_INC_DIR)'
 
 
 .PHONY: lib

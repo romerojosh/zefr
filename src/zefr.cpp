@@ -357,7 +357,7 @@ void Zefr::write_solution(void)
   if (input.plot_surfaces)
     solver->write_surfaces(input.output_prefix);
   if (input.write_pyfr)
-    solver->write_surfaces(input.output_prefix);
+    solver->write_solution_pyfr(input.output_prefix);
 }
 
 void Zefr::write_forces(void)
@@ -501,6 +501,7 @@ void Zefr::update_iblank_gpu(void)
     int face = geo->fpt2face[fpt];
     geo->iblank_fpts(fpt) = geo->iblank_face[face];
   }
+  check_error();
   geo->iblank_fpts_d = geo->iblank_fpts;
   geo->iblank_cell_d = geo->iblank_cell;
 #endif

@@ -119,6 +119,10 @@ int findFirst(const std::vector<T>& vec, T val)
   return -1;
 }
 
+std::vector<int> reverse_map(const std::vector<int> &map1);
+
+std::vector<uint> get_int_list(uint N, uint start = 0);
+
 //! Map a structured ijk-type index to the equivalent Gmsh node index
 std::vector<int> structured_to_gmsh_quad(unsigned int nNodes);
 std::vector<int> structured_to_gmsh_hex(unsigned int nNodes);
@@ -126,5 +130,105 @@ std::vector<int> structured_to_gmsh_hex(unsigned int nNodes);
 //! Map a Gmsh node index to the equivalent structured ijk-type index
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes);
 std::vector<int> gmsh_to_structured_hex(unsigned int nNodes);
+
+
+template<typename T>
+std::vector<uint> sort_ind(const std::vector<T> &data, const std::vector<uint> &inds)
+{
+  std::vector<std::pair<T,size_t>> vp;
+  vp.reserve(inds.size());
+
+  for (uint i = 0; i < inds.size(); i++)
+    vp.push_back(make_pair(data[inds[i]], inds[i]));
+
+  /* Sorting will put lower values [vp.first] ahead of larger ones, resolving
+   * ties using the original index [vp.second] */
+  std::sort(vp.begin(), vp.end());
+
+  std::vector<uint> sorted_ind(inds.size());
+  for (uint i = 0; i < vp.size(); i++)
+    sorted_ind[i] = vp[i].second;
+
+  return sorted_ind;
+}
+
+template<typename T>
+std::vector<uint> sort_ind(const std::vector<T> &data)
+{
+  std::vector<std::pair<T,size_t>> vp;
+  vp.reserve(data.size());
+
+  for (uint i = 0; i < data.size(); i++)
+    vp.push_back(make_pair(data[i], i));
+
+  /* Sorting will put lower values [vp.first] ahead of larger ones, resolving
+   * ties using the original index [vp.second] */
+  std::sort(vp.begin(), vp.end());
+
+  std::vector<uint> sorted_ind(data.size());
+  for (uint i = 0; i < vp.size(); i++)
+    sorted_ind[i] = vp[i].second;
+
+  return sorted_ind;
+}
+
+template<typename T>
+std::vector<uint>  fuzzysort_ind(mdvector<T> mat, const std::vector<uint> &inds, uint dim = 0, double tol = 1e-6)
+{
+  auto dims = mat.shape();
+  std::vector<T> data(dims[1]);
+  for (uint i = 0; i < dims[1]; i++)
+    data[i] = mat(dim, i);
+
+  auto ind = sort_ind(data, inds);
+
+  uint j, i = 0;
+  uint ix = ind[0];
+  for (j = 1; j < ind.size(); j++)
+  {
+    uint jx = ind[j];
+    if (data[jx] - data[ix] >= tol)
+    {
+      if (j - i > 1 && dim+1 < dims[0])
+      {
+        // Get the new indices to sort
+        std::vector<uint> _inds(j-i);
+        for (uint k = 0; k < j-i; k++)
+          _inds[k] = ind[i+k];
+
+        // Sort the duplicated by the next dimension and update 'ind'
+        auto ind2 = fuzzysort_ind(mat,_inds,dim+1,tol);
+
+        for (uint k = 0; k < j-i; k++)
+          ind[i+k] = ind2[k];
+      }
+      i = j;
+      ix = jx;
+    }
+  }
+
+  if (i != j && dim+1 < dims[0])
+  {
+    std::vector<uint> _inds(j-i);
+    for (uint k = 0; k < j-i; k++)
+      _inds[k] = ind[i+k];
+
+    // Sort the duplicated by the next dimension and update 'ind'
+    auto ind2 = fuzzysort_ind(mat,_inds,dim+1,tol);
+
+    for (uint k = 0; k < j-i; k++)
+      ind[i+k] = ind2[k];
+  }
+
+  return ind;
+}
+
+template<typename T>
+std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1e-6)
+{
+  auto dims = mat.shape();
+  auto list = get_int_list(dims[1]);
+  return fuzzysort_ind(mat, list, dim, tol);
+}
 
 #endif /* funcs_hpp */

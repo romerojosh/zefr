@@ -2237,7 +2237,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
     ss << "[solver-elements-quad]" << std::endl;
   else
     ss << "[solver-elements-hex]" << std::endl;
-  ss << "soln-pt = gauss-legendre" << std::endl;
+  ss << "soln-pts = gauss-legendre" << std::endl;
   ss << std::endl;
 
   std::string config = ss.str();
@@ -3629,7 +3629,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     std::cout << std::setw(6) << std::left << iter << " ";
 
     for (auto val : res)
-      std::cout << std::scientific << std::setw(15) << std::left << val / nDoF << " ";
+      std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << val / nDoF << " ";
 
     if (input->dt_type == 2)
     {

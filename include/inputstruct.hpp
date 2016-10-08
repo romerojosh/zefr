@@ -53,9 +53,11 @@ public:
 
   Timer(void) {}
 
-  Timer(std::string prefix) { this->prefix = prefix; }
+  Timer(const std::string &prefix) { this->prefix = prefix; }
+  Timer(const char *prefix) { this->prefix = prefix; }
 
-  void setPrefix(std::string prefix) { this->prefix = prefix; }
+  void setPrefix(const std::string &prefix) { this->prefix = prefix; }
+  void setPrefix(const char *prefix) { this->prefix = prefix; }
 
   void startTimer(void)
   {

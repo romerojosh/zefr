@@ -512,23 +512,15 @@ std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
 std::vector<int> structured_to_gmsh_quad(unsigned int nNodes)
 {
   auto gmsh2ijk = gmsh_to_structured_quad(nNodes);
-  auto ijk2gmsh = gmsh2ijk;
 
-  for (int i = 0; i < nNodes; i++)
-    ijk2gmsh[i] = findFirst(gmsh2ijk,i);
-
-  return ijk2gmsh;
+  return reverse_map(gmsh2ijk);
 }
 
 std::vector<int> structured_to_gmsh_hex(unsigned int nNodes)
 {
   auto gmsh2ijk = gmsh_to_structured_hex(nNodes);
-  auto ijk2gmsh = gmsh2ijk;
 
-  for (int i = 0; i < nNodes; i++)
-    ijk2gmsh[i] = findFirst(gmsh2ijk,i);
-
-  return ijk2gmsh;
+  return reverse_map(gmsh2ijk);
 }
 
 std::vector<int> gmsh_to_structured_hex(unsigned int nNodes)
@@ -772,3 +764,22 @@ std::vector<int> gmsh_to_structured_hex(unsigned int nNodes)
 
   return gmsh_to_ijk;
 }
+
+std::vector<int> reverse_map(const std::vector<int> &map1)
+{
+  auto map2 = map1;
+  for (int i = 0; i < map1.size(); i++)
+    map2[i] = findFirst(map1, i);
+
+  return map2;
+}
+
+std::vector<uint> get_int_list(uint N, uint start)
+{
+  std::vector<uint> list(N-start);
+  for (uint i = 0; i < N; i++)
+    list[i] = start + i;
+
+  return list;
+}
+

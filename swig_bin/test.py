@@ -75,10 +75,14 @@ z.set_tioga_callbacks(tg.tioga_preprocess_grids_,
 
 # Perform overset connectivity / hole blanking
 if nGrids > 1:
+    tgTime = zefr.Timer("TG Time: ")
+    tgTime.startTimer()
     print("Beginning connectivity...")
     tg.tioga_preprocess_grids_()
     tg.tioga_performconnectivity_()
     print("Connectivity complete.")
+    tgTime.stopTimer()
+    tgTime.showTime()
 
 if zefr.use_gpus():
     z.update_iblank_gpu()

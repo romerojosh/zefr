@@ -142,11 +142,17 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   dset.read(geo.mesh_uuid, dtype, dspace);
   dset.close();
 
-  std::regex r_con("(con_p)(\\d+)$");
   int max_rank = 0;
   for (std::string name : dsNames)
   {
-    if (!std::regex_match(name, r_con))
+    size_t ind = name.find("con_p");
+    if (ind == std::string::npos)
+      continue;
+
+    auto str = name.substr(5,name.length());
+    ind = str.find("p");
+
+    if (str.find("p") != std::string::npos)
       continue;
 
     std::stringstream ss(name.substr(5,name.length()));
@@ -201,12 +207,13 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     /// TODO: change Gmsh reading / geo setup so this isn't needed
     geo.ele_nodes.assign({geo.nNodesPerEle, geo.nEles, geo.nDims});
-    geo.coord_nodes.assign({geo.nDims, geo.nEles*geo.nNodesPerEle});
     geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
+    mdvector<double> temp_coords({geo.nDims, geo.nNodes});
 
     auto ndmap = (geo.nDims == 2) ? gmsh_to_structured_quad(geo.nNodesPerEle)
                                   : gmsh_to_structured_hex(geo.nNodesPerEle);
 
+    // Re-order nodes to Zefr format
     int gnd = 0;
     for (int ele = 0; ele < geo.nEles; ele++)
     {
@@ -214,13 +221,60 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       {
         for (int d = 0; d < geo.nDims; d++)
         {
-          geo.coord_nodes(d, gnd)   = tmp_nodes(d, ele, ndmap[nd]);
+          temp_coords(d, gnd)   = tmp_nodes(d, ele, ndmap[nd]);
           geo.ele_nodes(nd, ele, d) = tmp_nodes(d, ele, ndmap[nd]);
         }
         geo.ele2nodes(nd, ele) = gnd;
         gnd++;
       }
     }
+
+    /* --- Create 'proper' c2v connectivity (Remove duplicates) --- */
+
+    auto sortind = fuzzysort(temp_coords);
+
+    // Setup map to new node listing
+    double tol = 1e-10;
+    int idx = sortind[0];
+    int n_nodes = 0;
+    point pti = point(&temp_coords(0,idx), geo.nDims);
+    std::vector<int> nodemap(geo.nNodes, -1);
+    nodemap[idx] = n_nodes;
+
+    for (int i = 1; i < geo.nNodes; i++)
+    {
+      idx = sortind[i];
+      point ptj = point(&temp_coords(0,idx), geo.nDims);
+      if (point(ptj-pti).norm() > tol)
+      {
+        // Increment our counters
+        pti = ptj;
+        n_nodes++;
+      }
+
+      nodemap[idx] = n_nodes;
+    }
+    n_nodes += 1; // final index -> total #
+
+    // Setup geo structures with new node list
+    geo.coord_nodes.assign({geo.nDims, n_nodes});
+    for (int i = 0; i < geo.nNodes; i++)
+    {
+      for (int d = 0; d < geo.nDims; d++)
+        geo.coord_nodes(d, nodemap[i]) = temp_coords(d, i);
+    }
+
+    for (int ele = 0; ele < geo.nEles; ele++)
+    {
+      for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+      {
+        geo.ele2nodes(nd, ele) = nodemap[geo.ele2nodes(nd, ele)];
+      }
+    }
+
+    geo.nNodes = n_nodes;
+
+    break;
   }
 
   if (geo.nDims == 3)
@@ -233,7 +287,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.pyfr2zefr_face = {0,1,2,3};
     geo.zefr2pyfr_face = {0,1,2,3};
   }
-
 
   // ----- Read interior element / face connectivity -----
 
@@ -2245,7 +2298,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         geo.fpt2face[gfpt] = fid;
         gfpt_bnd++;
         gfpt++;
-        fid++;
       }
 
       // Create lists of all wall- and overset-boundary nodes
@@ -2257,8 +2309,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
           for (int j = 0; j < geo.nNodesPerFace; j++)
             overPts.insert(geo.ele2nodes(ct2fv[eType](j, n), ele));
 
-          int ff = geo.ele2face(n, ele);
-          geo.overFaceList.push_back(ff);
+          geo.overFaceList.push_back(fid);
         }
         else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
                  bcType == ISOTHERMAL_NOSLIP_G ||
@@ -2275,6 +2326,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         }
       }
 
+      fid++;
     }
   }
 
