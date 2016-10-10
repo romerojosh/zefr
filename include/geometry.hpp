@@ -83,7 +83,7 @@ struct GeoStruct
     std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
     std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
     std::map<std::vector<unsigned int>, unsigned int> face2bnd;
-    std::vector<std::vector<int>> boundFaces; //! List of face IDs for each mesh-defined boundary
+    std::vector<std::vector<unsigned int>> boundFaces; //! List of face IDs for each mesh-defined boundary
 
     //! --- New additions for PyFR format (consider re-organizing) ---
     mdvector<face_con> face_list;

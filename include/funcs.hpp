@@ -121,6 +121,7 @@ int findFirst(const std::vector<T>& vec, T val)
 
 std::vector<int> reverse_map(const std::vector<int> &map1);
 
+std::vector<int> get_int_list(int N, int start = 0);
 std::vector<uint> get_int_list(uint N, uint start = 0);
 
 //! Map a structured ijk-type index to the equivalent Gmsh node index

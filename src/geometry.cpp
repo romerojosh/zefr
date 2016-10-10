@@ -321,9 +321,13 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.nBounds = 0;
   geo.nBndFaces = 0;
   geo.bound_faces.resize(0);
+  geo.boundFaces.resize(0);
+  std::string bcon_p = "_p" + std::to_string(input->rank);
+  size_t len = bcon_p.length();
   for (auto &name : dsNames)
   {
-    if (name.substr(0,5) == "bcon_")
+    if (name.substr(0,5) == "bcon_" and
+        name.substr(name.length() - len, len) == bcon_p)
     {
       std::string bcName = name;
       size_t ind = bcName.find("_");
@@ -375,6 +379,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
       for (auto &face : geo.bound_faces[geo.nBounds])
         face.loc_f = geo.pyfr2zefr_face[face.loc_f];
+
+      geo.boundFaces.push_back(get_int_list(dims[0], geo.nIntFaces + geo.nBndFaces));
 
       geo.nBndFaces += dims[0];
       geo.nBounds++;
@@ -445,7 +451,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   }
 
   int fid = geo.nIntFaces;
-  for (int bnd = 0; bnd < geo.nBnds; bnd++)
+  for (int bnd = 0; bnd < geo.nBounds; bnd++)
   {
     for (int ff = 0; ff < geo.bound_faces[bnd].size(); ff++)
     {
@@ -2307,7 +2313,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         if (bcType == OVERSET)
         {
           for (int j = 0; j < geo.nNodesPerFace; j++)
-            overPts.insert(geo.ele2nodes(ct2fv[eType](j, n), ele));
+            overPts.insert(geo.ele2nodes(ct2fv[eType](n, j), ele));
 
           geo.overFaceList.push_back(fid);
         }
@@ -2322,7 +2328,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
                  bcType == SYMMETRY_G || bcType == SYMMETRY_P)
         {
           for (int j = 0; j < geo.nNodesPerFace; j++)
-            wallPts.insert(geo.ele2nodes(ct2fv[eType](j, n), ele));
+            wallPts.insert(geo.ele2nodes(ct2fv[eType](n, j), ele));
         }
       }
 

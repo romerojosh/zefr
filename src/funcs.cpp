@@ -774,12 +774,20 @@ std::vector<int> reverse_map(const std::vector<int> &map1)
   return map2;
 }
 
-std::vector<uint> get_int_list(uint N, uint start)
+std::vector<int> get_int_list(int N, int start)
 {
-  std::vector<uint> list(N-start);
-  for (uint i = 0; i < N; i++)
+  std::vector<int> list(N);
+  for (int i = 0; i < N; i++)
     list[i] = start + i;
 
   return list;
 }
 
+std::vector<uint> get_int_list(uint N, uint start)
+{
+  std::vector<uint> list(N);
+  for (uint i = 0; i < N; i++)
+    list[i] = start + i;
+
+  return list;
+}
