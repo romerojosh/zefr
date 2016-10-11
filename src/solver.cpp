@@ -1723,6 +1723,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
 #ifdef _GPU
     device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
+    check_error();
 #endif
 
     unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;

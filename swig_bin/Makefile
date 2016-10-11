@@ -1,5 +1,8 @@
-#SWIG = /home/jcrabill/local/bin/swig -c++ -python
+ifeq ($(strip $(SWIG_BIN)),)
 SWIG = swig -c++ -python
+else
+SWIG = $(SWIG_BIN)/swig -c++ -python
+endif
 TARGET = _zefr.so
 
 SWIG_OBJS = zefr_wrap.o

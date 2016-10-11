@@ -3973,7 +3973,7 @@ void Faces::recv_U_data()
     unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());
   }
 
-  sync_stream(0);
+  sync_stream(1);
 
   check_error();
 #endif

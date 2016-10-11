@@ -137,20 +137,18 @@ void sync_stream(unsigned int stream)
 __global__
 void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
 {
-
   const unsigned int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  if (idx >= size)
-    return;
-
-  vec1(idx) = vec2(idx);
-
+  for (uint i = idx; i < size; i += gridDim.x * blockDim.x)
+  {
+    vec1(i) = vec2(i);
+  }
 }
 
 void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
-  unsigned int blocks = (size + threads - 1) /threads;
+  unsigned int blocks = min((size + threads - 1) /threads, 65535);
   copy_kernel<<<blocks, threads>>>(vec1, vec2, size);
 }
 

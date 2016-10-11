@@ -174,54 +174,28 @@ std::vector<uint> sort_ind(const std::vector<T> &data)
 }
 
 template<typename T>
-std::vector<uint>  fuzzysort_ind(mdvector<T> mat, const std::vector<uint> &inds, uint dim = 0, double tol = 1e-6)
+void fuzzysort_ind(const mdvector<T> &mat, uint *inds, uint ninds, uint nDims, uint dim = 0, double tol = 1e-6)
 {
-  auto dims = mat.shape();
-  std::vector<T> data(dims[1]);
-  for (uint i = 0; i < dims[1]; i++)
-    data[i] = mat(dim, i);
-
-  auto ind = sort_ind(data, inds);
+  std::sort(inds, inds + ninds, [&](uint a, uint b) { return mat(dim, a) < mat(dim, b); } );
 
   uint j, i = 0;
-  uint ix = ind[0];
-  for (j = 1; j < ind.size(); j++)
+  uint ix = inds[0];
+  for (j = 1; j < ninds; j++)
   {
-    uint jx = ind[j];
-    if (data[jx] - data[ix] >= tol)
+    uint jx = inds[j];
+    if (mat(dim,jx) - mat(dim,ix) >= tol)
     {
-      if (j - i > 1 && dim+1 < dims[0])
-      {
-        // Get the new indices to sort
-        std::vector<uint> _inds(j-i);
-        for (uint k = 0; k < j-i; k++)
-          _inds[k] = ind[i+k];
-
-        // Sort the duplicated by the next dimension and update 'ind'
-        auto ind2 = fuzzysort_ind(mat,_inds,dim+1,tol);
-
-        for (uint k = 0; k < j-i; k++)
-          ind[i+k] = ind2[k];
-      }
+      // Sort the duplicated by the next dimension and update 'ind'
+      if (j - i > 1 && dim+1 < nDims)
+        fuzzysort_ind(mat,inds+i,j-i,nDims,dim+1,tol);
       i = j;
       ix = jx;
     }
   }
 
-  if (i != j && dim+1 < dims[0])
-  {
-    std::vector<uint> _inds(j-i);
-    for (uint k = 0; k < j-i; k++)
-      _inds[k] = ind[i+k];
-
-    // Sort the duplicated by the next dimension and update 'ind'
-    auto ind2 = fuzzysort_ind(mat,_inds,dim+1,tol);
-
-    for (uint k = 0; k < j-i; k++)
-      ind[i+k] = ind2[k];
-  }
-
-  return ind;
+  // Sort the duplicated by the next dimension and update 'ind'
+  if (i != j && dim+1 < nDims)
+    fuzzysort_ind(mat,inds+i,j-i,nDims,dim+1,tol);
 }
 
 template<typename T>
@@ -229,7 +203,10 @@ std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1
 {
   auto dims = mat.shape();
   auto list = get_int_list(dims[1]);
-  return fuzzysort_ind(mat, list, dim, tol);
+
+  fuzzysort_ind(mat, list.data(), list.size(), dims[0], dim, tol);
+
+  return list;
 }
 
 #endif /* funcs_hpp */

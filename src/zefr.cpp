@@ -60,7 +60,8 @@ int main(int argc, char* argv[])
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  cudaSetDevice(rank%nDevices); // Hardcoded for ICME nodes for now.
+  //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
+  cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
 #endif
 #else
   comm = 0;
@@ -259,8 +260,8 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  cudaSetDevice(0);
-  //cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
+  //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
+  cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
 #endif
 }
 #endif
