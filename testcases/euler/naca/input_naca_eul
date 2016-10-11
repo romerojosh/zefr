@@ -1,11 +1,11 @@
 # Geometry:
 nDims    2
-#meshfile naca_32x32_b2.msh
-meshfile naca_32x32_b2.pyfrm
+meshfile naca_32x32_b2.msh
+#meshfile naca_32x32_b2.pyfrm
 
 # Boundary Conditions
 mesh_bound  char  char
-mesh_bound  wall_slip  wall_slip_p
+mesh_bound  wall_slip_p  wall_slip_g
 mesh_bound  fluid  fluid
 
 # Solver:
@@ -18,12 +18,12 @@ spt_type Legendre
 n_steps 100000
 res_tol 1e-11
 dt_scheme RK44      (Euler, RK44, RK54, MCGS)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
-CFL	  1.5
+CFL	  0.3
 
 # CFL Adaptation
-adapt_CFL 1
+adapt_CFL 0
 CFL_max 1e5
 CFL_ratio 2.0
 
@@ -40,7 +40,7 @@ restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix naca_eul_MCGS
+output_prefix naca_eul
 write_freq    100000
 report_freq   100
 res_type      1
