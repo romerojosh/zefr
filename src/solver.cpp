@@ -702,14 +702,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
-  bool use_blocked = false;
-#ifdef _GPU
-  use_blocked = false;
-#endif
-  if (use_blocked)
-    faces->send_U_data_blocked();
-  else
-    faces->send_U_data();
+  faces->send_U_data();
 #endif
 
   /* Apply boundary conditions to state variables */
@@ -745,29 +738,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 #ifdef _MPI
     /* Receive U data */
-    if (use_blocked)
-    {
-      for (unsigned int i = 0; i < geo.nMpiFaces; i++)
-      {
-        int ff = geo.mpiFaces[i];
+    faces->recv_U_data();
 
-        faces->recv_U_data_blocked(i);
-
-        int fpt1 = geo.face2fpts(0, ff);
-        int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff)+1;
-
-        faces->compute_Fconv(fpt1, fpt2);
-        faces->compute_common_F(fpt1, fpt2);
-      }
-    }
-    else
-    {
-      faces->recv_U_data();
-
-      /* Complete computation on remaning flux points. */
-      faces->compute_Fconv(startFptMpi, geo.nGfpts);
-      faces->compute_common_F(startFptMpi, geo.nGfpts);
-    }
+    /* Complete computation on remaning flux points. */
+    faces->compute_Fconv(startFptMpi, geo.nGfpts);
+    faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
   }
 

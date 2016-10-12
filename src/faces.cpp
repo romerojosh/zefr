@@ -3745,45 +3745,8 @@ void Faces::send_U_data()
       }
     }
   }
-#endif
 
   /* Stage all the non-blocking receives */
-
-  /* ---- USING SEND/RECV BUFFERS ---- */
-#ifdef _CPU2
-  nrecvs = 0;
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int recvRank = entry.first;
-    const auto &fpts = entry.second;
-
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
-    nrecvs++;
-  }
-
-  nsends = 0;
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int sendRank = entry.first;
-    const auto &fpts = entry.second;
-
-    /* Pack buffer of solution data at flux points in list */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int i = 0; i < fpts.size(); i++)
-      {
-        U_sbuffs[sendRank](i, n) = U(fpts(i), n, 0);
-      }
-
-    }
-
-    /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[nsends]);
-    nsends++;
-  }
-#endif
-
-#ifdef _CPU
   /* ---- Using derived types ---- */
   nrecvs = 0;
   for (const auto &entry : geo->mpi_types)
@@ -3828,136 +3791,40 @@ void Faces::send_U_data()
 #endif
 }
 
-void Faces::send_U_data_blocked(void)
-{
-  n_reqs = 0;
-  for (unsigned int i = 0; i < geo->nMpiFaces; i++)
-  {
-    int ff = geo->mpiFaces[i];
-    int pR = geo->procR[i];
-    int ID = geo->mpiFaces[i];
-    int IDR = geo->faceID_R[i];
-
-    if (input->overset && geo->iblank_face[ff] != NORMAL)
-      continue;
-
-    MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &sends[2*n_reqs+1]);
-    //MPI_Irecv(buffUR[i].data(), buffUR[i].size(), MPI_DOUBLE, pR, ID, myComm, &recvs[i]);
-
-    /* Pack buffer of solution data at flux points in list */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
-      {
-        int rfpt = rot_permute[geo->mpiRotR[i]][fpt];
-        int gfpt = geo->face2fpts(rfpt, ff);
-        buffUL[i](fpt, n) = U(gfpt, n, 0);
-      }
-    }
-    /* Send buffer to paired rank */
-    MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[2*n_reqs]);
-    //MPI_Isend(buffUL[i].data(), buffUL[i].size(), MPI_DOUBLE, pR, IDR, myComm, &sends[i]);
-    n_reqs++;
-  }
-}
-
-void Faces::mpi_prod(void)
-{
-  int flag;
-  input->waitTimer.startTimer();
-  // Using blocked sends/recvs
-  //  MPI_Testall(n_reqs, sends.data(), &flag, new_statuses.data());
-  // Using big (original) sends/recvs
-  MPI_Testall(nsends, sreqs.data(), &flag, sstatuses.data());
-  MPI_Testall(nrecvs, rreqs.data(), &flag, rstatuses.data());
-  input->waitTimer.stopTimer();
-}
-
-void Faces::recv_U_data_blocked(int mpiFaceID)
-{
-  int ff = geo->mpiFaces[mpiFaceID];
-
-  if (input->overset && geo->iblank_face[ff] != NORMAL)
-    return;
-
-  /* ---- Using 1 waitall instead of 2 waits... ---- */
-  int ind = 0;
-  for (int i = 0; i < mpiFaceID; i++)
-  {
-    if (input->overset && geo->iblank_face[geo->mpiFaces[i]] != NORMAL)
-      continue;
-    ind++;
-  }
-
-  input->waitTimer.startTimer();
-  MPI_Waitall(2, &sends[2*ind], &new_statuses[0]);
-//  MPI_Wait(&sends[2*mpiFaceID], &status);
-//  MPI_Wait(&sends[2*mpiFaceID+1], &status);
-//  MPI_Wait(&sends[mpiFaceID], &status);
-//  MPI_Wait(&recvs[mpiFaceID], &status);
-  input->waitTimer.stopTimer();
-
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
-    {
-      int gfpt = geo->face2fpts(fpt, ff);
-      U(gfpt, n, 1) = buffUR[mpiFaceID](fpt, n);
-    }
-  }
-}
-
 void Faces::recv_U_data()
 {
 #ifdef _GPU
-  nrecvs = 0;
+  int ridx = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[nrecvs]);
-    nrecvs++;
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+    ridx++;
   }
 
   sync_stream(1);
 
-  nsends = 0;
+  int sidx = 0;
   for (auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
-    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[nsends]);
-    nsends++;
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
+    sidx++;
   }
 #endif
 
   /* Wait for comms to finish */
   input->waitTimer.startTimer();
-  MPI_Waitall(nrecvs, rreqs.data(), MPI_STATUSES_IGNORE);
-  MPI_Waitall(nsends, sreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
   input->waitTimer.stopTimer();
 
   /* Unpack buffer */
-
-  /* ---- USING SEND/RECV BUFFERS ---- */
-#ifdef _CPU2
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int recvRank = entry.first;
-    auto &fpts = entry.second;
-
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int i = 0; i < fpts.size(); i++)
-      {
-        U(fpts(i), n, 1) = U_rbuffs[recvRank](i, n);
-      }
-    }
-  }
-#endif
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
@@ -4030,20 +3897,8 @@ void Faces::send_dU_data()
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
-#endif
-#ifdef _GPU
-  for (const auto &entry : geo->fpt_buffer_map)
-  {
-    int recvRank = entry.first;
-    const auto &fpts = entry.second;
-
-    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
-    ridx++;
-  }
-#endif
 
   unsigned int sidx = 0;
-#ifdef _CPU
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
@@ -4066,23 +3921,44 @@ void Faces::send_dU_data()
     sidx++;
   }
 #endif
+
 #ifdef _GPU
+  sync_stream(0);
+
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
     
     /* Pack buffer of solution data at flux points in list */
-    pack_dU_wrapper(U_sbuffs_d[sendRank], fpts, dU_d, nVars, nDims);
+    pack_dU_wrapper(U_sbuffs_d[sendRank], fpts, dU_d, nVars, nDims, 1);
   }
 
   /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
-    U_sbuffs[pairedRank] = U_sbuffs_d[pairedRank];
+    copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
 
+  check_error();
+#endif
+}
+
+void Faces::recv_dU_data()
+{
+#ifdef _GPU
+  int ridx = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+    ridx++;
+  }
+  
+  int sidx = 0;
   for (auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
@@ -4093,12 +3969,8 @@ void Faces::send_dU_data()
     sidx++;
   }
 
-  check_error();
 #endif
-}
 
-void Faces::recv_dU_data()
-{
   /* Wait for comms to finish */
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
@@ -4124,12 +3996,13 @@ void Faces::recv_dU_data()
     }
   }
 #endif
+
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
-    U_rbuffs_d[pairedRank] = U_rbuffs[pairedRank];
+    copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
   }
 
   for (auto &entry : geo->fpt_buffer_map_d)
@@ -4137,8 +4010,10 @@ void Faces::recv_dU_data()
     int recvRank = entry.first;
     auto &fpts = entry.second;
 
-    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, input->overset, geo->iblank_fpts_d.data());
+    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, 1, input->overset, geo->iblank_fpts_d.data());
   }
+
+  sync_stream(1);
 
   check_error();
 #endif

@@ -79,11 +79,6 @@ class Faces
     void recv_U_data();
     void send_dU_data();
     void recv_dU_data();
-
-    void send_U_data_blocked(void);
-    void recv_U_data_blocked(int mpiFaceID);
-
-    void mpi_prod(void);
 #endif
 
   protected:
