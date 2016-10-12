@@ -3958,6 +3958,8 @@ void Faces::recv_dU_data()
     ridx++;
   }
   
+  sync_stream(1);
+
   int sidx = 0;
   for (auto &entry : geo->fpt_buffer_map)
   {
