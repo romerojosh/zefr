@@ -749,25 +749,28 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* If running viscous, use this scheduling */
   else
   {
-    /* Compute common interface solution at non-MPI flux points */
+    /* Compute common interface solution and convective flux at non-MPI flux points */
     faces->compute_common_U(startFpt, endFpt);
+    faces->compute_Fconv(startFpt, endFpt);
+    
+    /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
+    eles->compute_dU_spts(startEle, endEle);
 
 #ifdef _MPI
     /* Receieve U data */
     faces->recv_U_data();
-
-    //TODO: Do more work during this MPI transfer. Plenty of opportunities.
     
-    /* Finish computation of common interface solution */
+    /* Complete computation on remaining flux points */
     faces->compute_common_U(startFptMpi, geo.nGfpts);
+    faces->compute_Fconv(startFptMpi, geo.nGfpts);
 #endif
 
     /* Copy solution data at flux points from face local to element local
      * storage */
     U_from_faces(startEle, endEle);
 
-    /* Compute (corrected) gradient of state variables at solution points */
-    eles->compute_dU(startEle, endEle);
+    /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
+    eles->compute_dU_fpts(startEle, endEle);
 
     /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
     if (input->motion)
@@ -819,7 +822,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Compute viscous and convective flux and common interface flux 
      * at non-MPI flux points */
     faces->compute_Fvisc(startFpt, endFpt);
-    faces->compute_Fconv(startFpt, endFpt);
     faces->compute_common_F(startFpt, endFpt);
 
 #ifdef _MPI
@@ -828,7 +830,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Complete computation of fluxes */
     faces->compute_Fvisc(startFptMpi, geo.nGfpts);
-    faces->compute_Fconv(startFptMpi, geo.nGfpts);
     faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
   }

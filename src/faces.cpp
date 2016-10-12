@@ -3820,8 +3820,10 @@ void Faces::recv_U_data()
 
   /* Wait for comms to finish */
   input->waitTimer.startTimer();
+  PUSH_NVTX_RANGE("MPI", 0)
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  POP_NVTX_RANGE
   input->waitTimer.stopTimer();
 
   /* Unpack buffer */
@@ -3973,9 +3975,11 @@ void Faces::recv_dU_data()
 
 #endif
 
+  PUSH_NVTX_RANGE("MPI", 0)
   /* Wait for comms to finish */
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  POP_NVTX_RANGE
 
   /* Unpack buffer */
 #ifdef _CPU

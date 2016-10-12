@@ -798,6 +798,88 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
 
 }
 
+void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+  /* Compute contribution to derivative from solution at solution points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppD(0, 0, dim);
+        auto &B = U_spts(0, startEle, var);
+        auto &C = dU_spts(0, startEle, var, dim);
+
+#ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+            0.0, &C, dU_spts.ldim());
+#else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+            0.0, &C, dU_spts.ldim());
+#endif
+      }
+    }
+
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    /* Compute contribution to derivative from solution at solution points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
+        oppD_d.data() + dim * (oppD_d.ldim() * nSpts), oppD_d.ldim(), 
+        U_spts_d.data(), U_spts_d.ldim(), 0.0, dU_spts_d.data() + dim * 
+        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+
+    check_error();
+  }
+#endif
+
+}
+
+void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+    /* Compute contribution to derivative from common solution at flux points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppD_fpts(0, 0, dim);
+        auto &B = Ucomm(0, startEle, var);
+        auto &C = dU_spts(0, startEle, var, dim);
+
+#ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+            1.0, &C, dU_spts.ldim());
+#else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+            1.0, &C, dU_spts.ldim());
+#endif
+      }
+    }
+
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    /* Compute contribution to derivative from common solution at flux points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
+        oppD_fpts_d.data() + dim * (oppD_fpts_d.ldim() * nFpts), oppD_fpts_d.ldim(),
+        Ucomm_d.data(), Ucomm_d.ldim(), 1.0, dU_spts_d.data() + dim * 
+        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+
+    check_error();
+  }
+#endif
+
+}
+
 void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
 {
   /* If running a viscous simulation, use dU that was already computed
