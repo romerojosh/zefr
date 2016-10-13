@@ -1435,6 +1435,8 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
       input->equation, input->viscous, startEle, endEle, input->overset,
       geo.iblank_cell_d.data());
 
+  event_record(0, 0);
+
   check_error();
 #endif
 }
@@ -1503,6 +1505,8 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
   dU_to_faces_wrapper(eles->dU_fpts_d, faces->dU_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
       eles->nVars, eles->nEles, eles->nFpts, eles->nDims, input->equation, 
       input->overset, geo.iblank_cell_d.data());
+
+  event_record(0, 0);
 
   check_error();
 #endif

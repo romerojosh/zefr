@@ -48,7 +48,7 @@ struct MotionVars
   } \
 }
 
-void start_cublas();
+void initialize_cuda();
 
 /* Wrappers for alloc/free GPU memory */
 template<typename T>
@@ -67,6 +67,8 @@ void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 
 void sync_stream(unsigned int stream);
+void event_record(unsigned int event, unsigned int stream);
+void stream_wait_event(unsigned int event, unsigned int stream);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
