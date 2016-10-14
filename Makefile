@@ -10,7 +10,7 @@ ifeq ($(CU),)
   CU = nvcc
 endif
 
-CXXFLAGS = -std=c++11 -Wno-unknown-pragmas
+CXXFLAGS = -std=c++11 -Wno-unknown-pragmas #-fstack-protector-all
 CUFLAGS = -std=c++11 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
@@ -121,7 +121,7 @@ INCS += -I$(CURDIR)/include
 $(TARGET): $(OBJS)
 	$(CXX) $(INCS) $(OBJS) $(LIBS) $(CXXFLAGS) -o $(BINDIR)/$(TARGET)
 
-# Build the Python extension module (shared library) using SWIG
+# Build Zefr as a Python extension module (shared library) using SWIG
 .PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
 swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC
@@ -130,7 +130,13 @@ swig: CUFLAGS += -Xcompiler -fPIC
 swig: $(SOBJS)
 	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)' PYTHON_INC_DIR='$(PYTHON_INC_DIR)' MPI4PY_INC_DIR='$(MPI4PY_INC_DIR)' SWIG_BIN='$(SWIG_BIN)'
 
+# Build Zefr as a static library
+.PHONY: static
+static: FLAGS += -D_BUILD_LIB
+static: $(SOBJS)
+	$(AR) $(BINDIR)/libzefr.a $(SOBJS)
 
+# Build Zefr as a shared library
 .PHONY: lib
 lib: FLAGS += -D_BUILD_LIB
 lib: CXXFLAGS += -fPIC
@@ -138,11 +144,20 @@ lib: CUFLAGS += -Xcompiler -fPIC
 lib: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
 
+# Compile the testZefr wrapper program using dynamic linking
 .PHONY: test
 test: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test: lib
 	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(TIOGA_LIB_DIR) -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) -o $(SWIGDIR)/testZefr
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(TIOGA_LIB_DIR)/ -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) -o $(SWIGDIR)/testZefr
+
+# Compile the testZefr wrapper program using static linking
+.PHONY: test_static
+test_static: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
+test_static: static
+	cp $(BINDIR)/libzefr.a $(SWIGDIR)/lib/
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr $(LIBS) -L$(TIOGA_LIB_DIR)/ -ltioga $(SWIGDIR)/lib/libzefr.a -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) 
+
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h

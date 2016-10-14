@@ -19,8 +19,11 @@ int main(int argc, char *argv[])
 
   /* Basic sphere test case */
   nGrids = 2;
-  if (rank == 0) gridID = 0;
-  if (rank > 0) gridID = 1;
+  if (rank <= 1) gridID = 0;
+  if (rank > 1) gridID = 1;
+
+//  nGrids = 1;
+//  gridID = 0;
 
   /* 2-sphere test case */
 //  nGrids = 3;
@@ -116,7 +119,7 @@ int main(int argc, char *argv[])
   tg_time.stopTimer();
 
   // setup cell/face iblank data for use on GPU
-  if (zefr::use_gpus())
+  if (nGrids > 1 && zefr::use_gpus())
     z->update_iblank_gpu();
 
   // Output initial solution and grid

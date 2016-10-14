@@ -180,9 +180,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     auto DS = file.openDataSet(name);
     auto ds = DS.getSpace();
 
-    std::vector<hsize_t> dims(3);
-    hsize_t max_dims = 3;
-    int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+    hsize_t dims[3];
+    int ds_rank = ds.getSimpleExtentDims(dims);
 
     if (ds_rank != 3 or DS.getTypeClass() != H5T_FLOAT)
       ThrowException("Cannot read element nodes from PyFR mesh file - wrong data type.");
@@ -309,9 +308,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     auto DS = file.openDataSet(name);
     auto ds = DS.getSpace();
 
-    std::vector<hsize_t> dims(2);
-    hsize_t max_dims = 2;
-    int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+    hsize_t dims[2];
+    int ds_rank = ds.getSimpleExtentDims(dims);
 
     if (ds_rank != 2 or DS.getTypeClass() != H5T_COMPOUND)
       ThrowException("Cannot read internal connectivity from PyFR mesh file - expecting compound data type of rank 2.");
@@ -374,12 +372,11 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       auto DS = file.openDataSet(name);
       auto ds = DS.getSpace();
 
-      int ds_rank = ds.getSimpleExtentNdims();
-      std::vector<hsize_t> dims(ds_rank);
-      ds.getSimpleExtentDims(dims.data());
-
-      if (ds_rank != 1 or DS.getTypeClass() != H5T_COMPOUND)
+      if (ds.getSimpleExtentNdims() != 1 or DS.getTypeClass() != H5T_COMPOUND)
         ThrowException("Cannot read boundary condition from PyFR mesh file - expecting compound data type of rank 1.");
+
+      hsize_t dims[1];
+      ds.getSimpleExtentDims(dims);
 
       CompType fcon_t = fcon_type; // NOTE: HDF5 segfaults if you try to re-use a CompType in more than one read
 

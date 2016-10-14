@@ -2497,8 +2497,7 @@ void FRSolver::restart_pyfr(const std::string &restart_file)
   auto ds = dset.getSpace();
 
   std::vector<hsize_t> dims(3);
-  hsize_t max_dims = 3;
-  int ds_rank = ds.getSimpleExtentDims(dims.data(), &max_dims);
+  int ds_rank = ds.getSimpleExtentDims(dims.data());
 
   if (ds_rank != 3)
     ThrowException("Improper DataSpace rank for solution data.");
