@@ -60,10 +60,10 @@ INCS = -I$(strip $(BLAS_INC_DIR))
 ifeq ($(strip $(MPI)),YES)
 	CXX = mpicxx
 	FLAGS += -D_MPI
-	INCS += -I$(strip $(METIS_INC_DIR)) -I$(strip $(MPI_INC_DIR))
-	LIBS += -L$(strip $(METIS_LIB_DIR)) -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
+	INCS += -I$(strip $(METIS_INC_DIR))/ -I$(strip $(MPI_INC_DIR))/
+	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
 ifneq ($(MPI_LIB_DIR),)
-	LIBS += -L$(MPI_LIB_DIR) -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
+	LIBS += -L$(MPI_LIB_DIR)/ -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
 endif
 

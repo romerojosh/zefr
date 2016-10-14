@@ -260,8 +260,11 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
+  int grank;
+  MPI_Comm_rank(MPI_COMM_WORLD,&grank);
   //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
-  cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
+  cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
+  printf("My CUDA device for rank %d(%d) is %d\n",rank,grank,grank%4);
 #endif
 }
 #endif
@@ -298,7 +301,7 @@ void Zefr::setup_solver(void)
   }
 
 #ifdef _GPU
-  start_cublas();
+  initialize_cuda();
 #endif
 
   /* Open files to write residual / force / error history output */

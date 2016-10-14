@@ -480,6 +480,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       fid++;
     }
   }
+
+  std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles << ", nMpiFaces = " << geo.nMpiFaces << std::endl;
 #endif
 }
 
@@ -2417,8 +2419,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         MPI_Send(&mpiFace, 1, MPI_INT, p2, 0, geo.myComm);
         MPI_Recv(&geo.faceID_R[mface], 1, MPI_INT, p2, 0, geo.myComm, &status);
         //MPI_Recv(&geo.mpiRotR[mpiff], 1, MPI_INT, recvRank, 0, geo.myComm, &status);
-        geo.mpiFaces.push_back(mpiFace);
-        geo.procR.push_back(p2);
+        geo.mpiFaces[mface] = mpiFace;
+        geo.procR[mface] = p2;
         mpiFace++;
         mface++;
       }
@@ -2496,7 +2498,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         MPI_Recv(&geo.faceID_R[mface], 1, MPI_INT, p2, 0, geo.myComm, &status);
         MPI_Send(&mpiFace, 1, MPI_INT, p2, 0, geo.myComm);
         //MPI_Send(&rot_tag[mface], 1, MPI_INT, recvRank, 0, geo.myComm);
-        geo.procR.push_back(p2);
+        geo.mpiFaces[mface] = mpiFace;
+        geo.procR[mface] = p2;
         mpiFace++;
         mface++;
       }

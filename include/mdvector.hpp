@@ -97,6 +97,8 @@ class mdvector
     //! Method to return number of values (with padding)
     size_t max_size() const;
 
+    int get_nDims(void) { return nDims; }
+
     //! Method to return vector shape
     std::array<unsigned int,6> shape(void) const;
 

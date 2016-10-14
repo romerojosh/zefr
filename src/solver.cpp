@@ -1421,9 +1421,6 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
         int slot = geo.fpt2gfpt_slot(fpt,ele);
 
         faces->U(gfpt, n, slot) = eles->U_fpts(fpt, ele, n);
-//        if (input->rank == 0)
-//          printf("%d, %d, %d, %d, %d, %f\n",ele,fpt,gfpt,slot,n,faces->U(gfpt,n,slot));
-          //printf("%d, %d --> gfpt %d: U[%d][%d] = %f\n",ele,fpt,gfpt,slot,n,faces->U(gfpt,n,slot));
       }
     }
   }
@@ -3605,6 +3602,9 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
       for (auto &val : res)  
         val = std::sqrt(val);
     }
+
+    if (input->overset)
+      std::cout << "G" << std::setw(4) << std::left << input->gridID;
 
     std::cout << std::setw(6) << std::left << iter << " ";
 
