@@ -3770,7 +3770,8 @@ void Faces::send_U_data()
 #endif
 
 #ifdef _GPU
-  sync_stream(0);
+  /* Wait for U_to_faces to complete in stream 0 */
+  stream_wait_event(1, 0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
@@ -3804,6 +3805,7 @@ void Faces::recv_U_data()
     ridx++;
   }
 
+  /* Wait for buffer to host copy to complete */
   sync_stream(1);
 
   int sidx = 0;
@@ -3842,7 +3844,9 @@ void Faces::recv_U_data()
     unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());
   }
 
-  sync_stream(1);
+  /* Halt main compute stream until U is unpacked */
+  event_record(1, 1);
+  stream_wait_event(0, 1);
 
   check_error();
 #endif
@@ -3925,7 +3929,8 @@ void Faces::send_dU_data()
 #endif
 
 #ifdef _GPU
-  sync_stream(0);
+  /* Wait for dU_to_faces to complete in stream 0 */
+  stream_wait_event(1, 0);
 
   for (auto &entry : geo->fpt_buffer_map_d)
   {
@@ -4019,7 +4024,9 @@ void Faces::recv_dU_data()
     unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, 1, input->overset, geo->iblank_fpts_d.data());
   }
 
-  sync_stream(1);
+  /* Halt main stream until dU is unpacked */
+  event_record(1, 1);
+  stream_wait_event(0, 1);
 
   check_error();
 #endif

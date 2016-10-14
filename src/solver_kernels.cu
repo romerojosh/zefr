@@ -46,8 +46,9 @@ static const unsigned int MAX_GRID_DIM = 65535;
 /* Create handles for default (0) and concurrent (1-16) streams */
 static std::vector<cublasHandle_t> cublas_handles(17);
 static std::vector<cudaStream_t> stream_handles(17);
+static std::vector<cudaEvent_t> event_handles(2);
 
-void start_cublas()
+void initialize_cuda()
 {
   cublasCreate(&cublas_handles[0]);
   stream_handles[0] = cudaStreamPerThread;
@@ -60,6 +61,9 @@ void start_cublas()
     cudaStreamCreate(&stream_handles[i]);
     cublasSetStream(cublas_handles[i], stream_handles[i]);
   }
+
+  cudaEventCreateWithFlags(&event_handles[0], cudaEventDisableTiming);
+  cudaEventCreateWithFlags(&event_handles[1], cudaEventDisableTiming);
 }
 
 template <typename T>
@@ -132,6 +136,16 @@ template void copy_from_device<int>(int* host_data, const int* device_data, unsi
 void sync_stream(unsigned int stream)
 {
   cudaStreamSynchronize(stream_handles[stream]);
+}
+
+void event_record(unsigned int event, unsigned int stream)
+{
+  cudaEventRecord(event_handles[event], stream_handles[stream]);
+}
+
+void stream_wait_event(unsigned int stream, unsigned int event)
+{
+  cudaStreamWaitEvent(stream_handles[stream], event_handles[event], 0);
 }
 
 __global__

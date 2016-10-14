@@ -15,7 +15,7 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 10
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001

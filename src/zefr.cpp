@@ -111,7 +111,7 @@ int main(int argc, char* argv[])
   }
 
 #ifdef _GPU
-  start_cublas();
+  initialize_cuda();
 #endif
 
   /* Open file to write history output */
