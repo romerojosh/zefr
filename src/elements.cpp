@@ -624,21 +624,50 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
 void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-  for (unsigned int dim = 0; dim < nDims; dim++)
+  if (input->fvisc_type == "LDG")
   {
-    for (unsigned int var = 0; var < nVars; var++)
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      auto &A = oppE(0,0);
-      auto &B = dU_spts(0, startEle, var, dim);
-      auto &C = dU_fpts(0, startEle, var, dim);
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppE(0,0);
+        auto &B = dU_spts(0, startEle, var, dim);
+        auto &C = dU_fpts(0, startEle, var, dim);
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
-          endEle - startEle, nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
+            endEle - startEle, nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-          nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+            nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
 #endif
+      }
+    }
+  }
+
+  /* CDG: For each face, extrapolate the associated gradient to its corresponding face */
+  else if (input->fvisc_type == "CDG")
+  {
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          unsigned int startFpt = face * nSpts1D;
+          auto &A = oppE(startFpt, 0);
+          auto &B = dUf_spts(0, startEle, var, dim, face);
+          auto &C = dU_fpts(startFpt, startEle, var, dim);
+
+#ifdef _OMP
+          omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts1D, 
+              endEle - startEle, nSpts, 1.0, &A, oppE.ldim(), &B, dUf_spts.ldim(), 0.0, &C, dU_fpts.ldim());
+#else
+          cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts1D, endEle - startEle,
+              nSpts, 1.0, &A, oppE.ldim(), &B, dUf_spts.ldim(), 0.0, &C, dU_fpts.ldim());
+#endif
+        }
+      }
     }
   }
 #endif
@@ -802,25 +831,34 @@ void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
   /* Compute contribution to derivative from solution at solution points */
-    for (unsigned int dim = 0; dim < nDims; dim++)
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
     {
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        auto &A = oppD(0, 0, dim);
-        auto &B = U_spts(0, startEle, var);
-        auto &C = dU_spts(0, startEle, var, dim);
+      auto &A = oppD(0, 0, dim);
+      auto &B = U_spts(0, startEle, var);
+      auto &C = dU_spts(0, startEle, var, dim);
 
 #ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
-            0.0, &C, dU_spts.ldim());
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+          0.0, &C, dU_spts.ldim());
 #else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
-            0.0, &C, dU_spts.ldim());
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+          0.0, &C, dU_spts.ldim());
 #endif
-      }
     }
+  }
+
+  /* CDG: Copy dU_spts to nFaces */
+  if (input->fvisc_type == "CDG") 
+  {
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      std::copy(dU_spts.data(), dU_spts.data() + dU_spts.size(), dUf_spts.data() + face*dU_spts.size());
+    }
+  }
 
 #endif
 
@@ -842,26 +880,71 @@ void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
 void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-    /* Compute contribution to derivative from common solution at flux points */
-    for (unsigned int dim = 0; dim < nDims; dim++)
+  /* Compute contribution to derivative from common solution at flux points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
     {
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        auto &A = oppD_fpts(0, 0, dim);
-        auto &B = Ucomm(0, startEle, var);
-        auto &C = dU_spts(0, startEle, var, dim);
+      auto &A = oppD_fpts(0, 0, dim);
+      auto &B = Ucomm(0, startEle, var);
+      auto &C = dU_spts(0, startEle, var, dim);
 
 #ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
-            1.0, &C, dU_spts.ldim());
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+          1.0, &C, dU_spts.ldim());
 #else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
-            1.0, &C, dU_spts.ldim());
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+          1.0, &C, dU_spts.ldim());
 #endif
+    }
+  }
+
+  /* CDG: For a given face, compute contribution to derivative from common solution at flux points on face
+   * and extrpolated solutions at flux points for all other faces */
+  if (input->fvisc_type == "CDG")
+  {
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      /* Copy extrapolated solution to temporary data structure */
+      std::copy(U_fpts.data(), U_fpts.data() + U_fpts.size(), Utemp.data());
+
+      /* Copy common solution from face to temporary data structure */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        for (unsigned int ele = startEle; ele < endEle; ele++)
+        {
+          for (unsigned int fpt = 0; fpt < nSpts1D; fpt++)
+          {
+            unsigned int ind = face * nSpts1D + fpt;
+            Utemp(ind, ele, var) = Ucomm(ind, ele, var);
+          }
+        }
+      }
+
+      /* Compute contribution to derivative */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          auto &A = oppD_fpts(0, 0, dim);
+          auto &B = Utemp(0, startEle, var);
+          auto &C = dUf_spts(0, startEle, var, dim, face);
+
+#ifdef _OMP
+          omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+              endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Utemp.ldim(), 
+              1.0, &C, dUf_spts.ldim());
+#else
+          cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+              endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Utemp.ldim(), 
+              1.0, &C, dUf_spts.ldim());
+#endif
+        }
       }
     }
+  }
 
 #endif
 
@@ -2246,41 +2329,172 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             }
           }
 
-          /* (Center) Term 2 */
-          CtempFS.fill(0);
-          for (unsigned int dim = 0; dim < nDims; dim++)
+          if (input->fvisc_type == "LDG")
           {
-            CtempFS2.fill(0);
-            for (unsigned int j = 0; j < nSpts; j++)
+            /* (Center) Term 2 */
+            CtempFS.fill(0);
+            for (unsigned int dim = 0; dim < nDims; dim++)
             {
-              for (unsigned int i = 0; i < nFpts; i++)
+              CtempFS2.fill(0);
+              for (unsigned int j = 0; j < nSpts; j++)
               {
-                CtempFS2(i, j) += dFcddU_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
+                for (unsigned int i = 0; i < nFpts; i++)
+                {
+                  CtempFS2(i, j) += dFcddU_fpts(i, ele, ni, nj, dim, 0) * oppE(i, j);
+                }
+              }
+
+              for (unsigned int j = 0; j < nSpts; j++)
+              {
+                for (unsigned int i = 0; i < nFpts; i++)
+                {
+                  for (unsigned int k = 0; k < nSpts; k++)
+                  {
+                    CtempFS(i, j) += CtempFS2(i, k) * Cvisc0(k, j, dim);
+                  }
+                }
               }
             }
 
             for (unsigned int j = 0; j < nSpts; j++)
             {
-              for (unsigned int i = 0; i < nFpts; i++)
+              for (unsigned int i = 0; i < nSpts; i++)
               {
-                for (unsigned int k = 0; k < nSpts; k++)
+                double val = 0;
+                for (unsigned int k = 0; k < nFpts; k++)
                 {
-                  CtempFS(i, j) += CtempFS2(i, k) * Cvisc0(k, j, dim);
+                  val += oppDiv_fpts(i, k) * CtempFS(k, j);
                 }
+                LHSs[color - 1](i, ni, j, nj, idx) += val;
               }
             }
           }
 
-          for (unsigned int j = 0; j < nSpts; j++)
+          else if (input->fvisc_type == "CDG")
           {
-            for (unsigned int i = 0; i < nSpts; i++)
+            /* CDG: Compute (Center) Term 2 for each face */
+            for (unsigned int face = 0; face < nFaces; face++)
             {
-              double val = 0;
-              for (unsigned int k = 0; k < nFpts; k++)
+              /* Copy common solution derivative and extrapolated solution derivative to temporary data structure */
+              std::vector<double> dUtempdU(nFpts, 1.0);
+              for (unsigned int i = face*nSpts1D; i < (face+1)*nSpts1D; i++)
               {
-                val += oppDiv_fpts(i, k) * CtempFS(k, j);
+                dUtempdU[i] = dUcdU_fpts(i, ele, ni, nj, 0);
               }
-              LHSs[color - 1](i, ni, j, nj, idx) += val;
+
+              /* Compute center viscous supplementary matrix */
+              Cvisc0.fill(0);       
+              CtempFS.fill(0);
+              for (unsigned int j = 0; j < nSpts; j++)
+              {
+                for (unsigned int i = 0; i < nFpts; i++)
+                {
+                  CtempFS(i, j) = dUtempdU[i] * oppE(i, j);
+                }
+              }
+
+              for (unsigned int dim = 0; dim < nDims; dim++)
+              {
+                for (unsigned int j = 0; j < nSpts; j++)
+                {
+                  for (unsigned int i = 0; i < nSpts; i++)
+                  {
+                    Cvisc0(i, j, dim) += oppD(i, j, dim);
+                    for (unsigned int k = 0; k < nFpts; k++)
+                    {
+                      Cvisc0(i, j, dim) += oppD_fpts(i, k, dim) * CtempFS(k, j);
+                    }
+                  }
+                }
+              }
+
+              /* Add contribution from solution boundary condition to Cvisc0 */
+              int eleN = geo->ele_adj(face, ele);
+              if (eleN == -1)
+              {
+                CtempFSN.fill(0);
+                for (unsigned int j = 0; j < nSpts; j++)
+                {
+                  for (unsigned int i = 0; i < nSpts1D; i++)
+                  {
+                    unsigned int ind = face * nSpts1D + i;
+                    CtempFSN(i, j) = dUcdU_fpts(ind, ele, ni, nj, 1) * oppE(ind, j);
+                  }
+                }
+
+                for (unsigned int dim = 0; dim < nDims; dim++)
+                {
+                  for (unsigned int j = 0; j < nSpts; j++)
+                  {
+                    for (unsigned int i = 0; i < nSpts; i++)
+                    {
+                      for (unsigned int k = 0; k < nSpts1D; k++)
+                      {
+                        unsigned int ind = face * nSpts1D + k;
+                        Cvisc0(i, j, dim) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
+                      }
+                    }
+                  }
+                }
+              }
+
+              /* Transform center viscous supplementary matrices (2D) */
+              for (unsigned int j = 0; j < nSpts; j++)
+              {
+                for (unsigned int i = 0; i < nSpts; i++)
+                {
+                  double Cvisc0temp = Cvisc0(i, j, 0);
+
+                  Cvisc0(i, j, 0) = Cvisc0(i, j, 0) * jaco_spts(i, ele, 1, 1) -
+                                    Cvisc0(i, j, 1) * jaco_spts(i, ele, 1, 0);
+
+                  Cvisc0(i, j, 1) = Cvisc0(i, j, 1) * jaco_spts(i, ele, 0, 0) -
+                                    Cvisc0temp * jaco_spts(i, ele, 0, 1);
+
+                  Cvisc0(i, j, 0) /= jaco_det_spts(i, ele);
+                  Cvisc0(i, j, 1) /= jaco_det_spts(i, ele);
+                }
+              }
+
+              /* (Center) Term 2 */
+              CtempFSN.fill(0);
+              for (unsigned int dim = 0; dim < nDims; dim++)
+              {
+                CtempFSN2.fill(0);
+                for (unsigned int j = 0; j < nSpts; j++)
+                {
+                  for (unsigned int i = 0; i < nSpts1D; i++)
+                  {
+                    unsigned int ind = face * nSpts1D + i;
+                    CtempFSN2(i, j) += dFcddU_fpts(ind, ele, ni, nj, dim, 0) * oppE(ind, j);
+                  }
+                }
+
+                for (unsigned int j = 0; j < nSpts; j++)
+                {
+                  for (unsigned int i = 0; i < nSpts1D; i++)
+                  {
+                    for (unsigned int k = 0; k < nSpts; k++)
+                    {
+                      CtempFSN(i, j) += CtempFSN2(i, k) * Cvisc0(k, j, dim);
+                    }
+                  }
+                }
+              }
+
+              for (unsigned int j = 0; j < nSpts; j++)
+              {
+                for (unsigned int i = 0; i < nSpts; i++)
+                {
+                  double val = 0;
+                  for (unsigned int k = 0; k < nSpts1D; k++)
+                  {
+                    unsigned int ind = face * nSpts1D + k;
+                    val += oppDiv_fpts(i, ind) * CtempFSN(k, j);
+                  }
+                  LHSs[color - 1](i, ni, j, nj, idx) += val;
+                }
+              }
             }
           }
 

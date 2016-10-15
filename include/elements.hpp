@@ -87,6 +87,9 @@ class Elements
     mdvector<double> Fcomm, Ucomm;
     mdvector<double> dU_spts, dU_fpts, dU_qpts, divF_spts;
 
+    /* CDG related structures */
+    mdvector<double> Utemp, dUf_spts;
+
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;
 

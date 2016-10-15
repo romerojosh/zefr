@@ -2077,7 +2077,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
   if (input->viscous)
   {
-    if (input->fvisc_type == "LDG")
+    if (input->fvisc_type == "LDG" || input->fvisc_type == "CDG")
     {
 #ifdef _CPU
       LDG_flux(startFpt, endFpt);
@@ -2104,7 +2104,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 {
   
   /* Compute common solution */
-  if (input->fvisc_type == "LDG")
+  if (input->fvisc_type == "LDG" || input->fvisc_type == "CDG")
   {
 #ifdef _CPU
 #pragma omp parallel for 
@@ -3040,7 +3040,7 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
   if (input->viscous)
   {
-    if (input->fvisc_type == "LDG")
+    if (input->fvisc_type == "LDG" || input->fvisc_type == "CDG")
     {
 #ifdef _CPU
       LDG_dFcdU(startFpt, endFpt);
@@ -3060,7 +3060,7 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
 {
-  if (input->fvisc_type == "LDG")
+  if (input->fvisc_type == "LDG" || input->fvisc_type == "CDG")
   {
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {

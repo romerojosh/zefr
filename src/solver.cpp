@@ -1209,6 +1209,11 @@ void FRSolver::initialize_U()
     eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
+    if (input->fvisc_type == "CDG") 
+    {
+      eles->Utemp.assign({eles->nFpts, eles->nEles, eles->nVars});
+      eles->dUf_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims, eles->nFaces});
+    }
   }
 
   eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});

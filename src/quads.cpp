@@ -458,6 +458,36 @@ void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
       }
     }
   }
+
+  /* CDG: Transform gradient for each face */
+  if (input->fvisc_type == "CDG")
+  {
+#pragma omp parallel for collapse(4)
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = startEle; ele < endEle; ele++)
+        {
+          if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
+
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            double dUtemp = dUf_spts(spt, ele, n, 0, face);
+
+            dUf_spts(spt, ele, n, 0, face) = dUf_spts(spt, ele, n, 0, face) * jaco_spts(spt, ele, 1, 1) -
+                                             dUf_spts(spt, ele, n, 1, face) * jaco_spts(spt, ele, 1, 0);
+
+            dUf_spts(spt, ele, n, 1, face) = dUf_spts(spt, ele, n, 1, face) * jaco_spts(spt, ele, 0, 0) -
+                                             dUtemp * jaco_spts(spt, ele, 0, 1);
+
+            dUf_spts(spt, ele, n, 0, face) /= jaco_det_spts(spt, ele);
+            dUf_spts(spt, ele, n, 1, face) /= jaco_det_spts(spt, ele);
+          }
+        }
+      }
+    }
+  }
 #endif
 
 #ifdef _GPU
