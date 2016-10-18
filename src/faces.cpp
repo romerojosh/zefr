@@ -4036,9 +4036,9 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
   int ic2 = geo->face2eles(1,faceID);
 
   int side = -1;
-  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+  if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
     side = 1;
-  else if (ic2 > 0 && geo->iblank_cell(ic2) == NORMAL)
+  else if (ic2 >= 0 && geo->iblank_cell(ic2) == NORMAL)
     side = 0;
   else
   {
@@ -4058,8 +4058,10 @@ double& Faces::get_u_fpt(int faceID, int fpt, int var)
   int ic2 = geo->face2eles(1,faceID);
 
   unsigned int side = 0;
-  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+  if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
     side = 1;
+  else if (ic2 < 0)
+    ThrowException("get_u_fpt: Invalid face/cell blanking - check your connectivity.");
 
   return U(i,var,side);
 }
@@ -4072,7 +4074,7 @@ double& Faces::get_grad_fpt(int faceID, int fpt, int var, int dim)
   int ic2 = geo->face2eles(1,faceID);
 
   unsigned int side = 0;
-  if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+  if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
     side = 1;
 
   return dU(i,var,dim,side);
@@ -4090,7 +4092,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
   {
     unsigned int side = 0;
     int ic1 = geo->face2eles(0,fringeIDs[face]);
-    if (ic1 > 0 && geo->iblank_cell(ic1) == NORMAL)
+    if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
       side = 1;
 
     for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)

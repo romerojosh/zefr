@@ -231,57 +231,50 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       }
     }
 
-    if (!input->overset)
-    {
-      geo.coord_nodes = temp_coords;
-    }
-    else
-    {
-      /* --- Create 'proper' c2v connectivity (Remove duplicates) --- */
+    /* --- Create 'proper' c2v connectivity (Remove duplicates) --- */
 
-      auto sortind = fuzzysort(temp_coords);
+    auto sortind = fuzzysort(temp_coords);
 
-      // Setup map to new node listing
-      double tol = 1e-10;
-      int idx = sortind[0];
-      int n_nodes = 0;
-      point pti = point(&temp_coords(0,idx), geo.nDims);
-      std::vector<int> nodemap(geo.nNodes, -1);
+    // Setup map to new node listing
+    double tol = 1e-10;
+    int idx = sortind[0];
+    int n_nodes = 0;
+    point pti = point(&temp_coords(0,idx), geo.nDims);
+    std::vector<int> nodemap(geo.nNodes, -1);
+    nodemap[idx] = n_nodes;
+
+    for (int i = 1; i < geo.nNodes; i++)
+    {
+      idx = sortind[i];
+      point ptj = point(&temp_coords(0,idx), geo.nDims);
+      if (point(ptj-pti).norm() > tol)
+      {
+        // Increment our counters
+        pti = ptj;
+        n_nodes++;
+      }
+
       nodemap[idx] = n_nodes;
-
-      for (int i = 1; i < geo.nNodes; i++)
-      {
-        idx = sortind[i];
-        point ptj = point(&temp_coords(0,idx), geo.nDims);
-        if (point(ptj-pti).norm() > tol)
-        {
-          // Increment our counters
-          pti = ptj;
-          n_nodes++;
-        }
-
-        nodemap[idx] = n_nodes;
-      }
-      n_nodes += 1; // final index -> total #
-
-      // Setup geo structures with new node list
-      geo.coord_nodes.assign({geo.nDims, n_nodes});
-      for (int i = 0; i < geo.nNodes; i++)
-      {
-        for (int d = 0; d < geo.nDims; d++)
-          geo.coord_nodes(d, nodemap[i]) = temp_coords(d, i);
-      }
-
-      for (int ele = 0; ele < geo.nEles; ele++)
-      {
-        for (int nd = 0; nd < geo.nNodesPerEle; nd++)
-        {
-          geo.ele2nodes(nd, ele) = nodemap[geo.ele2nodes(nd, ele)];
-        }
-      }
-
-      geo.nNodes = n_nodes;
     }
+    n_nodes += 1; // final index -> total #
+
+    // Setup geo structures with new node list
+    geo.coord_nodes.assign({geo.nDims, n_nodes});
+    for (int i = 0; i < geo.nNodes; i++)
+    {
+      for (int d = 0; d < geo.nDims; d++)
+        geo.coord_nodes(d, nodemap[i]) = temp_coords(d, i);
+    }
+
+    for (int ele = 0; ele < geo.nEles; ele++)
+    {
+      for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+      {
+        geo.ele2nodes(nd, ele) = nodemap[geo.ele2nodes(nd, ele)];
+      }
+    }
+
+    geo.nNodes = n_nodes;
 
     break;
   }
@@ -478,6 +471,28 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       geo.ele2face(f.loc_f, f.ic) = fid;
       geo.face2eles(0, fid) = f.ic;
       fid++;
+    }
+  }
+
+  if (input->dt_scheme == "MCGS")
+  {
+    // Setup ele_adj
+    geo.ele_adj.assign({geo.nFacesPerEle,geo.nEles},-1);
+    for (int ff = 0; ff < geo.nFaces; ff++)
+    {
+      int ic1 = geo.face2eles(0,ff);
+      int ic2 = geo.face2eles(1,ff);
+      if (ic2 >= 0)
+      {
+        for (int n = 0; n < geo.nFacesPerEle; n++)
+        {
+          if (geo.ele2face(n,ic1) == ff)
+            geo.ele_adj(n,ic1) = ic2;
+
+          if (geo.ele2face(n,ic2) == ff)
+            geo.ele_adj(n,ic2) = ic1;
+        }
+      }
     }
   }
 

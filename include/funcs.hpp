@@ -199,7 +199,7 @@ void fuzzysort_ind(const mdvector<T> &mat, uint *inds, uint ninds, uint nDims, u
 }
 
 template<typename T>
-std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1e-6)
+std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1e-8)
 {
   auto dims = mat.shape();
   auto list = get_int_list(dims[1]);

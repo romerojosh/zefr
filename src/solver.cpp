@@ -3067,6 +3067,422 @@ void FRSolver::write_color()
   f.close();
 }
 
+void FRSolver::write_overset_boundary(const std::string &_prefix)
+{
+  if (!input->overset) ThrowException("Overset surface export must have overset grid.");
+
+  std::string prefix = _prefix;
+
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->mg_steps[0];
+
+  if (input->gridID == 0 && input->rank == 0)
+    std::cout << "Writing overset boundary surface data to " << prefix << "..." << std::endl;
+
+  prefix += "_Grid" + std::to_string(input->gridID);
+
+  // Prep the index lists [to grab data from a face of an ele]
+  int nDims = geo.nDims;
+  int nPts1D = order+3;
+  int nPtsFace = nPts1D;
+  if (nDims==3) nPtsFace *= nPts1D;
+  int nSubCells = nPts1D - 1;
+  if (nDims==3) nSubCells *= nSubCells;
+  int nFacesEle = geo.nFacesPerEle;
+
+  mdvector<int> index_map({nFacesEle, nPtsFace});
+
+  if (nDims == 2)
+  {
+    for (int j = 0; j < nPtsFace; j++)
+    {
+      index_map(0,j) = 0 + j*1;                    // Bottom
+      index_map(1,j) = nPts1D-1 + j*nPts1D;        // Right
+      index_map(2,j) = nPts1D*nPts1D - 1 + j*(-1); // Top
+      index_map(3,j) = 0 + j*nPts1D;               // Left
+    }
+  }
+  else
+  {
+    for (int j = 0; j < nPtsFace; j++)
+    {
+      index_map(0,j) = 0 + j*1;                      // Zmin / Bottom
+      index_map(1,j) = nPts1D*nPtsFace - 1 + j*(-1); // Zmax / Top
+      index_map(2,j) = 0 + j*nPts1D;                 // Xmin / Left
+      index_map(3,j) = nPts1D - 1 + j*nPts1D;        // Xmax / Right
+    }
+
+    // Ymin / Front
+    for (int j1 = 0; j1 < nPts1D; j1++) {
+      for (int j2 = 0; j2 < nPts1D; j2++) {
+        int J  = j2 + j1*nPts1D;
+        int J2 = j2 + j1*nPtsFace;
+        index_map(4,J) = J2;
+      }
+    }
+
+    // Ymax / Back
+    for (int j1 = 0; j1 < nPts1D; j1++) {
+      for (int j2 = 0; j2 < nPts1D; j2++) {
+        int J  = j2 + j1*nPts1D;
+        int J2 = j2 + (j1+1)*nPtsFace - nPts1D;
+        index_map(5,J) = J2;
+      }
+    }
+  }
+
+  // Write the ParaView file for each Gmsh boundary
+  std::stringstream ss;
+
+#ifdef _MPI
+  /* Write .pvtu file on rank 0 if running in parallel */
+  if (input->rank == 0)
+  {
+    ss << input->output_prefix << "/";
+    ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0');
+    ss << iter << ".pvtu";
+
+    std::ofstream f(ss.str());
+    f << "<?xml version=\"1.0\"?>" << std::endl;
+    f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
+    f << "byte_order=\"LittleEndian\" ";
+    f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+    f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
+    f << "<PPointData>" << std::endl;
+    if (input->equation == AdvDiff || input->equation == Burgers)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+    else if (input->equation == EulerNS)
+    {
+      std::vector<std::string> var;
+      if (eles->nDims == 2)
+        var = {"rho", "xmom", "ymom", "energy"};
+      else
+        var = {"rho", "xmom", "ymom", "zmom", "energy"};
+
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        f << "<PDataArray type=\"Float32\" Name=\"" << var[n];
+        f << "\" format=\"ascii\"/>";
+        f << std::endl;
+      }
+    }
+
+    if (input->filt_on && input->sen_write)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+
+    if (input->motion)
+    {
+      f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+
+    f << "</PPointData>" << std::endl;
+    f << "<PPoints>" << std::endl;
+    f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+    f << "format=\"ascii\"/>" << std::endl;
+    f << "</PPoints>" << std::endl;
+
+    for (unsigned int n = 0; n < input->nRanks; n++)
+    {
+      ss.str("");
+      ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0') << iter;
+      ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
+      f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
+    }
+
+    f << "</PUnstructuredGrid>" << std::endl;
+    f << "</VTKFile>" << std::endl;
+
+    f.close();
+  }
+#endif
+
+  ss.str("");
+#ifdef _MPI
+  ss << input->output_prefix << "/";
+  ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0') << iter;
+  ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
+#else
+  ss << input->output_prefix << "/";
+  ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0') << iter;
+  ss << ".vtu";
+#endif
+
+  auto outputfile = ss.str();
+
+  /* Write parition solution to file in .vtu format */
+  std::ofstream f(outputfile);
+
+  /* Write header */
+  f << "<?xml version=\"1.0\"?>" << std::endl;
+  f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
+  f << "byte_order=\"LittleEndian\" ";
+  f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+  /* Write comments for solution order, iteration number and flowtime */
+  f << "<!-- ORDER " << input->order << " -->" << std::endl;
+  f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
+  f << "<!-- ITER " << iter << " -->" << std::endl;
+
+  // Load list of eles (and sub-ele face indices) from which to load data
+  std::vector<int> eleList, indList;
+  unsigned int nFaces = 0;
+
+  for (unsigned int ff = 0; ff < geo.nFaces; ff++)
+  {
+    if (geo.iblank_face[ff] == FRINGE)
+    {
+      int ic1 = geo.face2eles(0,ff);
+      int ic2 = geo.face2eles(1,ff);
+      if (geo.iblank_cell(ic1) == NORMAL)
+      {
+        eleList.push_back(ic1);
+      }
+      else if (ic2 > 0 && geo.iblank_cell(ic2) == NORMAL)
+      {
+        eleList.push_back(ic2);
+      }
+
+      for (int i = 0; i < nFacesEle; i++)
+      {
+        if (geo.ele2face(i,eleList.back()) == ff)
+        {
+          indList.push_back(i);
+          break;
+        }
+      }
+
+      nFaces++;
+    }
+  }
+
+  // Write data to file
+
+  f << "<UnstructuredGrid>" << std::endl;
+  f << "<Piece NumberOfPoints=\"" << nPtsFace * nFaces << "\" ";
+  f << "NumberOfCells=\"" << nSubCells * nFaces << "\">";
+  f << std::endl;
+
+
+  /* Write plot point coordinates */
+  f << "<Points>" << std::endl;
+  f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+  f << "format=\"ascii\">" << std::endl;
+
+  if (eles->nDims == 2)
+  {
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << 0.0 << std::endl;
+      }
+    }
+  }
+  else
+  {
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+      }
+    }
+  }
+
+  f << "</DataArray>" << std::endl;
+  f << "</Points>" << std::endl;
+
+  /* Write cell information */
+  f << "<Cells>" << std::endl;
+  f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
+  f << "format=\"ascii\">"<< std::endl;
+
+  if (nDims == 2)
+  {
+    int count = 0;
+    for (int face = 0; face < nFaces; face++)
+    {
+      for (int j = 0; j < nPts1D-1; j++)
+      {
+        f << count + j << " ";
+        f << count + j + 1 << " ";
+        f << endl;
+      }
+      count += nPtsFace;
+    }
+  }
+  else
+  {
+    int count = 0;
+    for (int face = 0; face < nFaces; face++)
+    {
+      for (int j = 0; j < nPts1D-1; j++)
+      {
+        for (int i = 0; i < nPts1D-1; i++)
+        {
+          f << count + j*nPts1D     + i   << " ";
+          f << count + j*nPts1D     + i+1 << " ";
+          f << count + (j+1)*nPts1D + i+1 << " ";
+          f << count + (j+1)*nPts1D + i   << " ";
+          f << endl;
+        }
+      }
+      count += nPtsFace;
+    }
+  }
+
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  int nvPerFace = (nDims == 2) ? 2 : 4;
+  int offset = nvPerFace;
+  for (int face = 0; face < nFaces; face++)
+  {
+    for (int subele = 0; subele < nSubCells; subele++)
+    {
+      f << offset << " ";
+      offset += nvPerFace;
+    }
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"UInt8\" Name=\"types\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  int nCells = nSubCells * nFaces;
+  if (nDims == 2)
+  {
+    for (int cell = 0; cell < nCells; cell++)
+      f << 3 << " ";
+  }
+  else
+  {
+    for (int cell = 0; cell < nCells; cell++)
+      f << 9 << " ";
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+  f << "</Cells>" << std::endl;
+
+  /* Write solution information */
+  f << "<PointData>" << std::endl;
+
+  if (input->equation == AdvDiff || input->equation == Burgers)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"u\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        f << std::scientific << std::setprecision(16) << eles->U_ppts(ppt, ele, 0);
+        f  << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+  else if(input->equation == EulerNS)
+  {
+    std::vector<std::string> var;
+    if (eles->nDims == 2)
+      var = {"rho", "xmom", "ymom", "energy"};
+    else
+      var = {"rho", "xmom", "ymom", "zmom", "energy"};
+
+    for (int n = 0; n < eles->nVars; n++)
+    {
+      f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
+      f << "format=\"ascii\">"<< std::endl;
+
+      for (int face = 0; face < nFaces; face++)
+      {
+        int ele = eleList[face];
+        int ind = indList[face];
+        for (int pt = 0; pt < nPtsFace; pt++)
+        {
+          int ppt = index_map(ind,pt);
+          f << std::scientific << std::setprecision(16);
+          f << eles->U_ppts(ppt, ele, n);
+          f << " ";
+        }
+
+        f << std::endl;
+      }
+      f << "</DataArray>" << std::endl;
+    }
+  }
+
+  if (input->filt_on && input->sen_write)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        f << filt.sensor(ele) << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+
+  if (input->motion)
+  {
+    f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (unsigned int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        for (unsigned int dim = 0; dim < eles->nDims; dim++)
+        {
+          f << std::scientific << std::setprecision(16);
+          f << eles->grid_vel_ppts(ppt, ele, dim);
+          f  << " ";
+        }
+        if (eles->nDims == 2) f << 0.0 << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+
+  f << "</PointData>" << std::endl;
+  f << "</Piece>" << std::endl;
+  f << "</UnstructuredGrid>" << std::endl;
+  f << "</VTKFile>" << std::endl;
+  f.close();
+}
+
+
 void FRSolver::write_surfaces(const std::string &_prefix)
 {
 #ifdef _GPU
@@ -3522,6 +3938,11 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     f << "</UnstructuredGrid>" << std::endl;
     f << "</VTKFile>" << std::endl;
     f.close();
+  }
+
+  if (input->overset)
+  {
+    write_overset_boundary(_prefix);
   }
 }
 

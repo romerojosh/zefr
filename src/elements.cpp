@@ -232,6 +232,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 #endif
 
   /* Setup physical coordinates at flux points [in faces class] */
+  mdvector<double> coord_fpt({geo->nGfpts, 3, 2});
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
@@ -241,9 +242,26 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         int gfpt = geo->fpt2gfpt(fpt,ele);
         /* Check if on ghost edge */
         if (gfpt != -1)
+        {
           faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
+          coord_fpt(gfpt, dim, geo->fpt2gfpt_slot(fpt,ele)) = geo->coord_fpts(fpt,ele,dim);/// DEBUGGING
+        }
       }
     }
+  }
+
+  /// DEBUGGING
+  for (int fpt = 0; fpt < geo->nGfpts_int; fpt++)
+  {
+    point fpt1, fpt2;
+    for (int d = 0; d < geo->nDims; d++)
+    {
+      fpt1[d] = coord_fpt(fpt,d,0);
+      fpt2[d] = coord_fpt(fpt,d,1);
+    }
+    double dist = point(fpt1-fpt2).norm();
+    if (dist > 1e-10)
+      std::cout << "FPT " << fpt << ": " << dist << std::endl;
   }
 
   if (input->CFL_type == 2)
