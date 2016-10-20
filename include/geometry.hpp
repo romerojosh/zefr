@@ -72,6 +72,7 @@ struct GeoStruct
     mdvector<double> ele_nodes, coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
     mdvector<unsigned int> face_nodes;
     mdvector<int> ele_adj;
+    mdvector<unsigned int> dUf_Ucomm;
 
     mdvector<double> grid_vel_nodes, coords_init;
 
@@ -170,6 +171,7 @@ void couple_periodic_bnds(GeoStruct &geo);
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order);
 void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int order);
 void pair_periodic_gfpts(GeoStruct &geo);
+void setup_CDG(GeoStruct &geo);
 void setup_element_colors(InputStruct *input, GeoStruct &geo);
 void shuffle_data_by_color(GeoStruct &geo);
 

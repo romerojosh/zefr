@@ -907,10 +907,25 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int face = 0; face < nFaces; face++)
     {
+      /* Copy extrapolated solution and common solution to temp data structure */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        for (unsigned int ele = startEle; ele < endEle; ele++)
+        {
+          for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+          {
+            unsigned int fptFace = fpt / nSpts1D;
+            Utemp(fpt, ele, var) = geo->dUf_Ucomm(fptFace, ele, face) * Ucomm(fpt, ele, var) 
+                            + (1 - geo->dUf_Ucomm(fptFace, ele, face)) * U_fpts(fpt, ele, var);
+          }
+        }
+      }
+
       /* Copy extrapolated solution to temporary data structure */
-      std::copy(U_fpts.data(), U_fpts.data() + U_fpts.size(), Utemp.data());
+      //std::copy(U_fpts.data(), U_fpts.data() + U_fpts.size(), Utemp.data());
 
       /* Copy common solution from face to temporary data structure */
+      /*
       for (unsigned int var = 0; var < nVars; var++)
       {
         for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -922,6 +937,7 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
           }
         }
       }
+      */
 
       /* Compute contribution to derivative */
       for (unsigned int dim = 0; dim < nDims; dim++)

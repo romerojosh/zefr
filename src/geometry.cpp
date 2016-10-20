@@ -91,6 +91,11 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   else
     setup_global_fpts_pyfr(input, geo, order);
 
+  if (input->fvisc_type == "CDG")
+  {
+    setup_CDG(geo);
+  }
+
   if (input->dt_scheme == "MCGS")
   {
     shuffle_data_by_color(geo);
@@ -2532,6 +2537,38 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 
   MPI_Barrier(geo.myComm);
 #endif
+}
+
+void setup_CDG(GeoStruct &geo)
+{
+  /* CDG: Identify common solutions needed for common derivatives */
+  /* TODO: Needs to be changed for non-periodic boundary conditions */
+  geo.dUf_Ucomm.assign({geo.nFacesPerEle, geo.nEles, geo.nFacesPerEle}, 0);
+  for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
+  {
+    for (unsigned int ele1 = 0; ele1 < geo.nEles; ele1++)
+    {
+      geo.dUf_Ucomm(face, ele1, face) = 1;
+
+      int ele2 = geo.ele_adj(face, ele1);
+
+      /* Find common element neighbors */
+      for (unsigned int f1 = 0; f1 < geo.nFacesPerEle; f1++)
+      {
+        if (f1 == face) {continue;}
+
+        int ele1N = geo.ele_adj(f1, ele1);
+        for (unsigned int f2 = 0; f2 < geo.nFacesPerEle; f2++)
+        {
+          int ele2N = geo.ele_adj(f2, ele2);
+          if (ele1N == ele2N)
+          {
+            geo.dUf_Ucomm(f1, ele1, face) = 1;
+          }
+        }
+      }
+    }
+  }
 }
 
 void setup_element_colors(InputStruct *input, GeoStruct &geo)
