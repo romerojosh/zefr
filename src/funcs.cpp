@@ -47,15 +47,12 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     if (input->nDims == 2)
     {
       
-      /*
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
-      */
       
       //val =  std::sin(2 * M_PI * x/10.) + std::sin(2 * M_PI * y/10.);
-      val = std::exp(-x*x-y*y);
-
+      //val = std::exp(-x*x-y*y);
       //val =  step((x - input->AdvDiff_A(0) * t));
     }
     else if (input->nDims == 3)
@@ -350,19 +347,20 @@ void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA,
     CBLAS_TRANSPOSE transB, int M, int N, int K, double alpha, double* A, int lda, 
     double* B, int ldb, double beta, double* C, int ldc)
 {
+  
 #pragma omp parallel
-    {
-      int nThreads = omp_get_num_threads();
-      int thread_idx = omp_get_thread_num();
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
 
-      int block_size = N / nThreads;
-      int start_idx = block_size * thread_idx;
+    int block_size = N / nThreads;
+    int start_idx = block_size * thread_idx;
 
-      if (thread_idx == nThreads-1)
-        block_size += N % (block_size);
+    if (thread_idx == nThreads-1)
+      block_size += N % (block_size);
 
-      cblas_dgemm(mode, transA, transB, M, block_size, K, alpha, A, lda, 
-          B + ldb * start_idx, ldb, beta, C + ldc * start_idx, ldc);
+    cblas_dgemm(mode, transA, transB, M, block_size, K, alpha, A, lda, 
+        B + ldb * start_idx, ldb, beta, C + ldc * start_idx, ldc);
   }
 }
 #endif

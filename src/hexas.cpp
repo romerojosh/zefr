@@ -550,7 +550,7 @@ void Hexas::setup_PMG(int pro_order, int res_order)
 void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -594,7 +594,7 @@ void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
 void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
