@@ -48,7 +48,7 @@ struct MotionVars
   } \
 }
 
-void start_cublas();
+void initialize_cuda();
 
 /* Wrappers for alloc/free GPU memory */
 template<typename T>
@@ -67,6 +67,8 @@ void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 
 void sync_stream(unsigned int stream);
+void event_record(unsigned int event, unsigned int stream);
+void stream_wait_event(unsigned int event, unsigned int stream);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
@@ -155,9 +157,9 @@ void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int>
     mdvector_gpu<double> &U, unsigned int nVars, int stream = -1, bool overset = false,
     int* iblank = NULL);
 void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims);
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream = -1);
 void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, bool overset = false,
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream = -1, bool overset = false,
     int* iblank = NULL);
 #endif
 

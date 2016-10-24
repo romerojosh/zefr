@@ -20,7 +20,9 @@
 #include <iostream>
 #include <memory>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #include "funcs.hpp"
 #include "input.hpp"
@@ -121,7 +123,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 
     /* Copy initial solution to solution storage */
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
     for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
       for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
       {
@@ -156,7 +158,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
       /* Update residual and add source */
       grids[n]->compute_residual(0);
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
       for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
         for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
         {
@@ -199,7 +201,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 
     /* Generate error */
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
     for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
       for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
       {
@@ -446,7 +448,7 @@ void PMGrid::prolong_err(FRSolver &grid_c, mdvector_gpu<double> &correction_c, F
 void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
 {
   /* Copy restricted fine grid residual to source term */
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < grid.eles->nVars; n++)
     for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
     {

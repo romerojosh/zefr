@@ -22,7 +22,9 @@
 #include <iostream>
 #include <cstdlib>
 
+extern "C" {
 #include "cblas.h"
+}
 #include "funcs.hpp"
 #include "quads.hpp"
 #include "polynomials.hpp"

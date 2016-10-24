@@ -46,8 +46,9 @@ static const unsigned int MAX_GRID_DIM = 65535;
 /* Create handles for default (0) and concurrent (1-16) streams */
 static std::vector<cublasHandle_t> cublas_handles(17);
 static std::vector<cudaStream_t> stream_handles(17);
+static std::vector<cudaEvent_t> event_handles(2);
 
-void start_cublas()
+void initialize_cuda()
 {
   cublasCreate(&cublas_handles[0]);
   stream_handles[0] = cudaStreamPerThread;
@@ -60,6 +61,9 @@ void start_cublas()
     cudaStreamCreate(&stream_handles[i]);
     cublasSetStream(cublas_handles[i], stream_handles[i]);
   }
+
+  cudaEventCreateWithFlags(&event_handles[0], cudaEventDisableTiming);
+  cudaEventCreateWithFlags(&event_handles[1], cudaEventDisableTiming);
 }
 
 template <typename T>
@@ -134,23 +138,31 @@ void sync_stream(unsigned int stream)
   cudaStreamSynchronize(stream_handles[stream]);
 }
 
+void event_record(unsigned int event, unsigned int stream)
+{
+  cudaEventRecord(event_handles[event], stream_handles[stream]);
+}
+
+void stream_wait_event(unsigned int stream, unsigned int event)
+{
+  cudaStreamWaitEvent(stream_handles[stream], event_handles[event], 0);
+}
+
 __global__
 void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned int size)
 {
-
   const unsigned int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  if (idx >= size)
-    return;
-
-  vec1(idx) = vec2(idx);
-
+  for (uint i = idx; i < size; i += gridDim.x * blockDim.x)
+  {
+    vec1(i) = vec2(i);
+  }
 }
 
 void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
-  unsigned int blocks = (size + threads - 1) /threads;
+  unsigned int blocks = min((size + threads - 1) /threads, 65535);
   copy_kernel<<<blocks, threads>>>(vec1, vec2, size);
 }
 
@@ -1062,15 +1074,25 @@ void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts,
 }
 
 void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims)
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream)
 {
   dim3 threads(32,4);
   dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
 
-  if (nDims == 2)
-    pack_dU<2><<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+  if (stream == -1)
+  {
+    if (nDims == 2)
+      pack_dU<2><<<blocks, threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+    else
+      pack_dU<3><<<blocks, threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+  }
   else
-    pack_dU<3><<<blocks,threads>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+  {
+    if (nDims == 2)
+      pack_dU<2><<<blocks, threads, 0, stream_handles[stream]>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+    else
+      pack_dU<3><<<blocks, threads, 0, stream_handles[stream]>>>(U_sbuffs, fpts, dU, nVars, fpts.size());
+  }
 }
 
 template<unsigned int nDims>
@@ -1096,17 +1118,28 @@ void unpack_dU(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts,
 }
 
 void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, bool overset,
+    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream, bool overset,
     int* iblank)
 {
   dim3 threads(32,4);
   dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
 
-  if (nDims == 2)
-    unpack_dU<2><<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size());
-  else 
-    unpack_dU<3><<<blocks,threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size(),
-      overset, iblank);
+  if (stream == -1)
+  {
+    if (nDims == 2)
+      unpack_dU<2><<<blocks, threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size());
+    else 
+      unpack_dU<3><<<blocks, threads>>>(U_rbuffs, fpts, dU, nVars, fpts.size(),
+        overset, iblank);
+  }
+  else
+  {
+    if (nDims == 2)
+      unpack_dU<2><<<blocks, threads, 0, stream_handles[stream]>>>(U_rbuffs, fpts, dU, nVars, fpts.size());
+    else 
+      unpack_dU<3><<<blocks, threads, 0, stream_handles[stream]>>>(U_rbuffs, fpts, dU, nVars, fpts.size(),
+        overset, iblank);
+  }
 }
 
 #endif

@@ -23,7 +23,9 @@
 #include <memory>
 #include <string>
 
-#include <cblas.h>
+extern "C" {
+#include "cblas.h"
+}
 
 #include "elements.hpp"
 #include "faces.hpp"
@@ -168,10 +170,13 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   nodes.assign({nNodes, nEles, nDims});
 
   /* Setup positions of all element's shape nodes in one array */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-    for (unsigned int ele = 0; ele < nEles; ele++)
-      for (unsigned int node = 0; node < nNodes; node++)
-        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+  if (input->meshfile.find(".pyfr") != std::string::npos)
+    nodes = geo->ele_nodes; /// TODO: setup for Gmsh grids as well
+  else
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int node = 0; node < nNodes; node++)
+          nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
 
   int ms = nSpts;
   int mf = nFpts;
@@ -197,8 +202,8 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   auto &Af = shape_fpts(0,0);
   auto &Cf = geo->coord_fpts(0,0,0);
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasTrans, mf, n, k,
-              1.0, &Af, k, &B, n, 0.0, &Cf, mf);
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
 #else
   cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
               1.0, &Af, k, &B, k, 0.0, &Cf, mf);
@@ -209,7 +214,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   auto &Cp = geo->coord_ppts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
-              1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
+              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
 #else
   cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
               1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
@@ -236,7 +241,9 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         int gfpt = geo->fpt2gfpt(fpt,ele);
         /* Check if on ghost edge */
         if (gfpt != -1)
+        {
           faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
+        }
       }
     }
   }
@@ -252,8 +259,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       for (unsigned int fpt = 0; fpt < nFpts/2; fpt++)
       {
         if (nDims == 2)
-        {
-          /* Some indexing to pair up flux points in 2D (on Quad) */
+        {          /* Some indexing to pair up flux points in 2D (on Quad) */
           unsigned int idx = fpt % nSpts1D;
           unsigned int fpt1 = fpt;
           unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
@@ -669,7 +675,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 
   #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, disFn_fpts.ldim());
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
   #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
@@ -703,7 +709,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 
   #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, disFn_fpts.ldim());
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, dFn_fpts.ldim());
   #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, dFn_fpts.ldim());
@@ -782,6 +788,88 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
 
     check_error();
 
+    /* Compute contribution to derivative from common solution at flux points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
+        oppD_fpts_d.data() + dim * (oppD_fpts_d.ldim() * nFpts), oppD_fpts_d.ldim(),
+        Ucomm_d.data(), Ucomm_d.ldim(), 1.0, dU_spts_d.data() + dim * 
+        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+
+    check_error();
+  }
+#endif
+
+}
+
+void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+  /* Compute contribution to derivative from solution at solution points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppD(0, 0, dim);
+        auto &B = U_spts(0, startEle, var);
+        auto &C = dU_spts(0, startEle, var, dim);
+
+#ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+            0.0, &C, dU_spts.ldim());
+#else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+            0.0, &C, dU_spts.ldim());
+#endif
+      }
+    }
+
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    /* Compute contribution to derivative from solution at solution points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
+        oppD_d.data() + dim * (oppD_d.ldim() * nSpts), oppD_d.ldim(), 
+        U_spts_d.data(), U_spts_d.ldim(), 0.0, dU_spts_d.data() + dim * 
+        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+
+    check_error();
+  }
+#endif
+
+}
+
+void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+    /* Compute contribution to derivative from common solution at flux points */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        auto &A = oppD_fpts(0, 0, dim);
+        auto &B = Ucomm(0, startEle, var);
+        auto &C = dU_spts(0, startEle, var, dim);
+
+#ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+            1.0, &C, dU_spts.ldim());
+#else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+            1.0, &C, dU_spts.ldim());
+#endif
+      }
+    }
+
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
     /* Compute contribution to derivative from common solution at flux points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
         oppD_fpts_d.data() + dim * (oppD_fpts_d.ldim() * nFpts), oppD_fpts_d.ldim(),
@@ -946,7 +1034,7 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
 
 #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                          1.0, &A, oppD.ldim(), &B, F_spts.ldim(), 0., &C, gradF_spts.ldim());
+                          1.0, &A, oppD.ldim(), &B, F_spts.ldim(), 0., &C, dF_spts.ldim());
 #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
                     1.0, &A, oppD0.ldim(), &B, F_spts.ldim(), 0., &C, dF_spts.ldim());
@@ -2025,23 +2113,6 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
         /* Compute center viscous LHS implicit Jacobian */
         if (input->viscous)
         {
-          /* Add contribution from boundary conditions (dFcddU) */
-          for (unsigned int face = 0; face < nFaces; face++)
-          {
-            int eleN = geo->ele_adj(face, ele);
-            if (eleN == -1)
-            {
-              for (unsigned int dim = 0; dim < nDims; dim++)
-              {
-                for (unsigned int i = 0; i < nSpts1D; i++)
-                {
-                  unsigned int ind = face * nSpts1D + i;
-                  dFcddU_fpts(ind, ele, ni, nj, dim, 0) += dFcddU_fpts(ind, ele, ni, nj, dim, 1);
-                }
-              }
-            }
-          }
-
           /* Compute center viscous supplementary matrix */
           Cvisc0.fill(0);       
           CtempFS.fill(0);
@@ -2172,7 +2243,7 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
                 {
                   val += oppD(i, k, dim) * CtempSS(k, j);
                 }
-                //LHS(i, ni, j, nj, ele) += val;
+                LHSs[color - 1](i, ni, j, nj, idx) += val;
               }
             }
           }
@@ -2202,19 +2273,16 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             }
           }
 
-          for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int j = 0; j < nSpts; j++)
           {
-            for (unsigned int j = 0; j < nSpts; j++)
+            for (unsigned int i = 0; i < nSpts; i++)
             {
-              for (unsigned int i = 0; i < nSpts; i++)
+              double val = 0;
+              for (unsigned int k = 0; k < nFpts; k++)
               {
-                double val = 0;
-                for (unsigned int k = 0; k < nFpts; k++)
-                {
-                  val += oppD_fpts(i, k, dim) * CtempFS(k, j);
-                }
-                //LHS(i, ni, j, nj, ele) += val;
+                val += oppDiv_fpts(i, k) * CtempFS(k, j);
               }
+              LHSs[color - 1](i, ni, j, nj, idx) += val;
             }
           }
 
@@ -2314,20 +2382,17 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
                     }
                   }
 
-                  for (unsigned int dim = 0; dim < nDims; dim++)
+                  for (unsigned int j = 0; j < nSpts; j++)
                   {
-                    for (unsigned int j = 0; j < nSpts; j++)
+                    for (unsigned int i = 0; i < nSpts; i++)
                     {
-                      for (unsigned int i = 0; i < nSpts; i++)
+                      double val = 0;
+                      for (unsigned int k = 0; k < nSpts1D; k++)
                       {
-                        double val = 0;
-                        for (unsigned int k = 0; k < nSpts1D; k++)
-                        {
-                          unsigned int ind = face * nSpts1D + k;
-                          val += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
-                        }
-                        //LHS(i, ni, j, nj, ele) += val;
+                        unsigned int ind = face * nSpts1D + k;
+                        val += oppDiv_fpts(i, ind) * CtempFSN(k, j);
                       }
+                      LHSs[color - 1](i, ni, j, nj, idx) += val;
                     }
                   }
                 }
@@ -2358,7 +2423,6 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             }
           }
         }
-
         idx++;
       }
     }
@@ -2392,7 +2456,6 @@ void Elements::compute_Uavg()
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
       double sum = 0.0;
-      double vol = 0.0;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
@@ -2401,18 +2464,20 @@ void Elements::compute_Uavg()
         unsigned int j = idx_spts(spt,1);
         double weight = weights_spts(i) * weights_spts(j);
 
+        if (nDims == 3)
+          weight *= weights_spts(idx_spts(spt,2));
+
         sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
-        vol += weight * jaco_det_spts(spt, ele);
       }
 
-      Uavg(ele, n) = sum / vol; 
+      Uavg(ele, n) = sum / vol(ele); 
 
     }
   }
 #endif
 
 #ifdef _GPU
-  compute_Uavg_wrapper(U_spts_d, Uavg_d, jaco_det_spts_d, weights_spts_d, nSpts, nEles, nVars, order);
+  compute_Uavg_wrapper(U_spts_d, Uavg_d, jaco_det_spts_d, weights_spts_d, vol_d, nSpts, nEles, nVars, nDims, order);
 #endif
 }
 
@@ -2473,9 +2538,13 @@ void Elements::poly_squeeze()
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
       double rho = U_spts(spt, ele, 0);
-      double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
-          U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
-      double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
+
+      momF /= U_spts(spt, ele, 0);
+
+      double P = (input->gamma - 1.0) * (U_spts(spt, ele, nDims + 1) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -2485,9 +2554,12 @@ void Elements::poly_squeeze()
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       double rho = U_fpts(fpt, ele, 0);
-      double momF = (U_fpts(fpt, ele, 1) * U_fpts(fpt,ele,1) + U_spts(fpt, ele, 2) * 
-          U_fpts(fpt, ele,2)) / U_fpts(fpt, ele, 0);
-      double P = (input->gamma - 1.0) * (U_fpts(fpt, ele, 3) - 0.5 * momF);
+      double momF = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        momF += U_fpts(fpt, ele, dim + 1) * U_fpts(fpt, ele, dim + 1);
+
+      momF /= U_fpts(fpt, ele, 0);
+      double P = (input->gamma - 1.0) * (U_fpts(fpt, ele, nDims + 1) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -2505,7 +2577,7 @@ void Elements::poly_squeeze()
         Vsq += V[dim] * V[dim];
       }
 
-      double e = Uavg(ele, 3);
+      double e = Uavg(ele, nDims + 1);
       double P = (input->gamma - 1.0) * (e - 0.5 * rho * Vsq);
 
       double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));

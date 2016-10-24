@@ -91,7 +91,7 @@ Zefr* get_zefr_object(void);
 
 void finalize(void);
 
-bool use_gpus(void)
+static inline bool use_gpus(void)
 {
   #ifdef _GPU
   return true;

@@ -44,7 +44,7 @@ const int num_colors = sizeof(colors)/sizeof(uint32_t);
       eventAttrib.message.ascii = name; \
       nvtxRangePushEx(&eventAttrib); \
 }
-#define POP_NVTX_RANGE {cudaDeviceSynchronize(); nvtxRangePop();}
+#define POP_NVTX_RANGE {nvtxRangePop();}
 #else
 #define PUSH_NVTX_RANGE(name,cid)
 #define POP_NVTX_RANGE

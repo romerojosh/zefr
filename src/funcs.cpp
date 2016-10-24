@@ -25,7 +25,9 @@
 
 #include <cmath>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #ifdef _OMP
 #include "omp.h"
@@ -45,15 +47,12 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     if (input->nDims == 2)
     {
       
-      /*
       val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
              std::sin(M_PI * (x - input->AdvDiff_A(0) * t))* 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t));
-      */
       
       //val =  std::sin(2 * M_PI * x/10.) + std::sin(2 * M_PI * y/10.);
-      val = std::exp(-x*x-y*y);
-
+      //val = std::exp(-x*x-y*y);
       //val =  step((x - input->AdvDiff_A(0) * t));
     }
     else if (input->nDims == 3)
@@ -348,19 +347,20 @@ void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA,
     CBLAS_TRANSPOSE transB, int M, int N, int K, double alpha, double* A, int lda, 
     double* B, int ldb, double beta, double* C, int ldc)
 {
+  
 #pragma omp parallel
-    {
-      int nThreads = omp_get_num_threads();
-      int thread_idx = omp_get_thread_num();
+  {
+    int nThreads = omp_get_num_threads();
+    int thread_idx = omp_get_thread_num();
 
-      int block_size = N / nThreads;
-      int start_idx = block_size * thread_idx;
+    int block_size = N / nThreads;
+    int start_idx = block_size * thread_idx;
 
-      if (thread_idx == nThreads-1)
-        block_size += N % (block_size);
+    if (thread_idx == nThreads-1)
+      block_size += N % (block_size);
 
-      cblas_dgemm(mode, transA, transB, M, block_size, K, alpha, A, lda, 
-          B + ldb * start_idx, ldb, beta, C + ldc * start_idx, ldc);
+    cblas_dgemm(mode, transA, transB, M, block_size, K, alpha, A, lda, 
+        B + ldb * start_idx, ldb, beta, C + ldc * start_idx, ldc);
   }
 }
 #endif
@@ -448,4 +448,344 @@ double determinant(const mdvector<double> &mat)
 
     return Det;
   }
+}
+
+std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
+{
+  std::vector<int> gmsh_to_ijk(nNodes,0);
+
+  /* Lagrange Elements (or linear serendipity) */
+  if (nNodes != 8)
+  {
+    int nNodes1D = sqrt(nNodes);
+
+    if (nNodes1D * nNodes1D != nNodes)
+      ThrowException("nNodes must be a square number.");
+
+    int nLevels = nNodes1D / 2;
+
+    /* Set shape values via recursive strategy (from Flurry) */
+    int node = 0;
+    for (int i = 0; i < nLevels; i++)
+    {
+      /* Corner Nodes */
+      int i2 = (nNodes1D - 1) - i;
+      gmsh_to_ijk[node]     = i  + nNodes1D * i;
+      gmsh_to_ijk[node + 1] = i2 + nNodes1D * i;
+      gmsh_to_ijk[node + 2] = i2 + nNodes1D * i2;
+      gmsh_to_ijk[node + 3] = i  + nNodes1D * i2;
+
+      node += 4;
+
+      int nEdgeNodes = nNodes1D - 2 * (i + 1);
+      for (int j = 0; j < nEdgeNodes; j++)
+      {
+        gmsh_to_ijk[node + j]                = i+1+j  + nNodes1D * i;
+        gmsh_to_ijk[node + nEdgeNodes + j]   = i2     + nNodes1D * (i+1+j);
+        gmsh_to_ijk[node + 2*nEdgeNodes + j] = i2-1-j + nNodes1D * i2;
+        gmsh_to_ijk[node + 3*nEdgeNodes + j] = i      + nNodes1D * (i2-1-j);
+      }
+
+      node += 4 * nEdgeNodes;
+    }
+
+    /* Add center node in odd case */
+    if (nNodes1D % 2 != 0)
+    {
+      gmsh_to_ijk[nNodes - 1] = nNodes1D/2 + nNodes1D * (nNodes1D/2);
+    }
+  }
+
+  /* 8-node Serendipity Element */
+  else
+  {
+    gmsh_to_ijk[0] = 0; gmsh_to_ijk[1] = 2;  gmsh_to_ijk[2] = 7;
+    gmsh_to_ijk[3] = 5; gmsh_to_ijk[4] = 1;  gmsh_to_ijk[5] = 3;
+    gmsh_to_ijk[6] = 4; gmsh_to_ijk[7] = 6;
+  }
+
+  return gmsh_to_ijk;
+}
+
+std::vector<int> structured_to_gmsh_quad(unsigned int nNodes)
+{
+  auto gmsh2ijk = gmsh_to_structured_quad(nNodes);
+
+  return reverse_map(gmsh2ijk);
+}
+
+std::vector<int> structured_to_gmsh_hex(unsigned int nNodes)
+{
+  auto gmsh2ijk = gmsh_to_structured_hex(nNodes);
+
+  return reverse_map(gmsh2ijk);
+}
+
+std::vector<int> gmsh_to_structured_hex(unsigned int nNodes)
+{
+  std::vector<int> gmsh_to_ijk(nNodes,0);
+
+  int nSide = cbrt(nNodes);
+
+  if (nSide*nSide*nSide != nNodes)
+  {
+    std::cout << "nNodes = " << nNodes << std::endl;
+    ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
+  }
+
+  std::vector<double> xlist(nSide);
+  double dxi = 2./(nSide-1);
+
+  for (int i=0; i<nSide; i++)
+    xlist[i] = -1. + i*dxi;
+
+  int nLevels = nSide / 2;
+  int isOdd = nSide % 2;
+
+  /* Recursion for all high-order Lagrange elements:
+   * 8 corners, each edge's points, interior face points, volume points */
+  int nPts = 0;
+  for (int i = 0; i < nLevels; i++) {
+    // Corners
+    int i2 = (nSide-1) - i;
+    gmsh_to_ijk[nPts+0] = i  + nSide * (i  + nSide * i);
+    gmsh_to_ijk[nPts+1] = i2 + nSide * (i  + nSide * i);
+    gmsh_to_ijk[nPts+2] = i2 + nSide * (i2 + nSide * i);
+    gmsh_to_ijk[nPts+3] = i  + nSide * (i2 + nSide * i);
+    gmsh_to_ijk[nPts+4] = i  + nSide * (i  + nSide * i2);
+    gmsh_to_ijk[nPts+5] = i2 + nSide * (i  + nSide * i2);
+    gmsh_to_ijk[nPts+6] = i2 + nSide * (i2 + nSide * i2);
+    gmsh_to_ijk[nPts+7] = i  + nSide * (i2 + nSide * i2);
+    nPts += 8;
+
+    // Edges
+    int nSide2 = nSide - 2 * (i+1);
+    for (int j = 0; j < nSide2; j++) {
+      // Edges around 'bottom'
+      gmsh_to_ijk[nPts+0*nSide2+j] = i+1+j  + nSide * (i     + nSide * i);
+      gmsh_to_ijk[nPts+3*nSide2+j] = i2     + nSide * (i+1+j + nSide * i);
+      gmsh_to_ijk[nPts+5*nSide2+j] = i2-1-j + nSide * (i2    + nSide * i);
+      gmsh_to_ijk[nPts+1*nSide2+j] = i      + nSide * (i+1+j + nSide * i);
+
+      // 'Vertical' edges
+      gmsh_to_ijk[nPts+2*nSide2+j] = i  + nSide * (i  + nSide * (i+1+j));
+      gmsh_to_ijk[nPts+4*nSide2+j] = i2 + nSide * (i  + nSide * (i+1+j));
+      gmsh_to_ijk[nPts+6*nSide2+j] = i2 + nSide * (i2 + nSide * (i+1+j));
+      gmsh_to_ijk[nPts+7*nSide2+j] = i  + nSide * (i2 + nSide * (i+1+j));
+
+      // Edges around 'top'
+      gmsh_to_ijk[nPts+ 8*nSide2+j] = i+1+j  + nSide * (i     + nSide * i2);
+      gmsh_to_ijk[nPts+10*nSide2+j] = i2     + nSide * (i+1+j + nSide * i2);
+      gmsh_to_ijk[nPts+11*nSide2+j] = i2-1-j + nSide * (i2    + nSide * i2);
+      gmsh_to_ijk[nPts+ 9*nSide2+j] = i      + nSide * (i+1+j + nSide * i2);
+    }
+    nPts += 12*nSide2;
+
+    /* --- Faces [Use recursion from quadrilaterals] --- */
+
+    int nLevels2 = nSide2 / 2;
+    int isOdd2 = nSide2 % 2;
+
+    // --- Bottom face ---
+    for (int j0 = 0; j0 < nLevels2; j0++) {
+      // Corners
+      int j = j0 + i + 1;
+      int j2 = i + 1 + (nSide2-1) - j0;
+      gmsh_to_ijk[nPts+0] = j  + nSide * (j  + nSide * i);
+      gmsh_to_ijk[nPts+1] = j  + nSide * (j2 + nSide * i);
+      gmsh_to_ijk[nPts+2] = j2 + nSide * (j2 + nSide * i);
+      gmsh_to_ijk[nPts+3] = j2 + nSide * (j  + nSide * i);
+      nPts += 4;
+
+      // Edges: Bottom, right, top, left
+      int nSide3 = nSide2 - 2 * (j0+1);
+      for (int k = 0; k < nSide3; k++) {
+        gmsh_to_ijk[nPts+0*nSide3+k] = j      + nSide * (j+1+k  + nSide * i);
+        gmsh_to_ijk[nPts+1*nSide3+k] = j+1+k  + nSide * (j2     + nSide * i);
+        gmsh_to_ijk[nPts+2*nSide3+k] = j2     + nSide * (j2-1-k + nSide * i);
+        gmsh_to_ijk[nPts+3*nSide3+k] = j2-1-k + nSide * (j      + nSide * i);
+      }
+      nPts += 4*nSide3;
+    }
+
+    // Center node for even-ordered Lagrange quads (odd value of nSide)
+    if (isOdd2) {
+      gmsh_to_ijk[nPts] = nSide/2 +  nSide*(nSide/2) +  nSide*nSide*i;
+      nPts += 1;
+    }
+
+    // --- Front face ---
+    for (int j0 = 0; j0 < nLevels2; j0++) {
+      // Corners
+      int j = j0 + i + 1;
+      int j2 = i + 1 + (nSide2-1) - j0;
+      gmsh_to_ijk[nPts+0] = j  + nSide * (i + nSide * j);
+      gmsh_to_ijk[nPts+1] = j2 + nSide * (i + nSide * j);
+      gmsh_to_ijk[nPts+2] = j2 + nSide * (i + nSide * j2);
+      gmsh_to_ijk[nPts+3] = j  + nSide * (i + nSide * j2);
+      nPts += 4;
+
+      // Edges: Bottom, right, top, left
+      int nSide3 = nSide2 - 2 * (j0+1);
+      for (int k = 0; k < nSide3; k++) {
+        gmsh_to_ijk[nPts+0*nSide3+k] = j+1+k  + nSide * (i + nSide * j);
+        gmsh_to_ijk[nPts+1*nSide3+k] = j2     + nSide * (i + nSide * (j+1+k));
+        gmsh_to_ijk[nPts+2*nSide3+k] = j2-1-k + nSide * (i + nSide * j2);
+        gmsh_to_ijk[nPts+3*nSide3+k] = j      + nSide * (i + nSide * (j2-1-k));
+      }
+      nPts += 4*nSide3;
+    }
+
+    // Center node for even-ordered Lagrange quads (odd value of nSide)
+    if (isOdd2) {
+      gmsh_to_ijk[nPts] = nSide/2 + nSide*(i + nSide*(nSide/2));
+      nPts += 1;
+    }
+
+    // --- Left face ---
+    for (int j0 = 0; j0 < nLevels2; j0++) {
+      // Corners
+      int j = j0 + i + 1;
+      int j2 = i + 1 + (nSide2-1) - j0;
+      gmsh_to_ijk[nPts+0] = i + nSide * (j  + nSide * j);
+      gmsh_to_ijk[nPts+1] = i + nSide * (j  + nSide * j2);
+      gmsh_to_ijk[nPts+2] = i + nSide * (j2 + nSide * j2);
+      gmsh_to_ijk[nPts+3] = i + nSide * (j2 + nSide * j);
+      nPts += 4;
+
+      // Edges: Bottom, right, top, left
+      int nSide3 = nSide2 - 2 * (j0+1);
+      for (int k = 0; k < nSide3; k++) {
+        gmsh_to_ijk[nPts+0*nSide3+k] = i + nSide * (j      + nSide * (j+1+k));
+        gmsh_to_ijk[nPts+1*nSide3+k] = i + nSide * (j+1+k  + nSide * j2);
+        gmsh_to_ijk[nPts+2*nSide3+k] = i + nSide * (j2     + nSide * (j2-1-k));
+        gmsh_to_ijk[nPts+3*nSide3+k] = i + nSide * (j2-1-k + nSide * j);
+      }
+      nPts += 4*nSide3;
+    }
+
+    // Center node for even-ordered Lagrange quads (odd value of nSide)
+    if (isOdd2) {
+      gmsh_to_ijk[nPts] = i + nSide * (nSide/2 + nSide * (nSide/2));
+      nPts += 1;
+    }
+
+    // --- Right face ---
+    for (int j0 = 0; j0 < nLevels2; j0++) {
+      // Corners
+      int j = j0 + i + 1;
+      int j2 = i + 1 + (nSide2-1) - j0;
+      gmsh_to_ijk[nPts+0] = i2 + nSide * (j  + nSide * j);
+      gmsh_to_ijk[nPts+1] = i2 + nSide * (j2 + nSide * j);
+      gmsh_to_ijk[nPts+2] = i2 + nSide * (j2 + nSide * j2);
+      gmsh_to_ijk[nPts+3] = i2 + nSide * (j  + nSide * j2);
+      nPts += 4;
+
+      // Edges: Bottom, right, top, left
+      int nSide3 = nSide2 - 2 * (j0+1);
+      for (int k = 0; k < nSide3; k++) {
+        gmsh_to_ijk[nPts+0*nSide3+k] = i2 + nSide * (j+1+k  + nSide * j);
+        gmsh_to_ijk[nPts+1*nSide3+k] = i2 + nSide * (j2     + nSide * (j+1+k));
+        gmsh_to_ijk[nPts+2*nSide3+k] = i2 + nSide * (j2-1-k + nSide * j2);
+        gmsh_to_ijk[nPts+3*nSide3+k] = i2 + nSide * (j      + nSide * (j2-1-k));
+      }
+      nPts += 4*nSide3;
+    }
+
+    // Center node for even-ordered Lagrange quads (odd value of nSide)
+    if (isOdd2) {
+      gmsh_to_ijk[nPts] = i2 + nSide * (nSide/2 + nSide * (nSide/2));
+      nPts += 1;
+    }
+
+    // --- Back face ---
+    for (int j0 = 0; j0 < nLevels2; j0++) {
+      // Corners
+      int j = j0 + i + 1;
+      int j2 = i + 1 + (nSide2-1) - j0;
+      gmsh_to_ijk[nPts+0] = j2 + nSide * (i2 + nSide * j);
+      gmsh_to_ijk[nPts+1] = j  + nSide * (i2 + nSide * j);
+      gmsh_to_ijk[nPts+2] = j  + nSide * (i2 + nSide * j2);
+      gmsh_to_ijk[nPts+3] = j2 + nSide * (i2 + nSide * j2);
+      nPts += 4;
+
+      // Edges: Bottom, right, top, left
+      int nSide3 = nSide2 - 2 * (j0+1);
+      for (int k = 0; k < nSide3; k++) {
+        gmsh_to_ijk[nPts+0*nSide3+k] = j2-1-k + nSide * (i2 + nSide*j);
+        gmsh_to_ijk[nPts+1*nSide3+k] = j      + nSide * (i2 + nSide*(j+1+k));
+        gmsh_to_ijk[nPts+2*nSide3+k] = j+1+k  + nSide * (i2 + nSide*j2);
+        gmsh_to_ijk[nPts+3*nSide3+k] = j2     + nSide * (i2 + nSide*(j2-1-k));
+      }
+      nPts += 4*nSide3;
+    }
+
+    // Center node for even-ordered Lagrange quads (odd value of nSide)
+    if (isOdd2) {
+      gmsh_to_ijk[nPts] = nSide/2 + nSide * (i2 + nSide * (nSide/2));
+      nPts += 1;
+    }
+
+    // --- Top face ---
+    for (int j0 = 0; j0 < nLevels2; j0++) {
+      // Corners
+      int j = j0 + i + 1;
+      int j2 = i + 1 + (nSide2-1) - j0;
+      gmsh_to_ijk[nPts+0] = j  + nSide * (j  + nSide * i2);
+      gmsh_to_ijk[nPts+1] = j2 + nSide * (j  + nSide * i2);
+      gmsh_to_ijk[nPts+2] = j2 + nSide * (j2 + nSide * i2);
+      gmsh_to_ijk[nPts+3] = j  + nSide * (j2 + nSide * i2);
+      nPts += 4;
+
+      // Edges: Bottom, right, top, left
+      int nSide3 = nSide2 - 2 * (j0+1);
+      for (int k = 0; k < nSide3; k++) {
+        gmsh_to_ijk[nPts+0*nSide3+k] = j+1+k  + nSide * (j      + nSide * i2);
+        gmsh_to_ijk[nPts+1*nSide3+k] = j2     + nSide * (j+1+k  + nSide * i2);
+        gmsh_to_ijk[nPts+2*nSide3+k] = j2-1-k + nSide * (j2     + nSide * i2);
+        gmsh_to_ijk[nPts+3*nSide3+k] = j      + nSide * (j2-1-k + nSide * i2);
+      }
+      nPts += 4*nSide3;
+    }
+
+    // Center node for even-ordered Lagrange quads (odd value of nSide)
+    if (isOdd2) {
+      gmsh_to_ijk[nPts] = nSide/2 + nSide * (nSide/2 +  nSide * i2);
+      nPts += 1;
+    }
+  }
+
+  // Center node for even-ordered Lagrange quads (odd value of nSide)
+  if (isOdd) {
+    gmsh_to_ijk[nNodes-1] = nSide/2 + nSide * (nSide/2 + nSide * (nSide/2));
+  }
+
+  return gmsh_to_ijk;
+}
+
+std::vector<int> reverse_map(const std::vector<int> &map1)
+{
+  auto map2 = map1;
+  for (int i = 0; i < map1.size(); i++)
+    map2[i] = findFirst(map1, i);
+
+  return map2;
+}
+
+std::vector<int> get_int_list(int N, int start)
+{
+  std::vector<int> list(N);
+  for (int i = 0; i < N; i++)
+    list[i] = start + i;
+
+  return list;
+}
+
+std::vector<uint> get_int_list(uint N, uint start)
+{
+  std::vector<uint> list(N);
+  for (uint i = 0; i < N; i++)
+    list[i] = start + i;
+
+  return list;
 }

@@ -83,7 +83,7 @@ class mdvector
     mdvector(std::vector<unsigned int> dims, T value = 0, bool pad = false, bool pinned = false);
 
     //! Setup operator
-    void assign(std::vector<unsigned int> dims, T value = 0, bool pad = false, bool pinned = false);
+    void assign(std::vector<unsigned int> dims, T value = T(), bool pad = false, bool pinned = false);
 
     //! Push back operator (for compatibility)
     void push_back(T value); 
@@ -96,6 +96,8 @@ class mdvector
     //
     //! Method to return number of values (with padding)
     size_t max_size() const;
+
+    int get_nDims(void) { return nDims; }
 
     //! Method to return vector shape
     std::array<unsigned int,6> shape(void) const;

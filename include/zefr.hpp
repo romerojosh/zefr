@@ -42,6 +42,7 @@ class PMGrid;
 
 class Zefr
 {
+friend class FRSolver;
 public:
 
   /*! Assign MPI communicator and overset-grid ID
@@ -120,6 +121,9 @@ public:
   /// TODO: Reconsider organization
   void set_dataUpdate_callback(void (*dataUpdate)(int, double*, double*, int));
 
+  void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
+                           void (*dataUpdate)(int, double*, double*, int));
+
 private:
   // Generic data about the run
   int rank = 0, nRanks = 1;
@@ -146,6 +150,15 @@ private:
   // Again, to simplify MPI vs. no-MPI compilation, this will be either an
   // MPI_Comm or an int
   _mpi_comm myComm;
+
+  //! Callback function to TIOGA to perform overset interpolation
+  void (*overset_interp)(int nVars, double* U_spts, double* U_fpts, int gradFlag);
+
+  //! Callback function to TIOGA to pre-process the grids
+  void (*tg_preprocess) (void);
+
+  //! Callback function to TIOGA to process connectivity
+  void (*tg_process_connectivity) (void);
 };
 
 #endif /* _zefr_hpp */

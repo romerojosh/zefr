@@ -1,35 +1,31 @@
 # Geometry:
 nDims    2
-meshfile channelBump_48x16_b2.msh
-serendipity 0
+meshfile naca_32x32_b2.msh
+#meshfile naca_32x32_b2.pyfrm
 
 # Boundary Conditions
 mesh_bound  char  char
-mesh_bound  wall_slip_g  wall_slip_p
-mesh_bound  symmetry_g  symmetry_p
+mesh_bound  wall_slip_p  wall_slip_g
 mesh_bound  fluid  fluid
 
 # Solver:
-order     2
-equation EulerNS    (AdvDiff, EulerNS)
+order     4
+equation EulerNS    (AdvDiff, Burgers, EulerNS)
 viscous  0
 spt_type Legendre
 
 # Timestepping:
 n_steps 100000
 res_tol 1e-11
-dt_scheme MCGS     (Euler, RK44, RK54, MCGS)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.1
-CFL	  20.0
+dt_scheme RK44      (Euler, RK44, RK54, MCGS)
+dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt	  0.01
+CFL	  0.3
 
 # CFL Adaptation
-adapt_CFL 1
+adapt_CFL 0
 CFL_max 1e5
 CFL_ratio 2.0
-
-restart 0
-restart_file channel_48x16_MCGS/channel_48x16_MCGS_000002700.vtu
 
 # Implicit
 SER 0
@@ -39,15 +35,17 @@ Jfreeze_freq 100
 nColors 2
 n_LHS_blocks 4
 
+restart 0
+restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
+
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix channel_48x16_MCGS
-test_case 3
+output_prefix naca_eul
 write_freq    100000
 report_freq   100
 res_type      1
-force_freq    0
-error_freq    1000
+force_freq    1000
+error_freq    0
 nQpts1D       10
 
 # Riemann Solver:
@@ -70,8 +68,8 @@ S       120
 
 # Euler specific
 rho_fs 1.4
-u_fs 0.5
-v_fs 0.0
+u_fs 0.499881013537955
+v_fs 0.010907442517237
 w_fs 0.0
 P_fs 1.0
 

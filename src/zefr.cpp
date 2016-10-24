@@ -38,6 +38,8 @@
 #include "solver.hpp"
 #include "filter.hpp"
 
+#include "funcs.hpp"
+
 #ifndef _BUILD_LIB
 int main(int argc, char* argv[])
 {
@@ -58,7 +60,8 @@ int main(int argc, char* argv[])
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  cudaSetDevice(rank%nDevices); // Hardcoded for ICME nodes for now.
+  //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
+  cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
 #endif
 #else
   comm = 0;
@@ -89,7 +92,6 @@ int main(int argc, char* argv[])
     std::cout << std::endl;
   }
 
-
   std::string inputfile = argv[1];
 
   if (rank == 0) std::cout << "Reading input file: " << inputfile <<  std::endl;
@@ -109,7 +111,7 @@ int main(int argc, char* argv[])
   }
 
 #ifdef _GPU
-  start_cublas();
+  initialize_cuda();
 #endif
 
   /* Open file to write history output */
@@ -131,8 +133,13 @@ int main(int argc, char* argv[])
   }
 
   /* Write initial solution */
-  solver.write_solution(input.output_prefix);
-  solver.write_surfaces(input.output_prefix);
+  if (input.write_paraview)
+    solver.write_solution(input.output_prefix);
+  if (input.plot_surfaces)
+    solver.write_surfaces(input.output_prefix);
+  if (input.write_pyfr)
+    solver.write_solution_pyfr(input.output_prefix);
+
   if (input.dt_scheme == "MCGS")
   {
     solver.write_color();
@@ -166,8 +173,12 @@ int main(int argc, char* argv[])
 
     if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
     {
-      solver.write_solution(input.output_prefix);
-      solver.write_surfaces(input.output_prefix);
+      if (input.write_paraview)
+        solver.write_solution(input.output_prefix);
+      if (input.plot_surfaces)
+        solver.write_surfaces(input.output_prefix);
+      if (input.write_pyfr)
+        solver.write_solution_pyfr(input.output_prefix);
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
@@ -249,8 +260,11 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  cudaSetDevice(0);
-  //cudaSetDevice(rank%6); // Hardcoded for ICME nodes for now.
+  int grank;
+  MPI_Comm_rank(MPI_COMM_WORLD,&grank);
+  //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
+  cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
+  printf("My CUDA device for rank %d(%d) is %d\n",rank,grank,grank%4);
 #endif
 }
 #endif
@@ -275,6 +289,7 @@ void Zefr::setup_solver(void)
 {
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   solver = std::make_shared<FRSolver>(&input);
+  solver->ZEFR = this;
   solver->setup(myComm);
 
   if (input.p_multi)
@@ -286,7 +301,7 @@ void Zefr::setup_solver(void)
   }
 
 #ifdef _GPU
-  start_cublas();
+  initialize_cuda();
 #endif
 
   /* Open files to write residual / force / error history output */
@@ -341,8 +356,12 @@ void Zefr::write_residual(void)
 
 void Zefr::write_solution(void)
 {
-  solver->write_solution(input.output_prefix);
-  solver->write_surfaces(input.output_prefix);
+  if (input.write_paraview)
+    solver->write_solution(input.output_prefix);
+  if (input.plot_surfaces)
+    solver->write_surfaces(input.output_prefix);
+  if (input.write_pyfr)
+    solver->write_solution_pyfr(input.output_prefix);
 }
 
 void Zefr::write_forces(void)
@@ -486,6 +505,7 @@ void Zefr::update_iblank_gpu(void)
     int face = geo->fpt2face[fpt];
     geo->iblank_fpts(fpt) = geo->iblank_face[face];
   }
+  check_error();
   geo->iblank_fpts_d = geo->iblank_fpts;
   geo->iblank_cell_d = geo->iblank_cell;
 #endif
@@ -517,7 +537,15 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag)
 
 void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, double *q_fpts, int gradFlag))
 {
-  solver->overset_interp = dataUpdate;
+  overset_interp = dataUpdate;
+}
+
+void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
+                         void (*dataUpdate)(int, double*, double*, int))
+{
+  tg_preprocess = preprocess;
+  tg_process_connectivity = connect;
+  overset_interp = dataUpdate;
 }
 
 #endif /* _BUILD_LIB */

@@ -53,9 +53,11 @@ public:
 
   Timer(void) {}
 
-  Timer(std::string prefix) { this->prefix = prefix; }
+  Timer(const std::string &prefix) { this->prefix = prefix; }
+  Timer(const char *prefix) { this->prefix = prefix; }
 
-  void setPrefix(std::string prefix) { this->prefix = prefix; }
+  void setPrefix(const std::string &prefix) { this->prefix = prefix; }
+  void setPrefix(const char *prefix) { this->prefix = prefix; }
 
   void startTimer(void)
   {
@@ -124,6 +126,10 @@ struct InputStruct
   double sen_Jfac, filt_gamma;
   double iter = 0, initIter = 0, time = 0, rkTime = 0;
 
+  /* --- I/O --- */
+  short write_paraview, write_pyfr, plot_surfaces;
+  int restart_iter;
+
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;
   unsigned int gridID = 0;
@@ -134,7 +140,7 @@ struct InputStruct
   double moveFx, moveFy, moveFz;
 
   /* --- Additional Mesh Variables --- */
-  std::map<std::string,std::string> meshBounds;
+  std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 
   /* Implicit Parameters */
   bool SER, inv_mode, stream_mode, backsweep, LU_pivot;

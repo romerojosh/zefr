@@ -22,7 +22,9 @@
 
 #include <cmath>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #include "input.hpp"
 #include "mdvector.hpp"
@@ -115,6 +117,96 @@ int findFirst(const std::vector<T>& vec, T val)
       return i;
 
   return -1;
+}
+
+std::vector<int> reverse_map(const std::vector<int> &map1);
+
+std::vector<int> get_int_list(int N, int start = 0);
+std::vector<uint> get_int_list(uint N, uint start = 0);
+
+//! Map a structured ijk-type index to the equivalent Gmsh node index
+std::vector<int> structured_to_gmsh_quad(unsigned int nNodes);
+std::vector<int> structured_to_gmsh_hex(unsigned int nNodes);
+
+//! Map a Gmsh node index to the equivalent structured ijk-type index
+std::vector<int> gmsh_to_structured_quad(unsigned int nNodes);
+std::vector<int> gmsh_to_structured_hex(unsigned int nNodes);
+
+
+template<typename T>
+std::vector<uint> sort_ind(const std::vector<T> &data, const std::vector<uint> &inds)
+{
+  std::vector<std::pair<T,size_t>> vp;
+  vp.reserve(inds.size());
+
+  for (uint i = 0; i < inds.size(); i++)
+    vp.push_back(make_pair(data[inds[i]], inds[i]));
+
+  /* Sorting will put lower values [vp.first] ahead of larger ones, resolving
+   * ties using the original index [vp.second] */
+  std::sort(vp.begin(), vp.end());
+
+  std::vector<uint> sorted_ind(inds.size());
+  for (uint i = 0; i < vp.size(); i++)
+    sorted_ind[i] = vp[i].second;
+
+  return sorted_ind;
+}
+
+template<typename T>
+std::vector<uint> sort_ind(const std::vector<T> &data)
+{
+  std::vector<std::pair<T,size_t>> vp;
+  vp.reserve(data.size());
+
+  for (uint i = 0; i < data.size(); i++)
+    vp.push_back(make_pair(data[i], i));
+
+  /* Sorting will put lower values [vp.first] ahead of larger ones, resolving
+   * ties using the original index [vp.second] */
+  std::sort(vp.begin(), vp.end());
+
+  std::vector<uint> sorted_ind(data.size());
+  for (uint i = 0; i < vp.size(); i++)
+    sorted_ind[i] = vp[i].second;
+
+  return sorted_ind;
+}
+
+template<typename T>
+void fuzzysort_ind(const mdvector<T> &mat, uint *inds, uint ninds, uint nDims, uint dim = 0, double tol = 1e-6)
+{
+  std::sort(inds, inds + ninds, [&](uint a, uint b) { return mat(dim, a) < mat(dim, b); } );
+
+  uint j, i = 0;
+  uint ix = inds[0];
+  for (j = 1; j < ninds; j++)
+  {
+    uint jx = inds[j];
+    if (mat(dim,jx) - mat(dim,ix) >= tol)
+    {
+      // Sort the duplicated by the next dimension and update 'ind'
+      if (j - i > 1 && dim+1 < nDims)
+        fuzzysort_ind(mat,inds+i,j-i,nDims,dim+1,tol);
+      i = j;
+      ix = jx;
+    }
+  }
+
+  // Sort the duplicated by the next dimension and update 'ind'
+  if (i != j && dim+1 < nDims)
+    fuzzysort_ind(mat,inds+i,j-i,nDims,dim+1,tol);
+}
+
+template<typename T>
+std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1e-8)
+{
+  auto dims = mat.shape();
+  auto list = get_int_list(dims[1]);
+
+  fuzzysort_ind(mat, list.data(), list.size(), dims[0], dim, tol);
+
+  return list;
 }
 
 #endif /* funcs_hpp */

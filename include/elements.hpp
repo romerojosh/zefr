@@ -175,6 +175,8 @@ class Elements
     void extrapolate_U(unsigned int startEle, unsigned int endEle);
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);
     void compute_dU(unsigned int startEle, unsigned int endEle);
+    void compute_dU_spts(unsigned int startEle, unsigned int endEle);
+    void compute_dU_fpts(unsigned int startEle, unsigned int endEle);
     void compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle);

@@ -1588,8 +1588,8 @@ void extrapolate_Fn_wrapper(mdvector_gpu<double> &oppE,
 __global__
 void compute_Uavg(mdvector_gpu<double> U_spts, 
     mdvector_gpu<double> Uavg, mdvector_gpu<double> jaco_det_spts, 
-    mdvector_gpu<double> weights_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, int order)
+    mdvector_gpu<double> weights_spts, mdvector_gpu<double> vol, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims, int order)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
@@ -1600,20 +1600,30 @@ void compute_Uavg(mdvector_gpu<double> U_spts,
   for (unsigned int n = 0; n < nVars; n++)
   {
     double sum = 0.0;
-    double vol = 0.0;
 
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
       /* Get quadrature weight */
-      unsigned int i = spt % (order + 1);
-      unsigned int j = spt / (order + 1);
-      double weight = weights_spts(i) * weights_spts(j);
+      double weight; 
+      if (nDims == 2)
+      {
+        unsigned int i = spt % (order + 1);
+        unsigned int j = spt / (order + 1);
+        weight = weights_spts(i) * weights_spts(j);
+      }
+
+      if (nDims == 3)
+      {
+        unsigned int i = spt % (order + 1);
+        unsigned int j = (spt / (order + 1)) % (order + 1);
+        unsigned int k = spt / ((order + 1) * (order + 1));
+        weight = weights_spts(i) * weights_spts(j) * weights_spts(k);
+      }
 
       sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
-      vol += weight * jaco_det_spts(spt, ele);
     }
 
-    Uavg(ele, n) = sum / vol; 
+    Uavg(ele, n) = sum / vol(ele); 
 
   }
 
@@ -1621,13 +1631,13 @@ void compute_Uavg(mdvector_gpu<double> U_spts,
 
 void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 
     mdvector_gpu<double> &Uavg, mdvector_gpu<double> &jaco_det_spts, 
-    mdvector_gpu<double> &weights_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, int order)
+    mdvector_gpu<double> &weights_spts, mdvector_gpu<double> &vol, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims, int order)
 {
   unsigned int threads= 192;
   unsigned int blocks = (nEles + threads - 1)/ threads;
 
-  compute_Uavg<<<blocks, threads>>>(U_spts, Uavg, jaco_det_spts, weights_spts, nSpts, nEles, nVars, order);
+  compute_Uavg<<<blocks, threads>>>(U_spts, Uavg, jaco_det_spts, weights_spts, vol, nSpts, nEles, nVars, nDims, order);
 }
 
 __global__
@@ -1688,9 +1698,12 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {
     double rho = U_spts(spt, ele, 0);
-    double momF = (U_spts(spt, ele, 1) * U_spts(spt,ele,1) + U_spts(spt, ele, 2) * 
-        U_spts(spt, ele,2)) / U_spts(spt, ele, 0);
-    double P = (gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
+    double momF = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
+
+    momF /= U_spts(spt, ele, 0);
+    double P = (gamma - 1.0) * (U_spts(spt, ele, nDims + 1) - 0.5 * momF);
 
     double tau = P - exps0 * pow(rho, gamma);
     minTau = min(minTau, tau);
@@ -1700,9 +1713,12 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
     double rho = U_fpts(fpt, ele, 0);
-    double momF = (U_fpts(fpt, ele, 1) * U_fpts(fpt,ele,1) + U_spts(fpt, ele, 2) * 
-        U_fpts(fpt, ele,2)) / U_fpts(fpt, ele, 0);
-    double P = (gamma - 1.0) * (U_fpts(fpt, ele, 3) - 0.5 * momF);
+    double momF = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      momF += U_fpts(fpt, ele, dim + 1) * U_fpts(fpt, ele, dim + 1);
+
+    momF /= U_fpts(fpt, ele, 0);
+    double P = (gamma - 1.0) * (U_fpts(fpt, ele, nDims + 1) - 0.5 * momF);
 
     double tau = P - exps0 * pow(rho, gamma);
     minTau = min(minTau, tau);
@@ -1716,11 +1732,11 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
     double Vsq = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      V[dim] = Uavg(ele, dim+1) / rho;
+      V[dim] = Uavg(ele, dim + 1) / rho;
       Vsq += V[dim] * V[dim];
     }
 
-    double e = Uavg(ele, 3);
+    double e = Uavg(ele, nDims + 1);
     double P = (gamma - 1.0) * (e - 0.5 * rho * Vsq);
 
     double eps = minTau / (minTau - P + exps0 * pow(rho, gamma));

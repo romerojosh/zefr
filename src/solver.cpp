@@ -27,7 +27,9 @@
 #include <queue>
 #include <vector>
 
+extern "C" {
 #include "cblas.h"
+}
 
 #include "elements.hpp"
 #include "faces.hpp"
@@ -46,7 +48,7 @@
 #endif
 
 #ifdef _BUILD_LIB
-#include "tiogaInterface.h"
+//#include "tiogaInterface.h"
 #endif
 
 #ifdef _GPU
@@ -58,6 +60,18 @@
 #ifndef _NO_TNT
 #include "tnt.h"
 #include <jama_lu.h>
+#endif
+
+#ifndef _NO_HDF5
+#include "H5Cpp.h"
+#ifndef _H5_NO_NAMESPACE
+using namespace H5;
+#endif
+#ifdef _MPI
+  #ifdef H5_HAVE_PARALLEL
+//    #define _USE_H5_PARALLEL
+  #endif
+#endif
 #endif
 
 FRSolver::FRSolver(InputStruct *input, int order)
@@ -102,7 +116,14 @@ void FRSolver::setup(_mpi_comm comm_in)
   if (input->restart)
   {
     if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
-    restart(input->restart_file);
+
+    if (input->restart_file.find(".vtu")  != std::string::npos or
+        input->restart_file.find(".pvtu") != std::string::npos)
+      restart(input->restart_file);
+    else if (input->restart_file.find(".pyfr") != std::string::npos)
+      restart_pyfr(input->restart_file);
+    else
+      ThrowException("Unknown file type for restart file.");
   }
 
   if (input->filt_on)
@@ -160,6 +181,8 @@ void FRSolver::setup_update()
 
     // HACK: (nStages = 1) doesn't work, fix later
     nStages = 2;
+    rk_alpha.assign({nStages});
+    rk_beta.assign({nStages});
 
     /* Forward or Forward/Backward sweep */
     nCounter = geo.nColors;
@@ -651,10 +674,12 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
+#ifdef _BUILD_LIB
   if (input->overset)
   {
-    overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
+    ZEFR->overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
   }
+#endif
 
   /* Extrapolate solution to flux points */
   eles->extrapolate_U(startEle, endEle);
@@ -677,14 +702,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
-  bool use_blocked = false;
-#ifdef _GPU
-  use_blocked = false;
-#endif
-  if (use_blocked)
-    faces->send_U_data_blocked();
-  else
-    faces->send_U_data();
+  faces->send_U_data();
 #endif
 
   /* Apply boundary conditions to state variables */
@@ -720,54 +738,39 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 #ifdef _MPI
     /* Receive U data */
-    if (use_blocked)
-    {
-      for (unsigned int i = 0; i < geo.nMpiFaces; i++)
-      {
-        int ff = geo.mpiFaces[i];
+    faces->recv_U_data();
 
-        faces->recv_U_data_blocked(i);
-
-        int fpt1 = geo.face2fpts(0, ff);
-        int fpt2 = geo.face2fpts(geo.nFptsPerFace-1, ff)+1;
-
-        faces->compute_Fconv(fpt1, fpt2);
-        faces->compute_common_F(fpt1, fpt2);
-      }
-    }
-    else
-    {
-      faces->recv_U_data();
-
-      /* Complete computation on remaning flux points. */
-      faces->compute_Fconv(startFptMpi, geo.nGfpts);
-      faces->compute_common_F(startFptMpi, geo.nGfpts);
-    }
+    /* Complete computation on remaning flux points. */
+    faces->compute_Fconv(startFptMpi, geo.nGfpts);
+    faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
   }
 
   /* If running viscous, use this scheduling */
   else
   {
-    /* Compute common interface solution at non-MPI flux points */
+    /* Compute common interface solution and convective flux at non-MPI flux points */
     faces->compute_common_U(startFpt, endFpt);
+    faces->compute_Fconv(startFpt, endFpt);
+    
+    /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
+    eles->compute_dU_spts(startEle, endEle);
 
 #ifdef _MPI
     /* Receieve U data */
     faces->recv_U_data();
-
-    //TODO: Do more work during this MPI transfer. Plenty of opportunities.
     
-    /* Finish computation of common interface solution */
+    /* Complete computation on remaining flux points */
     faces->compute_common_U(startFptMpi, geo.nGfpts);
+    faces->compute_Fconv(startFptMpi, geo.nGfpts);
 #endif
 
     /* Copy solution data at flux points from face local to element local
      * storage */
     U_from_faces(startEle, endEle);
 
-    /* Compute (corrected) gradient of state variables at solution points */
-    eles->compute_dU(startEle, endEle);
+    /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
+    eles->compute_dU_fpts(startEle, endEle);
 
     /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
     if (input->motion)
@@ -788,8 +791,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     faces->send_dU_data();
 
     /* Interpolate gradient data to/from other grid(s) */
+#ifdef _BUILD_LIB
     if (input->overset)
-      overset_interp(faces->nVars, eles->dU_spts.data(), faces->dU.data(), 1);
+      ZEFR->overset_interp(faces->nVars, eles->dU_spts.data(), faces->dU.data(), 1);
+#endif
 #endif
 
     /* Apply boundary conditions to the gradient */
@@ -817,7 +822,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Compute viscous and convective flux and common interface flux 
      * at non-MPI flux points */
     faces->compute_Fvisc(startFpt, endFpt);
-    faces->compute_Fconv(startFpt, endFpt);
     faces->compute_common_F(startFpt, endFpt);
 
 #ifdef _MPI
@@ -826,7 +830,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Complete computation of fluxes */
     faces->compute_Fvisc(startFptMpi, geo.nGfpts);
-    faces->compute_Fconv(startFptMpi, geo.nGfpts);
     faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
   }
@@ -1010,7 +1013,7 @@ void FRSolver::compute_RHS(unsigned int color)
   unsigned int startEle = geo.ele_color_range[color - 1];
   unsigned int endEle = geo.ele_color_range[color];
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1043,7 +1046,7 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
 {
   unsigned int startEle = geo.ele_color_range[color - 1];
   unsigned int endEle = geo.ele_color_range[color];
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1226,23 +1229,17 @@ void FRSolver::initialize_U()
       ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
     } 
 
-    /* Maximum number of unique matrices possible per element */
-    unsigned int nMat = eles->nFaces + 1;
-
     eles->dFdU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
     eles->dFcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
     if(input->viscous)
     {
-      nMat += eles->nFaces * (eles->nFaces - 1);
-
       eles->dUcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
 
       /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
       eles->dFddU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
       eles->dFcddU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
     }
-
       
     if (!input->stream_mode)
     {
@@ -1405,7 +1402,7 @@ void FRSolver::initialize_U()
 void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1435,6 +1432,8 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
       input->equation, input->viscous, startEle, endEle, input->overset,
       geo.iblank_cell_d.data());
 
+  event_record(0, 0);
+
   check_error();
 #endif
 }
@@ -1442,7 +1441,7 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1476,7 +1475,7 @@ void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
   for (unsigned int dim = 0; dim < eles->nDims; dim++) 
   {
     for (unsigned int n = 0; n < eles->nVars; n++) 
@@ -1504,6 +1503,8 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
       eles->nVars, eles->nEles, eles->nFpts, eles->nDims, input->equation, 
       input->overset, geo.iblank_cell_d.data());
 
+  event_record(0, 0);
+
   check_error();
 #endif
 }
@@ -1511,7 +1512,7 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1546,7 +1547,7 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::dFcdU_from_faces()
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
   for (unsigned int nj = 0; nj < eles->nVars; nj++) 
   {
     for (unsigned int ni = 0; ni < eles->nVars; ni++) 
@@ -1576,13 +1577,11 @@ void FRSolver::dFcdU_from_faces()
             {
               eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot) + 
                                                       faces->dFcdU(gfpt, ni, nj, notslot, slot);
+              continue;
             }
           }
-          else
-          {
-            eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
-            eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
-          }
+          eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
+          eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
         }
       }
     }
@@ -1590,7 +1589,7 @@ void FRSolver::dFcdU_from_faces()
 
   if(input->viscous)
   {
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
     for (unsigned int nj = 0; nj < eles->nVars; nj++) 
     {
       for (unsigned int ni = 0; ni < eles->nVars; ni++) 
@@ -1613,6 +1612,22 @@ void FRSolver::dFcdU_from_faces()
 
             eles->dUcdU_fpts(fpt, ele, ni, nj, 0) = faces->dUcdU(gfpt, ni, nj, slot);
             eles->dUcdU_fpts(fpt, ele, ni, nj, 1) = faces->dUcdU(gfpt, ni, nj, notslot);
+
+            /* Combine dFcddU on non-periodic boundaries */
+            // TODO: might need to move this to faces
+            if (gfpt >= (int)geo.nGfpts_int && gfpt < (int)(geo.nGfpts_int + geo.nGfpts_bnd))
+            {
+              unsigned int bnd_id = geo.gfpt2bnd(gfpt - geo.nGfpts_int);
+              if (bnd_id != PERIODIC)
+              {
+                for (unsigned int dim = 0; dim < eles->nDims; dim++)
+                {
+                  eles->dFcddU_fpts(fpt, ele, ni, nj, dim, 0) = faces->dFcddU(gfpt, ni, nj, dim, slot, slot) +
+                                                                faces->dFcddU(gfpt, ni, nj, dim, notslot, slot);
+                }
+                continue;
+              }
+            }
 
             for (unsigned int dim = 0; dim < eles->nDims; dim++)
             {
@@ -1637,7 +1652,7 @@ void FRSolver::dFcdU_from_faces()
 void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1685,6 +1700,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
 #ifdef _GPU
     device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
+    check_error();
 #endif
 
     unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
@@ -1707,7 +1723,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #ifdef _CPU
       if (source.size() == 0)
       {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
@@ -1729,7 +1745,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       }
       else
       {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
@@ -1777,8 +1793,11 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       // Update the overset connectivity to the new grid positions
       if (input->overset && input->motion)
       {
-        tioga_preprocess_grids_();
-        tioga_performconnectivity_();
+        ZEFR->tg_preprocess();
+        ZEFR->tg_process_connectivity();
+#ifdef _GPU
+        ZEFR->update_iblank_gpu();
+#endif
       }
 #endif
     }
@@ -1802,7 +1821,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       {
         if (source.size() == 0)
         {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
@@ -1822,7 +1841,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         }
         else
         {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
@@ -1949,15 +1968,15 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   current_iter++;
 
   // Update grid to end of time step (if not already done so)
-  if (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1))
+  if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
     move(input->time);
 
 #ifdef _BUILD_LIB
     // Update the overset connectivity to the new grid positions
     if (input->overset && input->motion)
     {
-      tioga_preprocess_grids_();
-      tioga_performconnectivity_();
+      ZEFR->tg_preprocess();
+      ZEFR->tg_process_connectivity();
     }
 #endif
 }
@@ -2139,6 +2158,375 @@ void FRSolver::compute_SER_dt()
   }
 }
 
+void FRSolver::write_solution_pyfr(const std::string &_prefix)
+{
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
+  std::string prefix = _prefix;
+
+  if (input->overset) prefix += "-G" + std::to_string(input->gridID);
+
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->mg_steps[0];
+
+  std::string filename = input->output_prefix + "/" + prefix + "-" + std::to_string(iter) + ".pyfrs";
+
+  if (input->gridID == 0 && input->rank == 0)
+    std::cout << "Writing data to file " << filename << std::endl;
+
+  std::stringstream ss;
+
+  // Create a dataspace and datatype for a std::string
+  DataSpace dspace(H5S_SCALAR);
+  hid_t string_type = H5Tcopy (H5T_C_S1);
+  H5Tset_size (string_type, H5T_VARIABLE);
+
+  // Setup config and stats strings
+
+  /* --- Config String --- */
+  ss.str(""); ss.clear();
+  ss << "[constants]" << std::endl;
+  ss << "gamma = 1.4" << std::endl;
+  ss << std::endl;
+
+  ss << "[solver]" << std::endl;
+  ss << "system = ";
+  if (input->equation == NAVIER_STOKES)
+  {
+    if (input->viscous)
+      ss << "navier-stokes" << std::endl;
+    else
+      ss << "euler" << std::endl;
+  }
+  else
+  {
+    if (input->viscous)
+      ss << "advection-diffusion" << std::endl;
+    else
+      ss << "advection" << std::endl;
+  }
+  ss << "order = " << input->order << std::endl;
+  ss << std::endl;
+
+  if (geo.nDims == 2)
+    ss << "[solver-elements-quad]" << std::endl;
+  else
+    ss << "[solver-elements-hex]" << std::endl;
+  ss << "soln-pts = gauss-legendre" << std::endl;
+  ss << std::endl;
+
+  std::string config = ss.str();
+
+  /* --- Stats String --- */
+  ss.str(""); ss.clear();
+  ss << "[data]" << std::endl;
+  if (input->equation == NAVIER_STOKES)
+  {
+    ss << "fields = rho,rhou,rhov,";
+    if (geo.nDims == 3)
+      ss << "rhoW,";
+    ss << "E" << std::endl;
+  }
+  else
+  {
+    ss << "fields = u" << std::endl;
+  }
+  ss << "prefix = soln" << std::endl;
+  ss << std::endl;
+
+  ss << "[solver-time-integrator]" << std::endl;
+  ss << "tcurr = " << input->time << std::endl;
+  //ss << "wall-time = " << input->??"
+  ss << std::endl;
+
+  std::string stats = ss.str();
+
+  int nEles = eles->nEles;
+  int nVars = eles->nVars;
+  int nSpts = eles->nSpts;
+
+#ifdef _USE_H5_PARALLEL
+  FileCreatPropList h5_mpi_plist = H5Pcreate(H5P_FILE_ACCESS);
+  MPI_Info info;
+  MPI_Info_create(&info);
+  H5Pset_fapl_mpio(h5_mpi_plist, geo.myComm, info);
+  MPI_Barrier(MPI_COMM_WORLD);
+  H5File file(filename, H5F_ACC_TRUNC, h5_mpi_plist);
+
+  std::vector<int> n_eles_p(input->nRanks);
+  MPI_Allgather(&nEles, 1, MPI_INT, n_eles_p.data(), 1, MPI_INT, geo.myComm);
+
+  /* --- Write Data to File --- */
+
+  for (int p = 0; p < input->nRanks; p++)
+  {
+    nEles = n_eles_p[p];
+
+    hsize_t dims[3] = {nSpts, nVars, nEles}; /// NOTE: We are col-major, HDF5 is row-major
+
+    DataSpace dspaceU(3, dims);
+    std::string solname = "soln_";
+    solname += (geo.nDims == 2) ? "quad" : "hex";
+    solname += "_p" + std::to_string(p);
+    DataSet dsetU = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+
+    if (p == input->rank)
+    {
+      mdvector<double> u_tmp({nEles, nVars, nSpts});
+      for (int ele = 0; ele < nEles; ele++)
+        for (int var = 0; var < nVars; var++)
+          for (int spt = 0; spt < nSpts; spt++)
+            u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+
+      dsetU.write(u_tmp.data(), PredType::NATIVE_DOUBLE, dspaceU);
+    }
+
+    dsetU.close();
+  }
+
+  DataSet dset = file.createDataSet("config", string_type, dspace);
+  if (input->rank == 0)
+    dset.write(config, string_type, dspace);
+  dset.close();
+
+  dset = file.createDataSet("stats", string_type, dspace);
+  if (input->rank == 0)
+    dset.write(stats, string_type, dspace);
+  dset.close();
+
+  // Write mesh ID
+  dset = file.createDataSet("mesh_uuid", string_type, dspace);
+  if (input->rank == 0)
+    dset.write(geo.mesh_uuid, string_type, dspace);
+  dset.close();
+
+  dspace.close();
+#else
+
+#ifdef _MPI
+  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
+  std::vector<std::vector<double>> data_p(input->nRanks);
+  if (input->rank == 0)
+  {
+    uint ind = 0;
+    data_p[0].resize(nEles * nVars * nSpts);  // Create transposed copy
+    for (int spt = 0; spt < nSpts; spt++)
+    {
+      for (int var = 0; var < nVars; var++)
+      {
+        for (int ele = 0; ele < nEles; ele++)
+        {
+          data_p[0][ind] = eles->U_spts(spt,ele,var);
+          ind++;
+        }
+      }
+    }
+  }
+
+  /* --- Gather all the data onto Rank 0 for writing --- */
+
+  std::vector<int> nEles_p(input->nRanks);
+  MPI_Allgather(&nEles, 1, MPI_INT, nEles_p.data(), 1, MPI_INT, geo.myComm);
+
+  for (int p = 1; p < input->nRanks; p++)
+  {
+    int nEles = nEles_p[p];
+    int size = nEles * nSpts * nVars;
+
+    if (input->rank == 0)
+    {
+      data_p[p].resize(size);
+      MPI_Status status;
+      MPI_Recv(data_p[p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
+    }
+    else
+    {
+      if (p == input->rank)
+      {
+        mdvector<double> u_tmp({nEles, nVars, nSpts});
+        for (int ele = 0; ele < nEles; ele++)
+          for (int var = 0; var < nVars; var++)
+            for (int spt = 0; spt < nSpts; spt++)
+              u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+
+        MPI_Send(u_tmp.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+      }
+    }
+
+    MPI_Barrier(geo.myComm);
+  }
+
+  /* --- Write Data to File (on Rank 0) --- */
+
+  if (input->rank == 0)
+  {
+    H5File file(filename, H5F_ACC_TRUNC);
+
+    // Write out all the data
+    DataSet dset = file.createDataSet("config", string_type, dspace);
+    dset.write(config, string_type, dspace);
+    dset.close();
+
+    dset = file.createDataSet("stats", string_type, dspace);
+    dset.write(stats, string_type, dspace);
+    dset.close();
+
+    // Write mesh ID
+    dset = file.createDataSet("mesh_uuid", string_type, dspace);
+    dset.write(geo.mesh_uuid, string_type, dspace);
+    dset.close();
+
+    dspace.close();
+
+    std::string sol_prefix = "soln_";
+    sol_prefix += (geo.nDims == 2) ? "quad" : "hex";
+    sol_prefix += "_p";
+    for (int p = 0; p < input->nRanks; p++)
+    {
+      nEles = nEles_p[p];
+      hsize_t dims[3] = {nSpts, nVars, nEles};
+      DataSpace dspaceU(3, dims);
+
+      std::string solname = sol_prefix + std::to_string(p);
+      dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+      dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+      dspaceU.close();
+      dset.close();
+    }
+  }
+#else
+  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
+  mdvector<double> u_tmp({nEles, nVars, nSpts});
+  for (int ele = 0; ele < nEles; ele++)
+    for (int var = 0; var < nVars; var++)
+      for (int spt = 0; spt < nSpts; spt++)
+        u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+
+  hsize_t dims[3] = {nSpts, nVars, nEles}; /// NOTE: We are col-major, HDF5 is row-major
+
+  /* --- Write Data to File --- */
+
+  H5File file(filename, H5F_ACC_TRUNC);
+
+  DataSet dset = file.createDataSet("config", string_type, dspace);
+  dset.write(config, string_type, dspace);
+  dset.close();
+
+  dset = file.createDataSet("stats", string_type, dspace);
+  dset.write(stats, string_type, dspace);
+  dset.close();
+
+  // Write mesh ID
+  dset = file.createDataSet("mesh_uuid", string_type, dspace);
+  dset.write(geo.mesh_uuid, string_type, dspace);
+  dset.close();
+
+  dspace.close();
+
+  DataSpace dspaceU(3, dims);
+  std::string solname = "soln_";
+  solname += (geo.nDims == 2) ? "quad" : "hex";
+  solname += "_p" + std::to_string(input->rank);
+  dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+  dset.write(u_tmp.data(), PredType::NATIVE_DOUBLE, dspaceU);
+  dset.close();
+#endif // no MPI
+
+#endif // no USE_H5_PARALLEL
+}
+
+void FRSolver::restart_pyfr(const std::string &restart_file)
+{
+#ifdef _GPU
+  eles->U_spts = eles->U_spts_d;
+#endif
+
+  //std::stringstream ss;
+  //ss << input->output_prefix << "/";
+  //ss << restart_file << "-" << input->restart_iter << ".pyfrs";
+  //std::string filename(ss.str());
+  std::string filename = restart_file;
+
+  std::string str = filename;
+  size_t ind = str.find("-");
+  str.erase(str.begin(), str.begin()+ind+1);
+  ind = str.find(".pyfrs");
+  str.erase(str.begin()+ind,str.end());
+  std::stringstream ss(str);
+  ss >> restart_iter;
+  current_iter = restart_iter;
+  input->iter = restart_iter;
+  input->initIter = restart_iter;
+
+  if (input->rank == 0)
+    std::cout << "Reading data from file " << filename << std::endl;
+
+  H5File file(filename, H5F_ACC_RDONLY);
+
+  // Read the mesh ID string
+  std::string mesh_uuid;
+
+  DataSet dset = file.openDataSet("mesh_uuid");
+  DataType dtype = dset.getDataType();
+  DataSpace dspace(H5S_SCALAR);
+
+  dset.read(mesh_uuid, dtype, dspace);
+  dset.close();
+
+  if (mesh_uuid != geo.mesh_uuid)
+    ThrowException("Restart Error - Mesh and solution files do not mesh [mesh_uuid].");
+
+  // Read the config string
+  dset = file.openDataSet("config");
+  dset.read(geo.config, dtype, dspace);
+  dset.close();
+
+  // Read the stats string
+  dset = file.openDataSet("stats");
+  dset.read(geo.stats, dtype, dspace);
+  dset.close();
+
+  // Read the solution data
+  std::string solname = "soln_";
+  solname += (geo.nDims == 2) ? "quad" : "hex";
+  solname += "_p" + std::to_string(input->rank); /// TODO: write per rank in parallel...
+
+  dset = file.openDataSet(solname);
+  auto ds = dset.getSpace();
+
+  std::vector<hsize_t> dims(3);
+  int ds_rank = ds.getSimpleExtentDims(dims.data());
+
+  if (ds_rank != 3)
+    ThrowException("Improper DataSpace rank for solution data.");
+
+  // Create a datatype for a std::string
+  hid_t string_type = H5Tcopy (H5T_C_S1);
+  H5Tset_size (string_type, H5T_VARIABLE);
+
+  int nEles = eles->nEles;
+  int nVars = eles->nVars;
+  int nSpts = eles->nSpts;
+
+  if (dims[2] != nEles || dims[1] != nVars || dims[0] != nSpts)
+    ThrowException("Size of solution data set does not match that from mesh.");
+
+  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
+  mdvector<double> u_tmp({nEles, nVars, nSpts});
+
+  dset.read(u_tmp.data(), PredType::NATIVE_DOUBLE);
+  dset.close();
+
+  eles->U_spts.assign({nSpts,nEles,nVars});
+  for (int ele = 0; ele < nEles; ele++)
+    for (int var = 0; var < nVars; var++)
+      for (int spt = 0; spt < nSpts; spt++)
+        eles->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
+}
+
 void FRSolver::write_solution(const std::string &_prefix)
 {
 #ifdef _GPU
@@ -2152,7 +2540,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     iter = iter / input->mg_steps[0];
 
   if (input->gridID == 0 && input->rank == 0)
-    std::cout << "Writing data to file..." << std::endl;
+    std::cout << "Writing data to file for case " << prefix << "..." << std::endl;
 
   if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
 
@@ -2679,6 +3067,422 @@ void FRSolver::write_color()
   f.close();
 }
 
+void FRSolver::write_overset_boundary(const std::string &_prefix)
+{
+  if (!input->overset) ThrowException("Overset surface export must have overset grid.");
+
+  std::string prefix = _prefix;
+
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->mg_steps[0];
+
+  if (input->gridID == 0 && input->rank == 0)
+    std::cout << "Writing overset boundary surface data to " << prefix << "..." << std::endl;
+
+  prefix += "_Grid" + std::to_string(input->gridID);
+
+  // Prep the index lists [to grab data from a face of an ele]
+  int nDims = geo.nDims;
+  int nPts1D = order+3;
+  int nPtsFace = nPts1D;
+  if (nDims==3) nPtsFace *= nPts1D;
+  int nSubCells = nPts1D - 1;
+  if (nDims==3) nSubCells *= nSubCells;
+  int nFacesEle = geo.nFacesPerEle;
+
+  mdvector<int> index_map({nFacesEle, nPtsFace});
+
+  if (nDims == 2)
+  {
+    for (int j = 0; j < nPtsFace; j++)
+    {
+      index_map(0,j) = 0 + j*1;                    // Bottom
+      index_map(1,j) = nPts1D-1 + j*nPts1D;        // Right
+      index_map(2,j) = nPts1D*nPts1D - 1 + j*(-1); // Top
+      index_map(3,j) = 0 + j*nPts1D;               // Left
+    }
+  }
+  else
+  {
+    for (int j = 0; j < nPtsFace; j++)
+    {
+      index_map(0,j) = 0 + j*1;                      // Zmin / Bottom
+      index_map(1,j) = nPts1D*nPtsFace - 1 + j*(-1); // Zmax / Top
+      index_map(2,j) = 0 + j*nPts1D;                 // Xmin / Left
+      index_map(3,j) = nPts1D - 1 + j*nPts1D;        // Xmax / Right
+    }
+
+    // Ymin / Front
+    for (int j1 = 0; j1 < nPts1D; j1++) {
+      for (int j2 = 0; j2 < nPts1D; j2++) {
+        int J  = j2 + j1*nPts1D;
+        int J2 = j2 + j1*nPtsFace;
+        index_map(4,J) = J2;
+      }
+    }
+
+    // Ymax / Back
+    for (int j1 = 0; j1 < nPts1D; j1++) {
+      for (int j2 = 0; j2 < nPts1D; j2++) {
+        int J  = j2 + j1*nPts1D;
+        int J2 = j2 + (j1+1)*nPtsFace - nPts1D;
+        index_map(5,J) = J2;
+      }
+    }
+  }
+
+  // Write the ParaView file for each Gmsh boundary
+  std::stringstream ss;
+
+#ifdef _MPI
+  /* Write .pvtu file on rank 0 if running in parallel */
+  if (input->rank == 0)
+  {
+    ss << input->output_prefix << "/";
+    ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0');
+    ss << iter << ".pvtu";
+
+    std::ofstream f(ss.str());
+    f << "<?xml version=\"1.0\"?>" << std::endl;
+    f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
+    f << "byte_order=\"LittleEndian\" ";
+    f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+    f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
+    f << "<PPointData>" << std::endl;
+    if (input->equation == AdvDiff || input->equation == Burgers)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+    else if (input->equation == EulerNS)
+    {
+      std::vector<std::string> var;
+      if (eles->nDims == 2)
+        var = {"rho", "xmom", "ymom", "energy"};
+      else
+        var = {"rho", "xmom", "ymom", "zmom", "energy"};
+
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        f << "<PDataArray type=\"Float32\" Name=\"" << var[n];
+        f << "\" format=\"ascii\"/>";
+        f << std::endl;
+      }
+    }
+
+    if (input->filt_on && input->sen_write)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+
+    if (input->motion)
+    {
+      f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+
+    f << "</PPointData>" << std::endl;
+    f << "<PPoints>" << std::endl;
+    f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+    f << "format=\"ascii\"/>" << std::endl;
+    f << "</PPoints>" << std::endl;
+
+    for (unsigned int n = 0; n < input->nRanks; n++)
+    {
+      ss.str("");
+      ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0') << iter;
+      ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
+      f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
+    }
+
+    f << "</PUnstructuredGrid>" << std::endl;
+    f << "</VTKFile>" << std::endl;
+
+    f.close();
+  }
+#endif
+
+  ss.str("");
+#ifdef _MPI
+  ss << input->output_prefix << "/";
+  ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0') << iter;
+  ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".vtu";
+#else
+  ss << input->output_prefix << "/";
+  ss << prefix << "_OVERSET_" << std::setw(9) << std::setfill('0') << iter;
+  ss << ".vtu";
+#endif
+
+  auto outputfile = ss.str();
+
+  /* Write parition solution to file in .vtu format */
+  std::ofstream f(outputfile);
+
+  /* Write header */
+  f << "<?xml version=\"1.0\"?>" << std::endl;
+  f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
+  f << "byte_order=\"LittleEndian\" ";
+  f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+
+  /* Write comments for solution order, iteration number and flowtime */
+  f << "<!-- ORDER " << input->order << " -->" << std::endl;
+  f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
+  f << "<!-- ITER " << iter << " -->" << std::endl;
+
+  // Load list of eles (and sub-ele face indices) from which to load data
+  std::vector<int> eleList, indList;
+  unsigned int nFaces = 0;
+
+  for (unsigned int ff = 0; ff < geo.nFaces; ff++)
+  {
+    if (geo.iblank_face[ff] == FRINGE)
+    {
+      int ic1 = geo.face2eles(0,ff);
+      int ic2 = geo.face2eles(1,ff);
+      if (geo.iblank_cell(ic1) == NORMAL)
+      {
+        eleList.push_back(ic1);
+      }
+      else if (ic2 > 0 && geo.iblank_cell(ic2) == NORMAL)
+      {
+        eleList.push_back(ic2);
+      }
+
+      for (int i = 0; i < nFacesEle; i++)
+      {
+        if (geo.ele2face(i,eleList.back()) == ff)
+        {
+          indList.push_back(i);
+          break;
+        }
+      }
+
+      nFaces++;
+    }
+  }
+
+  // Write data to file
+
+  f << "<UnstructuredGrid>" << std::endl;
+  f << "<Piece NumberOfPoints=\"" << nPtsFace * nFaces << "\" ";
+  f << "NumberOfCells=\"" << nSubCells * nFaces << "\">";
+  f << std::endl;
+
+
+  /* Write plot point coordinates */
+  f << "<Points>" << std::endl;
+  f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
+  f << "format=\"ascii\">" << std::endl;
+
+  if (eles->nDims == 2)
+  {
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << 0.0 << std::endl;
+      }
+    }
+  }
+  else
+  {
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        f << geo.coord_ppts(ppt, ele, 0) << " ";
+        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+      }
+    }
+  }
+
+  f << "</DataArray>" << std::endl;
+  f << "</Points>" << std::endl;
+
+  /* Write cell information */
+  f << "<Cells>" << std::endl;
+  f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
+  f << "format=\"ascii\">"<< std::endl;
+
+  if (nDims == 2)
+  {
+    int count = 0;
+    for (int face = 0; face < nFaces; face++)
+    {
+      for (int j = 0; j < nPts1D-1; j++)
+      {
+        f << count + j << " ";
+        f << count + j + 1 << " ";
+        f << endl;
+      }
+      count += nPtsFace;
+    }
+  }
+  else
+  {
+    int count = 0;
+    for (int face = 0; face < nFaces; face++)
+    {
+      for (int j = 0; j < nPts1D-1; j++)
+      {
+        for (int i = 0; i < nPts1D-1; i++)
+        {
+          f << count + j*nPts1D     + i   << " ";
+          f << count + j*nPts1D     + i+1 << " ";
+          f << count + (j+1)*nPts1D + i+1 << " ";
+          f << count + (j+1)*nPts1D + i   << " ";
+          f << endl;
+        }
+      }
+      count += nPtsFace;
+    }
+  }
+
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  int nvPerFace = (nDims == 2) ? 2 : 4;
+  int offset = nvPerFace;
+  for (int face = 0; face < nFaces; face++)
+  {
+    for (int subele = 0; subele < nSubCells; subele++)
+    {
+      f << offset << " ";
+      offset += nvPerFace;
+    }
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+
+  f << "<DataArray type=\"UInt8\" Name=\"types\" ";
+  f << "format=\"ascii\">"<< std::endl;
+  int nCells = nSubCells * nFaces;
+  if (nDims == 2)
+  {
+    for (int cell = 0; cell < nCells; cell++)
+      f << 3 << " ";
+  }
+  else
+  {
+    for (int cell = 0; cell < nCells; cell++)
+      f << 9 << " ";
+  }
+  f << std::endl;
+  f << "</DataArray>" << std::endl;
+  f << "</Cells>" << std::endl;
+
+  /* Write solution information */
+  f << "<PointData>" << std::endl;
+
+  if (input->equation == AdvDiff || input->equation == Burgers)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"u\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        f << std::scientific << std::setprecision(16) << eles->U_ppts(ppt, ele, 0);
+        f  << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+  else if(input->equation == EulerNS)
+  {
+    std::vector<std::string> var;
+    if (eles->nDims == 2)
+      var = {"rho", "xmom", "ymom", "energy"};
+    else
+      var = {"rho", "xmom", "ymom", "zmom", "energy"};
+
+    for (int n = 0; n < eles->nVars; n++)
+    {
+      f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
+      f << "format=\"ascii\">"<< std::endl;
+
+      for (int face = 0; face < nFaces; face++)
+      {
+        int ele = eleList[face];
+        int ind = indList[face];
+        for (int pt = 0; pt < nPtsFace; pt++)
+        {
+          int ppt = index_map(ind,pt);
+          f << std::scientific << std::setprecision(16);
+          f << eles->U_ppts(ppt, ele, n);
+          f << " ";
+        }
+
+        f << std::endl;
+      }
+      f << "</DataArray>" << std::endl;
+    }
+  }
+
+  if (input->filt_on && input->sen_write)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
+    for (int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      for (int pt = 0; pt < nPtsFace; pt++)
+      {
+        f << filt.sensor(ele) << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+
+  if (input->motion)
+  {
+    f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      int ele = eleList[face];
+      int ind = indList[face];
+      for (unsigned int pt = 0; pt < nPtsFace; pt++)
+      {
+        int ppt = index_map(ind,pt);
+        for (unsigned int dim = 0; dim < eles->nDims; dim++)
+        {
+          f << std::scientific << std::setprecision(16);
+          f << eles->grid_vel_ppts(ppt, ele, dim);
+          f  << " ";
+        }
+        if (eles->nDims == 2) f << 0.0 << " ";
+      }
+      f << std::endl;
+    }
+    f << "</DataArray>" << std::endl;
+  }
+
+  f << "</PointData>" << std::endl;
+  f << "</Piece>" << std::endl;
+  f << "</UnstructuredGrid>" << std::endl;
+  f << "</VTKFile>" << std::endl;
+  f.close();
+}
+
+
 void FRSolver::write_surfaces(const std::string &_prefix)
 {
 #ifdef _GPU
@@ -3135,6 +3939,11 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     f << "</VTKFile>" << std::endl;
     f.close();
   }
+
+  if (input->overset)
+  {
+    write_overset_boundary(_prefix);
+  }
 }
 
 void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1)
@@ -3215,10 +4024,13 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         val = std::sqrt(val);
     }
 
+    if (input->overset)
+      std::cout << "G" << std::setw(4) << std::left << input->gridID;
+
     std::cout << std::setw(6) << std::left << iter << " ";
 
     for (auto val : res)
-      std::cout << std::scientific << std::setw(15) << std::left << val / nDoF << " ";
+      std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << val / nDoF << " ";
 
     if (input->dt_type == 2)
     {
@@ -3573,7 +4385,7 @@ void FRSolver::report_error(std::ofstream &f)
 
   unsigned int n = input->err_field;
   std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
-#pragma omp for collapse (2)
+#pragma omp for
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
