@@ -436,7 +436,7 @@ void Quads::setup_PMG(int pro_order, int res_order)
 void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -472,7 +472,7 @@ void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
 void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -503,7 +503,7 @@ void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
 void Quads::transform_dFdU()
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
     for (unsigned int ni = 0; ni < nVars; ni++)

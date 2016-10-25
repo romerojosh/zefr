@@ -61,12 +61,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   LDG_bias.assign({nFpts}, 0);
 
-  /* Allocating memory for Riemann solvers */
-  FL.assign(nVars, 0);
-  FR.assign(nVars, 0);
-  WL.assign(nVars, 0);
-  WR.assign(nVars, 0);
-
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
   {
@@ -1685,7 +1679,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
   if (input->equation == AdvDiff)
   {
 #ifdef _CPU
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
@@ -1708,7 +1702,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
   else if (input->equation == Burgers)
   {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
@@ -1733,7 +1727,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
 #ifdef _CPU
     if (nDims == 2)
     {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
         if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
@@ -1766,7 +1760,7 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
     }
     else if (nDims == 3)
     {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
         if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
@@ -1820,7 +1814,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
@@ -1848,7 +1842,7 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 #ifdef _CPU
     if (nDims == 2)
     {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
       for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
       {
         if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
@@ -2196,6 +2190,12 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 {
+  std::vector<double> FL(nVars);
+  std::vector<double> FR(nVars);
+  std::vector<double> WL(nVars);
+  std::vector<double> WR(nVars);
+
+
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
@@ -2316,6 +2316,8 @@ void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
 
   std::vector<double> F(nVars);
   std::vector<double> dW(nVars);
+  std::vector<double> FL(nVars);
+  std::vector<double> FR(nVars);
 
 #pragma omp parallel for firstprivate(FL, FR, F, dW)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -2424,6 +2426,11 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
   double tau = input->ldg_tau;
 
   Fcomm_temp.fill(0.0);
+
+  std::vector<double> FL(nVars);
+  std::vector<double> FR(nVars);
+  std::vector<double> WL(nVars);
+  std::vector<double> WR(nVars);
 
 #pragma omp parallel for firstprivate(FL, FR, WL, WR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -3669,7 +3676,7 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 void Faces::transform_dFcdU()
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(5)
+#pragma omp parallel for collapse(4)
   for (unsigned int slot = 0; slot < 2; slot++)
   {
     for (unsigned int nj = 0; nj < nVars; nj++)
@@ -3689,7 +3696,7 @@ void Faces::transform_dFcdU()
 
   if (input->viscous)
   {
-#pragma omp parallel for collapse(6)
+#pragma omp parallel for collapse(5)
     for (unsigned int slot = 0; slot < 2; slot++)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)

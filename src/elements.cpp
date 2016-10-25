@@ -202,8 +202,8 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   auto &Af = shape_fpts(0,0);
   auto &Cf = geo->coord_fpts(0,0,0);
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasTrans, mf, n, k,
-              1.0, &Af, k, &B, n, 0.0, &Cf, mf);
+  omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
 #else
   cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
               1.0, &Af, k, &B, k, 0.0, &Cf, mf);
@@ -214,7 +214,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   auto &Cp = geo->coord_ppts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
-              1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
+              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
 #else
   cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
               1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
@@ -232,7 +232,6 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 #endif
 
   /* Setup physical coordinates at flux points [in faces class] */
-  mdvector<double> coord_fpt({geo->nGfpts, 3, 2});
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
@@ -244,7 +243,6 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         if (gfpt != -1)
         {
           faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
-          coord_fpt(gfpt, dim, geo->fpt2gfpt_slot(fpt,ele)) = geo->coord_fpts(fpt,ele,dim);/// DEBUGGING
         }
       }
     }
@@ -721,7 +719,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 
   #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, disFn_fpts.ldim());
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
   #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
@@ -755,7 +753,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 
   #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, disFn_fpts.ldim());
+            nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, dFn_fpts.ldim());
   #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, dFn_fpts.ldim());
@@ -1080,7 +1078,7 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
 
 #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                          1.0, &A, oppD.ldim(), &B, F_spts.ldim(), 0., &C, gradF_spts.ldim());
+                          1.0, &A, oppD.ldim(), &B, F_spts.ldim(), 0., &C, dF_spts.ldim());
 #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
                     1.0, &A, oppD0.ldim(), &B, F_spts.ldim(), 0., &C, dF_spts.ldim());
