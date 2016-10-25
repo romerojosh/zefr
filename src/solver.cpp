@@ -2038,6 +2038,7 @@ void FRSolver::compute_element_dt()
   /* CFL-estimate based on MacCormack for NS */
   else if (input->CFL_type == 2)
   {
+    int nFptsFace = (eles->nDims == 2) ? eles->nSpts1D : eles->nSpts1D*eles->nSpts1D;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     { 
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
@@ -2045,7 +2046,7 @@ void FRSolver::compute_element_dt()
       std::vector<double> dtinv(2*eles->nDims);
       for (unsigned int face = 0; face < 2*eles->nDims; face++)
       {
-        for (unsigned int fpt = face * eles->nSpts1D; fpt < (face+1) * eles->nSpts1D; fpt++)
+        for (unsigned int fpt = face * nFptsFace; fpt < (face+1) * nFptsFace; fpt++)
         {
           /* Skip if on ghost edge. */
           int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -2060,10 +2061,22 @@ void FRSolver::compute_element_dt()
       }
 
       /* Find maximum in each dimension */
-      dtinv[0] = std::max(dtinv[0], dtinv[2]);
-      dtinv[1] = std::max(dtinv[1], dtinv[3]);
+      if (eles->nDims == 2)
+      {
+        dtinv[0] = std::max(dtinv[0], dtinv[2]);
+        dtinv[1] = std::max(dtinv[1], dtinv[3]);
 
-      dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+        dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+      }
+      else
+      {
+        dtinv[0] = std::max(dtinv[0],dtinv[1]);
+        dtinv[1] = std::max(dtinv[2],dtinv[3]);
+        dtinv[2] = std::max(dtinv[4],dtinv[5]);
+
+        /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
+        dt(ele) = 32 * CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // 32 = empirically-found factor
+      }
     }
   }
 

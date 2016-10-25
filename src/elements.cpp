@@ -250,32 +250,19 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
   }
 
-  /// DEBUGGING
-  for (int fpt = 0; fpt < geo->nGfpts_int; fpt++)
-  {
-    point fpt1, fpt2;
-    for (int d = 0; d < geo->nDims; d++)
-    {
-      fpt1[d] = coord_fpt(fpt,d,0);
-      fpt2[d] = coord_fpt(fpt,d,1);
-    }
-    double dist = point(fpt1-fpt2).norm();
-    if (dist > 1e-10)
-      std::cout << "FPT " << fpt << ": " << dist << std::endl;
-  }
-
   if (input->CFL_type == 2)
   {
     /* Allocate memory for tensor-line reference lengths */
     h_ref.assign({nFpts, nEles});
 
     /* Compute tensor-line lengths */
-    for (unsigned int ele = 0; ele < nEles; ele++)
+    if (nDims == 2)
     {
-      for (unsigned int fpt = 0; fpt < nFpts/2; fpt++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        if (nDims == 2)
-        {          /* Some indexing to pair up flux points in 2D (on Quad) */
+        for (unsigned int fpt = 0; fpt < nFpts/2; fpt++)
+        {
+          /* Some indexing to pair up flux points in 2D (on Quad) */
           unsigned int idx = fpt % nSpts1D;
           unsigned int fpt1 = fpt;
           unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
@@ -288,9 +275,52 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
           h_ref(fpt1, ele) = dist;
           h_ref(fpt2, ele) = dist;
         }
-        else
+      }
+    }
+    else /* nDims == 3 */
+    {
+      int nFptsPerFace = nSpts1D * nSpts1D;
+      mdvector<double> fpts1({3, nFptsPerFace});
+      mdvector<double> fpts2({3, nFptsPerFace});
+      std::vector<std::vector<uint>> sortind1(3);
+      std::vector<std::vector<uint>> sortind2(3);
+      for (int f = 0; f < nFaces/2; f++) // btm/top, left/right, front/back
+      {
+        int ind1 = 2*f*nFptsPerFace;
+        int ind2 = 2*f*nFptsPerFace + nFptsPerFace;
+        for (int i = 0; i < nFptsPerFace; i++)
         {
-          ThrowException("h_ref computation not setup in 3D yet!");
+          for (int d = 0; d < 3; d++)
+          {
+            fpts1(d,i) = loc_fpts(ind1+i,d);
+            fpts2(d,i) = loc_fpts(ind2+i,d);
+          }
+        }
+
+        sortind1[f] = fuzzysort(fpts1); // leave me alone, i'm lazy
+        sortind2[f] = fuzzysort(fpts2); // don't feel like figuring out the map
+      }
+
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (int f = 0; f < nFaces/2; f++)
+        {
+          int ind1 = 2*f*nFptsPerFace;
+          int ind2 = 2*f*nFptsPerFace + nFptsPerFace;
+          for (int i = 0; i < nFptsPerFace; i++)
+          {
+            int fpt1 = ind1 + sortind1[f][i];
+            int fpt2 = ind2 + sortind2[f][i];
+
+            double dx[3] = {0,0,0};
+            for (int d = 0; d < 3; d++)
+              dx[d] = geo->coord_fpts(fpt1,ele,d) - geo->coord_fpts(fpt2,ele,d);
+
+            double dist = std::sqrt(dx[0]*dx[0] + dx[1]*dx[1] * dx[2]*dx[2]);
+
+            h_ref(fpt1, ele) = dist;
+            h_ref(fpt2, ele) = dist;
+          }
         }
       }
     }

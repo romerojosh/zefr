@@ -262,9 +262,22 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
 
   int grank;
   MPI_Comm_rank(MPI_COMM_WORLD,&grank);
+
+  char hostname[MPI_MAX_PROCESSOR_NAME];
+  int len;
+  MPI_Get_processor_name(hostname, &len);
+//  std::cout << "Global rank " << grank << " is on processor " << hostname << std::endl;
   //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
   cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
-  printf("My CUDA device for rank %d(%d) is %d\n",rank,grank,grank%4);
+//  printf("My CUDA device for rank %d(%d) is %d / %d\n",rank,grank,grank%4,nDevices);
+
+//  cudaDeviceProp prop;
+//  cudaGetDeviceProperties(&prop, grank%4);
+//  printf("%d: Device name: %s\n",grank, prop.name);
+
+//  MPI_Barrier(MPI_COMM_WORLD);
+//  MPI_Finalize();
+//  exit(0);
 #endif
 }
 #endif

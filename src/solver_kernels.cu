@@ -782,11 +782,12 @@ void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfp
   /* CFL-estimate based on MacCormack for NS */
   else if (CFL_type == 2)
   {
+    int nFptsFace = (nDims == 2) ? nSpts1D : nSpts1D*nSpts1D;
     /* Compute inverse of timestep in each face */
     double dtinv[2*nDims] = {0};
     for (unsigned int face = 0; face < 2*nDims; face++)
     {
-      for (unsigned int fpt = face * nSpts1D; fpt < (face+1) * nSpts1D; fpt++)
+      for (unsigned int fpt = face * nFptsFace; fpt < (face+1) * nFptsFace; fpt++)
       {
         /* Skip if on ghost edge. */
         int gfpt = fpt2gfpt(fpt,ele);
@@ -801,10 +802,22 @@ void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfp
     }
 
     /* Find maximum in each dimension */
-    dtinv[0] = max(dtinv[0], dtinv[2]);
-    dtinv[1] = max(dtinv[1], dtinv[3]);
+    if (nDims == 2)
+    {
+      dtinv[0] = max(dtinv[0], dtinv[2]);
+      dtinv[1] = max(dtinv[1], dtinv[3]);
 
-    dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+      dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+    }
+    else
+    {
+      dtinv[0] = max(dtinv[0],dtinv[1]);
+      dtinv[1] = max(dtinv[2],dtinv[3]);
+      dtinv[2] = max(dtinv[4],dtinv[5]);
+
+      /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
+      dt(ele) = 32 * CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // 32 = empirically-found factor
+    }
   }
 }
 
