@@ -124,11 +124,13 @@ struct InputStruct
   unsigned int rank, nRanks;
   unsigned int filt_on, sen_write, sen_norm, filt_maxLevels;
   double sen_Jfac, filt_gamma;
-  double iter = 0, initIter = 0, time = 0, rkTime = 0;
+  unsigned int iter = 0, initIter = 0;
+  double time = 0, rkTime = 0;
 
   /* --- I/O --- */
-  short write_paraview, write_pyfr, plot_surfaces;
-  int restart_iter;
+  short write_paraview, write_pyfr, plot_surfaces, plot_overset;
+  unsigned int restart_iter, restart_type;
+  std::string restart_case;
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;

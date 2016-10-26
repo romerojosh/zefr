@@ -108,6 +108,9 @@ InputStruct read_input_file(std::string inputfile)
 
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
+  read_param(f, "restart_case", input.restart_case, std::string(""));
+  read_param(f, "restart_type", input.restart_type, (unsigned int)0);
+  read_param(f, "restart_iter", input.restart_iter, (unsigned int)0);
 
   read_param(f, "mg_cycle", input.mg_cycle, std::string("V"));
   read_param(f, "FMG_vcycles", input.FMG_vcycles, (unsigned int) 1);
@@ -129,6 +132,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "write_paraview", input.write_paraview, (short)1);
   read_param(f, "write_pyfr", input.write_pyfr, (short)0);
   read_param(f, "plot_surfaces", input.plot_surfaces, (short)1);
+  read_param(f, "plot_overset", input.plot_overset, (short)1);
   read_param(f, "write_freq", input.write_freq);
   read_param(f, "report_freq", input.report_freq);
   read_param(f, "res_type", input.res_type);

@@ -115,15 +115,34 @@ void FRSolver::setup(_mpi_comm comm_in)
 
   if (input->restart)
   {
-    if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
+    if (input->restart_type == 0)
+    {
+      if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file + " ..." << std::endl;
 
-    if (input->restart_file.find(".vtu")  != std::string::npos or
-        input->restart_file.find(".pvtu") != std::string::npos)
-      restart(input->restart_file);
-    else if (input->restart_file.find(".pyfr") != std::string::npos)
-      restart_pyfr(input->restart_file);
+      // Backwards compatibility: full filename given
+      if (input->restart_file.find(".vtu")  != std::string::npos or
+          input->restart_file.find(".pvtu") != std::string::npos)
+      {
+        restart(input->restart_file);
+      }
+      else if (input->restart_file.find(".pyfr") != std::string::npos)
+      {
+        restart_pyfr(input->restart_file);
+      }
+      else
+        ThrowException("Unknown file type for restart file.");
+    }
     else
-      ThrowException("Unknown file type for restart file.");
+    {
+      if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_case + "_" + std::to_string(input->restart_iter) + " ..." << std::endl;
+
+      // New version: Use case name + iteration number to find file
+      // [Overset compatible]
+      if (input->restart_type == 1) // ParaView
+        restart(input->restart_case, input->restart_iter);
+      else if (input->restart_type == 2) // PyFR
+        restart_pyfr(input->restart_case, input->restart_iter);
+    }
   }
 
   if (input->filt_on)
@@ -284,8 +303,30 @@ void FRSolver::setup_output()
 
 }
 
-void FRSolver::restart(std::string restart_file)
+void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 {
+  if (input->restart_type > 0) // append .pvtu / .vtu to case name
+  {
+    std::stringstream ss;
+
+    ss << restart_file;
+
+    if (input->overset)
+    {
+      ss << "_Grid" << input->gridID;
+    }
+
+    ss << "_" << std::setw(0) << std::setfill('0') << restart_iter;
+
+#ifdef _MPI
+    ss << ".pvtu";
+#else
+    ss << ".vtu";
+#endif
+
+    restart_file = ss.str();
+  }
+
   size_t pos;
 #ifdef _MPI
   /* From .pvtu, form partition specific filename */
@@ -1013,7 +1054,7 @@ void FRSolver::compute_RHS(unsigned int color)
   unsigned int startEle = geo.ele_color_range[color - 1];
   unsigned int endEle = geo.ele_color_range[color];
 #ifdef _CPU
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1046,7 +1087,7 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
 {
   unsigned int startEle = geo.ele_color_range[color - 1];
   unsigned int endEle = geo.ele_color_range[color];
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1402,7 +1443,7 @@ void FRSolver::initialize_U()
 void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1441,7 +1482,7 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1475,7 +1516,7 @@ void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(4)
   for (unsigned int dim = 0; dim < eles->nDims; dim++) 
   {
     for (unsigned int n = 0; n < eles->nVars; n++) 
@@ -1512,7 +1553,7 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1547,7 +1588,7 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::dFcdU_from_faces()
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(4)
   for (unsigned int nj = 0; nj < eles->nVars; nj++) 
   {
     for (unsigned int ni = 0; ni < eles->nVars; ni++) 
@@ -1589,7 +1630,7 @@ void FRSolver::dFcdU_from_faces()
 
   if(input->viscous)
   {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(4)
     for (unsigned int nj = 0; nj < eles->nVars; nj++) 
     {
       for (unsigned int ni = 0; ni < eles->nVars; ni++) 
@@ -1652,7 +1693,7 @@ void FRSolver::dFcdU_from_faces()
 void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1723,7 +1764,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #ifdef _CPU
       if (source.size() == 0)
       {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
@@ -1745,7 +1786,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       }
       else
       {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
@@ -1821,7 +1862,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       {
         if (source.size() == 0)
         {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
@@ -1841,7 +1882,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         }
         else
         {
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(3)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
@@ -2075,7 +2116,7 @@ void FRSolver::compute_element_dt()
         dtinv[2] = std::max(dtinv[4],dtinv[5]);
 
         /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
-        dt(ele) = 32 * CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // 32 = empirically-found factor
+        dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
       }
     }
   }
@@ -2322,6 +2363,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 #ifdef _MPI
   // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
   std::vector<std::vector<double>> data_p(input->nRanks);
+  std::vector<std::vector<int>> iblank_p(input->nRanks);
   if (input->rank == 0)
   {
     uint ind = 0;
@@ -2336,6 +2378,13 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
           ind++;
         }
       }
+    }
+
+    if (input->overset)
+    {
+      iblank_p[0].resize(nEles);
+      for (int ele = 0; ele < nEles; ele++)
+        iblank_p[0][ele] = geo.iblank_cell(ele);
     }
   }
 
@@ -2354,6 +2403,13 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       data_p[p].resize(size);
       MPI_Status status;
       MPI_Recv(data_p[p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
+
+      if (input->overset)
+      {
+        iblank_p[p].resize(nEles);
+        MPI_Status status2;
+        MPI_Recv(iblank_p[p].data(), nEles, MPI_INT, p, 0, geo.myComm, &status2);
+      }
     }
     else
     {
@@ -2366,6 +2422,11 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
               u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
 
         MPI_Send(u_tmp.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+
+        if (input->overset)
+        {
+          MPI_Send(geo.iblank_cell.data(), nEles, MPI_INT, 0, 0, geo.myComm);
+        }
       }
     }
 
@@ -2406,6 +2467,15 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       std::string solname = sol_prefix + std::to_string(p);
       dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
       dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+      if (input->overset) // Write out iblank tags as DataSet attribute
+      {
+        hsize_t dims[1] = {nEles};
+        DataSpace dspaceI(1, dims);
+        Attribute att = dset.createAttribute("iblank", PredType::NATIVE_INT8, dspaceI);
+        att.write(PredType::NATIVE_INT, iblank_p[p].data());
+      }
+
       dspaceU.close();
       dset.close();
     }
@@ -2451,25 +2521,37 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 #endif // no USE_H5_PARALLEL
 }
 
-void FRSolver::restart_pyfr(const std::string &restart_file)
+void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 {
-#ifdef _GPU
-  eles->U_spts = eles->U_spts_d;
-#endif
-
-  //std::stringstream ss;
-  //ss << input->output_prefix << "/";
-  //ss << restart_file << "-" << input->restart_iter << ".pyfrs";
-  //std::string filename(ss.str());
   std::string filename = restart_file;
 
-  std::string str = filename;
-  size_t ind = str.find("-");
-  str.erase(str.begin(), str.begin()+ind+1);
-  ind = str.find(".pyfrs");
-  str.erase(str.begin()+ind,str.end());
-  std::stringstream ss(str);
-  ss >> restart_iter;
+  if (input->restart_type > 0) // append .pvtu / .vtu to case name
+  {
+    std::stringstream ss;
+
+    ss << restart_file << "/" << restart_file;
+
+    if (input->overset)
+    {
+      ss << "-G" << input->gridID;
+    }
+
+    ss << "-" << restart_iter;
+    ss << ".pyfrs";
+
+    filename = ss.str();
+  }
+  else
+  {
+    std::string str = filename;
+    size_t ind = str.find("-");
+    str.erase(str.begin(), str.begin()+ind+1);
+    ind = str.find(".pyfrs");
+    str.erase(str.begin()+ind,str.end());
+    std::stringstream ss(str);
+    ss >> restart_iter;
+  }
+
   current_iter = restart_iter;
   input->iter = restart_iter;
   input->initIter = restart_iter;
@@ -2510,8 +2592,8 @@ void FRSolver::restart_pyfr(const std::string &restart_file)
   dset = file.openDataSet(solname);
   auto ds = dset.getSpace();
 
-  std::vector<hsize_t> dims(3);
-  int ds_rank = ds.getSimpleExtentDims(dims.data());
+  hsize_t dims[3];
+  int ds_rank = ds.getSimpleExtentDims(dims);
 
   if (ds_rank != 3)
     ThrowException("Improper DataSpace rank for solution data.");
@@ -2531,6 +2613,21 @@ void FRSolver::restart_pyfr(const std::string &restart_file)
   mdvector<double> u_tmp({nEles, nVars, nSpts});
 
   dset.read(u_tmp.data(), PredType::NATIVE_DOUBLE);
+
+  if (input->overset)
+  {
+    Attribute att = dset.openAttribute("iblank");
+    DataSpace dspaceI = att.getSpace();
+    hsize_t dim[1];
+    dspaceI.getSimpleExtentDims(dim);
+
+    if (dim[0] != geo.nEles)
+      ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+
+    geo.iblank_cell.assign({geo.nEles});
+    att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+  }
+
   dset.close();
 
   eles->U_spts.assign({nSpts,nEles,nVars});
@@ -2538,6 +2635,23 @@ void FRSolver::restart_pyfr(const std::string &restart_file)
     for (int var = 0; var < nVars; var++)
       for (int spt = 0; spt < nSpts; spt++)
         eles->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
+
+  // Process the config / stats string
+  std::string str, key, tmp;
+  std::stringstream ss;
+  std::istringstream stats(geo.stats);
+  while (std::getline(stats, str))
+  {
+    ss.str(str);  ss >> key;
+    if (key == "tcurr")
+    {
+      // "tcurr = ####"
+      ss >> tmp >> input->time;
+      break;
+    }
+
+    ss.str(""); ss.clear();
+  }
 }
 
 void FRSolver::write_solution(const std::string &_prefix)
@@ -3953,7 +4067,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     f.close();
   }
 
-  if (input->overset)
+  if (input->overset && input->plot_overset)
   {
     write_overset_boundary(_prefix);
   }
@@ -4398,7 +4512,7 @@ void FRSolver::report_error(std::ofstream &f)
 
   unsigned int n = input->err_field;
   std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
-#pragma omp for
+#pragma omp for collapse (2)
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
