@@ -23,22 +23,6 @@
 #include "mdvector_gpu.h"
 
 /* Face flux kernel wrappers */
-void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F, 
-    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims,
-    mdvector_gpu<double> &AdvDiff_A, unsigned int startFpt,
-    unsigned int endFpt, bool overset = false, int* iblank = NULL);
-
-void compute_Fconv_fpts_Burgers_wrapper(mdvector_gpu<double> &F, 
-    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims,
-    unsigned int startFpt, unsigned int endFpt, bool overset = false,
-    int* iblank = NULL);
-
-void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
-    mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
-    unsigned int nFpts, unsigned int nDims, double gamma,
-    unsigned int startFpt, unsigned int endFpt, bool overset = false, 
-    int* iblank = NULL);
-
 void compute_Fvisc_fpts_AdvDiff_wrapper(mdvector_gpu<double> &Fvisc, 
     mdvector_gpu<double> &dU, unsigned int nFpts, unsigned int nDims, 
     double AdvDiff_D, unsigned int startFpt, unsigned int endFpt,
@@ -82,17 +66,11 @@ void apply_bcs_dFdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUc
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous);
 
 /* Face common value kernel wrappers */
-void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
+void rusanov_flux_wrapper(mdvector_gpu<double> &U,
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double gamma, double rus_k, unsigned int nFpts, 
     unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool motion, 
-    bool overset = false, int* iblank = NULL);
-
-void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm,
-    mdvector_gpu<double> &waveSp, mdvector_gpu<double> &dA, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL);
 
 void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 

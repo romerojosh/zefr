@@ -19,198 +19,12 @@
 
 #include "input.hpp"
 #include "faces_kernels.h"
+#include "flux.hpp"
 #include "mdvector_gpu.h"
 
 #define HOLE 0
 #define FRINGE -1
 #define NORMAL 1
-
-template <unsigned int nDims>
-__global__
-void compute_Fconv_fpts_AdvDiff(mdvector_gpu<double> F, mdvector_gpu<double> U, 
-    unsigned int nFpts, mdvector_gpu<double> AdvDiff_A, 
-    unsigned int startFpt, unsigned int endFpt, bool overset = false, int* iblank = NULL)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  if (overset)
-    if (iblank[fpt] == 0)
-      return;
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-      F(fpt, 0, dim, 0) = AdvDiff_A(dim) * U(fpt, 0, 0);
-      F(fpt, 0, dim, 1) = AdvDiff_A(dim) * U(fpt, 0, 1);
-  }
-
-}
-
-void compute_Fconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &F, 
-    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims, 
-    mdvector_gpu<double> &AdvDiff_A, unsigned int startFpt,
-    unsigned int endFpt, bool overset, int* iblank)
-{
-  unsigned int threads = 192;
-  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
-
-  if (nDims == 2)
-    compute_Fconv_fpts_AdvDiff<2><<<blocks, threads>>>(F, U, nFpts, AdvDiff_A, 
-        startFpt, endFpt);
-  else 
-    compute_Fconv_fpts_AdvDiff<3><<<blocks, threads>>>(F, U, nFpts, AdvDiff_A,
-        startFpt, endFpt, overset, iblank);
-
-}
-
-template <unsigned int nDims>
-__global__
-void compute_Fconv_fpts_Burgers(mdvector_gpu<double> F, mdvector_gpu<double> U, 
-    unsigned int nFpts, unsigned int startFpt, unsigned int endFpt,
-    bool overset = false, int* iblank = NULL)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  if (overset)
-    if (iblank[fpt] == 0)
-      return;
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-      F(fpt, 0, dim, 0) = 0.5 * U(fpt, 0, 0) * U(fpt, 0, 0);
-
-      F(fpt, 0, dim, 1) = 0.5 * U(fpt, 0, 1) * U(fpt, 0, 1);
-  }
-
-}
-
-void compute_Fconv_fpts_Burgers_wrapper(mdvector_gpu<double> &F, 
-    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims, 
-    unsigned int startFpt, unsigned int endFpt, bool overset, int* iblank)
-{
-  unsigned int threads = 192;
-  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
-
-  if (nDims == 2)
-    compute_Fconv_fpts_Burgers<2><<<blocks, threads>>>(F, U, nFpts, startFpt, endFpt);
-  else 
-    compute_Fconv_fpts_Burgers<3><<<blocks, threads>>>(F, U, nFpts, startFpt, endFpt, overset, iblank);
-
-}
-
-__global__
-void compute_Fconv_fpts_2D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, mdvector_gpu<double> P, 
-    unsigned int nFpts, double gamma, unsigned int startFpt, unsigned int endFpt)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  for (unsigned int slot = 0; slot < 2; slot ++)
-  {
-    /* Get states */
-    double rho = U(fpt, 0, slot);
-    double momx = U(fpt, 1, slot);
-    double momy = U(fpt, 2, slot);
-    double ene = U(fpt, 3, slot);
-
-    /* Compute some primitive variables (keep pressure)*/
-    double momF = (momx * momx + momy * momy) / rho;
-
-    double P_d = (gamma - 1.0) * (ene - 0.5 * momF);
-    P(fpt, slot) = P_d;
-
-    double H = (ene + P_d) / rho;
-
-    F(fpt, 0, 0, slot) = momx;
-    F(fpt, 1, 0, slot) = momx * momx / rho + P_d;
-    F(fpt, 2, 0, slot) = momx * momy / rho;
-    F(fpt, 3, 0, slot) = momx * H;
-
-    F(fpt, 0, 1, slot) = momy;
-    F(fpt, 1, 1, slot) = momy * momx / rho;
-    F(fpt, 2, 1, slot) = momy * momy / rho + P_d;
-    F(fpt, 3, 1, slot) = momy * H;
-  }
-}
-
-__global__
-void compute_Fconv_fpts_3D_EulerNS(mdvector_gpu<double> F, mdvector_gpu<double> U, mdvector_gpu<double> P, 
-    unsigned int nFpts, double gamma, unsigned int startFpt, unsigned int endFpt,
-    bool overset = false, int* iblank = NULL)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  if (overset)
-    if (iblank[fpt] == HOLE)
-      return;
-
-   for (unsigned int slot = 0; slot < 2; slot ++)
-   {
-     /* Get states */
-     double rho = U(fpt, 0, slot);
-     double momx = U(fpt, 1, slot);
-     double momy = U(fpt, 2, slot);
-     double momz = U(fpt, 3, slot);
-     double ene = U(fpt, 4, slot);
-
-     /* Compute some primitive variables (keep pressure)*/
-     double momF = (momx * momx + momy * momy + momz * momz) / rho;
-
-     double P_d = (gamma - 1.0) * (ene - 0.5 * momF);
-     P(fpt, slot) = P_d;
-
-     double H = (ene + P_d) / rho;
-
-     F(fpt, 0, 0, slot) = momx;
-     F(fpt, 1, 0, slot) = momx * momx / rho + P_d;
-     F(fpt, 2, 0, slot) = momx * momy / rho;
-     F(fpt, 3, 0, slot) = momx * momz / rho;
-     F(fpt, 4, 0, slot) = momx * H;
-
-     F(fpt, 0, 1, slot) = momy;
-     F(fpt, 1, 1, slot) = momy * momx / rho;
-     F(fpt, 2, 1, slot) = momy * momy / rho + P_d;
-     F(fpt, 3, 1, slot) = momy * momz / rho;
-     F(fpt, 4, 1, slot) = momy * H;
-
-     F(fpt, 0, 2, slot) = momz;
-     F(fpt, 1, 2, slot) = momz * momx / rho;
-     F(fpt, 2, 2, slot) = momz * momy / rho;
-     F(fpt, 3, 2, slot) = momz * momz / rho + P_d;
-     F(fpt, 4, 2, slot) = momz * H;
-   }
-}
-
-void compute_Fconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &F_gfpts, 
-    mdvector_gpu<double> &U_gfpts, mdvector_gpu<double> &P_gfpts, 
-    unsigned int nFpts, unsigned int nDims, double gamma,
-    unsigned int startFpt, unsigned int endFpt, bool overset, int* iblank)
-{
-  unsigned int threads = 192;
-  //unsigned int blocks = (nFpts + threads - 1)/threads;
-  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
-
-  if (nDims == 2)
-  {
-    compute_Fconv_fpts_2D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma,
-        startFpt, endFpt);
-  }
-  else 
-  {
-    compute_Fconv_fpts_3D_EulerNS<<<blocks, threads>>>(F_gfpts, U_gfpts, P_gfpts, nFpts, gamma, 
-        startFpt, endFpt, overset, iblank);
-  }
-}
 
 template <unsigned int nDims>
 __global__
@@ -2279,7 +2093,7 @@ void apply_bcs_dFdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUc
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
+void rusanov_flux(mdvector_gpu<double> U,
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
     mdvector_gpu<double> dA, mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
@@ -2293,8 +2107,9 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   if (overset and iblank[fpt] == 0)
     return;
 
-  double FL[nVars]; double FR[nVars];
   double WL[nVars]; double WR[nVars];
+  double FnL[nVars]; double FnR[nVars];
+  double FL[nVars][nDims]; double FR[nVars][nDims];
   double norm[nDims], VG[nDims];
   double Vgn = 0.0;
 
@@ -2317,22 +2132,6 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
       VG[dim] = 0.0;
   }
 
-  /* Initialize FL, FR */
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    FL[n] = 0.0; FR[n] = 0.0;
-  }
-
-  /* Get interface-normal flux components  (from L to R) */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      FL[n] += Fconv(fpt, n, dim, 0) * norm[dim];
-      FR[n] += Fconv(fpt, n, dim, 1) * norm[dim];
-    }
-  }
-
   /* Get left and right state variables */
   for (unsigned int n = 0; n < nVars; n++)
   {
@@ -2343,17 +2142,26 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   double waveSp = 0., eig = 0.;
   if (equation == AdvDiff) 
   {
+    double A[nDims];
+
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      waveSp += AdvDiff_A(dim) * norm[dim];
+      A[dim] = AdvDiff_A(dim);
+      waveSp += A[dim] * norm[dim];
     }
 
     waveSp_gfpts(fpt) = std::abs(waveSp - Vgn);
 
     eig = std::abs(waveSp);
+
+    compute_Fconv_AdvDiff<nVars, nDims>(WL, FL, A);
+    compute_Fconv_AdvDiff<nVars, nDims>(WR, FR, A);
   }
   else if (equation == Burgers) 
   {
+    compute_Fconv_Burgers<nVars, nDims>(WL, FL);
+    compute_Fconv_Burgers<nVars, nDims>(WR, FR);
+
     double AnL = 0;
     double AnR = 0;
 
@@ -2369,6 +2177,15 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   }
   else if (equation == EulerNS)
   {
+    double PL, PR;
+
+    compute_Fconv_EulerNS<nVars, nDims>(WL, FL, PL, gamma);
+    compute_Fconv_EulerNS<nVars, nDims>(WR, FR, PR, gamma);
+
+    /* Store pressures for force computation */
+    P(fpt, 0) = PL;
+    P(fpt, 1) = PR;
+
     /* Compute speed of sound */
     //double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
     //double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
@@ -2382,23 +2199,40 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
     }
 
     //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
-    waveSp = std::abs(VnL - Vgn) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
-    waveSp = max(waveSp, std::abs(VnR - Vgn) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
+    waveSp = std::abs(VnL - Vgn) + std::sqrt(gamma * PL / WL[0]);
+    waveSp = max(waveSp, std::abs(VnR - Vgn) + std::sqrt(gamma * PR / WR[0]));
 
-    eig = std::abs(VnL) + std::sqrt(gamma * P(fpt, 0) / WL[0]);
-    eig = max(eig, std::abs(VnR) + std::sqrt(gamma * P(fpt, 1) / WR[0]));
+    eig = std::abs(VnL) + std::sqrt(gamma * PL / WL[0]);
+    eig = max(eig, std::abs(VnR) + std::sqrt(gamma * PR / WR[0]));
 
     // NOTE: Can I just store absolute of waveSp?
     waveSp_gfpts(fpt) = waveSp;
     //waveSp = std::abs(waveSp);
   }
 
+  /* Initialize FnL, FnR */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    FnL[n] = 0.0; FnR[n] = 0.0;
+  }
+
+  /* Get interface-normal flux components  (from L to R) */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      FnL[n] += FL[n][dim] * norm[dim];
+      FnR[n] += FR[n][dim] * norm[dim];
+    }
+  }
+
+
   /* Compute common normal flux */
   if (LDG_bias(fpt) == 2) /* Centered */
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = 0.5 * (FR[n] + FL[n])* dA(fpt);
+      double F = 0.5 * (FnR[n] + FnL[n])* dA(fpt);
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
@@ -2407,7 +2241,7 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = FR[n]* dA(fpt);
+      double F = FnR[n]* dA(fpt);
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
@@ -2416,20 +2250,19 @@ void rusanov_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = (0.5 * (FR[n]+FL[n]) - 0.5 * eig * (1.0 - rus_k) * (WR[n]-WL[n])) * dA(fpt);
+      double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0 - rus_k) * (WR[n]-WL[n])) * dA(fpt);
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
   }
 }
 
-void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
+void rusanov_flux_wrapper(mdvector_gpu<double> &U,
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double> &Vg,
-    double gamma, double rus_k, unsigned int nFpts, unsigned int nVars,
-    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt,
-    bool motion, bool overset, int* iblank)
+    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double gamma, double rus_k, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool motion, 
+    bool overset, int* iblank)
 {
   unsigned int threads = 256;
   //unsigned int blocks = (nFpts + threads - 1)/threads;
@@ -2443,167 +2276,29 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
+      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
           waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
     else
-      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
+      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
           waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
   }
   else if (equation == Burgers)
   {
     if (nDims == 2)
-      rusanov_flux<1, 2, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
+      rusanov_flux<1, 2, Burgers><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
           waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
     else
-      rusanov_flux<1, 3, Burgers><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
+      rusanov_flux<1, 3, Burgers><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
           waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
+      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
           waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
     else
-      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, P, AdvDiff_A, norm,
+      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
           waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
-  }
-}
-
-template<unsigned int nVars, unsigned int nDims, unsigned int equation>
-__global__
-void roe_flux(mdvector_gpu<double> U, mdvector_gpu<double> Fconv, 
-    mdvector_gpu<double> Fcomm, mdvector_gpu<double> norm_gfpts, 
-    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<double> dA, double gamma, double rus_k,
-    unsigned int nFpts, unsigned int startFpt, unsigned int endFpt)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  /* Apply central flux at boundaries */
-  double k = rus_k;
-
-  double FL[nVars]; double FR[nVars]; 
-  double F[nVars]; double dW[nVars];
-  double norm[nDims];
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    norm[dim] = norm_gfpts(fpt, dim, 0);
-  }
-
-  /* Initialize FL, FR */
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    FL[n] = 0.0; FR[n] = 0.0;
-  }
-
-  /* Get interface-normal flux components  (from L to R) */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      FL[n] += Fconv(fpt, n, dim, 0) * norm[dim];
-      FR[n] += Fconv(fpt, n, dim, 1) * norm[dim];
-    }
-  }
-
-  /* Get difference in state variables */
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    dW[n] = U(fpt, n, 1) - U(fpt, n, 0);
-  }
-
-  /* Get numerical wavespeed */
-  if (equation == EulerNS)
-  {
-    /* Primitive Variables */
-    double gam = gamma;
-    double rhoL = U(fpt, 0, 0);
-    double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-    double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-    double pL = (gam-1.0) * (U(fpt, 3, 0) - 0.5 * rhoL * (uL*uL + vL*vL));
-    double hL = (U(fpt, 3, 0) + pL) / rhoL;
-
-    double rhoR = U(fpt, 0, 1);
-    double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-    double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-    double pR = (gam-1.0) * (U(fpt, 3, 1) - 0.5 * rhoR * (uR*uR + vR*vR));
-    double hR = (U(fpt, 3, 0) + pL) / rhoL;
-
-    /* Compute averaged values */
-    double sq_rho = std::sqrt(rhoR / rhoL);
-    double rrho = 1.0 / (sq_rho + 1.0);
-    double um = rrho * (uL + sq_rho * uR);
-    double vm = rrho * (vL + sq_rho * vR);
-    double hm = rrho * (hL + sq_rho * hR);
-
-    double Vmsq = 0.5 * (um*um + vm*vm);
-    double am = std::sqrt((gam-1.0) * (hm - Vmsq));
-    double Vnm = um * norm[0] + vm * norm[1];
-
-    /* Compute Wavespeeds */
-    double lambda0 = std::abs(Vnm);
-    double lambdaP = std::abs(Vnm + am);
-    double lambdaM = std::abs(Vnm - am);
-
-    /* Entropy fix */
-    double eps = 0.5 * (std::abs(FL[0] / rhoL - FR[0] / rhoR) + std::abs(std::sqrt(gam*pL/rhoL) - std::sqrt(gam*pR/rhoR)));
-    if (lambda0 < 2.0 * eps)
-      lambda0 = 0.25 * lambda0*lambda0 / eps + eps;
-    if (lambdaP < 2.0 * eps)
-      lambdaP = 0.25 * lambdaP*lambdaP / eps + eps;
-    if (lambdaM < 2.0 * eps)
-      lambdaM = 0.25 * lambdaM*lambdaM / eps + eps;
-
-    /* Matrix terms */
-    double a2 = 0.5 * (lambdaP + lambdaM) - lambda0;
-    double a3 = 0.5 * (lambdaP - lambdaM) / am;
-    double a1 = a2 * (gam-1.0) / (am*am);
-    double a4 = a3 * (gam-1.0);
-    double a5 = Vmsq * dW[0] - um * dW[1] - vm * dW[2] + dW[3];
-    double a6 = Vnm * dW[0] - norm[0] * dW[1] - norm[1] * dW[2];
-    double aL1 = a1 * a5 - a3 * a6;
-    double bL1 = a4 * a5 - a2 * a6;
-
-    F[0] = 0.5 * (FR[0] + FL[0]) - (1.0-k) * (lambda0 * dW[0] + aL1);
-    F[1] = 0.5 * (FR[1] + FL[1]) - (1.0-k) * (lambda0 * dW[1] + aL1 * um + bL1 * norm[0]);
-    F[2] = 0.5 * (FR[2] + FL[2]) - (1.0-k) * (lambda0 * dW[2] + aL1 * vm + bL1 * norm[1]);
-    F[3] = 0.5 * (FR[3] + FL[3]) - (1.0-k) * (lambda0 * dW[3] + aL1 * hm + bL1 * Vnm);
-
-    waveSp_gfpts(fpt) = max(max(lambda0, lambdaP), lambdaM);
-  }
-
-  /* Correct for positive parent space sign convention */
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    F[n] *= dA(fpt);
-    Fcomm(fpt, n, 0) = F[n];
-    Fcomm(fpt, n, 1) = -F[n];
-  }
-}
-
-void roe_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fconv, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm,
-    mdvector_gpu<double> &waveSp, mdvector_gpu<double> &dA, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt,
-    bool overset, int* iblank)
-{
-  unsigned int threads = 256;
-  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
-
-  if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      roe_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fconv, Fcomm, norm,
-          waveSp, dA, gamma, rus_k, nFpts, startFpt, endFpt);
-    else
-      ThrowException("Roe flux only implemented for 2D!");
-  }
-  else
-  {
-    ThrowException("Roe flux not implemented for this equation type!");
   }
 }
 

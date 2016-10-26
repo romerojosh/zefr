@@ -1692,11 +1692,6 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
     }
 #endif
 
-#ifdef _GPU
-    compute_Fconv_fpts_AdvDiff_wrapper(Fconv_d, U_d, nFpts, nDims, input->AdvDiff_A_d,
-        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
-    check_error();
-#endif
   }
 
   else if (input->equation == Burgers)
@@ -1715,11 +1710,6 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
     }
 #endif
 
-#ifdef _GPU
-    compute_Fconv_fpts_Burgers_wrapper(Fconv_d, U_d, nFpts, nDims, startFpt, endFpt,
-      input->overset, geo->iblank_fpts_d.data());
-    check_error();
-#endif
   }
 
   else if (input->equation == EulerNS)
@@ -1801,11 +1791,6 @@ void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
     }
 #endif
 
-#ifdef _GPU
-      compute_Fconv_fpts_EulerNS_wrapper(Fconv_d, U_d, P_d, nFpts, nDims, input->gamma, 
-          startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
-      check_error();
-#endif
   }
 }
 
@@ -2044,22 +2029,9 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    rusanov_flux_wrapper(U_d, Fconv_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
+    rusanov_flux_wrapper(U_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
         dA_d, Vg_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
         input->motion, input->overset, geo->iblank_fpts_d.data());
-
-    check_error();
-#endif
-  }
-  else if (input->fconv_type == "Roe")
-  {
-#ifdef _CPU
-    roe_flux(startFpt, endFpt);
-#endif
-
-#ifdef _GPU
-    roe_flux_wrapper(U_d, Fconv_d, Fcomm_d, norm_d, waveSp_d, dA_d, input->gamma, input->rus_k,
-        nFpts, nVars, nDims, input->equation, startFpt, endFpt);
 
     check_error();
 #endif
@@ -2303,119 +2275,6 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         Fcomm(fpt, n, 0) = F;
         Fcomm(fpt, n, 1) = -F;
       }
-    }
-  }
-}
-
-void Faces::roe_flux(unsigned int startFpt, unsigned int endFpt)
-{
-  if (nDims != 2)
-  {
-    ThrowException("Roe Flux only implemented for 2D!");
-  }
-
-  std::vector<double> F(nVars);
-  std::vector<double> dW(nVars);
-  std::vector<double> FL(nVars);
-  std::vector<double> FR(nVars);
-
-#pragma omp parallel for firstprivate(FL, FR, F, dW)
-  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-  {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
-
-    /* Apply central flux at boundaries */
-    double k = input->rus_k;
-
-    /* Initialize FL, FR */
-    std::fill(FL.begin(), FL.end(), 0.0);
-    std::fill(FR.begin(), FR.end(), 0.0);
-
-    /* Get interface-normal flux components  (from L to R)*/
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        FL[n] += Fconv(fpt, n, dim, 0) * norm(fpt, dim, 0);
-        FR[n] += Fconv(fpt, n, dim, 1) * norm(fpt, dim, 0);
-      }
-    }
-
-    /* Get difference in state variables */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      dW[n] = U(fpt, n, 1) - U(fpt, n, 0);
-    }
-
-    /* Get numerical wavespeed */
-    if (input->equation == EulerNS)
-    {
-      /* Primitive Variables */
-      double gam = input->gamma;
-      double rhoL = U(fpt, 0, 0);
-      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-      double pL = (gam-1.0) * (U(fpt, 3, 0) - 0.5 * rhoL * (uL*uL + vL*vL));
-      double hL = (U(fpt, 3, 0) + pL) / rhoL;
-
-      double rhoR = U(fpt, 0, 1);
-      double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-      double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-      double pR = (gam-1.0) * (U(fpt, 3, 1) - 0.5 * rhoR * (uR*uR + vR*vR));
-      double hR = (U(fpt, 3, 0) + pL) / rhoL;
-
-      /* Compute averaged values */
-      double sq_rho = std::sqrt(rhoR / rhoL);
-      double rrho = 1.0 / (sq_rho + 1.0);
-      double um = rrho * (uL + sq_rho * uR);
-      double vm = rrho * (vL + sq_rho * vR);
-      double hm = rrho * (hL + sq_rho * hR);
-
-      double Vmsq = 0.5 * (um*um + vm*vm);
-      double am = std::sqrt((gam-1.0) * (hm - Vmsq));
-      double Vnm = um * norm(fpt, 0, 0) + vm * norm(fpt, 1, 0);
-
-      /* Compute Wavespeeds */
-      double lambda0 = std::abs(Vnm);
-      double lambdaP = std::abs(Vnm + am);
-      double lambdaM = std::abs(Vnm - am);
-
-      /* Entropy fix */
-      double eps = 0.5 * (std::abs(FL[0] / rhoL - FR[0] / rhoR) + std::abs(std::sqrt(gam*pL/rhoL) - std::sqrt(gam*pR/rhoR)));
-      if (lambda0 < 2.0 * eps)
-        lambda0 = 0.25 * lambda0*lambda0 / eps + eps;
-      if (lambdaP < 2.0 * eps)
-        lambdaP = 0.25 * lambdaP*lambdaP / eps + eps;
-      if (lambdaM < 2.0 * eps)
-        lambdaM = 0.25 * lambdaM*lambdaM / eps + eps;
-
-      /* Matrix terms */
-      double a2 = 0.5 * (lambdaP + lambdaM) - lambda0;
-      double a3 = 0.5 * (lambdaP - lambdaM) / am;
-      double a1 = a2 * (gam-1.0) / (am*am);
-      double a4 = a3 * (gam-1.0);
-      double a5 = Vmsq * dW[0] - um * dW[1] - vm * dW[2] + dW[3];
-      double a6 = Vnm * dW[0] - norm(fpt, 0, 0) * dW[1] - norm(fpt, 1, 0) * dW[2];
-      double aL1 = a1 * a5 - a3 * a6;
-      double bL1 = a4 * a5 - a2 * a6;
-
-      F[0] = 0.5 * (FR[0] + FL[0]) - (1.0-k) * (lambda0 * dW[0] + aL1);
-      F[1] = 0.5 * (FR[1] + FL[1]) - (1.0-k) * (lambda0 * dW[1] + aL1 * um + bL1 * norm(fpt, 0, 0));
-      F[2] = 0.5 * (FR[2] + FL[2]) - (1.0-k) * (lambda0 * dW[2] + aL1 * vm + bL1 * norm(fpt, 1, 0));
-      F[3] = 0.5 * (FR[3] + FL[3]) - (1.0-k) * (lambda0 * dW[3] + aL1 * hm + bL1 * Vnm);
-
-      waveSp(fpt) = std::max(std::max(lambda0, lambdaP), lambdaM);
-    }
-    else
-    {
-      ThrowException("Roe flux not implemented for this equation type!");
-    }
-
-    /* Correct for positive parent space sign convention */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      Fcomm(fpt, n, 0) = F[n] * dA(fpt);
-      Fcomm(fpt, n, 1) = -F[n] * dA(fpt);
     }
   }
 }
@@ -3030,16 +2889,6 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 #endif
 
   }
-  else if (input->fconv_type == "Roe")
-  {
-#ifdef _CPU
-    roe_dFcdU(startFpt, endFpt);
-#endif
-
-#ifdef _GPU
-    ThrowException("Roe flux for implicit method not implemented on GPU!");
-#endif
-  }
   else
   {
     ThrowException("Numerical convective flux type not recognized!");
@@ -3337,157 +3186,6 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
           dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUR[nj] * (1.0-k));
         }
       }
-    }
-  }
-}
-
-void Faces::roe_dFcdU(unsigned int startFpt, unsigned int endFpt)
-{
-  if (nDims != 2)
-  {
-    ThrowException("Roe Flux only implemented for 2D!");
-  }
-
-  dFndUL_temp.fill(0.0);
-  dFndUR_temp.fill(0.0);
-
-#pragma omp parallel for
-  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-  {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
-
-    /* Apply central flux at boundaries */
-    double k = input->rus_k;
-
-    /* Get interface-normal dFdU components  (from L to R)*/
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFndUL_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 0) * norm(fpt, dim, 0);
-          dFndUR_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
-        }
-      }
-    }
-
-    /* Get numerical wavespeed */
-    if (input->equation == EulerNS)
-    {
-      /* Primitive Variables */
-      double gam = input->gamma;
-      double rhoL = U(fpt, 0, 0);
-      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-      double pL = (gam-1.0) * (U(fpt, 3, 0) - 0.5 * rhoL * (uL*uL + vL*vL));
-      double hL = (U(fpt, 3, 0) + pL) / rhoL;
-
-      double rhoR = U(fpt, 0, 1);
-      double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-      double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-      double pR = (gam-1.0) * (U(fpt, 3, 1) - 0.5 * rhoR * (uR*uR + vR*vR));
-      double hR = (U(fpt, 3, 0) + pL) / rhoL;
-
-      /* Compute averaged values */
-      double sq_rho = std::sqrt(rhoR / rhoL);
-      double rrho = 1.0 / (sq_rho + 1.0);
-      double um = rrho * (uL + sq_rho * uR);
-      double vm = rrho * (vL + sq_rho * vR);
-      double hm = rrho * (hL + sq_rho * hR);
-
-      double Vmsq = 0.5 * (um*um + vm*vm);
-      double am = std::sqrt((gam-1.0) * (hm - Vmsq));
-      double Vnm = um * norm(fpt, 0, 0) + vm * norm(fpt, 1, 0);
-
-      /* Compute Wavespeeds */
-      double lambda0 = std::abs(Vnm);
-      double lambdaP = std::abs(Vnm + am);
-      double lambdaM = std::abs(Vnm - am);
-
-      /* Entropy fix */
-      double FL0 = 0; double FR0 = 0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        FL0 += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
-        FR0 += U(fpt, dim+1, 1) * norm(fpt, dim, 0);
-      }
-      double eps = 0.5 * (std::abs(FL0 / rhoL - FR0 / rhoR) + std::abs(std::sqrt(gam*pL/rhoL) - std::sqrt(gam*pR/rhoR)));
-      if (lambda0 < 2.0 * eps)
-        lambda0 = 0.25 * lambda0*lambda0 / eps + eps;
-      if (lambdaP < 2.0 * eps)
-        lambdaP = 0.25 * lambdaP*lambdaP / eps + eps;
-      if (lambdaM < 2.0 * eps)
-        lambdaM = 0.25 * lambdaM*lambdaM / eps + eps;
-
-      /* Matrix terms */
-      double a2 = 0.5 * (lambdaP + lambdaM) - lambda0;
-      double a3 = 0.5 * (lambdaP - lambdaM) / am;
-      double a1 = a2 * (gam-1.0) / (am*am);
-      double a4 = a3 * (gam-1.0);
-
-      std::vector<double> aL1(nVars);
-      aL1[0] = a1 * Vmsq - a3 * Vnm;
-      aL1[1] = a1 * (-um) - a3 * (-norm(fpt, 0, 0));
-      aL1[2] = a1 * (-vm) - a3 * (-norm(fpt, 1, 0));
-      aL1[3] = a1;
-
-      std::vector<double> bL1(nVars);
-      bL1[0] = a4 * Vmsq - a2 * Vnm;
-      bL1[1] = a4 * (-um) - a2 * (-norm(fpt, 0, 0));
-      bL1[2] = a4 * (-vm) - a2 * (-norm(fpt, 1, 0));
-      bL1[3] = a4;
-
-      /* Compute common dFdU */
-      for (unsigned int slot = 0; slot < 2; slot++)
-      {
-        dFcdU(fpt, 0, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 0) + (1.0-k) * (lambda0 + aL1[0]);
-        dFcdU(fpt, 0, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 1) + (1.0-k) * (aL1[1]);
-        dFcdU(fpt, 0, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 2) + (1.0-k) * (aL1[2]);
-        dFcdU(fpt, 0, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 0, 3) + (1.0-k) * (aL1[3]);
-
-        dFcdU(fpt, 1, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 0) + (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
-        dFcdU(fpt, 1, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 1) + (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
-        dFcdU(fpt, 1, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 2) + (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
-        dFcdU(fpt, 1, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 1, 3) + (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
-
-        dFcdU(fpt, 2, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 0) + (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
-        dFcdU(fpt, 2, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 1) + (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
-        dFcdU(fpt, 2, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 2) + (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
-        dFcdU(fpt, 2, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 2, 3) + (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
-
-        dFcdU(fpt, 3, 0, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 0) + (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
-        dFcdU(fpt, 3, 1, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 1) + (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
-        dFcdU(fpt, 3, 2, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 2) + (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
-        dFcdU(fpt, 3, 3, 0, slot) = 0.5 * dFndUL_temp(fpt, 3, 3) + (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
-
-
-        dFcdU(fpt, 0, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 0) - (1.0-k) * (lambda0 + aL1[0]);
-        dFcdU(fpt, 0, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 1) - (1.0-k) * (aL1[1]);
-        dFcdU(fpt, 0, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 2) - (1.0-k) * (aL1[2]);
-        dFcdU(fpt, 0, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 0, 3) - (1.0-k) * (aL1[3]);
-
-        dFcdU(fpt, 1, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 0) - (1.0-k) * (aL1[0] * um + bL1[0] * norm(fpt, 0, 0));
-        dFcdU(fpt, 1, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 1) - (1.0-k) * (lambda0 + aL1[1] * um + bL1[1] * norm(fpt, 0, 0));
-        dFcdU(fpt, 1, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 2) - (1.0-k) * (aL1[2] * um + bL1[2] * norm(fpt, 0, 0));
-        dFcdU(fpt, 1, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 1, 3) - (1.0-k) * (aL1[3] * um + bL1[3] * norm(fpt, 0, 0));
-
-        dFcdU(fpt, 2, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 0) - (1.0-k) * (aL1[0] * vm + bL1[0] * norm(fpt, 1, 0));
-        dFcdU(fpt, 2, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 1) - (1.0-k) * (aL1[1] * vm + bL1[1] * norm(fpt, 1, 0));
-        dFcdU(fpt, 2, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 2) - (1.0-k) * (lambda0 + aL1[2] * vm + bL1[2] * norm(fpt, 1, 0));
-        dFcdU(fpt, 2, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 2, 3) - (1.0-k) * (aL1[3] * vm + bL1[3] * norm(fpt, 1, 0));
-
-        dFcdU(fpt, 3, 0, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 0) - (1.0-k) * (aL1[0] * hm + bL1[0] * Vnm);
-        dFcdU(fpt, 3, 1, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 1) - (1.0-k) * (aL1[1] * hm + bL1[1] * Vnm);
-        dFcdU(fpt, 3, 2, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 2) - (1.0-k) * (aL1[2] * hm + bL1[2] * Vnm);
-        dFcdU(fpt, 3, 3, 1, slot) = 0.5 * dFndUR_temp(fpt, 3, 3) - (1.0-k) * (lambda0 + aL1[3] * hm + bL1[3] * Vnm);
-      }
-
-      waveSp(fpt) = std::max(std::max(lambda0, lambdaP), lambdaM);
-    }
-    else
-    {
-      ThrowException("Roe flux not implemented for this equation type!");
     }
   }
 }

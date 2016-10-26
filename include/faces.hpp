@@ -62,7 +62,6 @@ class Faces
     void apply_bcs();
     void apply_bcs_dU();
     void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
-    void roe_flux(unsigned int startFpt, unsigned int endFpt);
     void LDG_flux(unsigned int startFpt, unsigned int endFpt);
     void central_flux();
     void transform_flux();
@@ -70,7 +69,6 @@ class Faces
     /* Routines for implicit method */
     void apply_bcs_dFdU();
     void rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt);
-    void roe_dFcdU(unsigned int startFpt, unsigned int endFpt);
     void LDG_dFcdU(unsigned int startFpt, unsigned int endFpt);
     void transform_dFcdU();
 
@@ -121,7 +119,7 @@ class Faces
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, Ucomm_d, P_d;
+    mdvector_gpu<double> U_d, dU_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, Ucomm_d, P_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<double> dA_d, waveSp_d, diffCo_d;
     mdvector_gpu<int> LDG_bias_d;
