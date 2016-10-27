@@ -705,12 +705,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
 
-  /* Compute convective flux at solution points */
-  eles->compute_Fconv(startEle, endEle);
 
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
+    /* Compute flux at solution points */
+    eles->compute_F(startEle, endEle);
+
     /* Transform solution point fluxes from physical to reference space */
     if (input->motion)
     {
@@ -792,8 +793,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
 
-    /* Compute viscous flux at solution points */
-    eles->compute_Fvisc(startEle, endEle);
+    /* Compute flux at solution points */
+    eles->compute_F(startEle, endEle);
     
     if (input->motion)
     {
