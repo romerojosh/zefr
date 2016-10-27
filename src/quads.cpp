@@ -469,37 +469,6 @@ void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
 
 }
 
-void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(2)
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
-    {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        double Ftemp = F_spts(spt, ele, n, 0);
-
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(spt, ele, 1, 1)
-                               - F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 1);
-        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 0)
-                               - Ftemp * jaco_spts(spt, ele, 1, 0);
-      }
-    }
-  }
-#endif
-
-#ifdef _GPU
-  transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation, startEle, endEle);
-
-  check_error();
-#endif
-}
-
 void Quads::transform_dFdU()
 {
 #ifdef _CPU

@@ -24,11 +24,12 @@
 
 /* Element flux kernel wrappers */
 void compute_F_wrapper(mdvector_gpu<double> &F_spts, 
-    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts, 
+    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts,  mdvector_gpu<double> &inv_jaco_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
     unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
-    unsigned int startEle, unsigned int endEle, bool overset = false, int* iblank = NULL);
+    unsigned int startEle, unsigned int endEle, bool overset = false, int* iblank = NULL,
+    bool motion = false);
 
 /* Element flux derivative kernel wrappers (Implicit Method) */
 void compute_dFdUconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
@@ -70,16 +71,6 @@ void transform_dU_hexa_wrapper(mdvector_gpu<double> &dU_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, bool overset = false, 
     int* iblank = NULL);
-
-void transform_flux_quad_wrapper(mdvector_gpu<double> &F_spts, 
-    mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int nDims,
-    unsigned int equation, unsigned int startEle, unsigned int endEle);
-
-void transform_flux_hexa_wrapper(mdvector_gpu<double> &F_spts, 
-    mdvector_gpu<double> &inv_jaco_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int nDims,
-    unsigned int equation, bool overset = false, int* iblank = NULL);
 
 /* Element transformation kernel wrappers (Implicit Method) */
 void transform_dFdU_quad_wrapper(mdvector_gpu<double> &dFdU_spts, 

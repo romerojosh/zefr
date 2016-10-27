@@ -718,8 +718,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       eles->compute_gradF_spts(startEle, endEle);
       eles->compute_dU0(startEle, endEle);
     }
-    else
-      eles->transform_flux(startEle, endEle);
 
     /* Compute parent space common flux at non-MPI flux points */
     faces->compute_common_F(startFpt, endFpt);
@@ -805,9 +803,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     }
     else
     {
-      /* Transform solution point fluxes from physical to reference space */
-      eles->transform_flux(startEle, endEle);
-
       /* Compute solution point contribution to divergence of flux */
       eles->compute_divF_spts(stage, startEle, endEle);
     }

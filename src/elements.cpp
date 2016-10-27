@@ -1306,6 +1306,7 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
   double U[nVars];
   double dU[nVars][nDims];
   double F[nVars][nDims];
+  double inv_jaco[nDims][nDims];
 
   for (unsigned int ele = startEle; ele < endEle; ele++)
   {
@@ -1350,15 +1351,50 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
             input->rt, input->c_sth, input->fix_vis);
       }
 
-      /* Write out fluxes */
-      for (unsigned int var = 0; var < nVars; var++)
+      if (!input->motion)
       {
-        for(unsigned int dim = 0; dim < nDims; dim++)
+        /* Transform flux to reference space */
+        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
         {
-          F_spts(spt, ele, var, dim) = F[var][dim];
+          for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+          {
+            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+          }
+        }
+
+        double tF[nVars][nDims] = {{0.0}};;
+
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+          {
+            for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+            {
+              tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
+            }
+          }
+        }
+
+        /* Write out transformed fluxes */
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for(unsigned int dim = 0; dim < nDims; dim++)
+          {
+            F_spts(spt, ele, var, dim) = tF[var][dim];
+          }
         }
       }
-
+      else
+      {
+        /* Write out physical fluxes */
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for(unsigned int dim = 0; dim < nDims; dim++)
+          {
+            F_spts(spt, ele, var, dim) = F[var][dim];
+          }
+        }
+      }
     }
   }
 
@@ -1391,9 +1427,9 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
+  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
       input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
-      input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data());
+      input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
 
   check_error();
 #endif

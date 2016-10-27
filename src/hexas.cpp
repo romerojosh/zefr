@@ -591,51 +591,6 @@ void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
 
 }
 
-void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(2)
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
-    {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        double Ftemp0 = F_spts(spt, ele, n, 0);
-        double Ftemp1 = F_spts(spt, ele, n, 1);
-
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * inv_jaco_spts(spt, ele, 0, 0) +
-                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 0, 1) +
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 0, 2);
-
-        F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco_spts(spt, ele, 1, 0) +
-                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 1) +
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 1, 2);
-                                  
-        F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco_spts(spt, ele, 2, 0) +
-                                  Ftemp1 * inv_jaco_spts(spt, ele, 2, 1) +
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 2);
-
-      }
-
-    }
-  }
-
-#endif
-
-#ifdef _GPU
-  //F_spts_d = F_spts;
-  transform_flux_hexa_wrapper(F_spts_d, inv_jaco_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation, input->overset, geo->iblank_cell_d.data());
-
-  check_error();
-
-  //F_spts = F_spts_d;
-#endif
-}
-
 void Hexas::transform_dFdU()
 {
 #ifdef _CPU

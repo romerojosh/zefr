@@ -186,7 +186,6 @@ class Elements
 
     void compute_F(unsigned int startEle, unsigned int endEle);
 
-    virtual void transform_flux(unsigned int startEle, unsigned int endEle) = 0;
     virtual void transform_dU(unsigned int startEle, unsigned int endEle) = 0;
 
     //! Calculate geometric transforms
