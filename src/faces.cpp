@@ -20,6 +20,7 @@
 #include <cmath>
 
 #include "faces.hpp"
+#include "flux.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
 
@@ -1673,127 +1674,6 @@ void Faces::apply_bcs_dFdU()
 #endif
 }
 
-
-void Faces::compute_Fconv(unsigned int startFpt, unsigned int endFpt)
-{  
-  if (input->equation == AdvDiff)
-  {
-#ifdef _CPU
-#pragma omp parallel for
-    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-    {
-      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        Fconv(fpt, 0, dim, 0) = input->AdvDiff_A(dim) * U(fpt, 0, 0);
-        Fconv(fpt, 0, dim, 1) = input->AdvDiff_A(dim) * U(fpt, 0, 1);
-      }
-    }
-#endif
-
-  }
-
-  else if (input->equation == Burgers)
-  {
-#ifdef _CPU
-#pragma omp parallel for
-    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-    {
-      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        Fconv(fpt, 0, dim, 0) = 0.5 * U(fpt, 0, 0) * U(fpt, 0, 0);
-        Fconv(fpt, 0, dim, 1) = 0.5 * U(fpt, 0, 1) * U(fpt, 0, 1);
-      }
-    }
-#endif
-
-  }
-
-  else if (input->equation == EulerNS)
-  {
-#ifdef _CPU
-    if (nDims == 2)
-    {
-#pragma omp parallel for
-      for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-      {
-        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
-
-        for (unsigned int slot = 0; slot < 2; slot ++)
-        {
-          /* Compute some primitive variables (keep pressure)*/
-          double momF = 0.0;
-          for (unsigned int dim = 0; dim < nDims; dim ++)
-          {
-            momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
-          }
-
-          momF /= U(fpt, 0, slot);
-
-          P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, 3, slot) - 0.5 * momF);
-          double H = (U(fpt, 3, slot) + P(fpt, slot)) / U(fpt, 0, slot);
-
-          Fconv(fpt, 0, 0, slot) = U(fpt, 1, slot);
-          Fconv(fpt, 1, 0, slot) = U(fpt, 1, slot) * U(fpt, 1, slot) / U(fpt, 0, slot) + P(fpt, slot);
-          Fconv(fpt, 2, 0, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 3, 0, slot) = U(fpt, 1, slot) * H;
-
-          Fconv(fpt, 0, 1, slot) = U(fpt, 2, slot);
-          Fconv(fpt, 1, 1, slot) = U(fpt, 2, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
-          Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * H;
-        }
-      }
-    }
-    else if (nDims == 3)
-    {
-#pragma omp parallel for
-      for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-      {
-        if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
-
-        for (unsigned int slot = 0; slot < 2; slot ++)
-        {
-          // Compute some primitive variables (keep pressure)
-          double momF = 0.0;
-          for (unsigned int dim = 0; dim < nDims; dim ++)
-          {
-            momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
-          }
-
-          momF /= U(fpt, 0, slot);
-
-          P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, 4, slot) - 0.5 * momF);
-          double H = (U(fpt, 4, slot) + P(fpt, slot)) / U(fpt, 0, slot);
-
-          Fconv(fpt, 0, 0, slot) = U(fpt, 1, slot);
-          Fconv(fpt, 1, 0, slot) = U(fpt, 1, slot) * U(fpt, 1, slot) / U(fpt, 0, slot) + P(fpt, slot);
-          Fconv(fpt, 2, 0, slot) = U(fpt, 1, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 3, 0, slot) = U(fpt, 1, slot) * U(fpt, 3, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 4, 0, slot) = U(fpt, 1, slot) * H;
-
-          Fconv(fpt, 0, 1, slot) = U(fpt, 2, slot);
-          Fconv(fpt, 1, 1, slot) = U(fpt, 2, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 2, 1, slot) = U(fpt, 2, slot) * U(fpt, 2, slot) / U(fpt, 0, slot) + P(fpt, slot);
-          Fconv(fpt, 3, 1, slot) = U(fpt, 2, slot) * U(fpt, 3, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 4, 1, slot) = U(fpt, 2, slot) * H;
-
-          Fconv(fpt, 0, 2, slot) = U(fpt, 3, slot);
-          Fconv(fpt, 1, 2, slot) = U(fpt, 3, slot) * U(fpt, 1, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 2, 2, slot) = U(fpt, 3, slot) * U(fpt, 2, slot) / U(fpt, 0, slot);
-          Fconv(fpt, 3, 2, slot) = U(fpt, 3, slot) * U(fpt, 3, slot) / U(fpt, 0, slot) + P(fpt, slot);
-          Fconv(fpt, 4, 2, slot) = U(fpt, 3, slot) * H;
-        }
-      }
-    }
-#endif
-
-  }
-}
-
 void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
 {  
   if (input->equation == AdvDiff || input->equation == Burgers)
@@ -2006,12 +1886,171 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
+{
+  double FnL[nVars];
+  double FnR[nVars];
+  double FL[nVars][nDims];
+  double FR[nVars][nDims];
+  double UL[nVars];
+  double UR[nVars];
+
+
+#pragma omp parallel for firstprivate(FnL, FnR, FL, FR, UL, UR)
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+  {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
+    /* Get left and right state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      UL[n] = U(fpt, n, 0); UR[n] = U(fpt, n, 1);
+    }
+
+    double eig = 0;
+    double Vgn = 0;
+    if (input->motion)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        Vgn += Vg(fpt, dim) * norm(fpt, dim, 0);
+    }
+
+    /* Get numerical wavespeed */
+    if (input->equation == AdvDiff)
+    {
+      double An = 0.;
+      double A[nDims];
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+        A[dim] = input->AdvDiff_A(dim);
+      }
+
+      eig = std::abs(An);
+      waveSp(fpt) = std::abs(An - Vgn);
+
+      compute_Fconv_AdvDiff<nVars, nDims>(UL, FL, A);
+      compute_Fconv_AdvDiff<nVars, nDims>(UR, FR, A);
+    }
+    else if (input->equation == Burgers)
+    {
+      compute_Fconv_Burgers<nVars, nDims>(UL, FL);
+      compute_Fconv_Burgers<nVars, nDims>(UR, FR);
+
+      double AnL = 0;
+      double AnR = 0;
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        AnL += UL[0] * norm(fpt, dim, 0);
+        AnR += UR[0] * norm(fpt, dim, 0);
+      }
+
+      eig = std::max(std::abs(AnL), std::abs(AnR));
+      waveSp(fpt) = std::max(std::abs(AnL - Vgn), std::abs(AnR - Vgn));
+    }
+    else if (input->equation == EulerNS)
+    {
+      double PL, PR;
+
+      compute_Fconv_EulerNS<nVars, nDims>(UL, FL, PL, input->gamma);
+      compute_Fconv_EulerNS<nVars, nDims>(UR, FR, PR, input->gamma);
+
+      /* Store pressures for force computation */
+      P(fpt, 0) = PL;
+      P(fpt, 1) = PR;
+
+      /* Compute speed of sound */
+      double aL = std::sqrt(input->gamma * PL / UL[0]);
+      double aR = std::sqrt(input->gamma * PR / UR[0]);
+
+      /* Compute normal velocities */
+      double VnL = 0.0; double VnR = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += UL[dim+1]/UL[0] * norm(fpt, dim, 0);
+        VnR += UR[dim+1]/UR[0] * norm(fpt, dim, 0);
+      }
+
+      eig = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+      waveSp(fpt) = std::max(std::abs(VnL-Vgn) + aL, std::abs(VnR-Vgn) + aR);
+    }
+
+    /* Initialize FL, FR */
+    std::fill(FnL, FnL + nVars, 0.0);
+    std::fill(FnR, FnR + nVars, 0.0);
+    
+    /* Get interface-normal flux components  (from L to R)*/
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        FnL[n] += FL[n][dim] * norm(fpt, dim, 0);
+        FnR[n] += FR[n][dim] * norm(fpt, dim, 0);
+      }
+    }
+
+    /* Compute common normal flux */
+    if (LDG_bias(fpt) == 0)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0-input->rus_k) * (UR[n]-UL[n])) * dA(fpt);
+
+        /* Correct for positive parent space sign convention */
+        Fcomm(fpt, n, 0) = F;
+        Fcomm(fpt, n, 1) = -F;
+      }
+    }
+    else if (LDG_bias(fpt) == 2)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double F = 0.5 * (FnL[n] + FnR[n]) * dA(fpt);
+        Fcomm(fpt, n, 0) = F;
+        Fcomm(fpt, n, 1) = -F;
+      }
+    }
+    else
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double F = FnR[n] * dA(fpt);
+        Fcomm(fpt, n, 0) = F;
+        Fcomm(fpt, n, 1) = -F;
+      }
+    }
+  }
+}
+
 void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 {
   if (input->fconv_type == "Rusanov")
   {
 #ifdef _CPU
-    rusanov_flux(startFpt, endFpt);
+    if (input->equation == AdvDiff)
+    {
+      if (nDims == 2)
+        rusanov_flux<1, 2, AdvDiff>(startFpt, endFpt);
+      else
+        rusanov_flux<1, 3, AdvDiff>(startFpt, endFpt);
+    }
+    else if (input->equation == Burgers)
+    {
+      if (nDims == 2)
+        rusanov_flux<1, 2, Burgers>(startFpt, endFpt);
+      else
+        rusanov_flux<1, 3, Burgers>(startFpt, endFpt);
+    }
+    else if (input->equation == EulerNS)
+    {
+      if (nDims == 2)
+        rusanov_flux<4, 2, EulerNS>(startFpt, endFpt);
+      else
+        rusanov_flux<5, 3, EulerNS>(startFpt, endFpt);
+    }
 #endif
 
 #ifdef _GPU
@@ -2146,124 +2185,6 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 }
 
-void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
-{
-  std::vector<double> FL(nVars);
-  std::vector<double> FR(nVars);
-  std::vector<double> WL(nVars);
-  std::vector<double> WR(nVars);
-
-
-#pragma omp parallel for firstprivate(FL, FR, WL, WR)
-  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-  {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
-
-    /* Initialize FL, FR */
-    std::fill(FL.begin(), FL.end(), 0.0);
-    std::fill(FR.begin(), FR.end(), 0.0);
-
-    /* Get interface-normal flux components  (from L to R)*/
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        FL[n] += Fconv(fpt, n, dim, 0) * norm(fpt, dim, 0);
-        FR[n] += Fconv(fpt, n, dim, 1) * norm(fpt, dim, 0);
-      }
-    }
-
-    /* Get left and right state variables */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
-    }
-
-    double eig = 0;
-    double Vgn = 0;
-    if (input->motion)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        Vgn += Vg(fpt, dim) * norm(fpt, dim, 0);
-    }
-
-    /* Get numerical wavespeed */
-    if (input->equation == AdvDiff)
-    {
-      double An = 0.;
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
-      }
-
-      eig = std::abs(An);
-      waveSp(fpt) = std::abs(An - Vgn);
-    }
-    else if (input->equation == Burgers)
-    {
-      double AnL = 0;
-      double AnR = 0;
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        AnL += WL[0] * norm(fpt, dim, 0);
-        AnR += WR[0] * norm(fpt, dim, 0);
-      }
-
-      eig = std::max(std::abs(AnL), std::abs(AnR));
-      waveSp(fpt) = std::max(std::abs(AnL - Vgn), std::abs(AnR - Vgn));
-    }
-    else if (input->equation == EulerNS)
-    {
-      /* Compute speed of sound */
-      double aL = std::sqrt(input->gamma * P(fpt, 0) / WL[0]);
-      double aR = std::sqrt(input->gamma * P(fpt, 1) / WR[0]);
-
-      /* Compute normal velocities */
-      double VnL = 0.0; double VnR = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        VnL += WL[dim+1]/WL[0] * norm(fpt, dim, 0);
-        VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
-      }
-
-      eig = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
-      waveSp(fpt) = std::max(std::abs(VnL-Vgn) + aL, std::abs(VnR-Vgn) + aR);
-    }
-
-    /* Compute common normal flux */
-    if (LDG_bias(fpt) == 0)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        double F = (0.5 * (FR[n]+FL[n]) - 0.5 * eig * (1.0-input->rus_k) * (WR[n]-WL[n])) * dA(fpt);
-
-        /* Correct for positive parent space sign convention */
-        Fcomm(fpt, n, 0) = F;
-        Fcomm(fpt, n, 1) = -F;
-      }
-    }
-    else if (LDG_bias(fpt) == 2)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        double F = 0.5 * (FL[n] + FR[n]) * dA(fpt);
-        Fcomm(fpt, n, 0) = F;
-        Fcomm(fpt, n, 1) = -F;
-      }
-    }
-    else
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        double F = FR[n] * dA(fpt);
-        Fcomm(fpt, n, 0) = F;
-        Fcomm(fpt, n, 1) = -F;
-      }
-    }
-  }
-}
 
 void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 {

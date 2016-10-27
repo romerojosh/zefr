@@ -61,10 +61,11 @@ class Faces
 
     void apply_bcs();
     void apply_bcs_dU();
+
+    template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
+
     void LDG_flux(unsigned int startFpt, unsigned int endFpt);
-    void central_flux();
-    void transform_flux();
 
     /* Routines for implicit method */
     void apply_bcs_dFdU();
@@ -148,7 +149,6 @@ class Faces
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U(unsigned int startFpt, unsigned int endFpt);
     void compute_common_F(unsigned int startFpt, unsigned int endFpt);
-    void compute_Fconv(unsigned int startFpt, unsigned int endFpt);
     void compute_Fvisc(unsigned int startFpt, unsigned int endFpt);
     
     /* Routines for implicit method */

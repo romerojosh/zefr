@@ -720,9 +720,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     else
       eles->transform_flux(startEle, endEle);
 
-    /* Compute convective flux and parent space common flux at non-MPI flux points */
-    faces->compute_Fconv(startFpt, endFpt);
-
+    /* Compute parent space common flux at non-MPI flux points */
     faces->compute_common_F(startFpt, endFpt);
 
     /* Compute solution point contribution to divergence of flux */
@@ -738,7 +736,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     faces->recv_U_data();
 
     /* Complete computation on remaning flux points. */
-    faces->compute_Fconv(startFptMpi, geo.nGfpts);
     faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
   }
@@ -748,7 +745,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   {
     /* Compute common interface solution and convective flux at non-MPI flux points */
     faces->compute_common_U(startFpt, endFpt);
-    faces->compute_Fconv(startFpt, endFpt);
     
     /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_spts(startEle, endEle);
@@ -759,7 +755,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     
     /* Complete computation on remaining flux points */
     faces->compute_common_U(startFptMpi, geo.nGfpts);
-    faces->compute_Fconv(startFptMpi, geo.nGfpts);
 #endif
 
     /* Copy solution data at flux points from face local to element local
