@@ -128,7 +128,7 @@ struct InputStruct
   double time = 0, rkTime = 0;
 
   /* --- I/O --- */
-  short write_paraview, write_pyfr, plot_surfaces, plot_overset;
+  short write_paraview, write_pyfr, plot_surfaces, plot_overset, write_LHS;
   unsigned int restart_iter, restart_type;
   std::string restart_case;
 
