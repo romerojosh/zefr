@@ -600,7 +600,6 @@ void FRSolver::solver_data_to_device()
   faces->P_d = faces->P;
   faces->Ucomm_d = faces->Ucomm;
   faces->Fcomm_d = faces->Fcomm;
-  faces->Fcomm_temp_d = faces->Fcomm_temp;
   faces->norm_d = faces->norm;
   faces->dA_d = faces->dA;
   faces->waveSp_d = faces->waveSp;
@@ -610,7 +609,6 @@ void FRSolver::solver_data_to_device()
   if (input->viscous)
   {
     faces->dU_d = faces->dU;
-    faces->Fvisc_d = faces->Fvisc;
   }
 
   if (input->motion)

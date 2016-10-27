@@ -119,7 +119,7 @@ class Faces
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> U_d, dU_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, Ucomm_d, P_d;
+    mdvector_gpu<double> U_d, dU_d, Fcomm_d, Ucomm_d, P_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<double> dA_d, waveSp_d, diffCo_d;
     mdvector_gpu<int> LDG_bias_d;

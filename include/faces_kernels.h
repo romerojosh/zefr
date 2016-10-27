@@ -22,18 +22,6 @@
 
 #include "mdvector_gpu.h"
 
-/* Face flux kernel wrappers */
-void compute_Fvisc_fpts_AdvDiff_wrapper(mdvector_gpu<double> &Fvisc, 
-    mdvector_gpu<double> &dU, unsigned int nFpts, unsigned int nDims, 
-    double AdvDiff_D, unsigned int startFpt, unsigned int endFpt,
-    bool overset = false, int* iblank = NULL);
-
-void compute_Fvisc_fpts_EulerNS_wrapper(mdvector_gpu<double> &Fvisc, 
-    mdvector_gpu<double> &U, mdvector_gpu<double> &dU, unsigned int nFpts, unsigned int nDims, double gamma, 
-        double prandtl, double mu_in, double c_sth, double rt, bool fix_vis,
-        unsigned int startFpt, unsigned int endFpt, bool overset = false, 
-        int* iblank = NULL);
-
 /* Face flux derivative kernel wrappers (Implicit Method) */
 void compute_dFdUconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv, 
     unsigned int nFpts, unsigned int nDims, mdvector_gpu<double> &AdvDiff_A, 
@@ -78,10 +66,10 @@ void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> 
     unsigned int nDims, mdvector_gpu<int> &LDG_bias, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL);
 
-void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Fvisc, 
-    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Fcomm_temp, mdvector_gpu<double> &norm, mdvector_gpu<double> &diffCo,
+void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dU,
+    mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<double> &diffCo,
     mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double mu, double prandtl, 
-    double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
+    double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
     unsigned int startFpt, unsigned int endFpt, bool overset = false, int* iblank = NULL);
 
 /* Face common value kernel wrappers (Implicit Method) */
@@ -89,10 +77,6 @@ void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUco
     mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
-
-/* Face transformation kernel wrappers */
-void transform_flux_faces_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &dA, 
-    unsigned int nFpts, unsigned int nVar, bool overset = false, int* iblank = NULL);
 
 /* Face transformation kernel wrappers (Implicit Method) */
 void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dA, 

@@ -1815,12 +1815,6 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
     }
 #endif
 
-#ifdef _GPU
-    compute_Fvisc_fpts_AdvDiff_wrapper(Fvisc_d, dU_d, nFpts, nDims, input->AdvDiff_D,
-        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
-    check_error();
-#endif
-
   }
   else if (input->equation == EulerNS)
   {
@@ -2009,14 +2003,6 @@ void Faces::compute_Fvisc(unsigned int startFpt, unsigned int endFpt)
     }
 #endif
 
-#ifdef _GPU
-    compute_Fvisc_fpts_EulerNS_wrapper(Fvisc_d, U_d, dU_d, nFpts, nDims, input->gamma, 
-        input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
-        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
-    check_error();
-
-    //Fvisc = Fvisc_d;
-#endif
   }
 }
 
@@ -2050,10 +2036,10 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-      LDG_flux_wrapper(U_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, norm_d, diffCo_d, LDG_bias_d, dA_d, 
-          input->AdvDiff_D, input->gamma, input->mu, input->prandtl, input->ldg_b,
-          input->ldg_tau, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
-          input->overset, geo->iblank_fpts_d.data());
+      LDG_flux_wrapper(U_d, dU_d, Fcomm_d, norm_d, diffCo_d, LDG_bias_d, dA_d, 
+          input->AdvDiff_D, input->gamma, input->mu, input->prandtl, input->rt, input->c_sth,
+          input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, nVars, nDims, input->equation, 
+          startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
 
       check_error();
 #endif
