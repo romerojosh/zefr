@@ -65,6 +65,7 @@ void copy_from_device(T* host_data, const T* device_data, unsigned int size, int
 void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
+void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val = 0.);
 
 void sync_stream(unsigned int stream);
 void event_record(unsigned int event, unsigned int stream);
@@ -127,6 +128,21 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, 
     unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage, 
     bool overset = false, int* iblank = NULL);
+
+void LSRK_update_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_til, mdvector_gpu<double>& rk_err,
+    mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, double dt,
+    double ai, double bi, double bhi, unsigned int nSpts, unsigned int nEles,
+    unsigned int nVars, unsigned int stage, unsigned int nStages,
+    bool overset = false, int* iblank = NULL);
+
+void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_til, mdvector_gpu<double> &rk_err,
+    mdvector_gpu<double> &divF, const mdvector_gpu<double> &source,
+    mdvector_gpu<double> &jaco_det_spts, double dt, double ai, double bi,
+    double bhi, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
+    unsigned int stage, unsigned int nStages, bool overset = false,
+    int* iblank = NULL);
 
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, mdvector_gpu<double> &diffCo_gfpts,
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<double> &weights_spts, mdvector_gpu<double> &vol, 

@@ -66,11 +66,13 @@ class FRSolver
     int current_iter = 0;
     int restart_iter = 0;
     double flow_time = 0.;
+    double prev_time = 0.;
     unsigned int nStages;
     double CFL_ratio = 1;
-    mdvector<double> rk_alpha, rk_beta;
+    mdvector<double> rk_alpha, rk_beta, rk_bhat, rk_c;
     mdvector<double> dt;
-    mdvector<double> U_ini;
+    mdvector<double> U_ini, U_til;
+    mdvector<double> rk_err; //! RK Error Estimate
     Filter filt;
 
     /* Implicit method parameters */
@@ -84,6 +86,7 @@ class FRSolver
 
 #ifdef _GPU
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
+    mdvector_gpu<double> U_til_d, rk_err_d;  //! Low-Storage Adaptive RK scheme
 #endif
 
     _mpi_comm myComm;
@@ -119,10 +122,23 @@ class FRSolver
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
     void update(const mdvector<double> &source = mdvector<double>());
+
+    //! Implicit Multi-Color Gauss-Seidel update loop
+    void step_MCGS(const mdvector<double>& source = mdvector<double>());
+
+    //! Standard explicit (diagonal) Runge-Kutta update loop
+    void step_RK(const mdvector<double>& source = mdvector<double>());
+
+    //! Special Low-Storage (2-register) Runge-Kutta update loop
+    void step_LSRK(const mdvector<double>& source = mdvector<double>());
 #endif
 #ifdef _GPU
     void update(const mdvector_gpu<double> &source = mdvector_gpu<double>());
+    void step_MCGS(const mdvector_gpu<double>& source = mdvector_gpu<double>());
+    void step_RK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
+    void step_LSRK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
 #endif
+
     void write_solution(const std::string &_prefix);
     void write_solution_pyfr(const std::string &_prefix);
     void write_surfaces(const std::string &_prefix);
