@@ -1054,7 +1054,7 @@ void FRSolver::compute_RHS(unsigned int color)
   unsigned int startEle = geo.ele_color_range[color - 1];
   unsigned int endEle = geo.ele_color_range[color];
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1087,7 +1087,7 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
 {
   unsigned int startEle = geo.ele_color_range[color - 1];
   unsigned int endEle = geo.ele_color_range[color];
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1443,7 +1443,7 @@ void FRSolver::initialize_U()
 void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1482,7 +1482,7 @@ void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1516,7 +1516,7 @@ void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
   for (unsigned int dim = 0; dim < eles->nDims; dim++) 
   {
     for (unsigned int n = 0; n < eles->nVars; n++) 
@@ -1553,7 +1553,7 @@ void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++) 
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1588,7 +1588,7 @@ void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
 void FRSolver::dFcdU_from_faces()
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
   for (unsigned int nj = 0; nj < eles->nVars; nj++) 
   {
     for (unsigned int ni = 0; ni < eles->nVars; ni++) 
@@ -1630,7 +1630,7 @@ void FRSolver::dFcdU_from_faces()
 
   if(input->viscous)
   {
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
     for (unsigned int nj = 0; nj < eles->nVars; nj++) 
     {
       for (unsigned int ni = 0; ni < eles->nVars; ni++) 
@@ -1693,7 +1693,7 @@ void FRSolver::dFcdU_from_faces()
 void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1764,7 +1764,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #ifdef _CPU
       if (source.size() == 0)
       {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
@@ -1786,7 +1786,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       }
       else
       {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < eles->nVars; n++)
           for (unsigned int ele = 0; ele < eles->nEles; ele++)
           {
@@ -1862,7 +1862,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       {
         if (source.size() == 0)
         {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
@@ -1882,7 +1882,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
         }
         else
         {
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for collapse(2)
           for (unsigned int n = 0; n < eles->nVars; n++)
             for (unsigned int ele = 0; ele < eles->nEles; ele++)
             {
@@ -4512,7 +4512,7 @@ void FRSolver::report_error(std::ofstream &f)
 
   unsigned int n = input->err_field;
   std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
-#pragma omp for collapse (2)
+#pragma omp for 
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
