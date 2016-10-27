@@ -219,9 +219,11 @@ void FRSolver::setup_update()
 
       for (int j = 0; j < i-1; j++)
         rk_c(i) += rk_beta(j);
-
-      printf("RK_C(%d) = %f\n",i,rk_c(i));
     }
+
+    expa = input->pi_alpha / 4.;
+    expb = input->pi_beta / 4.;
+    prev_err = 1.;
 
     U_til.assign({eles->nSpts, eles->nEles, eles->nVars});
     rk_err.assign({eles->nSpts, eles->nEles, eles->nVars});
@@ -1778,28 +1780,33 @@ void FRSolver::update(const mdvector<double> &source)
 void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 {
-  if (input->dt_scheme == "MCGS")
-    step_MCGS(source);
-  else if (input->dt_scheme == "LSRK")
-    step_LSRK(source);
+  if (input->dt_scheme == "LSRK")
+  {
+    step_adaptive_LSRK(source);
+    //step_LSRK(source);
+  }
   else
-    step_RK(source);
+  {
+    if (input->dt_scheme == "MCGS")
+      step_MCGS(source);
+    else
+      step_RK(source);
 
-  input->time += dt(0);
-  flow_time += dt(0);
-  current_iter++;
+    flow_time += dt(0);
+    current_iter++;
+  }
 
   // Update grid to end of time step (if not already done so)
   if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
-    move(input->time);
+    move(flow_time);
 
 #ifdef _BUILD_LIB
-    // Update the overset connectivity to the new grid positions
-    if (input->overset && input->motion)
-    {
-      ZEFR->tg_preprocess();
-      ZEFR->tg_process_connectivity();
-    }
+  // Update the overset connectivity to the new grid positions
+  if (input->overset && input->motion)
+  {
+    ZEFR->tg_preprocess();
+    ZEFR->tg_process_connectivity();
+  }
 #endif
 }
 
@@ -1821,11 +1828,15 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   check_error();
 #endif
 
+  prev_time = flow_time;
+
   unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
 
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < nSteps; stage++)
   {
+    flow_time = prev_time + rk_alpha(stage) * dt(0);
+
     compute_residual(stage);
 
     /* If in first stage, compute stable timestep */
@@ -1905,7 +1916,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #endif
 
     // Update grid to position of next time step
-    move(input->time + rk_alpha(stage)*dt(0));
+    move(flow_time);
 
 #ifdef _BUILD_LIB
     // Update the overset connectivity to the new grid positions
@@ -1923,6 +1934,8 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
+    flow_time = prev_time + rk_alpha(nStages-1) * dt(0);
+
     compute_residual(nStages-1);
 #ifdef _CPU
     if (nStages > 1)
@@ -2002,6 +2015,73 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 }
 
 #ifdef _CPU
+void FRSolver::step_adaptive_LSRK(const mdvector<double> &source)
+#endif
+#ifdef _GPU
+void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
+#endif
+{
+  step_LSRK(source);
+
+  // Calculate error (infinity norm of RK error) and scaling factor for dt
+  double max_err = 0;
+#ifdef _CPU
+  for (uint n = 0; n < eles->nVars; n++)
+  {
+    for (uint ele = 0; ele < eles->nEles; ele++)
+    {
+      for (uint spt = 0; spt < eles->nSpts; spt++)
+      {
+        err = std::abs(rk_err(spt,ele,n)) /
+            (input->atol + input->rtol * std::max( std::abs(eles->U_spts(spt,ele,n)), std::abs(U_ini(spt,ele,n)) ));
+        max_err = std::max(max_err, err);
+      }
+    }
+  }
+
+#ifdef _MPI
+  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#endif
+
+  // Determine the time step scaling factor and the new time step
+  double fac = pow(max_err, -expa) * pow(prev_err, expb);
+  fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
+
+  dt(0) *= fac;
+#endif
+
+#ifdef _GPU
+  max_err = set_adaptive_dt_wrapper(eles->U_spts_d, U_ini_d, rk_err_d, dt_d, dt(0),
+      eles->nSpts, eles->nEles, eles->nVars, input->atol, input->rtol, expa, expb,
+      input->minfac, input->maxfac, input->sfact, prev_err, myComm, input->overset,
+      geo.iblank_cell_d.data());
+#endif
+
+  if (dt(0) < 1e-14)
+    ThrowException("dt approaching 0 - quitting simulation");
+
+  if (max_err < 1.)
+  {
+    // Accept the time step and continue on
+    prev_err = max_err;
+    current_iter++;
+  }
+  else
+  {
+    // Reject step - reset solution back to beginning of time step
+    flow_time = prev_time;
+#ifdef _CPU
+    eles->U_spts = U_ini;
+#endif
+#ifdef _GPU
+    device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
+#endif
+    // Try again with new dt
+    step_adaptive_LSRK(source);
+  }
+}
+
+#ifdef _CPU
 void FRSolver::step_LSRK(const mdvector<double> &source)
 #endif
 #ifdef _GPU
@@ -2023,6 +2103,10 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
   device_copy(U_til_d, eles->U_spts_d, eles->U_spts_d.max_size());
   device_fill(rk_err_d, rk_err_d.max_size());
+
+  // Get current delta t [dt(0)] (updated on GPU)
+  copy_from_device(dt.data(), dt_d.data(), 1);
+
   check_error();
 #endif
 
@@ -2124,6 +2208,8 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     }
 #endif
   }
+
+  flow_time = prev_time + dt(0);
 }
 
 #ifdef _CPU
@@ -2480,7 +2566,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   ss << std::endl;
 
   ss << "[solver-time-integrator]" << std::endl;
-  ss << "tcurr = " << input->time << std::endl;
+  ss << "tcurr = " << flow_time << std::endl;
   //ss << "wall-time = " << input->??"
   ss << std::endl;
 
@@ -2901,7 +2987,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     if (key == "tcurr")
     {
       // "tcurr = ####"
-      ss >> tmp >> input->time;
+      ss >> tmp >> flow_time;
       break;
     }
 

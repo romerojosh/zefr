@@ -75,6 +75,10 @@ class FRSolver
     mdvector<double> rk_err; //! RK Error Estimate
     Filter filt;
 
+    /* --- Adaptive time-stepping stuff --- */
+    double prev_err;        //! RK error estimate for previous step
+    double expa, expb;
+
     /* Implicit method parameters */
     unsigned int nCounter;
     unsigned int prev_color = 0;
@@ -131,12 +135,14 @@ class FRSolver
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop
     void step_LSRK(const mdvector<double>& source = mdvector<double>());
+    void step_adaptive_LSRK(const mdvector<double>& source = mdvector<double>());
 #endif
 #ifdef _GPU
     void update(const mdvector_gpu<double> &source = mdvector_gpu<double>());
     void step_MCGS(const mdvector_gpu<double>& source = mdvector_gpu<double>());
     void step_RK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
     void step_LSRK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
+    void step_adaptive_LSRK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
 #endif
 
     void write_solution(const std::string &_prefix);

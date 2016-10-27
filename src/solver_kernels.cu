@@ -844,8 +844,7 @@ void LSRK_source_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
   if (spt >= nSpts || ele >= nEles)
     return;
 
-  if (overset)
-    if (iblank[ele] != 1)
+  if (overset && iblank[ele] != 1)
       return;
 
   double fac = dt / jaco_det_spts(spt,ele);
@@ -908,6 +907,95 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
           " no implemented.";
       ThrowException(errs.c_str());
   }
+}
+
+template <unsigned int nVars>
+__global__
+void get_rk_error(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
+    mdvector_gpu<double> rk_err, uint nSpts, uint nEles, double atol,
+    double rtol, bool overset = false, int* iblank = NULL)
+{
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  if (overset && iblank[ele] != 1)
+      return;
+
+  for (unsigned int var = 0; var < nVars; var ++)
+  {
+    rk_err(spt, ele, var)  =  abs(rk_err(spt, ele, var));
+    rk_err(spt, ele, var) /= atol + rtol *
+        max( abs(U_spts(spt, ele, var)), abs(U_ini(spt, ele, var)) );
+  }
+}
+
+double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err, uint nSpts,
+    uint nEles, uint nVars, double atol, double rtol, _mpi_comm comm_in,
+    bool overset, int* iblank)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+
+  switch (nVars)
+  {
+    case 1:
+      get_rk_error<1><<<blocks, threads>>>(U_spts, U_ini, rk_err, nSpts, nEles,
+          atol, rtol, overset, iblank);
+      break;
+
+    case 4:
+      get_rk_error<4><<<blocks, threads>>>(U_spts, U_ini, rk_err, nSpts, nEles,
+          atol, rtol, overset, iblank);
+      break;
+
+    case 5:
+      get_rk_error<5><<<blocks, threads>>>(U_spts, U_ini, rk_err, nSpts, nEles,
+          atol, rtol, overset, iblank);
+      break;
+
+    default:
+      ThrowException("Invalid value for nVars");
+  }
+
+  /* Get min dt using thrust (pretty slow) */
+  thrust::device_ptr<double> err_ptr = thrust::device_pointer_cast(rk_err.data());
+  thrust::device_ptr<double> max_ptr = thrust::max_element(err_ptr, err_ptr + nEles*nSpts*nVars);
+
+#ifdef _MPI
+  double max_err = max_ptr[0];
+  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, comm_in);
+  err_ptr[0] = max_err;
+#else
+  err_ptr[0] = max_ptr[0];
+#endif
+
+  return err_ptr[0];
+}
+
+double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err,
+    mdvector_gpu<double> &dt_in, double &dt_out, uint nSpts, uint nEles,
+    uint nVars, double atol, double rtol, double expa, double expb,
+    double minfac, double maxfac, double sfact, double prev_err,
+    _mpi_comm comm_in, bool overset, int* iblank)
+{
+  double max_err = get_rk_error_wrapper(U_spts, U_ini, rk_err, nSpts, nEles,
+      nVars, atol, rtol, comm_in, overset, iblank);
+
+  // Determine the time step scaling factor and the new time step
+  double fac = pow(max_err, -expa) * pow(prev_err, expb);
+  fac = std::min(maxfac, std::max(minfac, sfact*fac));
+
+  thrust::device_ptr<double> dt_ptr = thrust::device_pointer_cast(dt_in.data());
+  dt_ptr[0] *= fac;
+
+  dt_out = dt_ptr[0]; // Set value on CPU for other uses
+
+  return max_err;
 }
 
 template <unsigned int nDims>
@@ -995,7 +1083,7 @@ void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfp
       dtinv[2] = max(dtinv[4],dtinv[5]);
 
       /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
-      dt(ele) = 32 * CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // 32 = empirically-found factor
+      dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // 32 = empirically-found factor
     }
   }
 }

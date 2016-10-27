@@ -106,6 +106,16 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "CFL_max", input.CFL_max, 1.0);
   read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
 
+  // NOTE: to reduce time step size (generally speaking), reduce atol and rtol
+  read_param(f, "err_atol", input.atol, 0.00001);
+  read_param(f, "err_rtol", input.rtol, 0.00001);
+  read_param(f, "pi_alpha", input.pi_alpha, 0.7);
+  read_param(f, "pi_beta", input.pi_beta, 0.4);
+
+  read_param(f, "safety_factor", input.sfact, 0.8);
+  read_param(f, "max_factor", input.maxfac, 2.5);
+  read_param(f, "min_factor", input.minfac, 0.3);
+
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
   read_param(f, "restart_case", input.restart_case, std::string(""));

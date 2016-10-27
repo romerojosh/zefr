@@ -125,7 +125,11 @@ struct InputStruct
   unsigned int filt_on, sen_write, sen_norm, filt_maxLevels;
   double sen_Jfac, filt_gamma;
   unsigned int iter = 0, initIter = 0;
-  double time = 0, rkTime = 0;
+
+  /* --- Adaptive time-stepping --- */
+  double pi_alpha, pi_beta;     //! PI-controller valuse
+  double sfact, maxfac, minfac; //! delta-t adjustment factors
+  double atol, rtol;
 
   /* --- I/O --- */
   short write_paraview, write_pyfr, plot_surfaces, plot_overset;

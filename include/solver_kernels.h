@@ -144,6 +144,18 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
     unsigned int stage, unsigned int nStages, bool overset = false,
     int* iblank = NULL);
 
+double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err, uint nSpts,
+    uint nEles, uint nVars, double atol, double rtol, _mpi_comm comm_in,
+    bool overset = false, int* iblank = NULL);
+
+double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err,
+    mdvector_gpu<double> &dt_in, double& dt_out, uint nSpts, uint nEles,
+    uint nVars, double atol, double rtol, double expa, double expb,
+    double minfac, double maxfac, double sfact, double prev_err,
+    _mpi_comm comm_in, bool overset = false, int* iblank = NULL);
+
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, mdvector_gpu<double> &diffCo_gfpts,
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<double> &weights_spts, mdvector_gpu<double> &vol, 
     mdvector_gpu<double> &h_ref, unsigned int nSpts1D, double CFL, double beta, int order, unsigned int dt_type, unsigned int CFL_type,
