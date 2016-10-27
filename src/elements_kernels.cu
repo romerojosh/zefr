@@ -1013,23 +1013,24 @@ void transform_dU_quad(mdvector_gpu<double> dU_spts,
   if (spt >= nSpts || ele >= nEles)
     return;
 
+  double dU[2];
+  double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
   double jaco[2][2];
   jaco[0][0] = jaco_spts(spt, ele, 0, 0);
   jaco[0][1] = jaco_spts(spt, ele, 0, 1);
   jaco[1][0] = jaco_spts(spt, ele, 1, 0);
   jaco[1][1] = jaco_spts(spt, ele, 1, 1);
-  double jaco_det = jaco_det_spts(spt,ele);
 
   for (unsigned int var = 0; var < nVars; var++)
   {
-    double dUtemp = dU_spts(spt, ele, var, 0);
+    dU[0] = dU_spts(spt, ele, var, 0);
+    dU[1] = dU_spts(spt, ele, var, 1);
 
-    dU_spts(spt, ele, var, 0) = (dU_spts(spt, ele, var, 0) * jaco[1][1] - 
-                                dU_spts(spt, ele, var, 1) * jaco[1][0]) /
-                                jaco_det; 
+    dU_spts(spt, ele, var, 0) = (dU[0] * jaco[1][1] - 
+                                 dU[1] * jaco[1][0]) * inv_jaco_det; 
 
-    dU_spts(spt, ele, var, 1) = (dU_spts(spt, ele, var, 1) * jaco[0][0] -
-                                 dUtemp * jaco[0][1]) / jaco_det;
+    dU_spts(spt, ele, var, 1) = (dU[1] * jaco[0][0] -
+                                 dU[0] * jaco[0][1]) * inv_jaco_det;
 
   }
 
@@ -1067,6 +1068,8 @@ void transform_dU_hexa(mdvector_gpu<double> dU_spts,
   if (spt >= nSpts || ele >= nEles)
     return;
 
+  double dU[3];
+  double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
   double inv_jaco[3][3];
   inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
   inv_jaco[0][1] = inv_jaco_spts(spt, ele, 0, 1);
@@ -1077,28 +1080,25 @@ void transform_dU_hexa(mdvector_gpu<double> dU_spts,
   inv_jaco[2][0] = inv_jaco_spts(spt, ele, 2, 0);
   inv_jaco[2][1] = inv_jaco_spts(spt, ele, 2, 1);
   inv_jaco[2][2] = inv_jaco_spts(spt, ele, 2, 2);
-  double jaco_det = jaco_det_spts(spt,ele);
 
   for (unsigned int n = 0; n < nVars; n++)
   {
-    double dUtemp0 = dU_spts(spt, ele, n, 0);
-    double dUtemp1 = dU_spts(spt, ele, n, 1);
+    dU[0] = dU_spts(spt, ele, n, 0);
+    dU[1] = dU_spts(spt, ele, n, 1);
+    dU[2] = dU_spts(spt, ele, n, 2);
 
-    dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco[0][0] + 
-                              dU_spts(spt, ele, n, 1) * inv_jaco[1][0] +  
-                              dU_spts(spt, ele, n, 2) * inv_jaco[2][0];  
+    dU_spts(spt, ele, n, 0) = (dU[0] * inv_jaco[0][0] + 
+                               dU[1] * inv_jaco[1][0] +  
+                               dU[2] * inv_jaco[2][0]) * inv_jaco_det;  
 
-    dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco[0][1] + 
-                              dU_spts(spt, ele, n, 1) * inv_jaco[1][1] +  
-                              dU_spts(spt, ele, n, 2) * inv_jaco[2][1];  
+    dU_spts(spt, ele, n, 1) = (dU[0] * inv_jaco[0][1] + 
+                               dU[1] * inv_jaco[1][1] +  
+                               dU[2] * inv_jaco[2][1]) * inv_jaco_det;  
                               
-    dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco[0][2] + 
-                              dUtemp1 * inv_jaco[1][2] +  
-                              dU_spts(spt, ele, n, 2) * inv_jaco[2][2];  
+    dU_spts(spt, ele, n, 2) = (dU[0] * inv_jaco[0][2] + 
+                               dU[1] * inv_jaco[1][2] +  
+                               dU[2] * inv_jaco[2][2]) * inv_jaco_det;  
 
-    dU_spts(spt, ele, n, 0) /= jaco_det;
-    dU_spts(spt, ele, n, 1) /= jaco_det;
-    dU_spts(spt, ele, n, 2) /= jaco_det;
   }
 
 }
@@ -1201,22 +1201,25 @@ void transform_flux_hexa(mdvector_gpu<double> F_spts,
   inv_jaco[2][1] = inv_jaco_spts(spt, ele, 2, 1);
   inv_jaco[2][2] = inv_jaco_spts(spt, ele, 2, 2);
 
+  double F[3];
+
   for (unsigned int n = 0; n < nVars; n++)
   {
-    double Ftemp0 = F_spts(spt, ele, n, 0);
-    double Ftemp1 = F_spts(spt, ele, n, 1);
+    F[0] = F_spts(spt, ele, n, 0);
+    F[1] = F_spts(spt, ele, n, 1);
+    F[2] = F_spts(spt, ele, n, 2);
 
-    F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * inv_jaco[0][0] +
-                             F_spts(spt, ele, n, 1) * inv_jaco[0][1] +
-                             F_spts(spt, ele, n, 2) * inv_jaco[0][2];
+    F_spts(spt, ele, n, 0) = F[0] * inv_jaco[0][0] +
+                             F[1] * inv_jaco[0][1] +
+                             F[2] * inv_jaco[0][2];
 
-    F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco[1][0] +
-                             F_spts(spt, ele, n, 1) * inv_jaco[1][1] +
-                             F_spts(spt, ele, n, 2) * inv_jaco[1][2];  
+    F_spts(spt, ele, n, 1) = F[0] * inv_jaco[1][0] +
+                             F[1] * inv_jaco[1][1] +
+                             F[2] * inv_jaco[1][2];  
                               
-    F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco[2][0]+ 
-                             Ftemp1 * inv_jaco[2][1] +  
-                             F_spts(spt, ele, n, 2) * inv_jaco[2][2]; 
+    F_spts(spt, ele, n, 2) = F[0] * inv_jaco[2][0] + 
+                             F[1] * inv_jaco[2][1] +  
+                             F[2] * inv_jaco[2][2]; 
 
   }
 
