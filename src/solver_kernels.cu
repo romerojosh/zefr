@@ -194,11 +194,30 @@ void subtract_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsig
 
   vec1(idx) -= vec2(idx);
 }
+
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
   unsigned int blocks = (size + threads - 1) /threads;
   subtract_kernel<<<blocks, threads>>>(vec1, vec2, size);
+}
+
+__global__
+void fill_kernel(mdvector_gpu<double> vec, double val, unsigned int size)
+{
+  const unsigned int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (idx >= size)
+    return;
+
+  vec(idx) = val;
+}
+
+void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = (size + threads - 1) /threads;
+  fill_kernel<<<blocks, threads>>>(vec, val, size);
 }
 
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
@@ -728,6 +747,166 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
     else
       RK_update_source<5><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, overset, iblank);
+  }
+}
+
+template <unsigned int nVars>
+__global__
+void LSRK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
+    mdvector_gpu<double> rk_err, mdvector_gpu<double> divF,
+    mdvector_gpu<double> jaco_det_spts, double dt, double ai, double bi,
+    double bhi, unsigned int nSpts, unsigned int nEles, unsigned int stage,
+    unsigned int nStages, bool overset = false, int* iblank = NULL)
+{
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  if (overset)
+    if (iblank[ele] != 1)
+      return;
+
+  double fac = dt / jaco_det_spts(spt,ele);
+
+  for (unsigned int var = 0; var < nVars; var++)
+    rk_err(spt, ele, var) -= (bi - bhi) * fac * divF(spt, ele, var, 0);
+
+  if (stage < nStages - 1)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      U_spts(spt, ele, var) = U_til(spt, ele, var) - ai * fac *
+          divF(spt, ele, var, 0);
+
+      U_til(spt, ele, var) = U_spts(spt, ele, var) - (bi - ai) * fac *
+          divF(spt, ele, var, 0);
+    }
+  }
+  else
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+      U_spts(spt, ele, var) = U_til(spt, ele, var) - bi * fac *
+          divF(spt, ele, var, 0);
+  }
+}
+
+void LSRK_update_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_til, mdvector_gpu<double> &rk_err,
+    mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, double dt,
+    double ai, double bi, double bhi, unsigned int nSpts, unsigned int nEles,
+    unsigned int nVars, unsigned int stage, unsigned int nStages, bool overset,
+    int* iblank)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+
+  switch (nVars)
+  {
+    case 1:
+      LSRK_update<1><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
+          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, overset,
+          iblank);
+      break;
+
+    case 4:
+      LSRK_update<4><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
+          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, overset,
+          iblank);
+      break;
+
+    case 5:
+      LSRK_update<5><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
+          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, overset,
+          iblank);
+      break;
+
+    default:
+      std::string errs = "Update wrapper for nVars = " + std::to_string(nVars) +
+          " no implemented.";
+      ThrowException(errs.c_str());
+  }
+}
+
+template <unsigned int nVars>
+__global__
+void LSRK_source_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
+    mdvector_gpu<double> rk_err, mdvector_gpu<double> divF,
+    mdvector_gpu<double> source, mdvector_gpu<double> jaco_det_spts, double dt,
+    double ai, double bi, double bhi, unsigned int nSpts, unsigned int nEles,
+    unsigned int stage, unsigned int nStages, bool overset = false,
+    int* iblank = NULL)
+{
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  if (overset)
+    if (iblank[ele] != 1)
+      return;
+
+  double fac = dt / jaco_det_spts(spt,ele);
+
+  for (unsigned int var = 0; var < nVars; var ++)
+    rk_err(spt, ele, var) -= (bi - bhi) * fac *
+        (divF(spt, ele, var, 0) + source(spt, ele, var));
+
+  if (stage != nStages - 1)
+  {
+    for (unsigned int var = 0; var < nVars; var ++)
+    {
+      U_spts(spt, ele, var) = U_til(spt, ele, var) - ai * fac *
+          (divF(spt, ele, var, 0) + source(spt, ele, var));
+
+      U_til(spt, ele, var) = U_spts(spt, ele, var) - (bi - ai) * fac *
+          (divF(spt, ele, var, 0) + source(spt, ele, var));
+    }
+  }
+  else
+  {
+    for (unsigned int var = 0; var < nVars; var ++)
+      U_spts(spt, ele, var) = U_til(spt, ele, var) - bi * fac *
+          (divF(spt, ele, var, 0) + source(spt, ele, var));
+  }
+}
+
+void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &U_til, mdvector_gpu<double> &rk_err,
+    mdvector_gpu<double> &divF, const mdvector_gpu<double> &source,
+    mdvector_gpu<double> &jaco_det_spts, double dt, double ai, double bi,
+    double bhi, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
+    unsigned int stage, unsigned int nStages, bool overset, int* iblank)
+{
+  unsigned int threads = 192;
+  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+
+  switch (nVars)
+  {
+    case 1:
+      LSRK_source_update<1><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
+          source, jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages,
+          overset, iblank);
+      break;
+
+    case 4:
+      LSRK_source_update<4><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
+          source, jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages,
+          overset, iblank);
+      break;
+
+    case 5:
+      LSRK_source_update<5><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
+          source, jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages,
+          overset, iblank);
+      break;
+
+    default:
+      std::string errs = "Update wrapper for nVars = " + std::to_string(nVars) +
+          " no implemented.";
+      ThrowException(errs.c_str());
   }
 }
 
