@@ -65,6 +65,7 @@ class Faces
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
 
+    template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void LDG_flux(unsigned int startFpt, unsigned int endFpt);
 
     /* Routines for implicit method */
@@ -81,7 +82,7 @@ class Faces
 #endif
 
   protected:
-    mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Fcomm_temp, Ucomm, P;
+    mdvector<double> U, dU, Fcomm, Ucomm, P;
     mdvector<double> norm, jaco, coord;
     mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
@@ -149,7 +150,6 @@ class Faces
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U(unsigned int startFpt, unsigned int endFpt);
     void compute_common_F(unsigned int startFpt, unsigned int endFpt);
-    void compute_Fvisc(unsigned int startFpt, unsigned int endFpt);
     
     /* Routines for implicit method */
     void compute_dFdUconv(unsigned int startFpt, unsigned int endFpt);

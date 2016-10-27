@@ -811,9 +811,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       eles->compute_divF_spts(stage, startEle, endEle);
     }
 
-    /* Compute viscous and convective flux and common interface flux 
-     * at non-MPI flux points */
-    faces->compute_Fvisc(startFpt, endFpt);
+    /* Compute common interface flux at non-MPI flux points */
     faces->compute_common_F(startFpt, endFpt);
 
 #ifdef _MPI
@@ -821,7 +819,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     faces->recv_dU_data();
 
     /* Complete computation of fluxes */
-    faces->compute_Fvisc(startFptMpi, geo.nGfpts);
     faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
   }
