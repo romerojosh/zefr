@@ -4414,6 +4414,78 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   }
 }
 
+// TODO: Convert to HDF5 output and make more general
+void FRSolver::write_LHS(const std::string &_prefix)
+{
+#if !defined (_MPI) && !defined (_GPU)
+  if (input->dt_scheme == "MCGS")
+  {
+    if (input->rank == 0) std::cout << "Writing LHS to file..." << std::endl;
+
+    unsigned int iter = current_iter;
+    if (input->p_multi)
+      iter = iter / input->mg_steps[0];
+
+    std::string prefix = _prefix;
+    std::stringstream ss;
+    ss << input->output_prefix << "/";
+    ss << prefix << "_LHS_" << std::setw(9) << std::setfill('0');
+    ss << iter << ".dat";
+
+    std::ofstream f(ss.str());
+    if (!input->stream_mode)
+    {
+      for (unsigned int ele = 0; ele < geo.nEles; ele++)
+      {
+        for (unsigned int ni = 0; ni < eles->nVars; ni++)
+        {
+          for (unsigned int i = 0; i < eles->nSpts; i++)
+          {
+            for (unsigned int nj = 0; nj < eles->nVars; nj++)
+            {
+              for (unsigned int j = 0; j < eles->nSpts; j++)
+              {
+                f << std::scientific << std::setprecision(16) << eles->LHSs[0](i, ni, j, nj, ele) << " ";
+              }
+            }
+            f << std::endl;
+          }
+        }
+        f << std::endl;
+      }
+    }
+
+    else
+    {
+      for (unsigned int color = 1; color <= geo.nColors; color++)
+      {
+        unsigned int startEle = geo.ele_color_range[color - 1];
+        unsigned int endEle = geo.ele_color_range[color];
+        for (unsigned int ele = startEle; ele < endEle; ele++)
+        {
+          for (unsigned int ni = 0; ni < eles->nVars; ni++)
+          {
+            for (unsigned int i = 0; i < eles->nSpts; i++)
+            {
+              for (unsigned int nj = 0; nj < eles->nVars; nj++)
+              {
+                for (unsigned int j = 0; j < eles->nSpts; j++)
+                {
+                  f << std::scientific << std::setprecision(16) << eles->LHSs[color - 1](i, ni, j, nj, ele) << " ";
+                }
+              }
+              f << std::endl;
+            }
+          }
+          f << std::endl;
+        }
+      }
+    }
+    f.close();
+  }
+#endif
+}
+
 void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1)
 {
   unsigned int iter = current_iter;
