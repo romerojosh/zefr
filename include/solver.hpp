@@ -89,6 +89,7 @@ class FRSolver
     _mpi_comm myComm;
 
     void initialize_U();
+    void setup_views();
     void restart(std::string restart_file);
     void restart_pyfr(const std::string &restart_file);
     void setup_update();

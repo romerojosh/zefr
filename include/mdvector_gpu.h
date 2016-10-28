@@ -45,8 +45,8 @@ class mdvector_gpu
     int nDims = 0;
     size_t size_ = 0;
     size_t max_size_ = 0;
-    unsigned int* dims; 
     unsigned int* strides;
+    unsigned int* strides_h;
     unsigned int ldim_;
     T* values = NULL;
     bool allocated = false;
@@ -88,7 +88,20 @@ class mdvector_gpu
     __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5);
 
-    unsigned int get_dim(unsigned int dim) { return dims[dim]; };
+    __host__ __forceinline__
+    T* get_ptr(unsigned int idx0);
+    __host__ __forceinline__
+    T* get_ptr(unsigned int idx0, unsigned int idx1);
+    __host__ __forceinline__
+    T* get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2);
+    __host__ __forceinline__
+    T* get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
+    __host__ __forceinline__
+    T* get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4);
+    __host__ __forceinline__
+    T* get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5);
+
+    unsigned int get_dim(unsigned int dim) { return strides_h[dim]; };
 
     __device__ __forceinline__
     unsigned int get_stride(unsigned int dim) { return strides[dim]; };
@@ -117,9 +130,8 @@ void mdvector_gpu<T>::free_data()
   if (allocated)
   {
     free_device_data(values);
-    free_device_data(dims);
     free_device_data(strides);
-    delete[] dims;
+    delete[] strides_h;
 
     allocated = false;
   }
@@ -138,7 +150,7 @@ void mdvector_gpu<T>::set_size(mdvector<T>& vec)
     ldim_ = vec.ldim();
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
-    dims = new unsigned int[6];
+    strides_h = new unsigned int[6];
 
     copy_to_device(strides, vec.strides_ptr(), 6);
     allocated = true;
@@ -155,11 +167,11 @@ mdvector_gpu<T>& mdvector_gpu<T>::operator= (mdvector<T>& vec)
     ldim_ = vec.ldim();
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
-    dims = new unsigned int[6];
+    strides_h = new unsigned int[6];
 
     copy_to_device(strides, vec.strides_ptr(), 6);
 
-    std::copy(vec.strides_ptr(), vec.strides_ptr()+6, dims);
+    std::copy(vec.strides_ptr(), vec.strides_ptr()+6, strides_h);
 
     allocated = true;
   }
@@ -245,5 +257,121 @@ T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned i
   //assert(ndims == 6);
   return values[((((idx5 * strides[4] + idx4) * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
 }
+
+template <typename T>
+__host__ __forceinline__
+T* mdvector_gpu<T>::get_ptr(unsigned int idx0) 
+{
+  return values + idx0;
+}
+
+template <typename T>
+__host__ __forceinline__
+T* mdvector_gpu<T>::get_ptr(unsigned int idx0, unsigned int idx1) 
+{
+  return values + (idx1 * strides_h[0] + idx0);
+}
+
+template <typename T>
+__host__ __forceinline__
+T* mdvector_gpu<T>::get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2) 
+{
+  return values + ((idx2 * strides_h[1] + idx1) * strides_h[0] + idx0);
+}
+
+template <typename T>
+__host__ __forceinline__
+T* mdvector_gpu<T>::get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3) 
+{
+  return values + (((idx3 * strides_h[2] + idx2) * strides_h[1] + idx1) * strides_h[0] + idx0);
+}
+
+template <typename T>
+__host__ __forceinline__
+T* mdvector_gpu<T>::get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3, unsigned int idx4) 
+{
+  return values + ((((idx4 * strides_h[3] + idx3) * strides_h[2] + idx2) * strides_h[1] + idx1) * strides_h[0] + idx0);
+}
+
+template <typename T>
+__host__ __forceinline__
+T* mdvector_gpu<T>::get_ptr(unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3, unsigned int idx4, unsigned int idx5) 
+{
+  return values + (((((idx5 * strides_h[4] + idx4) * strides_h[3] + idx3) * strides_h[2] + idx2) * strides_h[1] + idx1) * strides_h[0] + idx0);
+}
+
+template <typename T>
+class mdview_gpu
+{
+  private:
+    mdvector_gpu<T*> ptr_map;
+
+  public:
+    mdview_gpu(){}
+
+    mdview_gpu(mdvector<T*> &ptr_map_h)
+    {
+      ptr_map = ptr_map_h;
+    }
+
+    void assign(mdvector<T*> &ptr_map_h)
+    {
+      ptr_map = ptr_map_h;
+    }
+
+    __device__ __forceinline__
+    T& operator() (unsigned int idx0) 
+    {
+      return *(ptr_map(idx0));
+    }
+
+    __device__ __forceinline__
+    T operator() (unsigned int idx0) const
+    {
+      return *(ptr_map(idx0));
+    }
+
+    __device__ __forceinline__
+    T& operator() (unsigned int idx0, unsigned int idx1) 
+    {
+      return *(ptr_map(idx0, idx1));
+    }
+
+    __device__ __forceinline__
+    T operator() (unsigned int idx0, unsigned int idx1) const
+    {
+      return *(ptr_map(idx0, idx1));
+    }
+
+    __device__ __forceinline__
+    T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
+    {
+      return *(ptr_map(idx0, idx1, idx2));
+    }
+
+    __device__ __forceinline__
+    T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
+    {
+      return *(ptr_map(idx0, idx1, idx2));
+    }
+
+    __device__ __forceinline__
+    T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+        unsigned int idx3) 
+    {
+      return *(ptr_map(idx0, idx1, idx2, idx3));
+    }
+
+    __device__ __forceinline__
+    T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+        unsigned int idx3) const
+    {
+      return *(ptr_map(idx0, idx1, idx2, idx3));
+    }
+
+};
 
 #endif /* mdvector_gpu_hpp */

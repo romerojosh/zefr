@@ -64,7 +64,7 @@ void compute_dFdUconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv,
 
 template <unsigned int nDims>
 __global__
-void compute_dFdUconv_fpts_Burgers(mdvector_gpu<double> dFdUconv, mdvector_gpu<double> U, 
+void compute_dFdUconv_fpts_Burgers(mdvector_gpu<double> dFdUconv, mdview_gpu<double> U, 
     unsigned int nFpts, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -82,7 +82,7 @@ void compute_dFdUconv_fpts_Burgers(mdvector_gpu<double> dFdUconv, mdvector_gpu<d
 }
 
 void compute_dFdUconv_fpts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv, 
-    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims, 
+    mdview_gpu<double> &U, unsigned int nFpts, unsigned int nDims, 
     unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 192;
@@ -96,7 +96,7 @@ void compute_dFdUconv_fpts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv,
 }
 
 __global__
-void compute_dFdUconv_fpts_2D_EulerNS(mdvector_gpu<double> dFdUconv, mdvector_gpu<double> U,
+void compute_dFdUconv_fpts_2D_EulerNS(mdvector_gpu<double> dFdUconv, mdview_gpu<double> U,
     unsigned int nFpts, double gam, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -157,7 +157,7 @@ void compute_dFdUconv_fpts_2D_EulerNS(mdvector_gpu<double> dFdUconv, mdvector_gp
 }
 
 __global__
-void compute_dFdUconv_fpts_3D_EulerNS(mdvector_gpu<double> dFdUconv, mdvector_gpu<double> U,
+void compute_dFdUconv_fpts_3D_EulerNS(mdvector_gpu<double> dFdUconv, mdview_gpu<double> U,
     unsigned int nFpts, double gam, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -270,7 +270,7 @@ void compute_dFdUconv_fpts_3D_EulerNS(mdvector_gpu<double> dFdUconv, mdvector_gp
 }
 
 void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv, 
-    mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nDims, double gamma,
+    mdview_gpu<double> &U, unsigned int nFpts, unsigned int nDims, double gamma,
     unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 192;
@@ -286,7 +286,7 @@ void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv,
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
+void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, double rho_fs, 
     mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> Vg,
@@ -823,7 +823,7 @@ void apply_bcs(mdvector_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_i
 
 }
 
-void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
+void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &Vg,
@@ -868,7 +868,7 @@ void apply_bcs_wrapper(mdvector_gpu<double> &U, unsigned int nFpts, unsigned int
 
 template<unsigned int nVars, unsigned int nDims>
 __global__
-void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<double> norm_gfpt,
+void apply_bcs_dU(mdvector_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<double> norm_gfpt,
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
 {
@@ -1079,7 +1079,7 @@ void apply_bcs_dU(mdvector_gpu<double> dU, mdvector_gpu<double> U, mdvector_gpu<
 }
 
 
-void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdvector_gpu<double> &norm, 
+void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdview_gpu<double> &U, mdvector_gpu<double> &norm, 
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
     unsigned int nDims, mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list)
 {
@@ -1099,7 +1099,7 @@ void apply_bcs_dU_wrapper(mdvector_gpu<double> &dU, mdvector_gpu<double> &U, mdv
 
 template<unsigned int nVars, unsigned int nDims>
 __global__
-void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvector_gpu<double> dFdUvisc,
+void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvector_gpu<double> dFdUvisc,
     mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFddUvisc, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma,
     mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, bool viscous)
@@ -1813,7 +1813,7 @@ void apply_bcs_dFdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvec
   }
 }
 
-void apply_bcs_dFdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUconv, mdvector_gpu<double> &dFdUvisc,
+void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, mdvector_gpu<double> &dFdUvisc,
     mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddUvisc, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous)
@@ -1837,7 +1837,7 @@ void apply_bcs_dFdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUc
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void rusanov_flux(mdvector_gpu<double> U,
+void rusanov_flux(mdview_gpu<double> U,
     mdvector_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
     mdvector_gpu<double> dA, mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
@@ -1996,7 +1996,7 @@ void rusanov_flux(mdvector_gpu<double> U,
   }
 }
 
-void rusanov_flux_wrapper(mdvector_gpu<double> &U,
+void rusanov_flux_wrapper(mdview_gpu<double> &U,
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double gamma, double rus_k, unsigned int nFpts, 
@@ -2043,7 +2043,7 @@ void rusanov_flux_wrapper(mdvector_gpu<double> &U,
 
 template <unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> dU, mdvector_gpu<double> Fcomm, 
+void LDG_flux(mdview_gpu<double> U, mdvector_gpu<double> dU, mdvector_gpu<double> Fcomm, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> diffCo_gfpts,
     mdvector_gpu<int> LDG_bias, mdvector_gpu<double> dA, double AdvDiff_D, double gamma, double mu, double prandtl,
     double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt,
@@ -2162,7 +2162,7 @@ void LDG_flux(mdvector_gpu<double> U, mdvector_gpu<double> dU, mdvector_gpu<doub
   }
 }
 
-void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dU, 
+void LDG_flux_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dU, 
     mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<double> &diffCo,
     mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double mu, double prandtl, 
     double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation, 
@@ -2204,7 +2204,7 @@ void LDG_flux_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dU,
 
 template <unsigned int nDims>
 __global__
-void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm, 
+void compute_common_U_LDG(mdview_gpu<double> U, mdvector_gpu<double> Ucomm, 
     mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars,
     mdvector_gpu<int> LDG_bias, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL)
@@ -2249,7 +2249,7 @@ void compute_common_U_LDG(mdvector_gpu<double> U, mdvector_gpu<double> Ucomm,
     }
 }
 
-void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &Ucomm, 
+void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, mdvector_gpu<int> &LDG_bias, unsigned int startFpt,
     unsigned int endFpt, bool overset, int* iblank) 
@@ -2268,7 +2268,7 @@ void compute_common_U_LDG_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> 
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv, 
+void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, 
     mdvector_gpu<double> dFcdU, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts, 
     mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
     double gamma, double rus_k, unsigned int startFpt, unsigned int endFpt)
@@ -2471,7 +2471,7 @@ void rusanov_dFcdU(mdvector_gpu<double> U, mdvector_gpu<double> dFdUconv,
   }
 }
 
-void rusanov_dFcdU_wrapper(mdvector_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
+void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
     mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
@@ -2539,7 +2539,7 @@ void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<dou
 
 __global__
 void unpack_fringe_u(mdvector_gpu<double> U_fringe,
-    mdvector_gpu<double> U, mdvector_gpu<unsigned int> fringe_fpts,
+    mdview_gpu<double> U, mdvector_gpu<unsigned int> fringe_fpts,
     mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe, unsigned int nFpts,
     unsigned int nVars)
 {
@@ -2556,7 +2556,7 @@ void unpack_fringe_u(mdvector_gpu<double> U_fringe,
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
-    mdvector_gpu<double> &U, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdview_gpu<double> &U, mdvector_gpu<unsigned int> &fringe_fpts,
     mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe, unsigned int nFpts, unsigned int nVars)
 {
   int threads = nFpts;

@@ -177,7 +177,9 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     for (unsigned int dim = 0; dim < nDims; dim++)
       for (unsigned int ele = 0; ele < nEles; ele++)
         for (unsigned int node = 0; node < nNodes; node++)
+        {
           nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+        }
 
   int ms = nSpts;
   int mf = nFpts;
@@ -1322,7 +1324,7 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
         {
           for(unsigned int dim = 0; dim < nDims; dim++)
           {
-            dU[var][ele] = dU_spts(spt, ele, var, dim);
+            dU[var][dim] = dU_spts(spt, ele, var, dim);
           }
         }
       }

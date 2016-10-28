@@ -607,9 +607,7 @@ void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   }
   else
   {
-    double sum[nVars];
-    for (unsigned int var = 0; var < nVars; var++)
-      sum[var] = 0.;
+    double sum[nVars] = {0.0};
 
     for (unsigned int n = 0; n < nStages; n++)
     {
