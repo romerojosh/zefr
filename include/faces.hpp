@@ -82,10 +82,10 @@ class Faces
 #endif
 
   protected:
-    mdvector<double> dU, Fcomm, Ucomm, P;
+    mdvector<double> P;
     //mdvector<double>::mdview Uv;
-    mdview<double> U;
-    mdvector<double> U_bnd, dU_bnd;
+    mdview<double> U, dU, Fcomm, Ucomm;
+    mdvector<double> U_bnd, dU_bnd, Fcomm_bnd, Ucomm_bnd;
     mdvector<double> norm, jaco, coord;
     mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
@@ -124,9 +124,9 @@ class Faces
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> dU_d, Fcomm_d, Ucomm_d, P_d;
-    mdview_gpu<double> U_d;
-    mdvector_gpu<double> U_bnd_d, dU_bnd_d;
+    mdvector_gpu<double> P_d;
+    mdview_gpu<double> U_d, dU_d, Fcomm_d, Ucomm_d;
+    mdvector_gpu<double> U_bnd_d, dU_bnd_d, Fcomm_bnd_d, Ucomm_bnd_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<double> dA_d, waveSp_d, diffCo_d;
     mdvector_gpu<int> LDG_bias_d;

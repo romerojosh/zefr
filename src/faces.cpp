@@ -48,14 +48,17 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   /* Allocate memory for solution structures */
   //U.assign({nFpts, nVars, 2});
+  //Fcomm.assign({nFpts, nVars, 2});
   U_bnd.assign({geo->nGfpts_bnd, nVars});
-  Fcomm.assign({nFpts, nVars, 2});
+  Fcomm_bnd.assign({geo->nGfpts_bnd, nVars});
 
   /* If viscous, allocate arrays used for LDG flux */
   if(input->viscous)
   {
-    dU.assign({nFpts, nVars, nDims, 2});
-    Ucomm.assign({nFpts, nVars, 2});
+    //dU.assign({nFpts, nVars, nDims, 2});
+    //Ucomm.assign({nFpts, nVars, 2});
+    dU_bnd.assign({geo->nGfpts_bnd, nVars, nDims});
+    Ucomm_bnd.assign({geo->nGfpts_bnd, nVars});
   }
 
   LDG_bias.assign({nFpts}, 0);
