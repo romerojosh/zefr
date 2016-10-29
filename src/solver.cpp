@@ -116,15 +116,34 @@ void FRSolver::setup(_mpi_comm comm_in)
 
   if (input->restart)
   {
-    if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file +" ..." << std::endl;
+    if (input->restart_type == 0)
+    {
+      if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file + " ..." << std::endl;
 
-    if (input->restart_file.find(".vtu")  != std::string::npos or
-        input->restart_file.find(".pvtu") != std::string::npos)
-      restart(input->restart_file);
-    else if (input->restart_file.find(".pyfr") != std::string::npos)
-      restart_pyfr(input->restart_file);
+      // Backwards compatibility: full filename given
+      if (input->restart_file.find(".vtu")  != std::string::npos or
+          input->restart_file.find(".pvtu") != std::string::npos)
+      {
+        restart(input->restart_file);
+      }
+      else if (input->restart_file.find(".pyfr") != std::string::npos)
+      {
+        restart_pyfr(input->restart_file);
+      }
+      else
+        ThrowException("Unknown file type for restart file.");
+    }
     else
-      ThrowException("Unknown file type for restart file.");
+    {
+      if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_case + "_" + std::to_string(input->restart_iter) + " ..." << std::endl;
+
+      // New version: Use case name + iteration number to find file
+      // [Overset compatible]
+      if (input->restart_type == 1) // ParaView
+        restart(input->restart_case, input->restart_iter);
+      else if (input->restart_type == 2) // PyFR
+        restart_pyfr(input->restart_case, input->restart_iter);
+    }
   }
 
   if (input->filt_on)
@@ -172,6 +191,45 @@ void FRSolver::setup_update()
     /* OptRK4 (r = 0.5) */
     rk_alpha(0) = 0.153; rk_alpha(1) = 0.442; 
     rk_alpha(2) = 0.930; rk_alpha(3) = 1.0;
+  }
+  else if (input->dt_scheme == "LSRK")
+  {
+    nStages = 5;
+    rk_alpha.assign({nStages - 1});
+    rk_alpha(0) =   970286171893. / 4311952581923.;
+    rk_alpha(1) =  6584761158862. / 12103376702013.;
+    rk_alpha(2) =  2251764453980. / 15575788980749.;
+    rk_alpha(3) = 26877169314380. / 34165994151039.;
+
+    rk_beta.assign({nStages});
+    rk_beta(0) =  1153189308089. / 22510343858157.;
+    rk_beta(1) =  1772645290293. / 4653164025191.;
+    rk_beta(2) = -1672844663538. / 4480602732383.;
+    rk_beta(3) =  2114624349019. / 3568978502595.;
+    rk_beta(4) =  5198255086312. / 14908931495163.;
+
+    rk_bhat.assign({nStages});
+    rk_bhat(0) =  1016888040809. / 7410784769900.;
+    rk_bhat(1) = 11231460423587. / 58533540763752.;
+    rk_bhat(2) = -1563879915014. / 6823010717585.;
+    rk_bhat(3) =   606302364029. / 971179775848.;
+    rk_bhat(4) =  1097981568119. / 3980877426909.;
+
+    rk_c.assign({nStages});
+    for (int i = 1; i < nStages; i++)
+    {
+      rk_c(i) = rk_alpha(i-1);
+
+      for (int j = 0; j < i-1; j++)
+        rk_c(i) += rk_beta(j);
+    }
+
+    expa = input->pi_alpha / 4.;
+    expb = input->pi_beta / 4.;
+    prev_err = 1.;
+
+    U_til.assign({eles->nSpts, eles->nEles, eles->nVars});
+    rk_err.assign({eles->nSpts, eles->nEles, eles->nVars});
   }
   else if (input->dt_scheme == "MCGS")
   {
@@ -287,8 +345,30 @@ void FRSolver::setup_output()
 
 }
 
-void FRSolver::restart(std::string restart_file)
+void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 {
+  if (input->restart_type > 0) // append .pvtu / .vtu to case name
+  {
+    std::stringstream ss;
+
+    ss << restart_file;
+
+    if (input->overset)
+    {
+      ss << "_Grid" << input->gridID;
+    }
+
+    ss << "_" << std::setw(0) << std::setfill('0') << restart_iter;
+
+#ifdef _MPI
+    ss << ".pvtu";
+#else
+    ss << ".vtu";
+#endif
+
+    restart_file = ss.str();
+  }
+
   size_t pos;
 #ifdef _MPI
   /* From .pvtu, form partition specific filename */
@@ -461,6 +541,12 @@ void FRSolver::solver_data_to_device()
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
   dt_d = dt;
+
+  if (input->dt_scheme == "LSRK")
+  {
+    U_til_d = U_til;
+    rk_err_d = rk_err;
+  }
 
   /* Implicit solver data structures */
   eles->deltaU_d = eles->deltaU;
@@ -1190,7 +1276,10 @@ void FRSolver::initialize_U()
     eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
   }
 
-  eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
+  if (input->dt_scheme != "LSRK")
+    eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
+  else
+    eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, 1});
 
   if (input->motion)
   {
@@ -1642,285 +1731,143 @@ void FRSolver::update(const mdvector<double> &source)
 void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 {
-  if (input->dt_scheme != "MCGS")
+  if (input->dt_scheme == "LSRK")
   {
-#ifdef _CPU
-    if (nStages > 1)
-      U_ini = eles->U_spts;
-#endif
-
-#ifdef _GPU
-    device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
-    check_error();
-#endif
-
-    unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
-
-    /* Main stage loop. Complete for Jameson-style RK timestepping */
-    for (unsigned int stage = 0; stage < nSteps; stage++)
-    {
-      compute_residual(stage);
-
-      /* If in first stage, compute stable timestep */
-      if (stage == 0)
-      {
-        // TODO: Revisit this as it is kind of expensive.
-        if (input->dt_type != 0)
-        {
-          compute_element_dt();
-        }
-      }
-
-#ifdef _CPU
-      if (source.size() == 0)
-      {
-#pragma omp parallel for collapse(2)
-        for (unsigned int n = 0; n < eles->nVars; n++)
-          for (unsigned int ele = 0; ele < eles->nEles; ele++)
-          {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-            {
-              if (input->dt_type != 2)
-              {
-                eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-                  eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
-              }
-              else
-              {
-                eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-                  eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
-              }
-            }
-          }
-      }
-      else
-      {
-#pragma omp parallel for collapse(2)
-        for (unsigned int n = 0; n < eles->nVars; n++)
-          for (unsigned int ele = 0; ele < eles->nEles; ele++)
-          {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-            {
-              if (input->dt_type != 2)
-              {
-                eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) / 
-                  eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-              }
-              else
-              {
-                eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) / 
-                  eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-              }
-            }
-          }
-      }
-#endif
-
-#ifdef _GPU
-      /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
-      unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
-
-      if (source.size() == 0)
-      {
-        RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-            rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-            input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
-      }
-      else
-      {
-        RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-            rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims, 
-            input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
-      }
-      check_error();
-#endif
-
-      // Update grid to position of next time step
-      move(input->time + rk_alpha(stage)*dt(0));
-
-#ifdef _BUILD_LIB
-      // Update the overset connectivity to the new grid positions
-      if (input->overset && input->motion)
-      {
-        ZEFR->tg_preprocess();
-        ZEFR->tg_process_connectivity();
-#ifdef _GPU
-        ZEFR->update_iblank_gpu();
-#endif
-      }
-#endif
-    }
-
-    /* Final stage combining residuals for full Butcher table style RK timestepping*/
-    if (input->dt_scheme != "RKj")
-    {
-      compute_residual(nStages-1);
-#ifdef _CPU
-      if (nStages > 1)
-        eles->U_spts = U_ini;
-      else if (input->dt_type != 0)
-        compute_element_dt();
-#endif
-#ifdef _GPU
-      device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.max_size());
-#endif
-
-#ifdef _CPU
-      for (unsigned int stage = 0; stage < nStages; stage++)
-      {
-        if (source.size() == 0)
-        {
-#pragma omp parallel for collapse(2)
-          for (unsigned int n = 0; n < eles->nVars; n++)
-            for (unsigned int ele = 0; ele < eles->nEles; ele++)
-            {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-                if (input->dt_type != 2)
-                {
-                  eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) * 
-                    eles->divF_spts(spt, ele, n, stage);
-                }
-                else
-                {
-                  eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) * 
-                    eles->divF_spts(spt, ele, n, stage);
-                }
-            }
-        }
-        else
-        {
-#pragma omp parallel for collapse(2)
-          for (unsigned int n = 0; n < eles->nVars; n++)
-            for (unsigned int ele = 0; ele < eles->nEles; ele++)
-            {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-              {
-                if (input->dt_type != 2)
-                {
-                  eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
-                    (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-                }
-                else
-                {
-                  eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
-                    (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-                }
-              }
-            }
-        }
-      }
-#endif
-
-#ifdef _GPU
-      if (source.size() == 0)
-      {
-        RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, 
-            rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-            input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
-      }
-      else
-      {
-        RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, 
-            rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-            input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
-      }
-
-      check_error();
-#endif
-    }
+    step_adaptive_LSRK(source);
+    //step_LSRK(source);
   }
-
-  else if (input->dt_scheme == "MCGS")
+  else
   {
-    /* Sweep through colors */
-    for (unsigned int counter = 1; counter <= nCounter; counter++)
-    {
-      /* Set color */
-      unsigned int color = counter;
-      if (color > geo.nColors)
-        color = 2*geo.nColors+1 - counter;
+    if (input->dt_scheme == "MCGS")
+      step_MCGS(source);
+    else
+      step_RK(source);
 
-      /* Compute residual and Jacobian on all elements */
-      int iter = current_iter - restart_iter;
-      if (counter == 1 && iter%input->Jfreeze_freq == 0)
-      {
-        compute_residual(0);
-
-        // TODO: Revisit this as it is kind of expensive.
-        if (input->dt_type != 0)
-        {
-          compute_element_dt();
-        }
-
-        /* Compute SER time step growth */
-        if (input->SER)
-        {
-          compute_SER_dt();
-#ifdef _GPU
-          ThrowException("SER not available on GPU!");
-#endif
-        }
-
-        /* Compute LHS implicit Jacobian */
-        compute_LHS();
-      }
-      /* If running multigrid, assume solution has been updated externally. Compute res on
-       * all elements to update face data */
-      else if (input->p_multi and counter == 1)
-      {
-        compute_residual(0);
-      }
-      /* Compute residual on elements of this color only */
-      else
-      {
-        compute_residual(0, color);
-      }
-      prev_color = color;
-
-      /* Prepare RHS vector */
-      if (source.size() == 0)
-      {
-        compute_RHS(color);
-      }
-      else
-      {
-        compute_RHS_source(source, color);
-      }
-
-#ifdef _GPU
-      if (input->stream_mode)
-        sync_stream(1);
-#endif
-
-      /* Solve system for deltaU */
-      compute_deltaU(color);
-
-#ifdef _GPU
-      /* Begin transfer of LHSInv for next color */
-      if (input->stream_mode)
-      {
-        cudaDeviceSynchronize();
-        copy_to_device(eles->LHSInv_d.data(), eles->LHSInvs[(color) % geo.nColors].data(), eles->LHSInv_d.max_size(), 1);
-      }
-#endif
-
-      /* Add deltaU to solution */
-      compute_U(color);
-
-    }
+    flow_time += dt(0);
+    current_iter++;
   }
-
-  input->time += dt(0);
-  flow_time += dt(0);
-  current_iter++;
 
   // Update grid to end of time step (if not already done so)
   if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
-    move(input->time);
+    move(flow_time);
+
+#ifdef _BUILD_LIB
+  // Update the overset connectivity to the new grid positions
+  if (input->overset && input->motion)
+  {
+    ZEFR->tg_preprocess();
+    ZEFR->tg_process_connectivity();
+  }
+#endif
+}
+
+
+#ifdef _CPU
+void FRSolver::step_RK(const mdvector<double> &source)
+#endif
+#ifdef _GPU
+void FRSolver::step_RK(const mdvector_gpu<double> &source)
+#endif
+{
+#ifdef _CPU
+  if (nStages > 1)
+    U_ini = eles->U_spts;
+#endif
+
+#ifdef _GPU
+  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
+  check_error();
+#endif
+
+  prev_time = flow_time;
+
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nSteps; stage++)
+  {
+    flow_time = prev_time + rk_alpha(stage) * dt(0);
+
+    compute_residual(stage);
+
+    /* If in first stage, compute stable timestep */
+    if (stage == 0)
+    {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+    }
+
+#ifdef _CPU
+    if (source.size() == 0)
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) /
+                  eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) /
+                  eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+            }
+          }
+        }
+    }
+    else
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) /
+                  eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+            else
+            {
+              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) /
+                  eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+            }
+          }
+        }
+    }
+#endif
+
+#ifdef _GPU
+    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
+
+    if (source.size() == 0)
+    {
+      RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d,
+                        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+                        input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+    }
+    else
+    {
+      RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d,
+                               rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+                               input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+    }
+    check_error();
+#endif
+
+    // Update grid to position of next time step
+    move(flow_time);
 
 #ifdef _BUILD_LIB
     // Update the overset connectivity to the new grid positions
@@ -1928,8 +1875,376 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     {
       ZEFR->tg_preprocess();
       ZEFR->tg_process_connectivity();
+#ifdef _GPU
+      ZEFR->update_iblank_gpu();
+#endif
     }
 #endif
+  }
+
+  /* Final stage combining residuals for full Butcher table style RK timestepping*/
+  if (input->dt_scheme != "RKj")
+  {
+    flow_time = prev_time + rk_alpha(nStages-1) * dt(0);
+
+    compute_residual(nStages-1);
+#ifdef _CPU
+    if (nStages > 1)
+      eles->U_spts = U_ini;
+    else if (input->dt_type != 0)
+      compute_element_dt();
+#endif
+#ifdef _GPU
+    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.max_size());
+#endif
+
+#ifdef _CPU
+    for (unsigned int stage = 0; stage < nStages; stage++)
+    {
+      if (source.size() == 0)
+      {
+#pragma omp parallel for collapse(2)
+        for (unsigned int n = 0; n < eles->nVars; n++)
+          for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+              if (input->dt_type != 2)
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                    eles->divF_spts(spt, ele, n, stage);
+              }
+              else
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                    eles->divF_spts(spt, ele, n, stage);
+              }
+          }
+      }
+      else
+      {
+#pragma omp parallel for collapse(2)
+        for (unsigned int n = 0; n < eles->nVars; n++)
+          for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+            {
+              if (input->dt_type != 2)
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                    (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+              }
+              else
+              {
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                    (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+              }
+            }
+          }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    if (source.size() == 0)
+    {
+      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d,
+                        rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+                        input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
+    }
+    else
+    {
+      RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d,
+                               rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+                               input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
+    }
+
+    check_error();
+#endif
+  }
+}
+
+#ifdef _CPU
+void FRSolver::step_adaptive_LSRK(const mdvector<double> &source)
+#endif
+#ifdef _GPU
+void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
+#endif
+{
+  step_LSRK(source);
+
+  // Calculate error (infinity norm of RK error) and scaling factor for dt
+  double max_err = 0;
+#ifdef _CPU
+  for (uint n = 0; n < eles->nVars; n++)
+  {
+    for (uint ele = 0; ele < eles->nEles; ele++)
+    {
+      for (uint spt = 0; spt < eles->nSpts; spt++)
+      {
+        double err = std::abs(rk_err(spt,ele,n)) /
+            (input->atol + input->rtol * std::max( std::abs(eles->U_spts(spt,ele,n)), std::abs(U_ini(spt,ele,n)) ));
+        max_err = std::max(max_err, err);
+      }
+    }
+  }
+
+#ifdef _MPI
+  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#endif
+
+  // Determine the time step scaling factor and the new time step
+  double fac = pow(max_err, -expa) * pow(prev_err, expb);
+  fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
+
+  dt(0) *= fac;
+#endif
+
+#ifdef _GPU
+  max_err = set_adaptive_dt_wrapper(eles->U_spts_d, U_ini_d, rk_err_d, dt_d, dt(0),
+      eles->nSpts, eles->nEles, eles->nVars, input->atol, input->rtol, expa, expb,
+      input->minfac, input->maxfac, input->sfact, prev_err, myComm, input->overset,
+      geo.iblank_cell_d.data());
+#endif
+
+  if (dt(0) < 1e-14)
+    ThrowException("dt approaching 0 - quitting simulation");
+
+  if (max_err < 1.)
+  {
+    // Accept the time step and continue on
+    prev_err = max_err;
+    current_iter++;
+  }
+  else
+  {
+    // Reject step - reset solution back to beginning of time step
+    flow_time = prev_time;
+#ifdef _CPU
+    eles->U_spts = U_ini;
+#endif
+#ifdef _GPU
+    device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
+#endif
+    // Try again with new dt
+    step_adaptive_LSRK(source);
+  }
+}
+
+#ifdef _CPU
+void FRSolver::step_LSRK(const mdvector<double> &source)
+#endif
+#ifdef _GPU
+void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
+#endif
+{
+  /* NOTE: this implementation is not the 'true' low-storage implementation
+   * since we are using an additional array 'U_til' instead of swapping
+   * pointers at each stage */
+
+  // Copy current solution into "U_ini" ['rold' in PyFR]
+#ifdef _CPU
+  U_ini = eles->U_spts;
+  U_til = eles->U_spts;
+  rk_err.fill(0.0);
+#endif
+
+#ifdef _GPU
+  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
+  device_copy(U_til_d, eles->U_spts_d, eles->U_spts_d.max_size());
+  device_fill(rk_err_d, rk_err_d.max_size());
+
+  // Get current delta t [dt(0)] (updated on GPU)
+  copy_from_device(dt.data(), dt_d.data(), 1);
+
+  check_error();
+#endif
+
+  prev_time = flow_time;
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  for (unsigned int stage = 0; stage < nStages; stage++)
+  {
+    flow_time = prev_time + rk_c(stage) * dt(0);
+
+    compute_residual(0);
+
+    double ai = rk_alpha(stage);
+    double bi = rk_beta(stage);
+    double bhi = rk_bhat(stage);
+
+#ifdef _CPU
+    // Update Error
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      {
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        {
+          rk_err(spt,ele,n) -= (bi - bhi) * dt(0) /
+              eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
+        }
+      }
+    }
+
+    // Update solution registers
+    if (stage < nStages - 1)
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            eles->U_spts(spt,ele,n) = U_til(spt,ele,n) - ai * dt(0) /
+                eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
+
+            U_til(spt,ele,n) = eles->U_spts(spt,ele,n) - (bi - ai) * dt(0) /
+                eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
+          }
+        }
+      }
+    }
+    else
+    {
+#pragma omp parallel for collapse(2)
+      for (unsigned int n = 0; n < eles->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            eles->U_spts(spt,ele,n) = U_til(spt,ele,n) - bi * dt(0) /
+                eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
+          }
+        }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    if (source.size() == 0)
+    {
+      LSRK_update_wrapper(eles->U_spts_d, U_til_d, rk_err_d, eles->divF_spts_d,
+          eles->jaco_det_spts_d, dt(0), ai, bi, bhi, eles->nSpts, eles->nEles,
+          eles->nVars, stage, nStages, input->overset, geo.iblank_cell_d.data());
+    }
+    else
+    {
+      LSRK_update_source_wrapper(eles->U_spts_d, U_til_d, rk_err_d,
+          eles->divF_spts_d, source, eles->jaco_det_spts_d, dt(0), ai, bi, bhi,
+          eles->nSpts, eles->nEles, eles->nVars, stage, nStages, input->overset,
+          geo.iblank_cell_d.data());
+    }
+    check_error();
+#endif
+
+    // Update grid to position of next time step
+    // move(flow_time);
+
+#ifdef _BUILD_LIB
+    // Update the overset connectivity to the new grid positions
+    if (input->overset && input->motion)
+    {
+      ZEFR->tg_preprocess();
+      ZEFR->tg_process_connectivity();
+#ifdef _GPU
+      ZEFR->update_iblank_gpu();
+#endif
+    }
+#endif
+  }
+
+  flow_time = prev_time + dt(0);
+}
+
+#ifdef _CPU
+void FRSolver::step_MCGS(const mdvector<double> &source)
+#endif
+#ifdef _GPU
+void FRSolver::step_MCGS(const mdvector_gpu<double> &source)
+#endif
+{
+  /* Sweep through colors */
+  for (unsigned int counter = 1; counter <= nCounter; counter++)
+  {
+    /* Set color */
+    unsigned int color = counter;
+    if (color > geo.nColors)
+      color = 2*geo.nColors+1 - counter;
+
+    /* Compute residual and Jacobian on all elements */
+    int iter = current_iter - restart_iter;
+    if (counter == 1 && iter%input->Jfreeze_freq == 0)
+    {
+      compute_residual(0);
+
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+
+      /* Compute SER time step growth */
+      if (input->SER)
+      {
+        compute_SER_dt();
+#ifdef _GPU
+        ThrowException("SER not available on GPU!");
+#endif
+      }
+
+      /* Compute LHS implicit Jacobian */
+      compute_LHS();
+    }
+    /* If running multigrid, assume solution has been updated externally. Compute res on
+       * all elements to update face data */
+    else if (input->p_multi and counter == 1)
+    {
+      compute_residual(0);
+    }
+    /* Compute residual on elements of this color only */
+    else
+    {
+      compute_residual(0, color);
+    }
+    prev_color = color;
+
+    /* Prepare RHS vector */
+    if (source.size() == 0)
+    {
+      compute_RHS(color);
+    }
+    else
+    {
+      compute_RHS_source(source, color);
+    }
+
+#ifdef _GPU
+    if (input->stream_mode)
+      sync_stream(1);
+#endif
+
+    /* Solve system for deltaU */
+    compute_deltaU(color);
+
+#ifdef _GPU
+    /* Begin transfer of LHSInv for next color */
+    if (input->stream_mode)
+    {
+      cudaDeviceSynchronize();
+      copy_to_device(eles->LHSInv_d.data(), eles->LHSInvs[(color) % geo.nColors].data(), eles->LHSInv_d.max_size(), 1);
+    }
+#endif
+
+    /* Add deltaU to solution */
+    compute_U(color);
+  }
 }
 
 void FRSolver::compute_element_dt()
@@ -2026,7 +2341,7 @@ void FRSolver::compute_element_dt()
         dtinv[2] = std::max(dtinv[4],dtinv[5]);
 
         /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
-        dt(ele) = 32 * CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // 32 = empirically-found factor
+        dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
       }
     }
   }
@@ -2202,7 +2517,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   ss << std::endl;
 
   ss << "[solver-time-integrator]" << std::endl;
-  ss << "tcurr = " << input->time << std::endl;
+  ss << "tcurr = " << flow_time << std::endl;
   //ss << "wall-time = " << input->??"
   ss << std::endl;
 
@@ -2273,6 +2588,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 #ifdef _MPI
   // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
   std::vector<std::vector<double>> data_p(input->nRanks);
+  std::vector<std::vector<int>> iblank_p(input->nRanks);
   if (input->rank == 0)
   {
     uint ind = 0;
@@ -2287,6 +2603,13 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
           ind++;
         }
       }
+    }
+
+    if (input->overset)
+    {
+      iblank_p[0].resize(nEles);
+      for (int ele = 0; ele < nEles; ele++)
+        iblank_p[0][ele] = geo.iblank_cell(ele);
     }
   }
 
@@ -2305,6 +2628,13 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       data_p[p].resize(size);
       MPI_Status status;
       MPI_Recv(data_p[p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
+
+      if (input->overset)
+      {
+        iblank_p[p].resize(nEles);
+        MPI_Status status2;
+        MPI_Recv(iblank_p[p].data(), nEles, MPI_INT, p, 0, geo.myComm, &status2);
+      }
     }
     else
     {
@@ -2317,6 +2647,11 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
               u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
 
         MPI_Send(u_tmp.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+
+        if (input->overset)
+        {
+          MPI_Send(geo.iblank_cell.data(), nEles, MPI_INT, 0, 0, geo.myComm);
+        }
       }
     }
 
@@ -2357,6 +2692,15 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       std::string solname = sol_prefix + std::to_string(p);
       dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
       dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+      if (input->overset) // Write out iblank tags as DataSet attribute
+      {
+        hsize_t dims[1] = {nEles};
+        DataSpace dspaceI(1, dims);
+        Attribute att = dset.createAttribute("iblank", PredType::NATIVE_INT8, dspaceI);
+        att.write(PredType::NATIVE_INT, iblank_p[p].data());
+      }
+
       dspaceU.close();
       dset.close();
     }
@@ -2402,25 +2746,37 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 #endif // no USE_H5_PARALLEL
 }
 
-void FRSolver::restart_pyfr(const std::string &restart_file)
+void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 {
-#ifdef _GPU
-  eles->U_spts = eles->U_spts_d;
-#endif
-
-  //std::stringstream ss;
-  //ss << input->output_prefix << "/";
-  //ss << restart_file << "-" << input->restart_iter << ".pyfrs";
-  //std::string filename(ss.str());
   std::string filename = restart_file;
 
-  std::string str = filename;
-  size_t ind = str.find("-");
-  str.erase(str.begin(), str.begin()+ind+1);
-  ind = str.find(".pyfrs");
-  str.erase(str.begin()+ind,str.end());
-  std::stringstream ss(str);
-  ss >> restart_iter;
+  if (input->restart_type > 0) // append .pvtu / .vtu to case name
+  {
+    std::stringstream ss;
+
+    ss << restart_file << "/" << restart_file;
+
+    if (input->overset)
+    {
+      ss << "-G" << input->gridID;
+    }
+
+    ss << "-" << restart_iter;
+    ss << ".pyfrs";
+
+    filename = ss.str();
+  }
+  else
+  {
+    std::string str = filename;
+    size_t ind = str.find("-");
+    str.erase(str.begin(), str.begin()+ind+1);
+    ind = str.find(".pyfrs");
+    str.erase(str.begin()+ind,str.end());
+    std::stringstream ss(str);
+    ss >> restart_iter;
+  }
+
   current_iter = restart_iter;
   input->iter = restart_iter;
   input->initIter = restart_iter;
@@ -2461,8 +2817,8 @@ void FRSolver::restart_pyfr(const std::string &restart_file)
   dset = file.openDataSet(solname);
   auto ds = dset.getSpace();
 
-  std::vector<hsize_t> dims(3);
-  int ds_rank = ds.getSimpleExtentDims(dims.data());
+  hsize_t dims[3];
+  int ds_rank = ds.getSimpleExtentDims(dims);
 
   if (ds_rank != 3)
     ThrowException("Improper DataSpace rank for solution data.");
@@ -2473,22 +2829,121 @@ void FRSolver::restart_pyfr(const std::string &restart_file)
 
   int nEles = eles->nEles;
   int nVars = eles->nVars;
-  int nSpts = eles->nSpts;
 
-  if (dims[2] != nEles || dims[1] != nVars || dims[0] != nSpts)
+  if (dims[2] != nEles || dims[1] != nVars)
     ThrowException("Size of solution data set does not match that from mesh.");
+
+  int nSpts = dims[0];
 
   // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
   mdvector<double> u_tmp({nEles, nVars, nSpts});
 
   dset.read(u_tmp.data(), PredType::NATIVE_DOUBLE);
+
+  if (input->overset)
+  {
+    Attribute att = dset.openAttribute("iblank");
+    DataSpace dspaceI = att.getSpace();
+    hsize_t dim[1];
+    dspaceI.getSimpleExtentDims(dim);
+
+    if (dim[0] != geo.nEles)
+      ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+
+    geo.iblank_cell.assign({geo.nEles});
+    att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+  }
+
   dset.close();
 
-  eles->U_spts.assign({nSpts,nEles,nVars});
-  for (int ele = 0; ele < nEles; ele++)
-    for (int var = 0; var < nVars; var++)
-      for (int spt = 0; spt < nSpts; spt++)
-        eles->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
+  if (nSpts == eles->nSpts)
+  {
+    eles->U_spts.assign({nSpts,nEles,nVars});
+    for (int ele = 0; ele < nEles; ele++)
+      for (int var = 0; var < nVars; var++)
+        for (int spt = 0; spt < nSpts; spt++)
+          eles->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
+  }
+  else
+  {
+    int restartOrder = (input->nDims == 2)
+                     ? (std::sqrt(nSpts)-1) : (std::cbrt(nSpts)-1);
+
+    unsigned int nSpts1D_restart = restartOrder + 1;
+    unsigned int nSpts2D_restart = nSpts1D_restart * nSpts1D_restart;
+
+    // Transpose solution data from PyFR to Zefr layout
+    mdvector<double> U_restart({nSpts,nEles,nVars});
+    for (int ele = 0; ele < nEles; ele++)
+      for (int var = 0; var < nVars; var++)
+        for (int spt = 0; spt < nSpts; spt++)
+          U_restart(spt,ele,var) = u_tmp(ele,var,spt);
+
+    // Setup extrapolation operator from restart points
+    auto loc_spts_restart_1D = Gauss_Legendre_pts(restartOrder + 1);
+
+    mdvector<double> oppRestart({eles->nSpts, nSpts});
+
+    std::vector<double> loc(input->nDims);
+    for (unsigned int rpt = 0; rpt < nSpts; rpt++)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      {
+        for (unsigned int dim = 0; dim < input->nDims; dim++)
+          loc[dim] = eles->loc_spts(spt , dim);
+
+        if (input->nDims == 2)
+        {
+          int i = rpt % nSpts1D_restart;
+          int j = rpt / nSpts1D_restart;
+          oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) *
+                                Lagrange(loc_spts_restart_1D, j, loc[1]);
+        }
+        else
+        {
+          int i = rpt % nSpts1D_restart;
+          int j = (rpt / nSpts1D_restart) % nSpts1D_restart;
+          int k = rpt / nSpts2D_restart;
+          oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) *
+                                Lagrange(loc_spts_restart_1D, j, loc[1]) *
+                                Lagrange(loc_spts_restart_1D, k, loc[2]);
+        }
+      }
+    }
+
+
+    // Extrapolate values from restart points to solution points
+    auto &A = oppRestart(0, 0);
+    auto &B = U_restart(0, 0, 0);
+    auto &C = eles->U_spts(0, 0, 0);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts,
+        eles->nEles * eles->nVars, nSpts, 1.0, &A, oppRestart.ldim(), &B,
+        U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts,
+        eles->nEles * eles->nVars, nSpts, 1.0, &A, oppRestart.ldim(), &B,
+        U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
+#endif
+  }
+
+  // Process the config / stats string
+  std::string str, key, tmp;
+  std::stringstream ss;
+  std::istringstream stats(geo.stats);
+  while (std::getline(stats, str))
+  {
+    ss.str(str);  ss >> key;
+    if (key == "tcurr")
+    {
+      // "tcurr = ####"
+      ss >> tmp >> flow_time;
+      break;
+    }
+
+    ss.str(""); ss.clear();
+  }
 }
 
 void FRSolver::write_solution(const std::string &_prefix)
@@ -3904,10 +4359,43 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     f.close();
   }
 
-  if (input->overset)
+  if (input->overset && input->plot_overset)
   {
     write_overset_boundary(_prefix);
   }
+}
+
+void FRSolver::write_LHS(const std::string &_prefix)
+{
+#if !defined (_MPI) && !defined (_GPU)
+  if (input->dt_scheme == "MCGS" && !input->stream_mode)
+  {
+    if (input->rank == 0) std::cout << "Writing LHS to file..." << std::endl;
+
+    unsigned int iter = current_iter;
+    if (input->p_multi)
+      iter = iter / input->mg_steps[0];
+
+    std::string prefix = _prefix;
+    std::stringstream ss;
+    ss << input->output_prefix << "/";
+    ss << prefix << "_LHS_" << std::setw(9) << std::setfill('0');
+    ss << iter << ".dat";
+
+    H5File file(ss.str(), H5F_ACC_TRUNC);
+    unsigned int N = eles->nSpts * eles->nVars;
+    hsize_t dims[3] = {geo.nEles, N, N};
+    DataSpace dspaceU(3, dims);
+
+    std::string name = "LHS_" + std::to_string(iter);
+    DataSet dset = file.createDataSet(name, PredType::NATIVE_DOUBLE, dspaceU);
+    dset.write(eles->LHSs[0].data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+    dspaceU.close();
+    dset.close();
+    file.close();
+  }
+#endif
 }
 
 void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1)
@@ -4349,7 +4837,7 @@ void FRSolver::report_error(std::ofstream &f)
 
   unsigned int n = input->err_field;
   std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
-#pragma omp for
+#pragma omp for 
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
