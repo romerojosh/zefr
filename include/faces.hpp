@@ -83,7 +83,6 @@ class Faces
 
   protected:
     mdvector<double> P;
-    //mdvector<double>::mdview Uv;
     mdview<double> U, dU, Fcomm, Ucomm;
     mdvector<double> U_bnd, dU_bnd, Fcomm_bnd, Ucomm_bnd;
     mdvector<double> norm, jaco, coord;

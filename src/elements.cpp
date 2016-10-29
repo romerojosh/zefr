@@ -697,10 +697,12 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0, 
-        oppE_d.data(), oppE_d.ldim(), dU_spts_d.data() + dim * (dU_spts_d.ldim() * 
-        nVars * nEles), dU_spts_d.ldim(), 0.0, dU_fpts_d.data() + dim * 
-        (dU_fpts_d.ldim() * nVars * nEles), dU_fpts_d.ldim());
+    auto *A = oppE_d.get_ptr(0,0);
+    auto *B = dU_spts_d.get_ptr(0, startEle, 0, dim);
+    auto *C = dU_fpts_d.get_ptr(0, startEle, 0, dim);
+
+    cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0, A, oppE_d.ldim(), 
+        B, dU_spts_d.ldim(), 0.0, C, dU_fpts_d.ldim());
   }
 
   event_record(0, 0); // record event for MPI comms
@@ -830,19 +832,23 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
+    auto *A = oppD_d.get_ptr(0, 0, dim);
+    auto *B = U_spts_d.get_ptr(0, startEle, 0);
+    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from solution at solution points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
-        oppD_d.data() + dim * (oppD_d.ldim() * nSpts), oppD_d.ldim(), 
-        U_spts_d.data(), U_spts_d.ldim(), 0.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0, A, oppD_d.ldim(), 
+        B, U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
 
     check_error();
 
+    A = oppD_fpts_d.get_ptr(0, 0, dim);
+    B = Ucomm_d.get_ptr(0, startEle, 0);
+    C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from common solution at flux points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
-        oppD_fpts_d.data() + dim * (oppD_fpts_d.ldim() * nFpts), oppD_fpts_d.ldim(),
-        Ucomm_d.data(), Ucomm_d.ldim(), 1.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0, A, oppD_fpts_d.ldim(),
+        B, Ucomm_d.ldim(), 1.0, C , dU_spts_d.ldim());
 
     check_error();
   }
@@ -879,11 +885,13 @@ void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
+    auto *A = oppD_d.get_ptr(0, 0, dim);
+    auto *B = U_spts_d.get_ptr(0, startEle, 0);
+    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from solution at solution points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
-        oppD_d.data() + dim * (oppD_d.ldim() * nSpts), oppD_d.ldim(), 
-        U_spts_d.data(), U_spts_d.ldim(), 0.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0, A, oppD_d.ldim(), 
+        B, U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
 
     check_error();
   }
@@ -920,11 +928,13 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
+    auto *A = oppD_fpts_d.get_ptr(0, 0, dim);
+    auto *B = Ucomm_d.get_ptr(0, startEle, 0);
+    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from common solution at flux points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
-        oppD_fpts_d.data() + dim * (oppD_fpts_d.ldim() * nFpts), oppD_fpts_d.ldim(),
-        Ucomm_d.data(), Ucomm_d.ldim(), 1.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+        A, oppD_fpts_d.ldim(), B, Ucomm_d.ldim(), 1.0, C, dU_spts_d.ldim());
 
     check_error();
   }
@@ -978,9 +988,9 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int var = 0; var < nVars; var++)
     {
-      auto A = oppD0_d.data() + nSpts * nSpts * dim;
-      auto B = U_spts_d.data() + nSpts * (startEle + nEles * var);
-      auto C = dUr_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
+      auto *A = oppD0_d.get_ptr(0, 0, dim);
+      auto *B = U_spts_d.get_ptr(0, startEle, var);
+      auto *C = dUr_spts_d.get_ptr(0, startEle, var, dim);
 
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0, A, oppD0_d.ldim(), B,
           U_spts_d.ldim(), 0.0, C, dUr_spts_d.ldim());
@@ -1039,9 +1049,9 @@ void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned 
 
     for (unsigned int var = 0; var < nVars; var++)
     {
-      auto *A = oppD_d.data() + dim * (oppD_d.ldim() * nSpts);
-      auto *B = F_spts_d.data() + startEle * F_spts_d.ldim() + var * (F_spts_d.ldim() * nEles) + dim * (F_spts_d.ldim() * nEles * nVars);
-      auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+      auto *A = oppD_d.get_ptr(0, 0, dim);
+      auto *B = F_spts_d.get_ptr(0, startEle, var, dim);
+      auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
@@ -1052,9 +1062,10 @@ void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned 
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int var = 0; var < nVars; var++)
   {
-    auto *A = oppDiv_fpts_d.data();
-    auto *B = Fcomm_d.data() + startEle * Fcomm_d.ldim() + var * (Fcomm_d.ldim() * nEles);
-    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
+    auto *B = Fcomm_d.get_ptr(0, startEle, var);
+    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
+
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
         A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim());
@@ -1102,9 +1113,9 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
     {
       for (unsigned int var = 0; var < nVars; var++)
       {
-        auto *A = oppD0_d.data() + (nSpts * nSpts) * dim2;
-        auto *B = F_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim1));
-        auto *C = dF_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * (dim1 + nDims * dim2)));
+        auto *A = oppD0_d.get_ptr(0, 0, dim2);
+        auto *B = F_spts_d.get_ptr(0, startEle, var, dim1);
+        auto *C = dF_spts_d.get_ptr(0, startEle, var, dim1, dim2);
 
         /* Compute contribution to derivative from solution at solution points */
         cublasDGEMM_wrapper(m, n, k, 1.0, A, oppD0_d.ldim(), B, F_spts_d.ldim(),
@@ -1219,9 +1230,9 @@ void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsi
 
     for (unsigned int var = 0; var < nVars; var++)
     {
-      auto *A = oppD_d.data() + dim * (oppD_d.ldim() * nSpts);
-      auto *B = F_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
-      auto *C = divF_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * stage));
+      auto *A = oppD_d.get_ptr(0, 0, dim);
+      auto *B = F_spts_d.get_ptr(0, startEle, var, dim);
+      auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
@@ -1256,9 +1267,9 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int var = 0; var < nVars; var++)
   {
-    auto *A = oppDiv_fpts_d.data();
-    auto *B = Fcomm_d.data() + startEle * Fcomm_d.ldim() + var * (Fcomm_d.ldim() * nEles);
-    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
+    auto *B = Fcomm_d.get_ptr(0, startEle, var);
+    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
         A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
@@ -1293,9 +1304,9 @@ void Elements::correct_divF_spts(unsigned int stage, unsigned int startEle, unsi
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int var = 0; var < nVars; var++)
   {
-    auto *A = oppDiv_fpts_d.data();
-    auto *B = dFn_fpts_d.data() + startEle * dFn_fpts_d.ldim() + var * (dFn_fpts_d.ldim() * nEles);
-    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+    auto *A = oppDiv_fpts_d.get_ptr(0, 0); // Identical to FR-DG correction operator
+    auto *B = dFn_fpts_d.get_ptr(0, startEle, var);
+    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
         A, oppDiv_fpts_d.ldim(), B, dFn_fpts_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
