@@ -103,6 +103,8 @@ class Faces
 
     _mpi_comm myComm;
 #ifdef _MPI
+    mdview<double> U_mpi, dU_mpi;
+
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
     std::map<unsigned int, mdvector<double>> U_sbuffs, U_rbuffs;
 

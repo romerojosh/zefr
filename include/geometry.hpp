@@ -56,6 +56,7 @@ struct GeoStruct
     unsigned int nBnds = 0;
     unsigned int nDims, nNodes, nFaces, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
     unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
+    unsigned int nGfpts_mpi = 0;
     bool per_bnd_flag = false;
 
     /* Connectivity Data */
@@ -98,7 +99,6 @@ struct GeoStruct
 
     _mpi_comm myComm;
 #ifdef _MPI
-    unsigned int nGfpts_mpi;
     std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
     std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
     std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;

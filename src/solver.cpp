@@ -695,9 +695,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     eles->poly_squeeze();
   }
 
-  /* Copy flux point data from element local to face local storage */
-  U_to_faces(startEle, endEle);
-
   /* For coloring, modify range to sweep through current color */
   if (color && geo.nColors > 1)
   {
@@ -763,10 +760,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
-    /* Copy solution data at flux points from face local to element local
-     * storage */
-    U_from_faces(startEle, endEle);
-
     /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_fpts(startEle, endEle);
 
@@ -780,9 +773,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Extrapolate solution gradient to flux points */
     eles->extrapolate_dU(startEle, endEle);
-
-    /* Copy gradient data from element local to face local storage */
-    dU_to_faces(0, eles->nEles);
 
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
@@ -825,9 +815,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
   }
-
-  /* Copy common flux data from face local storage to element local storage */
-  F_from_faces(startEle, endEle);
 
   if (input->motion) // and input->gridID == 0)
   {
@@ -1394,6 +1381,7 @@ void FRSolver::initialize_U()
 void FRSolver::setup_views()
 {
   /* Setup face view of element solution data struture */
+  // TODO: Might not want to allocate all these at once. Turn this into a function maybe?
   mdvector<double*> U_ptr_map({geo.nGfpts, eles->nVars, 2});
   mdvector<double*> Fcomm_ptr_map({geo.nGfpts, eles->nVars, 2});
   mdvector<double*> Ucomm_ptr_map;
@@ -1456,15 +1444,16 @@ void FRSolver::setup_views()
     }
   }
 
-  /* Set pointers for boundary faces */
+  /* Set pointers for remaining faces (includes boundary and MPI faces) */
   unsigned int i = 0;
-  for (unsigned int gfpt = geo.nGfpts_int; gfpt < (geo.nGfpts_int + geo.nGfpts_bnd); gfpt++)
+  for (unsigned int gfpt = geo.nGfpts_int; gfpt < geo.nGfpts; gfpt++)
   {
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       U_ptr_map(gfpt, n, 1) = &faces->U_bnd(i, n);
       Fcomm_ptr_map(gfpt, n, 1) = &faces->Fcomm_bnd(i, n);
       if (input->viscous) Ucomm_ptr_map(gfpt, n, 1) = &faces->Ucomm_bnd(i, n);
+
 #ifdef _GPU
       U_ptr_map_d(gfpt, n, 1) = faces->U_bnd_d.get_ptr(i, n);
       Fcomm_ptr_map_d(gfpt, n, 1) = faces->Fcomm_bnd_d.get_ptr(i, n);
@@ -1486,6 +1475,7 @@ void FRSolver::setup_views()
     i++;
   }
 
+  /* Create views of element data for faces */
   faces->U.assign(U_ptr_map);
   faces->Fcomm.assign(Fcomm_ptr_map);
   if (input->viscous)
@@ -1493,6 +1483,7 @@ void FRSolver::setup_views()
     faces->Ucomm.assign(Ucomm_ptr_map);
     faces->dU.assign(dU_ptr_map);
   }
+
 #ifdef _GPU
   faces->U_d.assign(U_ptr_map_d);
   faces->Fcomm_d.assign(Fcomm_ptr_map_d);
@@ -1501,153 +1492,6 @@ void FRSolver::setup_views()
     faces->Ucomm_d.assign(Ucomm_ptr_map_d);
     faces->dU_d.assign(dU_ptr_map_d);
   }
-#endif
-}
-
-void FRSolver::U_to_faces(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-//#pragma omp parallel for collapse(2)
-//  for (unsigned int n = 0; n < eles->nVars; n++)
-//  {
-//    for (unsigned int ele = startEle; ele < endEle; ele++)
-//    {
-//      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-//      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-//      {
-//        int gfpt = geo.fpt2gfpt(fpt,ele);
-//        /* Check if flux point is on ghost edge */
-//        if (gfpt == -1)
-//        {
-//          if (input->viscous) // if viscous, put extrapolated solution into Ucomm
-//            eles->Ucomm(fpt, ele, n) = eles->U_fpts(fpt, ele, n);
-//          continue;
-//        }
-//        int slot = geo.fpt2gfpt_slot(fpt,ele);
-//
-//        faces->U(gfpt, n, slot) = eles->U_fpts(fpt, ele, n);
-//
-//        //std::cout << faces->Uv(gfpt, n, slot) << " " << faces->U(gfpt, n, slot) << std::endl;
-//      }
-//    }
-//  }
-#endif
-
-#ifdef _GPU
-//  U_to_faces_wrapper(eles->U_fpts_d, faces->U_d, eles->Ucomm_d, geo.fpt2gfpt_d,
-//      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, eles->nDims,
-//      input->equation, input->viscous, startEle, endEle, input->overset,
-//      geo.iblank_cell_d.data());
-
-  event_record(0, 0);
-
-  check_error();
-#endif
-}
-
-void FRSolver::U_from_faces(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-//#pragma omp parallel for collapse(2)
-//  for (unsigned int n = 0; n < eles->nVars; n++)
-//  {
-//    for (unsigned int ele = startEle; ele < endEle; ele++)
-//    {
-//      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-//      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-//      {
-//        int gfpt = geo.fpt2gfpt(fpt,ele);
-//        /* Check if flux point is on ghost edge */
-//        if (gfpt == -1)
-//          continue;
-//        int slot = geo.fpt2gfpt_slot(fpt,ele);
-//
-//        eles->Ucomm(fpt, ele, n) = faces->Ucomm(gfpt, n, slot);
-//      }
-//    }
-//  }
-#endif
-
-#ifdef _GPU
-//  U_from_faces_wrapper(faces->Ucomm_d, eles->Ucomm_d, geo.fpt2gfpt_d,
-//      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts,
-//      eles->nDims, input->equation, startEle, endEle, input->overset,
-//      geo.iblank_cell_d.data());
-//
-//  check_error();
-#endif
-
-}
-
-void FRSolver::dU_to_faces(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-//#pragma omp parallel for collapse(3)
-//  for (unsigned int dim = 0; dim < eles->nDims; dim++) 
-//  {
-//    for (unsigned int n = 0; n < eles->nVars; n++) 
-//    {
-//      for (unsigned int ele = startEle; ele < endEle; ele++)
-//      {
-//        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-//        for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-//        {
-//          int gfpt = geo.fpt2gfpt(fpt,ele);
-//          /* Check if flux point is on ghost edge */
-//          if (gfpt == -1)
-//            continue;
-//          int slot = geo.fpt2gfpt_slot(fpt,ele);
-//
-//          faces->dU(gfpt, n, dim, slot) = eles->dU_fpts(fpt, ele, n, dim);
-//        }
-//      }
-//    }
-//  }
-#endif
-
-#ifdef _GPU
-//  dU_to_faces_wrapper(eles->dU_fpts_d, faces->dU_d, geo.fpt2gfpt_d, geo.fpt2gfpt_slot_d, 
-//      eles->nVars, eles->nEles, eles->nFpts, eles->nDims, input->equation, 
-//      input->overset, geo.iblank_cell_d.data());
-
-  event_record(0, 0);
-
-  check_error();
-#endif
-}
-
-void FRSolver::F_from_faces(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-//#pragma omp parallel for collapse(2)
-//  for (unsigned int n = 0; n < eles->nVars; n++) 
-//  {
-//    for (unsigned int ele = startEle; ele < endEle; ele++)
-//    {
-//      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-//      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-//      {
-//        int gfpt = geo.fpt2gfpt(fpt,ele);
-//        /* Check if flux point is on ghost edge */
-//        if (gfpt == -1)
-//          continue;
-//        int slot = geo.fpt2gfpt_slot(fpt,ele);
-//
-//        eles->Fcomm(fpt, ele, n) = faces->Fcomm(gfpt, n, slot);
-//
-//      }
-//    }
-//  }
-#endif
-
-#ifdef _GPU
-//  /* Can reuse kernel here */
-//  U_from_faces_wrapper(faces->Fcomm_d, eles->Fcomm_d, geo.fpt2gfpt_d, 
-//      geo.fpt2gfpt_slot_d, eles->nVars, eles->nEles, eles->nFpts, 
-//      eles->nDims, input->equation, startEle, endEle, input->overset, 
-//      geo.iblank_cell_d.data());
-//
-//  check_error();
 #endif
 }
 

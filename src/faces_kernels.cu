@@ -1840,7 +1840,7 @@ __global__
 void rusanov_flux(mdview_gpu<double> U,
     mdview_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
-    mdvector_gpu<double> dA, mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
+    mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
     unsigned int endFpt, bool motion = false, bool overset = false, int* iblank = NULL)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -1967,11 +1967,12 @@ void rusanov_flux(mdview_gpu<double> U,
 
 
   /* Compute common normal flux */
+  double dA = dA_in(fpt);
   if (LDG_bias(fpt) == 2) /* Centered */
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = 0.5 * (FnR[n] + FnL[n])* dA(fpt);
+      double F = 0.5 * (FnR[n] + FnL[n])* dA;
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
@@ -1980,7 +1981,7 @@ void rusanov_flux(mdview_gpu<double> U,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = FnR[n]* dA(fpt);
+      double F = FnR[n]* dA;
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
@@ -1989,7 +1990,7 @@ void rusanov_flux(mdview_gpu<double> U,
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0 - rus_k) * (UR[n]-UL[n])) * dA(fpt);
+      double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0 - rus_k) * (UR[n]-UL[n])) * dA;
       Fcomm(fpt, n, 0) = F;
       Fcomm(fpt, n, 1) = -F;
     }
@@ -2045,7 +2046,7 @@ template <unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fcomm, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> diffCo_gfpts,
-    mdvector_gpu<int> LDG_bias, mdvector_gpu<double> dA, double AdvDiff_D, double gamma, double mu, double prandtl,
+    mdvector_gpu<int> LDG_bias, mdvector_gpu<double> dA_in, double AdvDiff_D, double gamma, double mu, double prandtl,
     double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL)
 {
@@ -2127,6 +2128,7 @@ void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fc
 
 
   /* Compute common normal viscous flux and accumulate */
+  double dA = dA_in(fpt);
   /* If interior, use central */
   if (LDG_bias(fpt) == 0)
   {
@@ -2155,7 +2157,7 @@ void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fc
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      double F = Fcomm_temp[n][dim] * norm[dim] * dA(fpt);
+      double F = Fcomm_temp[n][dim] * norm[dim] * dA;
       Fcomm(fpt, n, 0) += F;
       Fcomm(fpt, n, 1) -= F;
     }

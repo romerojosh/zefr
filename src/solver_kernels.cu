@@ -332,172 +332,6 @@ void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, co
 
 template <unsigned int nVars>
 __global__
-void U_to_faces(mdvector_gpu<double> U_fpts, mdvector_gpu<double> U_gfpts, mdvector_gpu<double> Ucomm, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts, bool viscous, unsigned int startEle, unsigned int endEle,
-    bool overset = false, int* iblank = NULL)
-{  
-  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts + startEle;
-
-  if (fpt >= nFpts || ele >= endEle)
-    return;
-
-  if (overset)
-    if (iblank[ele] != 1)
-      return;
-
-  int gfpt = fpt2gfpt(fpt,ele);
-  /* Check if flux point is on ghost edge */
-  if (gfpt == -1)
-  {
-    if (viscous) // if viscous, put extrapolated solution into Ucomm
-    {
-      for (unsigned int var = 0; var < nVars; var++)
-        Ucomm(fpt, ele, var) = U_fpts(fpt, ele, var);
-    }
-    return;
-  }
-
-  int slot = fpt2gfpt_slot(fpt,ele);
-
-  for (unsigned int var = 0; var < nVars; var++)
-    U_gfpts(gfpt, var, slot) = U_fpts(fpt, ele, var);
-}
-
-void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
-    mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 
-    unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation, 
-    bool viscous, unsigned int startEle, unsigned int endEle, bool overset, int* iblank)
-{
-  unsigned int threads= 192;
-  unsigned int blocks = ((nFpts * (endEle - startEle)) + threads - 1)/ threads;
-
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    U_to_faces<1><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, 
-      nEles, nFpts, viscous, startEle, endEle, overset, iblank);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      U_to_faces<4><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, 
-        nEles, nFpts, viscous, startEle, endEle);
-    else if (nDims == 3)
-      U_to_faces<5><<<blocks, threads>>>(U_fpts, U_gfpts, Ucomm, fpt2gfpt, fpt2gfpt_slot, 
-        nEles, nFpts, viscous, startEle, endEle, overset, iblank);
-  }
-}
-
-template <unsigned int nVars>
-__global__
-void U_from_faces(mdvector_gpu<double> Ucomm_gfpts, mdvector_gpu<double> Ucomm_fpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts, unsigned int startEle, unsigned int endEle,
-    bool overset = false, int* iblank = NULL)
-{
-  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts + startEle;
-
-  if (fpt >= nFpts || ele >= endEle)
-    return;
-
-  if (overset)
-    if (iblank[ele] != 1)
-      return;
-
-  int gfpt = fpt2gfpt(fpt,ele);
-
-  /* Check if flux point is on ghost edge */
-  if (gfpt == -1)
-    return;
-
-  int slot = fpt2gfpt_slot(fpt,ele);
-
-  for (unsigned int var = 0; var < nVars; var++)
-    Ucomm_fpts(fpt, ele, var) = Ucomm_gfpts(gfpt, var, slot);
-}
-
-void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double> &Ucomm_fpts, 
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
-    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation,
-    unsigned int startEle, unsigned int endEle, bool overset, int* iblank)
-{
-  unsigned int threads= 192;
-  unsigned int blocks = ((nFpts * (endEle - startEle)) + threads - 1)/ threads;
-
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    U_from_faces<1><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, startEle, endEle, overset, iblank);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      U_from_faces<4><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, startEle, endEle);
-    else
-      U_from_faces<5><<<blocks, threads>>>(Ucomm_gfpts, Ucomm_fpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, startEle, endEle, overset, iblank);
-  }
-
-}
-
-template <unsigned int nVars, unsigned int nDims>
-__global__
-void dU_to_faces(mdvector_gpu<double> dU_fpts, mdvector_gpu<double> dU_gfpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, unsigned int nEles, unsigned int nFpts, 
-    bool overset = false, int* iblank = NULL)
-{
-  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
-
-  if (fpt >= nFpts || ele >= nEles)
-    return;
-
-  if (overset)
-    if (iblank[ele] != 1)
-      return;
-
-  int gfpt = fpt2gfpt(fpt,ele);
-
-  /* Check if flux point is on ghost edge */
-  if (gfpt == -1)
-    return;
-
-  int slot = fpt2gfpt_slot(fpt,ele);
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      dU_gfpts(gfpt, var, dim, slot) = dU_fpts(fpt, ele, var, dim);
-    }
-  }
-
-}
-
-void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU_gfpts, 
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
-    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation,
-    bool overset, int* iblank)
-{
-  unsigned int threads= 192;
-  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
-  
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    if (nDims == 2)
-      dU_to_faces<1, 2><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
-    else
-      dU_to_faces<1, 3><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, overset, iblank);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      dU_to_faces<4, 2><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts);
-    else
-      dU_to_faces<5, 3><<<blocks, threads>>>(dU_fpts, dU_gfpts, fpt2gfpt, fpt2gfpt_slot, nEles, nFpts, overset, iblank);
-  }
-}
-
-template <unsigned int nVars>
-__global__
 void dFcdU_from_faces(mdvector_gpu<double> dFcdU_gfpts, mdvector_gpu<double> dFcdU_fpts, mdvector_gpu<int> fpt2gfpt, 
     mdvector_gpu<int> fpt2gfpt_slot, mdvector_gpu<unsigned int> gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     unsigned int nEles, unsigned int nFpts)
@@ -1011,7 +845,7 @@ void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &delta
 #ifdef _MPI
 __global__
 void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts)
+    mdview_gpu<double> U, unsigned int nVars, unsigned int nFpts)
 {
   const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
@@ -1023,7 +857,7 @@ void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts,
 }
 
 void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &U, unsigned int nVars, int stream)
+    mdview_gpu<double> &U, unsigned int nVars, int stream)
 {
   unsigned int threads = 192;
   unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
@@ -1036,7 +870,7 @@ void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &
 
 __global__
 void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdvector_gpu<double> U, unsigned int nVars, unsigned int nFpts, 
+    mdview_gpu<double> U, unsigned int nVars, unsigned int nFpts, 
     bool overset = false, int* iblank = NULL)
 {
   const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
@@ -1055,7 +889,7 @@ void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts,
 }
 
 void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &U, unsigned int nVars, int stream, bool overset, int* iblank)
+    mdview_gpu<double> &U, unsigned int nVars, int stream, bool overset, int* iblank)
 {
   unsigned int threads = 192;
   unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
@@ -1070,7 +904,7 @@ void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int>
 template<unsigned int nDims>
 __global__
 void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
+    mdview_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
 {
   const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
@@ -1085,7 +919,7 @@ void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts,
 }
 
 void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream)
+    mdview_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream)
 {
   dim3 threads(32,4);
   dim3 blocks((fpts.size() + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
@@ -1109,7 +943,7 @@ void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> 
 template<unsigned int nDims>
 __global__
 void unpack_dU(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdvector_gpu<double> dU, unsigned int nVars, unsigned int nFpts,
+    mdview_gpu<double> dU, unsigned int nVars, unsigned int nFpts,
     bool overset = false, int* iblank = NULL)
 {
   const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
@@ -1129,7 +963,7 @@ void unpack_dU(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts,
 }
 
 void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream, bool overset,
+    mdview_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream, bool overset,
     int* iblank)
 {
   dim3 threads(32,4);

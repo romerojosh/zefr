@@ -99,12 +99,6 @@ class FRSolver
     void solver_data_to_device();
 #endif
 
-    /* Routines to communicate data between faces and elements */
-    void U_to_faces(unsigned int startEle, unsigned int endEle);
-    void U_from_faces(unsigned int startEle, unsigned int endEle);
-    void dU_to_faces(unsigned int startEle, unsigned int endEle);
-    void F_from_faces(unsigned int startEle, unsigned int endEle);
-
     void compute_element_dt();
 
 #ifdef _GPU

@@ -665,6 +665,8 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
         A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim());
   }
 
+  event_record(0, 0); // record event for MPI comms
+
   check_error();
 #endif
 
@@ -701,6 +703,7 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
         (dU_fpts_d.ldim() * nVars * nEles), dU_fpts_d.ldim());
   }
 
+  event_record(0, 0); // record event for MPI comms
   check_error();
 #endif
 }

@@ -47,18 +47,14 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   this->nDims = nDims;
 
   /* Allocate memory for solution structures */
-  //U.assign({nFpts, nVars, 2});
-  //Fcomm.assign({nFpts, nVars, 2});
-  U_bnd.assign({geo->nGfpts_bnd, nVars});
-  Fcomm_bnd.assign({geo->nGfpts_bnd, nVars});
+  U_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars});
+  Fcomm_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars});
 
   /* If viscous, allocate arrays used for LDG flux */
   if(input->viscous)
   {
-    //dU.assign({nFpts, nVars, nDims, 2});
-    //Ucomm.assign({nFpts, nVars, 2});
-    dU_bnd.assign({geo->nGfpts_bnd, nVars, nDims});
-    Ucomm_bnd.assign({geo->nGfpts_bnd, nVars});
+    dU_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars, nDims});
+    Ucomm_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars});
   }
 
   LDG_bias.assign({nFpts}, 0);
@@ -3134,50 +3130,40 @@ void Faces::transform_dFcdU()
 void Faces::send_U_data()
 {
 #ifdef _CPU
-  /* This is kinda hacky, but I can't see any better way to get around the MPI
-   * datatype usage besides copying ALL the MPI data into a temp array */
-  if (input->overset)
-  {
-    tmpOversetU.assign({nVars,0,1,1});
-    int nPts = 0;
-    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
-    {
-      int ff = geo->fpt2face[fpt];
-      if (geo->iblank_face[ff] == FRINGE)
-      {
-        tmpOversetU.add_dim_1(nPts,0);
-        for (int k = 0; k < nVars; k++)
-          tmpOversetU(k, nPts) = U(fpt, k, 1);
-        nPts++;
-      }
-    }
-  }
-
-  /* Stage all the non-blocking receives */
-  /* ---- Using derived types ---- */
-  nrecvs = 0;
-  for (const auto &entry : geo->mpi_types)
+  /* Stage nonblocking receives */
+  unsigned int ridx = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
-    auto TYPE = entry.second;
+    const auto &fpts = entry.second;
 
-    MPI_Irecv(&U(0, 0, 1), 1, TYPE, recvRank, 0, myComm, &rreqs[nrecvs]);
-    nrecvs++;
+    MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+    ridx++;
   }
 
-  nsends = 0;
-  for (const auto &entry : geo->mpi_types)
+  unsigned int sidx = 0;
+  for (const auto &entry : geo->fpt_buffer_map)
   {
     int sendRank = entry.first;
-    auto TYPE = entry.second;
+    const auto &fpts = entry.second;
+    
+    /* Pack buffer of solution data at flux points in list */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+      {
+        U_sbuffs[sendRank](i, n) = U(fpts(i), n, 0);
+      }
+    }
 
-    MPI_Isend(&U(0, 0, 0), 1, TYPE, sendRank, 0, myComm, &sreqs[nsends]);
-    nsends++;
+    /* Send buffer to paired rank */
+    MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
+    sidx++;
   }
 #endif
 
 #ifdef _GPU
-  /* Wait for U_to_faces to complete in stream 0 */
+  /* Wait for extrapolate_U to complete in stream 0 */
   stream_wait_event(1, 0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
@@ -3203,6 +3189,7 @@ void Faces::recv_U_data()
 {
 #ifdef _GPU
   int ridx = 0;
+  /* Stage non-blocking receives */
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
@@ -3235,7 +3222,26 @@ void Faces::recv_U_data()
   POP_NVTX_RANGE
   input->waitTimer.stopTimer();
 
+#ifdef  _CPU
   /* Unpack buffer */
+  for (const auto &entry : geo->fpt_buffer_map)
+  {
+    int recvRank = entry.first;
+    const auto &fpts = entry.second;
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+      {
+        if (input->overset && geo->iblank_face[geo->fpt2face[fpts(i)]] != NORMAL)
+          continue;
+
+        U(fpts(i), n, 1) = U_rbuffs[recvRank](i, n);
+      }
+    }
+  }
+#endif
+
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
@@ -3258,50 +3264,13 @@ void Faces::recv_U_data()
   check_error();
 #endif
 
-#ifdef  _CPU
-  /* Copy interpolated overset data back into 'U' (overwrite junk MPI data) */
-  if (input->overset)
-  {
-    int nPts = 0;
-    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
-    {
-      int ff = geo->fpt2face[fpt];
-      if (geo->iblank_face[ff] == FRINGE)
-      {
-        for (int k = 0; k < nVars; k++)
-          U(fpt, k, 1) = tmpOversetU(k, nPts);
-        nPts++;
-      }
-    }
-  }
-#endif
 }
 
 void Faces::send_dU_data()
 {
   /* Stage all the non-blocking receives */
-  unsigned int ridx = 0;
 #ifdef _CPU
-  /* This is kinda hacky, but I can't see any better way to get around the MPI
-   * datatype usage besides copying ALL the MPI data into a temp array */
-//  if (input->overset)
-//  {
-//    tmpOversetdU.assign({nVars,nDims,0});
-//    int nPts = 0;
-//    for (unsigned int fpt = geo->nGfpts_int + geo->nGfpts_bnd; fpt < geo->nGfpts; fpt++)
-//    {
-//      int ff = geo->fpt2face[fpt];
-//      if (geo->iblank_face[ff] == FRINGE)
-//      {
-//        tmpOversetdU.add_dim_1(nPts,0);
-//        for (int dim = 0; dim < nDims; dim++)
-//          for (int k = 0; k < nVars; k++)
-//            tmpOversetdU(k, dim, nPts) = dU(fpt, k, dim, 1);
-//        nPts++;
-//      }
-//    }
-//  }
-
+  unsigned int ridx = 0;
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
@@ -3336,7 +3305,7 @@ void Faces::send_dU_data()
 #endif
 
 #ifdef _GPU
-  /* Wait for dU_to_faces to complete in stream 0 */
+  /* Wait for extrapolate_dU to complete in stream 0 */
   stream_wait_event(1, 0);
 
   for (auto &entry : geo->fpt_buffer_map_d)
