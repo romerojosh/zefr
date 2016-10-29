@@ -33,6 +33,7 @@ backsweep 0
 Jfreeze_freq 100
 nColors 2
 n_LHS_blocks 4
+write_LHS 0
 
 restart 0
 restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
