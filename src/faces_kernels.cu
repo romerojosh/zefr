@@ -288,10 +288,10 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, double rho_fs, 
-    mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
-    double P_tot_fs, double T_wall, mdvector_gpu<double> V_wall, mdvector_gpu<double> Vg,
-    mdvector_gpu<double> norm_fs, mdvector_gpu<double> norm,
-    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list,
+    const mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
+    double P_tot_fs, double T_wall, const mdvector_gpu<double> V_wall, mdvector_gpu<double> Vg,
+    const mdvector_gpu<double> norm_fs, const mdvector_gpu<double> norm,
+    const mdvector_gpu<unsigned int> gfpt2bnd, const mdvector_gpu<unsigned int> per_fpt_list,
     mdvector_gpu<int> LDG_bias, bool motion = false)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
@@ -868,9 +868,9 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int n
 
 template<unsigned int nVars, unsigned int nDims>
 __global__
-void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<double> norm_gfpt,
+void apply_bcs_dU(mdview_gpu<double> dU, const mdview_gpu<double> U, const mdvector_gpu<double> norm_gfpt,
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
+    const mdvector_gpu<unsigned int> gfpt2bnd, const mdvector_gpu<unsigned int> per_fpt_list)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -1837,11 +1837,11 @@ void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUcon
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void rusanov_flux(mdview_gpu<double> U,
-    mdview_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
-    mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
-    mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
-    unsigned int endFpt, bool motion = false, bool overset = false, int* iblank = NULL)
+void rusanov_flux(const mdview_gpu<double> U,
+    mdview_gpu<double> Fcomm, mdvector_gpu<double> P, const mdvector_gpu<double> AdvDiff_A, 
+    const mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, const mdvector_gpu<int> LDG_bias,
+    const mdvector_gpu<double> dA_in, const mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
+    unsigned int endFpt, bool motion = false, bool overset = false, const int* iblank = NULL)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -2044,11 +2044,11 @@ void rusanov_flux_wrapper(mdview_gpu<double> &U,
 
 template <unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fcomm, 
-    mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> diffCo_gfpts,
-    mdvector_gpu<int> LDG_bias, mdvector_gpu<double> dA_in, double AdvDiff_D, double gamma, double mu, double prandtl,
+void LDG_flux(const mdview_gpu<double> U, const mdview_gpu<double> dU, mdview_gpu<double> Fcomm, 
+    const mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> diffCo_gfpts,
+    mdvector_gpu<int> LDG_bias, const mdvector_gpu<double> dA_in, double AdvDiff_D, double gamma, double mu, double prandtl,
     double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt,
-    bool overset = false, int* iblank = NULL)
+    bool overset = false, const int* iblank = NULL)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -2207,10 +2207,10 @@ void LDG_flux_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
 
 template <unsigned int nDims, unsigned int nVars>
 __global__
-void compute_common_U_LDG(mdview_gpu<double> U, mdview_gpu<double> Ucomm, 
-    mdvector_gpu<double> norm, double beta, unsigned int nFpts,
-    mdvector_gpu<int> LDG_bias, unsigned int startFpt, unsigned int endFpt,
-    bool overset = false, int* iblank = NULL)
+void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm, 
+    const mdvector_gpu<double> norm, double beta, unsigned int nFpts,
+    const mdvector_gpu<int> LDG_bias, unsigned int startFpt, unsigned int endFpt,
+    bool overset = false, const int* iblank = NULL)
 {
     const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 

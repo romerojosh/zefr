@@ -120,11 +120,11 @@ void adjoint(double *mat, double *adj, int M)
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void compute_F(mdvector_gpu<double> F_spts, 
-    mdvector_gpu<double> U_spts, mdvector_gpu<double> dU_spts, mdvector_gpu<double> inv_jaco_spts,
+    const mdvector_gpu<double> U_spts, const mdvector_gpu<double> dU_spts, const mdvector_gpu<double> inv_jaco_spts,
     unsigned int nSpts, unsigned int nEles, 
-    mdvector_gpu<double> AdvDiff_A, double AdvDiff_D, double gamma,
+    const mdvector_gpu<double> AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
-    unsigned int startEle, unsigned int endEle, bool overset = false, int* iblank = NULL,
+    unsigned int startEle, unsigned int endEle, bool overset = false, const int* iblank = NULL,
     bool motion = false)
 {
 
@@ -718,7 +718,7 @@ void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
 template <unsigned int nVars>
 __global__
 void transform_dU_quad(mdvector_gpu<double> dU_spts, 
-    mdvector_gpu<double> jaco_spts, mdvector_gpu<double> jaco_det_spts,
+    const mdvector_gpu<double> jaco_spts, const mdvector_gpu<double> jaco_det_spts,
     unsigned int nSpts, unsigned int nEles)
 {
   const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
@@ -773,7 +773,7 @@ void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts,
 template <unsigned int nVars>
 __global__
 void transform_dU_hexa(mdvector_gpu<double> dU_spts, 
-    mdvector_gpu<double> inv_jaco_spts, mdvector_gpu<double> jaco_det_spts,
+    const mdvector_gpu<double> inv_jaco_spts, const mdvector_gpu<double> jaco_det_spts,
     unsigned int nSpts, unsigned int nEles)
 {
   const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;

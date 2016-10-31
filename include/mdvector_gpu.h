@@ -35,6 +35,24 @@
 #include "cuda_runtime.h"
 #include "solver_kernels.h"
 
+/* Texture (ldg) load template function */
+template<typename T>
+__device__ __forceinline__ T ldg(const T* ptr)
+{
+// TODO: Using ldg instruction slows down compute_F kernel quite a bit. Figure out why before re-enabling.
+//#if __CUDA_ARCH__ >= 350
+//  return __ldg(ptr);
+//#else
+  return *ptr;
+//#endif
+}
+
+template<>
+__device__ __forceinline__ double* ldg<double*>(double* const*  ptr)
+{
+  return *ptr;
+}
+
 template<typename T>
 class mdvector;
 
@@ -78,15 +96,27 @@ class mdvector_gpu
     __device__ __forceinline__
     T& operator()(unsigned int idx0);
     __device__ __forceinline__
+    T operator()(unsigned int idx0) const;
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1);
+    __device__ __forceinline__
+    T operator()(unsigned int idx0, unsigned int idx1) const;
     __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2);
     __device__ __forceinline__
+    T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2) const;
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3);
+    __device__ __forceinline__
+    T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3) const;
     __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4);
     __device__ __forceinline__
+    T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4) const;
+    __device__ __forceinline__
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5);
+    __device__ __forceinline__
+    T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5) const;
 
     __host__ __forceinline__
     T* get_ptr(unsigned int idx0);
@@ -211,24 +241,42 @@ template <typename T>
 __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0) 
 {
-  //assert(ndims == 1);
   return values[idx0];
+}
+
+template <typename T>
+__device__ __forceinline__
+T mdvector_gpu<T>::operator() (unsigned int idx0) const
+{
+  return ldg(values + idx0);
 }
 
 template <typename T>
 __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1) 
 {
-  //assert(ndims == 2);
   return values[idx1 * strides[0] + idx0];
+}
+
+template <typename T>
+__device__ __forceinline__
+T mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1) const
+{
+  return ldg(values + idx1 * strides[0] + idx0);
 }
 
 template <typename T>
 __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
 {
-  //assert(ndims == 3);
   return values[(idx2 * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template <typename T>
+__device__ __forceinline__
+T mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
+{
+  return ldg(values + (idx2 * strides[1] + idx1) * strides[0] + idx0);
 }
 
 template <typename T>
@@ -236,8 +284,15 @@ __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3) 
 {
-  //assert(ndims == 4);
   return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template <typename T>
+__device__ __forceinline__
+T mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3) const
+{
+  return ldg(values + ((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0);
 }
 
 template <typename T>
@@ -245,8 +300,15 @@ __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3, unsigned int idx4) 
 {
-  //assert(ndims == 5);
   return values[(((idx4 * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template <typename T>
+__device__ __forceinline__
+T mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3, unsigned int idx4) const
+{
+  return ldg(values + (((idx4 * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0);
 }
 
 template <typename T>
@@ -254,8 +316,15 @@ __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3, unsigned int idx4, unsigned int idx5) 
 {
-  //assert(ndims == 6);
   return values[((((idx5 * strides[4] + idx4) * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+}
+
+template <typename T>
+__device__ __forceinline__
+T mdvector_gpu<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+    unsigned int idx3, unsigned int idx4, unsigned int idx5) const
+{
+  return ldg(values + ((((idx5 * strides[4] + idx4) * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0);
 }
 
 template <typename T>
@@ -331,7 +400,7 @@ class mdview_gpu
     __device__ __forceinline__
     T operator() (unsigned int idx0) const
     {
-      return *(ptr_map(idx0));
+      return ldg(ptr_map(idx0));
     }
 
     __device__ __forceinline__
@@ -343,7 +412,7 @@ class mdview_gpu
     __device__ __forceinline__
     T operator() (unsigned int idx0, unsigned int idx1) const
     {
-      return *(ptr_map(idx0, idx1));
+      return ldg(ptr_map(idx0, idx1));
     }
 
     __device__ __forceinline__
@@ -355,7 +424,7 @@ class mdview_gpu
     __device__ __forceinline__
     T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
     {
-      return *(ptr_map(idx0, idx1, idx2));
+      return ldg(ptr_map(idx0, idx1, idx2));
     }
 
     __device__ __forceinline__
@@ -369,7 +438,7 @@ class mdview_gpu
     T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
         unsigned int idx3) const
     {
-      return *(ptr_map(idx0, idx1, idx2, idx3));
+      return ldg(ptr_map(idx0, idx1, idx2, idx3));
     }
 
 };

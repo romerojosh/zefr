@@ -428,10 +428,10 @@ void dFcdU_from_faces_wrapper(mdvector_gpu<double> &dFcdU_gfpts, mdvector_gpu<do
 
 template <unsigned int nVars>
 __global__
-void RK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
-    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
-    unsigned int stage, unsigned int nStages, bool last_stage, bool overset = false, int* iblank = NULL)
+void RK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini, 
+    const mdvector_gpu<double> divF, const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> dt_in, 
+    const mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
+    unsigned int stage, unsigned int nStages, bool last_stage, bool overset = false, const int* iblank = NULL)
 {
   const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
@@ -504,9 +504,9 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
 
 template <unsigned int nVars>
 __global__
-void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, 
-    mdvector_gpu<double> divF, mdvector_gpu<double> source, mdvector_gpu<double> jaco_det_spts, 
-    mdvector_gpu<double> dt_in, mdvector_gpu<double> rk_coeff, unsigned int dt_type, 
+void RK_update_source(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini, 
+    const mdvector_gpu<double> divF, const mdvector_gpu<double> source, const mdvector_gpu<double> jaco_det_spts, 
+    const mdvector_gpu<double> dt_in, const mdvector_gpu<double> rk_coeff, unsigned int dt_type, 
     unsigned int nSpts, unsigned int nEles, unsigned int stage, unsigned int nStages, 
     bool last_stage, bool overset = false, int* iblank = NULL)
 {
@@ -537,9 +537,7 @@ void RK_update_source(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
   }
   else
   {
-    double sum[nVars];
-    for (unsigned int var = 0; var < nVars; var++)
-      sum[var] = 0.;
+    double sum[nVars] = {0.0};;
 
     for (unsigned int n = 0; n < nStages; n++)
     {
@@ -585,8 +583,8 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
 template <unsigned int nVars>
 __global__
 void LSRK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
-    mdvector_gpu<double> rk_err, mdvector_gpu<double> divF,
-    mdvector_gpu<double> jaco_det_spts, double dt, double ai, double bi,
+    mdvector_gpu<double> rk_err, const mdvector_gpu<double> divF,
+    const mdvector_gpu<double> jaco_det_spts, double dt, double ai, double bi,
     double bhi, unsigned int nSpts, unsigned int nEles, unsigned int stage,
     unsigned int nStages, bool overset = false, int* iblank = NULL)
 {
@@ -743,7 +741,7 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
 
 template <unsigned int nVars>
 __global__
-void get_rk_error(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini,
+void get_rk_error(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
     mdvector_gpu<double> rk_err, uint nSpts, uint nEles, double atol,
     double rtol, bool overset = false, int* iblank = NULL)
 {
@@ -832,10 +830,10 @@ double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
 
 template <unsigned int nDims>
 __global__
-void compute_element_dt(mdvector_gpu<double> dt, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<double> diffCo_gfpts,
-    mdvector_gpu<double> dA, mdvector_gpu<int> fpt2gfpt, mdvector_gpu<double> weights_spts,
-    mdvector_gpu<double> vol, mdvector_gpu<double> h_ref, unsigned int nSpts1D, double CFL, double beta, int order, int CFL_type,
-    unsigned int nFpts, unsigned int nEles, bool overset = false, int* iblank = NULL)
+void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> waveSp_gfpts, const mdvector_gpu<double> diffCo_gfpts,
+    const mdvector_gpu<double> dA, const mdvector_gpu<int> fpt2gfpt, const mdvector_gpu<double> weights_spts,
+    const mdvector_gpu<double> vol, const mdvector_gpu<double> h_ref, unsigned int nSpts1D, double CFL, double beta, int order, int CFL_type,
+    unsigned int nFpts, unsigned int nEles, bool overset = false, const int* iblank = NULL)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -960,10 +958,10 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
 
 template<unsigned int nVars, unsigned int nDims>
 __global__
-void add_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> coord_spts, 
+void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int equation, 
     double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle,
-    bool overset = false, int* iblank = NULL)
+    bool overset = false, const int* iblank = NULL)
 {
   const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
@@ -1112,7 +1110,7 @@ void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &delta
 #ifdef _MPI
 __global__
 void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdview_gpu<double> U, unsigned int nVars, unsigned int nFpts)
+    const mdview_gpu<double> U, unsigned int nVars, unsigned int nFpts)
 {
   const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
@@ -1136,9 +1134,9 @@ void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &
 }
 
 __global__
-void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
+void unpack_U(const mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
     mdview_gpu<double> U, unsigned int nVars, unsigned int nFpts, 
-    bool overset = false, int* iblank = NULL)
+    bool overset = false, const int* iblank = NULL)
 {
   const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   const unsigned int var = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
@@ -1171,7 +1169,7 @@ void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int>
 template<unsigned int nDims>
 __global__
 void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts, 
-    mdview_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
+    const mdview_gpu<double> dU, unsigned int nVars, unsigned int nFpts)
 {
   const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
@@ -1209,9 +1207,9 @@ void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> 
 
 template<unsigned int nDims>
 __global__
-void unpack_dU(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
+void unpack_dU(const mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts, 
     mdview_gpu<double> dU, unsigned int nVars, unsigned int nFpts,
-    bool overset = false, int* iblank = NULL)
+    bool overset = false, const int* iblank = NULL)
 {
   const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
   const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;

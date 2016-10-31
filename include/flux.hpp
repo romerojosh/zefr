@@ -1,6 +1,6 @@
 template <size_t nVars, size_t nDims>
 #ifdef _GPU
-__device__
+__device__ __forceinline__
 #endif
 void compute_Fconv_AdvDiff(double U[nVars], double F[nVars][nDims], double A[nDims])
 {
@@ -10,7 +10,7 @@ void compute_Fconv_AdvDiff(double U[nVars], double F[nVars][nDims], double A[nDi
 
 template <size_t nVars, size_t nDims>
 #ifdef _GPU
-__device__
+__device__ __forceinline__
 #endif
 void compute_Fconv_Burgers(double U[nVars], double F[nVars][nDims])
 {
@@ -20,7 +20,7 @@ void compute_Fconv_Burgers(double U[nVars], double F[nVars][nDims])
 
 template <size_t nVars, size_t nDims>
 #ifdef _GPU
-__device__
+__device__ __forceinline__
 #endif
 void compute_Fconv_EulerNS(double U[nVars], double F[nVars][nDims], double &P, double gamma)
 {
@@ -74,7 +74,7 @@ void compute_Fconv_EulerNS(double U[nVars], double F[nVars][nDims], double &P, d
 
 template <size_t nVars, size_t nDims>
 #ifdef _GPU
-__device__
+__device__ __forceinline__
 #endif
 void compute_Fvisc_AdvDiff_add(double dU[nVars][nDims], double F[nVars][nDims], double D)
 {
@@ -84,7 +84,7 @@ void compute_Fvisc_AdvDiff_add(double dU[nVars][nDims], double F[nVars][nDims], 
 
 template <size_t nVars, size_t nDims>
 #ifdef _GPU
-__device__
+__device__ __forceinline__
 #endif
 void compute_Fvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], double F[nVars][nDims], 
     double gamma, double prandtl, double mu_in, double rt, double c_sth, bool fix_vis)
