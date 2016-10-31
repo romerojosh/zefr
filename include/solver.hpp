@@ -93,7 +93,7 @@ class FRSolver
     mdvector_gpu<double> U_til_d, rk_err_d;  //! Low-Storage Adaptive RK scheme
 #endif
 
-    _mpi_comm myComm;
+    _mpi_comm myComm, worldComm;
 
     void initialize_U();
     void restart(std::string restart_file, unsigned restart_iter = 0);

@@ -87,6 +87,9 @@ FRSolver::FRSolver(InputStruct *input, int order)
 void FRSolver::setup(_mpi_comm comm_in)
 {
   myComm = comm_in;
+#ifdef _MPI
+  worldComm = MPI_COMM_WORLD;
+#endif
 
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
   geo = process_mesh(input, order, input->nDims, myComm);
@@ -2053,7 +2056,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
 #ifdef _GPU
   max_err = set_adaptive_dt_wrapper(eles->U_spts_d, U_ini_d, rk_err_d, dt_d, dt(0),
       eles->nSpts, eles->nEles, eles->nVars, input->atol, input->rtol, expa, expb,
-      input->minfac, input->maxfac, input->sfact, prev_err, myComm, input->overset,
+      input->minfac, input->maxfac, input->sfact, prev_err, worldComm, input->overset,
       geo.iblank_cell_d.data());
 #endif
 

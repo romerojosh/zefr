@@ -179,8 +179,6 @@ int main(int argc, char* argv[])
         solver.write_surfaces(input.output_prefix);
       if (input.write_pyfr)
         solver.write_solution_pyfr(input.output_prefix);
-      if (input.write_LHS)
-        solver.write_LHS(input.output_prefix);
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
@@ -270,7 +268,7 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
   MPI_Get_processor_name(hostname, &len);
 //  std::cout << "Global rank " << grank << " is on processor " << hostname << std::endl;
   //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
-  cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
+  cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
 //  printf("My CUDA device for rank %d(%d) is %d / %d\n",rank,grank,grank%4,nDevices);
 
 //  cudaDeviceProp prop;
