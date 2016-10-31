@@ -2035,7 +2035,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     {
       for (uint spt = 0; spt < eles->nSpts; spt++)
       {
-        err = std::abs(rk_err(spt,ele,n)) /
+        double err = std::abs(rk_err(spt,ele,n)) /
             (input->atol + input->rtol * std::max( std::abs(eles->U_spts(spt,ele,n)), std::abs(U_ini(spt,ele,n)) ));
         max_err = std::max(max_err, err);
       }
@@ -4417,11 +4417,10 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   }
 }
 
-// TODO: Convert to HDF5 output and make more general
 void FRSolver::write_LHS(const std::string &_prefix)
 {
 #if !defined (_MPI) && !defined (_GPU)
-  if (input->dt_scheme == "MCGS")
+  if (input->dt_scheme == "MCGS" && !input->stream_mode)
   {
     if (input->rank == 0) std::cout << "Writing LHS to file..." << std::endl;
 
@@ -4435,56 +4434,18 @@ void FRSolver::write_LHS(const std::string &_prefix)
     ss << prefix << "_LHS_" << std::setw(9) << std::setfill('0');
     ss << iter << ".dat";
 
-    std::ofstream f(ss.str());
-    if (!input->stream_mode)
-    {
-      for (unsigned int ele = 0; ele < geo.nEles; ele++)
-      {
-        for (unsigned int ni = 0; ni < eles->nVars; ni++)
-        {
-          for (unsigned int i = 0; i < eles->nSpts; i++)
-          {
-            for (unsigned int nj = 0; nj < eles->nVars; nj++)
-            {
-              for (unsigned int j = 0; j < eles->nSpts; j++)
-              {
-                f << std::scientific << std::setprecision(16) << eles->LHSs[0](i, ni, j, nj, ele) << " ";
-              }
-            }
-            f << std::endl;
-          }
-        }
-        f << std::endl;
-      }
-    }
+    H5File file(ss.str(), H5F_ACC_TRUNC);
+    unsigned int N = eles->nSpts * eles->nVars;
+    hsize_t dims[3] = {geo.nEles, N, N};
+    DataSpace dspaceU(3, dims);
 
-    else
-    {
-      for (unsigned int color = 1; color <= geo.nColors; color++)
-      {
-        unsigned int startEle = geo.ele_color_range[color - 1];
-        unsigned int endEle = geo.ele_color_range[color];
-        for (unsigned int ele = startEle; ele < endEle; ele++)
-        {
-          for (unsigned int ni = 0; ni < eles->nVars; ni++)
-          {
-            for (unsigned int i = 0; i < eles->nSpts; i++)
-            {
-              for (unsigned int nj = 0; nj < eles->nVars; nj++)
-              {
-                for (unsigned int j = 0; j < eles->nSpts; j++)
-                {
-                  f << std::scientific << std::setprecision(16) << eles->LHSs[color - 1](i, ni, j, nj, ele) << " ";
-                }
-              }
-              f << std::endl;
-            }
-          }
-          f << std::endl;
-        }
-      }
-    }
-    f.close();
+    std::string name = "LHS_" + std::to_string(iter);
+    DataSet dset = file.createDataSet(name, PredType::NATIVE_DOUBLE, dspaceU);
+    dset.write(eles->LHSs[0].data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+    dspaceU.close();
+    dset.close();
+    file.close();
   }
 #endif
 }
