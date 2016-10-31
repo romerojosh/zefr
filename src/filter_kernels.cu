@@ -52,7 +52,7 @@ void normalize_data(mdvector_gpu<double> U_spts, double normalTol, unsigned int 
 void normalize_data_wrapper(mdvector_gpu<double>& U_spts, double normalTol, unsigned int nSpts,
     unsigned int nEles, unsigned int nVars)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nEles + threads - 1)/threads;
 
   normalize_data<<<blocks, threads>>>(U_spts, normalTol, nSpts, nEles, nVars);
@@ -87,7 +87,7 @@ void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
 void compute_max_sensor_wrapper(mdvector_gpu<double>& KS, mdvector_gpu<double>& sensor, 
     unsigned int order, double& max_sensor, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nEles + threads - 1)/threads;
 
   compute_max_sensor<<<blocks, threads>>>(KS, sensor, order, nSpts, nEles, nVars);
@@ -120,7 +120,7 @@ void copy_filtered_solution(mdvector_gpu<double> U_spts_filt, mdvector_gpu<doubl
 void copy_filtered_solution_wrapper(mdvector_gpu<double>& U_spts_filt, mdvector_gpu<double>& U_spts, 
     mdvector_gpu<double>& sensor, double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nEles + threads - 1)/threads;
 
   copy_filtered_solution<<<blocks, threads>>>(U_spts_filt, U_spts, sensor, threshJ, nSpts, nEles, nVars);

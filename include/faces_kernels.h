@@ -63,7 +63,7 @@ void rusanov_flux_wrapper(mdview_gpu<double> &U,
 
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,
-    unsigned int nDims, mdvector_gpu<int> &LDG_bias, unsigned int startFpt, unsigned int endFpt,
+    unsigned int nDims, unsigned int equation, mdvector_gpu<int> &LDG_bias, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL);
 
 void LDG_flux_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,

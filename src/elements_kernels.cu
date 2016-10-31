@@ -239,7 +239,7 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
     unsigned int startEle, unsigned int endEle, bool overset, int* iblank, bool motion)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/threads;
 
   if (equation == AdvDiff)
@@ -292,7 +292,7 @@ void compute_dFdUconv_spts_AdvDiff(mdvector_gpu<double> dFdU_spts,
 void compute_dFdUconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &dFdU_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, mdvector_gpu<double> &AdvDiff_A)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * nEles + threads - 1)/threads;
 
   if (nDims == 2)
@@ -326,7 +326,7 @@ void compute_dFdUconv_spts_Burgers_wrapper(mdvector_gpu<double> &dFdU_spts,
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
     unsigned int nDims)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * nEles + threads - 1)/threads;
 
   if (nDims == 2)
@@ -515,7 +515,7 @@ void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdU_spts,
     mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
     unsigned int nDims, double gamma)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * nEles + threads - 1)/threads;
 
   if (nDims == 2)
@@ -755,7 +755,7 @@ void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
     unsigned int nDims, unsigned int equation)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -822,7 +822,7 @@ void transform_dU_hexa_wrapper(mdvector_gpu<double> &dU_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, bool overset, int* iblank)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -875,7 +875,7 @@ void transform_dFdU_quad_wrapper(mdvector_gpu<double> &dFdU_spts,
     unsigned int nEles, unsigned int nVars, unsigned int nDims,
     unsigned int equation)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -939,7 +939,7 @@ void transform_dFdU_hexa_wrapper(mdvector_gpu<double> &dFdU_spts,
     unsigned int nEles, unsigned int nVars, unsigned int nDims,
     unsigned int equation)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -992,7 +992,7 @@ void transform_gradF_quad_wrapper(mdvector_gpu<double> &divF_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int stage,
     unsigned int equation, bool overset, int* iblank)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -1092,7 +1092,7 @@ void transform_gradF_hexa_wrapper(mdvector_gpu<double> &divF_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int stage,
     unsigned int equation, bool overset, int* iblank)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -1133,7 +1133,7 @@ void extrapolate_Fn_wrapper(mdvector_gpu<double> &oppE,
     mdvector_gpu<int> &fpt2slot, unsigned int nSpts, unsigned int nFpts,
     unsigned int nEles, unsigned int nDims, unsigned int nVars, bool motion)
 {
-  int threads = 192;
+  int threads = 128;
   int blocks = ((nFpts * nEles) + threads - 1)/ threads;
 
   int M = nFpts;
@@ -1230,7 +1230,7 @@ void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &weights_spts, mdvector_gpu<double> &vol, unsigned int nSpts, 
     unsigned int nEles, unsigned int nVars, unsigned int nDims, int order)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nEles + threads - 1)/ threads;
 
   compute_Uavg<<<blocks, threads>>>(U_spts, Uavg, jaco_det_spts, weights_spts, vol, nSpts, nEles, nVars, nDims, order);
@@ -1365,7 +1365,7 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
     unsigned int nFpts, unsigned int nEles, unsigned int nVars,
     unsigned int nDims)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nEles + threads - 1)/ threads;
 
   poly_squeeze<<<blocks, threads>>>(U_spts, U_fpts, Uavg, gamma, exps0, nSpts, nFpts,
@@ -1412,7 +1412,7 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
     unsigned int nFpts, unsigned int nNodes, unsigned int nEles,
     unsigned int nDims)
 {
-  int threads = 192;
+  int threads = 128;
   dim3 blocksE((nEles * nNodes + threads - 1) / threads, nDims);
 
   copy_coords_ele<<<blocksE,threads>>>(nodes, g_nodes, ele2node, nEles, nNodes);
@@ -1471,7 +1471,7 @@ void update_h_ref_wrapper(mdvector_gpu<double> &h_ref,
     mdvector_gpu<double> &coord_fpts, unsigned int nEles, unsigned int nFpts,
     unsigned int nPts1D, unsigned int nDims)
 {
-  int threads = 192;
+  int threads = 128;
   int blocks = (nEles * nFpts + threads - 1) / threads;
 
   if (nDims == 2)
@@ -1553,7 +1553,7 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
   }
 
   // Calculate inverse transform (physical -> reference) at spts, fpts
-  int threads = 192;
+  int threads = 128;
 
   int blocksS = (nSpts * nEles + threads - 1) / threads;
   int blocksF = (nFpts * nEles + threads - 1) / threads;
@@ -1622,7 +1622,7 @@ void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2slot, int nFpts,
     int nEles, int nDims)
 {
-  int threads = 192;
+  int threads = 128;
   int blocks = (nFpts * nEles + threads - 1) / threads;
 
   calc_normals<<<blocks,threads>>>(norm,dA,inv_jaco,tnorm,fpt2gfpt,fpt2slot,
@@ -1677,7 +1677,7 @@ void pack_donor_grad_wrapper(mdvector_gpu<double> &dU_spts,
     mdvector_gpu<double> &dU_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars, unsigned int nDims)
 {
-  int threads = 192;
+  int threads = 128;
   int nblock_x = (nDonors * nSpts + threads - 1) / threads;
   dim3 blocks( nblock_x, nVars*nDims);
 

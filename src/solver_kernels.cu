@@ -161,7 +161,7 @@ void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned 
 
 void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = min((size + threads - 1) /threads, 65535);
   copy_kernel<<<blocks, threads>>>(vec1, vec2, size);
 }
@@ -179,7 +179,7 @@ void add_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned i
 
 void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (size + threads - 1) /threads;
   add_kernel<<<blocks, threads>>>(vec1, vec2, size);
 }
@@ -197,7 +197,7 @@ void subtract_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsig
 
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (size + threads - 1) /threads;
   subtract_kernel<<<blocks, threads>>>(vec1, vec2, size);
 }
@@ -215,7 +215,7 @@ void fill_kernel(mdvector_gpu<double> vec, double val, unsigned int size)
 
 void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (size + threads - 1) /threads;
   fill_kernel<<<blocks, threads>>>(vec, val, size);
 }
@@ -407,7 +407,7 @@ void dFcdU_from_faces_wrapper(mdvector_gpu<double> &dFcdU_gfpts, mdvector_gpu<do
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation)
 {
-  unsigned int threads= 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -483,7 +483,7 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
     unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int stage, 
     unsigned int nStages, bool last_stage, bool overset, int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -563,7 +563,7 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
     unsigned int equation, unsigned int stage, unsigned int nStages, bool last_stage,
     bool overset, int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   if (equation == AdvDiff || equation == Burgers)
@@ -631,7 +631,7 @@ void LSRK_update_wrapper(mdvector_gpu<double> &U_spts,
     unsigned int nVars, unsigned int stage, unsigned int nStages, bool overset,
     int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   switch (nVars)
@@ -711,7 +711,7 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
     double bhi, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
     unsigned int stage, unsigned int nStages, bool overset, int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   switch (nVars)
@@ -769,7 +769,7 @@ double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
     uint nEles, uint nVars, double atol, double rtol, _mpi_comm comm_in,
     bool overset, int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
   switch (nVars)
@@ -926,7 +926,7 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
     unsigned int nFpts, unsigned int nEles, unsigned int nDims, _mpi_comm comm_in, bool overset,
     int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nEles + threads - 1) / threads;
 
   if (nDims == 2)
@@ -994,7 +994,7 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
     double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle, bool overset,
     int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
 
   if (nDims == 2)
@@ -1044,7 +1044,7 @@ void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &
     mdvector_gpu<double> &RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
     unsigned int startEle, unsigned int endEle)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
 
   compute_RHS<<<blocks, threads>>>(divF_spts, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars, startEle, endEle);
@@ -1077,7 +1077,7 @@ void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, const mdvector_
     mdvector_gpu<double> &RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
     unsigned int startEle, unsigned int endEle)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
 
   compute_RHS_source<<<blocks, threads>>>(divF_spts, source, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars, startEle, endEle);
@@ -1103,7 +1103,7 @@ void compute_U(mdvector_gpu<double> U_spts, mdvector_gpu<double> deltaU, unsigne
 void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
     unsigned int startEle, unsigned int endEle)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
 
   compute_U<<<blocks, threads>>>(U_spts, deltaU, nSpts, nEles, nVars, startEle, endEle);
@@ -1126,7 +1126,7 @@ void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts,
 void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
     mdview_gpu<double> &U, unsigned int nVars, int stream)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
 
   if (stream == -1)
@@ -1158,7 +1158,7 @@ void unpack_U(mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fpts,
 void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
     mdview_gpu<double> &U, unsigned int nVars, int stream, bool overset, int* iblank)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (fpts.size() * nVars + threads - 1) / threads;
 
   if (stream == -1)
@@ -1370,7 +1370,7 @@ void move_grid_wrapper(mdvector_gpu<double> &coords,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,
     int gridID)
 {
-  int threads = 192;
+  int threads = 128;
   int blocks = (nNodes + threads - 1) / threads;
   move_grid<<<blocks, threads>>>(coords, coords_0, Vg, params, nNodes, nDims,
       motion_type, time, gridID);

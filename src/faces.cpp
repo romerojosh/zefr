@@ -1765,9 +1765,9 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     double FnR[nVars] = {0.0};
 
     /* Get interface-normal flux components  (from L to R)*/
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
         FnL[n] += FL[n][dim] * norm(fpt, dim, 0);
         FnR[n] += FR[n][dim] * norm(fpt, dim, 0);
@@ -1863,8 +1863,8 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, input->ldg_b, nFpts, nVars, nDims, LDG_bias_d, 
-        startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
+    compute_common_U_LDG_wrapper(U_d, Ucomm_d, norm_d, input->ldg_b, nFpts, nVars, nDims, input->equation, 
+        LDG_bias_d, startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
 
@@ -1888,7 +1888,6 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
   double UR[nVars];
   double dUL[nVars][nDims];
   double dUR[nVars][nDims];
-  double Fcomm_temp[nVars][nDims];
 
 #pragma omp parallel for firstprivate(UL, UR, dUL, dUR, Fcomm_temp)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -1949,9 +1948,9 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     double FnR[nVars] = {0.0};
 
     /* Get interface-normal flux components  (from L to R)*/
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
         FnL[n] += FL[n][dim] * norm(fpt, dim, 0);
         FnR[n] += FR[n][dim] * norm(fpt, dim, 0);
@@ -1962,11 +1961,11 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     /* If interior, use central */
     if (LDG_bias(fpt) == 0)
     {
-      for (unsigned int dim = 0; dim < nDims; dim++)
+      for (unsigned int n = 0; n < nVars; n++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          Fcomm_temp[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(fpt, dim, 0)* (UL[n]
+          FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(fpt, dim, 0)* (UL[n]
               - UR[n]) + beta * norm(fpt, dim, 0)* (FnL[n] - FnR[n]);
         }
       }
@@ -1974,20 +1973,20 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     /* If Neumann boundary, use right state only */
     else
     {
-      for (unsigned int dim = 0; dim < nDims; dim++)
+      for (unsigned int n = 0; n < nVars; n++)
       {
-        for (unsigned int n = 0; n < nVars; n++)
+        for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          Fcomm_temp[n][dim] = FR[n][dim] + tau * norm(fpt, dim, 0)* (UL[n] - UR[n]);
+          FR[n][dim] += tau * norm(fpt, dim, 0)* (UL[n] - UR[n]);
         }
       }
     }
 
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        double F = Fcomm_temp[n][dim] * norm(fpt, dim, 0) * dA(fpt);
+        double F = FR[n][dim] * norm(fpt, dim, 0) * dA(fpt);
         Fcomm(fpt, n, 0) += F;
         Fcomm(fpt, n, 1) -= F;
       }

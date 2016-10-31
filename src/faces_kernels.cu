@@ -50,7 +50,7 @@ void compute_dFdUconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv,
     unsigned int nFpts, unsigned int nDims, mdvector_gpu<double> &AdvDiff_A, 
     unsigned int startFpt, unsigned int endFpt)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
   if (nDims == 2)
@@ -85,7 +85,7 @@ void compute_dFdUconv_fpts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv,
     mdview_gpu<double> &U, unsigned int nFpts, unsigned int nDims, 
     unsigned int startFpt, unsigned int endFpt)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
   if (nDims == 2)
@@ -273,7 +273,7 @@ void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv,
     mdview_gpu<double> &U, unsigned int nFpts, unsigned int nDims, double gamma,
     unsigned int startFpt, unsigned int endFpt)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
   if (nDims == 2)
@@ -831,7 +831,7 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int n
     mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation,
     bool motion)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
   if (blocks != 0)
@@ -1083,7 +1083,7 @@ void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvecto
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
     unsigned int nDims, mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
   if (blocks != 0)
@@ -1818,7 +1818,7 @@ void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUcon
     unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
   if (blocks != 0)
@@ -1956,9 +1956,9 @@ void rusanov_flux(mdview_gpu<double> U,
 
 
   /* Get interface-normal flux components  (from L to R) */
-  for (unsigned int dim = 0; dim < nDims; dim++)
+  for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
       FnL[n] += FL[n][dim] * norm[dim];
       FnR[n] += FR[n][dim] * norm[dim];
@@ -2004,7 +2004,7 @@ void rusanov_flux_wrapper(mdview_gpu<double> &U,
     unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool motion, 
     bool overset, int* iblank)
 {
-  unsigned int threads = 256;
+  unsigned int threads = 128;
   //unsigned int blocks = (nFpts + threads - 1)/threads;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
   //int threads; int minBlocks; int blocks;
@@ -2063,7 +2063,6 @@ void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fc
   double dUL[nVars][nDims]; double dUR[nVars][nDims];
   double FL[nVars][nDims] = {{0.0}}; double FR[nVars][nDims] = {{0.0}};
   double FnL[nVars] = {0.0}; double FnR[nVars] = {0.0};
-  double Fcomm_temp[nVars][nDims] = {{0.0}};
   double norm[nDims];
    
 
@@ -2117,9 +2116,9 @@ void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fc
   }
 
   /* Get interface-normal flux components  (from L to R)*/
-  for (unsigned int dim = 0; dim < nDims; dim++)
+  for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
       FnL[n] += FL[n][dim] * norm[dim];
       FnR[n] += FR[n][dim] * norm[dim];
@@ -2132,11 +2131,11 @@ void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fc
   /* If interior, use central */
   if (LDG_bias(fpt) == 0)
   {
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        Fcomm_temp[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + 
+        FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + 
           tau * norm[dim] * (UL[n] - UR[n]) + beta * norm[dim] * (FnL[n] - FnR[n]);
       }
     }
@@ -2144,23 +2143,25 @@ void LDG_flux(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> Fc
   /* If boundary, use right state only */
   else
   {
-    for (unsigned int dim = 0; dim < nDims; dim++)
+    for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        Fcomm_temp[n][dim] = FR[n][dim] + tau * norm[dim] * (UL[n] - UR[n]);
+        FR[n][dim] += tau * norm[dim] * (UL[n] - UR[n]);
       }
     }
   }
 
-  for (unsigned int dim = 0; dim < nDims; dim++)
+  for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int n = 0; n < nVars; n++)
+    double F = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      double F = Fcomm_temp[n][dim] * norm[dim] * dA;
-      Fcomm(fpt, n, 0) += F;
-      Fcomm(fpt, n, 1) -= F;
+      F += FR[n][dim] * norm[dim] * dA;
     }
+
+    Fcomm(fpt, n, 0) += F;
+    Fcomm(fpt, n, 1) -= F;
   }
 }
 
@@ -2170,7 +2171,7 @@ void LDG_flux_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
     double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation, 
     unsigned int startFpt, unsigned int endFpt, bool overset, int* iblank)
 {
-  unsigned int threads = 256;
+  unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
   if (equation == AdvDiff)
@@ -2204,18 +2205,20 @@ void LDG_flux_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
   }
 }
 
-template <unsigned int nDims>
+template <unsigned int nDims, unsigned int nVars>
 __global__
 void compute_common_U_LDG(mdview_gpu<double> U, mdview_gpu<double> Ucomm, 
-    mdvector_gpu<double> norm, double beta, unsigned int nFpts, unsigned int nVars,
+    mdvector_gpu<double> norm, double beta, unsigned int nFpts,
     mdvector_gpu<int> LDG_bias, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL)
 {
     const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-    const unsigned int var = blockDim.y * blockIdx.y + threadIdx.y;
 
-    if (fpt >= endFpt || var >= nVars)
+    if (fpt >= endFpt)
       return;
+    
+    double UL[nVars];
+    double UR[nVars];
 
     if (overset)
       if (iblank[fpt] == 0)
@@ -2233,38 +2236,58 @@ void compute_common_U_LDG(mdview_gpu<double> U, mdview_gpu<double> Ucomm,
         beta = -beta;
     }
 
-    double UL = U(fpt, var, 0); double UR = U(fpt, var, 1);
+    /* Get left and right state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      UL[n] = U(fpt, n, 0); UR[n] = U(fpt, n, 1);
+    }
 
     if (LDG_bias(fpt) == 0)
     {
-      double UC = 0.5*(UL + UR) - beta*(UL - UR);
-      Ucomm(fpt, var, 0) = UC;
-      Ucomm(fpt, var, 1) = UC;
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double UC = 0.5*(UL[n] + UR[n]) - beta*(UL[n] - UR[n]);
+        Ucomm(fpt, n, 0) = UC;
+        Ucomm(fpt, n, 1) = UC;
+      }
     }
     /* If on boundary, don't use beta (this is from HiFILES. Need to check) */
     else
     {
-      Ucomm(fpt, var, 0) = UR;
-      Ucomm(fpt, var, 1) = UR;
-      //Ucomm(fpt, var, 0) = 0.5*(UL + UR);
-      //Ucomm(fpt, var, 1) = 0.5*(UL + UR);
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        Ucomm(fpt, n, 0) = UR[n];
+        Ucomm(fpt, n, 1) = UR[n];
+      }
     }
 }
 
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, mdvector_gpu<int> &LDG_bias, unsigned int startFpt,
+    unsigned int nDims, unsigned int equation, mdvector_gpu<int> &LDG_bias, unsigned int startFpt,
     unsigned int endFpt, bool overset, int* iblank) 
 {
-  dim3 threads(32,4);
-  dim3 blocks(((endFpt - startFpt + 1) + threads.x - 1)/threads.x, (nVars + threads.y - 1)/threads.y);
+  unsigned int threads = 128;
+  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
-  if (nDims == 2)
-    compute_common_U_LDG<2><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts, nVars,
-        LDG_bias, startFpt, endFpt);
-  else
-    compute_common_U_LDG<3><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts, nVars,
-        LDG_bias, startFpt, endFpt, overset, iblank);
+  if (equation == AdvDiff | equation == Burgers)
+  {
+    if (nDims == 2)
+      compute_common_U_LDG<2, 1><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
+          LDG_bias, startFpt, endFpt);
+    else
+      compute_common_U_LDG<3, 1><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
+          LDG_bias, startFpt, endFpt, overset, iblank);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      compute_common_U_LDG<2, 4><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
+          LDG_bias, startFpt, endFpt);
+    else
+      compute_common_U_LDG<3, 5><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
+          LDG_bias, startFpt, endFpt, overset, iblank);
+  }
 
 }
 
@@ -2478,7 +2501,7 @@ void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv
     mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
-  unsigned int threads = 256;
+  unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
 
   if (equation == AdvDiff)
@@ -2533,7 +2556,7 @@ void transform_dFcdU_faces(mdvector_gpu<double> dFcdU, mdvector_gpu<double> dA,
 void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dA, 
     unsigned int nFpts, unsigned int nVars)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = (nFpts * nVars + threads - 1)/threads;
 
   transform_dFcdU_faces<<<blocks,threads>>>(dFcdU, dA, nFpts, nVars);
