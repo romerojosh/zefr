@@ -53,7 +53,6 @@ class Hexas: public Elements
 
   public:
     Hexas(GeoStruct *geo, InputStruct *input, int order = -1);
-    void transform_dU(unsigned int startEle, unsigned int endEle);
 
     void setup_PMG(int pro_order, int res_order);
 

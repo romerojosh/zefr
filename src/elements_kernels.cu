@@ -120,8 +120,8 @@ void adjoint(double *mat, double *adj, int M)
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void compute_F(mdvector_gpu<double> F_spts, 
-    const mdvector_gpu<double> U_spts, const mdvector_gpu<double> dU_spts, const mdvector_gpu<double> inv_jaco_spts,
-    unsigned int nSpts, unsigned int nEles, 
+    const mdvector_gpu<double> U_spts, mdvector_gpu<double> dU_spts, const mdvector_gpu<double> inv_jaco_spts,
+    const mdvector_gpu<double> jaco_det_spts, unsigned int nSpts, unsigned int nEles, 
     const mdvector_gpu<double> AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
     unsigned int startEle, unsigned int endEle, bool overset = false, const int* iblank = NULL,
@@ -139,12 +139,13 @@ void compute_F(mdvector_gpu<double> F_spts,
       return;
 
   double U[nVars];
-  double dU[nVars][nDims];
+  double tdU[nVars][nDims];
+  double dU[nVars][nDims] = {{0.0}};
   double F[nVars][nDims];
   double inv_jaco[nDims][nDims];
 
 
-  /* Get state variables and gradients */
+  /* Get state variables and reference space gradients */
   for (unsigned int var = 0; var < nVars; var++)
   {
     U[var] = U_spts(spt, ele, var);
@@ -153,7 +154,35 @@ void compute_F(mdvector_gpu<double> F_spts,
     {
       for(unsigned int dim = 0; dim < nDims; dim++)
       {
-        dU[var][dim] = dU_spts(spt, ele, var, dim);
+        tdU[var][dim] = dU_spts(spt, ele, var, dim);
+      }
+    }
+  }
+
+  if (viscous)
+  {
+    /* Transform gradient to physical space */
+    double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+    double inv_jaco[nDims][nDims];
+
+    for (int dim1 = 0; dim1 < nDims; dim1++)
+      for (int dim2 = 0; dim2 < nDims; dim2++)
+        inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (int dim1 = 0; dim1 < nDims; dim1++)
+      {
+        for (int dim2 = 0; dim2 < nDims; dim2++)
+        {
+          dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
+        }
+
+        dU[var][dim1] *= inv_jaco_det;
+
+        /* Write physical gradient to global memory */
+        dU_spts(spt, ele, var, dim1) = dU[var][dim1];
+
       }
     }
   }
@@ -234,7 +263,7 @@ void compute_F(mdvector_gpu<double> F_spts,
 
 void compute_F_wrapper(mdvector_gpu<double> &F_spts, 
     mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts, mdvector_gpu<double> &inv_jaco_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
+    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
     unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
     unsigned int startEle, unsigned int endEle, bool overset, int* iblank, bool motion)
@@ -245,28 +274,28 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      compute_F<1, 2, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<1, 2, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, startEle, endEle, overset, iblank, motion);
     else if (nDims == 3)
-      compute_F<1, 3, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<1, 3, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, overset, startEle, endEle, iblank, motion);
   }
   else if (equation == Burgers)
   {
     if (nDims == 2)
-      compute_F<1, 2, Burgers><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<1, 2, Burgers><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, startEle, endEle, overset, iblank, motion);
     else if (nDims == 3)
-      compute_F<1, 3, Burgers><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<1, 3, Burgers><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, startEle, endEle, overset, iblank, motion);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      compute_F<4, 2, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<4, 2, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, startEle, endEle, overset, iblank, motion);
     else if (nDims == 3)
-      compute_F<5, 3, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<5, 3, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, startEle, endEle, overset, iblank, motion);
   }
 
@@ -712,129 +741,6 @@ void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
   dim3 blocks(blocksX, blocksY);
 
   finalize_LHS<<<blocks, threads>>>(LHS, dt, jaco_det_spts, nSpts, nVars, nEles, dt_type, startEle, endEle);
-}
-
-
-template <unsigned int nVars>
-__global__
-void transform_dU_quad(mdvector_gpu<double> dU_spts, 
-    const mdvector_gpu<double> jaco_spts, const mdvector_gpu<double> jaco_det_spts,
-    unsigned int nSpts, unsigned int nEles)
-{
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
-
-  if (spt >= nSpts || ele >= nEles)
-    return;
-
-  double dU[2];
-  double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-  double jaco[2][2];
-  jaco[0][0] = jaco_spts(spt, ele, 0, 0);
-  jaco[0][1] = jaco_spts(spt, ele, 0, 1);
-  jaco[1][0] = jaco_spts(spt, ele, 1, 0);
-  jaco[1][1] = jaco_spts(spt, ele, 1, 1);
-
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    dU[0] = dU_spts(spt, ele, var, 0);
-    dU[1] = dU_spts(spt, ele, var, 1);
-
-    dU_spts(spt, ele, var, 0) = (dU[0] * jaco[1][1] - 
-                                 dU[1] * jaco[1][0]) * inv_jaco_det; 
-
-    dU_spts(spt, ele, var, 1) = (dU[1] * jaco[0][0] -
-                                 dU[0] * jaco[0][1]) * inv_jaco_det;
-
-  }
-
-}
-
-void transform_dU_quad_wrapper(mdvector_gpu<double> &dU_spts, 
-    mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &jaco_det_spts,
-    unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation)
-{
-  unsigned int threads = 128;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
-
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    transform_dU_quad<1><<<blocks, threads>>>(dU_spts, jaco_spts, jaco_det_spts,
-        nSpts, nEles);
-  }
-  else if (equation == EulerNS)
-  {
-    transform_dU_quad<4><<<blocks, threads>>>(dU_spts, jaco_spts, jaco_det_spts,
-        nSpts, nEles);
-  }
-}
-
-template <unsigned int nVars>
-__global__
-void transform_dU_hexa(mdvector_gpu<double> dU_spts, 
-    const mdvector_gpu<double> inv_jaco_spts, const mdvector_gpu<double> jaco_det_spts,
-    unsigned int nSpts, unsigned int nEles)
-{
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
-
-  if (spt >= nSpts || ele >= nEles)
-    return;
-
-  double dU[3];
-  double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-  double inv_jaco[3][3];
-  inv_jaco[0][0] = inv_jaco_spts(spt, ele, 0, 0);
-  inv_jaco[0][1] = inv_jaco_spts(spt, ele, 0, 1);
-  inv_jaco[0][2] = inv_jaco_spts(spt, ele, 0, 2);
-  inv_jaco[1][0] = inv_jaco_spts(spt, ele, 1, 0);
-  inv_jaco[1][1] = inv_jaco_spts(spt, ele, 1, 1);
-  inv_jaco[1][2] = inv_jaco_spts(spt, ele, 1, 2);
-  inv_jaco[2][0] = inv_jaco_spts(spt, ele, 2, 0);
-  inv_jaco[2][1] = inv_jaco_spts(spt, ele, 2, 1);
-  inv_jaco[2][2] = inv_jaco_spts(spt, ele, 2, 2);
-
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    dU[0] = dU_spts(spt, ele, n, 0);
-    dU[1] = dU_spts(spt, ele, n, 1);
-    dU[2] = dU_spts(spt, ele, n, 2);
-
-    dU_spts(spt, ele, n, 0) = (dU[0] * inv_jaco[0][0] + 
-                               dU[1] * inv_jaco[1][0] +  
-                               dU[2] * inv_jaco[2][0]) * inv_jaco_det;  
-
-    dU_spts(spt, ele, n, 1) = (dU[0] * inv_jaco[0][1] + 
-                               dU[1] * inv_jaco[1][1] +  
-                               dU[2] * inv_jaco[2][1]) * inv_jaco_det;  
-                              
-    dU_spts(spt, ele, n, 2) = (dU[0] * inv_jaco[0][2] + 
-                               dU[1] * inv_jaco[1][2] +  
-                               dU[2] * inv_jaco[2][2]) * inv_jaco_det;  
-
-  }
-
-}
-
-void transform_dU_hexa_wrapper(mdvector_gpu<double> &dU_spts, 
-    mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &jaco_det_spts,
-    unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation, bool overset, int* iblank)
-{
-  unsigned int threads = 128;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
-
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    transform_dU_hexa<1><<<blocks, threads>>>(dU_spts, inv_jaco_spts, jaco_det_spts,
-        nSpts, nEles);
-  }
-  else if (equation == EulerNS)
-  {
-    transform_dU_hexa<5><<<blocks, threads>>>(dU_spts, inv_jaco_spts, jaco_det_spts,
-        nSpts, nEles);
-  }
 }
 
 template <unsigned int nVars>

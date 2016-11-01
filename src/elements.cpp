@@ -1320,8 +1320,8 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 void Elements::compute_F(unsigned int startEle, unsigned int endEle)
 {
   double U[nVars];
-  double dU[nVars][nDims];
   double F[nVars][nDims];
+  double tdU[nVars][nDims];
   double inv_jaco[nDims][nDims];
 
   for (unsigned int ele = startEle; ele < endEle; ele++)
@@ -1329,7 +1329,7 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
 
-      /* Get state variables and gradients */
+      /* Get state variables and reference space gradients */
       for (unsigned int var = 0; var < nVars; var++)
       {
         U[var] = U_spts(spt, ele, var);
@@ -1338,7 +1338,36 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
         {
           for(unsigned int dim = 0; dim < nDims; dim++)
           {
-            dU[var][dim] = dU_spts(spt, ele, var, dim);
+            tdU[var][dim] = dU_spts(spt, ele, var, dim);
+          }
+        }
+      }
+
+      double dU[nVars][nDims] = {{0.0}};
+      if (input->viscous)
+      {
+        /* Transform gradient to physical space */
+        double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+        double inv_jaco[nDims][nDims];
+
+        for (int dim1 = 0; dim1 < nDims; dim1++)
+          for (int dim2 = 0; dim2 < nDims; dim2++)
+            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for (int dim1 = 0; dim1 < nDims; dim1++)
+          {
+            for (int dim2 = 0; dim2 < nDims; dim2++)
+            {
+              dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
+            }
+
+            dU[var][dim1] *= inv_jaco_det;
+
+            /* Write physical gradient to global memory */
+            dU_spts(spt, ele, var, dim1) = dU[var][dim1];
+
           }
         }
       }
@@ -1443,7 +1472,7 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
 #endif
 
 #ifdef _GPU
-  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
+  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
       input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
       input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
 

@@ -855,9 +855,12 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Transform gradient of state variables to physical space from 
      * reference space */
-    eles->transform_dU(startEle, endEle);
+    //eles->transform_dU(startEle, endEle);
 
-    /* Extrapolate solution gradient to flux points */
+    /* Compute flux at solution points */
+    eles->compute_F(startEle, endEle);
+
+    /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
     eles->extrapolate_dU(startEle, endEle);
 
 #ifdef _MPI
@@ -874,8 +877,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
 
-    /* Compute flux at solution points */
-    eles->compute_F(startEle, endEle);
     
     if (input->motion)
     {

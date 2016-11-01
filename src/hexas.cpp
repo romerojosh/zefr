@@ -547,50 +547,6 @@ void Hexas::setup_PMG(int pro_order, int res_order)
 
 }
 
-void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(2)
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
-    {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        double dUtemp0 = dU_spts(spt, ele, n, 0);
-        double dUtemp1 = dU_spts(spt, ele, n, 1);
-
-        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco_spts(spt, ele, 0, 0) +
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 0) +
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 0);
-
-        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 1) +
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 1) +
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 1);
-                                  
-        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 2) +
-                                  dUtemp1 * inv_jaco_spts(spt, ele, 1, 2) +
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 2);
-
-        dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
-        dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
-        dU_spts(spt, ele, n, 2) /= jaco_det_spts(spt, ele);
-      }
-    }
-  }
-#endif
-
-#ifdef _GPU
-  transform_dU_hexa_wrapper(dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation, input->overset, geo->iblank_cell_d.data());
-  //dU_spts = dU_spts_d;
-  check_error();
-#endif
-
-}
-
 void Hexas::transform_dFdU()
 {
 #ifdef _CPU
