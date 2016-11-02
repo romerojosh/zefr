@@ -2474,14 +2474,14 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   ss << "[solver]" << std::endl;
   ss << "system = ";
-  if (input->equation == NAVIER_STOKES)
+  if (input->equation == EulerNS) 
   {
     if (input->viscous)
       ss << "navier-stokes" << std::endl;
     else
       ss << "euler" << std::endl;
   }
-  else
+  else if (input->equation == AdvDiff)
   {
     if (input->viscous)
       ss << "advection-diffusion" << std::endl;
@@ -2503,14 +2503,14 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   /* --- Stats String --- */
   ss.str(""); ss.clear();
   ss << "[data]" << std::endl;
-  if (input->equation == NAVIER_STOKES)
+  if (input->equation == EulerNS)
   {
     ss << "fields = rho,rhou,rhov,";
     if (geo.nDims == 3)
       ss << "rhoW,";
     ss << "E" << std::endl;
   }
-  else
+  else if (input->equation == AdvDiff)
   {
     ss << "fields = u" << std::endl;
   }

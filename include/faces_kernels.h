@@ -54,23 +54,18 @@ void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUcon
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous);
 
 /* Face common value kernel wrappers */
-void rusanov_flux_wrapper(mdview_gpu<double> &U,
-    mdview_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
-    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double gamma, double rus_k, unsigned int nFpts, 
-    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool motion, 
-    bool overset = false, int* iblank = NULL);
-
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,
     unsigned int nDims, unsigned int equation, mdvector_gpu<int> &LDG_bias, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL);
 
-void LDG_flux_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
-    mdview_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<double> &diffCo,
-    mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double mu, double prandtl, 
-    double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
-    unsigned int startFpt, unsigned int endFpt, bool overset = false, int* iblank = NULL);
+void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
+    mdview_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, mdvector_gpu<double> &diffCo,
+    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double AdvDiff_D, double gamma, double rus_k, 
+    double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, 
+    unsigned int equation, unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, 
+    bool viscous, bool motion, bool overset = false, int* iblank = NULL);
 
 /* Face common value kernel wrappers (Implicit Method) */
 void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 

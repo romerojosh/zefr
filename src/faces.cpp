@@ -1811,7 +1811,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 {
   
   /* Compute common solution */
-  if (input->fvisc_type == "LDG")
+  if (input->fvisc_type == LDG)
   {
 #ifdef _CPU
 #pragma omp parallel for 
@@ -1996,9 +1996,9 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 {
-  if (input->fconv_type == "Rusanov")
-  {
 #ifdef _CPU
+  if (input->fconv_type == Rusanov)
+  {
     if (input->equation == AdvDiff)
     {
       if (nDims == 2)
@@ -2020,9 +2020,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
       else
         rusanov_flux<5, 3, EulerNS>(startFpt, endFpt);
     }
-#endif
 
-#ifdef _GPU
+#ifdef _APU
     rusanov_flux_wrapper(U_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
         dA_d, Vg_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
         input->motion, input->overset, geo->iblank_fpts_d.data());
@@ -2037,9 +2036,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 
   if (input->viscous)
   {
-    if (input->fvisc_type == "LDG")
+    if (input->fvisc_type == LDG)
     {
-#ifdef _CPU
       if (input->equation == AdvDiff)
       {
         if (nDims == 2)
@@ -2063,9 +2061,8 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
         else
           LDG_flux<5, 3, EulerNS>(startFpt, endFpt);
       }
-#endif
 
-#ifdef _GPU
+#ifdef _APU
       LDG_flux_wrapper(U_d, dU_d, Fcomm_d, norm_d, diffCo_d, LDG_bias_d, dA_d, 
           input->AdvDiff_D, input->gamma, input->mu, input->prandtl, input->rt, input->c_sth,
           input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, nVars, nDims, input->equation, 
@@ -2079,6 +2076,13 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
       ThrowException("Numerical viscous flux type not recognized!");
     }
   }
+#endif
+#ifdef _GPU
+    compute_common_F_wrapper(U_d, dU_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, diffCo_d,
+    LDG_bias_d,  dA_d, Vg_d, input->AdvDiff_D, input->gamma, input->rus_k, input->mu, input->prandtl, 
+    input->rt, input->c_sth, input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, nVars, nDims, input->equation, 
+    input->fconv_type, input->fvisc_type, startFpt, endFpt, input->viscous, input->motion, input->overset, geo->iblank_fpts_d.data());
+#endif
 
 }
 
@@ -2578,7 +2582,7 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 {
-  if (input->fconv_type == "Rusanov")
+  if (input->fconv_type == Rusanov)
   {
 #ifdef _CPU
     rusanov_dFcdU(startFpt, endFpt);
@@ -2598,7 +2602,7 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
   if (input->viscous)
   {
-    if (input->fvisc_type == "LDG")
+    if (input->fvisc_type == LDG)
     {
 #ifdef _CPU
       LDG_dFcdU(startFpt, endFpt);
@@ -2618,7 +2622,7 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
 {
-  if (input->fvisc_type == "LDG")
+  if (input->fvisc_type == LDG)
   {
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {

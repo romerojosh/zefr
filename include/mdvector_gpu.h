@@ -90,6 +90,7 @@ class mdvector_gpu
     unsigned int ldim() const;
 
     //! Method to return starting data pointer
+    __host__ __device__
     T* data();
 
     //! Overloaded methods to access data
@@ -232,6 +233,7 @@ unsigned int mdvector_gpu<T>::ldim() const
 }
 
 template <typename T>
+__host__ __device__
 T* mdvector_gpu<T>::data(void)
 {
   return values;

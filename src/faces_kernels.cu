@@ -885,9 +885,9 @@ void apply_bcs_dU(mdview_gpu<double> dU, const mdview_gpu<double> U, const mdvec
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
-      {
-	  unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
-          dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
+      {	  
+        unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
+        dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
       }
     }
   }
@@ -922,7 +922,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, const mdview_gpu<double> U, const mdvec
       double momx_dx = dU(fpt, 1, 0, 0);
       double momy_dx = dU(fpt, 2, 0, 0);
       double E_dx = dU(fpt, 3, 0, 0);
-      
+
       double rho_dy = dU(fpt, 0, 1, 0);
       double momx_dy = dU(fpt, 1, 1, 0);
       double momy_dy = dU(fpt, 2, 1, 0);
@@ -1835,376 +1835,6 @@ void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUcon
   }
 }
 
-template<unsigned int nVars, unsigned int nDims, unsigned int equation>
-__global__
-void rusanov_flux(const mdview_gpu<double> U,
-    mdview_gpu<double> Fcomm, mdvector_gpu<double> P, const mdvector_gpu<double> AdvDiff_A, 
-    const mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, const mdvector_gpu<int> LDG_bias,
-    const mdvector_gpu<double> dA_in, const mdvector_gpu<double> Vg, double gamma, double rus_k, unsigned int nFpts, unsigned int startFpt,
-    unsigned int endFpt, bool motion = false, bool overset = false, const int* iblank = NULL)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  if (overset and iblank[fpt] == 0)
-    return;
-
-  double UL[nVars]; double UR[nVars];
-  double FL[nVars][nDims]; double FR[nVars][nDims];
-  double FnL[nVars] = {0.0}; double FnR[nVars] = {0.0};
-  double norm[nDims], VG[nDims];
-  double Vgn = 0.0;
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    norm[dim] = norm_gfpts(fpt, dim, 0);
-  }
-
-  if (motion)
-  {
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      VG[dim] = Vg(fpt, dim);
-      Vgn += VG[dim] * norm[dim];
-    }
-  }
-  else
-  {
-    for (unsigned int dim = 0; dim < nDims; dim++)
-      VG[dim] = 0.0;
-  }
-
-  /* Get left and right state variables */
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    UL[n] = U(fpt, n, 0); UR[n] = U(fpt, n, 1);
-  }
-
-  /* Get numerical wavespeed */
-  double waveSp = 0., eig = 0.;
-  if (equation == AdvDiff) 
-  {
-    double A[nDims];
-
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      A[dim] = AdvDiff_A(dim);
-      waveSp += A[dim] * norm[dim];
-    }
-
-    waveSp_gfpts(fpt) = std::abs(waveSp - Vgn);
-
-    eig = std::abs(waveSp);
-
-    compute_Fconv_AdvDiff<nVars, nDims>(UL, FL, A);
-    compute_Fconv_AdvDiff<nVars, nDims>(UR, FR, A);
-  }
-  else if (equation == Burgers) 
-  {
-    compute_Fconv_Burgers<nVars, nDims>(UL, FL);
-    compute_Fconv_Burgers<nVars, nDims>(UR, FR);
-
-    double AnL = 0;
-    double AnR = 0;
-
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      AnL += UL[0] * norm[dim];
-      AnR += UR[0] * norm[dim];
-    }
-
-    // NOTE: Can I just store absolute of waveSp?
-    waveSp_gfpts(fpt) = max(std::abs(AnL - Vgn), std::abs(AnR - Vgn));
-    eig = std::abs(max(std::abs(AnL), std::abs(AnR)));
-  }
-  else if (equation == EulerNS)
-  {
-    double PL, PR;
-
-    compute_Fconv_EulerNS<nVars, nDims>(UL, FL, PL, gamma);
-    compute_Fconv_EulerNS<nVars, nDims>(UR, FR, PR, gamma);
-
-    /* Store pressures for force computation */
-    P(fpt, 0) = PL;
-    P(fpt, 1) = PR;
-
-    /* Compute speed of sound */
-    //double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / WL[0]));
-    //double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / WR[0]));
-
-    /* Compute normal velocities */
-    double VnL = 0.0; double VnR = 0.0;
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      VnL += UL[dim+1]/UL[0] * norm[dim];
-      VnR += UR[dim+1]/UR[0] * norm[dim];
-    }
-
-    //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
-    waveSp = std::abs(VnL - Vgn) + std::sqrt(gamma * PL / UL[0]);
-    waveSp = max(waveSp, std::abs(VnR - Vgn) + std::sqrt(gamma * PR / UR[0]));
-
-    eig = std::abs(VnL) + std::sqrt(gamma * PL / UL[0]);
-    eig = max(eig, std::abs(VnR) + std::sqrt(gamma * PR / UR[0]));
-
-    // NOTE: Can I just store absolute of waveSp?
-    waveSp_gfpts(fpt) = waveSp;
-    //waveSp = std::abs(waveSp);
-  }
-
-
-  /* Get interface-normal flux components  (from L to R) */
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      FnL[n] += FL[n][dim] * norm[dim];
-      FnR[n] += FR[n][dim] * norm[dim];
-    }
-  }
-
-
-  /* Compute common normal flux */
-  double dA = dA_in(fpt);
-  if (LDG_bias(fpt) == 2) /* Centered */
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      double F = 0.5 * (FnR[n] + FnL[n])* dA;
-      Fcomm(fpt, n, 0) = F;
-      Fcomm(fpt, n, 1) = -F;
-    }
-  }
-  else if (LDG_bias(fpt) != 0) /* Prescribed right-state */
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      double F = FnR[n]* dA;
-      Fcomm(fpt, n, 0) = F;
-      Fcomm(fpt, n, 1) = -F;
-    }
-  }
-  else /* Upwinded */
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0 - rus_k) * (UR[n]-UL[n])) * dA;
-      Fcomm(fpt, n, 0) = F;
-      Fcomm(fpt, n, 1) = -F;
-    }
-  }
-}
-
-void rusanov_flux_wrapper(mdview_gpu<double> &U,
-    mdview_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
-    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double gamma, double rus_k, unsigned int nFpts, 
-    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool motion, 
-    bool overset, int* iblank)
-{
-  unsigned int threads = 128;
-  //unsigned int blocks = (nFpts + threads - 1)/threads;
-  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
-  //int threads; int minBlocks; int blocks;
-
-  //cudaOccupancyMaxPotentialBlockSize(&minBlocks, &threads, (const void*)rusanov_flux, 0, nFpts);
-
-  //blocks = (nFpts + threads - 1) / threads;
-
-  if (equation == AdvDiff)
-  {
-    if (nDims == 2)
-      rusanov_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
-    else
-      rusanov_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
-  }
-  else if (equation == Burgers)
-  {
-    if (nDims == 2)
-      rusanov_flux<1, 2, Burgers><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
-    else
-      rusanov_flux<1, 3, Burgers><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      rusanov_flux<4, 2, EulerNS><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion);
-    else
-      rusanov_flux<5, 3, EulerNS><<<blocks, threads>>>(U, Fcomm, P, AdvDiff_A, norm,
-          waveSp, LDG_bias, dA, Vg, gamma, rus_k, nFpts, startFpt, endFpt, motion, overset, iblank);
-  }
-}
-
-template <unsigned int nVars, unsigned int nDims, unsigned int equation>
-__global__
-void LDG_flux(const mdview_gpu<double> U, const mdview_gpu<double> dU, mdview_gpu<double> Fcomm, 
-    const mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> diffCo_gfpts,
-    mdvector_gpu<int> LDG_bias, const mdvector_gpu<double> dA_in, double AdvDiff_D, double gamma, double mu, double prandtl,
-    double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt,
-    bool overset = false, const int* iblank = NULL)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  if (overset)
-    if (iblank[fpt] == 0)
-      return;
-
-  double UL[nVars]; double UR[nVars];
-  double dUL[nVars][nDims]; double dUR[nVars][nDims];
-  double FL[nVars][nDims] = {{0.0}}; double FR[nVars][nDims] = {{0.0}};
-  double FnL[nVars] = {0.0}; double FnR[nVars] = {0.0};
-  double norm[nDims];
-   
-
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    norm[dim] = norm_gfpts(fpt, dim, 0);
-  }
-
-  /* Setting sign of beta (from HiFiLES) */
-  if (nDims == 2)
-  {
-    if (norm[0] + norm[1] < 0.0)
-      beta = -beta;
-  }
-  else if (nDims == 3)
-  {
-    if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
-      beta = -beta;
-  }
-
-
-  /* Get left and right state variables */
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    UL[n] = U(fpt, n, 0); UR[n] = U(fpt, n, 1);
-
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      dUL[n][dim] = dU(fpt, n, dim, 0); dUR[n][dim] = dU(fpt, n, dim, 1);
-    }
-  }
-
-  /* Get numerical diffusion coefficient */
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    compute_Fvisc_AdvDiff_add<nVars, nDims>(dUL, FL, AdvDiff_D);
-    compute_Fvisc_AdvDiff_add<nVars, nDims>(dUR, FR, AdvDiff_D);
-
-    diffCo_gfpts(fpt) = AdvDiff_D;
-  }
-  else if (equation == EulerNS)
-  {
-    compute_Fvisc_EulerNS_add<nVars, nDims>(UL, dUL, FL, gamma, prandtl, mu, rt, c_sth, fix_vis);
-    compute_Fvisc_EulerNS_add<nVars, nDims>(UR, dUR, FR, gamma, prandtl, mu, rt, c_sth, fix_vis);
-
-
-    // TODO: Add or store mu from Sutherland's law
-    double diffCoL = max(mu / UL[0], gamma * mu / (prandtl * UL[0]));
-    double diffCoR = max(mu / UR[0], gamma * mu / (prandtl * UR[0]));
-    diffCo_gfpts(fpt) = max(diffCoL, diffCoR);
-  }
-
-  /* Get interface-normal flux components  (from L to R)*/
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      FnL[n] += FL[n][dim] * norm[dim];
-      FnR[n] += FR[n][dim] * norm[dim];
-    }
-  }
-
-
-  /* Compute common normal viscous flux and accumulate */
-  double dA = dA_in(fpt);
-  /* If interior, use central */
-  if (LDG_bias(fpt) == 0)
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + 
-          tau * norm[dim] * (UL[n] - UR[n]) + beta * norm[dim] * (FnL[n] - FnR[n]);
-      }
-    }
-  }
-  /* If boundary, use right state only */
-  else
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        FR[n][dim] += tau * norm[dim] * (UL[n] - UR[n]);
-      }
-    }
-  }
-
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    double F = 0.0;
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      F += FR[n][dim] * norm[dim] * dA;
-    }
-
-    Fcomm(fpt, n, 0) += F;
-    Fcomm(fpt, n, 1) -= F;
-  }
-}
-
-void LDG_flux_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU, 
-    mdview_gpu<double> &Fcomm, mdvector_gpu<double> &norm, mdvector_gpu<double> &diffCo,
-    mdvector_gpu<int> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double mu, double prandtl, 
-    double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation, 
-    unsigned int startFpt, unsigned int endFpt, bool overset, int* iblank)
-{
-  unsigned int threads = 128;
-  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
-
-  if (equation == AdvDiff)
-  {
-    if (nDims == 2)
-      LDG_flux<1, 2, AdvDiff><<<blocks, threads>>>(U, dU, Fcomm, norm, diffCo, LDG_bias, dA, 
-          AdvDiff_D, gamma, mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, startFpt, endFpt);
-    else
-      LDG_flux<1, 3, AdvDiff><<<blocks, threads>>>(U, dU, Fcomm, norm, diffCo, LDG_bias, dA, 
-          AdvDiff_D, gamma, mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, startFpt, endFpt, overset, iblank);
-  }
-
-  else if (equation == Burgers)
-  {
-    if (nDims == 2)
-      LDG_flux<1, 2, Burgers><<<blocks, threads>>>(U, dU, Fcomm, norm, diffCo, LDG_bias, dA, 
-          AdvDiff_D, gamma, mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, startFpt, endFpt);
-    else
-      LDG_flux<1, 3, Burgers><<<blocks, threads>>>(U, dU, Fcomm, norm, diffCo, LDG_bias, dA, 
-          AdvDiff_D, gamma, mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, startFpt, endFpt, overset, iblank);
-  }
-
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      LDG_flux<4, 2, EulerNS><<<blocks, threads>>>(U, dU, Fcomm, norm, diffCo, LDG_bias, dA,
-          AdvDiff_D, gamma, mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, startFpt, endFpt);
-    else
-      LDG_flux<5, 3, EulerNS><<<blocks, threads>>>(U, dU, Fcomm, norm, diffCo, LDG_bias, dA,
-          AdvDiff_D, gamma, mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, startFpt, endFpt, overset, iblank);
-  }
-}
-
 template <unsigned int nDims, unsigned int nVars>
 __global__
 void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm, 
@@ -2287,6 +1917,329 @@ void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Uco
     else
       compute_common_U_LDG<3, 5><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
           LDG_bias, startFpt, endFpt, overset, iblank);
+  }
+
+}
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+__device__ __forceinline__
+void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars], 
+    double &PL, double &PR,  double norm[nDims], double &waveSp, double *AdvDiff_A, 
+    double Vgn, double gamma, double rus_k, int LDG_bias)
+{
+
+  double FL[nVars][nDims];
+  double FR[nVars][nDims];
+  double FnL[nVars] = {0.0};
+  double FnR[nVars] = {0.0};
+
+  double wS = 0., eig = 0.;
+  if (equation == AdvDiff) 
+  {
+    double A[nDims];
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      A[dim] = *(AdvDiff_A + dim);
+      wS += A[dim] * norm[dim];
+    }
+
+    waveSp = std::abs(wS - Vgn);
+
+    eig = std::abs(waveSp);
+
+    compute_Fconv_AdvDiff<nVars, nDims>(UL, FL, A);
+    compute_Fconv_AdvDiff<nVars, nDims>(UR, FR, A);
+  }
+  else if (equation == Burgers) 
+  {
+    compute_Fconv_Burgers<nVars, nDims>(UL, FL);
+    compute_Fconv_Burgers<nVars, nDims>(UR, FR);
+
+    double AnL = 0;
+    double AnR = 0;
+
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      AnL += UL[0] * norm[dim];
+      AnR += UR[0] * norm[dim];
+    }
+
+    // NOTE: Can I just store absolute of waveSp?
+    waveSp = max(std::abs(AnL - Vgn), std::abs(AnR - Vgn));
+    eig = std::abs(max(std::abs(AnL), std::abs(AnR)));
+  }
+  else if (equation == EulerNS)
+  {
+    double P;
+    compute_Fconv_EulerNS<nVars, nDims>(UL, FL, P, gamma);
+    double aL = std::sqrt(gamma * P / UL[0]);
+    PL = P;
+    compute_Fconv_EulerNS<nVars, nDims>(UR, FR, P, gamma);
+    double aR = std::sqrt(gamma * P / UR[0]);
+    PR = P;
+
+
+    /* Compute speed of sound */
+    //double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / UL[0]));
+    //double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / UR[0]));
+
+    /* Compute normal velocities */
+    double VnL = 0.0; double VnR = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      VnL += UL[dim+1]/UL[0] * norm[dim];
+      VnR += UR[dim+1]/UR[0] * norm[dim];
+    }
+
+    //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
+    wS = std::abs(VnL - Vgn) + aL;
+    wS = max(waveSp, std::abs(VnR - Vgn) + aR);
+
+    eig = std::abs(VnL) + aL;
+    eig = max(eig, std::abs(VnR) + aR);
+
+    waveSp = wS;
+  }
+
+  /* Get interface-normal flux components  (from L to R) */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      FnL[n] += FL[n][dim] * norm[dim];
+      FnR[n] += FR[n][dim] * norm[dim];
+    }
+  }
+
+  /* Compute common normal flux */
+  if (LDG_bias == 2) /* Centered */
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm[n] = 0.5 * (FnR[n] + FnL[n]);
+    }
+  }
+  else if (LDG_bias != 0) /* Prescribed right-state */
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm[n] = FnR[n];
+    }
+  }
+  else /* Upwinded */
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm[n] = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0 - rus_k) * (UR[n]-UL[n]));
+    }
+  }
+}
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+__device__ __forceinline__
+void LDG_flux(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], double dUR[nVars][nDims], double Fcomm[nVars],
+    double norm[nDims], double AdvDiff_D, double &diffCo, double gamma, double prandtl, double mu, double rt, double c_sth, 
+    bool fix_vis, int LDG_bias, double beta_in, double tau)
+{
+  double FL[nVars][nDims] = {{0.0}}; double FR[nVars][nDims] = {{0.0}};
+  double FnL[nVars] = {0.0}; double FnR[nVars] = {0.0};
+
+  /* Setting sign of beta (from HiFiLES) */
+  double beta; 
+  if (nDims == 2)
+  {
+    if (norm[0] + norm[1] < 0.0)
+      beta = -beta_in;
+  }
+  else if (nDims == 3)
+  {
+    if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
+      beta = -beta_in;
+  }
+
+  /* Get numerical diffusion coefficient */
+  if (equation == AdvDiff || equation == Burgers)
+  {
+    compute_Fvisc_AdvDiff_add<nVars, nDims>(dUL, FL, AdvDiff_D);
+    compute_Fvisc_AdvDiff_add<nVars, nDims>(dUR, FR, AdvDiff_D);
+
+    diffCo = AdvDiff_D;
+  }
+  else if (equation == EulerNS)
+  {
+    compute_Fvisc_EulerNS_add<nVars, nDims>(UL, dUL, FL, gamma, prandtl, mu, rt, c_sth, fix_vis);
+    compute_Fvisc_EulerNS_add<nVars, nDims>(UR, dUR, FR, gamma, prandtl, mu, rt, c_sth, fix_vis);
+
+
+    // TODO: Add or store mu from Sutherland's law
+    double diffCoL = max(mu / UL[0], gamma * mu / (prandtl * UL[0]));
+    double diffCoR = max(mu / UR[0], gamma * mu / (prandtl * UR[0]));
+    diffCo = max(diffCoL, diffCoR);
+  }
+
+  /* Get interface-normal flux components  (from L to R)*/
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      FnL[n] += FL[n][dim] * norm[dim];
+      FnR[n] += FR[n][dim] * norm[dim];
+    }
+  }
+
+
+  /* Compute common normal viscous flux and accumulate */
+  /* If interior, use central */
+  if (LDG_bias == 0)
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        FR[n][dim] = 0.5 * (FL[n][dim] + FR[n][dim]) + 
+          tau * norm[dim] * (UL[n] - UR[n]) + beta * norm[dim] * (FnL[n] - FnR[n]);
+      }
+    }
+  }
+  /* If boundary, use right state only */
+  else
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        FR[n][dim] += tau * norm[dim] * (UL[n] - UR[n]);
+      }
+    }
+  }
+
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    double F = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      F += FR[n][dim] * norm[dim];
+    }
+
+    Fcomm[n] += F;
+  }
+}
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+__global__ 
+void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
+    mdview_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
+    mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<double> diffCo,
+    mdvector_gpu<int> LDG_bias,  mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double AdvDiff_D, double gamma, double rus_k, 
+    double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, 
+    unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, bool viscous, bool motion, bool overset, int* iblank)
+{
+
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
+
+  if (fpt >= endFpt)
+    return;
+
+  if (overset and iblank[fpt] == 0)
+    return;
+
+  double UL[nVars]; double UR[nVars]; double Fc[nVars];
+  double norm[nDims];
+  double Vgn = 0.0;
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    norm[dim] = norm_gfpts(fpt, dim, 0);
+  }
+
+  if (motion)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      Vgn += Vg(fpt, dim) * norm[dim];
+    }
+  }
+
+  /* Get left and right state variables */
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    UL[n] = U(fpt, n, 0); UR[n] = U(fpt, n, 1);
+  }
+
+  /* Compute convective contribution to common flux */
+  if (fconv_type == Rusanov)
+  {
+    rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, P(fpt, 0), P(fpt, 1), norm, waveSp_gfpts(fpt),
+        AdvDiff_A.data(), Vgn, gamma, rus_k, LDG_bias(fpt));
+  }
+
+  if (viscous)
+  {
+    /* Compute viscous contribution to common flux */
+    double dUL[nVars][nDims];
+    double dUR[nVars][nDims];
+
+    /* Get left and right gradients */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        dUL[n][dim] = dU(fpt, n, dim, 0); dUR[n][dim] = dU(fpt, n, dim, 1);
+      }
+    }
+
+    if (fvisc_type == LDG)
+      LDG_flux<nVars, nDims, equation>(UL, UR, dUL, dUR, Fc, norm, AdvDiff_D, diffCo(fpt), gamma, 
+          prandtl, mu, rt, c_sth, fix_vis, LDG_bias(fpt), beta, tau);
+         
+  }
+
+  /* Write common flux to global memory */
+  double dA = dA_in(fpt);
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    Fcomm(fpt, n, 0) = Fc[n] * dA;
+    Fcomm(fpt, n, 1) = -Fc[n] * dA;
+  }
+}
+
+void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
+    mdview_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, mdvector_gpu<double> &diffCo,
+    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double AdvDiff_D, double gamma, double rus_k, 
+    double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, 
+    unsigned int nDims, unsigned int equation, unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, 
+    bool viscous, bool motion, bool overset, int* iblank)
+{
+  unsigned int threads = 128;
+  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
+
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      compute_common_F<1, 2, AdvDiff><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+    else
+      compute_common_F<1, 3, AdvDiff><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+  }
+  else if (equation == Burgers)
+  {
+    if (nDims == 2)
+      compute_common_F<1, 2, Burgers><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+    else
+      compute_common_F<1, 3, Burgers><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      compute_common_F<4, 2, EulerNS><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+    else
+      compute_common_F<5, 3, EulerNS><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
   }
 
 }
