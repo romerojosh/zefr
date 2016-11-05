@@ -37,7 +37,16 @@
 
 extern double pi;
 
-enum EQN {AdvDiff = 0, EulerNS = 1, Burgers = 2};
+enum EQN {
+  AdvDiff = 0, 
+  EulerNS = 1, 
+  Burgers = 2
+};
+
+enum FC_TYPE {
+  Rusanov = 0,
+  LDG = 1
+};
 
 enum ELE_TYPE {
   TRI, QUAD, TET, HEX, PRI, PYR
@@ -64,11 +73,6 @@ enum meshType {
   READ_MESH   = 0,
   CREATE_MESH = 1,
   OVERSET_MESH = 2
-};
-
-enum EQUATION {
-  ADVECTION_DIFFUSION = 0,
-  NAVIER_STOKES       = 1
 };
 
 /*! Enumeration for all available boundary conditions */

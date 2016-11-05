@@ -22,8 +22,8 @@ RELEASE_FLAGS = -Ofast
 ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
 else
-	CXXFLAGS += $(WARN_OFF)
-	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result,-Wno-narrowing,-Wno-literal-suffix
+	CXXFLAGS += $(WARN_OFF) 
+	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result,-Wno-narrowing,-Wno-literal-suffix -Xcudafe "--diag_suppress=subscript_out_of_range"
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)

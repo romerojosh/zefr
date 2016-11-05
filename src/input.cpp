@@ -153,8 +153,18 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "err_field", input.err_field, (unsigned int) 0);
   read_param(f, "nQpts1D", input.nQpts1D);
 
-  read_param(f, "fconv_type", input.fconv_type);
-  read_param(f, "fvisc_type", input.fvisc_type);
+  read_param(f, "fconv_type", str);
+  if (str == "Rusanov")
+    input.fconv_type = Rusanov;
+  else
+    ThrowException("Equation not recognized!");
+
+  read_param(f, "fvisc_type", str);
+  if (str == "LDG")
+    input.fvisc_type = LDG;
+  else
+    ThrowException("Equation not recognized!");
+
   read_param(f, "rus_k", input.rus_k);
   read_param(f, "ldg_b", input.ldg_b);
   read_param(f, "ldg_tau", input.ldg_tau);

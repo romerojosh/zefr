@@ -1,7 +1,6 @@
 # Geometry:
 nDims    3
 meshfile sphere_hex.msh
-serendipity 1
 
 # Boundary Conditions
 mesh_bound  fluid  fluid

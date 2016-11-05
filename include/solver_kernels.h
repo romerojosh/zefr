@@ -20,6 +20,7 @@
 #ifndef solver_kernels_h
 #define solver_kernels_h
 
+
 #ifdef _MPI
 #define _mpi_comm MPI_Comm
 #include "mpi.h"
@@ -29,6 +30,8 @@
 
 template<typename T>
 class mdvector_gpu;
+template<typename T>
+class mdview_gpu;
 
 //! For ease of access to moving-grid params in CUDA
 struct MotionVars
@@ -97,21 +100,6 @@ void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, co
     const double beta, double** yarray, int incy, int batchCount);
 
 /* Wrappers for custom kernels */
-void U_to_faces_wrapper(mdvector_gpu<double> &U_fpts, mdvector_gpu<double> &U_gfpts, 
-    mdvector_gpu<double> &Ucomm, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, 
-    unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation, 
-    bool viscous, unsigned int startEle, unsigned int endEle, bool overset = false, int* iblank = NULL);
-
-void U_from_faces_wrapper(mdvector_gpu<double> &Ucomm_gfpts, mdvector_gpu<double> &Ucomm_fpts, 
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
-    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation,
-    unsigned int startEle, unsigned int endEle, bool overset = false, int* iblank = NULL);
-
-void dU_to_faces_wrapper(mdvector_gpu<double> &dU_fpts, mdvector_gpu<double> &dU_gfpts, 
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, unsigned int nVars, 
-    unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation, 
-    bool overset = false, int* iblank = NULL);
-
 void dFcdU_from_faces_wrapper(mdvector_gpu<double> &dFcdU_gfpts, mdvector_gpu<double> &dFcdU_fpts, 
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation);
@@ -180,14 +168,14 @@ void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &delta
 
 #ifdef _MPI
 void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &U, unsigned int nVars, int stream = -1);
+    mdview_gpu<double> &U, unsigned int nVars, int stream = -1);
 void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &U, unsigned int nVars, int stream = -1, bool overset = false,
+    mdview_gpu<double> &U, unsigned int nVars, int stream = -1, bool overset = false,
     int* iblank = NULL);
 void pack_dU_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream = -1);
+    mdview_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream = -1);
 void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
-    mdvector_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream = -1, bool overset = false,
+    mdview_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream = -1, bool overset = false,
     int* iblank = NULL);
 #endif
 

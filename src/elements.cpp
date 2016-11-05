@@ -29,6 +29,7 @@ extern "C" {
 
 #include "elements.hpp"
 #include "faces.hpp"
+#include "flux.hpp"
 #include "funcs.hpp"
 #include "mdvector.hpp"
 #include "macros.hpp"
@@ -176,7 +177,9 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     for (unsigned int dim = 0; dim < nDims; dim++)
       for (unsigned int ele = 0; ele < nEles; ele++)
         for (unsigned int node = 0; node < nNodes; node++)
+        {
           nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+        }
 
   int ms = nSpts;
   int mf = nFpts;
@@ -662,6 +665,8 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
         A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim());
   }
 
+  event_record(0, 0); // record event for MPI comms
+
   check_error();
 #endif
 
@@ -692,12 +697,15 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0, 
-        oppE_d.data(), oppE_d.ldim(), dU_spts_d.data() + dim * (dU_spts_d.ldim() * 
-        nVars * nEles), dU_spts_d.ldim(), 0.0, dU_fpts_d.data() + dim * 
-        (dU_fpts_d.ldim() * nVars * nEles), dU_fpts_d.ldim());
+    auto *A = oppE_d.get_ptr(0,0);
+    auto *B = dU_spts_d.get_ptr(0, startEle, 0, dim);
+    auto *C = dU_fpts_d.get_ptr(0, startEle, 0, dim);
+
+    cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0, A, oppE_d.ldim(), 
+        B, dU_spts_d.ldim(), 0.0, C, dU_fpts_d.ldim());
   }
 
+  event_record(0, 0); // record event for MPI comms
   check_error();
 #endif
 }
@@ -824,19 +832,23 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
+    auto *A = oppD_d.get_ptr(0, 0, dim);
+    auto *B = U_spts_d.get_ptr(0, startEle, 0);
+    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from solution at solution points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
-        oppD_d.data() + dim * (oppD_d.ldim() * nSpts), oppD_d.ldim(), 
-        U_spts_d.data(), U_spts_d.ldim(), 0.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0, A, oppD_d.ldim(), 
+        B, U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
 
     check_error();
 
+    A = oppD_fpts_d.get_ptr(0, 0, dim);
+    B = Ucomm_d.get_ptr(0, startEle, 0);
+    C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from common solution at flux points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
-        oppD_fpts_d.data() + dim * (oppD_fpts_d.ldim() * nFpts), oppD_fpts_d.ldim(),
-        Ucomm_d.data(), Ucomm_d.ldim(), 1.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0, A, oppD_fpts_d.ldim(),
+        B, Ucomm_d.ldim(), 1.0, C , dU_spts_d.ldim());
 
     check_error();
   }
@@ -873,11 +885,13 @@ void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
+    auto *A = oppD_d.get_ptr(0, 0, dim);
+    auto *B = U_spts_d.get_ptr(0, startEle, 0);
+    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from solution at solution points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
-        oppD_d.data() + dim * (oppD_d.ldim() * nSpts), oppD_d.ldim(), 
-        U_spts_d.data(), U_spts_d.ldim(), 0.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0, A, oppD_d.ldim(), 
+        B, U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
 
     check_error();
   }
@@ -914,11 +928,13 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
+    auto *A = oppD_fpts_d.get_ptr(0, 0, dim);
+    auto *B = Ucomm_d.get_ptr(0, startEle, 0);
+    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+
     /* Compute contribution to derivative from common solution at flux points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
-        oppD_fpts_d.data() + dim * (oppD_fpts_d.ldim() * nFpts), oppD_fpts_d.ldim(),
-        Ucomm_d.data(), Ucomm_d.ldim(), 1.0, dU_spts_d.data() + dim * 
-        (dU_spts_d.ldim() * nVars * nEles), dU_spts_d.ldim());
+        A, oppD_fpts_d.ldim(), B, Ucomm_d.ldim(), 1.0, C, dU_spts_d.ldim());
 
     check_error();
   }
@@ -972,9 +988,9 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
   {
     for (unsigned int var = 0; var < nVars; var++)
     {
-      auto A = oppD0_d.data() + nSpts * nSpts * dim;
-      auto B = U_spts_d.data() + nSpts * (startEle + nEles * var);
-      auto C = dUr_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
+      auto *A = oppD0_d.get_ptr(0, 0, dim);
+      auto *B = U_spts_d.get_ptr(0, startEle, var);
+      auto *C = dUr_spts_d.get_ptr(0, startEle, var, dim);
 
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0, A, oppD0_d.ldim(), B,
           U_spts_d.ldim(), 0.0, C, dUr_spts_d.ldim());
@@ -1033,9 +1049,9 @@ void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned 
 
     for (unsigned int var = 0; var < nVars; var++)
     {
-      auto *A = oppD_d.data() + dim * (oppD_d.ldim() * nSpts);
-      auto *B = F_spts_d.data() + startEle * F_spts_d.ldim() + var * (F_spts_d.ldim() * nEles) + dim * (F_spts_d.ldim() * nEles * nVars);
-      auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+      auto *A = oppD_d.get_ptr(0, 0, dim);
+      auto *B = F_spts_d.get_ptr(0, startEle, var, dim);
+      auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
@@ -1046,9 +1062,10 @@ void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned 
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int var = 0; var < nVars; var++)
   {
-    auto *A = oppDiv_fpts_d.data();
-    auto *B = Fcomm_d.data() + startEle * Fcomm_d.ldim() + var * (Fcomm_d.ldim() * nEles);
-    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
+    auto *B = Fcomm_d.get_ptr(0, startEle, var);
+    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
+
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
         A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim());
@@ -1096,9 +1113,9 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
     {
       for (unsigned int var = 0; var < nVars; var++)
       {
-        auto *A = oppD0_d.data() + (nSpts * nSpts) * dim2;
-        auto *B = F_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim1));
-        auto *C = dF_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * (dim1 + nDims * dim2)));
+        auto *A = oppD0_d.get_ptr(0, 0, dim2);
+        auto *B = F_spts_d.get_ptr(0, startEle, var, dim1);
+        auto *C = dF_spts_d.get_ptr(0, startEle, var, dim1, dim2);
 
         /* Compute contribution to derivative from solution at solution points */
         cublasDGEMM_wrapper(m, n, k, 1.0, A, oppD0_d.ldim(), B, F_spts_d.ldim(),
@@ -1213,9 +1230,9 @@ void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsi
 
     for (unsigned int var = 0; var < nVars; var++)
     {
-      auto *A = oppD_d.data() + dim * (oppD_d.ldim() * nSpts);
-      auto *B = F_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * dim));
-      auto *C = divF_spts_d.data() + nSpts * (startEle + nEles * (var + nVars * stage));
+      auto *A = oppD_d.get_ptr(0, 0, dim);
+      auto *B = F_spts_d.get_ptr(0, startEle, var, dim);
+      auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
@@ -1250,9 +1267,9 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int var = 0; var < nVars; var++)
   {
-    auto *A = oppDiv_fpts_d.data();
-    auto *B = Fcomm_d.data() + startEle * Fcomm_d.ldim() + var * (Fcomm_d.ldim() * nEles);
-    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
+    auto *B = Fcomm_d.get_ptr(0, startEle, var);
+    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
         A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
@@ -1287,9 +1304,9 @@ void Elements::correct_divF_spts(unsigned int stage, unsigned int startEle, unsi
   /* Compute contribution to derivative from common solution at flux points */
   for (unsigned int var = 0; var < nVars; var++)
   {
-    auto *A = oppDiv_fpts_d.data();
-    auto *B = dFn_fpts_d.data() + startEle * dFn_fpts_d.ldim() + var * (dFn_fpts_d.ldim() * nEles);
-    auto *C = divF_spts_d.data() + startEle * divF_spts_d.ldim() + var * (divF_spts_d.ldim() * nEles) + stage * (divF_spts_d.ldim() * nEles * nVars);
+    auto *A = oppDiv_fpts_d.get_ptr(0, 0); // Identical to FR-DG correction operator
+    auto *B = dFn_fpts_d.get_ptr(0, startEle, var);
+    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
         A, oppDiv_fpts_d.ldim(), B, dFn_fpts_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
@@ -1299,363 +1316,170 @@ void Elements::correct_divF_spts(unsigned int stage, unsigned int startEle, unsi
 #endif
 }
 
-void Elements::compute_Fconv(unsigned int startEle, unsigned int endEle)
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+void Elements::compute_F(unsigned int startEle, unsigned int endEle)
 {
+  double U[nVars];
+  double F[nVars][nDims];
+  double tdU[nVars][nDims];
+  double inv_jaco[nDims][nDims];
+
+  for (unsigned int ele = startEle; ele < endEle; ele++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+
+      /* Get state variables and reference space gradients */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        U[var] = U_spts(spt, ele, var);
+
+        if(input->viscous) 
+        {
+          for(unsigned int dim = 0; dim < nDims; dim++)
+          {
+            tdU[var][dim] = dU_spts(spt, ele, var, dim);
+          }
+        }
+      }
+
+      double dU[nVars][nDims] = {{0.0}};
+      if (input->viscous)
+      {
+        /* Transform gradient to physical space */
+        double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+        double inv_jaco[nDims][nDims];
+
+        for (int dim1 = 0; dim1 < nDims; dim1++)
+          for (int dim2 = 0; dim2 < nDims; dim2++)
+            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for (int dim1 = 0; dim1 < nDims; dim1++)
+          {
+            for (int dim2 = 0; dim2 < nDims; dim2++)
+            {
+              dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
+            }
+
+            dU[var][dim1] *= inv_jaco_det;
+
+            /* Write physical gradient to global memory */
+            dU_spts(spt, ele, var, dim1) = dU[var][dim1];
+
+          }
+        }
+      }
+
+      /* Compute fluxes */
+      if (equation == AdvDiff)
+      {
+        double A[nDims];
+        for(unsigned int dim = 0; dim < nDims; dim++)
+          A[dim] = input->AdvDiff_A(dim);
+
+        compute_Fconv_AdvDiff<nVars, nDims>(U, F, A);
+        if(input->viscous) compute_Fvisc_AdvDiff_add<nVars, nDims>(dU, F, input->AdvDiff_D);
+
+      }
+      else if (equation == Burgers)
+      {
+        compute_Fconv_Burgers<nVars, nDims>(U, F);
+        if(input->viscous) compute_Fvisc_AdvDiff_add<nVars, nDims>(dU, F, input->AdvDiff_D);
+      }
+      else if (equation == EulerNS)
+      {
+        double P;
+        compute_Fconv_EulerNS<nVars, nDims>(U, F, P, input->gamma);
+        if(input->viscous) compute_Fvisc_EulerNS_add<nVars, nDims>(U, dU, F, input->gamma, input->prandtl, input->mu,
+            input->rt, input->c_sth, input->fix_vis);
+      }
+
+      if (!input->motion)
+      {
+        /* Transform flux to reference space */
+        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+        {
+          for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+          {
+            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+          }
+        }
+
+        double tF[nVars][nDims] = {{0.0}};;
+
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+          {
+            for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+            {
+              tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
+            }
+          }
+        }
+
+        /* Write out transformed fluxes */
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for(unsigned int dim = 0; dim < nDims; dim++)
+          {
+            F_spts(spt, ele, var, dim) = tF[var][dim];
+          }
+        }
+      }
+      else
+      {
+        /* Write out physical fluxes */
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          for(unsigned int dim = 0; dim < nDims; dim++)
+          {
+            F_spts(spt, ele, var, dim) = F[var][dim];
+          }
+        }
+      }
+    }
+  }
+
+}
+
+void Elements::compute_F(unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
   if (input->equation == AdvDiff)
   {
-#ifdef _CPU
-#pragma omp parallel for collapse(4)
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = startEle; ele < endEle; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            F_spts(spt, ele, n, dim) = input->AdvDiff_A(dim) * U_spts(spt, ele, n);
-          }
-        }
-      }
-    }
-#endif
-
-#ifdef _GPU
-    compute_Fconv_spts_AdvDiff_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->AdvDiff_A_d, 
-      startEle, endEle, input->overset, geo->iblank_cell_d.data());
-    check_error();
-#endif
-
+    if (nDims == 2)
+      compute_F<1, 2, AdvDiff>(startEle, endEle);
+    else if (nDims == 3)
+      compute_F<1, 3, AdvDiff>(startEle, endEle);
   }
-
   else if (input->equation == Burgers)
   {
-#ifdef _CPU
-#pragma omp parallel for collapse(4)
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = startEle; ele < endEle; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            F_spts(spt, ele, n, dim) = 0.5 * U_spts(spt, ele, n) * U_spts(spt, ele, n);
-          }
-        }
-      }
-    }
-#endif
-
-#ifdef _GPU
-    compute_Fconv_spts_Burgers_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, startEle, 
-      endEle, input->overset, geo->iblank_cell_d.data());
-    check_error();
-#endif
-
-  }
-
-  else if (input->equation == EulerNS)
-  {
-#ifdef _CPU
     if (nDims == 2)
-    {
-#pragma omp parallel for collapse(2)
-      for (unsigned int ele = startEle; ele < endEle; ele++)
-      {
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          /* Compute some primitive variables */
-          double momF = 0.0;
-          for (unsigned int dim = 0; dim < nDims; dim ++)
-          {
-            momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
-          }
-
-          momF /= U_spts(spt, ele, 0);
-
-          double P = (input->gamma - 1.0) * (U_spts(spt, ele, 3) - 0.5 * momF);
-          double H = (U_spts(spt, ele, 3) + P) / U_spts(spt, ele, 0);
-
-
-          F_spts(spt, ele, 0, 0) = U_spts(spt, ele, 1);
-          F_spts(spt, ele, 1, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0) + P;
-          F_spts(spt, ele, 2, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 3, 0) = U_spts(spt, ele, 1) * H;
-
-          F_spts(spt, ele, 0, 1) = U_spts(spt, ele, 2);
-          F_spts(spt, ele, 1, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 2, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0) + P;
-          F_spts(spt, ele, 3, 1) = U_spts(spt, ele, 2) * H;
-        }
-      }
-    }
+      compute_F<1, 2, Burgers>(startEle, endEle);
     else if (nDims == 3)
-    {
-#pragma omp parallel for collapse(2)
-      for (unsigned int ele = startEle; ele < endEle; ele++)
-      {
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          /* Compute some primitive variables */
-          double momF = 0.0;
-          for (unsigned int dim = 0; dim < nDims; dim ++)
-          {
-            momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
-          }
-
-          momF /= U_spts(spt, ele, 0);
-
-          double P = (input->gamma - 1.0) * (U_spts(spt, ele, 4) - 0.5 * momF);
-          double H = (U_spts(spt, ele, 4) + P) / U_spts(spt, ele, 0);
-
-
-          F_spts(spt, ele, 0, 0) = U_spts(spt, ele, 1);
-          F_spts(spt, ele, 1, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0) + P;
-          F_spts(spt, ele, 2, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 3, 0) = U_spts(spt, ele, 1) * U_spts(spt, ele, 3) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 4, 0) = U_spts(spt, ele, 1) * H;
-
-          F_spts(spt, ele, 0, 1) = U_spts(spt, ele, 2);
-          F_spts(spt, ele, 1, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 2, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0) + P;
-          F_spts(spt, ele, 3, 1) = U_spts(spt, ele, 2) * U_spts(spt, ele, 3) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 4, 1) = U_spts(spt, ele, 2) * H;
-
-          F_spts(spt, ele, 0, 2) = U_spts(spt, ele, 3);
-          F_spts(spt, ele, 1, 2) = U_spts(spt, ele, 3) * U_spts(spt, ele, 1) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 2, 2) = U_spts(spt, ele, 3) * U_spts(spt, ele, 2) / U_spts(spt, ele, 0);
-          F_spts(spt, ele, 3, 2) = U_spts(spt, ele, 3) * U_spts(spt, ele, 3) / U_spts(spt, ele, 0) + P;
-          F_spts(spt, ele, 4, 2) = U_spts(spt, ele, 3) * H;
-        }
-      }
-    }
-#endif
-
-#ifdef _GPU
-    compute_Fconv_spts_EulerNS_wrapper(F_spts_d, U_spts_d, nSpts, nEles, nDims, input->gamma, 
-      startEle, endEle, input->overset, geo->iblank_cell_d.data());
-    check_error();
-#endif
-
-  }
-}
-
-void Elements::compute_Fvisc(unsigned int startEle, unsigned int endEle)
-{
-  if (input->equation == AdvDiff || input->equation == Burgers)
-  {
-#ifdef _CPU
-#pragma omp parallel for collapse(4)
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = startEle; ele < endEle; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            /* Can just add viscous flux to existing convective flux */
-            F_spts(spt, ele, n, dim) += -input->AdvDiff_D * dU_spts(spt, ele, n, dim);
-          }
-        }
-      }
-    }
-#endif
-
-#ifdef _GPU
-    compute_Fvisc_spts_AdvDiff_wrapper(F_spts_d, dU_spts_d, nSpts, nEles, nDims, 
-      input->AdvDiff_D, input->overset, geo->iblank_cell_d.data());
-    check_error();
-#endif
-
+      compute_F<1, 3, Burgers>(startEle, endEle);
   }
   else if (input->equation == EulerNS)
   {
-#ifdef _CPU
     if (nDims == 2)
-    {
-#pragma omp parallel for collapse(2)
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          /* Setting variables for convenience */
-          /* States */
-          double rho = U_spts(spt, ele, 0);
-          double momx = U_spts(spt, ele, 1);
-          double momy = U_spts(spt, ele, 2);
-          double e = U_spts(spt, ele, 3);
-
-          double u = momx / rho;
-          double v = momy / rho;
-          double e_int = e / rho - 0.5 * (u*u + v*v);
-
-          /* Gradients */
-          double rho_dx = dU_spts(spt, ele, 0, 0);
-          double momx_dx = dU_spts(spt, ele, 1, 0);
-          double momy_dx = dU_spts(spt, ele, 2, 0);
-          double e_dx = dU_spts(spt, ele, 3, 0);
-          
-          double rho_dy = dU_spts(spt, ele, 0, 1);
-          double momx_dy = dU_spts(spt, ele, 1, 1);
-          double momy_dy = dU_spts(spt, ele, 2, 1);
-          double e_dy = dU_spts(spt, ele, 3, 1);
-
-          /* Set viscosity */
-          double mu;
-          if (input->fix_vis)
-          {
-            mu = input->mu;
-          }
-          else
-          {
-            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
-          }
-
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-
-          double dv_dx = (momy_dx - rho_dx * v) / rho;
-          double dv_dy = (momy_dy - rho_dy * v) / rho;
-
-          double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
-          double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
-
-          double de_dx = (e_dx - dke_dx - rho_dx * e_int) / rho;
-          double de_dy = (e_dy - dke_dy - rho_dy * e_int) / rho;
-
-          double diag = (du_dx + dv_dy) / 3.0;
-
-          double tauxx = 2.0 * mu * (du_dx - diag);
-          double tauxy = mu * (du_dy + dv_dx);
-          double tauyy = 2.0 * mu * (dv_dy - diag);
-
-          /* Set viscous flux values */
-          F_spts(spt, ele, 1, 0) -= tauxx;
-          F_spts(spt, ele, 2, 0) -= tauxy;
-          F_spts(spt, ele, 3, 0) -= (u * tauxx + v * tauxy + (mu / input->prandtl) *
-              input-> gamma * de_dx);
-
-          F_spts(spt, ele, 1, 1) -= tauxy;
-          F_spts(spt, ele, 2, 1) -= tauyy;
-          F_spts(spt, ele, 3, 1) -= (u * tauxy + v * tauyy + (mu / input->prandtl) *
-              input->gamma * de_dy);
-        }
-      }
-    }
+      compute_F<4, 2, EulerNS>(startEle, endEle);
     else if (nDims == 3)
-    {
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          /* Setting variables for convenience */
-          /* States */
-          double rho = U_spts(spt, ele, 0);
-          double momx = U_spts(spt, ele, 1);
-          double momy = U_spts(spt, ele, 2);
-          double momz = U_spts(spt, ele, 3);
-          double e = U_spts(spt, ele, 4);
-
-          double u = momx / rho;
-          double v = momy / rho;
-          double w = momz / rho;
-          double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
-
-          /* Gradients */
-          double rho_dx = dU_spts(spt, ele, 0, 0);
-          double momx_dx = dU_spts(spt, ele, 1, 0);
-          double momy_dx = dU_spts(spt, ele, 2, 0);
-          double momz_dx = dU_spts(spt, ele, 3, 0);
-          double e_dx = dU_spts(spt, ele, 4, 0);
-          
-          double rho_dy = dU_spts(spt, ele, 0, 1);
-          double momx_dy = dU_spts(spt, ele, 1, 1);
-          double momy_dy = dU_spts(spt, ele, 2, 1);
-          double momz_dy = dU_spts(spt, ele, 3, 1);
-          double e_dy = dU_spts(spt, ele, 4, 1);
-
-          double rho_dz = dU_spts(spt, ele, 0, 2);
-          double momx_dz = dU_spts(spt, ele, 1, 2);
-          double momy_dz = dU_spts(spt, ele, 2, 2);
-          double momz_dz = dU_spts(spt, ele, 3, 2);
-          double e_dz = dU_spts(spt, ele, 4, 2);
-
-          /* Set viscosity */
-          double mu;
-          if (input->fix_vis)
-          {
-            mu = input->mu;
-          }
-          else
-          {
-            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
-          }
-
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-          double du_dz = (momx_dz - rho_dz * u) / rho;
-
-          double dv_dx = (momy_dx - rho_dx * v) / rho;
-          double dv_dy = (momy_dy - rho_dy * v) / rho;
-          double dv_dz = (momy_dz - rho_dz * v) / rho;
-
-          double dw_dx = (momz_dx - rho_dx * w) / rho;
-          double dw_dy = (momz_dy - rho_dy * w) / rho;
-          double dw_dz = (momz_dz - rho_dz * w) / rho;
-
-          double dke_dx = 0.5 * (u*u + v*v + w*w) * rho_dx + rho * (u * du_dx + v * dv_dx + w * dw_dx);
-          double dke_dy = 0.5 * (u*u + v*v + w*w) * rho_dy + rho * (u * du_dy + v * dv_dy + w * dw_dy);
-          double dke_dz = 0.5 * (u*u + v*v + w*w) * rho_dz + rho * (u * du_dz + v * dv_dz + w * dw_dz);
-
-          double de_dx = (e_dx - dke_dx - rho_dx * e_int) / rho;
-          double de_dy = (e_dy - dke_dy - rho_dy * e_int) / rho;
-          double de_dz = (e_dz - dke_dz - rho_dz * e_int) / rho;
-
-          double diag = (du_dx + dv_dy + dw_dz) / 3.0;
-
-          double tauxx = 2.0 * mu * (du_dx - diag);
-          double tauyy = 2.0 * mu * (dv_dy - diag);
-          double tauzz = 2.0 * mu * (dw_dz - diag);
-          double tauxy = mu * (du_dy + dv_dx);
-          double tauxz = mu * (du_dz + dw_dx);
-          double tauyz = mu * (dv_dz + dw_dy);
-
-          /* Set viscous flux values */
-          F_spts(spt, ele, 1, 0) -= tauxx;
-          F_spts(spt, ele, 2, 0) -= tauxy;
-          F_spts(spt, ele, 3, 0) -= tauxz;
-          F_spts(spt, ele, 4, 0) -= (u * tauxx + v * tauxy + w * tauxz + (mu / input->prandtl) *
-              input-> gamma * de_dx);
-
-          F_spts(spt, ele, 1, 1) -= tauxy;
-          F_spts(spt, ele, 2, 1) -= tauyy;
-          F_spts(spt, ele, 3, 1) -= tauyz;
-          F_spts(spt, ele, 4, 1) -= (u * tauxy + v * tauyy + w * tauyz + (mu / input->prandtl) *
-              input->gamma * de_dy);
-
-          F_spts(spt, ele, 1, 2) -= tauxz;
-          F_spts(spt, ele, 2, 2) -= tauyz;
-          F_spts(spt, ele, 3, 2) -= tauzz;
-          F_spts(spt, ele, 4, 2) -= (u * tauxz + v * tauyz + w * tauzz + (mu / input->prandtl) *
-              input->gamma * de_dz);
-        }
-      }
-
-    }
+      compute_F<5, 3, EulerNS>(startEle, endEle);
+  }
 #endif
 
 #ifdef _GPU
-    compute_Fvisc_spts_EulerNS_wrapper(F_spts_d, U_spts_d, dU_spts_d, nSpts, nEles, nDims,
-                                       input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, input->fix_vis,
-                                       input->overset, geo->iblank_cell_d.data());
-    check_error();
+  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
+      input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
+      input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
+
+  check_error();
 #endif
-  }
 }
+
 
 void Elements::compute_dFdUconv()
 {
