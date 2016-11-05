@@ -271,7 +271,7 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
   MPI_Get_processor_name(hostname, &len);
 //  std::cout << "Global rank " << grank << " is on processor " << hostname << std::endl;
   //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
-  cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
+  cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
 //  printf("My CUDA device for rank %d(%d) is %d / %d\n",rank,grank,grank%4,nDevices);
 
 //  cudaDeviceProp prop;
@@ -450,14 +450,53 @@ double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
   return solver->eles->dU_spts(spt, ele, var, dim);
 }
 
-double *Zefr::get_u_spts(void)
+double *Zefr::get_u_spts(int &ele_stride, int &spt_stride, int &var_stride)
 {
+  ele_stride = solver->eles->nSpts;
+  spt_stride = 1;
+  var_stride = solver->eles->nEles * solver->eles->nSpts;
+
   return solver->eles->U_spts.data();
 }
 
-double *Zefr::get_u_fpts(void)
+double *Zefr::get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
 {
-  return solver->faces->U.data();
+  ele_stride = solver->eles->nSpts;
+  spt_stride = 1;
+  var_stride = solver->eles->nEles * solver->eles->nSpts;
+  dim_stride = solver->eles->nEles * solver->eles->nSpts * solver->eles->nVars;
+
+  return solver->eles->dU_spts.data();
+}
+
+
+double *Zefr::get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
+{
+#ifdef _GPU
+  ele_stride = solver->eles->nSpts;
+  spt_stride = 1;
+  var_stride = solver->eles->nEles * solver->eles->nSpts;
+
+  return solver->eles->U_spts_d.data();
+#endif
+#ifdef _CPU
+  ThrowException("Should not be calling get_u_spts_d - ZEFR not compiled for GPUs!");
+#endif
+}
+
+double *Zefr::get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+{
+#ifdef _GPU
+  ele_stride = solver->eles->nSpts;
+  spt_stride = 1;
+  var_stride = solver->eles->nEles * solver->eles->nSpts;
+  dim_stride = solver->eles->nEles * solver->eles->nSpts * solver->eles->nVars;
+
+  return solver->eles->dU_spts_d.data();
+#endif
+#ifdef _CPU
+  ThrowException("Should not be calling get_du_spts_d - ZEFR not compiled for GPUs!");
+#endif
 }
 
 void Zefr::get_nodes_per_cell(int &nNodes)
@@ -551,13 +590,13 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag)
 #endif
 }
 
-void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, double *q_fpts, int gradFlag))
+void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, int gradFlag))
 {
   overset_interp = dataUpdate;
 }
 
 void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
-                         void (*dataUpdate)(int, double*, double*, int))
+                               void (*dataUpdate)(int, double*, int))
 {
   tg_preprocess = preprocess;
   tg_process_connectivity = connect;

@@ -2,6 +2,7 @@
 #include "tiogaInterface.h"
 
 #include "mpi.h"
+//#include <valgrind/callgrind.h>
 
 int main(int argc, char *argv[])
 {
@@ -19,8 +20,9 @@ int main(int argc, char *argv[])
 
   /* Basic sphere test case */
   nGrids = 2;
-  if (rank <= 1) gridID = 0;
-  if (rank > 1) gridID = 1;
+  gridID = (rank >= size / nGrids);
+  //if (rank <= 1) gridID = 0;
+  //if (rank > 1) gridID = 1;
 
 //  nGrids = 1;
 //  gridID = 0;
@@ -82,6 +84,9 @@ int main(int argc, char *argv[])
   // Setup the TIOGA connectivity object
   tioga_init_(MPI_COMM_WORLD);
 
+  if (rank == 0)
+    std::cout << "Setting TIOGA callback functions..." << std::endl;
+
   tioga_registergrid_data_(geo.btag, geo.nnodes, geo.xyz, geo.iblank,
       geo.nwall, geo.nover, geo.wallNodes, geo.overNodes,
       geo.nCellTypes, geo.nvert_cell, geo.nCells_type, geo.c2v);
@@ -97,13 +102,14 @@ int main(int argc, char *argv[])
       cbs.donor_inclusion_test, cbs.donor_frac, cbs.convert_to_modal);
 
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
-      cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt);
+      cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt,
+      cbs.get_q_spts, cbs.get_dq_spts);
 
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())
   {
     tioga_set_ab_callback_gpu_(cbs.donor_data_from_device, 
-      cbs.fringe_data_to_device);
+      cbs.fringe_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d);
   }
 
   /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
@@ -123,7 +129,7 @@ int main(int argc, char *argv[])
     z->update_iblank_gpu();
 
   // Output initial solution and grid
-  z->write_solution();
+//  z->write_solution();
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -132,16 +138,18 @@ int main(int argc, char *argv[])
   Timer tgTime("TIOGA Interp Time: ");
   inp.waitTimer.setPrefix("ZEFR MPI Time: ");
 
-  for (int iter = 1; iter <= inp.n_steps; iter++)
+//  CALLGRIND_START_INSTRUMENTATION;
+
+  for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
     runTime.startTimer();
     z->do_step();
     runTime.stopTimer();
 
-    if (iter%inp.report_freq == 0 or iter == 1 or iter == inp.n_steps)
+    if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
       z->write_residual();
 
-    if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)
+    if (inp.write_freq > 0 and (iter%inp.write_freq == 0 or iter == inp.n_steps))
       z->write_solution();
 
     if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
@@ -151,7 +159,9 @@ int main(int argc, char *argv[])
       z->write_error();
   }
 
-  z->write_solution();
+//  CALLGRIND_STOP_INSTRUMENTATION;
+
+//  z->write_solution();
 
   std::cout << "Preprocessing/Connectivity Time: ";
   tg_time.showTime(2);

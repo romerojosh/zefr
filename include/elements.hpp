@@ -109,6 +109,9 @@ class Elements
     _mpi_comm myComm;
 
     mdvector<double> U_donors, dU_donors;
+    int nDonors = 0;
+    int *donorIDs_d = NULL;
+    std::vector<int> donorIDs;
 
 #ifdef _GPU
     /* GPU data */
@@ -222,8 +225,8 @@ class Elements
     std::vector<double> getBoundingBox(int ele);
 
 #ifdef _GPU
-    void donor_u_from_device(int* donorIDs, int nDonors);
-    void donor_grad_from_device(int* donorIDs, int nDonors);
+    void donor_u_from_device(int* donorIDs_in, int nDonors_in);
+    void donor_grad_from_device(int* donorIDs_in, int nDonors_in);
 #endif
 
     void move(std::shared_ptr<Faces> faces);

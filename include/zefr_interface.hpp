@@ -69,6 +69,10 @@ struct CallbackFuncs
                      double* weights, double* rst, int* buffsize);
   void (*convert_to_modal)(int *cellID, int *nSpts, double *q_in, int *npts,
                            int *index_out, double *q_out);
+  double* (*get_q_spts)(int &ele_stride, int &spt_stride, int &var_stride);
+  double* (*get_dq_spts)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+  double* (*get_q_spts_d)(int &ele_stride, int &spt_stride, int &var_stride);
+  double* (*get_dq_spts_d)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
   double (*get_q_spt)(int cellID, int spt, int var);
   double (*get_grad_spt)(int cellID, int spt, int dim, int var);
   double& (*get_q_fpt)(int faceID, int fpt, int var);
@@ -112,7 +116,10 @@ CallbackFuncs get_callback_funcs(void);
 
 double get_q_spt(int ele, int spt, int var);
 double get_grad_spt(int ele, int spt, int dim, int var);
-double *get_q_spts(void);
+double *get_q_spts(int &ele_stride, int &spt_stride, int &var_stride);
+double *get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+double *get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride);
+double *get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
 double *get_q_fpts(void);
 
 /* ==== Callback Function Wrappers ==== */

@@ -75,7 +75,7 @@ class mdvector_gpu
 
     void free_data();
 
-    //! Allocated memory & dimensions of vec w/o copying values
+    //! Allocate memory & dimensions of vec w/o copying values
     void set_size(mdvector<T>& vec);
 
     //! Assignment (copy from host)
@@ -184,6 +184,9 @@ void mdvector_gpu<T>::set_size(mdvector<T>& vec)
     strides_h = new unsigned int[6];
 
     copy_to_device(strides, vec.strides_ptr(), 6);
+
+    std::copy(vec.strides_ptr(), vec.strides_ptr()+6, strides_h);
+
     allocated = true;
   }
 }

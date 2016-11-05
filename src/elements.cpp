@@ -2924,18 +2924,53 @@ void Elements::get_interp_weights(double* rst, double* weights, int& nweights, i
 }
 
 #ifdef _GPU
-void Elements::donor_u_from_device(int* donorIDs, int nDonors)
+void Elements::donor_u_from_device(int* donorIDs_in, int nDonors_in)
 {
-  if (nDonors == 0) return;
+  if (nDonors_in == 0) return;
 
-  U_donors.assign({nSpts,nDonors,nVars},0,0);
-  U_donors_d.set_size(U_donors);
+  if (nDonors != nDonors_in)
+  {
+    if (nDonors > 0)
+      free_device_data(donorIDs_d);
 
-  int* donorIDs_d;
-  allocate_device_data(donorIDs_d, nDonors);
-  copy_to_device(donorIDs_d, donorIDs, nDonors);
+    nDonors = nDonors_in;
+
+    U_donors.resize({nSpts,nDonors,nVars});
+    U_donors_d.set_size(U_donors);
+
+    if (input->viscous)
+    {
+      dU_donors.resize({nSpts,nDonors,nVars,nDims});
+      dU_donors_d.set_size(dU_donors);
+      dU_donors = dU_donors_d;
+    }
+
+    donorIDs.assign(donorIDs_in, donorIDs_in+nDonors);
+    allocate_device_data(donorIDs_d, nDonors);
+    copy_to_device(donorIDs_d, donorIDs_in, nDonors);
+  }
+  else
+  {
+    bool sameIDs = true;
+    for (int i = 0; i < nDonors; i++)
+    {
+      if (donorIDs[i] != donorIDs_in[i])
+      {
+        sameIDs = false;
+        break;
+      }
+    }
+
+    if (!sameIDs)
+    {
+      donorIDs.assign(donorIDs_in, donorIDs_in+nDonors);
+      copy_to_device(donorIDs_d, donorIDs_in, nDonors_in);
+    }
+  }
 
   pack_donor_u_wrapper(U_spts_d,U_donors_d,donorIDs_d,nDonors,nSpts,nVars);
+
+  check_error();
 
   U_donors = U_donors_d;
 
@@ -2950,24 +2985,18 @@ void Elements::donor_u_from_device(int* donorIDs, int nDonors)
       }
     }
   }
-
-  free_device_data(donorIDs_d);
-
-  check_error();
 }
 
-void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
+void Elements::donor_grad_from_device(int* donorIDs_in, int nDonors_in)
 {
-  if (nDonors == 0) return;
+  if (nDonors_in == 0) return;
 
-  dU_donors.assign({nSpts,nDonors,nVars,nDims},0,0);
-  dU_donors_d.set_size(dU_donors);
+  if (nDonors_in != nDonors)
+    ThrowException("Invalid nDonors/nDonors_in - should have been set up in donor_u_from_device!");
 
-  int* donorIDs_d;
-  allocate_device_data(donorIDs_d, nDonors);
-  copy_to_device(donorIDs_d, donorIDs, nDonors);
+  pack_donor_grad_wrapper(dU_spts_d,dU_donors_d,donorIDs_d,nDonors_in,nSpts,nVars,nDims);
 
-  pack_donor_grad_wrapper(dU_spts_d,dU_donors_d,donorIDs_d,nDonors,nSpts,nVars,nDims);
+  check_error();
 
   dU_donors = dU_donors_d;
 
@@ -2985,9 +3014,5 @@ void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
       }
     }
   }
-
-  free_device_data(donorIDs_d);
-
-  check_error();
 }
 #endif

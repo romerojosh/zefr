@@ -90,14 +90,29 @@ double& get_grad_fpt(int face, int fpt, int dim, int var)
   return ZEFR->get_grad_fpt(face,fpt,dim,var);
 }
 
-double* get_q_spts(void)
+double* get_q_spts(int &ele_stride, int &spt_stride, int &var_stride)
 {
-  return ZEFR->get_u_spts();
+  return ZEFR->get_u_spts(ele_stride, spt_stride, var_stride);
+}
+
+double* get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+{
+  return ZEFR->get_du_spts(ele_stride, spt_stride, var_stride, dim_stride);
+}
+
+double* get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
+{
+  return ZEFR->get_u_spts_d(ele_stride, spt_stride, var_stride);
+}
+
+double* get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+{
+  return ZEFR->get_du_spts_d(ele_stride, spt_stride, var_stride, dim_stride);
 }
 
 double* get_q_fpts(void)
 {
-  return ZEFR->get_u_fpts();
+//  return ZEFR->get_u_fpts();
 }
 
 ExtraGeo get_extra_geo_data(void)
@@ -127,10 +142,15 @@ CallbackFuncs get_callback_funcs(void)
   call.get_grad_spt = get_grad_spt;
   call.get_q_fpt = get_q_fpt;
   call.get_grad_fpt = get_grad_fpt;
+  call.get_q_spts = get_q_spts;
+  call.get_dq_spts = get_dq_spts;
 
   /* GPU-specific functions */
   call.donor_data_from_device = donor_data_from_device;
   call.fringe_data_to_device = fringe_data_to_device;
+  /// TODO: replace ^ with these:
+  call.get_q_spts_d = get_q_spts_d;
+  call.get_dq_spts_d = get_dq_spts_d;
 
   return call;
 }

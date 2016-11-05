@@ -418,6 +418,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
     {
       f >> current_iter;
       restart_iter = current_iter;
+      input->iter = current_iter;
+      input->initIter = current_iter;
     }
     if (param == "ORDER")
     {
@@ -770,7 +772,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #ifdef _BUILD_LIB
   if (input->overset)
   {
-    ZEFR->overset_interp(faces->nVars, eles->U_spts.data(), faces->U.data(), 0);
+    PUSH_NVTX_RANGE("overset_U", 2);
+//    MPI_Pcontrol(1, "overset_interp_u");
+    ZEFR->overset_interp(faces->nVars, eles->U_spts.data(), 0);
+//    MPI_Pcontrol(-1, "overset_interp_u");
+    POP_NVTX_RANGE;
   }
 #endif
 
@@ -873,7 +879,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Interpolate gradient data to/from other grid(s) */
 #ifdef _BUILD_LIB
     if (input->overset)
-      ZEFR->overset_interp(faces->nVars, eles->dU_spts.data(), faces->dU.data(), 1);
+    {
+      PUSH_NVTX_RANGE("overset_grad", 2);
+      MPI_Pcontrol(1, "overset_interp_du");
+      ZEFR->overset_interp(faces->nVars, eles->dU_spts.data(), 1);
+      MPI_Pcontrol(-1, "overset_interp_du");
+      POP_NVTX_RANGE;
+    }
 #endif
 #endif
 

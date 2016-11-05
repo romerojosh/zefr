@@ -1889,7 +1889,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
   double dUL[nVars][nDims];
   double dUR[nVars][nDims];
 
-#pragma omp parallel for firstprivate(UL, UR, dUL, dUR, Fcomm_temp)
+#pragma omp parallel for firstprivate(UL, UR, dUL, dUR)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
@@ -3190,6 +3190,7 @@ void Faces::send_U_data()
 
 void Faces::recv_U_data()
 {
+  PUSH_NVTX_RANGE("MPI", 0);
 #ifdef _GPU
   int ridx = 0;
   /* Stage non-blocking receives */
@@ -3219,10 +3220,11 @@ void Faces::recv_U_data()
 
   /* Wait for comms to finish */
   input->waitTimer.startTimer();
-  PUSH_NVTX_RANGE("MPI", 0)
+  MPI_Pcontrol(1, "recv_U_data");
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
-  POP_NVTX_RANGE
+  MPI_Pcontrol(-1, "recv_U_data");
+  POP_NVTX_RANGE;
   input->waitTimer.stopTimer();
 
 #ifdef  _CPU
@@ -3361,8 +3363,10 @@ void Faces::recv_dU_data()
 
   PUSH_NVTX_RANGE("MPI", 0)
   /* Wait for comms to finish */
+  MPI_Pcontrol(1, "recv_dU_data");
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Pcontrol(-1, "recv_dU_data");
   POP_NVTX_RANGE
 
   /* Unpack buffer */
@@ -3469,9 +3473,9 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 {
   if (nFringe == 0) return;
 
-  U_fringe.assign({geo->nFptsPerFace, nFringe, nVars});
-  fringe_fpts.assign({geo->nFptsPerFace, nFringe}, 0);
-  fringe_side.assign({geo->nFptsPerFace, nFringe}, 0);
+  U_fringe.resize({geo->nFptsPerFace, nFringe, nVars});
+  fringe_fpts.resize({geo->nFptsPerFace, nFringe});
+  fringe_side.resize({geo->nFptsPerFace, nFringe});
   for (int face = 0; face < nFringe; face++)
   {
     unsigned int side = 0;
@@ -3516,7 +3520,7 @@ void Faces::fringe_grad_to_device(int nFringe)
 
   if (nFringe == 0) return;
 
-  dU_fringe.assign({geo->nFptsPerFace, nFringe, nVars, nDims});
+  dU_fringe.resize({geo->nFptsPerFace, nFringe, nVars, nDims});
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {

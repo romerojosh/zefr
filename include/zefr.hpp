@@ -99,8 +99,10 @@ public:
   // Solution-data access functions
   double get_u_spt(int ele, int spt, int var);
   double get_grad_spt(int ele, int spt, int dim, int var);
-  double *get_u_spts(void);
-  double *get_u_fpts(void);
+  double *get_u_spts(int &ele_stride, int &spt_stride, int &var_stride);
+  double *get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+  double *get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride);
+  double *get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
 
   // Callback Functions for TIOGA
   void get_nodes_per_cell(int& nNodes);
@@ -115,14 +117,14 @@ public:
 
   // GPU-related callback functions
   void update_iblank_gpu(void);
-  void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag);
-  void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag);
+  void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
+  void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag = 0);
 
   /// TODO: Reconsider organization
-  void set_dataUpdate_callback(void (*dataUpdate)(int, double*, double*, int));
+  void set_dataUpdate_callback(void (*dataUpdate)(int, double*, int));
 
   void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
-                           void (*dataUpdate)(int, double*, double*, int));
+                           void (*dataUpdate)(int, double*, int));
 
 private:
   // Generic data about the run
@@ -152,7 +154,7 @@ private:
   _mpi_comm myComm;
 
   //! Callback function to TIOGA to perform overset interpolation
-  void (*overset_interp)(int nVars, double* U_spts, double* U_fpts, int gradFlag);
+  void (*overset_interp)(int nVars, double* U_spts, int gradFlag);
 
   //! Callback function to TIOGA to pre-process the grids
   void (*tg_preprocess) (void);

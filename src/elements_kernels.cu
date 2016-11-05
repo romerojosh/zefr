@@ -1535,48 +1535,68 @@ void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
       nFpts,nEles,nDims);
 }
 
+template <unsigned int nVars>
 __global__
 void pack_donor_u(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_donors,
-    int* donorIDs, int nDonors, unsigned int nSpts, unsigned int nVars)
+    int* donorIDs, int nDonors, unsigned int nSpts)
 {
-  const unsigned int var = blockIdx.y;
-  //const unsigned int spt  = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  //const unsigned int donor= (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
-  const unsigned int spt  = threadIdx.x;
-  const unsigned int donor= blockIdx.x;
+  const unsigned int spt   = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int donor = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+//  const unsigned int spt  = threadIdx.x;
+//  const unsigned int donor= blockIdx.x;
 
   if (spt >= nSpts || donor >= nDonors)
     return;
 
   const unsigned int ele = donorIDs[donor];
-  U_donors(spt, donor, var) = U_spts(spt, ele, var);
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    U_donors(spt, donor, var) = U_spts(spt, ele, var);
+  }
 }
 
 void pack_donor_u_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars)
 {
-  int threads = nSpts;
-  dim3 blocks(nDonors, nVars);
+  int threads = 192;
+  int blocks = (nSpts * nDonors + threads - 1) / threads;
 
-  pack_donor_u<<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts, nVars);
+  switch (nVars)
+  {
+    case 1:
+      pack_donor_u<1><<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+      break;
+
+    case 4:
+      pack_donor_u<4><<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+      break;
+
+    case 5:
+      pack_donor_u<5><<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+      break;
+  }
 }
 
+template <unsigned int nVars>
 __global__
 void pack_donor_grad(mdvector_gpu<double> dU_spts,
     mdvector_gpu<double> dU_donors, int* donorIDs, int nDonors,
-    unsigned int nSpts, unsigned int nVars)
+    unsigned int nSpts)
 {
-  const unsigned int var = blockIdx.y % nVars;
-  const unsigned int dim = blockIdx.y / nVars;
+  const unsigned int dim = blockIdx.y;
   const unsigned int spt   = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
   const unsigned int donor = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
-  if (spt >= nSpts || donor >= nDonors)
+  if (spt >= nSpts || donor >= nDonors || dim >= 3)
     return;
 
   const unsigned int ele = donorIDs[donor];
-  dU_donors(spt, donor, var, dim) = dU_spts(spt, ele, var, dim);
+
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    dU_donors(spt, donor, var, dim) = dU_spts(spt, ele, var, dim);
+  }
 }
 
 void pack_donor_grad_wrapper(mdvector_gpu<double> &dU_spts,
@@ -1585,8 +1605,23 @@ void pack_donor_grad_wrapper(mdvector_gpu<double> &dU_spts,
 {
   int threads = 128;
   int nblock_x = (nDonors * nSpts + threads - 1) / threads;
-  dim3 blocks( nblock_x, nVars*nDims);
+  dim3 blocks(nblock_x, nDims);
 
-  pack_donor_grad<<<blocks, threads>>>(dU_spts, dU_donors, donorIDs, nDonors,
-      nSpts, nVars);
+  switch (nVars)
+  {
+    case 1:
+      pack_donor_grad<1><<<blocks, threads>>>(dU_spts, dU_donors, donorIDs,
+                                              nDonors, nSpts);
+      break;
+
+    case 4:
+      pack_donor_grad<4><<<blocks, threads>>>(dU_spts, dU_donors, donorIDs,
+                                              nDonors, nSpts);
+      break;
+
+    case 5:
+      pack_donor_grad<5><<<blocks, threads>>>(dU_spts, dU_donors, donorIDs,
+                                              nDonors, nSpts);
+      break;
+  }
 }

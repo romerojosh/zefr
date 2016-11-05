@@ -15,7 +15,8 @@ CUFLAGS = -std=c++11 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
-DEBUG_FLAGS = -g -O0
+#DEBUG_FLAGS = -Og
+DEBUG_FLAGS = -g -O1
 
 RELEASE_FLAGS = -Ofast
 
@@ -27,8 +28,9 @@ else
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CXXFLAGS += $(DEBUG_FLAGS)
-	CUFLAGS += -g -O1
+	CXXFLAGS += $(DEBUG_FLAGS) -D_NVTX
+	#CUFLAGS += -g -O1
+	CUFLAGS += -g -O3 -D_NVTX
 else
 	CXXFLAGS += $(RELEASE_FLAGS)
 	CUFLAGS += -O3 -use_fast_math
@@ -156,7 +158,8 @@ test: lib
 test_static: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test_static: static
 	cp $(BINDIR)/libzefr.a $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr $(LIBS) -L$(TIOGA_LIB_DIR)/ -ltioga $(SWIGDIR)/lib/libzefr.a -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) 
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr $(LIBS) $(SWIGDIR)/lib/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a
+#-Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) 
 
 
 # Implicit Rules
