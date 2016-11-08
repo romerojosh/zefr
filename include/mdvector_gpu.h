@@ -75,6 +75,8 @@ class mdvector_gpu
 
     void free_data();
 
+    void assign(std::vector<unsigned> dims, T* values, int stream = -1);
+
     //! Allocate memory & dimensions of vec w/o copying values
     void set_size(mdvector<T>& vec);
 
@@ -166,6 +168,33 @@ void mdvector_gpu<T>::free_data()
 
     allocated = false;
   }
+}
+
+template <typename T>
+void mdvector_gpu<T>::assign(std::vector<unsigned> dims, T* vec, int stream)
+{
+  size_ = 1;
+  for (auto &dim : dims)
+    size_ *= dim;
+
+  if (allocated && max_size_ != size_)
+    free_data();
+
+  if(!allocated)
+  {
+    max_size_ = size_;
+    ldim_ = dims[0];
+    allocate_device_data(values, max_size_);
+    allocate_device_data(strides, 6);
+    strides_h = new unsigned int[6];
+
+    std::copy(dims.data(), dims.data()+dims.size(), strides_h);
+
+    allocated = true;
+  }
+
+  copy_to_device(strides, strides_h, 6, stream);
+  copy_to_device(values, vec, size_, stream);
 }
 
 template <typename T>

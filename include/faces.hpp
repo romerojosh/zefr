@@ -171,7 +171,9 @@ class Faces
 
 #ifdef _GPU
     void fringe_u_to_device(int* fringeIDs, int nFringe);
+    void fringe_u_to_device(int* fringeIDs, int nFringe, double* data);
     void fringe_grad_to_device(int nFringe);
+    void fringe_grad_to_device(int nFringe, double* data);
 #endif
 };
 

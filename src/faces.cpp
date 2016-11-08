@@ -3545,4 +3545,51 @@ void Faces::fringe_grad_to_device(int nFringe)
 
   check_error();
 }
+
+
+void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
+{
+  if (nFringe == 0) return;
+
+  U_fringe_d.assign({geo->nFptsPerFace, nFringe, nVars}, data);
+
+  fringe_fpts.resize({geo->nFptsPerFace, nFringe});
+  fringe_side.resize({geo->nFptsPerFace, nFringe});
+  for (int face = 0; face < nFringe; face++)
+  {
+    unsigned int side = 0;
+    int ic1 = geo->face2eles(0,fringeIDs[face]);
+    if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
+      side = 1;
+
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+    {
+      fringe_fpts(fpt,face) = geo->face2fpts(fpt, fringeIDs[face]);
+      fringe_side(fpt,face) = side;
+    }
+  }
+
+  fringe_fpts_d = fringe_fpts;
+  fringe_side_d = fringe_side;
+
+  unpack_fringe_u_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,nFringe,
+      geo->nFptsPerFace,nVars);
+
+  check_error();
+}
+
+void Faces::fringe_grad_to_device(int nFringe, double *data)
+{
+  /* NOTE: Expecting that fringe_u_to_device has already been called for the
+   * same set of fringe faces */
+
+  if (nFringe == 0) return;
+
+  dU_fringe_d.assign({geo->nFptsPerFace, nFringe, nVars, nDims}, data);
+
+  unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
+      nFringe,geo->nFptsPerFace,nVars,nDims);
+
+  check_error();
+}
 #endif

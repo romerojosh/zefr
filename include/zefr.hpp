@@ -118,7 +118,7 @@ public:
   // GPU-related callback functions
   void update_iblank_gpu(void);
   void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
-  void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag = 0);
+  void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag = 0, double* data = NULL);
 
   /// TODO: Reconsider organization
   void set_dataUpdate_callback(void (*dataUpdate)(int, double*, int));

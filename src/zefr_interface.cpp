@@ -203,10 +203,10 @@ void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
 #endif
 }
 
-void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag)
+void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
 {
 #ifdef _GPU
-  ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag);
+  ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag, data);
 #endif
 }
 
