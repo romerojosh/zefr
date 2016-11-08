@@ -15,9 +15,6 @@ CUFLAGS = -std=c++11 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
-#DEBUG_FLAGS = -Og
-DEBUG_FLAGS = -g -O1
-
 RELEASE_FLAGS = -Ofast
 
 ifeq ($(strip $(WARNINGS)),YES)
@@ -28,12 +25,16 @@ else
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CXXFLAGS += $(DEBUG_FLAGS) -D_NVTX
-	#CUFLAGS += -g -O1
+	CXXFLAGS += -g -O3 -D_NVTX
 	CUFLAGS += -g -O3 -D_NVTX
+else 
+ifeq ($(strip $(DEBUG_LEVEL)),2)
+	CXXFLAGS += -g -O0 -D_NVTX
+	CUFLAGS += -g -O0 -D_NVTX
 else
 	CXXFLAGS += $(RELEASE_FLAGS)
 	CUFLAGS += -O3 -use_fast_math
+endif
 endif
 
 # Setting OpenMP flags

@@ -2530,7 +2530,8 @@ void unpack_fringe_u(mdvector_gpu<double> U_fringe,
 
   const unsigned int gfpt = fringe_fpts(fpt, face);
   const unsigned int side = fringe_side(fpt, face);
-  U(gfpt, var, side) = U_fringe(fpt, face, var);
+  //U(gfpt, var, side) = U_fringe(fpt, face, var);
+  U(gfpt, var, side) = U_fringe(var, fpt, face); /// TODO
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
@@ -2542,6 +2543,8 @@ void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
 
   unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, fringe_fpts, fringe_side,
       nFringe, nFpts, nVars);
+
+  check_error();
 }
 
 __global__
@@ -2560,7 +2563,8 @@ void unpack_fringe_grad(mdvector_gpu<double> dU_fringe,
 
   const unsigned int gfpt = fringe_fpts(fpt, face);
   const unsigned int side = fringe_side(fpt, face);
-  dU(gfpt, var, dim, side) = dU_fringe(fpt, face, var, dim);
+  //dU(gfpt, var, dim, side) = dU_fringe(fpt, face, var, dim);
+  dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face); /// TODO
 }
 
 void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
