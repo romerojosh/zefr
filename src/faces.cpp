@@ -932,7 +932,7 @@ void Faces::apply_bcs_dU()
 
 #ifdef _GPU
   apply_bcs_dU_wrapper(dU_d, U_d, norm_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, 
-      nDims, geo->gfpt2bnd_d, geo->per_fpt_list_d);
+      nDims, geo->gfpt2bnd_d, geo->per_fpt_list_d, input->equation);
 
   check_error();
 #endif
@@ -2021,13 +2021,6 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
         rusanov_flux<5, 3, EulerNS>(startFpt, endFpt);
     }
 
-#ifdef _APU
-    rusanov_flux_wrapper(U_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, LDG_bias_d,
-        dA_d, Vg_d, input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt,
-        input->motion, input->overset, geo->iblank_fpts_d.data());
-
-    check_error();
-#endif
   }
   else
   {
@@ -2061,15 +2054,6 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
         else
           LDG_flux<5, 3, EulerNS>(startFpt, endFpt);
       }
-
-#ifdef _APU
-      LDG_flux_wrapper(U_d, dU_d, Fcomm_d, norm_d, diffCo_d, LDG_bias_d, dA_d, 
-          input->AdvDiff_D, input->gamma, input->mu, input->prandtl, input->rt, input->c_sth,
-          input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, nVars, nDims, input->equation, 
-          startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
-
-      check_error();
-#endif
     }
     else
     {
@@ -2077,6 +2061,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
     }
   }
 #endif
+
 #ifdef _GPU
     compute_common_F_wrapper(U_d, dU_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, diffCo_d,
     LDG_bias_d,  dA_d, Vg_d, input->AdvDiff_D, input->gamma, input->rus_k, input->mu, input->prandtl, 

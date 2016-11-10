@@ -834,43 +834,40 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int n
   unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
-  if (blocks != 0)
+  if (equation == AdvDiff)
   {
-    if (equation == AdvDiff)
-    {
-      if (nDims == 2)
-        apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
-      else
-        apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
-    }
-    else if (equation == Burgers)
-    {
-      if (nDims == 2)
-        apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
-      else
-        apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
-    }
-    else if (equation == EulerNS)
-    {
-      if (nDims == 2)
-        apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
-      else
-        apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-            gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
-    }
+    if (nDims == 2)
+      apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+    else
+      apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+  }
+  else if (equation == Burgers)
+  {
+    if (nDims == 2)
+      apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+    else
+      apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+    else
+      apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
   }
 }
 
 template<unsigned int nVars, unsigned int nDims>
 __global__
-void apply_bcs_dU(mdview_gpu<double> dU, const mdview_gpu<double> U, const mdvector_gpu<double> norm_gfpt,
+void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<double> norm_gfpt,
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    const mdvector_gpu<unsigned int> gfpt2bnd, const mdvector_gpu<unsigned int> per_fpt_list)
+    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -882,11 +879,12 @@ void apply_bcs_dU(mdview_gpu<double> dU, const mdview_gpu<double> U, const mdvec
   /* Apply specified boundary condition */
   if (bnd_id == PERIODIC) /* Periodic */
   {
+    unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
+
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {	  
-        unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
         dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
       }
     }
@@ -1081,12 +1079,22 @@ void apply_bcs_dU(mdview_gpu<double> dU, const mdview_gpu<double> U, const mdvec
 
 void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvector_gpu<double> &norm, 
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
-    unsigned int nDims, mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list)
+    unsigned int nDims, mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list,
+    unsigned int equation)
 {
   unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
-  if (blocks != 0)
+  if (equation == AdvDiff || equation == Burgers)
+  {
+    if (nDims == 2)
+      apply_bcs_dU<1, 2><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
+          gfpt2bnd, per_fpt_list);
+    else
+      apply_bcs_dU<1, 3><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
+          gfpt2bnd, per_fpt_list);
+  }
+  else if (equation == EulerNS)
   {
     if (nDims == 2)
       apply_bcs_dU<4, 2><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
@@ -1821,17 +1829,14 @@ void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUcon
   unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
-  if (blocks != 0)
+  if (equation == EulerNS)
   {
-    if (equation == EulerNS)
-    {
-      if (nDims == 2)
-        apply_bcs_dFdU<4, 2><<<blocks, threads>>>(U, dFdUconv, dFdUvisc, dUcdU, dFddUvisc,
-            nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, gamma, norm, gfpt2bnd, viscous);
-      else
-        apply_bcs_dFdU<5, 3><<<blocks, threads>>>(U, dFdUconv, dFdUvisc, dUcdU, dFddUvisc,
-            nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, gamma, norm, gfpt2bnd, viscous);
-    }
+    if (nDims == 2)
+      apply_bcs_dFdU<4, 2><<<blocks, threads>>>(U, dFdUconv, dFdUvisc, dUcdU, dFddUvisc,
+          nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, gamma, norm, gfpt2bnd, viscous);
+    else
+      apply_bcs_dFdU<5, 3><<<blocks, threads>>>(U, dFdUconv, dFdUvisc, dUcdU, dFddUvisc,
+          nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, gamma, norm, gfpt2bnd, viscous);
   }
 }
 

@@ -278,7 +278,7 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, startEle, endEle, overset, iblank, motion);
     else if (nDims == 3)
       compute_F<1, 3, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
-          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, overset, startEle, endEle, iblank, motion);
+          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, startEle, endEle, overset, iblank, motion);
   }
   else if (equation == Burgers)
   {
