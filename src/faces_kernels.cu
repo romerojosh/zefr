@@ -831,6 +831,8 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int n
     mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation,
     bool motion)
 {
+  if (nGfpts_bnd == 0) return;
+
   unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
@@ -1082,6 +1084,8 @@ void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvecto
     unsigned int nDims, mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list,
     unsigned int equation)
 {
+  if (nGfpts_bnd == 0) return;
+
   unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
@@ -1826,6 +1830,8 @@ void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUcon
     unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
     mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous)
 {
+  if (nGfpts_bnd == 0) return;
+
   unsigned int threads = 128;
   unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
 
