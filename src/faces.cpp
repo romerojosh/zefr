@@ -3538,7 +3538,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 
   U_fringe_d.assign({nVars, geo->nFptsPerFace, nFringe}, data);
 
-  if (input->motion || input->iter <= input->initIter+1)
+  if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
   {
     fringe_fpts.resize({geo->nFptsPerFace, nFringe});
     fringe_side.resize({geo->nFptsPerFace, nFringe});

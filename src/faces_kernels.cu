@@ -2529,53 +2529,58 @@ void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<dou
 __global__
 void unpack_fringe_u(mdvector_gpu<double> U_fringe,
     mdview_gpu<double> U, mdvector_gpu<unsigned int> fringe_fpts,
-    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe, unsigned int nFpts,
-    unsigned int nVars)
+    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars)
 {
-  const unsigned int var  = blockIdx.y;
-  const unsigned int fpt  = threadIdx.x;
-  const unsigned int face = blockIdx.x;
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int fpt = (tot_ind / nVars) % nFpts;
+  const unsigned int face = tot_ind / (nFpts * nVars);
 
-  if (fpt >= nFpts || face >= nFringe || var > nVars)
+  if (fpt >= nFpts || face >= nFringe || var >= nVars)
     return;
 
   const unsigned int gfpt = fringe_fpts(fpt, face);
   const unsigned int side = fringe_side(fpt, face);
-  //U(gfpt, var, side) = U_fringe(fpt, face, var);
-  U(gfpt, var, side) = U_fringe(var, fpt, face); /// TODO
+
+  //U(gfpt, var, side) = U_fringe(fpt, face, var); /// TODO: look into further
+  U(gfpt, var, side) = U_fringe(var, fpt, face);
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
     mdview_gpu<double> &U, mdvector_gpu<unsigned int> &fringe_fpts,
     mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe, unsigned int nFpts, unsigned int nVars)
 {
-  int threads = nFpts;
-  dim3 blocks(nFringe, nVars);
+  int threads = 192;
+  int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
 
-  unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, fringe_fpts, fringe_side,
-      nFringe, nFpts, nVars);
+  unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, fringe_fpts,
+      fringe_side, nFringe, nFpts, nVars);
 
   check_error();
 }
 
+template <unsigned nDims>
 __global__
 void unpack_fringe_grad(mdvector_gpu<double> dU_fringe,
     mdview_gpu<double> dU, mdvector_gpu<unsigned int> fringe_fpts,
     mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
     unsigned int nFpts, unsigned int nVars)
 {
-  const unsigned int var = blockIdx.y % nVars;
-  const unsigned int dim = blockIdx.y / nVars;
-  const unsigned int fpt  = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  const unsigned int face = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int fpt = (tot_ind / nVars) % nFpts;
+  const unsigned int face = tot_ind / (nFpts * nVars);
 
-  if (fpt >= nFpts || face >= nFringe)
+  if (fpt >= nFpts || face >= nFringe || var >= nVars)
     return;
 
   const unsigned int gfpt = fringe_fpts(fpt, face);
   const unsigned int side = fringe_side(fpt, face);
+
   //dU(gfpt, var, dim, side) = dU_fringe(fpt, face, var, dim);
-  dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face); /// TODO
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face); /// TODO
 }
 
 void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
@@ -2584,9 +2589,15 @@ void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
     unsigned int nFpts, unsigned int nVars, unsigned int nDims)
 {
   int threads  = 192;
-  int nblock_x = (nFringe * nFpts + threads - 1)/ threads;
-  dim3 blocks( nblock_x, nVars*nDims);
+  int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
 
-  unpack_fringe_grad<<<blocks, threads>>>(dU_fringe, dU, fringe_fpts,
-      fringe_side, nFringe, nFpts, nVars);
+  if (nDims == 2)
+    unpack_fringe_grad<2><<<blocks, threads>>>(dU_fringe, dU, fringe_fpts,
+        fringe_side, nFringe, nFpts, nVars);
+
+  else if (nDims == 3)
+    unpack_fringe_grad<3><<<blocks, threads>>>(dU_fringe, dU, fringe_fpts,
+        fringe_side, nFringe, nFpts, nVars);
+
+  check_error();
 }

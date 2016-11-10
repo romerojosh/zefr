@@ -47,10 +47,6 @@ extern "C" {
 #include "mpi.h"
 #endif
 
-#ifdef _BUILD_LIB
-//#include "tiogaInterface.h"
-#endif
-
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
@@ -171,6 +167,7 @@ void FRSolver::setup_update()
   {
     nStages = 1;
     rk_beta.assign({nStages}, 1.0);
+    rk_alpha.assign({1}, 1.0);
 
   }
   else if (input->dt_scheme == "RK44")
@@ -769,6 +766,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
+  /* Extrapolate solution to flux points */
+  eles->extrapolate_U(startEle, endEle);
+
 #ifdef _BUILD_LIB
   if (input->overset)
   {
@@ -779,9 +779,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     POP_NVTX_RANGE;
   }
 #endif
-
-  /* Extrapolate solution to flux points */
-  eles->extrapolate_U(startEle, endEle);
 
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
@@ -881,9 +878,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     if (input->overset)
     {
       PUSH_NVTX_RANGE("overset_grad", 2);
-      MPI_Pcontrol(1, "overset_interp_du");
       ZEFR->overset_interp(faces->nVars, eles->dU_spts.data(), 1);
-      MPI_Pcontrol(-1, "overset_interp_du");
       POP_NVTX_RANGE;
     }
 #endif
@@ -892,7 +887,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
 
-    
     if (input->motion)
     {
       /* Use Liang-Miyaji Chain-Rule form to compute divF */
@@ -1791,8 +1785,11 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _GPU
-  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
-  check_error();
+  if (nStages > 1)
+  {
+    device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
+    check_error();
+  }
 #endif
 
   prev_time = flow_time;
@@ -1901,7 +1898,8 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-    flow_time = prev_time + rk_alpha(nStages-1) * dt(0);
+    if (nStages > 1)
+      flow_time = prev_time + rk_alpha(nStages-2) * dt(0);
 
     compute_residual(nStages-1);
 #ifdef _CPU
