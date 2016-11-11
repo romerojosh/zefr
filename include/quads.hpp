@@ -37,10 +37,16 @@ class Quads: public Elements
     void set_normals(std::shared_ptr<Faces> faces);
 
     mdvector<double> calc_shape(unsigned int shape_order,
-                                const std::vector<double> &loc);
+                                const double* loc);
 
     mdvector<double> calc_d_shape(unsigned int shape_order,
-                                  const std::vector<double> &loc);
+                                  const double* loc);
+
+    void calc_shape(mdvector<double> &shape_val, unsigned int shape_order,
+                    const double* loc);
+
+    void calc_d_shape(mdvector<double> &dshap_val, unsigned int shape_order,
+                      const double* loc);
 
     double calc_nodal_basis(unsigned int spt,
                             const std::vector<double> &loc);

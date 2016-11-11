@@ -466,10 +466,18 @@ void Quads::transform_dFdU()
 #endif
 }
 
-mdvector<double> Quads::calc_shape(unsigned int shape_order, 
-                                   const std::vector<double> &loc)
+mdvector<double> Quads::calc_shape(unsigned int shape_order,
+                                   const double* loc)
 {
   mdvector<double> shape_val({nNodes}, 0.0);
+  calc_shape(shape_val, shape_order, loc);
+
+  return shape_val;
+}
+
+void Quads::calc_shape(mdvector<double> &shape_val, unsigned int shape_order,
+                       const double* loc)
+{
   double xi = loc[0]; 
   double eta = loc[1];
 
@@ -515,14 +523,20 @@ mdvector<double> Quads::calc_shape(unsigned int shape_order,
       }
     }
   }
-
-  return shape_val;
 }
 
 mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
-                                     const std::vector<double> &loc)
+                                     const double* loc)
 {
-  mdvector<double> dshape_val({nNodes, nDims}, 0.0);
+  mdvector<double> dshape_val({nNodes, nDims}, 0);
+  calc_d_shape(dshape_val,shape_order,loc);
+
+  return dshape_val;
+}
+
+void Quads::calc_d_shape(mdvector<double> &dshape_val, unsigned int shape_order,
+                         const double* loc)
+{
   double xi = loc[0];
   double eta = loc[1];
 
@@ -578,6 +592,4 @@ mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
       }
     }
   }
-
-  return dshape_val;
 }

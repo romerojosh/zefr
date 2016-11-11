@@ -115,6 +115,8 @@ class mdvector
 
     //! Method to return starting data pointer
     T* data();
+
+    const T* data() const;
     
     //! Method to return max element
     T max_val() const;
@@ -355,6 +357,15 @@ unsigned int mdvector<T>::ldim() const
 
 template <typename T>
 T* mdvector<T>::data(void)
+{
+  if (!pinned)
+    return values.data();
+  else
+    return values_ptr;
+}
+
+template <typename T>
+const T* mdvector<T>::data(void) const
 {
   if (!pinned)
     return values.data();

@@ -37,6 +37,12 @@ extern "C" {
 #include "input.hpp"
 #include "funcs.hpp"
 
+//! Storing Gmsh to structured-IJK index mappings to avoid re-computing
+static std::map<int, std::vector<int>> gmsh_maps_hex;
+static std::map<int, std::vector<int>> gmsh_maps_quad;
+static std::map<int, std::vector<int>> ijk_maps_quad;
+static std::map<int, std::vector<int>> ijk_maps_hex;
+
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
 {
    
@@ -372,6 +378,37 @@ void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA,
 //  return os;
 //}
 
+// See Eigen's 'determinant.h' from 2014-9-18,
+// https://bitbucket.org/eigen/eigen file Eigen/src/LU/determinant.h,
+double det_3x3_part(const double* mat, int a, int b, int c)
+{
+  return mat[a] * (mat[3+b] * mat[6+c] - mat[3+c] * mat[6+b]);
+}
+
+double det_4x4_part(const double* mat, int j, int k, int m, int n)
+{
+  return (mat[j*4] * mat[k*4+1] - mat[k*4] * mat[j*4+1])
+      * (mat[m*4+2] * mat[n*4+3] - mat[n*4+2] * mat[m*4+3]);
+}
+
+double det_2x2(const double* mat)
+{
+  return mat[0]*mat[3] - mat[1]*mat[2];
+}
+
+double det_3x3(const double* mat)
+{
+  return det_3x3_part(mat,0,1,2) - det_3x3_part(mat,1,0,2)
+      + det_3x3_part(mat,2,0,1);
+}
+
+double det_4x4(const double* mat)
+{
+  return det_4x4_part(mat,0,1,2,3) - det_4x4_part(mat,0,2,1,3)
+      + det_4x4_part(mat,0,3,1,2) + det_4x4_part(mat,1,2,0,3)
+      - det_4x4_part(mat,1,3,0,2) + det_4x4_part(mat,2,3,0,1);
+}
+
 mdvector<double> adjoint(const mdvector<double> &mat)
 {
   auto dims = mat.shape();
@@ -412,6 +449,46 @@ mdvector<double> adjoint(const mdvector<double> &mat)
   return adj;
 }
 
+
+//! In-place adjoint function
+void adjoint(const mdvector<double> &mat, mdvector<double> &adj)
+{
+  auto dims = mat.shape();
+
+  if (dims[0] != dims[1])
+    ThrowException("Adjoint only meaningful for square matrices.");
+
+  adj.resize({dims[0],dims[1]});
+
+  int signRow = -1;
+  mdvector<double> Minor({dims[0]-1,dims[1]-1});
+  for (int row = 0; row < dims[0]; row++)
+  {
+    signRow *= -1;
+    int sign = -1*signRow;
+    for (int col = 0; col < dims[1]; col++)
+    {
+      sign *= -1;
+      // Setup the minor matrix (expanding along row, col)
+      int i0 = 0;
+      for (int i = 0; i < dims[0]; i++)
+      {
+        if (i == row) continue;
+        int j0 = 0;
+        for (int j = 0; j < dims[1]; j++)
+        {
+          if (j == col) continue;
+          Minor(i0,j0) = mat(i,j);
+          j0++;
+        }
+        i0++;
+      }
+      // Recall: adjoint is TRANSPOSE of cofactor matrix
+      adj(col,row) = sign*determinant(Minor);
+    }
+  }
+}
+
 double determinant(const mdvector<double> &mat)
 {
   auto dims = mat.shape();
@@ -421,8 +498,16 @@ double determinant(const mdvector<double> &mat)
 
   if (dims[0] == 1)
     return mat(0,0);
-  else if (dims[0] == 2) // Base case
-    return mat(0,0)*mat(1,1) - mat(0,1)*mat(1,0);
+
+  else if (dims[0] == 2)
+    return mat(0,0)*mat(1,1) - mat(1,0)*mat(0,1);
+
+  else if (dims[0] == 3)
+    return det_3x3(mat.data());
+
+  else if (dims[0] == 4)
+    return det_4x4(mat.data());
+
   else
   {
     // Use minor-matrix recursion
@@ -453,6 +538,9 @@ double determinant(const mdvector<double> &mat)
 
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
 {
+  if (ijk_maps_quad.count(nNodes))
+    return ijk_maps_quad[nNodes];
+
   std::vector<int> gmsh_to_ijk(nNodes,0);
 
   /* Lagrange Elements (or linear serendipity) */
@@ -505,25 +593,48 @@ std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
     gmsh_to_ijk[6] = 4; gmsh_to_ijk[7] = 6;
   }
 
+  ijk_maps_quad[nNodes] = gmsh_to_ijk;
+
   return gmsh_to_ijk;
 }
 
 std::vector<int> structured_to_gmsh_quad(unsigned int nNodes)
 {
-  auto gmsh2ijk = gmsh_to_structured_quad(nNodes);
+  if (gmsh_maps_quad.count(nNodes))
+  {
+    return gmsh_maps_quad[nNodes];
+  }
+  else
+  {
+    auto gmsh2ijk = gmsh_to_structured_quad(nNodes);
 
-  return reverse_map(gmsh2ijk);
+    gmsh_maps_quad[nNodes] = reverse_map(gmsh2ijk);
+
+    return gmsh_maps_quad[nNodes];
+  }
 }
 
 std::vector<int> structured_to_gmsh_hex(unsigned int nNodes)
 {
-  auto gmsh2ijk = gmsh_to_structured_hex(nNodes);
+  if (gmsh_maps_hex.count(nNodes))
+  {
+    return gmsh_maps_hex[nNodes];
+  }
+  else
+  {
+    auto gmsh2ijk = gmsh_to_structured_hex(nNodes);
 
-  return reverse_map(gmsh2ijk);
+    gmsh_maps_hex[nNodes] = reverse_map(gmsh2ijk);
+
+    return gmsh_maps_hex[nNodes];
+  }
 }
 
 std::vector<int> gmsh_to_structured_hex(unsigned int nNodes)
 {
+  if (ijk_maps_hex.count(nNodes))
+    return ijk_maps_hex[nNodes];
+
   std::vector<int> gmsh_to_ijk(nNodes,0);
 
   int nSide = cbrt(nNodes);
@@ -760,6 +871,8 @@ std::vector<int> gmsh_to_structured_hex(unsigned int nNodes)
   if (isOdd) {
     gmsh_to_ijk[nNodes-1] = nSide/2 + nSide * (nSide/2 + nSide * (nSide/2));
   }
+
+  ijk_maps_hex[nNodes] = gmsh_to_ijk;
 
   return gmsh_to_ijk;
 }

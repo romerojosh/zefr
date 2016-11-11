@@ -87,7 +87,9 @@ void Elements::set_shape()
   jaco_det_qpts.assign({nQpts, nEles});
   vol.assign({nEles});
 
-  std::vector<double> loc(nDims,0.0);
+  double loc[3] = {0., 0., 0.};
+  mdvector<double> shape_val({nNodes});
+  mdvector<double> dshape_val({nNodes,nDims});
 
   /* Shape functions and derivatives at solution points */
   for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -96,8 +98,8 @@ void Elements::set_shape()
       loc[dim] = loc_spts(spt,dim);
 
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    calc_shape(shape_val, shape_order, loc);
+    calc_d_shape(dshape_val, shape_order, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -114,8 +116,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_fpts(fpt,dim);
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    calc_shape(shape_val, shape_order, loc);
+    calc_d_shape(dshape_val, shape_order, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -132,8 +134,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_ppts(ppt,dim);
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    calc_shape(shape_val, shape_order, loc);
+    calc_d_shape(dshape_val, shape_order, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -147,8 +149,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_qpts(qpt,dim);
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    calc_shape(shape_val, shape_order, loc);
+    calc_d_shape(dshape_val, shape_order, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -2863,6 +2865,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   mdvector<double> shape({nNodes});
   mdvector<double> dshape({nNodes,nDims});
   mdvector<double> grad({nDims,nDims});
+  mdvector<double> ginv({nDims,nDims});
 
   int iter = 0;
   int iterMax = 20;
@@ -2871,8 +2874,8 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
   while (norm > tol && iter < iterMax)
   {
-    shape = calc_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
-    dshape = calc_d_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
+    calc_shape(shape, shape_order, rst);
+    calc_d_shape(dshape, shape_order, rst);
 
     point dx = pos;
     grad.fill(0);
@@ -2891,27 +2894,24 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
     double detJ = determinant(grad);
 
-    auto ginv = adjoint(grad);
+    adjoint(grad,ginv);
 
     point delta = {0,0,0};
     for (int i=0; i<nDims; i++)
       for (int j=0; j<nDims; j++)
         delta[i] += ginv(i,j)*dx[j]/detJ;
 
-    norm = 0;
-    for (int i = 0; i < nDims; i++) {
-      norm += dx[i]*dx[i];
-      rst[i] += delta[i];
-      rst[i] = std::max(std::min(rst[i],1.),-1.);
-    }
+    norm = dx.norm();
+    for (int i = 0; i < nDims; i++)
+      rst[i] = std::max(std::min(rst[i]+delta[i],1.),-1.);
 
     iter++;
-    if (iter == iterMax) {
-      return false;
-    }
   }
 
-  return true;
+  if (norm <= tol)
+    return true;
+  else
+    return false;
 }
 
 void Elements::get_interp_weights(double* rst, double* weights, int& nweights, int buffSize)

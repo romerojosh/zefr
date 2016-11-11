@@ -107,6 +107,9 @@ unsigned int step(const T& val)
 
 mdvector<double> adjoint(const mdvector<double> &mat);
 
+//! In-place matrix adjoint
+void adjoint(const mdvector<double> &mat, mdvector<double> &adj);
+
 double determinant(const mdvector<double> &mat);
 
 template<typename T>

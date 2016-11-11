@@ -23,12 +23,12 @@
 #include "polynomials.hpp"
 
 
-double Lagrange(std::vector<double> xiGrid, double xi, unsigned int mode)
+double Lagrange(const std::vector<double> &xiGrid, double xi, unsigned int mode)
 {
   return Lagrange(xiGrid, mode, xi);
 }
 
-double Lagrange(std::vector<double> xiGrid, unsigned int mode, double xi)
+double Lagrange(const std::vector<double> &xiGrid, unsigned int mode, double xi)
 {
   double val = 1.0;
   unsigned int npts = (unsigned int) xiGrid.size();
@@ -42,12 +42,12 @@ double Lagrange(std::vector<double> xiGrid, unsigned int mode, double xi)
   return val;
 }
 
-double dLagrange(std::vector<double> xiGrid, double xi, unsigned int mode)
+double dLagrange(const std::vector<double>& xiGrid, double xi, unsigned int mode)
 {
   return Lagrange_d1(xiGrid, mode, xi);
 }
 
-double Lagrange_d1(std::vector<double> xiGrid, unsigned int mode, double xi)
+double Lagrange_d1(const std::vector<double>& xiGrid, unsigned int mode, double xi)
 {
   double val = 0.0;
   unsigned int npts = (unsigned int) xiGrid.size();
