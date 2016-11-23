@@ -112,6 +112,8 @@ void adjoint(const mdvector<double> &mat, mdvector<double> &adj);
 
 double determinant(const mdvector<double> &mat);
 
+mdvector<double> getRotationMatrix(double axis[3], double angle);
+
 template<typename T>
 int findFirst(const std::vector<T>& vec, T val)
 {

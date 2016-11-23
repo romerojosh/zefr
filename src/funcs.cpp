@@ -536,6 +536,31 @@ double determinant(const mdvector<double> &mat)
   }
 }
 
+mdvector<double> getRotationMatrix(double axis[3], double angle)
+{
+  Vec3 Axis = Vec3(axis[0],axis[1],axis[2]);
+  double mag = Axis.norm();
+  double ax = Axis.x /= mag;
+  double ay = Axis.y /= mag;
+  double az = Axis.z /= mag;
+
+  mdvector<double> mat({3,3}, 0);
+
+  double s = sin(angle);
+  double c = cos(angle);
+  double c1 = 1.-c;
+
+  double axyc = ax*ay*c1;
+  double axzc = ax*az*c1;
+  double ayzc = ay*az*c1;
+
+  mat(0,0) = c + ax*ax*c1;  mat(0,1) = axyc - az*s;  mat(0,2) = axzc + ay*s;
+  mat(1,0) = axyc + az*s;   mat(1,1) = c + ay*ay*c1; mat(1,2) = ayzc - ax*s;
+  mat(2,0) = axzc - ay*s;   mat(2,1) = ayzc + ax*s;  mat(2,2) = c + az*az*c1;
+
+  return mat;
+}
+
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
 {
   if (ijk_maps_quad.count(nNodes))

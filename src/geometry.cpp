@@ -438,6 +438,9 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
   geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
   geo.face2eles.assign({2, geo.nFaces}, -1);
+#ifdef _BUILD_LIB
+    geo.face2nodes.assign({geo.nNodesPerFace,geo.nFaces},-1);
+#endif
   for (int f = 0; f < geo.nIntFaces; f++)
   {
     auto &f1 = geo.face_list(f,0);
@@ -448,6 +451,11 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.ele2face(f2.loc_f, f2.ic) = f;
     geo.face2eles(0, f) = f1.ic;
     geo.face2eles(1, f) = f2.ic;
+#ifdef _BUILD_LIB
+    // Connectivity only used in conjunction with TIOGA
+    for (int j = 0; j < geo.nNodesPerFace; j++)
+      geo.face2nodes(j,f) = geo.ele2nodes(geo.face_nodes(f1.loc_f, j), f1.ic);
+#endif
   }
 
   int fid = geo.nIntFaces;
@@ -458,6 +466,11 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       auto f = geo.bound_faces[bnd][ff];
       geo.ele2face(f.loc_f, f.ic) = fid;
       geo.face2eles(0, fid) = f.ic;
+#ifdef _BUILD_LIB
+      // Connectivity only used in conjunction with TIOGA
+      for (int j = 0; j < geo.nNodesPerFace; j++)
+        geo.face2nodes(j,fid) = geo.ele2nodes(geo.face_nodes(f.loc_f, j), f.ic);
+#endif
       fid++;
     }
   }
@@ -1620,6 +1633,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.face2eles.assign({2, unique_faces.size()}, -1);
     geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
     geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
+#ifdef _BUILD_LIB
+    geo.face2nodes.assign({geo.nNodesPerFace, unique_faces.size()}, -1);
+#endif
 
     std::set<int> overPts, wallPts;
     std::set<std::vector<unsigned int>> overFaces;
@@ -1664,6 +1680,10 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         {
           geo.ele2face(n, ele) = geo.nFaces;
           geo.face2eles(0, geo.nFaces) = ele;
+#ifdef _BUILD_LIB
+          for (int j = 0; j < geo.nNodesPerFace; j++)
+            geo.face2nodes(j,geo.nFaces) = geo.ele2nodes(geo.face_nodes(n, j), ele);
+#endif
 
           /* Check if face is on boundary */
           if (geo.bnd_faces.count(face))
@@ -3134,6 +3154,40 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
         }
       }
       break;
+    }
+    case 10:
+    {
+      /// 6 DOF Rotation / Translation
+
+      // Rotation Component
+      auto rotMat = getRotationMatrix(input->rot_axis,input->rot_angle);
+
+      int m = 3;
+      int k = 3;
+      int n = nNodes;
+
+      auto &A = rotMat(0,0);
+      auto &B = geo.coords_init(0,0);
+      auto &C = geo.coord_nodes(0,0);
+    #ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                        1.0, &A, k, &B, k, 0.0, &C, m);
+    #else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                  1.0, &A, k, &B, k, 0.0, &C, m);
+    #endif
+
+      // Translation Component
+      for (int i = 0; i < nNodes; i++)
+      {
+        geo.coord_nodes(0,i) += input->dxc[0];
+        geo.coord_nodes(1,i) += input->dxc[1];
+        geo.coord_nodes(2,i) += input->dxc[2];
+
+        geo.grid_vel_nodes(0,i) += input->dvc[0];
+        geo.grid_vel_nodes(1,i) += input->dvc[1];
+        geo.grid_vel_nodes(2,i) += input->dvc[2];
+      }
     }
   }
 }

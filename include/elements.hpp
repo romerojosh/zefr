@@ -69,7 +69,7 @@ class Elements
     mdvector<double> jaco_fpts, jaco_det_fpts, inv_jaco_fpts;
     mdvector<double> nodes;
     mdvector<double> vol;
-    mdvector<double> weights_spts;
+    mdvector<double> weights_spts, weights_fpts;
     mdvector<double> h_ref;
     std::vector<double> weights_qpts;
 

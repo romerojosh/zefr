@@ -25,13 +25,13 @@ else
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CXXFLAGS += -g -O3 -D_NVTX
-	CUFLAGS += -g -O3 -D_NVTX
+	CXXFLAGS += -g -O3 #-D_NVTX
+	CUFLAGS += -g -O3 #-D_NVTX
 else 
 ifeq ($(strip $(DEBUG_LEVEL)),2)
-	CXXFLAGS += -g -O0 -D_NVTX
-	CUFLAGS += -g -O0 -D_NVTX
-else
+	CXXFLAGS += -g -O0 #-D_NVTX
+	CUFLAGS += -g -O0 #-D_NVTX
+else 
 	CXXFLAGS += $(RELEASE_FLAGS)
 	CUFLAGS += -O3 -use_fast_math
 endif
@@ -159,9 +159,7 @@ test: lib
 test_static: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test_static: static
 	cp $(BINDIR)/libzefr.a $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr $(LIBS) $(SWIGDIR)/lib/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a
-#-Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) 
-
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp $(SWIGDIR)/lib/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a -o $(SWIGDIR)/testZefr $(LIBS)
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h

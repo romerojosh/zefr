@@ -111,6 +111,12 @@ void Hexas::set_locs()
   for (unsigned int spt = 0; spt < nSpts1D; spt++)
     weights_spts(spt) = weights_spts_temp[spt];
 
+  // For integration of quantities over faces
+  weights_fpts.assign({nSpts1D,nSpts1D});
+  for (unsigned int fpt1 = 0; fpt1 < nSpts1D; fpt1++)
+    for (unsigned int fpt2 = 0; fpt2 < nSpts1D; fpt2++)
+      weights_fpts(fpt1,fpt2) = weights_spts(fpt1)*weights_spts(fpt2);
+
   loc_DFR_1D = loc_spts_1D;
   loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
   loc_DFR_1D.insert(loc_DFR_1D.end(), 1.0);
