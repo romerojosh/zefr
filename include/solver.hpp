@@ -155,6 +155,9 @@ class FRSolver
     void report_error(std::ofstream &f);
     void filter_solution();
 
+    void compute_forces(std::array<double, 3>& force_conv, std::array<double, 3>& force_visc, std::ofstream* f);
+    void compute_moments(std::array<double, 3>& tot_force, std::array<double, 3>& tot_moment);
+
     /* Routines for implicit method */
     void compute_LHS();
     void compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsigned int color = 1);

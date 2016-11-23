@@ -115,6 +115,8 @@ void Quads::set_locs()
   for (unsigned int spt = 0; spt < nSpts1D; spt++)
     weights_spts(spt) = weights_spts_temp[spt];
 
+  weights_fpts = weights_spts;
+
   loc_DFR_1D = loc_spts_1D;
   loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
   loc_DFR_1D.insert(loc_DFR_1D.end(), 1.0);

@@ -145,6 +145,10 @@ struct InputStruct
   double moveAx, moveAy, moveAz;
   double moveFx, moveFy, moveFz;
 
+  double rot_axis[3];
+  double rot_angle;
+  double xc[3], dxc[3], vc[3], dvc[3];
+
   /* --- Additional Mesh Variables --- */
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 
