@@ -4873,7 +4873,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
     unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
     unsigned int idx = count % geo.nFptsPerFace;
 
-    if (bnd_id == SLIP_WALL_P || bnd_id == SLIP_WALL_G || bnd_id == ISOTHERMAL_NOSLIP_G  || bnd_id == ISOTHERMAL_NOSLIP_G
+    if (bnd_id == SLIP_WALL_P || bnd_id == SLIP_WALL_G || bnd_id == ISOTHERMAL_NOSLIP_P  || bnd_id == ISOTHERMAL_NOSLIP_G
         || bnd_id == ISOTHERMAL_NOSLIP_MOVING_P || bnd_id == ISOTHERMAL_NOSLIP_MOVING_G || bnd_id == ADIABATIC_NOSLIP_P
         || bnd_id == ADIABATIC_NOSLIP_G || bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* On wall boundary */
     {
@@ -5057,7 +5057,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
     unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
     unsigned int idx = count % geo.nFptsPerFace;
 
-    if (bnd_id == SLIP_WALL_P || bnd_id == SLIP_WALL_G || bnd_id == ISOTHERMAL_NOSLIP_G  || bnd_id == ISOTHERMAL_NOSLIP_G
+    if (bnd_id == SLIP_WALL_P || bnd_id == SLIP_WALL_G || bnd_id == ISOTHERMAL_NOSLIP_P  || bnd_id == ISOTHERMAL_NOSLIP_G
         || bnd_id == ISOTHERMAL_NOSLIP_MOVING_P || bnd_id == ISOTHERMAL_NOSLIP_MOVING_G || bnd_id == ADIABATIC_NOSLIP_P
         || bnd_id == ADIABATIC_NOSLIP_G || bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* On wall boundary */
     {

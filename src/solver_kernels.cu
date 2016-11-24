@@ -117,6 +117,7 @@ template void copy_to_device<MotionVars>(MotionVars* device_data, const MotionVa
 template <typename T>
 void copy_from_device(T* host_data, const T* device_data, unsigned int size, int stream)
 {
+  check_error();
   if (stream == -1)
   {
     cudaMemcpy(host_data, device_data, size * sizeof(T), cudaMemcpyDeviceToHost);
@@ -162,8 +163,10 @@ void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned 
 void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
-  unsigned int blocks = min((size + threads - 1) /threads, 65535);
+  unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   copy_kernel<<<blocks, threads>>>(vec1, vec2, size);
+
+  check_error();
 }
 
 __global__
@@ -174,14 +177,17 @@ void add_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned i
   if (idx >= size)
     return;
 
-  vec1(idx) += vec2(idx);
+  for (uint i = idx; i < size; i += gridDim.x * blockDim.x)
+    vec1(i) += vec2(i);
 }
 
 void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
-  unsigned int blocks = (size + threads - 1) /threads;
+  unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   add_kernel<<<blocks, threads>>>(vec1, vec2, size);
+
+  check_error();
 }
 
 __global__
@@ -192,14 +198,17 @@ void subtract_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsig
   if (idx >= size)
     return;
 
-  vec1(idx) -= vec2(idx);
+  for (uint i = idx; i < size; i += gridDim.x * blockDim.x)
+    vec1(i) -= vec2(i);
 }
 
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
   unsigned int threads = 192;
-  unsigned int blocks = (size + threads - 1) /threads;
+  unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   subtract_kernel<<<blocks, threads>>>(vec1, vec2, size);
+
+  check_error();
 }
 
 __global__
@@ -210,14 +219,17 @@ void fill_kernel(mdvector_gpu<double> vec, double val, unsigned int size)
   if (idx >= size)
     return;
 
-  vec(idx) = val;
+  for (uint i = idx; i < size; i += gridDim.x * blockDim.x)
+    vec(i) = val;
 }
 
 void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val)
 {
   unsigned int threads = 192;
-  unsigned int blocks = (size + threads - 1) /threads;
+  unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   fill_kernel<<<blocks, threads>>>(vec, val, size);
+
+  check_error();
 }
 
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 

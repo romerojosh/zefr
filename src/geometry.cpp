@@ -436,6 +436,12 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   // Finish setting up ele-to-face / face-to-ele connectivity
 
   geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
+  geo.nNodesPerFace = (geo.nDims == 3) ? 4 : 2;
+
+#ifdef _BUILD_LIB
+  set_face_nodes(geo);
+#endif
+
   geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
   geo.face2eles.assign({2, geo.nFaces}, -1);
 #ifdef _BUILD_LIB
