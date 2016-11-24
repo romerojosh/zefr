@@ -31,7 +31,7 @@ else
 ifeq ($(strip $(DEBUG_LEVEL)),2)
 	CXXFLAGS += -g -O0 #-D_NVTX
 	CUFLAGS += -g -O0 #-D_NVTX
-else 
+else
 	CXXFLAGS += $(RELEASE_FLAGS)
 	CUFLAGS += -O3 -use_fast_math
 endif
