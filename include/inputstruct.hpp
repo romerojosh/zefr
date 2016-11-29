@@ -111,7 +111,7 @@ struct InputStruct
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
   bool viscous, p_multi, restart, fix_vis, squeeze, serendipity, source;
   std::vector<unsigned int> mg_levels, mg_steps;
-  std::string fconv_type, fvisc_type;
+  unsigned int fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau;
   double AdvDiff_D, dt, res_tol, CFL, rel_fac, CFL_max, CFL_ratio;
   mdvector<double> AdvDiff_A, V_fs, norm_fs, V_wall, norm_wall;
