@@ -2004,7 +2004,7 @@ void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars],
 
     //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
     wS = std::abs(VnL - Vgn) + aL;
-    wS = max(waveSp, std::abs(VnR - Vgn) + aR);
+    wS = max(wS, std::abs(VnR - Vgn) + aR);
 
     eig = std::abs(VnL) + aL;
     eig = max(eig, std::abs(VnR) + aR);
