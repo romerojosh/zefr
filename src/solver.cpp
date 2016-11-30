@@ -4560,7 +4560,7 @@ void FRSolver::report_forces(std::ofstream &f)
 
   for (int i = 0; i < 3; i++)
   {
-    force_conv[i] *= (1. - input->P_fs) * fac;
+    force_conv[i] *= fac;
     force_visc[i] *= fac;
   }
 
