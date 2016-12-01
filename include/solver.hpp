@@ -63,6 +63,9 @@ class FRSolver
     int order;
     std::shared_ptr<Elements> eles;
     std::shared_ptr<Faces> faces;
+    
+    std::vector<std::shared_ptr<Elements>> elesObjs;
+
     int current_iter = 0;
     int restart_iter = 0;
     double flow_time = 0.;

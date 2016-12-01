@@ -50,6 +50,7 @@ class Elements
   protected:
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
+    ELE_TYPE etype;
 
     /* Geometric Parameters */
     unsigned int order, shape_order;
@@ -82,7 +83,7 @@ class Elements
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
     mdvector<double> oppE_ppts, oppE_qpts;
-    mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
+    mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg, U_ini, U_til;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fcomm, Ucomm;
     mdvector<double> dU_spts, dU_fpts, dU_qpts, divF_spts;
@@ -90,9 +91,14 @@ class Elements
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;
 
+    mdvector<double> dt, rk_err;
+
     /* Element structures for implicit method */
     mdvector<double> LHS, LHSInv;  // Element local matrices for implicit system
     mdvector<int> LU_pivots, LU_info; 
+#ifndef _NO_TNT
+    std::vector<std::vector<JAMA::LU<double>>> LUptrs;
+#endif
     mdvector<double*> LHS_ptrs, RHS_ptrs, LHSInv_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs, deltaU_ptrs; 
     mdvector<double> dFdU_spts, dFddU_spts;
     mdvector<double> dFcdU_fpts, dUcdU_fpts, dFcddU_fpts;
@@ -109,6 +115,9 @@ class Elements
     _mpi_comm myComm;
 
     mdvector<double> U_donors, dU_donors;
+
+    /* Output data structures */
+    mdvector<unsigned int> ppt_connect;
 
 #ifdef _GPU
     /* GPU data */
@@ -172,6 +181,8 @@ class Elements
   public:
     void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
     virtual void setup_PMG(int pro_order, int res_order) = 0;
+    virtual void setup_ppt_connectivity() = 0;
+    void initialize_U();
     void extrapolate_U(unsigned int startEle, unsigned int endEle);
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);
     void compute_dU(unsigned int startEle, unsigned int endEle);

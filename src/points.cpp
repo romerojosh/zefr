@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "macros.hpp"
+#include "mdvector.hpp"
 
 // TODO: Can get open-source scripts for generating quadrature points for arbitrary P>0
 std::vector<double> Gauss_Legendre_pts(unsigned int P)
@@ -237,6 +238,25 @@ std::vector<double> Shape_pts(unsigned int P)
   nodes[P] = 1.0;
 
   return nodes; 
+}
+
+mdvector<double> WS_Tri_pts(unsigned int P)
+{
+  unsigned int nPts = (P+1)*(P+2)/2;
+  mdvector<double> pts({nPts, 2});
+
+  switch(P)
+  {
+    case 1:
+      pts(0, 0) = -2/3; pts(0,1) = -2/3;
+      pts(1, 0) = 1/3; pts(1,1) = -2/3;
+      pts(2, 0) = -2/3; pts(2,1) = 1/3;
+      break;
+
+    default:
+      ThrowException("WS_Tri_pts undefined for provided order!");
+  }
+  return pts;
 }
 
 

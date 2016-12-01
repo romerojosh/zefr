@@ -52,109 +52,124 @@ typedef struct {
 
 struct GeoStruct
 {
-    unsigned int nEles = 0; 
-    unsigned int nBnds = 0;
-    unsigned int nDims, nNodes, nFaces, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
-    unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
-    unsigned int nGfpts_mpi = 0;
-    bool per_bnd_flag = false;
+  /* Maps to organize geometry data by element type */
+  std::set<ELE_TYPE> ele_set; // Set of element types discovered in mesh
+  std::map<ELE_TYPE, unsigned int> nElesBT;
+  std::map<ELE_TYPE, unsigned int> shape_orderBT;
+  std::map<ELE_TYPE, unsigned int> nFacesPerEleBT;
+  std::map<ELE_TYPE, unsigned int> nNodesPerEleBT;
+  std::map<ELE_TYPE, unsigned int> nNodesPerFaceBT;
+  std::map<ELE_TYPE, unsigned int> nFptsPerFaceBT;
+  std::map<ELE_TYPE, mdvector<int>> ele2nodesBT;
+  //std::map<ELE_TYPE, mdvector<unsigned int>> face_nodesBT;
+  std::map<ELE_TYPE, std::vector<std::vector<unsigned int>>> face_nodesBT;
+  std::map<ELE_TYPE, mdvector<int>> fpt2gfptBT, fpt2gfpt_slotBT;
+  std::map<ELE_TYPE, mdvector<double>> coord_sptsBT, coord_fptsBT, coord_pptsBT, coord_qptsBT;
 
-    /* Connectivity Data */
-    mdvector<int> ele2nodes, ele2face, face2nodes, face2eles, face2eles_idx;
 
-    std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
-    std::vector<unsigned int> ele_color_range, ele_color_nEles;
-    mdvector<unsigned int> gfpt2bnd, per_fpt_list;
-    std::map<std::vector<unsigned int>, int> bnd_faces, per_bnd_rot;
-    std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
-    std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
-    mdvector<unsigned int> ppt_connect;
-    mdvector<int> fpt2gfpt, fpt2gfpt_slot;
-    mdvector<double> ele_nodes, coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
-    mdvector<unsigned int> face_nodes;
-    mdvector<int> ele_adj;
+  unsigned int nEles = 0; 
+  unsigned int nBnds = 0;
+  unsigned int nDims, nNodes, nFaces, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
+  unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
+  unsigned int nGfpts_mpi = 0;
+  bool per_bnd_flag = false;
 
-    mdvector<double> grid_vel_nodes, coords_init;
+  /* Connectivity Data */
+  mdvector<int> ele2nodes, ele2face, face2nodes, face2eles, face2eles_idx;
 
-    unsigned int nColors;
-    mdvector<unsigned int> ele_color;
+  std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
+  std::vector<unsigned int> ele_color_range, ele_color_nEles;
+  mdvector<unsigned int> gfpt2bnd, per_fpt_list;
+  std::map<std::vector<unsigned int>, int> bnd_faces, per_bnd_rot;
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
+  std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
+  mdvector<unsigned int> ppt_connect;
+  mdvector<int> fpt2gfpt, fpt2gfpt_slot;
+  mdvector<double> ele_nodes, coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
+  mdvector<unsigned int> face_nodes;
+  mdvector<int> ele_adj;
 
-    unsigned int nBounds;               //! Number of distinct mesh boundary regions
-    std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
-    std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
-    std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
-    std::map<std::vector<unsigned int>, unsigned int> face2bnd;
-    std::vector<std::vector<unsigned int>> boundFaces; //! List of face IDs for each mesh-defined boundary
+  mdvector<double> grid_vel_nodes, coords_init;
 
-    //! --- New additions for PyFR format (consider re-organizing) ---
-    mdvector<face_con> face_list;
-    std::vector<std::vector<face_con>> bound_faces;
+  unsigned int nColors;
+  mdvector<unsigned int> ele_color;
+
+  unsigned int nBounds;               //! Number of distinct mesh boundary regions
+  std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
+  std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
+  std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
+  std::map<std::vector<unsigned int>, unsigned int> face2bnd;
+  std::vector<std::vector<unsigned int>> boundFaces; //! List of face IDs for each mesh-defined boundary
+
+  //! --- New additions for PyFR format (consider re-organizing) ---
+  mdvector<face_con> face_list;
+  std::vector<std::vector<face_con>> bound_faces;
 #ifdef _MPI
-    std::map<int,std::vector<face_con>> mpi_conn;
-    std::vector<int> send_ranks;
+  std::map<int,std::vector<face_con>> mpi_conn;
+  std::vector<int> send_ranks;
 #endif
-    std::string mesh_uuid, config, stats;
+  std::string mesh_uuid, config, stats;
 
-    std::vector<int> pyfr2zefr_face, zefr2pyfr_face;
+  std::vector<int> pyfr2zefr_face, zefr2pyfr_face;
 
-    _mpi_comm myComm;
+  _mpi_comm myComm;
 #ifdef _MPI
-    std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
-    std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
-    std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
-    std::map<unsigned int, MPI_Datatype> mpi_types;
+  std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
+  std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
+  std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
+  std::map<unsigned int, MPI_Datatype> mpi_types;
 
-    unsigned int nMpiFaces;
-    std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
+  unsigned int nMpiFaces;
+  std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
-    mdvector_gpu<unsigned int> gfpt2bnd_d, per_fpt_list_d;
-    mdvector_gpu<double> coord_spts_d, coord_fpts_d;
-    mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
-    mdvector_gpu<int> ele2nodes_d;
+  mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
+  mdvector_gpu<unsigned int> gfpt2bnd_d, per_fpt_list_d;
+  mdvector_gpu<double> coord_spts_d, coord_fpts_d;
+  mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
+  mdvector_gpu<int> ele2nodes_d;
 #ifdef _MPI
-    std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
+  std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif
 #endif
 
-    /* --- Motion-Related Variables --- */
-    mdvector<double> vel_nodes;  //! Grid velocity at all mesh nodes
+  /* --- Motion-Related Variables --- */
+  mdvector<double> vel_nodes;  //! Grid velocity at all mesh nodes
 
-    /* --- Overset-Related Variables --- */
+  /* --- Overset-Related Variables --- */
 
-    InputStruct *input;
+  InputStruct *input;
 
-    unsigned int nBndFaces, nIntFaces, nOverFaces;
-    std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
+  unsigned int nBndFaces, nIntFaces, nOverFaces;
+  std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
 ///    mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
-    std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
-    std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
-    std::vector<int> fpt2face; //! fpt index to face index
-    mdvector<int> face2fpts; //! Face index to fpt indices
+  std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
+  std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
+  std::vector<int> fpt2face; //! fpt index to face index
+  mdvector<int> face2fpts; //! Face index to fpt indices
 
-    std::vector<int> iblank_node, iblank_face; //! iblank values for nodes, cells, faces
-    mdvector<int> iblank_cell;
+  std::vector<int> iblank_node, iblank_face; //! iblank values for nodes, cells, faces
+  mdvector<int> iblank_cell;
 
-    std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
-    std::set<int> overFaces;  //! Ordered list of all current overset faces
-    std::vector<int> overFaceList;
+  std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
+  std::set<int> overFaces;  //! Ordered list of all current overset faces
+  std::vector<int> overFaceList;
 
-    int nWall, nOver; //! Number of nodes on wall & overset boundaries
-    std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists
+  int nWall, nOver; //! Number of nodes on wall & overset boundaries
+  std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists
 
 #ifdef _GPU
-    mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
-    mdvector<int> iblank_fpts;
+  mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
+  mdvector<int> iblank_fpts;
 #endif
 
-    unsigned int nGrids;  //! Number of distinct overset grids
-    int nProcsGrid;       //! Number of MPI processes assigned to current (overset) grid block
-    unsigned int gridID;  //! Which (overset) grid block is this process handling
-    int gridRank;         //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
-    int rank;
-    int nproc;
+  unsigned int nGrids;  //! Number of distinct overset grids
+  int nProcsGrid;       //! Number of MPI processes assigned to current (overset) grid block
+  unsigned int gridID;  //! Which (overset) grid block is this process handling
+  int gridRank;         //! MPI rank of process *within* the grid block [0 to nprocPerGrid-1]
+  int rank;
+  int nproc;
 };
 
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in);

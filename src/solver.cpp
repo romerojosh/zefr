@@ -41,6 +41,7 @@ extern "C" {
 #include "quads.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
+#include "tris.hpp"
 #include "solver.hpp"
 
 #ifdef _MPI
@@ -94,12 +95,28 @@ void FRSolver::setup(_mpi_comm comm_in)
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
   geo = process_mesh(input, order, input->nDims, myComm);
 
+  if (input->rank == 0) std::cout << "Setting up timestepping..." << std::endl;
+  setup_update();  
+
   if (input->rank == 0) std::cout << "Setting up elements and faces..." << std::endl;
 
-  if (input->nDims == 2)
-    eles = std::make_shared<Quads>(&geo, input, order);
-  else if (input->nDims == 3)
-    eles = std::make_shared<Hexas>(&geo, input, order);
+  for (auto etype : geo.ele_set)
+  {
+    if (etype == QUAD)
+       elesObjs.push_back(std::make_shared<Quads>(&geo, input, order));
+    else if (etype == TRI)
+       elesObjs.push_back(std::make_shared<Tris>(&geo, input, order));
+    else if (etype == HEX)
+       elesObjs.push_back(std::make_shared<Hexas>(&geo, input, order));
+    
+  }
+
+  //if (input->nDims == 2)
+    //eles = std::make_shared<Quads>(&geo, input, order);
+  //else if (input->nDims == 3)
+    //eles = std::make_shared<Hexas>(&geo, input, order);
+
+  eles = elesObjs[0];
 
   faces = std::make_shared<Faces>(&geo, input, myComm);
 
@@ -107,14 +124,13 @@ void FRSolver::setup(_mpi_comm comm_in)
 
   eles->setup(faces, myComm);
 
-  if (input->rank == 0) std::cout << "Setting up timestepping..." << std::endl;
-  setup_update();  
 
   if (input->rank == 0) std::cout << "Setting up output..." << std::endl;
   setup_output();
 
   if (input->rank == 0) std::cout << "Initializing solution..." << std::endl;
-  initialize_U();
+  //initialize_U();
+  eles->initialize_U();
 
 
   if (input->restart)
@@ -169,25 +185,25 @@ void FRSolver::setup_update()
   /* Setup variables for timestepping scheme */
   if (input->dt_scheme == "Euler")
   {
-    nStages = 1;
-    rk_beta.assign({nStages}, 1.0);
+    input->nStages = 1;
+    rk_beta.assign({input->nStages}, 1.0);
 
   }
   else if (input->dt_scheme == "RK44")
   {
-    nStages = 4;
+    input->nStages = 4;
     
-    rk_alpha.assign({nStages-1});
+    rk_alpha.assign({input->nStages-1});
     rk_alpha(0) = 0.5; rk_alpha(1) = 0.5; rk_alpha(2) = 1.0;
 
-    rk_beta.assign({nStages});
+    rk_beta.assign({input->nStages});
     rk_beta(0) = 1./6.; rk_beta(1) = 1./3.; 
     rk_beta(2) = 1./3.; rk_beta(3) = 1./6.;
   }
   else if (input->dt_scheme == "RKj")
   {
-    nStages = 4;
-    rk_alpha.assign({nStages});
+    input->nStages = 4;
+    rk_alpha.assign({input->nStages});
     /* Standard RK44 */
     //rk_alpha(0) = 1./4; rk_alpha(1) = 1./3.; 
     //rk_alpha(2) = 1./2.; rk_alpha(3) = 1.0;
@@ -197,29 +213,29 @@ void FRSolver::setup_update()
   }
   else if (input->dt_scheme == "LSRK")
   {
-    nStages = 5;
-    rk_alpha.assign({nStages - 1});
+    input->nStages = 5;
+    rk_alpha.assign({input->nStages - 1});
     rk_alpha(0) =   970286171893. / 4311952581923.;
     rk_alpha(1) =  6584761158862. / 12103376702013.;
     rk_alpha(2) =  2251764453980. / 15575788980749.;
     rk_alpha(3) = 26877169314380. / 34165994151039.;
 
-    rk_beta.assign({nStages});
+    rk_beta.assign({input->nStages});
     rk_beta(0) =  1153189308089. / 22510343858157.;
     rk_beta(1) =  1772645290293. / 4653164025191.;
     rk_beta(2) = -1672844663538. / 4480602732383.;
     rk_beta(3) =  2114624349019. / 3568978502595.;
     rk_beta(4) =  5198255086312. / 14908931495163.;
 
-    rk_bhat.assign({nStages});
+    rk_bhat.assign({input->nStages});
     rk_bhat(0) =  1016888040809. / 7410784769900.;
     rk_bhat(1) = 11231460423587. / 58533540763752.;
     rk_bhat(2) = -1563879915014. / 6823010717585.;
     rk_bhat(3) =   606302364029. / 971179775848.;
     rk_bhat(4) =  1097981568119. / 3980877426909.;
 
-    rk_c.assign({nStages});
-    for (int i = 1; i < nStages; i++)
+    rk_c.assign({input->nStages});
+    for (int i = 1; i < input->nStages; i++)
     {
       rk_c(i) = rk_alpha(i-1);
 
@@ -231,8 +247,8 @@ void FRSolver::setup_update()
     expb = input->pi_beta / 4.;
     prev_err = 1.;
 
-    U_til.assign({eles->nSpts, eles->nEles, eles->nVars});
-    rk_err.assign({eles->nSpts, eles->nEles, eles->nVars});
+    //U_til.assign({eles->nSpts, eles->nEles, eles->nVars});
+    //rk_err.assign({eles->nSpts, eles->nEles, eles->nVars});
   }
   else if (input->dt_scheme == "MCGS")
   {
@@ -244,9 +260,9 @@ void FRSolver::setup_update()
 #endif
 
     // HACK: (nStages = 1) doesn't work, fix later
-    nStages = 2;
-    rk_alpha.assign({nStages});
-    rk_beta.assign({nStages});
+    input->nStages = 2;
+    rk_alpha.assign({input->nStages});
+    rk_beta.assign({input->nStages});
 
     /* Forward or Forward/Backward sweep */
     nCounter = geo.nColors;
@@ -260,8 +276,8 @@ void FRSolver::setup_update()
     ThrowException("dt_scheme not recognized!");
   }
 
-  U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
-  dt.assign({eles->nEles},input->dt);
+  //U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
+  //dt.assign({eles->nEles},input->dt);
 }
 
 void FRSolver::setup_output()
@@ -273,78 +289,83 @@ void FRSolver::setup_output()
     system(cmd.c_str());
   }
 
-  if (eles->nDims == 2)
+  for (auto e : elesObjs)
   {
-    unsigned int nSubelements1D = eles->nSpts1D+1;
-    eles->nSubelements = nSubelements1D * nSubelements1D;
-    eles->nNodesPerSubelement = 4;
-
-    /* Allocate memory for local plot point connectivity and solution at plot points */
-    geo.ppt_connect.assign({4, eles->nSubelements});
-
-    /* Setup plot "subelement" connectivity */
-    std::vector<unsigned int> nd(4,0);
-
-    unsigned int ele = 0;
-    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
-
-    for (unsigned int i = 0; i < nSubelements1D; i++)
-    {
-      for (unsigned int j = 0; j < nSubelements1D; j++)
-      {
-        for (unsigned int node = 0; node < 4; node ++)
-        {
-          geo.ppt_connect(node, ele) = nd[node] + j;
-        }
-
-        ele++;
-      }
-
-      for (unsigned int node = 0; node < 4; node ++)
-        nd[node] += nSubelements1D + 1;
-    }
+    e->setup_ppt_connectivity();
   }
-  else if (eles->nDims == 3)
-  {
-    unsigned int nSubelements1D = eles->nSpts1D+1;
-    eles->nSubelements = nSubelements1D * nSubelements1D * nSubelements1D;
-    eles->nNodesPerSubelement = 8;
 
-    /* Allocate memory for local plot point connectivity and solution at plot points */
-    geo.ppt_connect.assign({8, eles->nSubelements});
-
-    /* Setup plot "subelement" connectivity */
-    std::vector<unsigned int> nd(8,0);
-
-    unsigned int ele = 0;
-    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
-    nd[4] = (nSubelements1D + 1) * (nSubelements1D + 1); nd[5] = nd[4] + 1; 
-    nd[6] = nd[4] + nSubelements1D + 2; nd[7] = nd[4] + nSubelements1D + 1;
-
-    for (unsigned int i = 0; i < nSubelements1D; i++)
-    {
-      for (unsigned int j = 0; j < nSubelements1D; j++)
-      {
-        for (unsigned int k = 0; k < nSubelements1D; k++)
-        {
-          for (unsigned int node = 0; node < 8; node ++)
-          {
-            geo.ppt_connect(node, ele) = nd[node] + k;
-          }
-
-          ele++;
-        }
-
-        for (unsigned int node = 0; node < 8; node ++)
-          nd[node] += (nSubelements1D + 1);
-
-      }
-
-      for (unsigned int node = 0; node < 8; node ++)
-        nd[node] += (nSubelements1D + 1);
-    }
-
-  }
+//  if (eles->nDims == 2)
+//  {
+//    unsigned int nSubelements1D = eles->nSpts1D+1;
+//    eles->nSubelements = nSubelements1D * nSubelements1D;
+//    eles->nNodesPerSubelement = 4;
+//
+//    /* Allocate memory for local plot point connectivity and solution at plot points */
+//    geo.ppt_connect.assign({4, eles->nSubelements});
+//
+//    /* Setup plot "subelement" connectivity */
+//    std::vector<unsigned int> nd(4,0);
+//
+//    unsigned int ele = 0;
+//    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+//
+//    for (unsigned int i = 0; i < nSubelements1D; i++)
+//    {
+//      for (unsigned int j = 0; j < nSubelements1D; j++)
+//      {
+//        for (unsigned int node = 0; node < 4; node ++)
+//        {
+//          geo.ppt_connect(node, ele) = nd[node] + j;
+//        }
+//
+//        ele++;
+//      }
+//
+//      for (unsigned int node = 0; node < 4; node ++)
+//        nd[node] += nSubelements1D + 1;
+//    }
+//  }
+//  else if (eles->nDims == 3)
+//  {
+//    unsigned int nSubelements1D = eles->nSpts1D+1;
+//    eles->nSubelements = nSubelements1D * nSubelements1D * nSubelements1D;
+//    eles->nNodesPerSubelement = 8;
+//
+//    /* Allocate memory for local plot point connectivity and solution at plot points */
+//    geo.ppt_connect.assign({8, eles->nSubelements});
+//
+//    /* Setup plot "subelement" connectivity */
+//    std::vector<unsigned int> nd(8,0);
+//
+//    unsigned int ele = 0;
+//    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+//    nd[4] = (nSubelements1D + 1) * (nSubelements1D + 1); nd[5] = nd[4] + 1; 
+//    nd[6] = nd[4] + nSubelements1D + 2; nd[7] = nd[4] + nSubelements1D + 1;
+//
+//    for (unsigned int i = 0; i < nSubelements1D; i++)
+//    {
+//      for (unsigned int j = 0; j < nSubelements1D; j++)
+//      {
+//        for (unsigned int k = 0; k < nSubelements1D; k++)
+//        {
+//          for (unsigned int node = 0; node < 8; node ++)
+//          {
+//            geo.ppt_connect(node, ele) = nd[node] + k;
+//          }
+//
+//          ele++;
+//        }
+//
+//        for (unsigned int node = 0; node < 8; node ++)
+//          nd[node] += (nSubelements1D + 1);
+//
+//      }
+//
+//      for (unsigned int node = 0; node < 8; node ++)
+//        nd[node] += (nSubelements1D + 1);
+//    }
+//
+//  }
 
 }
 
@@ -710,7 +731,7 @@ void FRSolver::solver_data_to_device()
   if (input->motion)
   {
     faces->Vg_d = faces->Vg;
-    faces->coord_d = faces->coord;
+    //faces->coord_d = faces->coord;
   }
 
   /* Additional data */
@@ -1093,11 +1114,11 @@ void FRSolver::compute_RHS(unsigned int color)
       {
         if (input->dt_type != 2)
         {
-          eles->RHS(spt, n, ele) = -(dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+          eles->RHS(spt, n, ele) = -(eles->dt(0) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
         }
         else
         {
-          eles->RHS(spt, n, ele) = -(dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
+          eles->RHS(spt, n, ele) = -(eles->dt(ele) * eles->divF_spts(spt, ele, n, 0)) / eles->jaco_det_spts(spt, ele);
         }
       }
     }
@@ -1126,11 +1147,11 @@ void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int c
       {
         if (input->dt_type != 2)
         {
-          eles->RHS(spt, n, ele) = -(dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+          eles->RHS(spt, n, ele) = -(eles->dt(0) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
         }
         else
         {
-          eles->RHS(spt, n, ele) = -(dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
+          eles->RHS(spt, n, ele) = -(eles->dt(ele) * (eles->divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / eles->jaco_det_spts(spt, ele);
         }
       }
     }
@@ -1257,218 +1278,217 @@ void FRSolver::compute_U(unsigned int color)
 
 void FRSolver::initialize_U()
 {
-  /* Allocate memory for solution data structures */
-  /* Solution and Flux Variables */
-  eles->U_spts.assign({eles->nSpts, eles->nEles, eles->nVars});
-  eles->U_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-  if (input->viscous)
-    eles->Ucomm.assign({eles->nFpts, eles->nEles, eles->nVars});
-  eles->U_ppts.assign({eles->nPpts, eles->nEles, eles->nVars});
-  eles->U_qpts.assign({eles->nQpts, eles->nEles, eles->nVars});
+//  /* Allocate memory for solution data structures */
+//  /* Solution and Flux Variables */
+//  eles->U_spts.assign({eles->nSpts, eles->nEles, eles->nVars});
+//  eles->U_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+//  if (input->viscous)
+//    eles->Ucomm.assign({eles->nFpts, eles->nEles, eles->nVars});
+//  eles->U_ppts.assign({eles->nPpts, eles->nEles, eles->nVars});
+//  eles->U_qpts.assign({eles->nQpts, eles->nEles, eles->nVars});
+//
+//  if (input->squeeze)
+//    eles->Uavg.assign({eles->nEles, eles->nVars});
+//
+//  eles->F_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+//  eles->Fcomm.assign({eles->nFpts, eles->nEles, eles->nVars});
+//
+//  if (input->viscous)
+//  {
+//    eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+//    eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
+//    eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
+//  }
+//
+//  if (input->dt_scheme != "LSRK")
+//    eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
+//  else
+//    eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, 1});
+//
+//  if (input->motion)
+//  {
+//    eles->dUr_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
+//    eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims, eles->nDims});
+//    eles->dFn_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
+//    eles->tempF_fpts.assign({eles->nFpts, eles->nEles});
+//  }
+//
+//  /* Allocate memory for implicit method data structures */
+//  if (input->dt_scheme == "MCGS")
+//  {
+//    if (!input->inv_mode and input->n_LHS_blocks != 1)
+//    {
+//      ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
+//    } 
+//
+//    eles->dFdU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
+//    eles->dFcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
+//
+//    if(input->viscous)
+//    {
+//      eles->dUcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
+//
+//      /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
+//      eles->dFddU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
+//      eles->dFcddU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
+//    }
+//      
+//    if (!input->stream_mode)
+//    {
+//      eles->LHSs.resize(1);
+//      eles->LHSInvs.resize(1);
+//      LUptrs.resize(1);
+//
+//#ifdef _CPU
+//      unsigned int nElesMax = eles->nEles;
+//#endif
+//#ifdef _GPU
+//      unsigned int nElesMax = ceil(geo.nEles / (double) input->n_LHS_blocks);
+//#endif
+//
+//      eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
+//      LUptrs[0].resize(eles->nEles);
+//      
+//      if (input->inv_mode)
+//      {
+//        eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
+//        eles->LHSInv_ptrs.assign({eles->nEles});
+//        eles->deltaU_ptrs.assign({eles->nEles});
+//      }
+//
+//      eles->LHS_ptrs.assign({nElesMax});
+//      eles->RHS_ptrs.assign({eles->nEles});
+//      eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
+//      eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
+//
+//    }
+//    else
+//    {
+//      eles->LHSs.resize(geo.nColors);
+//      eles->LHSInvs.resize(geo.nColors);
+//      LUptrs.resize(geo.nColors);
+//
+//      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
+//      for (unsigned int color = 1; color <= geo.nColors; color++)
+//      {
+//        eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
+//        eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, false, true);
+//        LUptrs[color - 1].resize(nElesMax);
+//      }
+//      
+//      if (input->inv_mode)
+//      {
+//        eles->LHSInv_ptrs.assign({nElesMax});
+//        eles->deltaU_ptrs.assign({eles->nEles});
+//      }
+//
+//      eles->LHS_ptrs.assign({nElesMax});
+//      eles->RHS_ptrs.assign({eles->nEles});
+//      eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
+//      eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
+//    }
+//
+//    eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+//    eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
+//    eles->CdFddU0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+//    eles->CtempSS.assign({eles->nSpts, eles->nSpts});
+//    eles->CtempFS.assign({eles->nFpts, eles->nSpts});
+//    eles->CtempFS2.assign({eles->nFpts, eles->nSpts});
+//    eles->CtempSF.assign({eles->nSpts, eles->nFpts});
+//    eles->CtempFSN.assign({eles->nSpts1D, eles->nSpts});
+//    eles->CtempFSN2.assign({eles->nSpts1D, eles->nSpts});
+//
+//    eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
+//    eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
+//  }
 
-  if (input->squeeze)
-    eles->Uavg.assign({eles->nEles, eles->nVars});
-
-  eles->F_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-  //eles->F_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
-  eles->Fcomm.assign({eles->nFpts, eles->nEles, eles->nVars});
-
-  if (input->viscous)
-  {
-    eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-    eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
-    eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
-  }
-
-  if (input->dt_scheme != "LSRK")
-    eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
-  else
-    eles->divF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, 1});
-
-  if (input->motion)
-  {
-    eles->dUr_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
-    eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims, eles->nDims});
-    eles->dFn_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
-    eles->tempF_fpts.assign({eles->nFpts, eles->nEles});
-  }
-
-  /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "MCGS")
-  {
-    if (!input->inv_mode and input->n_LHS_blocks != 1)
-    {
-      ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
-    } 
-
-    eles->dFdU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims});
-    eles->dFcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
-
-    if(input->viscous)
-    {
-      eles->dUcdU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, 2});
-
-      /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
-      eles->dFddU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, eles->nDims});
-      eles->dFcddU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nVars, eles->nDims, 2});
-    }
-      
-    if (!input->stream_mode)
-    {
-      eles->LHSs.resize(1);
-      eles->LHSInvs.resize(1);
-      LUptrs.resize(1);
-
-#ifdef _CPU
-      unsigned int nElesMax = eles->nEles;
-#endif
-#ifdef _GPU
-      unsigned int nElesMax = ceil(geo.nEles / (double) input->n_LHS_blocks);
-#endif
-
-      eles->LHSs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-      LUptrs[0].resize(eles->nEles);
-      
-      if (input->inv_mode)
-      {
-        eles->LHSInvs[0].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles}, 0);
-        eles->LHSInv_ptrs.assign({eles->nEles});
-        eles->deltaU_ptrs.assign({eles->nEles});
-      }
-
-      eles->LHS_ptrs.assign({nElesMax});
-      eles->RHS_ptrs.assign({eles->nEles});
-      eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
-      eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
-
-    }
-    else
-    {
-      eles->LHSs.resize(geo.nColors);
-      eles->LHSInvs.resize(geo.nColors);
-      LUptrs.resize(geo.nColors);
-
-      unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
-      for (unsigned int color = 1; color <= geo.nColors; color++)
-      {
-        eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-        eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, false, true);
-        LUptrs[color - 1].resize(nElesMax);
-      }
-      
-      if (input->inv_mode)
-      {
-        eles->LHSInv_ptrs.assign({nElesMax});
-        eles->deltaU_ptrs.assign({eles->nEles});
-      }
-
-      eles->LHS_ptrs.assign({nElesMax});
-      eles->RHS_ptrs.assign({eles->nEles});
-      eles->LU_pivots.assign({eles->nSpts * eles->nVars * nElesMax});
-      eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
-    }
-
-    eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
-    eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
-    eles->CdFddU0.assign({eles->nSpts, eles->nSpts, eles->nDims});
-    eles->CtempSS.assign({eles->nSpts, eles->nSpts});
-    eles->CtempFS.assign({eles->nFpts, eles->nSpts});
-    eles->CtempFS2.assign({eles->nFpts, eles->nSpts});
-    eles->CtempSF.assign({eles->nSpts, eles->nFpts});
-    eles->CtempFSN.assign({eles->nSpts1D, eles->nSpts});
-    eles->CtempFSN2.assign({eles->nSpts1D, eles->nSpts});
-
-    eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
-    eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
-  }
-
-  /* Initialize solution */
-  if (input->equation == AdvDiff || input->equation == Burgers)
-  {
-    if (input->ic_type == 0)
-    {
-      // Do nothing for now
-    }
-    else if (input->ic_type == 1)
-    {
-      if (input->nDims == 2)
-      {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            double x = geo.coord_spts(spt, ele, 0);
-            double y = geo.coord_spts(spt, ele, 1);
-
-            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
-          }
-        }
-      }
-      else if (input->nDims == 3)
-      {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            double x = geo.coord_spts(spt, ele, 0);
-            double y = geo.coord_spts(spt, ele, 1);
-            double z = geo.coord_spts(spt, ele, 2);
-
-            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
-
-          }
-        }
-      }
-    }
-    else
-    {
-      ThrowException("ic_type not recognized!");
-    }
-  }
-  else if (input->equation == EulerNS)
-  {
-    if (input->ic_type == 0)
-    {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          eles->U_spts(spt, ele, 0)  = input->rho_fs;
-
-          double Vsq = 0.0;
-          for (unsigned int dim = 0; dim < eles->nDims; dim++)
-          {
-            eles->U_spts(spt, ele, dim+1)  = input->rho_fs * input->V_fs(dim);
-            Vsq += input->V_fs(dim) * input->V_fs(dim);
-          }
-
-          eles->U_spts(spt, ele, eles->nDims + 1)  = input->P_fs/(input->gamma-1.0) +
-            0.5*input->rho_fs * Vsq;
-        }
-      }
-
-    }
-    else if (input->ic_type == 1)
-    {
-      for (unsigned int n = 0; n < eles->nVars; n++)
-      {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-          {
-            double x = geo.coord_spts(spt, ele, 0);
-            double y = geo.coord_spts(spt, ele, 1);
-
-            eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
-          }
-        }
-      }
-    }
-  }
-  else
-  {
-    ThrowException("Solution initialization not recognized!");
-  }
+//  /* Initialize solution */
+//  if (input->equation == AdvDiff || input->equation == Burgers)
+//  {
+//    if (input->ic_type == 0)
+//    {
+//      // Do nothing for now
+//    }
+//    else if (input->ic_type == 1)
+//    {
+//      if (input->nDims == 2)
+//      {
+//        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+//        {
+//          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+//          {
+//            double x = geo.coord_spts(spt, ele, 0);
+//            double y = geo.coord_spts(spt, ele, 1);
+//
+//            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
+//          }
+//        }
+//      }
+//      else if (input->nDims == 3)
+//      {
+//        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+//        {
+//          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+//          {
+//            double x = geo.coord_spts(spt, ele, 0);
+//            double y = geo.coord_spts(spt, ele, 1);
+//            double z = geo.coord_spts(spt, ele, 2);
+//
+//            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
+//
+//          }
+//        }
+//      }
+//    }
+//    else
+//    {
+//      ThrowException("ic_type not recognized!");
+//    }
+//  }
+//  else if (input->equation == EulerNS)
+//  {
+//    if (input->ic_type == 0)
+//    {
+//      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+//      {
+//        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+//        {
+//          eles->U_spts(spt, ele, 0)  = input->rho_fs;
+//
+//          double Vsq = 0.0;
+//          for (unsigned int dim = 0; dim < eles->nDims; dim++)
+//          {
+//            eles->U_spts(spt, ele, dim+1)  = input->rho_fs * input->V_fs(dim);
+//            Vsq += input->V_fs(dim) * input->V_fs(dim);
+//          }
+//
+//          eles->U_spts(spt, ele, eles->nDims + 1)  = input->P_fs/(input->gamma-1.0) +
+//            0.5*input->rho_fs * Vsq;
+//        }
+//      }
+//
+//    }
+//    else if (input->ic_type == 1)
+//    {
+//      for (unsigned int n = 0; n < eles->nVars; n++)
+//      {
+//        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+//        {
+//          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+//          {
+//            double x = geo.coord_spts(spt, ele, 0);
+//            double y = geo.coord_spts(spt, ele, 1);
+//
+//            eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
+//          }
+//        }
+//      }
+//    }
+//  }
+//  else
+//  {
+//    ThrowException("Solution initialization not recognized!");
+//  }
 }
 
 void FRSolver::setup_views()
@@ -1747,12 +1767,12 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     else
       step_RK(source);
 
-    flow_time += dt(0);
+    flow_time += eles->dt(0);
     current_iter++;
   }
 
   // Update grid to end of time step (if not already done so)
-  if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
+  if (input->dt_scheme != "MCGS" && (input->nStages == 1 || (input->nStages > 1 && rk_alpha(input->nStages-2) != 1)))
     move(flow_time);
 
 #ifdef _BUILD_LIB
@@ -1774,8 +1794,8 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #endif
 {
 #ifdef _CPU
-  if (nStages > 1)
-    U_ini = eles->U_spts;
+  if (input->nStages > 1)
+    eles->U_ini = eles->U_spts;
 #endif
 
 #ifdef _GPU
@@ -1785,12 +1805,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 
   prev_time = flow_time;
 
-  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? input->nStages : input->nStages - 1;
 
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < nSteps; stage++)
   {
-    flow_time = prev_time + rk_alpha(stage) * dt(0);
+    flow_time = prev_time + rk_alpha(stage) * eles->dt(0);
 
     compute_residual(stage);
 
@@ -1816,12 +1836,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
           {
             if (input->dt_type != 2)
             {
-              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) /
+              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(0) /
                   eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
             }
             else
             {
-              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) /
+              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(ele) /
                   eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
             }
           }
@@ -1838,12 +1858,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
           {
             if (input->dt_type != 2)
             {
-              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(0) /
+              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(0) /
                   eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
             }
             else
             {
-              eles->U_spts(spt, ele, n) = U_ini(spt, ele, n) - rk_alpha(stage) * dt(ele) /
+              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(ele) /
                   eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
             }
           }
@@ -1853,7 +1873,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 
 #ifdef _GPU
     /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
-    unsigned int last_stage = (input->dt_scheme == "RKj") ? nStages + 1 : nStages;
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? input->nStages + 1 : input->nStages;
 
     if (source.size() == 0)
     {
@@ -1889,12 +1909,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-    flow_time = prev_time + rk_alpha(nStages-1) * dt(0);
+    flow_time = prev_time + rk_alpha(input->nStages-1) * eles->dt(0);
 
-    compute_residual(nStages-1);
+    compute_residual(input->nStages-1);
 #ifdef _CPU
-    if (nStages > 1)
-      eles->U_spts = U_ini;
+    if (input->nStages > 1)
+      eles->U_spts = eles->U_ini;
     else if (input->dt_type != 0)
       compute_element_dt();
 #endif
@@ -1903,7 +1923,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _CPU
-    for (unsigned int stage = 0; stage < nStages; stage++)
+    for (unsigned int stage = 0; stage < input->nStages; stage++)
     {
       if (source.size() == 0)
       {
@@ -1915,12 +1935,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
             for (unsigned int spt = 0; spt < eles->nSpts; spt++)
               if (input->dt_type != 2)
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(0) / eles->jaco_det_spts(spt,ele) *
                     eles->divF_spts(spt, ele, n, stage);
               }
               else
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(ele) / eles->jaco_det_spts(spt,ele) *
                     eles->divF_spts(spt, ele, n, stage);
               }
           }
@@ -1936,12 +1956,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
             {
               if (input->dt_type != 2)
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(0) / eles->jaco_det_spts(spt,ele) *
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(0) / eles->jaco_det_spts(spt,ele) *
                     (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
               }
               else
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * dt(ele) / eles->jaco_det_spts(spt,ele) *
+                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(ele) / eles->jaco_det_spts(spt,ele) *
                     (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
               }
             }
@@ -1955,13 +1975,13 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     {
       RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d,
                         rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-                        input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
+                        input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
     }
     else
     {
       RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d,
                                rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-                               input->equation, 0, nStages, true, input->overset, geo.iblank_cell_d.data());
+                               input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
     }
 
     check_error();
@@ -1987,8 +2007,8 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     {
       for (uint spt = 0; spt < eles->nSpts; spt++)
       {
-        double err = std::abs(rk_err(spt,ele,n)) /
-            (input->atol + input->rtol * std::max( std::abs(eles->U_spts(spt,ele,n)), std::abs(U_ini(spt,ele,n)) ));
+        double err = std::abs(eles->rk_err(spt,ele,n)) /
+            (input->atol + input->rtol * std::max( std::abs(eles->U_spts(spt,ele,n)), std::abs(eles->U_ini(spt,ele,n)) ));
         max_err = std::max(max_err, err);
       }
     }
@@ -2002,7 +2022,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   double fac = pow(max_err, -expa) * pow(prev_err, expb);
   fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
 
-  dt(0) *= fac;
+  eles->dt(0) *= fac;
 #endif
 
 #ifdef _GPU
@@ -2012,7 +2032,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
       geo.iblank_cell_d.data());
 #endif
 
-  if (dt(0) < 1e-14)
+  if (eles->dt(0) < 1e-14)
     ThrowException("dt approaching 0 - quitting simulation");
 
   if (max_err < 1.)
@@ -2026,7 +2046,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     // Reject step - reset solution back to beginning of time step
     flow_time = prev_time;
 #ifdef _CPU
-    eles->U_spts = U_ini;
+    eles->U_spts = eles->U_ini;
 #endif
 #ifdef _GPU
     device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
@@ -2049,9 +2069,9 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   // Copy current solution into "U_ini" ['rold' in PyFR]
 #ifdef _CPU
-  U_ini = eles->U_spts;
-  U_til = eles->U_spts;
-  rk_err.fill(0.0);
+  eles->U_ini = eles->U_spts;
+  eles->U_til = eles->U_spts;
+  eles->rk_err.fill(0.0);
 #endif
 
 #ifdef _GPU
@@ -2068,9 +2088,9 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   prev_time = flow_time;
 
   /* Main stage loop. Complete for Jameson-style RK timestepping */
-  for (unsigned int stage = 0; stage < nStages; stage++)
+  for (unsigned int stage = 0; stage < input->nStages; stage++)
   {
-    flow_time = prev_time + rk_c(stage) * dt(0);
+    flow_time = prev_time + rk_c(stage) * eles->dt(0);
 
     compute_residual(0);
 
@@ -2087,14 +2107,14 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (unsigned int spt = 0; spt < eles->nSpts; spt++)
         {
-          rk_err(spt,ele,n) -= (bi - bhi) * dt(0) /
+          eles->rk_err(spt,ele,n) -= (bi - bhi) * eles->dt(0) /
               eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
         }
       }
     }
 
     // Update solution registers
-    if (stage < nStages - 1)
+    if (stage < input->nStages - 1)
     {
 #pragma omp parallel for collapse(2)
       for (unsigned int n = 0; n < eles->nVars; n++)
@@ -2104,10 +2124,10 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
           if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt,ele,n) = U_til(spt,ele,n) - ai * dt(0) /
+            eles->U_spts(spt,ele,n) = eles->U_til(spt,ele,n) - ai * eles->dt(0) /
                 eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
 
-            U_til(spt,ele,n) = eles->U_spts(spt,ele,n) - (bi - ai) * dt(0) /
+            eles->U_til(spt,ele,n) = eles->U_spts(spt,ele,n) - (bi - ai) * eles->dt(0) /
                 eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
           }
         }
@@ -2123,7 +2143,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
           if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            eles->U_spts(spt,ele,n) = U_til(spt,ele,n) - bi * dt(0) /
+            eles->U_spts(spt,ele,n) = eles->U_til(spt,ele,n) - bi * eles->dt(0) /
                 eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
           }
         }
@@ -2134,15 +2154,15 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 #ifdef _GPU
     if (source.size() == 0)
     {
-      LSRK_update_wrapper(eles->U_spts_d, U_til_d, rk_err_d, eles->divF_spts_d,
+      LSRK_update_wrapper(eles->U_spts_d, eles->U_til_d, rk_err_d, eles->divF_spts_d,
           eles->jaco_det_spts_d, dt(0), ai, bi, bhi, eles->nSpts, eles->nEles,
-          eles->nVars, stage, nStages, input->overset, geo.iblank_cell_d.data());
+          eles->nVars, stage, input->nStages, input->overset, geo.iblank_cell_d.data());
     }
     else
     {
-      LSRK_update_source_wrapper(eles->U_spts_d, U_til_d, rk_err_d,
+      LSRK_update_source_wrapper(eles->U_spts_d, eles->U_til_d, rk_err_d,
           eles->divF_spts_d, source, eles->jaco_det_spts_d, dt(0), ai, bi, bhi,
-          eles->nSpts, eles->nEles, eles->nVars, stage, nStages, input->overset,
+          eles->nSpts, eles->nEles, eles->nVars, stage, input->nStages, input->overset,
           geo.iblank_cell_d.data());
     }
     check_error();
@@ -2164,7 +2184,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 #endif
   }
 
-  flow_time = prev_time + dt(0);
+  flow_time = prev_time + eles->dt(0);
 }
 
 #ifdef _CPU
@@ -2301,7 +2321,7 @@ void FRSolver::compute_element_dt()
         }
       }
 
-      dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
+      eles->dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
     }
   }
 
@@ -2336,7 +2356,7 @@ void FRSolver::compute_element_dt()
         dtinv[0] = std::max(dtinv[0], dtinv[2]);
         dtinv[1] = std::max(dtinv[1], dtinv[3]);
 
-        dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+        eles->dt(ele) = CFL / (dtinv[0] + dtinv[1]);
       }
       else
       {
@@ -2345,7 +2365,7 @@ void FRSolver::compute_element_dt()
         dtinv[2] = std::max(dtinv[4],dtinv[5]);
 
         /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
-        dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
+        eles->dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
       }
     }
   }
@@ -2358,18 +2378,18 @@ void FRSolver::compute_element_dt()
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        minDT = std::min(minDT, dt(ele));
+        minDT = std::min(minDT, eles->dt(ele));
       }
-      dt(0) = minDT;
+      eles->dt(0) = minDT;
     }
     else
     {
-      dt(0) = *std::min_element(dt.data(), dt.data()+eles->nEles);
+      eles->dt(0) = *std::min_element(eles->dt.data(), eles->dt.data()+eles->nEles);
     }
 
 #ifdef _MPI
     /// TODO: If interfacing with other explicit solver, work together here
-    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &eles->dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 #endif
 
   }
@@ -2424,18 +2444,18 @@ void FRSolver::compute_SER_dt()
     SER_omg *= omg;
     if (input->dt_type == 0)
     {
-      dt(0) *= omg;
+      eles->dt(0) *= omg;
     }
     else if(input->dt_type == 1)
     {
-      dt(0) *= SER_omg;
+      eles->dt(0) *= SER_omg;
     }
     else if (input->dt_type == 2)
     {
 #pragma omp parallel for
       for (unsigned int ele = 0; ele < eles->nEles; ele++)
       {
-        dt(ele) *= SER_omg;
+        eles->dt(ele) *= SER_omg;
       }
     }
   }
@@ -3064,7 +3084,8 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
   f << "<!-- ITER " << iter << " -->" << std::endl;
 
-  int nEles = eles->nEles;
+  //int nEles = eles->nEles;
+  int nEles = geo.nEles;
   if (input->overset)
   {
     /* Remove blanked elements from total element count */
@@ -3080,9 +3101,17 @@ void FRSolver::write_solution(const std::string &_prefix)
 #endif
   }
 
+  unsigned int nPts = 0;
+  unsigned int nCells = 0;
+  for (auto e : elesObjs)
+  {
+    nPts += e->nPpts * e->nEles;
+    nCells += e->nSubelements * e->nEles;
+  }
+
   f << "<UnstructuredGrid>" << std::endl;
-  f << "<Piece NumberOfPoints=\"" << eles->nPpts * nEles << "\" ";
-  f << "NumberOfCells=\"" << eles->nSubelements * nEles << "\">";
+  f << "<Piece NumberOfPoints=\"" << nPts << "\" ";
+  f << "NumberOfCells=\"" << nCells << "\">";
   f << std::endl;
 
   
@@ -3091,30 +3120,20 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
   f << "format=\"ascii\">" << std::endl; 
 
-  if (eles->nDims == 2)
+  for (auto e : elesObjs)
   {
     // TODO: Change order of ppt structures for better looping 
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
       {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << 0.0 << std::endl;
-      }
-    }
-  }
-  else
-  {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+        f << geo.coord_pptsBT[e->etype](ppt, ele, 0) << " ";
+        f << geo.coord_pptsBT[e->etype](ppt, ele, 1) << " ";
+        if (geo.nDims == 2)
+          f << 0.0 << std::endl;
+        else
+          f << geo.coord_pptsBT[e->etype](ppt, ele, 2) << std::endl;
       }
     }
   }
@@ -3126,32 +3145,38 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<Cells>" << std::endl;
   f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
   f << "format=\"ascii\">"<< std::endl;
-  int count = 0; // To account for blanked elements
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  int shift = 0; // To account for blanked elements
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
       {
-        f << geo.ppt_connect(i, subele) + count*eles->nPpts << " ";
+        for (unsigned int i = 0; i < e->nNodesPerSubelement; i++)
+        {
+          f << e->ppt_connect(i, subele) + shift << " ";
+        }
+        f << std::endl;
       }
-      f << std::endl;
+      shift += e->nPpts;
     }
-    count++;
   }
   f << "</DataArray>" << std::endl;
 
   f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
   f << "format=\"ascii\">"<< std::endl;
-  unsigned int offset = eles->nNodesPerSubelement;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    unsigned int offset = e->nNodesPerSubelement;
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      f << offset << " ";
-      offset += eles->nNodesPerSubelement;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
+      {
+        f << offset << " ";
+        offset += e->nNodesPerSubelement;
+      }
     }
   }
   f << std::endl;
@@ -3159,17 +3184,33 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" ";
   f << "format=\"ascii\">"<< std::endl;
-  unsigned int nCells = eles->nSubelements * nEles;
-  if (eles->nDims == 2)
+  for (auto e : elesObjs)
   {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 9 << " ";
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
+      {
+        if (e->etype == QUAD)
+          f << 9  << " ";
+        else if (e->etype == TRI)
+          f << 5  << " ";
+        else if (e->etype == HEX)
+          f << 12 << " ";
+      }
+    }
+
   }
-  else
-  {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 12 << " ";
-  }
+  //unsigned int nCells = eles->nSubelements * nEles;
+  //if (eles->nDims == 2)
+  //{
+  //  for (unsigned int cell = 0; cell < nCells; cell++)
+  //    f << 9 << " ";
+  //}
+  //else
+  //{
+  //  for (unsigned int cell = 0; cell < nCells; cell++)
+  //    f << 12 << " ";
+  //}
   f << std::endl;
   f << "</DataArray>" << std::endl;
   f << "</Cells>" << std::endl;
@@ -3180,76 +3221,71 @@ void FRSolver::write_solution(const std::string &_prefix)
   /* TEST: Write cell average solution */
   //eles->compute_Uavg();
 
-  /* Extrapolate solution to plot points */
-  auto &A = eles->oppE_ppts(0, 0);
-  auto &B = eles->U_spts(0, 0, 0);
-  auto &C = eles->U_ppts(0, 0, 0);
+
+  for (auto e : elesObjs)
+  {
+    /* Extrapolate solution to plot points */
+    auto &A = e->oppE_ppts(0, 0);
+    auto &B = e->U_spts(0, 0, 0);
+    auto &C = e->U_ppts(0, 0, 0);
 
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
-      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B, 
+        e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
-      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
+        e->nEles * eles->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B, 
+        e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
 #endif
 
-  /* Apply squeezing if needed */
-  if (input->squeeze)
-  {
-    eles->compute_Uavg();
+    /* Apply squeezing if needed */
+    if (input->squeeze)
+    {
+      e->compute_Uavg();
 
 #ifdef _GPU
-    eles->Uavg = eles->Uavg_d;
+      e->Uavg = e->Uavg_d;
 #endif
 
-    eles->poly_squeeze_ppts();
+      e->poly_squeeze_ppts();
+    }
   }
 
+  std::vector<std::string> var;
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
-    f << "<DataArray type=\"Float32\" Name=\"u\" ";
-    f << "format=\"ascii\">"<< std::endl;
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << std::scientific << std::setprecision(16) << eles->U_ppts(ppt, ele, 0);
-        f  << " ";
-      }
-      f << std::endl;
-    }
-    f << "</DataArray>" << std::endl;
+    var = {"u"};
   }
   else if(input->equation == EulerNS)
   {
-    std::vector<std::string> var;
     if (eles->nDims == 2)
       var = {"rho", "xmom", "ymom", "energy"};
     else
       var = {"rho", "xmom", "ymom", "zmom", "energy"};
+  }
 
-    for (unsigned int n = 0; n < eles->nVars; n++)
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
+    f << "format=\"ascii\">"<< std::endl;
+    for (auto e : elesObjs)
     {
-      f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
-      f << "format=\"ascii\">"<< std::endl;
-      
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+        for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
           f << std::scientific << std::setprecision(16);
-          f << eles->U_ppts(ppt, ele, n);
+          f << e->U_ppts(ppt, ele, n);
           f << " ";
         }
 
         f << std::endl;
       }
-      f << "</DataArray>" << std::endl;
     }
+
+    f << "</DataArray>" << std::endl;
   }
 
   if (input->filt_on && input->sen_write)
@@ -3258,14 +3294,17 @@ void FRSolver::write_solution(const std::string &_prefix)
     filt.sensor = filt.sensor_d;
 #endif
     f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (auto e : elesObjs)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        f << filt.sensor(ele) << " ";
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
+        {
+          f << filt.sensor(ele) << " ";
+        }
+        f << std::endl;
       }
-      f << std::endl;
     }
     f << "</DataArray>" << std::endl;
   }
@@ -4417,7 +4456,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   // HACK: Change nStages to compute the correct residual
   if (input->dt_scheme == "MCGS")
   {
-    nStages = 1;
+    input->nStages = 1;
   }
 
   std::vector<double> res(eles->nVars,0.0);
@@ -4451,7 +4490,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   // HACK: Change nStages back
   if (input->dt_scheme == "MCGS")
   {
-    nStages = 2;
+    input->nStages = 2;
   }
 
 #ifdef _MPI
@@ -4490,12 +4529,12 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
     if (input->dt_type == 2)
     {
-      std::cout << "dt: " <<  *std::min_element(dt.data(), dt.data()+eles->nEles) << " (min) ";
-      std::cout << *std::max_element(dt.data(), dt.data()+eles->nEles) << " (max)";
+      std::cout << "dt: " <<  *std::min_element(eles->dt.data(), eles->dt.data()+eles->nEles) << " (min) ";
+      std::cout << *std::max_element(eles->dt.data(), eles->dt.data()+eles->nEles) << " (max)";
     }
     else
     {
-      std::cout << "dt: " << dt(0);
+      std::cout << "dt: " << eles->dt(0);
     }
 
     std::cout << std::endl;

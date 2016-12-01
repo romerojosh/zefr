@@ -543,7 +543,7 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   read_element_connectivity(f, geo, input);
   read_boundary_faces(f, geo);
 
-  set_ele_adjacency(geo);
+  //set_ele_adjacency(geo);
 
   f.close();
 
@@ -684,41 +684,74 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     if (geo.nDims == 2)
     {
       geo.nFacesPerEle = 4; geo.nNodesPerFace = 2;
-      geo.nCornerNodes = 4;
+      geo.nCornerNodes = 4; //TODO: corner nodes necessary?
+
+      geo.nFacesPerEleBT[QUAD] = 4; geo.nNodesPerFaceBT[QUAD] = 2;
+      geo.nFacesPerEleBT[TRI] = 3; geo.nNodesPerFaceBT[TRI] = 2;
 
       switch(val)
       {
         /* Linear quad/tri */
         case 2:
+          if (!input->collapsed_mode)
+          {
+            geo.ele_set.insert(TRI);
+            geo.nEles++; 
+            geo.nElesBT[TRI]++;
+            geo.shape_order = 1; geo.nNodesPerEle = 3; 
+            geo.shape_orderBT[TRI] = 1; geo.nNodesPerEleBT[TRI] = 3; break;
+          }
         case 3:
+          geo.ele_set.insert(QUAD);
           geo.nEles++; 
-          geo.shape_order = 1; geo.nNodesPerEle = 4; break;
+          geo.nElesBT[QUAD]++;
+          geo.shape_order = 1; geo.nNodesPerEle = 4; 
+          geo.shape_orderBT[QUAD] = 1; geo.nNodesPerEleBT[QUAD] = 4; break;
 
         /* Biquadratic quad/tri */
         case 9:
+          if (!input->collapsed_mode) ThrowException("ERROR: Only linear triangles currently supported!");
         case 10:
+          geo.ele_set.insert(QUAD);
           geo.nEles++; 
+          geo.nElesBT[QUAD]++;
           geo.shape_order = 2; 
+          geo.shape_orderBT[QUAD] = 2; 
           if (input->serendipity)
+          {
             geo.nNodesPerEle = 8;
+            geo.nNodesPerEleBT[QUAD] = 8;
+          }
           else
+          {
             geo.nNodesPerEle = 9;
+            geo.nNodesPerEleBT[QUAD] = 9;
+          }
           break;
 
         /* Bicubic quad */
         case 36:
+          geo.ele_set.insert(QUAD);
           geo.nEles++; 
-          geo.shape_order = 3; geo.nNodesPerEle = 16; break;
+          geo.nElesBT[QUAD]++;
+          geo.shape_order = 3; geo.nNodesPerEle = 16; 
+          geo.shape_orderBT[QUAD] = 3; geo.nNodesPerEleBT[QUAD] = 16; break;
 
         /* Biquartic quad */
         case 37:
+          geo.ele_set.insert(QUAD);
           geo.nEles++; 
-          geo.shape_order = 4; geo.nNodesPerEle = 25; break;
+          geo.nElesBT[QUAD]++;
+          geo.shape_order = 4; geo.nNodesPerEle = 25; 
+          geo.shape_orderBT[QUAD] = 4; geo.nNodesPerEleBT[QUAD] = 25; break;
 
         /* Biquintic quad */
         case 38:
+          geo.ele_set.insert(QUAD);
           geo.nEles++; 
-          geo.shape_order = 5; geo.nNodesPerEle = 36; break;
+          geo.nElesBT[QUAD]++;
+          geo.shape_order = 5; geo.nNodesPerEle = 36; 
+          geo.shape_orderBT[QUAD] = 5; geo.nNodesPerEleBT[QUAD] = 36; break;
 
         case 1:
         case 8:
@@ -736,6 +769,9 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       geo.nFacesPerEle = 6; geo.nNodesPerFace = 4;
       geo.nCornerNodes = 8;
 
+      geo.nFacesPerEleBT[HEX] = 6; geo.nNodesPerFaceBT[HEX] = 4;
+      geo.nFacesPerEleBT[TET] = 4; geo.nNodesPerFaceBT[TET] = 3;
+
       switch(val)
       {
         /* Trilinear Hex/Tet/Prism/Pyramid */
@@ -743,35 +779,58 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 5:
         case 6:
         case 7:
+          geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.shape_order = 1; geo.nNodesPerEle = 8; break;
+          geo.nElesBT[HEX]++;
+          geo.shape_orderBT[HEX] = 1; geo.nNodesPerEleBT[HEX] = 8; break;
+
 
         case 11:
         case 12:
+          geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.shape_order = 2;
+          geo.nElesBT[HEX]++;
+          geo.shape_orderBT[HEX] = 2;
           if (input->serendipity)
+          {
             geo.nNodesPerEle = 20;
+            geo.nNodesPerEleBT[HEX] = 20;
+          }
           else
+          {
             geo.nNodesPerEle = 27;
+            geo.nNodesPerEleBT[HEX] = 27;
+          }
           break;
 
         case 92:
+          geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.shape_order = 3;
           geo.nNodesPerEle = 64;
+          geo.nElesBT[HEX]++;
+          geo.shape_orderBT[HEX] = 3;
+          geo.nNodesPerEleBT[HEX] = 64;
           break;
 
         case 93:
+          geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.shape_order = 4;
           geo.nNodesPerEle = 125;
+          geo.nElesBT[HEX]++;
+          geo.shape_orderBT[HEX] = 4;
+          geo.nNodesPerEleBT[HEX] = 125;
           break;
 
         case 94:
+          geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.shape_order = 5;
           geo.nNodesPerEle = 216;
+          geo.nElesBT[HEX]++;
           break;
 
         case 2:
@@ -795,9 +854,14 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
   /* Allocate memory for element connectivity */
   geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
+  for (auto etype : geo.ele_set) 
+  {
+    geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype]});
+    geo.nElesBT[etype] = 0; // zero out ele by type count to use for indexing
+  }
 
   /* Read element connectivity (skip boundaries in this loop) */
-  unsigned int ele = 0;
+  //unsigned int ele = 0;
   std::string line;
   for (unsigned int n = 0; n < nElesBnds; n++)
   {
@@ -819,53 +883,131 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 26: /* 4-node Line (skip) */
         case 27: /* 5-node Line (skip) */
         case 28: /* 6-node Line (skip) */
-          std::getline(f,line); break;
+          break;
 
+        /* Process triangular elements */
         case 2: /* 3-node Triangle */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
-          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); 
-          ele++; break;
-
-        case 3: /* 4-node Quadrilateral */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-          ele++; break;
-
-        case 9: /* 6-node Triangle */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele); 
-          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(7,ele);
-          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); geo.ele2nodes(6,ele) = geo.ele2nodes(2,ele);
-
-          if (!input->serendipity)
+          if (input->collapsed_mode)
           {
-            //TODO set geo.ele2nodes(8,ele) to centroid
-            ThrowException("Biquadratic quad to triangles not implemented yet! Set serendipity = 1!");
+            unsigned int ele = geo.nElesBT[QUAD];
+            f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele);
+            geo.ele2nodes(0,ele) = geo.ele2nodesBT[QUAD](0,ele);
+            geo.ele2nodes(1,ele) = geo.ele2nodesBT[QUAD](1,ele);
+            geo.ele2nodes(2,ele) = geo.ele2nodesBT[QUAD](2,ele);
+
+            geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); 
+            geo.ele2nodesBT[QUAD](3,ele) = geo.ele2nodesBT[QUAD](2,ele); 
+            geo.nElesBT[QUAD]++; break;
+          }
+        case 9: /* 6-node Triangle */
+        {
+          if (input->collapsed_mode)
+          {
+            unsigned int ele = geo.nElesBT[QUAD];
+            f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele); 
+            f >> geo.ele2nodesBT[QUAD](4,ele) >> geo.ele2nodesBT[QUAD](5,ele) >> geo.ele2nodesBT[QUAD](7,ele);
+            geo.ele2nodes(0,ele) = geo.ele2nodesBT[QUAD](0,ele);
+            geo.ele2nodes(1,ele) = geo.ele2nodesBT[QUAD](1,ele);
+            geo.ele2nodes(2,ele) = geo.ele2nodesBT[QUAD](2,ele);
+            geo.ele2nodes(4,ele) = geo.ele2nodesBT[QUAD](4,ele);
+            geo.ele2nodes(5,ele) = geo.ele2nodesBT[QUAD](5,ele);
+            geo.ele2nodes(7,ele) = geo.ele2nodesBT[QUAD](7,ele);
+
+            geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); geo.ele2nodes(6,ele) = geo.ele2nodes(2,ele);
+            geo.ele2nodesBT[QUAD](3,ele) = geo.ele2nodesBT[QUAD](2,ele); geo.ele2nodesBT[QUAD](6,ele) = geo.ele2nodesBT[QUAD](2,ele);
+
+            if (!input->serendipity)
+            {
+              //TODO set geo.ele2nodes(8,ele) to centroid
+              ThrowException("Biquadratic quad to triangles not implemented yet! Set serendipity = 1!");
+            }
+
+            geo.nElesBT[QUAD]++; break;
           }
 
-          ele++; break;
+          /* Process for generic triangle */
+          unsigned int ele = geo.nElesBT[TRI];
+          for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[TRI]; nd++)
+          {
+            f >> geo.ele2nodesBT[TRI](nd,ele);
+            geo.ele2nodes(nd,ele) = geo.ele2nodesBT[TRI](nd,ele);
+          }
+          geo.nElesBT[TRI]++; break;
+        }
 
+        /* Process quadrilateral elements */
+        case 3: /* 4-node Quadrilateral */
         case 10: /* 9-node Quadilateral */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-          if (!input->serendipity)
-            f >> geo.ele2nodes(8,ele);
-          else
-            f >> vint;
-          ele++; break;
-
         case 36: /* 16-node Quadilateral */
-          for (int n = 0; n < 16; n++)
-            f >> geo.ele2nodes(n, ele);
-          ele++; break;
-
         case 37: /* 25-node Quadilateral */
-          for (int n = 0; n < 25; n++)
-            f >> geo.ele2nodes(n, ele);
-          ele++; break;
-
         case 38: /* 36-node Quadilateral */
-          for (int n = 0; n < 36; n++)
-            f >> geo.ele2nodes(n, ele);
-          ele++; break;
+        {
+          unsigned int ele = geo.nElesBT[QUAD];
+          for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[QUAD]; nd++)
+          {
+            f >> geo.ele2nodesBT[QUAD](nd,ele);
+            geo.ele2nodes(nd,ele) = geo.ele2nodesBT[QUAD](nd, ele);
+          }
+          geo.nElesBT[QUAD]++; 
+          break;
+        }
+
+        //case 3: /* 4-node Quadrilateral */
+        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+        //  f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele) >> geo.ele2nodesBT[QUAD](3,ele);
+        //  f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele) >> geo.ele2nodesBT[QUAD](3,ele);
+        //  nElesBT[QUAD]++; 
+        //  break;
+
+
+        //case 10: /* 9-node Quadilateral */
+        //  unsigned int ele = nElesBT[QUAD];
+        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+        //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
+        //  f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele) >> geo.ele2nodesBT[QUAD](3,ele);
+        //  f >> geo.ele2nodesBT[QUAD](4,ele) >> geo.ele2nodesBT[QUAD](5,ele) >> geo.ele2nodesBT[QUAD](6,ele) >> geo.ele2nodesBT[QUAD](7,ele);
+        //  if (!input->serendipity)
+        //  {
+        //    f >> geo.ele2nodes(8,ele);
+        //    f >> geo.ele2nodesBT[QUAD](8,ele);
+        //  }
+        //  else
+        //  {
+        //    f >> vint;
+        //  }
+        //  nElesBT[QUAD]++; 
+        //  break;
+
+        //case 36: /* 16-node Quadilateral */
+        //  unsigned int ele = nElesBT[QUAD];
+        //  for (int n = 0; n < 16; n++)
+        //  {
+        //    f >> geo.ele2nodes(n, ele);
+        //    f >> geo.ele2nodesBT[QUAD](n, ele);
+        //  }
+        //  nElesBT[QUAD]++; 
+        //  break;
+
+        //case 37: /* 25-node Quadilateral */
+        //  unsigned int ele = nElesBT[QUAD];
+        //  for (int n = 0; n < 25; n++)
+        //  {
+        //    f >> geo.ele2nodes(n, ele);
+        //    f >> geo.ele2nodesBT[QUAD](n, ele);
+        //  }
+        //  nElesBT[QUAD]++; 
+        //  break;
+
+        //case 38: /* 36-node Quadilateral */
+        //  unsigned int ele = nElesBT[QUAD];
+        //  for (int n = 0; n < 36; n++)
+        //  {
+        //    f >> geo.ele2nodes(n, ele);
+        //    f >> geo.ele2nodesBT[QUAD](n, ele);
+        //  }
+        //  nElesBT[QUAD]++; 
+        //  break;
 
         default:
           ThrowException("Unrecognized element type detected!"); break;
@@ -884,223 +1026,252 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 36: // Cubic quad
         case 37: // Quartic quad
         case 38: // Quintic quad
-          std::getline(f,line); break;
+          break;
 
-        case 4: /* 4-node Tetrahedral */
-        {
-          /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
-           * fully tetrahedral meshes. */
-          std::vector<unsigned int> nodes(4,0);
+        //case 4: /* 4-node Tetrahedral */
+        //{
+        //  /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
+        //   * fully tetrahedral meshes. */
+        //  std::vector<unsigned int> nodes(4,0);
 
-          for (unsigned int i = 0; i < 4; i++)
-          {
-            f >> nodes[i];
-          }
+        //  for (unsigned int i = 0; i < 4; i++)
+        //  {
+        //    f >> nodes[i];
+        //  }
 
-          /* Locate minimum node index and position */
-          auto it_min = std::min_element(nodes.begin(), nodes.end());
-          auto min_node = *it_min;
+        //  /* Locate minimum node index and position */
+        //  auto it_min = std::min_element(nodes.begin(), nodes.end());
+        //  auto min_node = *it_min;
 
-          unsigned int min_pos = 0;
-          for (unsigned int i = 0; i < 4; i++)
-          {
-            if (nodes[i] == min_node)
-              min_pos = i;
-          }
+        //  unsigned int min_pos = 0;
+        //  for (unsigned int i = 0; i < 4; i++)
+        //  {
+        //    if (nodes[i] == min_node)
+        //      min_pos = i;
+        //  }
 
-          /* Set minimum node to "top" collapsed node */
-          geo.ele2nodes(4, ele) = min_node;
-          geo.ele2nodes(5, ele) = min_node;
-          geo.ele2nodes(6, ele) = min_node;
-          geo.ele2nodes(7, ele) = min_node;
+        //  /* Set minimum node to "top" collapsed node */
+        //  geo.ele2nodes(4, ele) = min_node;
+        //  geo.ele2nodes(5, ele) = min_node;
+        //  geo.ele2nodes(6, ele) = min_node;
+        //  geo.ele2nodes(7, ele) = min_node;
 
-          nodes.erase(it_min);
+        //  nodes.erase(it_min);
 
-          /* Find next minimum node */
-          it_min = std::min_element(nodes.begin(), nodes.end());
-          min_node = *it_min;
+        //  /* Find next minimum node */
+        //  it_min = std::min_element(nodes.begin(), nodes.end());
+        //  min_node = *it_min;
 
 
-          /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
-           * Reorder for CCW orientation if needed */
-          while (nodes[2] != min_node)
-          {
-            std::rotate(nodes.begin(), nodes.begin() + 1, nodes.end());
-          }
-          if (min_pos == 0 || min_pos == 2)
-          {
-            geo.ele2nodes(0, ele) = nodes[1];
-            geo.ele2nodes(1, ele) = nodes[0];
-            geo.ele2nodes(2, ele) = nodes[2];
-            geo.ele2nodes(3, ele) = nodes[2];
-          }
-          else if (min_pos == 1 || min_pos == 3)
-          {
-            geo.ele2nodes(0, ele) = nodes[0];
-            geo.ele2nodes(1, ele) = nodes[1];
-            geo.ele2nodes(2, ele) = nodes[2];
-            geo.ele2nodes(3, ele) = nodes[2];
-          }
+        //  /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
+        //   * Reorder for CCW orientation if needed */
+        //  while (nodes[2] != min_node)
+        //  {
+        //    std::rotate(nodes.begin(), nodes.begin() + 1, nodes.end());
+        //  }
+        //  if (min_pos == 0 || min_pos == 2)
+        //  {
+        //    geo.ele2nodes(0, ele) = nodes[1];
+        //    geo.ele2nodes(1, ele) = nodes[0];
+        //    geo.ele2nodes(2, ele) = nodes[2];
+        //    geo.ele2nodes(3, ele) = nodes[2];
+        //  }
+        //  else if (min_pos == 1 || min_pos == 3)
+        //  {
+        //    geo.ele2nodes(0, ele) = nodes[0];
+        //    geo.ele2nodes(1, ele) = nodes[1];
+        //    geo.ele2nodes(2, ele) = nodes[2];
+        //    geo.ele2nodes(3, ele) = nodes[2];
+        //  }
 
-          ele++; break;
-        }
+        //  ele++; break;
+        //}
 
+        //case 5: /* 8-node Hexahedral */
+        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+        //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
+        //  ele++; break;
+
+        //case 6: /* 6-node Prism */
+        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
+        //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele);
+        //  geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele);
+        //  geo.ele2nodes(7,ele) = geo.ele2nodes(6,ele);
+        //  ele++; break;
+
+        //case 7: /* 5-node Pyramid */
+        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1, ele) >> geo.ele2nodes(2, ele);
+        //  f >> geo.ele2nodes(3, ele) >> geo.ele2nodes(4,ele);
+        //  geo.ele2nodes(5, ele) = geo.ele2nodes(4, ele);
+        //  geo.ele2nodes(6, ele) = geo.ele2nodes(4, ele);
+        //  geo.ele2nodes(7, ele) = geo.ele2nodes(4, ele);
+        //  ele++; break;
+
+        //case 11: /* 10-node Tetrahedron (read as collapsed 20-node serendipity) */
+        //{
+        //  /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
+        //   * fully tetrahedral meshes. */
+        //  std::vector<unsigned int> nodes(10,0);
+        //  std::vector<unsigned int> verts(4,0);
+
+        //  for (unsigned int i = 0; i < 10; i++)
+        //  {
+        //    f >> nodes[i];
+        //    //nodes[i] = i;
+        //  }
+
+        //  for (unsigned int i = 0; i < 4; i++)
+        //  {
+        //    verts[i] = nodes[i];
+        //  }
+
+        //  /* Locate minimum vertex index and position */
+        //  auto it_min = std::min_element(verts.begin(), verts.end());
+        //  auto min_vert = *it_min;
+
+        //  unsigned int min_pos = 0;
+        //  for (unsigned int i = 0; i < 4; i++)
+        //  {
+        //    if (verts[i] == min_vert)
+        //      min_pos = i;
+        //  }
+
+        //  //std::cout << ele << " " << min_pos << std::endl;
+
+        //  /* Set minimum node to "top" collapsed node */
+        //  geo.ele2nodes(4, ele) = min_vert; geo.ele2nodes(5, ele) = min_vert;
+        //  geo.ele2nodes(6, ele) = min_vert; geo.ele2nodes(7, ele) = min_vert;
+        //  geo.ele2nodes(16,ele) =  min_vert; geo.ele2nodes(17,ele) = min_vert;
+        //  geo.ele2nodes(18,ele) =  min_vert; geo.ele2nodes(19,ele) = min_vert;
+
+        //  verts.erase(it_min);
+
+        //  /* Get bottom and middle edge vertices, based on min_pos */
+        //  std::vector<unsigned int> bverts(3,0);
+        //  std::vector<unsigned int> mverts(3,0);
+        //  if (min_pos == 0)
+        //  {
+        //    bverts = {nodes[5], nodes[8], nodes[9]};
+        //    mverts = {nodes[4], nodes[6], nodes[7]};
+        //  }
+        //  else if (min_pos == 1)
+        //  {
+        //    bverts = {nodes[6], nodes[8], nodes[7]};
+        //    mverts = {nodes[4], nodes[5], nodes[9]};
+        //  }
+        //  else if (min_pos == 2)
+        //  {
+        //    bverts = {nodes[4], nodes[9], nodes[7]};
+        //    mverts = {nodes[6], nodes[5], nodes[8]};
+        //  }
+        //  else
+        //  {
+        //    bverts = {nodes[4], nodes[5], nodes[6]};
+        //    mverts = {nodes[7], nodes[9], nodes[8]};
+        //  }
+
+        //  /* Find next minimum vertex */
+        //  it_min = std::min_element(verts.begin(), verts.end());
+        //  min_vert = *it_min;
+
+
+        //  /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
+        //   * Reorder for CCW orientation if needed */
+        //  while (verts[2] != min_vert)
+        //  {
+        //    std::rotate(verts.begin(), verts.begin() + 1, verts.end());
+        //    std::rotate(bverts.begin(), bverts.begin() + 1, bverts.end());
+        //    std::rotate(mverts.begin(), mverts.begin() + 1, mverts.end());
+        //  }
+        //  if (min_pos == 0 || min_pos == 2)
+        //  {
+        //    geo.ele2nodes(0, ele) = verts[1];
+        //    geo.ele2nodes(1, ele) = verts[0];
+        //    geo.ele2nodes(2, ele) = verts[2];
+        //    geo.ele2nodes(3, ele) = verts[2];
+
+        //    geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[2];
+        //    geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[1];
+
+        //    geo.ele2nodes(12,ele) =  mverts[1]; geo.ele2nodes(13,ele) = mverts[0];
+        //    geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
+        //  }
+        //  else if (min_pos == 1 || min_pos == 3)
+        //  {
+        //    geo.ele2nodes(0, ele) = verts[0];
+        //    geo.ele2nodes(1, ele) = verts[1];
+        //    geo.ele2nodes(2, ele) = verts[2];
+        //    geo.ele2nodes(3, ele) = verts[2];
+
+        //    geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[1];
+        //    geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[2];
+
+        //    geo.ele2nodes(12,ele) =  mverts[0]; geo.ele2nodes(13,ele) = mverts[1];
+        //    geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
+        //  }
+
+        //  ele++; break;
+        //}
+
+        //case 12: /* Triquadratic Hex */
+        //{
+        //  if (input->serendipity) /* Read as 20-node serendipity */
+        //  {
+        //    f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+        //    f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
+        //    f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
+        //    f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
+        //    f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
+        //  }
+        //  else /* Read as 27-node Lagrange tensor-product */
+        //  {
+        //    for (unsigned int nd = 0; nd < 27; nd++)
+        //      f >> geo.ele2nodes(nd,ele);
+        //  }
+        //  std::getline(f,line); ele++; break;
+        //}
+
+        /* Process hexahedral elements */
         case 5: /* 8-node Hexahedral */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-          ele++; break;
-
-        case 6: /* 6-node Prism */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
-          f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele);
-          geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele);
-          geo.ele2nodes(7,ele) = geo.ele2nodes(6,ele);
-          ele++; break;
-
-        case 7: /* 5-node Pyramid */
-          f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1, ele) >> geo.ele2nodes(2, ele);
-          f >> geo.ele2nodes(3, ele) >> geo.ele2nodes(4,ele);
-          geo.ele2nodes(5, ele) = geo.ele2nodes(4, ele);
-          geo.ele2nodes(6, ele) = geo.ele2nodes(4, ele);
-          geo.ele2nodes(7, ele) = geo.ele2nodes(4, ele);
-          ele++; break;
-
-        case 11: /* 10-node Tetrahedron (read as collapsed 20-node serendipity) */
-        {
-          /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
-           * fully tetrahedral meshes. */
-          std::vector<unsigned int> nodes(10,0);
-          std::vector<unsigned int> verts(4,0);
-
-          for (unsigned int i = 0; i < 10; i++)
-          {
-            f >> nodes[i];
-            //nodes[i] = i;
-          }
-
-          for (unsigned int i = 0; i < 4; i++)
-          {
-            verts[i] = nodes[i];
-          }
-
-          /* Locate minimum vertex index and position */
-          auto it_min = std::min_element(verts.begin(), verts.end());
-          auto min_vert = *it_min;
-
-          unsigned int min_pos = 0;
-          for (unsigned int i = 0; i < 4; i++)
-          {
-            if (verts[i] == min_vert)
-              min_pos = i;
-          }
-
-          //std::cout << ele << " " << min_pos << std::endl;
-
-          /* Set minimum node to "top" collapsed node */
-          geo.ele2nodes(4, ele) = min_vert; geo.ele2nodes(5, ele) = min_vert;
-          geo.ele2nodes(6, ele) = min_vert; geo.ele2nodes(7, ele) = min_vert;
-          geo.ele2nodes(16,ele) =  min_vert; geo.ele2nodes(17,ele) = min_vert;
-          geo.ele2nodes(18,ele) =  min_vert; geo.ele2nodes(19,ele) = min_vert;
-
-          verts.erase(it_min);
-
-          /* Get bottom and middle edge vertices, based on min_pos */
-          std::vector<unsigned int> bverts(3,0);
-          std::vector<unsigned int> mverts(3,0);
-          if (min_pos == 0)
-          {
-            bverts = {nodes[5], nodes[8], nodes[9]};
-            mverts = {nodes[4], nodes[6], nodes[7]};
-          }
-          else if (min_pos == 1)
-          {
-            bverts = {nodes[6], nodes[8], nodes[7]};
-            mverts = {nodes[4], nodes[5], nodes[9]};
-          }
-          else if (min_pos == 2)
-          {
-            bverts = {nodes[4], nodes[9], nodes[7]};
-            mverts = {nodes[6], nodes[5], nodes[8]};
-          }
-          else
-          {
-            bverts = {nodes[4], nodes[5], nodes[6]};
-            mverts = {nodes[7], nodes[9], nodes[8]};
-          }
-
-          /* Find next minimum vertex */
-          it_min = std::min_element(verts.begin(), verts.end());
-          min_vert = *it_min;
-
-
-          /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
-           * Reorder for CCW orientation if needed */
-          while (verts[2] != min_vert)
-          {
-            std::rotate(verts.begin(), verts.begin() + 1, verts.end());
-            std::rotate(bverts.begin(), bverts.begin() + 1, bverts.end());
-            std::rotate(mverts.begin(), mverts.begin() + 1, mverts.end());
-          }
-          if (min_pos == 0 || min_pos == 2)
-          {
-            geo.ele2nodes(0, ele) = verts[1];
-            geo.ele2nodes(1, ele) = verts[0];
-            geo.ele2nodes(2, ele) = verts[2];
-            geo.ele2nodes(3, ele) = verts[2];
-
-            geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[2];
-            geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[1];
-
-            geo.ele2nodes(12,ele) =  mverts[1]; geo.ele2nodes(13,ele) = mverts[0];
-            geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
-          }
-          else if (min_pos == 1 || min_pos == 3)
-          {
-            geo.ele2nodes(0, ele) = verts[0];
-            geo.ele2nodes(1, ele) = verts[1];
-            geo.ele2nodes(2, ele) = verts[2];
-            geo.ele2nodes(3, ele) = verts[2];
-
-            geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[1];
-            geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[2];
-
-            geo.ele2nodes(12,ele) =  mverts[0]; geo.ele2nodes(13,ele) = mverts[1];
-            geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
-          }
-
-          ele++; break;
-        }
-
         case 12: /* Triquadratic Hex */
-        {
-          if (input->serendipity) /* Read as 20-node serendipity */
-          {
-            f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-            f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-            f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
-            f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
-            f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
-          }
-          else /* Read as 27-node Lagrange tensor-product */
-          {
-            for (unsigned int nd = 0; nd < 27; nd++)
-              f >> geo.ele2nodes(nd,ele);
-          }
-          std::getline(f,line); ele++; break;
-        }
+          //if (input->serendipity) /* Read as 20-node serendipity */
+          //{
+          //  unsigned int ele = geo.nElesBT[HEX];
+          //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
+          //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
+          //  f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
+          //  f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
+          //  f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
 
+          //  f >> geo.ele2nodesBT[HEX](0,ele) >> geo.ele2nodesBT[HEX](1,ele) >> geo.ele2nodesBT[HEX](2,ele) >> geo.ele2nodesBT[HEX](3,ele);
+          //  f >> geo.ele2nodesBT[HEX](4,ele) >> geo.ele2nodesBT[HEX](5,ele) >> geo.ele2nodesBT[HEX](6,ele) >> geo.ele2nodesBT[HEX](7,ele);
+          //  f >> geo.ele2nodesBT[HEX](8,ele) >> geo.ele2nodesBT[HEX](11,ele) >> geo.ele2nodesBT[HEX](12,ele) >> geo.ele2nodesBT[HEX](9,ele);
+          //  f >> geo.ele2nodesBT[HEX](13,ele) >> geo.ele2nodesBT[HEX](10,ele) >> geo.ele2nodesBT[HEX](14,ele) >> geo.ele2nodesBT[HEX](15,ele);
+          //  f >> geo.ele2nodesBT[HEX](16,ele) >> geo.ele2nodesBT[HEX](19,ele) >> geo.ele2nodesBT[HEX](17,ele) >> geo.ele2nodesBT[HEX](18,ele);
+
+          //  geo.nElesBT[HEX]++; break;
+          //}
         case 92: /* Cubic Hex */
         case 93: /* Quartic Hex */
         case 94: /* Quintic Hex */
-          for (unsigned int nd = 0; nd < geo.nNodesPerEle; nd++)
-            f >> geo.ele2nodes(nd,ele);
-          std::getline(f,line); ele++; break;
+        {
+          unsigned int ele = geo.nElesBT[HEX];
+          for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[HEX]; nd++)
+          {
+            f >> geo.ele2nodesBT[HEX](nd,ele);
+            geo.ele2nodes(nd,ele) = geo.ele2nodesBT[HEX](nd,ele);
+          }
+          geo.nElesBT[HEX]++; break;
+        }
 
         default:
           ThrowException("Unrecognized element type detected!"); break;
       }
 
     }
+
+
+    std::getline(f,line); 
   }
 
   /* Correct node values to be 0-indexed */
@@ -1109,6 +1280,17 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
     {
       geo.ele2nodes(n,ele)--;
+    }
+  }
+  
+  for (auto etype : geo.ele_set)
+  {
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+    {
+      for (unsigned int n = 0; n < geo.nNodesPerEleBT[etype]; n++)
+      {
+        geo.ele2nodesBT[etype](n,ele)--;
+      }
     }
   }
 
@@ -1141,9 +1323,9 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       {
         case 1: /* 2-node line */
         case 8: /* 3-node Line */
-        case 26: /* 4-node Line (skip) */
-        case 27: /* 5-node Line (skip) */
-        case 28: /* 6-node Line (skip) */
+        case 26: /* 4-node Line */
+        case 27: /* 5-node Line */
+        case 28: /* 6-node Line */
           f >> face[0] >> face[1]; 
           std::getline(f,line); break;
 
@@ -1176,6 +1358,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
       switch (ele_type)
       {
         case 2: /* 3-node Triangle */
+        case 9: /* 6-node Triangle */
           f >> nTags;
           f >> bnd_id;
 
@@ -1184,31 +1367,33 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
           
           face.assign(3,0);
           f >> face[0] >> face[1] >> face[2]; 
-          break;
-
-        case 3: /* 4-node Quadrilateral */
-          f >> nTags;
-          f >> bnd_id;
-
-          for (unsigned int i = 0; i < nTags - 1; i++)
-            f >> vint;
-
-          face.assign(4,0);
-          f >> face[0] >> face[1] >> face[2] >> face[3]; break;
-
-        case 9: /* 6-node Triangle */
-          f >> nTags;
-          f >> bnd_id;
-
-          for (unsigned int i = 0; i < nTags - 1; i++)
-            f >> vint;
-
-          face.assign(3,0);
-          f >> face[0] >> face[1] >> face[2]; 
           std::getline(f,line);
           break;
 
+        //case 3: /* 4-node Quadrilateral */
+        //  f >> nTags;
+        //  f >> bnd_id;
 
+        //  for (unsigned int i = 0; i < nTags - 1; i++)
+        //    f >> vint;
+
+        //  face.assign(4,0);
+        //  f >> face[0] >> face[1] >> face[2] >> face[3]; break;
+
+        //case 9: /* 6-node Triangle */
+        //  f >> nTags;
+        //  f >> bnd_id;
+
+        //  for (unsigned int i = 0; i < nTags - 1; i++)
+        //    f >> vint;
+
+        //  face.assign(3,0);
+        //  f >> face[0] >> face[1] >> face[2]; 
+        //  std::getline(f,line);
+        //  break;
+
+
+        case 3: /* 4-node Quadrilateral */
         case 10: /* 9-node Quadrilateral */
         case 16: // Quadratic (Serendipity) quad
         case 36: // Cubic quad
@@ -1290,6 +1475,58 @@ void set_face_nodes(GeoStruct &geo)
     /* Face 5: Back */
     geo.face_nodes(5, 0) = 3; geo.face_nodes(5, 1) = 2;
     geo.face_nodes(5, 2) = 6; geo.face_nodes(5, 3) = 7;
+  }
+
+  for (auto etype : geo.ele_set)
+  {
+    geo.face_nodesBT[etype].resize(geo.nFacesPerEleBT[etype]);
+
+    if (etype == QUAD)
+    {
+      /* Face 0: Bottom */
+      geo.face_nodesBT[etype][0] = {0, 1};
+
+      /* Face 1: Right */
+      geo.face_nodesBT[etype][1] = {1, 2};
+
+      /* Face 2: Top */
+      geo.face_nodesBT[etype][2] = {2, 3};
+
+      /* Face 3: Left */
+      geo.face_nodesBT[etype][3] = {3, 0};
+
+    }
+    else if (etype == TRI)
+    {
+      /* Face 0: Bottom */
+      geo.face_nodesBT[etype][0] = {0, 1};
+
+      /* Face 1: Hypotnuse */
+      geo.face_nodesBT[etype][1] = {1, 2};
+
+      /* Face 2: Left */
+      geo.face_nodesBT[etype][2] = {2, 0};
+    }
+    else if (etype == HEX)
+    {
+      /* Face 0: Bottom */
+      geo.face_nodesBT[etype][0] = {0, 1, 2, 3};
+
+      /* Face 1: Top */
+      geo.face_nodesBT[etype][1] = {5, 4, 7, 6};
+
+      /* Face 2: Left */
+      geo.face_nodesBT[etype][2] = {0, 3, 7, 4};
+
+      /* Face 3: Right */
+      geo.face_nodesBT[etype][2] = {2, 1, 5, 6};
+
+      /* Face 4: Front */
+      geo.face_nodesBT[etype][2] = {1, 0, 4, 5};
+
+      /* Face 5: Back */
+      geo.face_nodesBT[etype][2] = {3, 2, 6, 7};
+    }
   }
 }
 
@@ -1453,6 +1690,7 @@ void couple_periodic_bnds(GeoStruct &geo)
           geo.per_bnd_pairs[face1] = face2;
 
           /* Add element adjacency information to periodic boundaries */
+          /*
           // TODO: Seems to work, needs to be checked
           //std::sort(face1.begin(),face1.end());
           int f1 = geo.nodes_to_face[face1];
@@ -1470,6 +1708,7 @@ void couple_periodic_bnds(GeoStruct &geo)
              //geo.ele2face(n, ele2) = f1;
             }
           }
+          */
 
           /* Fill in map coupling nodes */
           for (unsigned int node1 = 0; node1 < nNodesPerFace; node1++)
@@ -1538,45 +1777,51 @@ void couple_periodic_bnds(GeoStruct &geo)
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 {
   /* Form set of unique faces */
-  if (geo.nDims == 2 || geo.nDims == 3)
-  {
-    unsigned int nFptsPerFace = (order + 1);
-    unsigned int nFpts1D = (order + 1);
-    if (geo.nDims == 3)
-      nFptsPerFace *= (order + 1);
+  if (geo.nDims != 2 && geo.nDims != 3)
+    ThrowException("Improper value for nDims - should be 2 or 3.");
 
-    unsigned int nVars = 1;
-    if (input->equation == EulerNS)
-      nVars = geo.nDims + 2;
+  unsigned int nFptsPerFace = (order + 1);
+  unsigned int nFpts1D = (order + 1);
+  if (geo.nDims == 3)
+    nFptsPerFace *= (order + 1);
 
-    geo.nFptsPerFace = nFptsPerFace;
+  unsigned int nVars = 1;
+  if (input->equation == EulerNS)
+    nVars = geo.nDims + 2;
 
-    std::map<std::vector<unsigned int>, std::vector<unsigned int>> face_fpts;
-    std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
-    std::vector<std::vector<int>> ele2fpts(geo.nEles);
-    std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
+  geo.nFptsPerFace = nFptsPerFace;
 
-    std::vector<unsigned int> face(geo.nNodesPerFace,0);
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> face_fpts;
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> bndface2fpts;
+  std::vector<std::vector<int>> ele2fpts(geo.nEles);
+  std::vector<std::vector<int>> ele2fpts_slot(geo.nEles);
+  std::map<ELE_TYPE, std::vector<std::vector<int>>> ele2fptsBT;
+  std::map<ELE_TYPE, std::vector<std::vector<int>>> ele2fpts_slotBT;
 
-    /* Determine number of interior global flux points */
-    std::set<std::vector<unsigned int>> unique_faces;
-    geo.nGfpts_int = 0; geo.nGfpts_bnd = 0;
+
+  /* Determine number of interior global flux points */
+  std::set<std::vector<unsigned int>> unique_faces;
+  geo.nGfpts_int = 0; geo.nGfpts_bnd = 0;
 
 #ifdef _MPI
-    geo.nGfpts_mpi = 0;
-    int rank;
-    MPI_Comm_rank(geo.myComm, &rank);
+  geo.nGfpts_mpi = 0;
+  int rank;
+  MPI_Comm_rank(geo.myComm, &rank);
 #endif
 
-    for (unsigned int ele = 0; ele < geo.nEles; ele++)
-    {
-      for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
-      {
-        face.assign(geo.nNodesPerFace, 0);
+  for (auto etype : geo.ele_set)
+  {
+    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
 
-        for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+    {
+      for (auto face_nodes : geo.face_nodesBT[etype])
+      {
+        face.assign(face_nodes.size(), 0);
+
+        for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
+          face[i] = geo.ele2nodes(face_nodes[i], ele);
         }
 
         /* Check if face is collapsed */
@@ -1588,10 +1833,10 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         {
           continue;
         }
-        else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
-        {
+        //else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
+        //{
           face.assign(nodes.begin(), nodes.end());
-        }
+        //}
 
         std::sort(face.begin(), face.end());
 
@@ -1617,49 +1862,56 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         unique_faces.insert(face);
       }
     }
+  }
 
-    /* Initialize global flux point indicies (to place boundary fpts at end of global fpt data structure) */
-    unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;
+  /* Initialize global flux point indicies (to place boundary fpts at end of global fpt data structure) */
+  unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;
 
 #ifdef _MPI
-    unsigned int gfpt_mpi = geo.nGfpts_int + geo.nGfpts_bnd;
-    std::set<std::vector<unsigned int>> mpi_faces_to_process;
+  unsigned int gfpt_mpi = geo.nGfpts_int + geo.nGfpts_bnd;
+  std::set<std::vector<unsigned int>> mpi_faces_to_process;
 #endif
 
-    geo.nFaces = 0;
-    geo.faceList.resize(0);
+  geo.nFaces = 0;
+  geo.faceList.resize(0);
 
-    /* Additional Connectivity Arrays */
+  /* Additional Connectivity Arrays */
 #ifdef _MPI
-    geo.mpiFaces.resize(0);
-    geo.procR.resize(0);
-    geo.mpiLocF.resize(0);
+  geo.mpiFaces.resize(0);
+  geo.procR.resize(0);
+  geo.mpiLocF.resize(0);
 #endif
-    geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
-    geo.face2eles.assign({2, unique_faces.size()}, -1);
-    geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
-    geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
+  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
+  geo.face2eles.assign({2, unique_faces.size()}, -1);
+  geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
+  geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
 #ifdef _BUILD_LIB
-    geo.face2nodes.assign({geo.nNodesPerFace, unique_faces.size()}, -1);
+  geo.face2nodes.assign({geo.nNodesPerFace, unique_faces.size()}, -1);
 #endif
 
-    std::set<int> overPts, wallPts;
-    std::set<std::vector<unsigned int>> overFaces;
+  std::set<int> overPts, wallPts;
+  std::set<std::vector<unsigned int>> overFaces;
 
-    /* Begin loop through faces */
-    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  /* Begin loop through faces */
+  for (auto etype : geo.ele_set)
+  {
+    std::vector<unsigned int> face(geo.nNodesPerFace, 0);
+    ele2fptsBT[etype].resize(geo.nElesBT[etype]);
+    ele2fpts_slotBT[etype].resize(geo.nElesBT[etype]);
+
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {
-      ele2fpts[ele].assign(geo.nFacesPerEle * nFptsPerFace, -1);
-      ele2fpts_slot[ele].assign(geo.nFacesPerEle * nFptsPerFace, -1);
+      ele2fptsBT[etype][ele].assign(geo.nFacesPerEleBT[etype] * nFptsPerFace, -1);
+      ele2fpts_slotBT[etype][ele].assign(geo.nFacesPerEleBT[etype] * nFptsPerFace, -1);
 
-      for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+      unsigned int n = 0;
+      for (auto face_nodes : geo.face_nodesBT[etype])
       {
-        face.assign(geo.nNodesPerFace, 0);
+        face.assign(face_nodes.size(), 0);
 
-        /* Get face nodes and sort for consistency */
-        for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+        for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
+          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
         }
 
         auto face_ordered = face;
@@ -1673,10 +1925,10 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         {
           continue;
         }
-        else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
-        {
+        //else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
+        //{
           face.assign(nodes.begin(), nodes.end());
-        }
+        //}
 
         std::sort(face.begin(), face.end());
 
@@ -1767,8 +2019,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
-            ele2fpts[ele][n*nFptsPerFace + i] = fpts[i];
-            ele2fpts_slot[ele][n*nFptsPerFace + i] = 0;
+            ele2fptsBT[etype][ele][n*nFptsPerFace + i] = fpts[i];
+            ele2fpts_slotBT[etype][ele][n*nFptsPerFace + i] = 0;
           }
 
           for (auto &fpt : fpts)
@@ -1813,7 +2065,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               {
                 for (unsigned int j = 0; j < nFpts1D; j++)
                 {
-                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[i * nFpts1D + j];
+                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[i * nFpts1D + j];
                 }
               } break;
 
@@ -1822,7 +2074,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               {
                 for (unsigned int j = 0; j < nFpts1D; j++)
                 {
-                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFpts1D - i + j * nFpts1D - 1];
+                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFpts1D - i + j * nFpts1D - 1];
                 }
               } break;
 
@@ -1831,7 +2083,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               {
                 for (unsigned int j = 0; j < nFpts1D; j++)
                 {
-                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - i * nFpts1D - j - 1];
+                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - i * nFpts1D - j - 1];
                 }
               } break;
 
@@ -1840,327 +2092,319 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               {
                 for (unsigned int j = 0; j < nFpts1D; j++)
                 {
-                  ele2fpts[ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - (j+1) * nFpts1D + i];
+                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - (j+1) * nFpts1D + i];
                 }
               } break;
 
             case 4:
               for (unsigned int i = 0; i < nFptsPerFace; i++)
               {
-                  ele2fpts[ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
+                  ele2fptsBT[etype][ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
               } break;
           }
           
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
-            ele2fpts_slot[ele][n*nFptsPerFace + i] = 1;
+            ele2fpts_slotBT[etype][ele][n*nFptsPerFace + i] = 1;
           }
         }
+
+        n++;
       }
     }
+  }
 
-    if (input->overset)
+  if (input->overset)
+  {
+    // Find any additional surfaces used for closing wall/overset volumes
+    for (auto &bnd : geo.bnd_faces)
     {
-      // Find any additional surfaces used for closing wall/overset volumes
-      for (auto &bnd : geo.bnd_faces)
-      {
-        if (bnd.second == WALL_CLOSURE)
-          for (auto &pt : bnd.first)
-            wallPts.insert(pt);
-        else if (bnd.second == OVERSET_CLOSURE)
-          for (auto &pt : bnd.first)
-            overPts.insert(pt);
-      }
-
-      geo.nWall = wallPts.size();
-      geo.nOver = overPts.size();
-      geo.wallNodes.resize(0);
-      geo.overNodes.resize(0);
-      geo.overFaceList.resize(0);
-      geo.wallNodes.reserve(geo.nWall);
-      geo.overNodes.reserve(geo.nOver);
-      for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
-      for (auto &pt:overPts) geo.overNodes.push_back(pt);
-      for (auto &face:overFaces)
-        geo.overFaceList.push_back(geo.nodes_to_face[face]);
+      if (bnd.second == WALL_CLOSURE)
+        for (auto &pt : bnd.first)
+          wallPts.insert(pt);
+      else if (bnd.second == OVERSET_CLOSURE)
+        for (auto &pt : bnd.first)
+          overPts.insert(pt);
     }
 
-    /* Process MPI faces, if needed */
+    geo.nWall = wallPts.size();
+    geo.nOver = overPts.size();
+    geo.wallNodes.resize(0);
+    geo.overNodes.resize(0);
+    geo.overFaceList.resize(0);
+    geo.wallNodes.reserve(geo.nWall);
+    geo.overNodes.reserve(geo.nOver);
+    for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
+    for (auto &pt:overPts) geo.overNodes.push_back(pt);
+    for (auto &face:overFaces)
+      geo.overFaceList.push_back(geo.nodes_to_face[face]);
+  }
+
+  /* Process MPI faces, if needed */
 #ifdef _MPI
-    geo.nMpiFaces = geo.mpiFaces.size();
-    geo.faceID_R.resize(geo.nMpiFaces);
-    geo.mpiRotR.resize(geo.nMpiFaces);
-    for (const auto &face : mpi_faces_to_process)
+  geo.nMpiFaces = geo.mpiFaces.size();
+  geo.faceID_R.resize(geo.nMpiFaces);
+  geo.mpiRotR.resize(geo.nMpiFaces);
+  for (const auto &face : mpi_faces_to_process)
+  {
+    auto ranks = geo.mpi_faces[face];
+    int sendRank = *std::min_element(ranks.begin(), ranks.end());
+    int recvRank = *std::max_element(ranks.begin(), ranks.end());
+
+    int faceID = geo.nodes_to_face[face];
+    int ff = findFirst(geo.mpiFaces, faceID);
+
+    /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
+
+    /* If partition has minimum (of 2) ranks assigned to this face, use its flux point order. Send
+     * information to other rank. */
+    if (rank == sendRank)
     {
-      auto ranks = geo.mpi_faces[face];
-      int sendRank = *std::min_element(ranks.begin(), ranks.end());
-      int recvRank = *std::max_element(ranks.begin(), ranks.end());
+      auto fpts = face_fpts[face];
+      auto face_ordered = geo.face2ordered[face];
 
-      int faceID = geo.nodes_to_face[face];
-      int ff = findFirst(geo.mpiFaces, faceID);
+      /* Convert face_ordered node indexing to global indexing */
+      for (auto &nd : face_ordered)
+        nd = geo.node_map_p2g[nd];
 
-      /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
+      /* Append flux points to fpt_buffer_map in existing order */
+      for (auto fpt : fpts)
+        geo.fpt_buffer_map[recvRank].push_back(fpt);
 
-      /* If partition has minimum (of 2) ranks assigned to this face, use its flux point order. Send
-       * information to other rank. */
-      if (rank == sendRank)
+      /* Send ordered face to paired rank */
+      MPI_Status temp;
+      MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, geo.myComm);
+      MPI_Send(&faceID, 1, MPI_INT, recvRank, 0, geo.myComm);
+      MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
+      MPI_Recv(&geo.mpiRotR[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
+    }
+    else if (rank == recvRank)
+    {
+      auto fpts = face_fpts[face];
+      auto face_ordered = geo.face2ordered[face];
+      auto face_ordered_mpi = face_ordered;
+
+      /* Receive ordered face from paired rank */
+      MPI_Status temp;
+      MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, geo.myComm, &temp);
+      MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, sendRank, 0, geo.myComm, &temp);
+      MPI_Send(&faceID, 1, MPI_INT, sendRank, 0, geo.myComm);
+
+      /* Convert received face_ordered node indexing to partition local indexing */
+      for (auto &nd : face_ordered_mpi)
+        nd = geo.node_map_g2p[nd];
+
+      /* Determine rotation using ordered faces*/
+      unsigned int rot = 0;
+      if (geo.nDims == 3)
       {
-        auto fpts = face_fpts[face];
-        auto face_ordered = geo.face2ordered[face];
-
-        /* Convert face_ordered node indexing to global indexing */
-        for (auto &nd : face_ordered)
-          nd = geo.node_map_p2g[nd];
-
-        /* Append flux points to fpt_buffer_map in existing order */
-        for (auto fpt : fpts)
-          geo.fpt_buffer_map[recvRank].push_back(fpt);
-
-        /* Send ordered face to paired rank */
-        MPI_Status temp;
-        MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, geo.myComm);
-        MPI_Send(&faceID, 1, MPI_INT, recvRank, 0, geo.myComm);
-        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
-        MPI_Recv(&geo.mpiRotR[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
-      }
-      else if (rank == recvRank)
-      {
-        auto fpts = face_fpts[face];
-        auto face_ordered = geo.face2ordered[face];
-        auto face_ordered_mpi = face_ordered;
-
-        /* Receive ordered face from paired rank */
-        MPI_Status temp;
-        MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, geo.myComm, &temp);
-        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, sendRank, 0, geo.myComm, &temp);
-        MPI_Send(&faceID, 1, MPI_INT, sendRank, 0, geo.myComm);
-
-        /* Convert received face_ordered node indexing to partition local indexing */
-        for (auto &nd : face_ordered_mpi)
-          nd = geo.node_map_g2p[nd];
-
-        /* Determine rotation using ordered faces*/
-        unsigned int rot = 0;
-        if (geo.nDims == 3)
+        while (face_ordered[rot] != face_ordered_mpi[0])
+        //while (face_ordered_mpi[rot] != face_ordered[0])
         {
-          while (face_ordered[rot] != face_ordered_mpi[0])
-          //while (face_ordered_mpi[rot] != face_ordered[0])
-          {
-            rot++;
-          }
-        }
-        else
-        {
-          rot = 4;
-        }
-
-        geo.mpiRotR[ff] = rot;
-        MPI_Send(&geo.mpiRotR[ff], 1, MPI_INT, sendRank, 0, geo.myComm);
-
-        /* Based on rotation, append flux points to fpt_buffer_map (to be consistent with paired rank fpt order) */
-        switch (rot)
-        {
-          case 0:
-            for (unsigned int j = 0; j < nFpts1D; j++)
-            {
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                 geo.fpt_buffer_map[sendRank].push_back(fpts[i * nFpts1D + j]);
-              }
-            } break;
-
-          case 1:
-            for (unsigned int j = 0; j < nFpts1D; j++)
-            {
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                geo.fpt_buffer_map[sendRank].push_back(fpts[nFpts1D - i + j * nFpts1D - 1]);
-              }
-            } break;
-
-          case 2:
-            for (unsigned int j = 0; j < nFpts1D; j++)
-            {
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i * nFpts1D - j - 1]);
-              }
-            } break;
-
-          case 3:
-            for (unsigned int j = 0; j < nFpts1D; j++)
-            {
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - (j+1) * nFpts1D + i]);
-              }
-            } break;
-
-          case 4:
-            for (unsigned int i = 0; i < nFptsPerFace; i++)
-            {
-              geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
-            } break;
+          rot++;
         }
       }
       else
       {
-        ThrowException("Error in mpi_faces. Neither rank is this rank.");
+        rot = 4;
+      }
+
+      geo.mpiRotR[ff] = rot;
+      MPI_Send(&geo.mpiRotR[ff], 1, MPI_INT, sendRank, 0, geo.myComm);
+
+      /* Based on rotation, append flux points to fpt_buffer_map (to be consistent with paired rank fpt order) */
+      switch (rot)
+      {
+        case 0:
+          for (unsigned int j = 0; j < nFpts1D; j++)
+          {
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+               geo.fpt_buffer_map[sendRank].push_back(fpts[i * nFpts1D + j]);
+            }
+          } break;
+
+        case 1:
+          for (unsigned int j = 0; j < nFpts1D; j++)
+          {
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              geo.fpt_buffer_map[sendRank].push_back(fpts[nFpts1D - i + j * nFpts1D - 1]);
+            }
+          } break;
+
+        case 2:
+          for (unsigned int j = 0; j < nFpts1D; j++)
+          {
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i * nFpts1D - j - 1]);
+            }
+          } break;
+
+        case 3:
+          for (unsigned int j = 0; j < nFpts1D; j++)
+          {
+            for (unsigned int i = 0; i < nFpts1D; i++)
+            {
+              geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - (j+1) * nFpts1D + i]);
+            }
+          } break;
+
+        case 4:
+          for (unsigned int i = 0; i < nFptsPerFace; i++)
+          {
+            geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
+          } break;
       }
     }
-
-    MPI_Barrier(geo.myComm);
-
-    /* Create MPI Derived type for sends/receives */
-    for (auto &entry : geo.fpt_buffer_map)
+    else
     {
-      unsigned int sendRank = entry.first;
-      auto fpts = entry.second;
-      std::vector<int> block_len(nVars * fpts.size(), 1);
-      std::vector<int> disp(nVars * fpts.size(), 0);
-      
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        for (unsigned int i = 0; i < fpts.size(); i++)
-          disp[i + var * fpts.size()] = fpts(i) + var * gfpt_mpi;
-      }
-      
-      MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]);
-
-      MPI_Type_commit(&geo.mpi_types[sendRank]);
+      ThrowException("Error in mpi_faces. Neither rank is this rank.");
     }
-
-    MPI_Barrier(geo.myComm);
-
-#endif
-
-    // TODO: For periodic MPI, move this up the code, define which faces are periodic first.
-    if (geo.per_bnd_flag)
-      couple_periodic_bnds(geo);
-
-    /* Pair up periodic flux points if needed */ 
-    if (geo.per_bnd_flag)
-    {
-      /* Creating simple vector of flux point pairs to replace map, since it
-       * cannot be used for GPU */
-      geo.per_fpt_list.assign({gfpt_bnd - geo.nGfpts_int}, 0);
-
-      for (auto &bnd_face1 : bndface2fpts)
-      {
-        auto face1 = bnd_face1.first;
-        auto fpts1 = bnd_face1.second;
-        auto face1_ordered = geo.face2ordered[face1];
-
-        /* If boundary face is not periodic, skip this pairing */
-        if (geo.bnd_faces[face1] != PERIODIC)
-          continue;
-
-        auto face2 = geo.per_bnd_pairs[face1];
-        auto fpts2 = bndface2fpts[face2];
-        auto face2_ordered = geo.face2ordered[face2];
-
-        /* Determine rotation using ordered faces*/
-        unsigned int rot = 0;
-        if (geo.nDims == 3)
-        {
-          rot = geo.per_bnd_rot[face2];
-        }
-        else
-        {
-          rot = 4;
-        }
-
-        /* Based on rotation, couple flux points */
-        switch (rot)
-        {
-          case 0:
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-              for (unsigned int j = 0; j < nFpts1D; j++)
-              {
-                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[i * nFpts1D + j];
-                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[i * nFpts1D + j];
-              }
-            } break;
-
-          case 1:
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-              for (unsigned int j = 0; j < nFpts1D; j++)
-              {
-                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFpts1D - i - 1 + j*nFpts1D];
-                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFpts1D - i - 1 + j*nFpts1D];
-              }
-            } break;
-
-          case 2:
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-              for (unsigned int j = 0; j < nFpts1D; j++)
-              {
-                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - 1 - i * nFpts1D - j];
-                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i * nFpts1D - j];
-              }
-            } break;
-
-          case 3:
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-              for (unsigned int j = 0; j < nFpts1D; j++)
-              {
-                geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
-                geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
-              }
-            } break;
-
-          case 4:
-            for (unsigned int i = 0; i < nFptsPerFace; i++)
-            {
-                geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - i - 1];
-                geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - i - 1];
-            } break;
-        }
-      } 
-    }
-
-    /* Populate data structures */
-#ifdef _MPI
-    geo.nGfpts = gfpt_mpi;
-#else
-    geo.nGfpts = gfpt_bnd;
-#endif
-
-    geo.nFaces = geo.faceList.size();
-
-    geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-    geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-
-    for (unsigned int ele = 0; ele < geo.nEles; ele++)
-    {
-      for (unsigned int fpt = 0; fpt < geo.nFacesPerEle * nFptsPerFace; fpt++)
-      {
-        geo.fpt2gfpt(fpt,ele) = ele2fpts[ele][fpt];
-        geo.fpt2gfpt_slot(fpt,ele) = ele2fpts_slot[ele][fpt];
-      }
-
-      for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
-      {
-        face.assign(geo.nNodesPerFace, 0);
-
-        for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
-        {
-          face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
-        }
-
-        std::sort(face.begin(), face.end());
-
-      }
-    }
-
   }
-  else
+
+  MPI_Barrier(geo.myComm);
+
+  /* Create MPI Derived type for sends/receives */
+  for (auto &entry : geo.fpt_buffer_map)
   {
-    ThrowException("nDims is not valid!");
+    unsigned int sendRank = entry.first;
+    auto fpts = entry.second;
+    std::vector<int> block_len(nVars * fpts.size(), 1);
+    std::vector<int> disp(nVars * fpts.size(), 0);
+    
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (unsigned int i = 0; i < fpts.size(); i++)
+        disp[i + var * fpts.size()] = fpts(i) + var * gfpt_mpi;
+    }
+    
+    MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]);
+
+    MPI_Type_commit(&geo.mpi_types[sendRank]);
+  }
+
+  MPI_Barrier(geo.myComm);
+
+#endif
+
+  // TODO: For periodic MPI, move this up the code, define which faces are periodic first.
+  if (geo.per_bnd_flag)
+    couple_periodic_bnds(geo);
+
+  /* Pair up periodic flux points if needed */ 
+  if (geo.per_bnd_flag)
+  {
+    /* Creating simple vector of flux point pairs to replace map, since it
+     * cannot be used for GPU */
+    geo.per_fpt_list.assign({gfpt_bnd - geo.nGfpts_int}, 0);
+
+    for (auto &bnd_face1 : bndface2fpts)
+    {
+      auto face1 = bnd_face1.first;
+      auto fpts1 = bnd_face1.second;
+      auto face1_ordered = geo.face2ordered[face1];
+
+      /* If boundary face is not periodic, skip this pairing */
+      if (geo.bnd_faces[face1] != PERIODIC)
+        continue;
+
+      auto face2 = geo.per_bnd_pairs[face1];
+      auto fpts2 = bndface2fpts[face2];
+      auto face2_ordered = geo.face2ordered[face2];
+
+      /* Determine rotation using ordered faces*/
+      unsigned int rot = 0;
+      if (geo.nDims == 3)
+      {
+        rot = geo.per_bnd_rot[face2];
+      }
+      else
+      {
+        rot = 4;
+      }
+
+      /* Based on rotation, couple flux points */
+      switch (rot)
+      {
+        case 0:
+          for (unsigned int i = 0; i < nFpts1D; i++)
+          {
+            for (unsigned int j = 0; j < nFpts1D; j++)
+            {
+              geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[i * nFpts1D + j];
+              geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[i * nFpts1D + j];
+            }
+          } break;
+
+        case 1:
+          for (unsigned int i = 0; i < nFpts1D; i++)
+          {
+            for (unsigned int j = 0; j < nFpts1D; j++)
+            {
+              geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFpts1D - i - 1 + j*nFpts1D];
+              geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFpts1D - i - 1 + j*nFpts1D];
+            }
+          } break;
+
+        case 2:
+          for (unsigned int i = 0; i < nFpts1D; i++)
+          {
+            for (unsigned int j = 0; j < nFpts1D; j++)
+            {
+              geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - 1 - i * nFpts1D - j];
+              geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace - 1 - i * nFpts1D - j];
+            }
+          } break;
+
+        case 3:
+          for (unsigned int i = 0; i < nFpts1D; i++)
+          {
+            for (unsigned int j = 0; j < nFpts1D; j++)
+            {
+              geo.per_fpt_pairs[fpts1[i + j*nFpts1D]] = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
+              geo.per_fpt_list(fpts1[i + j*nFpts1D] - geo.nGfpts_int) = fpts2[nFptsPerFace - nFpts1D * (j+1) + i];
+            }
+          } break;
+
+        case 4:
+          for (unsigned int i = 0; i < nFptsPerFace; i++)
+          {
+              geo.per_fpt_pairs[fpts1[i]] = fpts2[nFptsPerFace - i - 1];
+              geo.per_fpt_list(fpts1[i] - geo.nGfpts_int) = fpts2[nFptsPerFace - i - 1];
+          } break;
+      }
+    } 
+  }
+
+  /* Populate data structures */
+#ifdef _MPI
+  geo.nGfpts = gfpt_mpi;
+#else
+  geo.nGfpts = gfpt_bnd;
+#endif
+
+  geo.nFaces = geo.faceList.size();
+
+  geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+  geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+
+  for (auto etype : geo.ele_set)
+  {
+    geo.fpt2gfptBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+    geo.fpt2gfpt_slotBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+    {
+      for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * nFptsPerFace; fpt++)
+      {
+        geo.fpt2gfpt(fpt,ele) = ele2fptsBT[etype][ele][fpt];
+        geo.fpt2gfpt_slot(fpt,ele) = ele2fpts_slotBT[etype][ele][fpt];
+        geo.fpt2gfptBT[etype](fpt,ele) = ele2fptsBT[etype][ele][fpt];
+        geo.fpt2gfpt_slotBT[etype](fpt,ele) = ele2fpts_slotBT[etype][ele][fpt];
+      }
+    }
   }
 }
 

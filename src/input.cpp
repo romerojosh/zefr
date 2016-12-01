@@ -65,6 +65,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "nDims", input.nDims);
   read_param(f, "meshfile", input.meshfile);
   read_param(f, "serendipity", input.serendipity, false);
+  read_param(f, "collapsed_mode", input.collapsed_mode, false);
 
   // Get mesh boundaries and boundary conditions, then convert to lowercase
   std::map<std::string, std::string> meshBndTmp;
@@ -141,7 +142,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "output_prefix", input.output_prefix);
   read_param(f, "write_paraview", input.write_paraview, (short)1);
   read_param(f, "write_pyfr", input.write_pyfr, (short)0);
-  read_param(f, "plot_surfaces", input.plot_surfaces, (short)1);
+  read_param(f, "plot_surfaces", input.plot_surfaces, (short)0);
   read_param(f, "plot_overset", input.plot_overset, (short)0);
   read_param(f, "write_LHS", input.write_LHS, (short)0);
   read_param(f, "write_freq", input.write_freq);

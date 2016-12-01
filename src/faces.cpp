@@ -107,6 +107,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     diffCo.assign({nFpts}, 0.0);
 
   /* Allocate memory for geometry structures */
+  coord.assign({nFpts, nDims});
   norm.assign({nFpts, nDims, 2});
   dA.assign({nFpts},0.0);
   jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove

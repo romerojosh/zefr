@@ -53,6 +53,140 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   calc_transforms(faces);
   setup_FR();
   setup_aux();  
+
+  /* Allocate memory for solution data structures */
+  /* Solution and Flux Variables */
+  U_spts.assign({nSpts, nEles, nVars});
+  U_fpts.assign({nFpts, nEles, nVars});
+  if (input->viscous)
+    Ucomm.assign({nFpts, nEles, nVars});
+  U_ppts.assign({nPpts, nEles, nVars});
+  U_qpts.assign({nQpts, nEles, nVars});
+
+  if (input->squeeze)
+    Uavg.assign({nEles, nVars});
+
+  F_spts.assign({nSpts, nEles, nVars, nDims});
+  Fcomm.assign({nFpts, nEles, nVars});
+
+  if (input->viscous)
+  {
+    dU_spts.assign({nSpts, nEles, nVars, nDims});
+    dU_fpts.assign({nFpts, nEles, nVars, nDims});
+    dU_qpts.assign({nQpts, nEles, nVars, nDims});
+  }
+
+  if (input->dt_scheme != "LSRK")
+  {
+    divF_spts.assign({nSpts, nEles, nVars, input->nStages});
+    U_til.assign({nSpts, nEles, nVars});
+    rk_err.assign({nSpts, nEles, nVars});
+  }
+  else
+  {
+    divF_spts.assign({nSpts, nEles, nVars, 1});
+  }
+
+  U_ini.assign({nSpts, nEles, nVars});
+  dt.assign({nEles}, input->dt);
+
+  if (input->motion)
+  {
+    dUr_spts.assign({nSpts, nEles, nVars, nDims});
+    dF_spts.assign({nSpts, nEles, nVars, nDims, nDims});
+    dFn_fpts.assign({nFpts, nEles, nVars});
+    tempF_fpts.assign({nFpts, nEles});
+  }
+
+  /* Allocate memory for implicit method data structures */
+  if (input->dt_scheme == "MCGS")
+  {
+    if (!input->inv_mode and input->n_LHS_blocks != 1)
+    {
+      ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
+    } 
+
+    dFdU_spts.assign({nSpts, nEles, nVars, nVars, nDims});
+    dFcdU_fpts.assign({nFpts, nEles, nVars, nVars, 2});
+
+    if(input->viscous)
+    {
+      dUcdU_fpts.assign({nFpts, nEles, nVars, nVars, 2});
+
+      /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
+      dFddU_spts.assign({nSpts, nEles, nVars, nVars, nDims, nDims});
+      dFcddU_fpts.assign({nFpts, nEles, nVars, nVars, nDims, 2});
+    }
+      
+    if (!input->stream_mode)
+    {
+      LHSs.resize(1);
+      LHSInvs.resize(1);
+      LUptrs.resize(1);
+
+#ifdef _CPU
+      unsigned int nElesMax = nEles;
+#endif
+#ifdef _GPU
+      unsigned int nElesMax = ceil(geo->nEles / (double) input->n_LHS_blocks);
+#endif
+
+      LHSs[0].assign({nSpts, nVars, nSpts, nVars, nElesMax}, 0);
+      LUptrs[0].resize(nEles);
+      
+      if (input->inv_mode)
+      {
+        LHSInvs[0].assign({nSpts, nVars, nSpts, nVars, nEles}, 0);
+        LHSInv_ptrs.assign({nEles});
+        deltaU_ptrs.assign({nEles});
+      }
+
+      LHS_ptrs.assign({nElesMax});
+      RHS_ptrs.assign({nEles});
+      LU_pivots.assign({nSpts * nVars * nElesMax});
+      LU_info.assign({nSpts * nVars * nElesMax});
+
+    }
+    else
+    {
+      LHSs.resize(geo->nColors);
+      LHSInvs.resize(geo->nColors);
+      LUptrs.resize(geo->nColors);
+
+      unsigned int nElesMax = *std::max_element(geo->ele_color_nEles.begin(), geo->ele_color_nEles.end());
+      for (unsigned int color = 1; color <= geo->nColors; color++)
+      {
+        LHSs[color - 1].assign({nSpts, nVars, nSpts, nVars, nElesMax}, 0);
+        LHSInvs[color - 1].assign({nSpts, nVars, nSpts, nVars, nElesMax}, 0, false, true);
+        LUptrs[color - 1].resize(nElesMax);
+      }
+      
+      if (input->inv_mode)
+      {
+        LHSInv_ptrs.assign({nElesMax});
+        deltaU_ptrs.assign({nEles});
+      }
+
+      LHS_ptrs.assign({nElesMax});
+      RHS_ptrs.assign({nEles});
+      LU_pivots.assign({nSpts * nVars * nElesMax});
+      LU_info.assign({nSpts * nVars * nElesMax});
+    }
+
+    Cvisc0.assign({nSpts, nSpts, nDims});
+    CviscN.assign({nSpts, nSpts, nDims, nFaces});
+    CdFddU0.assign({nSpts, nSpts, nDims});
+    CtempSS.assign({nSpts, nSpts});
+    CtempFS.assign({nFpts, nSpts});
+    CtempFS2.assign({nFpts, nSpts});
+    CtempSF.assign({nSpts, nFpts});
+    CtempFSN.assign({nSpts1D, nSpts});
+    CtempFSN2.assign({nSpts1D, nSpts});
+
+    deltaU.assign({nSpts, nVars, nEles});
+    RHS.assign({nSpts, nVars, nEles});
+  }
+
 }
 
 void Elements::set_shape()
@@ -163,11 +297,10 @@ void Elements::set_shape()
 void Elements::set_coords(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for physical coordinates */
-  geo->coord_spts.assign({nSpts, nEles, nDims});
-  geo->coord_fpts.assign({nFpts, nEles, nDims});
-  faces->coord.assign({geo->nGfpts, nDims});
-  geo->coord_ppts.assign({nPpts, nEles, nDims});
-  geo->coord_qpts.assign({nQpts, nEles, nDims});
+  geo->coord_sptsBT[etype].assign({nSpts, nEles, nDims});
+  geo->coord_fptsBT[etype].assign({nFpts, nEles, nDims});
+  geo->coord_pptsBT[etype].assign({nPpts, nEles, nDims});
+  geo->coord_qptsBT[etype].assign({nQpts, nEles, nDims});
   nodes.assign({nNodes, nEles, nDims});
 
   /* Setup positions of all element's shape nodes in one array */
@@ -178,7 +311,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       for (unsigned int ele = 0; ele < nEles; ele++)
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+          nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodesBT[etype](node,ele));
         }
 
   int ms = nSpts;
@@ -192,7 +325,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at solution points */
   auto &As = shape_spts(0,0);
-  auto &Cs = geo->coord_spts(0,0,0);
+  auto &Cs = geo->coord_sptsBT[etype](0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
               1.0, &As, k, &B, k, 0.0, &Cs, ms);
@@ -203,7 +336,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at flux points */
   auto &Af = shape_fpts(0,0);
-  auto &Cf = geo->coord_fpts(0,0,0);
+  auto &Cf = geo->coord_fptsBT[etype](0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
               1.0, &Af, k, &B, k, 0.0, &Cf, mf);
@@ -214,7 +347,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at plot points */
   auto &Ap = shape_ppts(0,0);
-  auto &Cp = geo->coord_ppts(0,0,0);
+  auto &Cp = geo->coord_pptsBT[etype](0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
               1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
@@ -225,7 +358,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at quadrature points */
   auto &Aq = shape_qpts(0,0);
-  auto &Cq = geo->coord_qpts(0,0,0);
+  auto &Cq = geo->coord_qptsBT[etype](0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
               1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
@@ -245,7 +378,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         /* Check if on ghost edge */
         if (gfpt != -1)
         {
-          faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
+          faces->coord(gfpt, dim) = geo->coord_fptsBT[etype](fpt,ele,dim);
         }
       }
     }
@@ -269,8 +402,8 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
           unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
 
 
-          double dx = geo->coord_fpts(fpt1, ele, 0) - geo->coord_fpts(fpt2, ele, 0);
-          double dy = geo->coord_fpts(fpt1, ele, 1) - geo->coord_fpts(fpt2, ele, 1);
+          double dx = geo->coord_fptsBT[etype](fpt1, ele, 0) - geo->coord_fptsBT[etype](fpt2, ele, 0);
+          double dy = geo->coord_fptsBT[etype](fpt1, ele, 1) - geo->coord_fptsBT[etype](fpt2, ele, 1);
           double dist = std::sqrt(dx*dx + dy*dy);
 
           h_ref(fpt1, ele) = dist;
@@ -315,7 +448,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
             double dx[3] = {0,0,0};
             for (int d = 0; d < 3; d++)
-              dx[d] = geo->coord_fpts(fpt1,ele,d) - geo->coord_fpts(fpt2,ele,d);
+              dx[d] = geo->coord_fptsBT[etype](fpt1,ele,d) - geo->coord_fptsBT[etype](fpt2,ele,d);
 
             double dist = std::sqrt(dx[0]*dx[0] + dx[1]*dx[1] * dx[2]*dx[2]);
 
@@ -516,14 +649,17 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
       /* Get quadrature weight */
-      unsigned int i = idx_spts(spt,0);
-      unsigned int j = idx_spts(spt,1);
+      //unsigned int i = idx_spts(spt,0);
+      //unsigned int j = idx_spts(spt,1);
+      unsigned int i = spt % nSpts1D;
+      unsigned int j = spt / nSpts1D;
 
 
       double weight = weights_spts(i) * weights_spts(j);
 
       if (nDims == 3)
-        weight *= weights_spts(idx_spts(spt,2));
+        weight *= weights_spts(spt/(nSpts1D*nSpts1D));
+        //weight *= weights_spts(idx_spts(spt,2));
 
       vol(e) += weight * jaco_det_spts(spt, e);
     }
@@ -535,13 +671,13 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      int gfpt = geo->fpt2gfpt(fpt,e);
+      int gfpt = geo->fpt2gfptBT[etype](fpt,e);
 
       /* Check if flux point is on ghost edge */
       if (gfpt == -1)
         continue;
 
-      unsigned int slot = geo->fpt2gfpt_slot(fpt,e);
+      unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,e);
 
       /* --- Calculate outward unit normal vector at flux point --- */
       // Transform face normal from reference to physical space [JGinv .dot. tNorm]
@@ -632,6 +768,97 @@ void Elements::set_inverse_transforms(const mdvector<double> &jaco,
 
       if (jaco_det.size() and jaco_det(pt,e) < 0) ThrowException("Negative Jacobian at solution points.");
     }
+  }
+}
+
+void Elements::initialize_U()
+{
+  /* Initialize solution */
+  if (input->equation == AdvDiff || input->equation == Burgers)
+  {
+    if (input->ic_type == 0)
+    {
+      // Do nothing for now
+    }
+    else if (input->ic_type == 1)
+    {
+      if (input->nDims == 2)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            double x = geo->coord_sptsBT[etype](spt, ele, 0);
+            double y = geo->coord_sptsBT[etype](spt, ele, 1);
+
+            U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
+          }
+        }
+      }
+      else if (input->nDims == 3)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            double x = geo->coord_sptsBT[etype](spt, ele, 0);
+            double y = geo->coord_sptsBT[etype](spt, ele, 1);
+            double z = geo->coord_sptsBT[etype](spt, ele, 2);
+
+            U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
+
+          }
+        }
+      }
+    }
+    else
+    {
+      ThrowException("ic_type not recognized!");
+    }
+  }
+  else if (input->equation == EulerNS)
+  {
+    if (input->ic_type == 0)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          U_spts(spt, ele, 0)  = input->rho_fs;
+
+          double Vsq = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            U_spts(spt, ele, dim+1)  = input->rho_fs * input->V_fs(dim);
+            Vsq += input->V_fs(dim) * input->V_fs(dim);
+          }
+
+          U_spts(spt, ele, nDims + 1)  = input->P_fs/(input->gamma-1.0) +
+            0.5*input->rho_fs * Vsq;
+        }
+      }
+
+    }
+    else if (input->ic_type == 1)
+    {
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          for (unsigned int spt = 0; spt < nSpts; spt++)
+          {
+            double x = geo->coord_sptsBT[etype](spt, ele, 0);
+            double y = geo->coord_sptsBT[etype](spt, ele, 1);
+
+            U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    ThrowException("Solution initialization not recognized!");
   }
 }
 
@@ -736,13 +963,13 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
         {
           for (unsigned int fpt = 0; fpt < nFpts; fpt++)
           {
-            int gfpt = geo->fpt2gfpt(fpt,ele);
+            int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
 
             /* Check if flux point is on ghost edge */
             if (gfpt == -1)
               continue;
 
-            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+            unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
             dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * faces->norm(gfpt,dim,slot) * faces->dA(gfpt);
           }
         }
