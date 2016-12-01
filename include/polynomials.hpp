@@ -46,6 +46,7 @@ double Lagrange(std::vector<double> xiGrid, double xi, unsigned int mode);
  * 
  * \return Value of first derivative of the Lagrange function at xi.
  */
+//TODO: Just change everything to use dLagrange format.
 double Lagrange_d1(std::vector<double> xiGrid, unsigned int mode, double xi);
 
 /// Because Jacob is too lazy to convert all his copied code from Flurry
@@ -68,6 +69,11 @@ double Legendre(unsigned int P, double xi);
  * \return Value of derivative of Legendre polynomial at xi.
  */
 double Legendre_d1(unsigned int P, double xi);
+
+
+double Jacobi(double xi, double a, double b, unsigned int mode);
+double dJacobi(double xi, double a, double b, unsigned int mode);
+double Dubiner2D(unsigned int P, double xi, double eta, unsigned int mode);
 
 
 #endif /* polynomials_hpp */

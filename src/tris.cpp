@@ -166,6 +166,7 @@ void Tris::set_locs()
   /* Setup gauss quadrature point locations and weights */
   loc_qpts_1D = Gauss_Legendre_pts(input->nQpts1D); 
   weights_qpts = Gauss_Legendre_weights(input->nQpts1D);
+  //TODO: In all elements, compute single weight per flux point to replace tensor-product dependencies
 
   /* Setup quadrature point locations */
   //unsigned int qpt = 0;
@@ -206,12 +207,60 @@ void Tris::set_normals(std::shared_ptr<Faces> faces)
     }
 
   }
+
+  /* Can set vandermode matrices now */
+  set_vandermonde_mats();
+}
+
+void Tris::set_vandermonde_mats()
+{
+  vandDB.assign({nSpts, nSpts});
+
+  for (unsigned int i = 0; i < nSpts; i++)
+    for (unsigned int j = 0; j < nSpts; j++)
+    {
+      vandDB(i,j) = Dubiner2D(order, loc_spts(i, 0), loc_spts(i, 1), j); 
+    }
+
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    for (unsigned int j = 0; j < nSpts; j++)
+    {
+      std::cout << vandDB(i,j) << " ";
+    }
+    std::cout << std::endl;
+  }
+
+  
+
+  vandDB.calc_LU();
+
+  inv_vandDB.assign({nSpts, nSpts}); 
+  
+  mdvector<double> eye({nSpts, nSpts}, 0); 
+  for (unsigned int i = 0; i < nSpts; i++)
+    eye(i,i) = 1.0;
+
+  vandDB.solve(inv_vandDB, eye);
+
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    for (unsigned int j = 0; j < nSpts; j++)
+    {
+      std::cout << inv_vandDB(i,j) << " ";
+    }
+    std::cout << std::endl;
+  }
 }
 
 double Tris::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
 {
 
   double val = 0.0;
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    val += inv_vandDB(i, spt) * Dubiner2D(order, loc[0], loc[1], i);
+  }
 
   return val;
 }

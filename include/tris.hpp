@@ -51,6 +51,7 @@ class Tris: public Elements
     double calc_d_nodal_basis_fpts(unsigned int fpt,
                                    const std::vector<double> &loc,
                                    unsigned int dim);
+    void set_vandermonde_mats();
 
   public:
     Tris(GeoStruct *geo, InputStruct *input, int order = -1);

@@ -73,6 +73,7 @@ class Elements
     mdvector<double> weights_spts, weights_fpts;
     mdvector<double> h_ref;
     std::vector<double> weights_qpts;
+    mdvector<double> vandDB, inv_vandDB, vandRT, inv_vandRT;
 
     /* Moving-Grid related structures */
     mdvector<double> grid_vel_nodes, grid_vel_spts, grid_vel_fpts, grid_vel_ppts;
