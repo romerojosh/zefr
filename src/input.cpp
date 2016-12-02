@@ -219,6 +219,12 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "filt_gamma", input.filt_gamma, 0.1);
   read_param(f, "filt_maxLevels", input.filt_maxLevels, (unsigned int) 1);
 
+  if (input.filt_on && input.order <= 1)
+  {
+    std::cout << "WARNING: requesting filtering yet P <= 1. Filtering will not be used." << std::endl;
+    input.filt_on = 0;
+  }
+
   // Abhishek's filtering parameters
   read_param(f, "limiter", input.limiter, (unsigned int) 0);
   read_param(f, "alpha", input.alpha, 1.0);

@@ -5193,7 +5193,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
 
 void FRSolver::filter_solution()
 {
-  if (input->filt_on && order > 1)
+  if (input->filt_on)
   {
     filt.apply_sensor();
 
