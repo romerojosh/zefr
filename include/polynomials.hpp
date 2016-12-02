@@ -74,6 +74,8 @@ double Legendre_d1(unsigned int P, double xi);
 double Jacobi(double xi, double a, double b, unsigned int mode);
 double dJacobi(double xi, double a, double b, unsigned int mode);
 double Dubiner2D(unsigned int P, double xi, double eta, unsigned int mode);
+double RTMonomial2D(unsigned int P, double xi, double eta, unsigned int dim, unsigned int mode);
+double divRTMonomial2D(unsigned int P, double xi, double eta, unsigned int mode);
 
 
 #endif /* polynomials_hpp */

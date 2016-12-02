@@ -199,3 +199,111 @@ double Dubiner2D(unsigned int P, double xi, double eta, unsigned int mode)
 
   return val;
 }
+
+double RTMonomial2D(unsigned int P, double xi, double eta, unsigned int dim, unsigned int mode)
+{
+  double val;
+  unsigned int nP2Modes = (P+1)*(P+2); // number of regular monomial modes
+
+  if (mode < nP2Modes)
+  {
+    /* Regular monomial mode */
+    unsigned int idx = mode/2;
+    unsigned int slot = mode%2; //which dimension mode is nonzero
+
+    unsigned int n = 0;
+    for (unsigned int j = 0; j <= P; j++)
+    {
+      for (unsigned int i = 0; i <= P; i++)
+      {
+        if (i+j <= P)
+        {
+          if (n == idx)
+          {
+            val =  (dim == slot) ? std::pow(xi, i) * std::pow(eta, j) : 0.0;
+            return val;
+          }
+          n++;
+        }
+      }
+    }
+  }
+  else
+  {
+    /* RT mode */
+    unsigned int idx = mode - nP2Modes;
+
+    unsigned int n = 0;
+    for (unsigned int j = 0; j <= P; j++)
+    {
+      for (unsigned int i = 0; i <= P; i++)
+      {
+        if (i+j == P)
+        {
+          if (n == idx)
+          {
+            val =  (dim == 0) ? std::pow(xi, i+1) * std::pow(eta, j) : std::pow(xi, i) * std::pow(eta, j+1);
+            return val;
+          }
+          n++;
+        }
+      }
+    }
+  }
+
+  return 0.0;
+}
+
+double divRTMonomial2D(unsigned int P, double xi, double eta, unsigned int mode)
+{
+  double val;
+  unsigned int nP2Modes = (P+1)*(P+2); // number of regular monomial modes
+
+  if (mode < nP2Modes)
+  {
+    /* Regular monomial mode */
+    unsigned int idx = mode/2;
+    unsigned int slot = mode%2; //which dimension mode is nonzero
+
+    unsigned int n = 0;
+    for (unsigned int j = 0; j <= P; j++)
+    {
+      for (unsigned int i = 0; i <= P; i++)
+      {
+        if (i+j <= P)
+        {
+          if (n == idx)
+          {
+            val =  (slot == 0) ? i * std::pow(xi, i-1) * std::pow(eta, j) : std::pow(xi, i) * j * std::pow(eta, j-1);
+            return val;
+          }
+          n++;
+        }
+      }
+    }
+  }
+  else
+  {
+    /* RT mode */
+    unsigned int idx = mode - nP2Modes;
+
+    unsigned int n = 0;
+    for (unsigned int j = 0; j <= P; j++)
+    {
+      for (unsigned int i = 0; i <= P; i++)
+      {
+        if (i+j == P)
+        {
+          if (n == idx)
+          {
+            val =  (i+1)*std::pow(xi, i) * std::pow(eta, j) + std::pow(xi, i) * (j+1) * std::pow(eta, j);
+            return val;
+          }
+          n++;
+        }
+      }
+    }
+  }
+
+  return 0.0;
+}

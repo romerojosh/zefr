@@ -484,6 +484,16 @@ void Elements::setup_FR()
     }
   }
 
+//  std::cout << "oppE" << std::endl;
+//  for (unsigned int i = 0; i < nFpts; i++)
+//  {
+//    for (unsigned int j = 0; j < nSpts; j++)
+//    {
+//      std::cout << oppE(i,j) << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+
   /* Setup spt to fpt extrapolation operator for normal flux (oppE_Fn) */
   for (unsigned int dim = 0; dim < nDims; dim++)
     for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -505,6 +515,26 @@ void Elements::setup_FR()
       }
     }
   }
+
+//  std::cout << "oppD" << std::endl;
+//  for (unsigned int i = 0; i < nSpts; i++)
+//  {
+//    for (unsigned int j = 0; j < nSpts; j++)
+//    {
+//      std::cout << oppD(i,j,0) << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+//
+//  for (unsigned int i = 0; i < nSpts; i++)
+//  {
+//    for (unsigned int j = 0; j < nSpts; j++)
+//    {
+//      std::cout << oppD(i,j,1) << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+
 
   /* Setup differentiation operator (oppD) for solution points */
   /* Note: This one is the 'traditional' FR derivative [fpts not included] */
@@ -537,6 +567,27 @@ void Elements::setup_FR()
     }
   }
 
+//  std::cout << "oppD_fpts" << std::endl;
+//  for (unsigned int i = 0; i < nSpts; i++)
+//  {
+//    for (unsigned int j = 0; j < nFpts; j++)
+//    {
+//      std::cout << oppD_fpts(i,j,0) << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+//
+//  for (unsigned int i = 0; i < nSpts; i++)
+//  {
+//    for (unsigned int j = 0; j < nFpts; j++)
+//    {
+//      std::cout << oppD_fpts(i,j,1) << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+//
+
+
   /* Setup divergence operator (oppDiv_fpts) for flux points by combining dimensions of oppD_fpts */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
@@ -545,17 +596,20 @@ void Elements::setup_FR()
 
       /* Set positive parent sign convention into operator based on face */
       int fac = 1;
-      if (nDims == 2) 
+      if (etype == QUAD || etype == HEX)
       {
-        int face = fpt / nSpts1D;
-        if (face == 0 or face == 3) // Bottom and Left face
-          fac = -1;
-      }
-      else if (nDims == 3)
-      {
-        int face = fpt / (nSpts1D * nSpts1D);
-        if (face % 2 == 0) // Bottom, Left, and Front face
-          fac = -1;
+        if (nDims == 2) 
+        {
+          int face = fpt / nSpts1D;
+          if (face == 0 or face == 3) // Bottom and Left face
+            fac = -1;
+        }
+        else if (nDims == 3)
+        {
+          int face = fpt / (nSpts1D * nSpts1D);
+          if (face % 2 == 0) // Bottom, Left, and Front face
+            fac = -1;
+        }
       }
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -564,6 +618,18 @@ void Elements::setup_FR()
       }
     }
   }
+
+//  std::cout << "oppDiv_fpts" << std::endl;
+//  for (unsigned int i = 0; i < nSpts; i++)
+//  {
+//    for (unsigned int j = 0; j < nFpts; j++)
+//    {
+//      std::cout << oppDiv_fpts(i,j) << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+
+
 
 }
 
@@ -685,17 +751,17 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
       {
         faces->norm(gfpt,dim1,slot) = 0.;
         for (uint dim2 = 0; dim2 < nDims; dim2++)
+        {
           faces->norm(gfpt,dim1,slot) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
+        }
       }
 
       // Store magnitude of face normal (equivalent to face area in finite-volume land)
-      if (slot == 0)
-      {
-        faces->dA(gfpt) = 0;
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->dA(gfpt) += faces->norm(gfpt,dim,slot)*faces->norm(gfpt,dim,slot);
-        faces->dA(gfpt) = sqrt(faces->dA(gfpt));
-      }
+      faces->dA(gfpt, slot) = 0;
+      for (uint dim = 0; dim < nDims; dim++)
+        faces->dA(gfpt, slot) += faces->norm(gfpt,dim,slot)*faces->norm(gfpt,dim,slot);
+      faces->dA(gfpt, slot) = sqrt(faces->dA(gfpt, slot));
+
 
       // Normalize
       // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
@@ -1504,6 +1570,16 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
 
   check_error();
 #endif
+
+  //for (unsigned int e = 0; e < nEles; e++)
+  //{
+  //  std::cout << "e " << e << std::endl;
+  //  for (unsigned int spt = 0; spt < nSpts; spt++)
+  // {
+  //    std::cout << divF_spts(spt, e, 0, stage)  << " " ;
+  //  }
+  //  std::cout << std::endl;
+  //}
 
 }
 
@@ -2872,6 +2948,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
         int gfpt = geo->fpt2gfpt(fpt,ele);
+
         /* Check if on ghost edge */
         if (gfpt != -1)
           faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);

@@ -109,7 +109,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Allocate memory for geometry structures */
   coord.assign({nFpts, nDims});
   norm.assign({nFpts, nDims, 2});
-  dA.assign({nFpts},0.0);
+  dA.assign({nFpts, 2},0.0);
   jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
 
   /* Moving-grid-related structures */
@@ -1780,29 +1780,29 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0-input->rus_k) * (UR[n]-UL[n])) * dA(fpt);
+        double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0-input->rus_k) * (UR[n]-UL[n]));
 
         /* Correct for positive parent space sign convention */
-        Fcomm(fpt, n, 0) = F;
-        Fcomm(fpt, n, 1) = -F;
+        Fcomm(fpt, n, 0) = F * dA(fpt, 0);
+        Fcomm(fpt, n, 1) = -F * dA(fpt, 1);
       }
     }
     else if (LDG_bias(fpt) == 2)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        double F = 0.5 * (FnL[n] + FnR[n]) * dA(fpt);
-        Fcomm(fpt, n, 0) = F;
-        Fcomm(fpt, n, 1) = -F;
+        double F = 0.5 * (FnL[n] + FnR[n]);
+        Fcomm(fpt, n, 0) = F * dA(fpt, 0);
+        Fcomm(fpt, n, 1) = -F * dA(fpt, 1);
       }
     }
     else
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        double F = FnR[n] * dA(fpt);
-        Fcomm(fpt, n, 0) = F;
-        Fcomm(fpt, n, 1) = -F;
+        double F = FnR[n];
+        Fcomm(fpt, n, 0) = F * dA(fpt, 0);
+        Fcomm(fpt, n, 1) = -F * dA(fpt, 1);
       }
     }
   }
@@ -1987,9 +1987,9 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        double F = FR[n][dim] * norm(fpt, dim, 0) * dA(fpt);
-        Fcomm(fpt, n, 0) += F;
-        Fcomm(fpt, n, 1) -= F;
+        double F = FR[n][dim] * norm(fpt, dim, 0);
+        Fcomm(fpt, n, 0) += F * dA(fpt, 0);
+        Fcomm(fpt, n, 1) -= F * dA(fpt, 1);
       }
     }
   }

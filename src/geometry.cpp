@@ -87,7 +87,15 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
 #endif
 
   if (format == GMSH)
-    setup_global_fpts(input, geo, order);
+  {
+    if (geo.ele_set.count(TRI))
+    {
+      std::cout << "JDR: MODIFIED ORDER OF GLOBAL FPTS " << std::endl;
+      setup_global_fpts(input, geo, order+1);
+    }
+    else
+      setup_global_fpts(input, geo, order);
+  }
   else
     setup_global_fpts_pyfr(input, geo, order);
 
@@ -673,6 +681,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
   /* Get total number of elements and boundaries */
   unsigned int nElesBnds;
   f >> nElesBnds;
+
   auto pos = f.tellg();
 
   /* Determine number of elements */
@@ -1863,6 +1872,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       }
     }
   }
+  std::cout << "geo.nGfpts_int " << geo.nGfpts_int << std::endl;
+  std::cout << "geo.nGfpts_bnd " << geo.nGfpts_bnd << std::endl;
+  std::cout << "geo.nBnds " << geo.nBnds << std::endl;
 
   /* Initialize global flux point indicies (to place boundary fpts at end of global fpt data structure) */
   unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;

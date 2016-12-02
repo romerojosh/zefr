@@ -62,13 +62,15 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
   if (order == -1)
   {
     nSpts = (input->order + 1) * (input->order + 2) / 2;
-    nSpts1D = input->order + 1;
+    //nSpts1D = input->order + 1;
+    nSpts1D = input->order + 2;
     this->order = input->order;
   }
   else
   {
     nSpts = (order + 1) * (order + 2) / 2;
-    nSpts1D = order + 1;
+    //nSpts1D = order + 1;
+    nSpts1D = order + 2;
     this->order = order;
   }
 
@@ -99,9 +101,8 @@ void Tris::set_locs()
 
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
-   loc_spts_1D = Gauss_Legendre_pts(order+1); 
-  else if (input->spt_type == "DFRsp")
-    loc_spts_1D = DFRsp_pts(order+1, 0.339842589774454);
+   loc_spts_1D = Gauss_Legendre_pts(order+2); 
+   //loc_spts_1D = Gauss_Legendre_pts(order+1); 
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
@@ -208,12 +209,13 @@ void Tris::set_normals(std::shared_ptr<Faces> faces)
 
   }
 
-  /* Can set vandermode matrices now */
+  /* Can set vandermonde matrices now */
   set_vandermonde_mats();
 }
 
 void Tris::set_vandermonde_mats()
 {
+  /* Set vandermonde for orthonormal Dubiner basis */
   vandDB.assign({nSpts, nSpts});
 
   for (unsigned int i = 0; i < nSpts; i++)
@@ -222,16 +224,14 @@ void Tris::set_vandermonde_mats()
       vandDB(i,j) = Dubiner2D(order, loc_spts(i, 0), loc_spts(i, 1), j); 
     }
 
-  for (unsigned int i = 0; i < nSpts; i++)
-  {
-    for (unsigned int j = 0; j < nSpts; j++)
-    {
-      std::cout << vandDB(i,j) << " ";
-    }
-    std::cout << std::endl;
-  }
-
-  
+  //for (unsigned int i = 0; i < nSpts; i++)
+  //{
+  //  for (unsigned int j = 0; j < nSpts; j++)
+  //  {
+  //    std::cout << vandDB(i,j) << " ";
+  //  }
+  //  std::cout << std::endl;
+  //}
 
   vandDB.calc_LU();
 
@@ -243,14 +243,74 @@ void Tris::set_vandermonde_mats()
 
   vandDB.solve(inv_vandDB, eye);
 
-  for (unsigned int i = 0; i < nSpts; i++)
+  //for (unsigned int i = 0; i < nSpts; i++)
+  //{
+  //  for (unsigned int j = 0; j < nSpts; j++)
+  //  {
+  //    std::cout << inv_vandDB(i,j) << " ";
+  //  }
+  //  std::cout << std::endl;
+  //}
+
+  /* Set vandermonde for Raviart-Thomas monomial basis over combined solution and flux point set*/
+  vandRT.assign({2*nSpts+nFpts, 2*nSpts+nFpts}, 0.0);
+
+  for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
   {
-    for (unsigned int j = 0; j < nSpts; j++)
+    for (unsigned int j = 0; j < 2*nSpts + nFpts; j++)
     {
-      std::cout << inv_vandDB(i,j) << " ";
+      double tnormj[2];
+      double loc[2];
+      if (j < 2*nSpts)
+      {
+        //tnormj[0] = j % 2; tnormj[1] = (j+1) % 2; // alternates between +xi, and +eta directions
+        tnormj[0] = (j < nSpts) ? 1 : 0; 
+        tnormj[1] = (j < nSpts) ? 0 : 1; 
+        loc[0] = loc_spts(j%nSpts, 0); loc[1] = loc_spts(j%nSpts, 1);
+      }
+      else
+      {
+        tnormj[0] = tnorm(j - 2*nSpts, 0); tnormj[1] = tnorm(j - 2*nSpts, 1);
+        loc[0] = loc_fpts(j - 2*nSpts, 0); loc[1] = loc_fpts(j - 2*nSpts, 1);
+      }
+
+      vandRT(i,j) =  RTMonomial2D(order+1, loc[0], loc[1], 0, i) * tnormj[0];
+      vandRT(i,j) += RTMonomial2D(order+1, loc[0], loc[1], 1, i) * tnormj[1];
     }
-    std::cout << std::endl;
   }
+
+  //for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
+  //{
+  //  for (unsigned int j = 0; j < 2*nSpts + nFpts; j++)
+  //  {
+  //    std::cout << vandRT(i,j) << " ";
+  //  }
+  //  std::cout << std::endl;
+  //}
+
+  vandRT.calc_LU();
+
+  inv_vandRT.assign({2*nSpts + nFpts, 2*nSpts * nFpts}); 
+  
+  //eye.assign({2*nSpts + nFpts, 2*nSpts + nFpts}, 0); 
+  mdvector<double>eye2({2*nSpts + nFpts, 2*nSpts + nFpts}, 0); 
+  for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
+    eye2(i,i) = 1.0;
+
+  vandRT.solve(inv_vandRT, eye2);
+
+  //for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
+  //{
+  //  for (unsigned int j = 0; j < 2*nSpts + nFpts; j++)
+  //  {
+  //    std::cout << inv_vandRT(i,j) << " ";
+  //  }
+  //  std::cout << std::endl;
+  //}
+
+
+
+  
 }
 
 double Tris::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
@@ -268,6 +328,10 @@ double Tris::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
 double Tris::calc_nodal_basis(unsigned int spt, double *loc)
 {
   double val = 0.0;
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    val += inv_vandDB(i, spt) * Dubiner2D(order, loc[0], loc[1], i);
+  }
 
   return val;
 }
@@ -277,14 +341,20 @@ double Tris::calc_d_nodal_basis_spts(unsigned int spt,
 {
 
   double val = 0.0;
+  int mode;
 
   if (dim == 0)
   {
-    val = 0.0;
+    mode = spt;
   }
   else
   {
-    val = 0.0;
+    mode = spt + nSpts;
+  }
+
+  for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
+  {
+    val += inv_vandRT(mode, i) * divRTMonomial2D(order + 1, loc[0], loc[1], i);
   }
 
   return val;
@@ -313,16 +383,21 @@ double Tris::calc_d_nodal_basis_fr(unsigned int spt,
 double Tris::calc_d_nodal_basis_fpts(unsigned int fpt,
               const std::vector<double> &loc, unsigned int dim)
 {
-
   double val = 0.0;
+  int mode;
 
   if (dim == 0)
   {
-      val = 0.0;
+    mode = fpt + 2*nSpts;
+
+    for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
+    {
+      val += inv_vandRT(mode, i) * divRTMonomial2D(order + 1, loc[0], loc[1], i);
+    }
   }
   else
   {
-      val = 0.0;
+    val = 0.0;
   }
 
   return val;
