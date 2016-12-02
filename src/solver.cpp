@@ -1352,7 +1352,7 @@ void FRSolver::initialize_U()
       for (unsigned int color = 1; color <= geo.nColors; color++)
       {
         eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-        eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, false, true);
+        eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, true);
         LUptrs[color - 1].resize(nElesMax);
       }
       

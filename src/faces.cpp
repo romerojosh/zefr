@@ -126,13 +126,13 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
     if (input->viscous)
     {
-      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
-      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, true);
     }
     else
     {
-      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
-      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, true);
     }
   }
 
