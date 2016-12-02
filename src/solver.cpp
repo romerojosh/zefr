@@ -5178,16 +5178,29 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
   }
 }
 
+//void FRSolver::filter_solution()
+//{
+//  if (!input->filt_on) return;
+  
+//  /* Sense discontinuities and filter solution */
+//  unsigned int status = 1;
+//  for (unsigned int level = 0; level < input->filt_maxLevels && status; level++)
+//  {
+//    filt.apply_sensor();
+//    status = filt.apply_expfilter(level);
+//  }
+//}
+
 void FRSolver::filter_solution()
 {
-  if (!input->filt_on) return; 
-  
-  /* Sense discontinuities and filter solution */
-  unsigned int status = 1;
-  for (unsigned int level = 0; level < input->filt_maxLevels && status; level++)
+  if (input->filt_on && order > 1)
   {
     filt.apply_sensor();
-    status = filt.apply_filter(level);
+
+    /* Method 1 */
+    filt.apply_expfilter();
+    if(input->filt2on)
+      filt.apply_expfilter_type2();
   }
 }
 
