@@ -1479,65 +1479,79 @@ void FRSolver::setup_views()
 {
   /* Setup face view of element solution data struture */
   // TODO: Might not want to allocate all these at once. Turn this into a function maybe?
-  mdvector<double*> U_ptr_map({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Fcomm_ptr_map({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Ucomm_ptr_map;
-  mdvector<double*> dU_ptr_map;
+  mdvector<double*> U_base_ptrs({2 * geo.nGfpts});
+  mdvector<double*> Fcomm_base_ptrs({2 * geo.nGfpts});
+  mdvector<unsigned int> U_strides({2 * geo.nGfpts});
+  mdvector<double*> Ucomm_base_ptrs;
+  mdvector<double*> dU_base_ptrs;
+  mdvector<unsigned int> dU_strides;
+
   if (input->viscous)
   {
-    Ucomm_ptr_map.assign({geo.nGfpts, eles->nVars, 2});
-    dU_ptr_map.assign({geo.nGfpts, eles->nVars, eles->nDims, 2});
+    Ucomm_base_ptrs.assign({2 * geo.nGfpts});
+    dU_base_ptrs.assign({2 * geo.nGfpts});
+    dU_strides.assign({2 * geo.nGfpts, 2});
   }
 #ifdef _GPU
-  mdvector<double*> U_ptr_map_d({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Fcomm_ptr_map_d({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Ucomm_ptr_map_d;
-  mdvector<double*> dU_ptr_map_d;
+  mdvector<double*> U_base_ptrs_d({2 * geo.nGfpts});
+  mdvector<double*> Fcomm_base_ptrs_d({2 * geo.nGfpts});
+  mdvector<unsigned int> U_strides_d({2 * geo.nGfpts});
+  mdvector<double*> Ucomm_base_ptrs_d;
+  mdvector<double*> dU_base_ptrs_d;
+  mdvector<unsigned int> dU_strides_d;
+
   if (input->viscous)
   {
-    Ucomm_ptr_map_d.assign({geo.nGfpts, eles->nVars, 2});
-    dU_ptr_map_d.assign({geo.nGfpts, eles->nVars, eles->nDims, 2});
+    Ucomm_base_ptrs_d.assign({2 * geo.nGfpts});
+    dU_base_ptrs_d.assign({2 * geo.nGfpts});
+    dU_strides_d.assign({2 * geo.nGfpts, 2});
   }
 #endif
 
   /* Set pointers for internal faces */
 #pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < eles->nVars; n++)
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
     {
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      int gfpt = geo.fpt2gfpt(fpt,ele);
+      /* Check if flux point is on ghost edge */
+      if (gfpt == -1)
       {
-        int gfpt = geo.fpt2gfpt(fpt,ele);
-        /* Check if flux point is on ghost edge */
-        if (gfpt == -1)
-        {
-          continue;
-        }
-
-        int slot = geo.fpt2gfpt_slot(fpt,ele);
-
-        U_ptr_map(gfpt, n, slot) = &eles->U_fpts(fpt, ele, n);
-        Fcomm_ptr_map(gfpt, n, slot) = &eles->Fcomm(fpt, ele, n);
-        if (input->viscous) Ucomm_ptr_map(gfpt, n, slot) = &eles->Ucomm(fpt, ele, n);
-#ifdef _GPU
-        U_ptr_map_d(gfpt, n, slot) = eles->U_fpts_d.get_ptr(fpt, ele, n);
-        Fcomm_ptr_map_d(gfpt, n, slot) = eles->Fcomm_d.get_ptr(fpt, ele, n);
-        if (input->viscous) Ucomm_ptr_map_d(gfpt, n, slot) = eles->Ucomm_d.get_ptr(fpt, ele, n);
-#endif
-
-        if (input->viscous)
-        {
-          for (unsigned int dim = 0; dim < eles->nDims; dim++)
-          {
-            dU_ptr_map(gfpt, n, dim, slot) = &eles->dU_fpts(fpt, ele, n, dim);
-#ifdef _GPU
-            dU_ptr_map_d(gfpt, n, dim, slot) = eles->dU_fpts_d.get_ptr(fpt, ele, n, dim);
-#endif
-          }
-        }
-        
+        continue;
       }
+
+      int slot = geo.fpt2gfpt_slot(fpt,ele);
+
+      U_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
+      U_strides(gfpt + slot * geo.nGfpts) = eles->U_fpts.get_stride(1);
+
+      Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Fcomm(fpt, ele, 0);
+
+      if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Ucomm(fpt, ele, 0);
+#ifdef _GPU
+      U_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
+      U_strides_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_stride(1);
+
+      Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Fcomm_d.get_ptr(fpt, ele, 0);
+
+      if (input->viscous) Ucomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Ucomm_d.get_ptr(fpt, ele, 0);
+#endif
+
+      if (input->viscous)
+      {
+        dU_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->dU_fpts(fpt, ele, 0, 0);
+        dU_strides(gfpt + slot * geo.nGfpts, 0) = eles->dU_fpts.get_stride(1);
+        dU_strides(gfpt + slot * geo.nGfpts, 1) = eles->dU_fpts.get_stride(2);
+
+#ifdef _GPU
+        dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->dU_fpts_d.get_ptr(fpt, ele, 0, 0);
+        dU_strides_d(gfpt + slot * geo.nGfpts, 0) = eles->dU_fpts_d.get_stride(1);
+        dU_strides_d(gfpt + slot * geo.nGfpts, 1) = eles->dU_fpts_d.get_stride(2);
+#endif
+       
+      }
+      
     }
   }
 
@@ -1547,25 +1561,32 @@ void FRSolver::setup_views()
   {
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
-      U_ptr_map(gfpt, n, 1) = &faces->U_bnd(i, n);
-      Fcomm_ptr_map(gfpt, n, 1) = &faces->Fcomm_bnd(i, n);
-      if (input->viscous) Ucomm_ptr_map(gfpt, n, 1) = &faces->Ucomm_bnd(i, n);
+      U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0);
+      U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(0);
+
+      Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(i, 0);
+
+      if (input->viscous) Ucomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Ucomm_bnd(i, 0);
 
 #ifdef _GPU
-      U_ptr_map_d(gfpt, n, 1) = faces->U_bnd_d.get_ptr(i, n);
-      Fcomm_ptr_map_d(gfpt, n, 1) = faces->Fcomm_bnd_d.get_ptr(i, n);
-      if (input->viscous) Ucomm_ptr_map_d(gfpt, n, 1) = faces->Ucomm_bnd_d.get_ptr(i, n);
+      U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0);
+      U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(0);
+
+      Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(i, 0);
+
+      if (input->viscous) Ucomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Ucomm_bnd_d.get_ptr(i, 0);
 #endif
 
       if (input->viscous)
       {
-        for (unsigned int dim = 0; dim < eles->nDims; dim++)
-        {
-          dU_ptr_map(gfpt, n, dim, 1) = &faces->dU_bnd(i, n, dim);
+        dU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dU_bnd(i, 0, 0);
+        dU_strides(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd.get_stride(0);
+        dU_strides(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd.get_stride(1);
 #ifdef _GPU
-          dU_ptr_map_d(gfpt, n, dim, 1) = faces->dU_bnd_d.get_ptr(i, n, dim);
+        dU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_ptr(i, 0, 0);
+        dU_strides_d(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd_d.get_stride(0);
+        dU_strides_d(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd_d.get_stride(1);
 #endif
-        }
       }
     }
 
@@ -1573,23 +1594,24 @@ void FRSolver::setup_views()
   }
 
   /* Create views of element data for faces */
-  faces->U.assign(U_ptr_map);
-  faces->Fcomm.assign(Fcomm_ptr_map);
+  faces->U.assign(U_base_ptrs, U_strides, geo.nGfpts);
+  faces->Fcomm.assign(Fcomm_base_ptrs, U_strides, geo.nGfpts);
   if (input->viscous)
   {
-    faces->Ucomm.assign(Ucomm_ptr_map);
-    faces->dU.assign(dU_ptr_map);
+    faces->Ucomm.assign(Ucomm_base_ptrs, U_strides, geo.nGfpts);
+    faces->dU.assign(dU_base_ptrs, dU_strides, geo.nGfpts);
   }
 
 #ifdef _GPU
-  faces->U_d.assign(U_ptr_map_d);
-  faces->Fcomm_d.assign(Fcomm_ptr_map_d);
+  faces->U_d.assign(U_base_ptrs_d, U_strides_d, geo.nGfpts);
+  faces->Fcomm_d.assign(Fcomm_base_ptrs_d, U_strides_d, geo.nGfpts);
   if (input->viscous)
   {
-    faces->Ucomm_d.assign(Ucomm_ptr_map_d);
-    faces->dU_d.assign(dU_ptr_map_d);
+    faces->Ucomm_d.assign(Ucomm_base_ptrs_d, U_strides_d, geo.nGfpts);
+    faces->dU_d.assign(dU_base_ptrs_d, dU_strides_d, geo.nGfpts);
   }
 #endif
+
 }
 
 void FRSolver::dFcdU_from_faces()

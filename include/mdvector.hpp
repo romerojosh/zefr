@@ -98,7 +98,7 @@ class mdvector
     std::array<unsigned int,6> shape(void) const;
 
     //! Method to return vector strides
-    std::array<unsigned int,6> get_strides(void) const;
+    unsigned int get_stride(unsigned int dim) const;
 
     //! Method to get leading dimension
     unsigned int ldim() const; 
@@ -303,9 +303,9 @@ std::array<unsigned int,6> mdvector<T>::shape(void) const
 }
 
 template <typename T>
-std::array<unsigned int,6> mdvector<T>::get_strides(void) const
+unsigned int mdvector<T>::get_stride(unsigned int dim) const
 {
-  return strides;
+  return strides[dim];
 }
 
 template <typename T>
@@ -720,64 +720,76 @@ mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
 }
 #endif
 
+/* mdview class to allow indirect data access from faces */
+// NOTE: Assumes index in last place used for slot always, and thus
+// applies to strided access into base_ptrs/strides vectors. 
 template <typename T>
 class mdview
 {
   private:
-    mdvector<T*> ptr_map;
+    mdvector<T*> base_ptrs;
+    mdvector<unsigned int> strides;
+    unsigned int base_stride;
 
   public:
     mdview(){}
 
-    mdview(mdvector<T*> &ptr_map)
+    mdview(mdvector<T*> &base_ptrs, mdvector<unsigned int>& strides, unsigned int base_stride)
     {
-      this->ptr_map = ptr_map;
+      this->base_ptrs = base_ptrs;
+      this->strides = strides;
+      this->base_stride = base_stride;
     }
 
-    void assign(mdvector<T*> &ptr_map)
+    void assign(mdvector<T*> &base_ptrs, mdvector<unsigned int>& strides, unsigned int base_stride)
     {
-      this->ptr_map = ptr_map;
+      this->base_ptrs = base_ptrs;
+      this->strides = strides;
+      this->base_stride = base_stride;
     }
 
     T& operator() (unsigned int idx0) 
     {
-      return *(ptr_map(idx0));
+      return *(base_ptrs(idx0));
     }
 
     T operator() (unsigned int idx0) const
     {
-      return *(ptr_map(idx0));
+      return *(base_ptrs(idx0));
     }
 
     T& operator() (unsigned int idx0, unsigned int idx1) 
     {
-      return *(ptr_map(idx0, idx1));
+      return *(base_ptrs(idx0 + base_stride * idx1));
     }
 
     T operator() (unsigned int idx0, unsigned int idx1) const
     {
-      return *(ptr_map(idx0, idx1));
+      return *(base_ptrs(idx0 + base_stride * idx1));
     }
 
     T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
     {
-      return *(ptr_map(idx0, idx1, idx2));
+      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
     }
 
     T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
     {
-      return *(ptr_map(idx0, idx1, idx2));
+      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
     }
+
     T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
         unsigned int idx3) 
     {
-      return *(ptr_map(idx0, idx1, idx2, idx3));
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
+          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
     }
 
     T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
         unsigned int idx3) const
     {
-      return *(ptr_map(idx0, idx1, idx2, idx3));
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
+          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
     }
 
 };
