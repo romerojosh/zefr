@@ -160,7 +160,11 @@ void FRSolver::setup(_mpi_comm comm_in)
   solver_data_to_device();
 #endif
 
-  setup_views();
+  setup_views(); // Note: This function allocates addtional GPU memory for views
+
+#ifdef _GPU
+  report_gpu_mem_usage();
+#endif
 
 }
 
@@ -5221,3 +5225,32 @@ void FRSolver::move(double time)
 
   eles->move(faces);
 }
+
+#ifdef _GPU
+void FRSolver::report_gpu_mem_usage()
+{
+  size_t free, total, used;
+  cudaMemGetInfo(&free, &total);
+  used = total - free;
+
+#ifndef _MPI
+  std::cout << "GPU Memory Usage: " << used/1e6 << " MB used of " << total/1e6 << " MB available" << std::endl;
+#else
+  size_t used_max, used_min;
+
+  if (input->rank == 0)
+  {
+    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);  
+    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);  
+
+    std::cout << "GPU Memory Usage: " << (used_min/1e6) << " (min) - " << (used_max/1e6) << " (max) MB used of " << total/1e6;
+    std::cout << " MB available per GPU" << std::endl;
+  }
+  else
+  {
+    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);  
+    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);  
+  }
+#endif
+}
+#endif

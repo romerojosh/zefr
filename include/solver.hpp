@@ -148,6 +148,9 @@ class FRSolver
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
+#ifdef _GPU
+    void report_gpu_mem_usage();
+#endif
     void filter_solution();
 
     void compute_forces(std::array<double, 3>& force_conv, std::array<double, 3>& force_visc, std::ofstream* f);
