@@ -644,7 +644,6 @@ void FRSolver::solver_data_to_device()
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
   eles->divF_spts_d = eles->divF_spts;
-  eles->jaco_spts_d = eles->jaco_spts;
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
@@ -657,6 +656,12 @@ void FRSolver::solver_data_to_device()
     eles->dU_spts_d = eles->dU_spts;
     eles->Ucomm_d = eles->Ucomm;
     eles->dU_fpts_d = eles->dU_fpts;
+  }
+  
+  //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
+  if (input->motion || input->dt_scheme == "MCGS")
+  {
+    eles->jaco_spts_d = eles->jaco_spts;
   }
 
   if (input->motion)
