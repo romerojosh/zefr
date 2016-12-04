@@ -543,37 +543,37 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
 
       unsigned int slot = geo->fpt2gfpt_slot(fpt,e);
 
-      /* --- Calculate outward unit normal vector at flux point --- */
-      // Transform face normal from reference to physical space [JGinv .dot. tNorm]
-      for (uint dim1 = 0; dim1 < nDims; dim1++)
-      {
-        faces->norm(gfpt,dim1,slot) = 0.;
-        for (uint dim2 = 0; dim2 < nDims; dim2++)
-          faces->norm(gfpt,dim1,slot) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
-      }
-
-      // Store magnitude of face normal (equivalent to face area in finite-volume land)
+      /* --- Calculate outward unit normal vector at flux point ("left" element only) --- */
       if (slot == 0)
       {
-        faces->dA(gfpt) = 0;
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->dA(gfpt) += faces->norm(gfpt,dim,slot)*faces->norm(gfpt,dim,slot);
-        faces->dA(gfpt) = sqrt(faces->dA(gfpt));
-      }
+        // Transform face normal from reference to physical space [JGinv .dot. tNorm]
+        for (uint dim1 = 0; dim1 < nDims; dim1++)
+        {
+          faces->norm(gfpt,dim1) = 0.;
+          for (uint dim2 = 0; dim2 < nDims; dim2++)
+            faces->norm(gfpt,dim1) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
+        }
 
-      // Normalize
-      // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
-      // (A normal vector at a point doesn't make sense anyways)
-      if (std::fabs(faces->dA(gfpt)) < 1e-10)
-      {
-        faces->dA(gfpt) = 0.;
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt,dim,slot) = 0;
-      }
-      else
-      {
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt,dim,slot) /= faces->dA(gfpt);
+        // Store magnitude of face normal (equivalent to face area in finite-volume land)
+          faces->dA(gfpt) = 0;
+          for (uint dim = 0; dim < nDims; dim++)
+            faces->dA(gfpt) += faces->norm(gfpt,dim)*faces->norm(gfpt,dim);
+          faces->dA(gfpt) = sqrt(faces->dA(gfpt));
+
+        // Normalize
+        // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
+        // (A normal vector at a point doesn't make sense anyways)
+        if (std::fabs(faces->dA(gfpt)) < 1e-10)
+        {
+          faces->dA(gfpt) = 0.;
+          for (uint dim = 0; dim < nDims; dim++)
+            faces->norm(gfpt,dim) = 0;
+        }
+        else
+        {
+          for (uint dim = 0; dim < nDims; dim++)
+            faces->norm(gfpt,dim) /= faces->dA(gfpt);
+        }
       }
     }
   }
@@ -743,7 +743,8 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
               continue;
 
             unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
-            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * faces->norm(gfpt,dim,slot) * faces->dA(gfpt);
+            //Note: (0 - slot) factor to negate normal if "right" element (slot = 1)
+            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * (0 - slot) * faces->norm(gfpt,dim) * faces->dA(gfpt);
           }
         }
       }

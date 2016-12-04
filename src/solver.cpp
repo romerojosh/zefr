@@ -556,11 +556,10 @@ void FRSolver::solver_data_to_device()
   }
 
   /* Implicit solver data structures */
-  eles->deltaU_d = eles->deltaU;
-  eles->RHS_d = eles->RHS;
-
   if (input->dt_scheme == "MCGS")
   {
+    eles->deltaU_d = eles->deltaU;
+    eles->RHS_d = eles->RHS;
     eles->LHS_d = eles->LHSs[0];
 
     if (input->inv_mode)
@@ -649,7 +648,9 @@ void FRSolver::solver_data_to_device()
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
-  eles->h_ref_d = eles->h_ref;
+
+  if (input->CFL_type == 2)
+    eles->h_ref_d = eles->h_ref;
 
   if (input->viscous)
   {
@@ -692,11 +693,8 @@ void FRSolver::solver_data_to_device()
   }
 
   /* Solution data structures (faces) */
-  //faces->U_d = faces->U;
   faces->U_bnd_d = faces->U_bnd;
   faces->P_d = faces->P;
-  //faces->Ucomm_d = faces->Ucomm;
-  //faces->Fcomm_d = faces->Fcomm;
   faces->Ucomm_bnd_d = faces->Ucomm_bnd;
   faces->Fcomm_bnd_d = faces->Fcomm_bnd;
   faces->norm_d = faces->norm;
@@ -707,7 +705,6 @@ void FRSolver::solver_data_to_device()
 
   if (input->viscous)
   {
-    //faces->dU_d = faces->dU;
     faces->dU_bnd_d = faces->dU_bnd;
   }
 
@@ -4871,7 +4868,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
         force_conv[dim] += eles->weights_fpts(idx) * PL *
-          faces->norm(fpt, dim, 0) * faces->dA(fpt);
+          faces->norm(fpt, dim) * faces->dA(fpt);
       }
 
       if (input->viscous)
@@ -4925,8 +4922,8 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_fpts(idx) * taun[dim] *
@@ -5000,9 +4997,9 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           double tauyz = mu * (dv_dz + dw_dy);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0) + tauxz * faces->norm(fpt, 2, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0) + tauyz * faces->norm(fpt, 2, 0);
-          taun[3] = tauxz * faces->norm(fpt, 0, 0) + tauyz * faces->norm(fpt, 1, 0) + tauzz * faces->norm(fpt, 2, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1) + tauxz * faces->norm(fpt, 2);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
+          taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_fpts(idx) * taun[dim] *
@@ -5045,7 +5042,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
         force[dim] = eles->weights_fpts(idx) * PL *
-          faces->norm(fpt, dim, 0) * faces->dA(fpt);
+          faces->norm(fpt, dim) * faces->dA(fpt);
 
       if (input->viscous)
       {
@@ -5098,8 +5095,8 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force[dim] -= eles->weights_fpts(idx) * taun[dim] * faces->dA(fpt);
@@ -5171,9 +5168,9 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           double tauyz = mu * (dv_dz + dw_dy);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0) + tauxz * faces->norm(fpt, 2, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0) + tauyz * faces->norm(fpt, 2, 0);
-          taun[3] = tauxz * faces->norm(fpt, 0, 0) + tauyz * faces->norm(fpt, 1, 0) + tauzz * faces->norm(fpt, 2, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1) + tauxz * faces->norm(fpt, 2);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
+          taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force[dim] -= eles->weights_fpts(idx) * taun[dim] *

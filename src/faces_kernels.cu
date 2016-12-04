@@ -291,7 +291,7 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
     const mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, const mdvector_gpu<double> V_wall, mdvector_gpu<double> Vg,
     const mdvector_gpu<double> norm_fs, const mdvector_gpu<double> norm,
-    const mdvector_gpu<unsigned int> gfpt2bnd, const mdvector_gpu<unsigned int> per_fpt_list,
+    const mdvector_gpu<char> gfpt2bnd, const mdvector_gpu<unsigned int> per_fpt_list,
     mdvector_gpu<int> LDG_bias, bool motion = false)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
@@ -380,8 +380,8 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        VnL += VL[dim] * norm(fpt, dim, 0);
-        alpha += norm_fs(dim) * norm(fpt, dim, 0);
+        VnL += VL[dim] * norm(fpt, dim);
+        alpha += norm_fs(dim) * norm(fpt, dim);
       }
 
       /* Compute speed of sound */
@@ -477,8 +477,8 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
-        VnR += V_fs(dim) * norm(fpt, dim, 0);
+        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim);
+        VnR += V_fs(dim) * norm(fpt, dim);
       }
 
       /* Compute pressure. TODO: Compute pressure once!*/
@@ -520,14 +520,14 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
         rhoR *= pow(rho_fs, gamma) / PR;
 
         for (unsigned int dim = 0; dim < nDims; dim++)
-          VR[dim] = V_fs(dim) + (ustarn - VnR) * norm(fpt, dim, 0);
+          VR[dim] = V_fs(dim) + (ustarn - VnR) * norm(fpt, dim);
       }
       else  /* Case 2: Outflow */
       {
         rhoR *= pow(U(fpt, 0, 0), gamma) / PL;
 
         for (unsigned int dim = 0; dim < nDims; dim++)
-          VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim, 0);
+          VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim);
       }
 
       rhoR = std::pow(rhoR, 1.0 / (gamma - 1));
@@ -555,19 +555,19 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
       /* Compute wall normal momentum */
       for (unsigned int dim = 0; dim < nDims; dim++)
-        momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+        momN += U(fpt, dim+1, 0) * norm(fpt, dim);
 
       if (motion)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+          momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim);
       }
 
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
       /* Set boundary state with cancelled normal velocity */
       for (unsigned int dim = 0; dim < nDims; dim++)
-        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim);
 
       /* Set energy */
       /* Get left-state pressure */
@@ -598,19 +598,19 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
       /* Compute wall normal momentum */
       for (unsigned int dim = 0; dim < nDims; dim++)
-        momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+        momN += U(fpt, dim+1, 0) * norm(fpt, dim);
 
       if (motion)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+          momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim);
       }
 
       U(fpt, 0, 1) = U(fpt, 0, 0);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
         /* Set boundary state to reflect normal velocity */
-        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+        U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim);
 
       U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
@@ -827,7 +827,7 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int n
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &Vg,
-    mdvector_gpu<double> &norm_fs,  mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd,
+    mdvector_gpu<double> &norm_fs,  mdvector_gpu<double> &norm, mdvector_gpu<char> &gfpt2bnd,
     mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation,
     bool motion)
 {
@@ -869,7 +869,7 @@ template<unsigned int nVars, unsigned int nDims>
 __global__
 void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<double> norm_gfpt,
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    mdvector_gpu<unsigned int> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
+    mdvector_gpu<char> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -897,7 +897,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
     double norm[nDims];
 
     for (unsigned int dim = 0; dim < nDims; dim++)
-      norm[dim] = norm_gfpt(fpt, dim, 0);
+      norm[dim] = norm_gfpt(fpt, dim);
 
     /* Extrapolate density gradient */
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1081,7 +1081,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
 
 void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvector_gpu<double> &norm, 
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
-    unsigned int nDims, mdvector_gpu<unsigned int> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list,
+    unsigned int nDims, mdvector_gpu<char> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list,
     unsigned int equation)
 {
   if (nGfpts_bnd == 0) return;
@@ -1114,7 +1114,7 @@ __global__
 void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvector_gpu<double> dFdUvisc,
     mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFddUvisc, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma,
-    mdvector_gpu<double> norm, mdvector_gpu<unsigned int> gfpt2bnd, bool viscous)
+    mdvector_gpu<double> norm, mdvector_gpu<char> gfpt2bnd, bool viscous)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -1230,8 +1230,8 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
       double VnL = 0.0; double VnR = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
-        VnR += V_fs(dim) * norm(fpt, dim, 0);
+        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim);
+        VnR += V_fs(dim) * norm(fpt, dim);
       }
 
       /* Compute pressure. TODO: Compute pressure once!*/
@@ -1259,8 +1259,8 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
 
       if (nDims == 2)
       {
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
+        double nx = norm(fpt, 0);
+        double ny = norm(fpt, 1);
         double gam = gamma;
 
         /* Primitive Variables */
@@ -1364,9 +1364,9 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
 
       else if (nDims == 3)
       {
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
-        double nz = norm(fpt, 2, 0);
+        double nx = norm(fpt, 0);
+        double ny = norm(fpt, 1);
+        double nz = norm(fpt, 2);
         double gam = gamma;
 
         /* Primitive Variables */
@@ -1509,8 +1509,8 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
     {
       if (nDims == 2)
       {
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
+        double nx = norm(fpt, 0);
+        double ny = norm(fpt, 1);
 
         /* Primitive Variables */
         double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
@@ -1543,9 +1543,9 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
 
       else if (nDims == 3)
       {
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
-        double nz = norm(fpt, 2, 0);
+        double nx = norm(fpt, 0);
+        double ny = norm(fpt, 1);
+        double nz = norm(fpt, 2);
 
         /* Primitive Variables */
         double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
@@ -1594,8 +1594,8 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
     case SYMMETRY_G: /* Symmetry (ghost) */
     case SLIP_WALL_G: /* Slip Wall (ghost) */
     {
-      double nx = norm(fpt, 0, 0);
-      double ny = norm(fpt, 1, 0);
+      double nx = norm(fpt, 0);
+      double ny = norm(fpt, 1);
 
       dURdUL[0][0] = 1;
       dURdUL[1][0] = 0;
@@ -1622,8 +1622,8 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
 
     case ADIABATIC_NOSLIP_P: /* No-slip Wall (adiabatic) */
     {
-      double nx = norm(fpt, 0, 0);
-      double ny = norm(fpt, 1, 0);
+      double nx = norm(fpt, 0);
+      double ny = norm(fpt, 1);
 
       /* Primitive Variables */
       double rhoL = U(fpt, 0, 0);
@@ -1828,7 +1828,7 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
 void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, mdvector_gpu<double> &dFdUvisc,
     mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddUvisc, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
-    mdvector_gpu<double> &norm, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int equation, bool viscous)
+    mdvector_gpu<double> &norm, mdvector_gpu<char> &gfpt2bnd, unsigned int equation, bool viscous)
 {
   if (nGfpts_bnd == 0) return;
 
@@ -1868,12 +1868,12 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
     /* Setting sign of beta (from HiFiLES) */
     if (nDims == 2)
     {
-      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+      if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
         beta = -beta;
     }
     else if (nDims == 3)
     {
-      if (norm(fpt, 0,0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+      if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
         beta = -beta;
     }
 
@@ -2160,7 +2160,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    norm[dim] = norm_gfpts(fpt, dim, 0);
+    norm[dim] = norm_gfpts(fpt, dim);
   }
 
   if (motion)
@@ -2276,7 +2276,7 @@ void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv,
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    norm[dim] = norm_gfpts(fpt, dim, 0);
+    norm[dim] = norm_gfpts(fpt, dim);
   }
 
   /* Initialize dFndUL, dFndUR */
