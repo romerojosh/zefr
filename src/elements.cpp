@@ -743,8 +743,8 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
               continue;
 
             unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
-            //Note: (0 - slot) factor to negate normal if "right" element (slot = 1)
-            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * (0 - slot) * faces->norm(gfpt,dim) * faces->dA(gfpt);
+            double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * fac * faces->norm(gfpt,dim) * faces->dA(gfpt);
           }
         }
       }
@@ -1344,17 +1344,19 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
         }
       }
 
+      /* Get metric terms */
+      double inv_jaco[nDims][nDims];
+
+      for (int dim1 = 0; dim1 < nDims; dim1++)
+        for (int dim2 = 0; dim2 < nDims; dim2++)
+          inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
       double dU[nVars][nDims] = {{0.0}};
       if (input->viscous)
       {
-        /* Transform gradient to physical space */
         double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-        double inv_jaco[nDims][nDims];
 
-        for (int dim1 = 0; dim1 < nDims; dim1++)
-          for (int dim2 = 0; dim2 < nDims; dim2++)
-            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-
+        /* Transform gradient to physical space */
         for (unsigned int var = 0; var < nVars; var++)
         {
           for (int dim1 = 0; dim1 < nDims; dim1++)
@@ -1400,14 +1402,6 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
       if (!input->motion)
       {
         /* Transform flux to reference space */
-        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-        {
-          for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-          {
-            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-          }
-        }
-
         double tF[nVars][nDims] = {{0.0}};;
 
         for (unsigned int var = 0; var < nVars; var++)

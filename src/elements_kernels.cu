@@ -159,15 +159,15 @@ void compute_F(mdvector_gpu<double> F_spts,
     }
   }
 
+  /* Get metric terms */
+  for (int dim1 = 0; dim1 < nDims; dim1++)
+    for (int dim2 = 0; dim2 < nDims; dim2++)
+      inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
   if (viscous)
   {
     /* Transform gradient to physical space */
     double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-    double inv_jaco[nDims][nDims];
-
-    for (int dim1 = 0; dim1 < nDims; dim1++)
-      for (int dim2 = 0; dim2 < nDims; dim2++)
-        inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
 
     for (unsigned int var = 0; var < nVars; var++)
     {
@@ -217,14 +217,6 @@ void compute_F(mdvector_gpu<double> F_spts,
   if (!motion)
   {
     /* Transform flux to reference space */
-    for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-    {
-      for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-      {
-        inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-      }
-    }
-
     double tF[nVars][nDims] = {{0.0}};;
 
     for (unsigned int var = 0; var < nVars; var++)
@@ -1029,8 +1021,8 @@ void normal_flux(mdvector_gpu<double> tempF, mdvector_gpu<double> dFn,
   if (gfpt < 0)
     return;
 
-  //Note: (0 - slot) factor to negate normal if "right" element i.e. slot = 1
-  dFn(fpt,ele,var) -= tempF(fpt,ele) * (0 - slot) * norm(gfpt,dim) * dA(gfpt);
+  double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+  dFn(fpt,ele,var) -= tempF(fpt,ele) * fac * norm(gfpt,dim) * dA(gfpt);
 }
 
 void extrapolate_Fn_wrapper(mdvector_gpu<double> &oppE,
