@@ -64,7 +64,6 @@ struct GeoStruct
   //std::map<ELE_TYPE, mdvector<unsigned int>> face_nodesBT;
   std::map<ELE_TYPE, std::vector<std::vector<unsigned int>>> face_nodesBT;
   std::map<ELE_TYPE, mdvector<int>> fpt2gfptBT, fpt2gfpt_slotBT;
-  std::map<ELE_TYPE, mdvector<double>> coord_sptsBT, coord_fptsBT, coord_pptsBT, coord_qptsBT;
 
 
   unsigned int nEles = 0; 
@@ -85,7 +84,7 @@ struct GeoStruct
   std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
   mdvector<unsigned int> ppt_connect;
   mdvector<int> fpt2gfpt, fpt2gfpt_slot;
-  mdvector<double> ele_nodes, coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
+  mdvector<double> ele_nodes, coord_nodes;
   mdvector<unsigned int> face_nodes;
   mdvector<int> ele_adj;
 

@@ -1750,11 +1750,11 @@ void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned in
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-          double x = geo.coord_spts(spt, ele, 0);
-          double y = geo.coord_spts(spt, ele, 1);
+          double x = eles->coord_spts(spt, ele, 0);
+          double y = eles->coord_spts(spt, ele, 1);
           double z = 0;
           if (eles->nDims == 3)
-            z = geo.coord_spts(spt, ele, 2);
+            z = eles->coord_spts(spt, ele, 2);
 
           eles->divF_spts(spt, ele, n, stage) += compute_source_term(x, y, z, flow_time, n, input) * 
             eles->jaco_det_spts(spt, ele);
@@ -3154,12 +3154,12 @@ void FRSolver::write_solution(const std::string &_prefix)
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
       {
-        f << geo.coord_pptsBT[e->etype](ppt, ele, 0) << " ";
-        f << geo.coord_pptsBT[e->etype](ppt, ele, 1) << " ";
+        f << e->coord_ppts(ppt, ele, 0) << " ";
+        f << e->coord_ppts(ppt, ele, 1) << " ";
         if (geo.nDims == 2)
           f << 0.0 << std::endl;
         else
-          f << geo.coord_pptsBT[e->etype](ppt, ele, 2) << std::endl;
+          f << e->coord_ppts(ppt, ele, 2) << std::endl;
       }
     }
   }
@@ -3459,8 +3459,8 @@ void FRSolver::write_color()
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
         f << 0.0 << std::endl;
       }
     }
@@ -3472,9 +3472,9 @@ void FRSolver::write_color()
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 2) << std::endl;
       }
     }
   }
@@ -3774,8 +3774,8 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       for (int pt = 0; pt < nPtsFace; pt++)
       {
         int ppt = index_map(ind,pt);
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
         f << 0.0 << std::endl;
       }
     }
@@ -3789,9 +3789,9 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       for (int pt = 0; pt < nPtsFace; pt++)
       {
         int ppt = index_map(ind,pt);
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 2) << std::endl;
       }
     }
   }
@@ -4232,8 +4232,8 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         for (int pt = 0; pt < nPtsFace; pt++)
         {
           int ppt = index_map(ind,pt);
-          f << geo.coord_ppts(ppt, ele, 0) << " ";
-          f << geo.coord_ppts(ppt, ele, 1) << " ";
+          f << eles->coord_ppts(ppt, ele, 0) << " ";
+          f << eles->coord_ppts(ppt, ele, 1) << " ";
           f << 0.0 << std::endl;
         }
       }
@@ -4247,9 +4247,9 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         for (int pt = 0; pt < nPtsFace; pt++)
         {
           int ppt = index_map(ind,pt);
-          f << geo.coord_ppts(ppt, ele, 0) << " ";
-          f << geo.coord_ppts(ppt, ele, 1) << " ";
-          f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+          f << eles->coord_ppts(ppt, ele, 0) << " ";
+          f << eles->coord_ppts(ppt, ele, 1) << " ";
+          f << eles->coord_ppts(ppt, ele, 2) << std::endl;
         }
       }
     }
@@ -4762,15 +4762,15 @@ void FRSolver::report_error(std::ofstream &f)
           }
           else 
           {
-            U_true = compute_U_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
+            U_true = compute_U_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0, 
                 flow_time, n, input);
           }
 
           if (input->viscous)
           {
-            dU_true[0] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0,
+            dU_true[0] = compute_dU_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0,
                                          flow_time, n, 0, input);
-            dU_true[1] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0,
+            dU_true[1] = compute_dU_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0,
                                          flow_time, n, 1, input);
           }
 

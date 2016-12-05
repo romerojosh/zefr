@@ -297,10 +297,10 @@ void Elements::set_shape()
 void Elements::set_coords(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for physical coordinates */
-  geo->coord_sptsBT[etype].assign({nSpts, nEles, nDims});
-  geo->coord_fptsBT[etype].assign({nFpts, nEles, nDims});
-  geo->coord_pptsBT[etype].assign({nPpts, nEles, nDims});
-  geo->coord_qptsBT[etype].assign({nQpts, nEles, nDims});
+  coord_spts.assign({nSpts, nEles, nDims});
+  coord_fpts.assign({nFpts, nEles, nDims});
+  coord_ppts.assign({nPpts, nEles, nDims});
+  coord_qpts.assign({nQpts, nEles, nDims});
   nodes.assign({nNodes, nEles, nDims});
 
   /* Setup positions of all element's shape nodes in one array */
@@ -325,7 +325,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at solution points */
   auto &As = shape_spts(0,0);
-  auto &Cs = geo->coord_sptsBT[etype](0,0,0);
+  auto &Cs = coord_spts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
               1.0, &As, k, &B, k, 0.0, &Cs, ms);
@@ -336,7 +336,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at flux points */
   auto &Af = shape_fpts(0,0);
-  auto &Cf = geo->coord_fptsBT[etype](0,0,0);
+  auto &Cf = coord_fpts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
               1.0, &Af, k, &B, k, 0.0, &Cf, mf);
@@ -347,7 +347,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at plot points */
   auto &Ap = shape_ppts(0,0);
-  auto &Cp = geo->coord_pptsBT[etype](0,0,0);
+  auto &Cp = coord_ppts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
               1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
@@ -358,7 +358,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at quadrature points */
   auto &Aq = shape_qpts(0,0);
-  auto &Cq = geo->coord_qptsBT[etype](0,0,0);
+  auto &Cq = coord_qpts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
               1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
@@ -378,7 +378,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         /* Check if on ghost edge */
         if (gfpt != -1)
         {
-          faces->coord(gfpt, dim) = geo->coord_fptsBT[etype](fpt,ele,dim);
+          faces->coord(gfpt, dim) = coord_fpts(fpt,ele,dim);
         }
       }
     }
@@ -402,8 +402,8 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
           unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
 
 
-          double dx = geo->coord_fptsBT[etype](fpt1, ele, 0) - geo->coord_fptsBT[etype](fpt2, ele, 0);
-          double dy = geo->coord_fptsBT[etype](fpt1, ele, 1) - geo->coord_fptsBT[etype](fpt2, ele, 1);
+          double dx = coord_fpts(fpt1, ele, 0) - coord_fpts(fpt2, ele, 0);
+          double dy = coord_fpts(fpt1, ele, 1) - coord_fpts(fpt2, ele, 1);
           double dist = std::sqrt(dx*dx + dy*dy);
 
           h_ref(fpt1, ele) = dist;
@@ -448,7 +448,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
             double dx[3] = {0,0,0};
             for (int d = 0; d < 3; d++)
-              dx[d] = geo->coord_fptsBT[etype](fpt1,ele,d) - geo->coord_fptsBT[etype](fpt2,ele,d);
+              dx[d] = coord_fpts(fpt1,ele,d) - coord_fpts(fpt2,ele,d);
 
             double dist = std::sqrt(dx[0]*dx[0] + dx[1]*dx[1] * dx[2]*dx[2]);
 
@@ -854,8 +854,8 @@ void Elements::initialize_U()
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
-            double x = geo->coord_sptsBT[etype](spt, ele, 0);
-            double y = geo->coord_sptsBT[etype](spt, ele, 1);
+            double x = coord_spts(spt, ele, 0);
+            double y = coord_spts(spt, ele, 1);
 
             U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
           }
@@ -867,9 +867,9 @@ void Elements::initialize_U()
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
-            double x = geo->coord_sptsBT[etype](spt, ele, 0);
-            double y = geo->coord_sptsBT[etype](spt, ele, 1);
-            double z = geo->coord_sptsBT[etype](spt, ele, 2);
+            double x = coord_spts(spt, ele, 0);
+            double y = coord_spts(spt, ele, 1);
+            double z = coord_spts(spt, ele, 2);
 
             U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
 
@@ -913,8 +913,8 @@ void Elements::initialize_U()
         {
           for (unsigned int spt = 0; spt < nSpts; spt++)
           {
-            double x = geo->coord_sptsBT[etype](spt, ele, 0);
-            double y = geo->coord_sptsBT[etype](spt, ele, 1);
+            double x = coord_spts(spt, ele, 0);
+            double y = coord_spts(spt, ele, 1);
 
             U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
           }
@@ -3077,7 +3077,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at solution points */
   auto &As = shape_spts(0,0);
-  auto &Cs = geo->coord_spts(0,0,0);
+  auto &Cs = coord_spts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
               1.0, &As, k, &B, k, 0.0, &Cs, ms);
@@ -3088,7 +3088,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
 
   /* Setup physical coordinates at flux points */
   auto &Af = shape_fpts(0,0);
-  auto &Cf = geo->coord_fpts(0,0,0);
+  auto &Cf = coord_fpts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasTrans, mf, n, k,
               1.0, &Af, k, &B, n, 0.0, &Cf, mf);
@@ -3108,7 +3108,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
 
         /* Check if on ghost edge */
         if (gfpt != -1)
-          faces->coord(gfpt, dim) = geo->coord_fpts(fpt,ele,dim);
+          faces->coord(gfpt, dim) = coord_fpts(fpt,ele,dim);
       }
     }
   }
@@ -3127,8 +3127,8 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
           unsigned int fpt1 = fpt;
           unsigned int fpt2 =  (fpt / nSpts1D + 3) * nSpts1D - idx - 1;
 
-          double dx = geo->coord_fpts(fpt1, ele, 0) - geo->coord_fpts(fpt2, ele, 0);
-          double dy = geo->coord_fpts(fpt1, ele, 1) - geo->coord_fpts(fpt2, ele, 1);
+          double dx = coord_fpts(fpt1, ele, 0) - coord_fpts(fpt2, ele, 0);
+          double dy = coord_fpts(fpt1, ele, 1) - coord_fpts(fpt2, ele, 1);
           double dist = std::sqrt(dx*dx + dy*dy);
 
           h_ref(fpt1, ele) = dist;
@@ -3165,7 +3165,7 @@ void Elements::update_plot_point_coords(void)
 
   /* Setup physical coordinates at plot points */
   auto &Ap = shape_ppts(0,0);
-  auto &Cp = geo->coord_ppts(0,0,0);
+  auto &Cp = coord_ppts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
               1.0, &Ap, k, &B, n, 0.0, &Cp, mp);
@@ -3176,7 +3176,7 @@ void Elements::update_plot_point_coords(void)
 
   /* Setup physical coordinates at quadrature points */
   auto &Aq = shape_qpts(0,0);
-  auto &Cq = geo->coord_qpts(0,0,0);
+  auto &Cq = coord_qpts(0,0,0);
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
               1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
