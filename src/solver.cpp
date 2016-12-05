@@ -856,30 +856,52 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* If running viscous, use this scheduling */
   else
   {
-    /* Compute common interface solution and convective flux at non-MPI flux points */
-    faces->compute_common_U(startFpt, endFpt);
-    
-    /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
-    eles->compute_dU_spts(startEle, endEle);
+    // EXPERIMENTAL gradient computation from divergence
+    if (input->grad_via_div)
+    {
+      /* Compute common interface solution and convective flux at non-MPI flux points */
+      faces->compute_common_U(startFpt, endFpt);
+
+      for (unsigned int dim = 0; dim < eles->nDims; dim++)
+      {
+        // Compute unit advection flux at solution points with wavespeed along dim
+        eles->compute_unit_advF(startEle, endEle, dim); 
+
+        // Convert common U to common normal advection flux
+        faces->common_U_to_F(startFpt, endFpt, dim);
+
+        // Compute physical gradient (times jacobian determinant) along via divergence of F
+        eles->compute_dU_spts_via_divF(startEle, endEle, dim);
+        eles->compute_dU_fpts_via_divF(startEle, endEle, dim);
+      }
+    }
+    else
+    {
+      /* Compute common interface solution and convective flux at non-MPI flux points */
+      faces->compute_common_U(startFpt, endFpt);
+      
+      /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
+      eles->compute_dU_spts(startEle, endEle);
 
 #ifdef _MPI
-    /* Receieve U data */
-    faces->recv_U_data();
-    
-    /* Complete computation on remaining flux points */
-    faces->compute_common_U(startFptMpi, geo.nGfpts);
+      /* Receieve U data */
+      faces->recv_U_data();
+      
+      /* Complete computation on remaining flux points */
+      faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
-    /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
-    eles->compute_dU_fpts(startEle, endEle);
+      /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
+      eles->compute_dU_fpts(startEle, endEle);
 
-    /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
-    if (input->motion)
-      eles->compute_dU0(startEle, endEle);
+      /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
+      if (input->motion)
+        eles->compute_dU0(startEle, endEle);
 
-    /* Transform gradient of state variables to physical space from 
-     * reference space */
-    //eles->transform_dU(startEle, endEle);
+      /* Transform gradient of state variables to physical space from 
+       * reference space */
+      //eles->transform_dU(startEle, endEle);
+    }
 
     /* Compute flux at solution points */
     eles->compute_F(startEle, endEle);

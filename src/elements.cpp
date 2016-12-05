@@ -1570,16 +1570,88 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
 
   check_error();
 #endif
+}
 
-  //for (unsigned int e = 0; e < nEles; e++)
-  //{
-  //  std::cout << "e " << e << std::endl;
-  //  for (unsigned int spt = 0; spt < nSpts; spt++)
-  // {
-  //    std::cout << divF_spts(spt, e, 0, stage)  << " " ;
-  //  }
-  //  std::cout << std::endl;
-  //}
+void Elements::compute_dU_spts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+{
+#ifdef _CPU
+  /* Compute contribution to divergence from flux at solution points */
+  for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+  {
+    double fac = (dim1 == 0) ? 0.0 : 1.0;
+
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      auto &A = oppD(0, 0, dim1);
+      auto &B = F_spts(0, startEle, var, dim1);
+      auto &C = dU_spts(0, startEle, var, dim);
+
+
+#ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
+            nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+#endif
+    }
+  }
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim1 = 0; dim1 < nDims; dim++)
+  {
+    double fac = (dim1 == 0) ? 0.0 : 1.0;
+
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      auto *A = oppD_d.get_ptr(0, 0, dim1);
+      auto *B = F_spts_d.get_ptr(0, startEle, var, dim1);
+      auto *C = dU_spts_d.get_ptr(0, startEle, var, dim);
+
+      /* Compute contribution to derivative from solution at solution points */
+      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
+          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
+    }
+  }
+  check_error();
+#endif
+}
+
+void Elements::compute_dU_fpts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+{
+#ifdef _CPU
+  /* Compute contribution to divergence from common flux at flux points */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto &A = oppDiv_fpts(0, 0);
+    auto &B = Fcomm(0, startEle, var);
+    auto &C = dU_spts(0, startEle, var, dim);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+        endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
+        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+#endif
+  }
+#endif
+
+#ifdef _GPU
+  /* Compute contribution to derivative from common solution at flux points */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
+    auto *B = Fcomm_d.get_ptr(0, startEle, var);
+    auto *C = dU_spts_d.get_ptr(0, startEle, var, dim);
+
+    cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
+        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
+  }
+
+  check_error();
+#endif
 
 }
 
@@ -1646,27 +1718,37 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
         }
       }
 
+      /* Get metric terms */
+      double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+      double inv_jaco[nDims][nDims];
+
+      for (int dim1 = 0; dim1 < nDims; dim1++)
+        for (int dim2 = 0; dim2 < nDims; dim2++)
+          inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
       double dU[nVars][nDims] = {{0.0}};
+
       if (input->viscous)
       {
         /* Transform gradient to physical space */
-        double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-        double inv_jaco[nDims][nDims];
-
-        for (int dim1 = 0; dim1 < nDims; dim1++)
-          for (int dim2 = 0; dim2 < nDims; dim2++)
-            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-
         for (unsigned int var = 0; var < nVars; var++)
         {
           for (int dim1 = 0; dim1 < nDims; dim1++)
           {
-            for (int dim2 = 0; dim2 < nDims; dim2++)
+            if (!input->grad_via_div)
             {
-              dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
-            }
+              for (int dim2 = 0; dim2 < nDims; dim2++)
+              {
+                dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
+              }
 
-            dU[var][dim1] *= inv_jaco_det;
+              dU[var][dim1] *= inv_jaco_det;
+
+            }
+            else
+            {
+              dU[var][dim1] = tdU[var][dim1] * inv_jaco_det;
+            }
 
             /* Write physical gradient to global memory */
             dU_spts(spt, ele, var, dim1) = dU[var][dim1];
@@ -1674,6 +1756,18 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
           }
         }
       }
+
+      /*
+      if (ele == 0)
+      {
+        std::cout << "dU" << std::endl;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          std::cout << dU[0][dim] << " ";
+        }
+        std::cout << std::endl;
+      }
+      */
 
       /* Compute fluxes */
       if (equation == AdvDiff)
@@ -1780,6 +1874,69 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
       input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
 
   check_error();
+#endif
+}
+
+template<unsigned int nVars, unsigned int nDims>
+void Elements::compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+{
+  double U[nVars];
+  double inv_jaco[nDims];
+
+  for (unsigned int ele = startEle; ele < endEle; ele++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      /* Get state variables */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        U[var] = U_spts(spt, ele, var);
+      }
+
+      /* Get required metric terms */
+      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+      {
+          inv_jaco[dim1] = inv_jaco_spts(spt, ele, dim1, dim);
+      }
+
+      /* Compute transformed unit advection flux along provided dimension */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+        {
+            F_spts(spt, ele, var, dim1) = U[var] * inv_jaco[dim1];
+        }
+      }
+    }
+  }
+
+}
+
+void Elements::compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+{
+#ifdef _CPU
+  if (input->equation == AdvDiff || input->equation == Burgers)
+  {
+    if (nDims == 2)
+      compute_unit_advF<1, 2>(startEle, endEle, dim);
+    else if (nDims == 3)
+      compute_unit_advF<1, 3>(startEle, endEle, dim);
+  }
+  else if (input->equation == EulerNS)
+  {
+    if (nDims == 2)
+      compute_unit_advF<4, 2>(startEle, endEle, dim);
+    else if (nDims == 3)
+      compute_unit_advF<5, 3>(startEle, endEle, dim);
+  }
+#endif
+
+#ifdef _GPU
+//  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
+//      input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
+//      input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
+//
+//  check_error();
 #endif
 }
 

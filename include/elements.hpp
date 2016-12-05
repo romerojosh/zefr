@@ -189,6 +189,8 @@ class Elements
     void compute_dU(unsigned int startEle, unsigned int endEle);
     void compute_dU_spts(unsigned int startEle, unsigned int endEle);
     void compute_dU_fpts(unsigned int startEle, unsigned int endEle);
+    void compute_dU_spts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim);
+    void compute_dU_fpts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim);
     void compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle);
@@ -197,6 +199,11 @@ class Elements
     void compute_F(unsigned int startEle, unsigned int endEle);
 
     void compute_F(unsigned int startEle, unsigned int endEle);
+
+    template<unsigned int nVars, unsigned int nDims>
+    void compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim);
+
+    void compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim);
 
     //! Calculate geometric transforms
     void calc_transforms(std::shared_ptr<Faces> faces);

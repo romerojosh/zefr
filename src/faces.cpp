@@ -1876,7 +1876,19 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
   {
     ThrowException("Numerical viscous flux type not recognized!");
   }
+}
 
+void Faces::common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned int dim)
+{
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      double F = Ucomm(fpt, var, 0) * norm(fpt, dim, 0);
+      Fcomm(fpt, var, 0) = F * dA(fpt, 0);
+      Fcomm(fpt, var, 1) = -F * dA(fpt, 1);
+    }
+  }
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
