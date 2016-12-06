@@ -663,6 +663,7 @@ void FRSolver::solver_data_to_device()
   eles->U_fpts_d = eles->U_fpts;
   eles->Uavg_d = eles->Uavg;
   eles->weights_spts_d = eles->weights_spts;
+  eles->weights_fpts_d = eles->weights_fpts;
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
   eles->divF_spts_d = eles->divF_spts;
@@ -2333,18 +2334,7 @@ void FRSolver::compute_element_dt()
         if (gfpt == -1)
           continue;
 
-        if (eles->nDims == 2)
-        {
-          int_waveSp += eles->weights_spts(fpt % eles->nSpts1D) * faces->waveSp(gfpt) * faces->dA(gfpt);
-        }
-        else
-        {
-          int idx = fpt % (eles->nSpts1D * eles->nSpts1D);
-          int i = idx % eles->nSpts1D;
-          int j = idx / eles->nSpts1D;
-
-          int_waveSp += eles->weights_spts(i) * eles->weights_spts(j) * faces->waveSp(gfpt) * faces->dA(gfpt);
-        }
+        int_waveSp += eles->weights_fpts(fpt % eles->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(gfpt);
       }
 
       eles->dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
@@ -2354,7 +2344,6 @@ void FRSolver::compute_element_dt()
   /* CFL-estimate based on MacCormack for NS */
   else if (input->CFL_type == 2)
   {
-    int nFptsFace = (eles->nDims == 2) ? eles->nSpts1D : eles->nSpts1D*eles->nSpts1D;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     { 
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
@@ -2362,7 +2351,7 @@ void FRSolver::compute_element_dt()
       std::vector<double> dtinv(2*eles->nDims);
       for (unsigned int face = 0; face < 2*eles->nDims; face++)
       {
-        for (unsigned int fpt = face * nFptsFace; fpt < (face+1) * nFptsFace; fpt++)
+        for (unsigned int fpt = face * eles->nFptsPerFace; fpt < (face+1) * eles->nFptsPerFace; fpt++)
         {
           /* Skip if on ghost edge. */
           int gfpt = geo.fpt2gfpt(fpt,ele);
@@ -2423,7 +2412,7 @@ void FRSolver::compute_element_dt()
 
 #ifdef _GPU
   compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfpt_d, 
-      eles->weights_spts_d, eles->vol_d, eles->h_ref_d, eles->nSpts1D, CFL, input->ldg_b, order, 
+      eles->weights_fpts_d, eles->vol_d, eles->h_ref_d, eles->nFptsPerFace, CFL, input->ldg_b, order, 
       input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims, myComm,
       input->overset, geo.iblank_cell_d.data());
 
@@ -4751,7 +4740,6 @@ void FRSolver::report_error(std::ofstream &f)
       for (unsigned int qpt = 0; qpt < eles->nQpts; qpt++)
       {
         double U_true = 0.0;
-        double weight = 0.0;
 
         if (eles->nDims == 2)
         {
@@ -4774,10 +4762,6 @@ void FRSolver::report_error(std::ofstream &f)
                                          flow_time, n, 1, input);
           }
 
-          /* Get quadrature point index and weight */
-          unsigned int i = eles->idx_qpts(qpt,0);
-          unsigned int j = eles->idx_qpts(qpt,1);
-          weight = eles->weights_qpts[i] * eles->weights_qpts[j];
         }
         else if (eles->nDims == 3)
         {
@@ -4819,7 +4803,7 @@ void FRSolver::report_error(std::ofstream &f)
           double P = (input->gamma - 1.0) * (eles->U_qpts(qpt, ele, 3) - 0.5 * momF);
 
           U_error = (U_true - P/std::pow(eles->U_qpts(qpt, ele, 0), input->gamma)) / U_true;
-          vol += weight * eles->jaco_det_qpts(qpt, ele); 
+          vol += eles->weights_qpts(qpt) * eles->jaco_det_qpts(qpt, ele); 
         }
         else
         {
@@ -4832,8 +4816,8 @@ void FRSolver::report_error(std::ofstream &f)
           vol = 1;
         }
 
-        l2_error[0] += weight * eles->jaco_det_qpts(qpt, ele) * U_error * U_error; 
-        l2_error[1] += weight * eles->jaco_det_qpts(qpt, ele) * (U_error * U_error +
+        l2_error[0] += eles->weights_qpts(qpt) * eles->jaco_det_qpts(qpt, ele) * U_error * U_error; 
+        l2_error[1] += eles->weights_qpts(qpt) * eles->jaco_det_qpts(qpt, ele) * (U_error * U_error +
             dU_error[0] * dU_error[0] + dU_error[1] * dU_error[1]); 
       }
   }

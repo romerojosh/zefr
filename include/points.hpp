@@ -52,5 +52,6 @@ std::vector<double> Gauss_Legendre_weights(unsigned int n);
 std::vector<double> Shape_pts(unsigned int P); 
 
 mdvector<double> WS_Tri_pts(unsigned int P);
+mdvector<double> WS_Tri_weights(unsigned int P);
 
 #endif /* points_hpp */

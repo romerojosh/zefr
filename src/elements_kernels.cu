@@ -1105,24 +1105,7 @@ void compute_Uavg(mdvector_gpu<double> U_spts,
 
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
-      /* Get quadrature weight */
-      double weight; 
-      if (nDims == 2)
-      {
-        unsigned int i = spt % (order + 1);
-        unsigned int j = spt / (order + 1);
-        weight = weights_spts(i) * weights_spts(j);
-      }
-
-      if (nDims == 3)
-      {
-        unsigned int i = spt % (order + 1);
-        unsigned int j = (spt / (order + 1)) % (order + 1);
-        unsigned int k = spt / ((order + 1) * (order + 1));
-        weight = weights_spts(i) * weights_spts(j) * weights_spts(k);
-      }
-
-      sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
+      sum += weights_spts(spt) * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
     }
 
     Uavg(ele, n) = sum / vol(ele); 

@@ -71,6 +71,7 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
     this->order = order;
   }
 
+  nFptsPerFace = nSpts1D * nSpts1D;
   nFpts = (nSpts1D * nSpts1D) * nFaces;
   nPpts = (nSpts1D + 2) * (nSpts1D + 2) * (nSpts1D + 2);
   
@@ -107,22 +108,20 @@ void Hexas::set_locs()
 
   // NOTE: Currently assuming solution point locations always at Legendre.
   // Will need extrapolation operation in 1D otherwise
-  auto weights_spts_temp = Gauss_Legendre_weights(nSpts1D); 
-  weights_spts.assign({nSpts1D});
-  for (unsigned int spt = 0; spt < nSpts1D; spt++)
-    weights_spts(spt) = weights_spts_temp[spt];
+  auto weights_spts_1D = Gauss_Legendre_weights(nSpts1D); 
 
   // For integration of quantities over faces
   weights_fpts.assign({nSpts1D,nSpts1D});
   for (unsigned int fpt1 = 0; fpt1 < nSpts1D; fpt1++)
     for (unsigned int fpt2 = 0; fpt2 < nSpts1D; fpt2++)
-      weights_fpts(fpt1,fpt2) = weights_spts(fpt1)*weights_spts(fpt2);
+      weights_fpts(fpt1,fpt2) = weights_spts_1D[fpt1] * weights_spts_1D[fpt2];
 
   loc_DFR_1D = loc_spts_1D;
   loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
   loc_DFR_1D.insert(loc_DFR_1D.end(), 1.0);
 
-  /* Setup solution point locations */
+  /* Setup solution point locations and quadrature weights */
+  weights_spts.assign({nSpts});
   unsigned int spt = 0;
   for (unsigned int i = 0; i < nSpts1D; i++)
   {
@@ -136,6 +135,8 @@ void Hexas::set_locs()
         idx_spts(spt,0) = k;
         idx_spts(spt,1) = j;
         idx_spts(spt,2) = i;
+        weights_spts(spt) = weights_spts_1D[i] * weights_spts_1D[j] * weights_spts_1D[k];
+
         spt++;
       }
     }
@@ -259,7 +260,8 @@ void Hexas::set_locs()
 
   /* Setup gauss quadrature point locations and weights */
   loc_qpts_1D = Gauss_Legendre_pts(input->nQpts1D); 
-  weights_qpts = Gauss_Legendre_weights(input->nQpts1D);
+  auto weights_qpts_1D = Gauss_Legendre_weights(input->nQpts1D);
+  weights_qpts.assign({input->nQpts1D * input->nQpts1D * input->nQpts1D});
 
   /* Setup quadrature point locations */
   unsigned int qpt = 0;
@@ -275,6 +277,7 @@ void Hexas::set_locs()
         idx_qpts(qpt,0) = k;
         idx_qpts(qpt,1) = j;
         idx_qpts(qpt,2) = i;
+        weights_qpts(qpt) =  weights_qpts_1D[i] * weights_qpts_1D[j] * weights_qpts_1D[k];
         qpt++;
       }
     }

@@ -714,20 +714,7 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
   {
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
-      /* Get quadrature weight */
-      //unsigned int i = idx_spts(spt,0);
-      //unsigned int j = idx_spts(spt,1);
-      unsigned int i = spt % nSpts1D;
-      unsigned int j = spt / nSpts1D;
-
-
-      double weight = weights_spts(i) * weights_spts(j);
-
-      if (nDims == 3)
-        weight *= weights_spts(spt/(nSpts1D*nSpts1D));
-        //weight *= weights_spts(idx_spts(spt,2));
-
-      vol(e) += weight * jaco_det_spts(spt, e);
+      vol(e) += weights_spts(spt) * jaco_det_spts(spt, e);
     }
   }
 
@@ -2787,15 +2774,7 @@ void Elements::compute_Uavg()
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        /* Get quadrature weight */
-        unsigned int i = idx_spts(spt,0);
-        unsigned int j = idx_spts(spt,1);
-        double weight = weights_spts(i) * weights_spts(j);
-
-        if (nDims == 3)
-          weight *= weights_spts(idx_spts(spt,2));
-
-        sum += weight * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
+        sum += weights_spts(spt) * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
       }
 
       Uavg(ele, n) = sum / vol(ele); 

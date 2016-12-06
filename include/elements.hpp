@@ -55,7 +55,7 @@ class Elements
     /* Geometric Parameters */
     unsigned int order, shape_order;
     unsigned int nEles, nDims, nVars;
-    unsigned int nSpts, nFpts, nSpts1D, nPpts, nQpts;
+    unsigned int nSpts, nFpts, nSpts1D, nPpts, nQpts, nFptsPerFace;
     unsigned int nFaces, nNodes;
     unsigned int nSubelements, nNodesPerSubelement;
     mdvector<double> coord_spts, coord_fpts, coord_ppts, coord_qpts;
@@ -71,9 +71,8 @@ class Elements
     mdvector<double> jaco_fpts, jaco_det_fpts, inv_jaco_fpts;
     mdvector<double> nodes;
     mdvector<double> vol;
-    mdvector<double> weights_spts, weights_fpts;
+    mdvector<double> weights_spts, weights_fpts, weights_qpts;
     mdvector<double> h_ref;
-    std::vector<double> weights_qpts;
     mdvector<double> vandDB, inv_vandDB, vandRT, inv_vandRT;
 
     /* Moving-Grid related structures */
@@ -132,7 +131,7 @@ class Elements
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;
     mdvector_gpu<double> jaco_fpts_d, inv_jaco_fpts_d;
     mdvector_gpu<double> vol_d;
-    mdvector_gpu<double> weights_spts_d;
+    mdvector_gpu<double> weights_spts_d, weights_fpts_d;
     mdvector_gpu<double> h_ref_d;
 
     /* Motion Related */

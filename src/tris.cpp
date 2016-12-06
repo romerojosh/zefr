@@ -47,7 +47,7 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
   this->input = input;  
   this->shape_order = geo->shape_orderBT[TRI];  
   this->nEles = geo->nElesBT[TRI];  
-  this->nQpts = input->nQpts1D * input->nQpts1D; //TODO: Fix this.
+  this->nQpts = 45; // Note: Fixing quadrature points to Williams-Shunn 45 point rule
 
   /* Generic triangular geometry */
   nDims = 2;
@@ -74,6 +74,7 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
     this->order = order;
   }
 
+  nFptsPerFace = nSpts1D;
   nFpts = nSpts1D * nFaces;
   //nPpts = (nSpts1D + 2) * (nSpts1D + 2);
   //nPpts = (3 + 1) * (3 + 2) / 2;
@@ -106,18 +107,17 @@ void Tris::set_locs()
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
-  // NOTE: Currently assuming solution point locations always at Legendre.
+  // NOTE: Currently assuming flux point locations always at Legendre.
   // Will need extrapolation operation in 1D otherwise
-  auto weights_spts_temp = Gauss_Legendre_weights(nSpts1D); 
-  weights_spts.assign({nSpts1D});
-  for (unsigned int spt = 0; spt < nSpts1D; spt++)
-    weights_spts(spt) = weights_spts_temp[spt];
-
-  weights_fpts = weights_spts;
+  auto weights_fpts_1D = Gauss_Legendre_weights(nFptsPerFace); 
+  weights_fpts.assign({nFptsPerFace});
+  for (unsigned int fpt = 0; fpt < nFptsPerFace; fpt++)
+    weights_fpts(fpt) = weights_fpts_1D[fpt];
 
 
-  /* Setup solution point locations */
+  /* Setup solution point locations and quadrature weights */
   loc_spts = WS_Tri_pts(order);
+  weights_spts = WS_Tri_weights(order);
 
   /* Setup flux point locations */
   loc_fpts.assign({nFpts,nDims});
@@ -165,21 +165,8 @@ void Tris::set_locs()
   }
 
   /* Setup gauss quadrature point locations and weights */
-  loc_qpts_1D = Gauss_Legendre_pts(input->nQpts1D); 
-  weights_qpts = Gauss_Legendre_weights(input->nQpts1D);
-  //TODO: In all elements, compute single weight per flux point to replace tensor-product dependencies
-
-  /* Setup quadrature point locations */
-  //unsigned int qpt = 0;
-  //for (unsigned int i = 0; i < input->nQpts1D; i++)
-  //{
-  //  for (unsigned int j = 0; j < input->nQpts1D; j++)
-  //  {
-  //    loc_qpts(qpt,0) = loc_qpts_1D[j];
-  //    loc_qpts(qpt,1) = loc_qpts_1D[i];
-  //    qpt++;
-  //  }
-  //}
+  loc_qpts = WS_Tri_pts(8);
+  weights_qpts = WS_Tri_weights(8);
 
 }
 

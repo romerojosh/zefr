@@ -28,6 +28,7 @@ extern "C" {
 #include "funcs.hpp"
 #include "quads.hpp"
 #include "polynomials.hpp"
+#include "points.hpp"
 #include "filter.hpp"
 
 #ifdef _MPI
@@ -663,6 +664,7 @@ void Filter::setup_oppF_1D(unsigned int level)
   // Assign filter matrix
   oppF_1D[level].assign({eles->nSpts1D, eles->nSpts1D + 2});
   double DH = DeltaHat[level];
+  auto weights_spts_1D = Gauss_Legendre_weights(eles->nSpts1D);
 
   // Loop over solution points - rows
   for (unsigned int spt = 0; spt < eles->nSpts1D; spt++)
@@ -679,7 +681,7 @@ void Filter::setup_oppF_1D(unsigned int level)
       {
         double xi = xiL + (xiR - xiL) * (eles->loc_spts_1D[j] + 1.0) / 2.0;
         double fun = 0.5 * (xiR-xiL)* Lagrange(eles->loc_spts_1D, i, xi) / DH;
-        oppF_1D[level](spt, i) += fun * eles->weights_spts(j);
+        oppF_1D[level](spt, i) += fun * weights_spts_1D[j];
       }
     }
     
