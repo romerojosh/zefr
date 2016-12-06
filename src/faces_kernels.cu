@@ -1932,6 +1932,54 @@ void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Uco
 
 }
 
+template <unsigned int nDims, unsigned int nVars>
+__global__
+void common_U_to_F(mdview_gpu<double> Fcomm, mdview_gpu<double> Ucomm, mdvector_gpu<double> norm, 
+    mdvector_gpu<double> dA, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt, unsigned int dim)
+{
+  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
+
+  if (fpt >= endFpt)
+    return;
+
+  double norm_dim = norm(fpt, dim, 0);
+  double dAL = dA(fpt, 0);
+  double dAR = dA(fpt, 1);
+
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    double F = Ucomm(fpt, var, 0) * norm_dim;
+    Fcomm(fpt, var, 0) = F * dAL;
+    Fcomm(fpt, var, 1) = -F * dAR;
+  }
+    
+}
+
+void common_U_to_F_wrapper(mdview_gpu<double> &Fcomm, mdview_gpu<double> &Ucomm, mdvector_gpu<double> &norm, 
+    mdvector_gpu<double> &dA, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
+    unsigned int startFpt, unsigned int endFpt, unsigned int dim)
+{
+  unsigned int threads = 128;
+  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
+
+  if (equation == AdvDiff | equation == Burgers)
+  {
+    if (nDims == 2)
+      common_U_to_F<2, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
+    else
+      common_U_to_F<3, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      common_U_to_F<2, 4><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
+    else
+      common_U_to_F<3, 5><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
+  }
+
+}
+
+
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __device__ __forceinline__
 void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars], 
@@ -2206,11 +2254,12 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
   }
 
   /* Write common flux to global memory */
-  double dA = dA_in(fpt);
+  double dAL = dA_in(fpt, 0);
+  double dAR = dA_in(fpt, 1);
   for (unsigned int n = 0; n < nVars; n++)
   {
-    Fcomm(fpt, n, 0) = Fc[n] * dA;
-    Fcomm(fpt, n, 1) = -Fc[n] * dA;
+    Fcomm(fpt, n, 0) = Fc[n] * dAL;
+    Fcomm(fpt, n, 1) = -Fc[n] * dAR;
   }
 }
 

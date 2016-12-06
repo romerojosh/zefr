@@ -1880,6 +1880,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned int dim)
 {
+#ifdef _CPU
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     for (unsigned int var = 0; var < nVars; var++)
@@ -1889,6 +1890,12 @@ void Faces::common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned i
       Fcomm(fpt, var, 1) = -F * dA(fpt, 1);
     }
   }
+#endif
+
+#ifdef _GPU
+  common_U_to_F_wrapper(Fcomm_d, Ucomm_d, norm_d, dA_d, nFpts, nVars, nDims, input->equation, startFpt,
+      endFpt, dim);
+#endif
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>

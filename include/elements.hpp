@@ -124,7 +124,7 @@ class Elements
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d, oppDiv_fpts_d;
     mdvector_gpu<double> oppE_ppts_d, oppE_qpts_d;
-    mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d, Uavg_d;
+    mdvector_gpu<double> U_spts_d, U_fpts_d, U_ppts_d, U_qpts_d, Uavg_d, U_ini_d, U_til_d;
     mdvector_gpu<double> F_spts_d, F_fpts_d;
     mdvector_gpu<double> Fcomm_d, Ucomm_d;
     mdvector_gpu<double> dU_spts_d, dU_fpts_d, divF_spts_d;
@@ -133,6 +133,7 @@ class Elements
     mdvector_gpu<double> vol_d;
     mdvector_gpu<double> weights_spts_d, weights_fpts_d;
     mdvector_gpu<double> h_ref_d;
+    mdvector_gpu<double> coord_spts_d, coord_fpts_d;
 
     /* Motion Related */
     mdvector_gpu<double> grid_vel_nodes_d, grid_vel_spts_d, grid_vel_fpts_d, grid_vel_ppts_d;
@@ -144,6 +145,8 @@ class Elements
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
+
+    mdvector_gpu<double> dt_d, rk_err_d;
 
     /* Element structures for implicit method */
     mdvector_gpu<double> LHS_d, LHSInv_d;

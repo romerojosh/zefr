@@ -1579,14 +1579,14 @@ void Elements::compute_dU_spts_via_divF(unsigned int startEle, unsigned int endE
           endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
 #else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-            nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+            nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, dU_spts.ldim());
 #endif
     }
   }
 #endif
 
 #ifdef _GPU
-  for (unsigned int dim1 = 0; dim1 < nDims; dim++)
+  for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
   {
     double fac = (dim1 == 0) ? 0.0 : 1.0;
 
@@ -1598,7 +1598,7 @@ void Elements::compute_dU_spts_via_divF(unsigned int startEle, unsigned int endE
 
       /* Compute contribution to derivative from solution at solution points */
       cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
-          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
+          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, dU_spts_d.ldim(), 0);
     }
   }
   check_error();
@@ -1620,7 +1620,7 @@ void Elements::compute_dU_fpts_via_divF(unsigned int startEle, unsigned int endE
         endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
 #else
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, dU_spts.ldim());
 #endif
   }
 #endif
@@ -1634,7 +1634,7 @@ void Elements::compute_dU_fpts_via_divF(unsigned int startEle, unsigned int endE
     auto *C = dU_spts_d.get_ptr(0, startEle, var, dim);
 
     cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
-        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
+        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, dU_spts_d.ldim(), 0);
   }
 
   check_error();
@@ -1858,7 +1858,7 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
 #ifdef _GPU
   compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
       input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
-      input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
+      input->fix_vis, input->viscous, input->grad_via_div, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
 
   check_error();
 #endif
@@ -1919,11 +1919,10 @@ void Elements::compute_unit_advF(unsigned int startEle, unsigned int endEle, uns
 #endif
 
 #ifdef _GPU
-//  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
-//      input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
-//      input->fix_vis, input->viscous, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
-//
-//  check_error();
+  compute_unit_advF_wrapper(F_spts_d, U_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, 
+      startEle, endEle, dim);
+
+  check_error();
 #endif
 }
 

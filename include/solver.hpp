@@ -73,9 +73,6 @@ class FRSolver
     unsigned int nStages;
     double CFL_ratio = 1;
     mdvector<double> rk_alpha, rk_beta, rk_bhat, rk_c;
-    mdvector<double> dt;
-    mdvector<double> U_ini, U_til;
-    mdvector<double> rk_err; //! RK Error Estimate
     Filter filt;
 
     /* --- Adaptive time-stepping stuff --- */
@@ -92,8 +89,7 @@ class FRSolver
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
-    mdvector_gpu<double> U_til_d, rk_err_d;  //! Low-Storage Adaptive RK scheme
+    mdvector_gpu<double> rk_alpha_d, rk_beta_d;
 #endif
 
     _mpi_comm myComm, worldComm;

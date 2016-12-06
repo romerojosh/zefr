@@ -565,15 +565,15 @@ void FRSolver::solver_data_to_device()
   eles->oppDiv_fpts_d = eles->oppDiv_fpts;
 
   /* Solver data structures */
-  U_ini_d = U_ini;
+  eles->U_ini_d = eles->U_ini;
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
-  dt_d = dt;
+  eles->dt_d = eles->dt;
 
   if (input->dt_scheme == "LSRK")
   {
-    U_til_d = U_til;
-    rk_err_d = rk_err;
+    eles->U_til_d = eles->U_til;
+    eles->rk_err_d = eles->rk_err;
   }
 
   /* Implicit solver data structures */
@@ -745,7 +745,12 @@ void FRSolver::solver_data_to_device()
   geo.fpt2gfpt_slot_d = geo.fpt2gfpt_slot;
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
-  geo.coord_spts_d = geo.coord_spts;
+
+  if (input->source)
+  {
+    for (auto e : elesObjs)
+      e->coord_spts_d = e->coord_spts;
+  }
 
   if (input->motion)
   {
@@ -753,7 +758,8 @@ void FRSolver::solver_data_to_device()
     geo.coord_nodes_d = geo.coord_nodes;
     geo.coords_init_d = geo.coords_init;
     geo.grid_vel_nodes_d = geo.grid_vel_nodes;
-    geo.coord_fpts_d = geo.coord_fpts;
+    for (auto e : elesObjs)
+      e->coord_fpts_d = e->coord_fpts;
   }
 
   /* Input parameters */
@@ -1013,7 +1019,7 @@ void FRSolver::compute_LHS()
   if (!input->stream_mode)
   {
 #ifdef _CPU
-      eles->compute_localLHS(dt, 0, geo.nEles);
+      eles->compute_localLHS(eles->dt, 0, geo.nEles);
       compute_LHS_LU(0, geo.nEles);
 #endif
 #ifdef _GPU
@@ -1022,7 +1028,7 @@ void FRSolver::compute_LHS()
     {
       unsigned int endEle = std::min(startEle + blocksize, geo.nEles);
 
-      eles->compute_localLHS(dt_d, startEle, endEle);
+      eles->compute_localLHS(eles->dt_d, startEle, endEle);
       compute_LHS_LU(startEle, endEle);
     }
 
@@ -1037,10 +1043,10 @@ void FRSolver::compute_LHS()
       unsigned int endEle = geo.ele_color_range[color];
 
 #ifdef _CPU
-      eles->compute_localLHS(dt, startEle, endEle, color);
+      eles->compute_localLHS(eles->dt, startEle, endEle, color);
 #endif
 #ifdef _GPU
-      eles->compute_localLHS(dt_d, startEle, endEle, color);
+      eles->compute_localLHS(eles->dt_d, startEle, endEle, color);
 #endif
       compute_LHS_LU(startEle, endEle, color);
 
@@ -1153,7 +1159,7 @@ void FRSolver::compute_RHS(unsigned int color)
 #endif
 
 #ifdef _GPU
-  compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, 
+  compute_RHS_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, eles->dt_d, eles->RHS_d, input->dt_type, eles->nSpts, 
       eles->nEles, eles->nVars, startEle, endEle);
 #endif
 }
@@ -1192,7 +1198,7 @@ void FRSolver::compute_RHS_source(const mdvector_gpu<double> &source, unsigned i
   unsigned int startEle = geo.ele_color_range[color - 1];
   unsigned int endEle = geo.ele_color_range[color];
 
-  compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d, eles->RHS_d, input->dt_type, eles->nSpts, 
+  compute_RHS_source_wrapper(eles->divF_spts_d, source, eles->jaco_det_spts_d, eles->dt_d, eles->RHS_d, input->dt_type, eles->nSpts, 
       eles->nEles, eles->nVars, startEle, endEle);
 }
 #endif
@@ -1826,7 +1832,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _GPU
-  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
+  device_copy(eles->U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
   check_error();
 #endif
 
@@ -1904,13 +1910,13 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 
     if (source.size() == 0)
     {
-      RK_update_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d,
+      RK_update_wrapper(eles->U_spts_d, eles->U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, eles->dt_d,
                         rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
                         input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
     }
     else
     {
-      RK_update_source_wrapper(eles->U_spts_d, U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d,
+      RK_update_source_wrapper(eles->U_spts_d, eles->U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, eles->dt_d,
                                rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
                                input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
     }
@@ -1946,7 +1952,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
       compute_element_dt();
 #endif
 #ifdef _GPU
-    device_copy(eles->U_spts_d, U_ini_d, eles->U_spts_d.max_size());
+    device_copy(eles->U_spts_d, eles->U_ini_d, eles->U_spts_d.max_size());
 #endif
 
 #ifdef _CPU
@@ -2000,13 +2006,13 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #ifdef _GPU
     if (source.size() == 0)
     {
-      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, dt_d,
+      RK_update_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, eles->jaco_det_spts_d, eles->dt_d,
                         rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
                         input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
     }
     else
     {
-      RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, dt_d,
+      RK_update_source_wrapper(eles->U_spts_d, eles->U_spts_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, eles->dt_d,
                                rk_beta_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
                                input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
     }
@@ -2053,7 +2059,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _GPU
-  max_err = set_adaptive_dt_wrapper(eles->U_spts_d, U_ini_d, rk_err_d, dt_d, dt(0),
+  max_err = set_adaptive_dt_wrapper(eles->U_spts_d, eles->U_ini_d, eles->rk_err_d, eles->dt_d, eles->dt(0),
       eles->nSpts, eles->nEles, eles->nVars, input->atol, input->rtol, expa, expb,
       input->minfac, input->maxfac, input->sfact, prev_err, worldComm, input->overset,
       geo.iblank_cell_d.data());
@@ -2076,7 +2082,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     eles->U_spts = eles->U_ini;
 #endif
 #ifdef _GPU
-    device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
+    device_copy(eles->U_spts_d, eles->U_ini_d, eles->U_ini_d.max_size());
 #endif
     // Try again with new dt
     step_adaptive_LSRK(source);
@@ -2102,12 +2108,12 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 #endif
 
 #ifdef _GPU
-  device_copy(U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
-  device_copy(U_til_d, eles->U_spts_d, eles->U_spts_d.max_size());
-  device_fill(rk_err_d, rk_err_d.max_size());
+  device_copy(eles->U_ini_d, eles->U_spts_d, eles->U_spts_d.max_size());
+  device_copy(eles->U_til_d, eles->U_spts_d, eles->U_spts_d.max_size());
+  device_fill(eles->rk_err_d, eles->rk_err_d.max_size());
 
   // Get current delta t [dt(0)] (updated on GPU)
-  copy_from_device(dt.data(), dt_d.data(), 1);
+  copy_from_device(eles->dt.data(), eles->dt_d.data(), 1);
 
   check_error();
 #endif
@@ -2181,14 +2187,14 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 #ifdef _GPU
     if (source.size() == 0)
     {
-      LSRK_update_wrapper(eles->U_spts_d, eles->U_til_d, rk_err_d, eles->divF_spts_d,
-          eles->jaco_det_spts_d, dt(0), ai, bi, bhi, eles->nSpts, eles->nEles,
+      LSRK_update_wrapper(eles->U_spts_d, eles->U_til_d, eles->rk_err_d, eles->divF_spts_d,
+          eles->jaco_det_spts_d, eles->dt(0), ai, bi, bhi, eles->nSpts, eles->nEles,
           eles->nVars, stage, input->nStages, input->overset, geo.iblank_cell_d.data());
     }
     else
     {
-      LSRK_update_source_wrapper(eles->U_spts_d, eles->U_til_d, rk_err_d,
-          eles->divF_spts_d, source, eles->jaco_det_spts_d, dt(0), ai, bi, bhi,
+      LSRK_update_source_wrapper(eles->U_spts_d, eles->U_til_d, eles->rk_err_d,
+          eles->divF_spts_d, source, eles->jaco_det_spts_d, eles->dt(0), ai, bi, bhi,
           eles->nSpts, eles->nEles, eles->nVars, stage, input->nStages, input->overset,
           geo.iblank_cell_d.data());
     }
@@ -2411,7 +2417,7 @@ void FRSolver::compute_element_dt()
 #endif
 
 #ifdef _GPU
-  compute_element_dt_wrapper(dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfpt_d, 
+  compute_element_dt_wrapper(eles->dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfpt_d, 
       eles->weights_fpts_d, eles->vol_d, eles->h_ref_d, eles->nFptsPerFace, CFL, input->ldg_b, order, 
       input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims, myComm,
       input->overset, geo.iblank_cell_d.data());
@@ -4465,7 +4471,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   /* If running on GPU, copy out divergence */
 #ifdef _GPU
   eles->divF_spts = eles->divF_spts_d;
-  dt = dt_d;
+  eles->dt = eles->dt_d;
 #endif
 
   // HACK: Change nStages to compute the correct residual
