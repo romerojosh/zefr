@@ -198,6 +198,57 @@ double Dubiner2D(unsigned int P, double xi, double eta, unsigned int mode)
   return val;
 }
 
+double dDubiner2D(unsigned int P, double xi, double eta, double dim, unsigned int mode)
+{
+  double val;
+  int nModes = (P + 1) * (P + 2) / 2;
+  if (mode > nModes) 
+    ThrowException("ERROR: mode value is too high for given P!")
+
+  double ab[2];
+  ab[0] = (eta == 1.0) ? (-1) : ((2 * (1 + xi) / (1 - eta)) - 1);
+  ab[1] = eta;
+
+  unsigned int m = 0;
+  for (unsigned int k = 0; k <= P; k++)
+  {
+    for (unsigned int j = 0; j <= k; j++)
+    {
+      unsigned int i  = k - j;
+
+      if (m == mode)
+      {
+        if (dim == 0)
+        {
+          double j0 = dJacobi(ab[0], 0, 0, i);
+          double j1 = Jacobi(ab[1], 2*i + 1, 0, j);
+          if (i == 0)
+            val = 0.0;
+          else
+            val =  2.0 * std::sqrt(2) * j0 * j1 * std::pow(1 - ab[1], i-1);
+        }
+        else if (dim == 1)
+        {
+          double j0 = dJacobi(ab[0], 0, 0, i);
+          double j1 = Jacobi(ab[1], 2*i + 1, 0, j);
+          double j2 = Jacobi(ab[0], 0, 0, i);
+          double j3 = dJacobi(ab[1], 2*i + 1, 0, j) * std::pow(1 - ab[1], i);
+          double j4 = Jacobi(ab[1], 2*i + 1, 0, j) * i * std::pow(1 - ab[1], i-1);
+
+          if (i == 0)
+            val = std::sqrt(2) * j2 * j3;
+          else
+            val = std::sqrt(2) * (j0 * j1 * std::pow(1 - ab[1], i-1) * (1 + ab[0]) + j2 * (j3 - j4)); 
+        }
+      }
+
+      m++;
+    }
+  } 
+
+  return val;
+}
+
 double RTMonomial2D(unsigned int P, double xi, double eta, unsigned int dim, unsigned int mode)
 {
   double val;

@@ -569,38 +569,131 @@ void Tris::transform_dFdU()
 mdvector<double> Tris::calc_shape(unsigned int shape_order, 
                                    const std::vector<double> &loc)
 {
-  if (shape_order > 1)
-    ThrowException("Only linear triangles supported right now!");
+  std::vector<std::vector<unsigned int>> gmsh_nodes(3);
+  gmsh_nodes[1] =  {0, 1, 2};
+  gmsh_nodes[2] =  {0, 3, 1, 5, 4, 2};
+
+  if (shape_order > 2)
+    ThrowException("Triangle with supplied shape_order unsupported!");
 
   mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
   double eta = loc[1];
 
-  shape_val(0) = -(xi + eta) / 2;
-  shape_val(1) = (xi + 1) / 2;
-  shape_val(2) = (eta + 1) / 2;
+  /* Setup shape node locations */
+  auto loc_pts_1D = Shape_pts(shape_order); unsigned int nPts1D = loc_pts_1D.size();
+  mdvector<double> loc_pts({nNodes, nDims});
+
+  unsigned int pt = 0;
+  for (unsigned int i = 0; i < nPts1D; i++)
+  {
+    for (unsigned int j = 0; j < nPts1D; j++)
+    {
+      if (j <= nPts1D - i - 1)
+      {
+        loc_pts(pt,0) = loc_pts_1D[j];
+        loc_pts(pt,1) = loc_pts_1D[i];
+        pt++;
+      }
+    }
+  }
+
+  /* Set vandermonde and inverse for orthonormal Dubiner basis at shape points*/
+  mdvector<double> vand({nNodes, nNodes});
+
+  for (unsigned int i = 0; i < nNodes; i++)
+    for (unsigned int j = 0; j < nNodes; j++)
+      vand(i,j) = Dubiner2D(shape_order, loc_pts(i, 0), loc_pts(i, 1), j); 
+
+  vand.calc_LU();
+
+  mdvector<double> inv_vand({nNodes, nNodes});
+  
+  mdvector<double> eye({nNodes, nNodes}, 0); 
+  for (unsigned int i = 0; i < nNodes; i++)
+    eye(i,i) = 1.0;
+
+  vand.solve(inv_vand, eye);
+
+  /* Compute Lagrange shape basis */
+  for (unsigned int nd = 0; nd < nNodes; nd++)
+  {
+    double val = 0.0;
+    for (unsigned int i = 0; i < nNodes; i++)
+    {
+      val += inv_vand(i, nd) * Dubiner2D(shape_order, loc[0], loc[1], i);
+    }
+
+    shape_val(gmsh_nodes[shape_order][nd]) = val;
+  }
 
   return shape_val;
+
 }
 
 mdvector<double> Tris::calc_d_shape(unsigned int shape_order,
                                      const std::vector<double> &loc)
 {
-  if (shape_order > 1)
+  std::vector<std::vector<unsigned int>> gmsh_nodes(3);
+  gmsh_nodes[1] =  {0, 1, 2};
+  gmsh_nodes[2] =  {0, 3, 1, 5, 4, 2};
+
+  if (shape_order > 2)
     ThrowException("Only linear triangles supported right now!");
 
-  mdvector<double> dshape_val({nNodes, nDims}, 0.0);
+  mdvector<double> dshape_val({nNodes, 2}, 0.0);
   double xi = loc[0];
   double eta = loc[1];
 
-  dshape_val(0, 0) = -0.5; 
-  dshape_val(1, 0) = 0.5;
-  dshape_val(2, 0) = 0.0;
+  /* Setup shape node locations */
+  auto loc_pts_1D = Shape_pts(shape_order); unsigned int nPts1D = loc_pts_1D.size();
+  mdvector<double> loc_pts({nNodes, nDims});
 
-  dshape_val(0, 1) = -0.5;
-  dshape_val(1, 1) = 0.0;
-  dshape_val(2, 1) = 0.5;
+  unsigned int pt = 0;
+  for (unsigned int i = 0; i < nPts1D; i++)
+  {
+    for (unsigned int j = 0; j < nPts1D; j++)
+    {
+      if (j <= nPts1D - i - 1)
+      {
+        loc_pts(pt,0) = loc_pts_1D[j];
+        loc_pts(pt,1) = loc_pts_1D[i];
+        pt++;
+      }
+    }
+  }
 
+  /* Set vandermonde and inverse for orthonormal Dubiner basis at shape points*/
+  mdvector<double> vand({nNodes, nNodes});
+
+  for (unsigned int i = 0; i < nNodes; i++)
+    for (unsigned int j = 0; j < nNodes; j++)
+      vand(i,j) = Dubiner2D(shape_order, loc_pts(i, 0), loc_pts(i, 1), j); 
+
+  vand.calc_LU();
+
+  mdvector<double> inv_vand({nNodes, nNodes});
+  
+  mdvector<double> eye({nNodes, nNodes}, 0); 
+  for (unsigned int i = 0; i < nNodes; i++)
+    eye(i,i) = 1.0;
+
+  vand.solve(inv_vand, eye);
+
+  /* Compute Lagrange shape basis */
+  for (unsigned int nd = 0; nd < nNodes; nd++)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      double val = 0.0;
+      for (unsigned int i = 0; i < nNodes; i++)
+      {
+        val += inv_vand(i, nd) * dDubiner2D(shape_order, loc[0], loc[1], dim, i);
+      }
+
+      dshape_val(gmsh_nodes[shape_order][nd], dim) = val;
+    }
+  }
 
   return dshape_val;
 }

@@ -719,7 +719,14 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
         /* Biquadratic quad/tri */
         case 9:
-          if (!input->collapsed_mode) ThrowException("ERROR: Only linear triangles currently supported!");
+          if (!input->collapsed_mode) 
+          {
+            geo.ele_set.insert(TRI);
+            geo.nEles++; 
+            geo.nElesBT[TRI]++;
+            geo.shape_order = 2; geo.nNodesPerEle = 6; 
+            geo.shape_orderBT[TRI] = 2; geo.nNodesPerEleBT[TRI] = 6; break;
+          }
         case 10:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
@@ -960,63 +967,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.nElesBT[QUAD]++; 
           break;
         }
-
-        //case 3: /* 4-node Quadrilateral */
-        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-        //  f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele) >> geo.ele2nodesBT[QUAD](3,ele);
-        //  f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele) >> geo.ele2nodesBT[QUAD](3,ele);
-        //  nElesBT[QUAD]++; 
-        //  break;
-
-
-        //case 10: /* 9-node Quadilateral */
-        //  unsigned int ele = nElesBT[QUAD];
-        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-        //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-        //  f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele) >> geo.ele2nodesBT[QUAD](3,ele);
-        //  f >> geo.ele2nodesBT[QUAD](4,ele) >> geo.ele2nodesBT[QUAD](5,ele) >> geo.ele2nodesBT[QUAD](6,ele) >> geo.ele2nodesBT[QUAD](7,ele);
-        //  if (!input->serendipity)
-        //  {
-        //    f >> geo.ele2nodes(8,ele);
-        //    f >> geo.ele2nodesBT[QUAD](8,ele);
-        //  }
-        //  else
-        //  {
-        //    f >> vint;
-        //  }
-        //  nElesBT[QUAD]++; 
-        //  break;
-
-        //case 36: /* 16-node Quadilateral */
-        //  unsigned int ele = nElesBT[QUAD];
-        //  for (int n = 0; n < 16; n++)
-        //  {
-        //    f >> geo.ele2nodes(n, ele);
-        //    f >> geo.ele2nodesBT[QUAD](n, ele);
-        //  }
-        //  nElesBT[QUAD]++; 
-        //  break;
-
-        //case 37: /* 25-node Quadilateral */
-        //  unsigned int ele = nElesBT[QUAD];
-        //  for (int n = 0; n < 25; n++)
-        //  {
-        //    f >> geo.ele2nodes(n, ele);
-        //    f >> geo.ele2nodesBT[QUAD](n, ele);
-        //  }
-        //  nElesBT[QUAD]++; 
-        //  break;
-
-        //case 38: /* 36-node Quadilateral */
-        //  unsigned int ele = nElesBT[QUAD];
-        //  for (int n = 0; n < 36; n++)
-        //  {
-        //    f >> geo.ele2nodes(n, ele);
-        //    f >> geo.ele2nodesBT[QUAD](n, ele);
-        //  }
-        //  nElesBT[QUAD]++; 
-        //  break;
 
         default:
           ThrowException("Unrecognized element type detected!"); break;
@@ -1378,29 +1328,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
           f >> face[0] >> face[1] >> face[2]; 
           std::getline(f,line);
           break;
-
-        //case 3: /* 4-node Quadrilateral */
-        //  f >> nTags;
-        //  f >> bnd_id;
-
-        //  for (unsigned int i = 0; i < nTags - 1; i++)
-        //    f >> vint;
-
-        //  face.assign(4,0);
-        //  f >> face[0] >> face[1] >> face[2] >> face[3]; break;
-
-        //case 9: /* 6-node Triangle */
-        //  f >> nTags;
-        //  f >> bnd_id;
-
-        //  for (unsigned int i = 0; i < nTags - 1; i++)
-        //    f >> vint;
-
-        //  face.assign(3,0);
-        //  f >> face[0] >> face[1] >> face[2]; 
-        //  std::getline(f,line);
-        //  break;
-
 
         case 3: /* 4-node Quadrilateral */
         case 10: /* 9-node Quadrilateral */

@@ -76,6 +76,7 @@ double LegendreND(unsigned int in_mode, const std::vector<double>& loc, unsigned
 double Jacobi(double xi, double a, double b, unsigned int mode);
 double dJacobi(double xi, double a, double b, unsigned int mode);
 double Dubiner2D(unsigned int P, double xi, double eta, unsigned int mode);
+double dDubiner2D(unsigned int P, double xi, double eta, double dim, unsigned int mode);
 double RTMonomial2D(unsigned int P, double xi, double eta, unsigned int dim, unsigned int mode);
 double divRTMonomial2D(unsigned int P, double xi, double eta, unsigned int mode);
 
