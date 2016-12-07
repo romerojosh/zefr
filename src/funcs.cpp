@@ -37,6 +37,114 @@ extern "C" {
 #include "input.hpp"
 #include "funcs.hpp"
 
+double compute_U_init(double x, double y, double z, unsigned int var, const InputStruct *input)
+{
+   
+  double val = 0.0;
+
+  if (input->equation == AdvDiff || input->equation == Burgers)
+  {
+    if (input->nDims == 2)
+    {
+      
+      val = std::sin(M_PI * x) * 
+            std::sin(M_PI * y);
+      
+      //val =  std::sin(2 * M_PI * x/10.) + std::sin(2 * M_PI * y/10.);
+      //val = std::exp(-x*x-y*y);
+      //val =  step((x - input->AdvDiff_A(0) * t));
+    }
+    else if (input->nDims == 3)
+    {
+      
+      val = std::sin(M_PI * x) *
+            std::sin(M_PI * y) *
+            std::sin(M_PI * z);
+      
+      //val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
+    }
+  }
+  else if (input->equation == EulerNS)
+  {
+    if (!input->test_case == 2)
+    {
+      double G = 5.0;
+      double R = 1.;
+
+      double f = (1.0 - x*x - y*y)/R;
+
+      double rho = std::pow(1.0 - (G * G * (input->gamma - 1.))/(8.0 * input->gamma * 
+                M_PI * M_PI) * std::exp(f), 1.0/(input->gamma - 1.0)); 
+      double Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f);
+      double Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
+      double P = std::pow(rho, input->gamma);
+
+      if (input->nDims == 2)
+      {
+        switch (var)
+        {
+          case 0:
+            val = rho; break;
+          case 1:
+            val = rho * Vx; break;
+          case 2:
+            val = rho * Vy; break;
+          case 3:
+            val = P/(input->gamma - 1.0) + 0.5 * rho * (Vx * Vx + Vy * Vy); break;
+        }
+      }
+      else
+      {
+        switch (var)
+        {
+          case 0:
+            val = rho; break;
+          case 1:
+            val = rho * Vx; break;
+          case 2:
+            val = rho * Vy; break;
+          case 3:
+            val = 0; break;
+          case 4:
+            val = P/(input->gamma - 1.0) + 0.5 * rho * (Vx * Vx + Vy * Vy); break;
+        }
+      }
+    }
+    else
+    {
+      /* Couette flow test case */
+      double gamma = input->gamma;
+      double Pr = input->prandtl;
+      double P = input->P_fs;
+      double R = input->R_ref;
+      double Vw = input->V_wall(0);
+      double Tw = input->T_wall;
+      double cp = gamma * R / (gamma - 1);
+
+      double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
+
+      switch (var)
+      {
+        case 0:
+          val = rho; break;
+        case 1:
+          val = rho * Vw; break;
+        case 2:
+          val = 0.0; break;
+        case 3:
+          val = P / (gamma - 1) + 0.5 * rho * Vw * Vw; break;
+      }
+
+    }
+  }
+  else
+  {
+    ThrowException("Under construction!");
+  }
+
+  return val;
+}
+
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input)
 {
    
@@ -114,33 +222,29 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     }
     else
     {
-      /* Couette flow test case: analytical total energy */
+      /* Couette flow test case */
+      double gamma = input->gamma;
+      double Pr = input->prandtl;
       double P = input->P_fs;
       double R = input->R_ref;
       double Vw = input->V_wall(0);
       double Tw = input->T_wall;
-      double cp = input->gamma * R / (input->gamma - 1);
+      double cp = gamma * R / (gamma - 1);
 
-      val = P * (1. / (input->gamma - 1) + (Vw * Vw / (2 * R) * y * y) /
-          (Tw + input->prandtl * Vw * Vw / (2 * cp) * y * (1 - y)));
+      double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
 
-     // std::cout << "P: " << P << std::endl;
-     // std::cout << "R: " << R << std::endl;
-     // std::cout << "Vw: " << Vw << std::endl;
-     // std::cout << "Tw: " << Tw << std::endl;
-     // std::cout << "cp: " << cp << std::endl;
-     // std::cout << "gamma: " << input->gamma << std::endl;
-     // std::cout << "prandtl: " << input->prandtl << std::endl;
-
-     // y = 1;
-     // val = P * (1. / (input->gamma - 1) + (Vw * Vw / (2 * R) * y * y) /
-     //     (Tw + input->prandtl * Vw * Vw / (2 * cp) * y * (1 - y)));
-     // std::cout << "val(1): " << val << std::endl;
-     // y = 0;
-     // val = P * (1. / (input->gamma - 1) + (Vw * Vw / (2 * R) * y * y) /
-     //     (Tw + input->prandtl * Vw * Vw / (2 * cp) * y * (1 - y)));
-     // std::cout << "val(0): " << val << std::endl;
-     // ThrowException("break");
+      switch (var)
+      {
+        case 0:
+          val = rho; break;
+        case 1:
+          val = rho * (Vw*y); break;
+        case 2:
+          val = 0.0; break;
+        case 3:
+          val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) * 
+              2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
+      }
     }
   }
   else

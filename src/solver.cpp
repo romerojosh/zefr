@@ -843,7 +843,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   {
     /* Compute common interface solution and convective flux at non-MPI flux points */
     faces->compute_common_U(startFpt, endFpt);
-    
+
     /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_spts(startEle, endEle);
 
@@ -1406,7 +1406,7 @@ void FRSolver::initialize_U()
             double x = geo.coord_spts(spt, ele, 0);
             double y = geo.coord_spts(spt, ele, 1);
 
-            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
+            eles->U_spts(spt, ele, 0) = compute_U_init(x, y, 0, 0, input);
           }
         }
       }
@@ -1420,7 +1420,7 @@ void FRSolver::initialize_U()
             double y = geo.coord_spts(spt, ele, 1);
             double z = geo.coord_spts(spt, ele, 2);
 
-            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
+            eles->U_spts(spt, ele, 0) = compute_U_init(x, y, z, 0, input);
 
           }
         }
@@ -1465,7 +1465,7 @@ void FRSolver::initialize_U()
             double x = geo.coord_spts(spt, ele, 0);
             double y = geo.coord_spts(spt, ele, 1);
 
-            eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
+            eles->U_spts(spt, ele, n) = compute_U_init(x, y, 0, n, input);
           }
         }
       }
@@ -1482,6 +1482,7 @@ void FRSolver::setup_views()
   /* Setup face view of element solution data struture */
   // TODO: Might not want to allocate all these at once. Turn this into a function maybe?
   mdvector<double*> U_base_ptrs({2 * geo.nGfpts});
+  mdvector<double*> U_ldg_base_ptrs({2 * geo.nGfpts});
   mdvector<double*> Fcomm_base_ptrs({2 * geo.nGfpts});
   mdvector<unsigned int> U_strides({2 * geo.nGfpts});
   mdvector<double*> Ucomm_base_ptrs;
@@ -1511,7 +1512,6 @@ void FRSolver::setup_views()
 #endif
 
   /* Set pointers for internal faces */
-#pragma omp parallel for collapse(3)
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
@@ -1526,6 +1526,7 @@ void FRSolver::setup_views()
       int slot = geo.fpt2gfpt_slot(fpt,ele);
 
       U_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
+      U_ldg_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
       U_strides(gfpt + slot * geo.nGfpts) = eles->U_fpts.get_stride(1);
 
       Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Fcomm(fpt, ele, 0);
@@ -1564,6 +1565,8 @@ void FRSolver::setup_views()
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0);
+      U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(i, 0);
+
       U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(0);
 
       Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(i, 0);
@@ -1597,6 +1600,7 @@ void FRSolver::setup_views()
 
   /* Create views of element data for faces */
   faces->U.assign(U_base_ptrs, U_strides, geo.nGfpts);
+  faces->U_ldg.assign(U_ldg_base_ptrs, U_strides, geo.nGfpts);
   faces->Fcomm.assign(Fcomm_base_ptrs, U_strides, geo.nGfpts);
   if (input->viscous)
   {
@@ -4749,16 +4753,7 @@ void FRSolver::report_error(std::ofstream &f)
 
         /* Compute errors */
         double U_error;
-        if (input->test_case == 2) // Couette flow case
-        {
-          if (!input->viscous) 
-            ThrowException("Couette flow test case selected but viscosity disabled.");
-          
-          double E = eles->U_qpts(qpt, ele, 3);
-          U_error = U_true - E;
-          vol = 1;
-        }
-        else if (input->test_case == 3) // Isentropic bump
+        if (input->test_case == 3) // Isentropic bump
         {
           double momF = 0.0;
           for (unsigned int dim = 0; dim < eles->nDims; dim ++)

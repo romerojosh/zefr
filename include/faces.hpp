@@ -83,11 +83,11 @@ class Faces
 
   protected:
     mdvector<double> P;
-    mdview<double> U, dU, Fcomm, Ucomm;
-    mdvector<double> U_bnd, dU_bnd, Fcomm_bnd, Ucomm_bnd;
+    mdview<double> U, dU, Fcomm, Ucomm, U_ldg;
+    mdvector<double> U_bnd, U_bnd_ldg, dU_bnd, Fcomm_bnd, Ucomm_bnd;
     mdvector<double> norm, jaco, coord;
     mdvector<double> dA, waveSp, diffCo;
-    mdvector<int> LDG_bias;
+    mdvector<char> rus_bias, LDG_bias;
 
     mdvector<double> Vg;  //! Grid velocity
 
