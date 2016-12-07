@@ -74,7 +74,7 @@ void compute_max_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
     double sen = 0.0;
     for (unsigned int row = 0; row < nDims * nSpts; row++)
     {
-      KS(row, ele, var) = pow(order+1,Q/2) * pow(abs(KS(row, ele, var)), Q);
+      KS(row, ele, var) = pow((double)order+1,Q/2) * pow(abs(KS(row, ele, var)), Q);
       //KS(row, ele, var) = order * (KS(row, ele, var) * KS(row, ele, var)); // Kartikey's version
       sen = max(sen, KS(row, ele, var));
     }
