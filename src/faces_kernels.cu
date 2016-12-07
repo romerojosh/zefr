@@ -2050,22 +2050,21 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __device__ __forceinline__
 void LDG_flux(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], double dUR[nVars][nDims], double Fcomm[nVars],
     double norm[nDims], double AdvDiff_D, double &diffCo, double gamma, double prandtl, double mu, double rt, double c_sth, 
-    bool fix_vis, int LDG_bias, double beta_in, double tau)
+    bool fix_vis, int LDG_bias, double beta, double tau)
 {
   double FL[nVars][nDims] = {{0.0}}; double FR[nVars][nDims] = {{0.0}};
   double FnL[nVars] = {0.0}; double FnR[nVars] = {0.0};
 
   /* Setting sign of beta (from HiFiLES) */
-  double beta; 
   if (nDims == 2)
   {
     if (norm[0] + norm[1] < 0.0)
-      beta = -beta_in;
+      beta = -beta;
   }
   else if (nDims == 3)
   {
     if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
-      beta = -beta_in;
+      beta = -beta;
   }
 
   /* Get numerical diffusion coefficient */
