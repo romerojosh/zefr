@@ -114,7 +114,33 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     }
     else
     {
-      val = 1.0246950765959597 * y;
+      /* Couette flow test case: analytical total energy */
+      double P = input->P_fs;
+      double R = input->R_ref;
+      double Vw = input->V_wall(0);
+      double Tw = input->T_wall;
+      double cp = input->gamma * R / (input->gamma - 1);
+
+      val = P * (1. / (input->gamma - 1) + (Vw * Vw / (2 * R) * y * y) /
+          (Tw + input->prandtl * Vw * Vw / (2 * cp) * y * (1 - y)));
+
+     // std::cout << "P: " << P << std::endl;
+     // std::cout << "R: " << R << std::endl;
+     // std::cout << "Vw: " << Vw << std::endl;
+     // std::cout << "Tw: " << Tw << std::endl;
+     // std::cout << "cp: " << cp << std::endl;
+     // std::cout << "gamma: " << input->gamma << std::endl;
+     // std::cout << "prandtl: " << input->prandtl << std::endl;
+
+     // y = 1;
+     // val = P * (1. / (input->gamma - 1) + (Vw * Vw / (2 * R) * y * y) /
+     //     (Tw + input->prandtl * Vw * Vw / (2 * cp) * y * (1 - y)));
+     // std::cout << "val(1): " << val << std::endl;
+     // y = 0;
+     // val = P * (1. / (input->gamma - 1) + (Vw * Vw / (2 * R) * y * y) /
+     //     (Tw + input->prandtl * Vw * Vw / (2 * cp) * y * (1 - y)));
+     // std::cout << "val(0): " << val << std::endl;
+     // ThrowException("break");
     }
   }
   else

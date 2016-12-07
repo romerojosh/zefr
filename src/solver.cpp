@@ -4754,19 +4754,8 @@ void FRSolver::report_error(std::ofstream &f)
           if (!input->viscous) 
             ThrowException("Couette flow test case selected but viscosity disabled.");
           
-          double rho = eles->U_qpts(qpt, ele, 0);
-          double u =  eles->U_qpts(qpt, ele, 1) / rho;
-          double rho_dx = eles->dU_qpts(qpt, ele, 0, 0);
-          double rho_dy = eles->dU_qpts(qpt, ele, 0, 1);
-          double momx_dx = eles->dU_qpts(qpt, ele, 1, 0);
-          double momx_dy = eles->dU_qpts(qpt, ele, 1, 1);
-
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-
-          U_error = U_true - u;
-          dU_error[0] = dU_true[0] - du_dx;
-          dU_error[1] = dU_true[1] - du_dy;
+          double E = eles->U_qpts(qpt, ele, 3);
+          U_error = U_true - E;
           vol = 1;
         }
         else if (input->test_case == 3) // Isentropic bump
