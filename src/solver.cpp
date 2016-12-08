@@ -699,6 +699,7 @@ void FRSolver::solver_data_to_device()
 
   /* Solution data structures (faces) */
   faces->U_bnd_d = faces->U_bnd;
+  faces->U_bnd_ldg_d = faces->U_bnd_ldg;
   faces->P_d = faces->P;
   faces->Ucomm_bnd_d = faces->Ucomm_bnd;
   faces->Fcomm_bnd_d = faces->Fcomm_bnd;
@@ -706,6 +707,7 @@ void FRSolver::solver_data_to_device()
   faces->dA_d = faces->dA;
   faces->waveSp_d = faces->waveSp;
   faces->diffCo_d = faces->diffCo;
+  faces->rus_bias_d = faces->rus_bias;
   faces->LDG_bias_d = faces->LDG_bias;
 
   if (input->viscous)
@@ -1497,6 +1499,7 @@ void FRSolver::setup_views()
   }
 #ifdef _GPU
   mdvector<double*> U_base_ptrs_d({2 * geo.nGfpts});
+  mdvector<double*> U_ldg_base_ptrs_d({2 * geo.nGfpts});
   mdvector<double*> Fcomm_base_ptrs_d({2 * geo.nGfpts});
   mdvector<unsigned int> U_strides_d({2 * geo.nGfpts});
   mdvector<double*> Ucomm_base_ptrs_d;
@@ -1534,6 +1537,7 @@ void FRSolver::setup_views()
       if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Ucomm(fpt, ele, 0);
 #ifdef _GPU
       U_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
+      U_ldg_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
       U_strides_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_stride(1);
 
       Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Fcomm_d.get_ptr(fpt, ele, 0);
@@ -1575,6 +1579,7 @@ void FRSolver::setup_views()
 
 #ifdef _GPU
       U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0);
+      U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(i, 0);
       U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(0);
 
       Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(i, 0);
@@ -1610,6 +1615,7 @@ void FRSolver::setup_views()
 
 #ifdef _GPU
   faces->U_d.assign(U_base_ptrs_d, U_strides_d, geo.nGfpts);
+  faces->U_ldg_d.assign(U_ldg_base_ptrs_d, U_strides_d, geo.nGfpts);
   faces->Fcomm_d.assign(Fcomm_base_ptrs_d, U_strides_d, geo.nGfpts);
   if (input->viscous)
   {
