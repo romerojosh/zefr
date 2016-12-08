@@ -157,7 +157,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
       for (unsigned int color = 1; color <= geo->nColors; color++)
       {
         LHSs[color - 1].assign({nSpts, nVars, nSpts, nVars, nElesMax}, 0);
-        LHSInvs[color - 1].assign({nSpts, nVars, nSpts, nVars, nElesMax}, 0, false, true);
+        LHSInvs[color - 1].assign({nSpts, nVars, nSpts, nVars, nElesMax}, 0, true);
         LUptrs[color - 1].resize(nElesMax);
       }
       
@@ -732,37 +732,51 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
 
       unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,e);
 
-      /* --- Calculate outward unit normal vector at flux point --- */
+      /* --- Calculate outward unit normal vector at flux point ("left" element only) --- */
+      double norm[3] = {0.0};
       // Transform face normal from reference to physical space [JGinv .dot. tNorm]
       for (uint dim1 = 0; dim1 < nDims; dim1++)
       {
-        faces->norm(gfpt,dim1,slot) = 0.;
+        //faces->norm(gfpt,dim1) = 0.;
+        //for (uint dim2 = 0; dim2 < nDims; dim2++)
+        //  faces->norm(gfpt,dim1) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
+
         for (uint dim2 = 0; dim2 < nDims; dim2++)
-        {
-          faces->norm(gfpt,dim1,slot) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
-        }
+          norm[dim1] += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
+      }
+
+      if (slot == 0)
+      {
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->norm(gfpt, dim) = norm[dim]; 
       }
 
       // Store magnitude of face normal (equivalent to face area in finite-volume land)
-      faces->dA(gfpt, slot) = 0;
-      for (uint dim = 0; dim < nDims; dim++)
-        faces->dA(gfpt, slot) += faces->norm(gfpt,dim,slot)*faces->norm(gfpt,dim,slot);
-      faces->dA(gfpt, slot) = sqrt(faces->dA(gfpt, slot));
+        faces->dA(gfpt, slot) = 0;
+        for (uint dim = 0; dim < nDims; dim++)
+          faces->dA(gfpt, slot) += norm[dim]*norm[dim];
 
+        faces->dA(gfpt, slot) = sqrt(faces->dA(gfpt, slot));
 
       // Normalize
       // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
       // (A normal vector at a point doesn't make sense anyways)
-      if (std::fabs(faces->dA(gfpt)) < 1e-10)
+      //if (std::fabs(faces->dA(gfpt, slot)) < 1e-10)
+      //{
+      //  faces->dA(gfpt, slot) = 0.;
+      //  for (uint dim = 0; dim < nDims; dim++)
+      //    faces->norm(gfpt,dim) = 0;
+      //}
+      //else
+      //{
+      //  for (uint dim = 0; dim < nDims; dim++)
+      //    faces->norm(gfpt,dim) /= faces->dA(gfpt);
+      //}
+      
+      if (slot == 0)
       {
-        faces->dA(gfpt) = 0.;
         for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt,dim,slot) = 0;
-      }
-      else
-      {
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt,dim,slot) /= faces->dA(gfpt);
+          faces->norm(gfpt,dim) /= faces->dA(gfpt, 0);
       }
     }
   }
@@ -844,7 +858,7 @@ void Elements::initialize_U()
             double x = coord_spts(spt, ele, 0);
             double y = coord_spts(spt, ele, 1);
 
-            U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
+            U_spts(spt, ele, 0) = compute_U_init(x, y, 0, 0, input);
           }
         }
       }
@@ -858,7 +872,7 @@ void Elements::initialize_U()
             double y = coord_spts(spt, ele, 1);
             double z = coord_spts(spt, ele, 2);
 
-            U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
+            U_spts(spt, ele, 0) = compute_U_init(x, y, z, 0, input);
 
           }
         }
@@ -903,7 +917,7 @@ void Elements::initialize_U()
             double x = coord_spts(spt, ele, 0);
             double y = coord_spts(spt, ele, 1);
 
-            U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
+            U_spts(spt, ele, n) = compute_U_init(x, y, 0, n, input);
           }
         }
       }
@@ -1022,8 +1036,9 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
             if (gfpt == -1)
               continue;
 
-            unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
-            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * faces->norm(gfpt,dim,slot) * faces->dA(gfpt);
+            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+            double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * fac * faces->norm(gfpt,dim) * faces->dA(gfpt);
           }
         }
       }
@@ -1706,7 +1721,6 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
       }
 
       /* Get metric terms */
-      double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
       double inv_jaco[nDims][nDims];
 
       for (int dim1 = 0; dim1 < nDims; dim1++)
@@ -1717,6 +1731,8 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
 
       if (input->viscous)
       {
+        double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+
         /* Transform gradient to physical space */
         for (unsigned int var = 0; var < nVars; var++)
         {
@@ -1783,14 +1799,6 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
       if (!input->motion)
       {
         /* Transform flux to reference space */
-        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-        {
-          for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-          {
-            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-          }
-        }
-
         double tF[nVars][nDims] = {{0.0}};;
 
         for (unsigned int var = 0; var < nVars; var++)

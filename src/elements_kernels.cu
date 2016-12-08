@@ -159,16 +159,15 @@ void compute_F(mdvector_gpu<double> F_spts,
   }
 
   /* Get metric terms */
-  double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-
   for (int dim1 = 0; dim1 < nDims; dim1++)
     for (int dim2 = 0; dim2 < nDims; dim2++)
       inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
 
-
   if (viscous)
   {
     /* Transform gradient to physical space */
+    double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+
     for (unsigned int var = 0; var < nVars; var++)
     {
       for (int dim1 = 0; dim1 < nDims; dim1++)
@@ -225,14 +224,6 @@ void compute_F(mdvector_gpu<double> F_spts,
   if (!motion)
   {
     /* Transform flux to reference space */
-    for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-    {
-      for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-      {
-        inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-      }
-    }
-
     double tF[nVars][nDims] = {{0.0}};;
 
     for (unsigned int var = 0; var < nVars; var++)
@@ -1082,7 +1073,7 @@ void transform_gradF_hexa_wrapper(mdvector_gpu<double> &divF_spts,
 __global__
 void normal_flux(mdvector_gpu<double> tempF, mdvector_gpu<double> dFn,
     mdvector_gpu<double> norm, mdvector_gpu<double> dA,
-    mdvector_gpu<int> fpt2gfpt, mdvector_gpu<int> fpt2slot, unsigned int nFpts,
+    mdvector_gpu<int> fpt2gfpt, mdvector_gpu<char> fpt2slot, unsigned int nFpts,
     unsigned int nEles, unsigned int dim, unsigned int var)
 {
   const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
@@ -1097,14 +1088,15 @@ void normal_flux(mdvector_gpu<double> tempF, mdvector_gpu<double> dFn,
   if (gfpt < 0)
     return;
 
-  dFn(fpt,ele,var) -= tempF(fpt,ele) * norm(gfpt,dim,slot) * dA(gfpt);
+  double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+  dFn(fpt,ele,var) -= tempF(fpt,ele) * fac * norm(gfpt,dim) * dA(gfpt);
 }
 
 void extrapolate_Fn_wrapper(mdvector_gpu<double> &oppE,
     mdvector_gpu<double> &F_spts, mdvector_gpu<double> &tempF_fpts,
     mdvector_gpu<double> &dFn_fpts, mdvector_gpu<double> &norm,
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt,
-    mdvector_gpu<int> &fpt2slot, unsigned int nSpts, unsigned int nFpts,
+    mdvector_gpu<char> &fpt2slot, unsigned int nSpts, unsigned int nFpts,
     unsigned int nEles, unsigned int nDims, unsigned int nVars, bool motion)
 {
   int threads = 128;
@@ -1536,7 +1528,7 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
 __global__
 void calc_normals(mdvector_gpu<double> norm, mdvector_gpu<double> dA,
     mdvector_gpu<double> inv_jaco, mdvector_gpu<double> tnorm,
-    mdvector_gpu<int> fpt2gfpt, mdvector_gpu<int> fpt2slot, int nFpts, int nEles, int nDims)
+    mdvector_gpu<int> fpt2gfpt, mdvector_gpu<char> fpt2slot, int nFpts, int nEles, int nDims)
 {
   int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
   int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
@@ -1552,31 +1544,33 @@ void calc_normals(mdvector_gpu<double> norm, mdvector_gpu<double> dA,
   int slot = fpt2slot(fpt,ele);
 
   double DA = 0.0;
-  for (int dim1 = 0; dim1 < nDims; dim1++)
+  if (slot == 0)
   {
-    norm(gfpt,dim1,slot) = 0.0;
-    for (int dim2 = 0; dim2 < nDims; dim2++)
+    for (int dim1 = 0; dim1 < nDims; dim1++)
     {
-      norm(gfpt,dim1,slot) += inv_jaco(fpt,ele,dim2,dim1) * tnorm(fpt,dim2);
+      norm(gfpt,dim1) = 0.0;
+      for (int dim2 = 0; dim2 < nDims; dim2++)
+      {
+        norm(gfpt,dim1) += inv_jaco(fpt,ele,dim2,dim1) * tnorm(fpt,dim2);
+      }
+
+      DA += norm(gfpt,dim1) * norm(gfpt,dim1);
     }
 
-    DA += norm(gfpt,dim1,slot) * norm(gfpt,dim1,slot);
-  }
+    DA = sqrt(DA);
 
-  DA = sqrt(DA);
+    for (int dim = 0; dim < nDims; dim++)
+    {
+      norm(gfpt,dim) /= DA;
+    }
 
-  for (int dim = 0; dim < nDims; dim++)
-  {
-    norm(gfpt,dim,slot) /= DA;
-  }
-
-  if (slot == 0)
     dA(gfpt) = DA;
+  }
 }
 
 void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
     mdvector_gpu<double> &inv_jaco, mdvector_gpu<double> &tnorm,
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2slot, int nFpts,
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2slot, int nFpts,
     int nEles, int nDims)
 {
   int threads = 128;

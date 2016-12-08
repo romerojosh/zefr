@@ -78,12 +78,14 @@ struct GeoStruct
 
   std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
   std::vector<unsigned int> ele_color_range, ele_color_nEles;
-  mdvector<unsigned int> gfpt2bnd, per_fpt_list;
+  mdvector<unsigned int> per_fpt_list;
+  mdvector<char> gfpt2bnd;
   std::map<std::vector<unsigned int>, int> bnd_faces, per_bnd_rot;
   std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
   std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
   mdvector<unsigned int> ppt_connect;
-  mdvector<int> fpt2gfpt, fpt2gfpt_slot;
+  mdvector<int> fpt2gfpt;
+  mdvector<char> fpt2gfpt_slot;
   mdvector<double> ele_nodes, coord_nodes;
   mdvector<unsigned int> face_nodes;
   mdvector<int> ele_adj;
@@ -123,11 +125,13 @@ struct GeoStruct
 #endif
 
 #ifdef _GPU
-  mdvector_gpu<int> fpt2gfpt_d, fpt2gfpt_slot_d;
-  mdvector_gpu<unsigned int> gfpt2bnd_d, per_fpt_list_d;
-  mdvector_gpu<double> coord_spts_d, coord_fpts_d;
-  mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
-  mdvector_gpu<int> ele2nodes_d;
+    mdvector_gpu<int> fpt2gfpt_d;
+    mdvector_gpu<char> fpt2gfpt_slot_d;
+    mdvector_gpu<unsigned int> per_fpt_list_d;
+    mdvector_gpu<char> gfpt2bnd_d;
+    mdvector_gpu<double> coord_spts_d, coord_fpts_d;
+    mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
+    mdvector_gpu<int> ele2nodes_d;
 #ifdef _MPI
   std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif
