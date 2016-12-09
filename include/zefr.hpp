@@ -52,7 +52,7 @@ public:
    * (1 communicator per grid)
    */
 #ifdef _MPI
-  Zefr(MPI_Comm comm_in = MPI_COMM_WORLD, int n_grids = 1, int grid_id = 0);
+  Zefr(MPI_Comm comm_in = MPI_COMM_WORLD, int n_grids = 1, int grid_id = 0, MPI_Comm comm_world = MPI_COMM_WORLD);
 #else
   Zefr(void);
 #endif
@@ -146,12 +146,13 @@ private:
   std::ofstream error_file;
 
 #ifdef _MPI
-  void mpi_init(MPI_Comm comm_in, int n_grids = 1, int grid_id = 0);
+  void mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids = 1, int grid_id = 0);
 #endif
 
   // Again, to simplify MPI vs. no-MPI compilation, this will be either an
   // MPI_Comm or an int
   _mpi_comm myComm;
+  _mpi_comm worldComm;
 
   //! Callback function to TIOGA to perform overset interpolation
   void (*overset_interp)(int nVars, double* U_spts, int gradFlag);

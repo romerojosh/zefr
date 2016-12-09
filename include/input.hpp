@@ -31,8 +31,10 @@
 
 #ifdef _MPI // This is kinda hacky, but it works and keeps things simple
 #define _mpi_comm MPI_Comm
+#define DEFAULT_COMM MPI_COMM_WORLD
 #else
 #define _mpi_comm int
+#define DEFAULT_COMM 0
 #endif
 
 extern double pi;

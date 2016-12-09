@@ -8,8 +8,10 @@
 #ifdef _MPI
 #include <mpi.h>
 #define _mpi_comm MPI_Comm
+#define DEFAULT_COMM MPI_COMM_WORLD
 #else
 #define _mpi_comm int
+#define DEFAULT_COMM 0
 #endif
 
 #include "zefr_interface.hpp"
