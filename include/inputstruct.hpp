@@ -123,7 +123,9 @@ struct InputStruct
   double exps0, s_factor;
   unsigned int rank, nRanks;
   unsigned int filt_on, sen_write, sen_norm, filt_maxLevels;
+  unsigned int shockcapture, limiter, filt2on;
   double sen_Jfac, filt_gamma;
+  double alpha, filtexp, nonlin_exp, filtexp2, alpha2;
   unsigned int iter = 0, initIter = 0;
 
   /* --- Adaptive time-stepping --- */

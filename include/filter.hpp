@@ -50,34 +50,56 @@ class Filter
     FRSolver* solver;
 		unsigned int order;
 
-    mdvector<double> Vander, VanderInv, Vander_d1, Conc, oppS_1D, oppS;
-    mdvector<double> KS, U_spts;
+    mdvector<double> Vander, VanderInv, Vander_d1;
+    mdvector<double> Vander2D, VanderND, VanderNDInv;
+    mdvector<double> Conc, oppS_1D, oppS, filt, filt2;
+    mdvector<double> KS, U_spts, U_filt;
     double threshJ, normalTol;
+
+    // Stuff for Kartikey's version
     std::vector<mdvector<double>> oppF_1D, oppF_spts, oppF_fpts;
     std::vector<double> DeltaHat;
 
 #ifdef _GPU
     mdvector_gpu<double> oppS_d, KS_d, U_spts_d;
-    std::vector<mdvector_gpu<double>> oppF_spts_d, oppF_fpts_d;
+    mdvector_gpu<double> filt_d, filt2_d, U_filt_d;
+    mdvector_gpu<double> Vander2DInv_tr_d, Vander2D_tr_d;
+    std::vector<mdvector_gpu<double>> oppF_spts_d, oppF_fpts_d; // For Kartikey's version
     double max_sensor_d;
 #endif
 	
 		void setup_vandermonde_matrices();
 		void setup_concentration_matrix();
-		void setup_threshold();
+    double calc_expfilter_coeffs(int in_mode, int type);
+    void setup_expfilter_matrix();
+    void setup_threshold();
     void setup_oppS();
+
+    // Functions for Kartikey's version
     void setup_DeltaHat(unsigned int level);
     void setup_oppF_1D(unsigned int level);
     void setup_oppF(unsigned int level);
 
   public:
-		mdvector<double> sensor; 
+    mdvector<double> sensor;
+    mdvector<unsigned int> sensor_bool;
+
 #ifdef _GPU
     mdvector_gpu<double> sensor_d;
+    mdvector_gpu<unsigned int> sensor_bool_d;
 #endif
+
     void setup(InputStruct *input, FRSolver &solver);
-		void apply_sensor();
+
+    //! Apply the concentration sensor to the solution
+    void apply_sensor();
+
+    //! Apply Kartikey's version of the filter
     unsigned int apply_filter(unsigned int level);
+
+    //! Apply Abhishek's version of the filter
+    void apply_expfilter();
+    void apply_expfilter_type2();
 };
 
 

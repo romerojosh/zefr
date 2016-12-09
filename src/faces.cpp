@@ -107,7 +107,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     diffCo.assign({nFpts}, 0.0);
 
   /* Allocate memory for geometry structures */
-  norm.assign({nFpts, nDims, 2});
+  norm.assign({nFpts, nDims});
   dA.assign({nFpts},0.0);
   jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
 
@@ -126,13 +126,13 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
     if (input->viscous)
     {
-      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
-      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, false, true);
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, true);
     }
     else
     {
-      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
-      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, false, true);
+      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, true);
+      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, true);
     }
   }
 
@@ -273,8 +273,8 @@ void Faces::apply_bcs()
 
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VnL += VL[dim] * norm(fpt, dim, 0);
-          alpha += input->norm_fs(dim) * norm(fpt, dim, 0);
+          VnL += VL[dim] * norm(fpt, dim);
+          alpha += input->norm_fs(dim) * norm(fpt, dim);
         }
 
         /* Compute speed of sound */
@@ -372,8 +372,8 @@ void Faces::apply_bcs()
 
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
-          VnR += input->V_fs(dim) * norm(fpt, dim, 0);
+          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim);
+          VnR += input->V_fs(dim) * norm(fpt, dim);
         }
 
         /* Compute pressure. TODO: Compute pressure once!*/
@@ -415,14 +415,14 @@ void Faces::apply_bcs()
           rhoR *= std::pow(input->rho_fs, input->gamma) / PR;
 
           for (unsigned int dim = 0; dim < nDims; dim++)
-            VR[dim] = input->V_fs(dim) + (ustarn - VnR) * norm(fpt, dim, 0);
+            VR[dim] = input->V_fs(dim) + (ustarn - VnR) * norm(fpt, dim);
         }
         else  /* Case 2: Outflow */
         {
           rhoR *= std::pow(U(fpt, 0, 0), input->gamma) / PL;
 
           for (unsigned int dim = 0; dim < nDims; dim++)
-            VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim, 0);
+            VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim);
         }
 
         rhoR = std::pow(rhoR, 1.0 / (input->gamma - 1));
@@ -449,19 +449,19 @@ void Faces::apply_bcs()
 
         /* Compute wall normal momentum */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+          momN += U(fpt, dim+1, 0) * norm(fpt, dim);
 
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim);
         }
 
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Set boundary state with cancelled normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim, 0);
+          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim);
 
         /* Set energy */
         /* Get left-state pressure */
@@ -492,19 +492,19 @@ void Faces::apply_bcs()
 
         /* Compute wall normal momentum */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(fpt, dim+1, 0) * norm(fpt, dim, 0);
+          momN += U(fpt, dim+1, 0) * norm(fpt, dim);
 
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim, 0);
+            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim);
         }
 
         U(fpt, 0, 1) = U(fpt, 0, 0);
 
         /* Set boundary state to reflect normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim, 0);
+          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim);
 
         /* Set energy */
         U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
@@ -790,13 +790,13 @@ void Faces::apply_bcs_dU()
         dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
 
         /* Option 2: Enforce constraint on tangential velocity gradient */
-        //double du_dn = du_dx * norm(fpt, 0, 0) + du_dy * norm(fpt, 1, 0);
-        //double dv_dn = dv_dx * norm(fpt, 0, 0) + dv_dy * norm(fpt, 1, 0);
+        //double du_dn = du_dx * norm(fpt, 0) + du_dy * norm(fpt, 1);
+        //double dv_dn = dv_dx * norm(fpt, 0) + dv_dy * norm(fpt, 1);
 
-        //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
-        //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
-        //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
-        //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm(fpt, 1, 0);
+        //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0);
+        //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1);
+        //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0);
+        //dU(fpt, 2, 1, 1) =  rho * dv_dn * norm(fpt, 1);
 
         // double dke_dx = 0.5 * (u*u + v*v) * rho_dx + rho * (u * du_dx + v * dv_dx);
         // double dke_dy = 0.5 * (u*u + v*v) * rho_dy + rho * (u * du_dy + v * dv_dy);
@@ -806,15 +806,15 @@ void Faces::apply_bcs_dU()
         double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
 
         /* Compute wall normal temperature gradient */
-        double dT_dn = dT_dx * norm(fpt, 0, 0) + dT_dy * norm(fpt, 1, 0);
+        double dT_dn = dT_dx * norm(fpt, 0) + dT_dy * norm(fpt, 1);
 
         /* Option 1: Simply remove contribution of dT from total energy gradient */
-        dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm(fpt, 0, 0);
-        dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm(fpt, 1, 0);
+        dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm(fpt, 0);
+        dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm(fpt, 1);
 
         /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
-        //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
-        //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 3, 1) / rho; 
+        //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
+        //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1)) + rho_dy * U(fpt, 3, 1) / rho; 
       }
       else if (bnd_id == OVERSET)
       {
@@ -879,19 +879,19 @@ void Faces::apply_bcs_dU()
         dU(fpt, 3, 2, 1) = dU(fpt, 3, 2, 0);
 
         /* Option 2: Enforce constraint on tangential velocity gradient */
-        //double du_dn = du_dx * norm(fpt, 0, 0) + du_dy * norm(fpt, 1, 0) + du_dz * norm(fpt, 2, 0);
-        //double dv_dn = dv_dx * norm(fpt, 0, 0) + dv_dy * norm(fpt, 1, 0) + dv_dz * norm(fpt, 2, 0);
-        //double dw_dn = dw_dx * norm(fpt, 0, 0) + dw_dy * norm(fpt, 1, 0) + dw_dz * norm(fpt, 2, 0);
+        //double du_dn = du_dx * norm(fpt, 0) + du_dy * norm(fpt, 1) + du_dz * norm(fpt, 2);
+        //double dv_dn = dv_dx * norm(fpt, 0) + dv_dy * norm(fpt, 1) + dv_dz * norm(fpt, 2);
+        //double dw_dn = dw_dx * norm(fpt, 0) + dw_dy * norm(fpt, 1) + dw_dz * norm(fpt, 2);
 
-        //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0, 0);
-        //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1, 0);
-        //dU(fpt, 1, 2, 1) = rho * du_dn * norm(fpt, 2, 0);
-        //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0, 0);
-        //dU(fpt, 2, 1, 1) = rho * dv_dn * norm(fpt, 1, 0);
-        //dU(fpt, 2, 2, 1) = rho * dv_dn * norm(fpt, 2, 0);
-        //dU(fpt, 3, 0, 1) = rho * dw_dn * norm(fpt, 0, 0);
-        //dU(fpt, 3, 1, 1) = rho * dw_dn * norm(fpt, 1, 0);
-        //dU(fpt, 3, 2, 1) = rho * dw_dn * norm(fpt, 2, 0);
+        //dU(fpt, 1, 0, 1) = rho * du_dn * norm(fpt, 0);
+        //dU(fpt, 1, 1, 1) = rho * du_dn * norm(fpt, 1);
+        //dU(fpt, 1, 2, 1) = rho * du_dn * norm(fpt, 2);
+        //dU(fpt, 2, 0, 1) = rho * dv_dn * norm(fpt, 0);
+        //dU(fpt, 2, 1, 1) = rho * dv_dn * norm(fpt, 1);
+        //dU(fpt, 2, 2, 1) = rho * dv_dn * norm(fpt, 2);
+        //dU(fpt, 3, 0, 1) = rho * dw_dn * norm(fpt, 0);
+        //dU(fpt, 3, 1, 1) = rho * dw_dn * norm(fpt, 1);
+        //dU(fpt, 3, 2, 1) = rho * dw_dn * norm(fpt, 2);
 
        // double dke_dx = 0.5 * (u*u + v*v + w*w) * rho_dx + rho * (u * du_dx + v * dv_dx + w * dw_dx);
        // double dke_dy = 0.5 * (u*u + v*v + w*w) * rho_dy + rho * (u * du_dy + v * dv_dy + w * dw_dy);
@@ -903,17 +903,17 @@ void Faces::apply_bcs_dU()
         double dT_dz = E_dz - rho_dz * E/rho - rho * (u * du_dz + v * dv_dz + w * dw_dz);
 
         /* Compute wall normal temperature gradient */
-        double dT_dn = dT_dx * norm(fpt, 0, 0) + dT_dy * norm(fpt, 1, 0) + dT_dz * norm(fpt, 2, 0);
+        double dT_dn = dT_dx * norm(fpt, 0) + dT_dy * norm(fpt, 1) + dT_dz * norm(fpt, 2);
 
         /* Option 1: Simply remove contribution of dT from total energy gradient */
-        dU(fpt, 4, 0, 1) = E_dx - dT_dn * norm(fpt, 0, 0);
-        dU(fpt, 4, 1, 1) = E_dy - dT_dn * norm(fpt, 1, 0);
-        dU(fpt, 4, 2, 1) = E_dz - dT_dn * norm(fpt, 2, 0);
+        dU(fpt, 4, 0, 1) = E_dx - dT_dn * norm(fpt, 0);
+        dU(fpt, 4, 1, 1) = E_dy - dT_dn * norm(fpt, 1);
+        dU(fpt, 4, 2, 1) = E_dz - dT_dn * norm(fpt, 2);
 
         /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
-        //dU(fpt, 4, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0, 0)) + rho_dx * U(fpt, 4, 1) / rho; 
-        //dU(fpt, 4, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1, 0)) + rho_dy * U(fpt, 4, 1) / rho; 
-        //dU(fpt, 4, 2, 1) = (dT_dz - dT_dn * norm(fpt, 2, 0)) + rho_dz * U(fpt, 4, 1) / rho; 
+        //dU(fpt, 4, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0)) + rho_dx * U(fpt, 4, 1) / rho; 
+        //dU(fpt, 4, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1)) + rho_dy * U(fpt, 4, 1) / rho; 
+        //dU(fpt, 4, 2, 1) = (dT_dz - dT_dn * norm(fpt, 2)) + rho_dz * U(fpt, 4, 1) / rho; 
       }
 
     }
@@ -1053,8 +1053,8 @@ void Faces::apply_bcs_dFdU()
         double VnL = 0.0; double VnR = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim, 0);
-          VnR += input->V_fs(dim) * norm(fpt, dim, 0);
+          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim);
+          VnR += input->V_fs(dim) * norm(fpt, dim);
         }
 
         /* Compute pressure. TODO: Compute pressure once!*/
@@ -1090,8 +1090,8 @@ void Faces::apply_bcs_dFdU()
 
         if (nDims == 2)
         {
-          double nx = norm(fpt, 0, 0);
-          double ny = norm(fpt, 1, 0);
+          double nx = norm(fpt, 0);
+          double ny = norm(fpt, 1);
           double gam = input->gamma;
 
           /* Primitive Variables */
@@ -1195,9 +1195,9 @@ void Faces::apply_bcs_dFdU()
 
         else if (nDims == 3)
         {
-          double nx = norm(fpt, 0, 0);
-          double ny = norm(fpt, 1, 0);
-          double nz = norm(fpt, 2, 0);
+          double nx = norm(fpt, 0);
+          double ny = norm(fpt, 1);
+          double nz = norm(fpt, 2);
           double gam = input->gamma;
 
           /* Primitive Variables */
@@ -1340,8 +1340,8 @@ void Faces::apply_bcs_dFdU()
       {
         if (nDims == 2)
         {
-          double nx = norm(fpt, 0, 0);
-          double ny = norm(fpt, 1, 0);
+          double nx = norm(fpt, 0);
+          double ny = norm(fpt, 1);
 
           /* Primitive Variables */
           double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
@@ -1374,9 +1374,9 @@ void Faces::apply_bcs_dFdU()
 
         else if (nDims == 3)
         {
-          double nx = norm(fpt, 0, 0);
-          double ny = norm(fpt, 1, 0);
-          double nz = norm(fpt, 2, 0);
+          double nx = norm(fpt, 0);
+          double ny = norm(fpt, 1);
+          double nz = norm(fpt, 2);
 
           /* Primitive Variables */
           double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
@@ -1425,8 +1425,8 @@ void Faces::apply_bcs_dFdU()
       case SYMMETRY_G: /* Symmetry (ghost) */
       case SLIP_WALL_G: /* Slip Wall (ghost) */
       {
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
+        double nx = norm(fpt, 0);
+        double ny = norm(fpt, 1);
 
         dURdUL(0, 0) = 1;
         dURdUL(1, 0) = 0;
@@ -1453,8 +1453,8 @@ void Faces::apply_bcs_dFdU()
 
       case ADIABATIC_NOSLIP_P: /* No-slip Wall (adiabatic) */
       {
-        double nx = norm(fpt, 0, 0);
-        double ny = norm(fpt, 1, 0);
+        double nx = norm(fpt, 0);
+        double ny = norm(fpt, 1);
 
         /* Primitive Variables */
         double rhoL = U(fpt, 0, 0);
@@ -1696,7 +1696,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     if (input->motion)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
-        Vgn += Vg(fpt, dim) * norm(fpt, dim, 0);
+        Vgn += Vg(fpt, dim) * norm(fpt, dim);
     }
 
     /* Get numerical wavespeed */
@@ -1707,7 +1707,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+        An += input->AdvDiff_A(dim) * norm(fpt, dim);
         A[dim] = input->AdvDiff_A(dim);
       }
 
@@ -1727,8 +1727,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        AnL += UL[0] * norm(fpt, dim, 0);
-        AnR += UR[0] * norm(fpt, dim, 0);
+        AnL += UL[0] * norm(fpt, dim);
+        AnR += UR[0] * norm(fpt, dim);
       }
 
       eig = std::max(std::abs(AnL), std::abs(AnR));
@@ -1753,8 +1753,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       double VnL = 0.0; double VnR = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        VnL += UL[dim+1]/UL[0] * norm(fpt, dim, 0);
-        VnR += UR[dim+1]/UR[0] * norm(fpt, dim, 0);
+        VnL += UL[dim+1]/UL[0] * norm(fpt, dim);
+        VnR += UR[dim+1]/UR[0] * norm(fpt, dim);
       }
 
       eig = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
@@ -1769,8 +1769,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        FnL[n] += FL[n][dim] * norm(fpt, dim, 0);
-        FnR[n] += FR[n][dim] * norm(fpt, dim, 0);
+        FnL[n] += FL[n][dim] * norm(fpt, dim);
+        FnR[n] += FR[n][dim] * norm(fpt, dim);
       }
     }
 
@@ -1824,12 +1824,12 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
       /* Setting sign of beta (from HiFiLES) */
       if (nDims == 2)
       {
-        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+        if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
           beta = -beta;
       }
       else if (nDims == 3)
       {
-        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+        if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
           beta = -beta;
       }
 
@@ -1899,12 +1899,12 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     /* Setting sign of beta (from HiFiLES) */
     if (nDims == 2)
     {
-      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+      if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
         beta = -beta;
     }
     else if (nDims == 3)
     {
-      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+      if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
         beta = -beta;
     }
 
@@ -1952,8 +1952,8 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        FnL[n] += FL[n][dim] * norm(fpt, dim, 0);
-        FnR[n] += FR[n][dim] * norm(fpt, dim, 0);
+        FnL[n] += FL[n][dim] * norm(fpt, dim);
+        FnR[n] += FR[n][dim] * norm(fpt, dim);
       }
     }
 
@@ -1965,8 +1965,8 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(fpt, dim, 0)* (UL[n]
-              - UR[n]) + beta * norm(fpt, dim, 0)* (FnL[n] - FnR[n]);
+          FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(fpt, dim)* (UL[n]
+              - UR[n]) + beta * norm(fpt, dim)* (FnL[n] - FnR[n]);
         }
       }
     }
@@ -1977,7 +1977,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          FR[n][dim] += tau * norm(fpt, dim, 0)* (UL[n] - UR[n]);
+          FR[n][dim] += tau * norm(fpt, dim)* (UL[n] - UR[n]);
         }
       }
     }
@@ -1986,7 +1986,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        double F = FR[n][dim] * norm(fpt, dim, 0) * dA(fpt);
+        double F = FR[n][dim] * norm(fpt, dim) * dA(fpt);
         Fcomm(fpt, n, 0) += F;
         Fcomm(fpt, n, 1) -= F;
       }
@@ -2618,12 +2618,12 @@ void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
       /* Setting sign of beta (from HiFiLES) */
       if (nDims == 2)
       {
-        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+        if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
           beta = -beta;
       }
       else if (nDims == 3)
       {
-        if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+        if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
           beta = -beta;
       }
 
@@ -2699,8 +2699,8 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFndUL_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 0) * norm(fpt, dim, 0);
-          dFndUR_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
+          dFndUL_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 0) * norm(fpt, dim);
+          dFndUR_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 1) * norm(fpt, dim);
         }
       }
     }
@@ -2752,7 +2752,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        An += input->AdvDiff_A(dim) * norm(fpt, dim, 0);
+        An += input->AdvDiff_A(dim) * norm(fpt, dim);
       }
 
       waveSp(fpt) = std::abs(An);
@@ -2764,8 +2764,8 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        AnL += WL[0] * norm(fpt, dim, 0);
-        AnR += WR[0] * norm(fpt, dim, 0);
+        AnL += WL[0] * norm(fpt, dim);
+        AnR += WR[0] * norm(fpt, dim);
       }
 
       waveSp(fpt) = std::max(std::abs(AnL), std::abs(AnR));
@@ -2794,8 +2794,8 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       double VnL = 0.0; double VnR = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        VnL += WL[dim+1]/WL[0] * norm(fpt, dim, 0);
-        VnR += WR[dim+1]/WR[0] * norm(fpt, dim, 0);
+        VnL += WL[dim+1]/WL[0] * norm(fpt, dim);
+        VnR += WR[dim+1]/WR[0] * norm(fpt, dim);
       }
 
       /* Compute wavespeed and wavespeed derivative */
@@ -2823,7 +2823,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           dwSdUL[0] += gam * (gam-1.0) * V[dim]*V[dim] / (4.0*aL*rho);
-          dwSdUL[dim+1] = sgn*norm(fpt, dim, 0)/rho - gam * (gam-1.0) * V[dim] / (2.0*aL*rho);
+          dwSdUL[dim+1] = sgn*norm(fpt, dim)/rho - gam * (gam-1.0) * V[dim] / (2.0*aL*rho);
         }
         dwSdUL[nDims+1] = gam * (gam-1.0) / (2.0*aL*rho);
       }
@@ -2849,7 +2849,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           dwSdUR[0] += gam * (gam-1.0) * V[dim]*V[dim] / (4.0*aR*rho);
-          dwSdUR[dim+1] = sgn*norm(fpt, dim, 0)/rho - gam * (gam-1.0) * V[dim] / (2.0*aR*rho);
+          dwSdUR[dim+1] = sgn*norm(fpt, dim)/rho - gam * (gam-1.0) * V[dim] / (2.0*aR*rho);
         }
         dwSdUR[nDims+1] = gam * (gam-1.0) / (2.0*aR*rho);
       }
@@ -2901,12 +2901,12 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
     double beta = input->ldg_b;
     if (nDims == 2)
     {
-      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) < 0.0)
+      if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
         beta = -beta;
     }
     else if (nDims == 3)
     {
-      if (norm(fpt, 0, 0) + norm(fpt, 1, 0) + sqrt(2.) * norm(fpt, 2, 0) < 0.0)
+      if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
         beta = -beta;
     }
 
@@ -2931,8 +2931,8 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFndUL_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 0) * norm(fpt, dim, 0);
-          dFndUR_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
+          dFndUL_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 0) * norm(fpt, dim);
+          dFndUR_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim);
         }
       }
     }
@@ -2946,8 +2946,8 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFnddUL_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 0) * norm(fpt, dimi, 0);
-            dFnddUR_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi, 0);
+            dFnddUL_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 0) * norm(fpt, dimi);
+            dFnddUR_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi);
           }
         }
       }
@@ -2964,13 +2964,13 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFcdU_temp(fpt, ni, nj, 0) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 0) + beta * norm(fpt, dim, 0) * dFndUL_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
-            dFcdU_temp(fpt, ni, nj, 1) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 1) - beta * norm(fpt, dim, 0) * dFndUR_temp(fpt, ni, nj)) * norm(fpt, dim, 0);
+            dFcdU_temp(fpt, ni, nj, 0) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 0) + beta * norm(fpt, dim) * dFndUL_temp(fpt, ni, nj)) * norm(fpt, dim);
+            dFcdU_temp(fpt, ni, nj, 1) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 1) - beta * norm(fpt, dim) * dFndUR_temp(fpt, ni, nj)) * norm(fpt, dim);
 
             if (ni == nj)
             {
-              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
-              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
+              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim)) * norm(fpt, dim);
+              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim)) * norm(fpt, dim);
             }
           }
         }
@@ -2986,9 +2986,9 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
             for (unsigned int ni = 0; ni < nVars; ni++)
             {
               dFcddU_temp(fpt, ni, nj, dimj, 0) += 
-                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 0) + beta * norm(fpt, dimi, 0) * dFnddUL_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi, 0);
+                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 0) + beta * norm(fpt, dimi) * dFnddUL_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi);
               dFcddU_temp(fpt, ni, nj, dimj, 1) += 
-                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 1) - beta * norm(fpt, dimi, 0) * dFnddUR_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi, 0);
+                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 1) - beta * norm(fpt, dimi) * dFnddUR_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi);
             }
           }
         }
@@ -3004,12 +3004,12 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFcdU_temp(fpt, ni, nj, 1) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim, 0);
+            dFcdU_temp(fpt, ni, nj, 1) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim);
 
             if (ni == nj)
             {
-              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
-              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim, 0)) * norm(fpt, dim, 0);
+              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim)) * norm(fpt, dim);
+              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim)) * norm(fpt, dim);
             }
           }
         }
@@ -3024,7 +3024,7 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
           {
             for (unsigned int ni = 0; ni < nVars; ni++)
             {
-              dFcddU_temp(fpt, ni, nj, dimj, 1) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi, 0);
+              dFcddU_temp(fpt, ni, nj, dimj, 1) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi);
             }
           }
         }
