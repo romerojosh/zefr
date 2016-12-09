@@ -213,7 +213,7 @@ int main(int argc, char* argv[])
 #include "zefr.hpp"
 
 #ifdef _MPI
-Zefr::Zefr(MPI_Comm comm_in, int n_grids, int grid_id)
+Zefr::Zefr(MPI_Comm comm_in, int n_grids, int grid_id, MPI_Comm comm_world)
 #else
 Zefr::Zefr(void)
 #endif
@@ -223,7 +223,7 @@ Zefr::Zefr(void)
   myComm = 0;
   myGrid = 0;
 #else
-  mpi_init(comm_in, n_grids, grid_id);
+  mpi_init(comm_in, comm_world, n_grids, grid_id);
 #endif
 
   /* Print out cool ascii art header */
@@ -245,9 +245,10 @@ Zefr::Zefr(void)
 }
 
 #ifdef _MPI
-void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
+void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid_id)
 {
   myComm = comm_in;
+  worldComm = comm_world;
   nGrids = n_grids;
   myGrid = grid_id;
 
@@ -263,25 +264,24 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  int grank;
-  MPI_Comm_rank(MPI_COMM_WORLD,&grank);
+  int grank = rank;
+  MPI_Comm_rank(worldComm,&grank);
 
   char hostname[MPI_MAX_PROCESSOR_NAME];
   int len;
   MPI_Get_processor_name(hostname, &len);
-//  std::cout << "Global rank " << grank << " is on processor " << hostname << std::endl;
-  //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
-  cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
-  //cudaSetDevice(0);
-//  printf("My CUDA device for rank %d(%d) is %d / %d\n",rank,grank,grank%4,nDevices);
+
+  int cid;
+  cid = grank%16; // For XStream nodes
+  //cid = grank%4; // For ICME K80 nodes
+  //cid = rank % nDevices; /// TODO: use MPI_local_rank % nDevices
+  printf("rank %d on grid %d --> CUDA device %d\n",rank,myGrid,cid);
+  cudaSetDevice(cid); 
+  check_error();
 
 //  cudaDeviceProp prop;
-//  cudaGetDeviceProperties(&prop, grank%4);
+//  cudaGetDeviceProperties(&prop, cid);
 //  printf("%d: Device name: %s\n",grank, prop.name);
-
-//  MPI_Barrier(MPI_COMM_WORLD);
-//  MPI_Finalize();
-//  exit(0);
 #endif
 }
 #endif
@@ -307,7 +307,7 @@ void Zefr::setup_solver(void)
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   solver = std::make_shared<FRSolver>(&input);
   solver->ZEFR = this;
-  solver->setup(myComm);
+  solver->setup(myComm, worldComm);
 
   if (input.p_multi)
   {

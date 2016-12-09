@@ -24,9 +24,9 @@ Zefr *ZEFR = NULL;
 namespace zefr {
 
 #ifdef _MPI
-void initialize(MPI_Comm comm_in, char *inputFile, int nGrids, int gridID)
+void initialize(MPI_Comm comm_in, char *inputFile, int nGrids, int gridID, MPI_Comm world_comm)
 {
-  if (!ZEFR) ZEFR = new Zefr(comm_in, nGrids, gridID);
+  if (!ZEFR) ZEFR = new Zefr(comm_in, nGrids, gridID, world_comm);
 
   ZEFR->read_input(inputFile);
 }

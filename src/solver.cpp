@@ -80,11 +80,11 @@ FRSolver::FRSolver(InputStruct *input, int order)
 
 }
 
-void FRSolver::setup(_mpi_comm comm_in)
+void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 {
   myComm = comm_in;
 #ifdef _MPI
-  worldComm = MPI_COMM_WORLD;
+  worldComm = comm_world;
 #endif
 
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
@@ -2033,7 +2033,8 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   }
 
 #ifdef _MPI
-  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  std::cout << __FILE__ << ":" __LINE__ << ": rank " << rank << ": befre MPI_Allreduce for dt" << std::endl;
+  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, worldComm);
 #endif
 
   // Determine the time step scaling factor and the new time step
@@ -2407,7 +2408,7 @@ void FRSolver::compute_element_dt()
 
 #ifdef _MPI
     /// TODO: If interfacing with other explicit solver, work together here
-    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, worldComm);
 #endif
 
   }
@@ -2574,7 +2575,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   MPI_Info info;
   MPI_Info_create(&info);
   H5Pset_fapl_mpio(h5_mpi_plist, geo.myComm, info);
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(myComm);
   H5File file(filename, H5F_ACC_TRUNC, h5_mpi_plist);
 
   std::vector<int> n_eles_p(input->nRanks);
@@ -2884,16 +2885,22 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   if (input->overset)
   {
-    Attribute att = dset.openAttribute("iblank");
-    DataSpace dspaceI = att.getSpace();
-    hsize_t dim[1];
-    dspaceI.getSimpleExtentDims(dim);
+    /*try {
+      Attribute att = dset.openAttribute("iblank");
+      DataSpace dspaceI = att.getSpace();
+      hsize_t dim[1];
+      dspaceI.getSimpleExtentDims(dim);
 
-    if (dim[0] != geo.nEles)
-      ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+      if (dim[0] != geo.nEles)
+        ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
 
-    geo.iblank_cell.assign({geo.nEles});
-    att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+      geo.iblank_cell.assign({geo.nEles});
+      att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+    }
+    catch (const std::exception &e) {
+      // No iblank attribute - ignore (will be re-calculated anyways)
+      geo.iblank_cell.assign({geo.nEles});
+    }*/
   }
 
   dset.close();
