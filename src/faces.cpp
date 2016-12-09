@@ -1838,6 +1838,20 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
       double beta = input->ldg_b;
 
+
+      /* Setting sign of beta (from HiFiLES) */
+      if (nDims == 2)
+      {
+        if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
+          beta = -beta;
+      }
+      else if (nDims == 3)
+      {
+        if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
+          beta = -beta;
+      }
+
+
       /* Get left and right state variables */
       /* If interior, allow use of beta factor */
       if (LDG_bias(fpt) == 0)
@@ -1899,6 +1913,18 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
     double beta = input->ldg_b;
 
+    /* Setting sign of beta (from HiFiLES) */
+    if (nDims == 2)
+    {
+      if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
+        beta = -beta;
+    }
+    else if (nDims == 3)
+    {
+      if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
+        beta = -beta;
+    }
+
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -1954,21 +1980,32 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        double F = 0.5 * (FnL[n] + FnR[n]) + tau * (UL[n]
-          - UR[n]) + beta * (FnL[n] - FnR[n]);
-
-        Fcomm(fpt, n, 0) += F * dA(fpt);
-        Fcomm(fpt, n, 1) -= F * dA(fpt);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(fpt, dim)* (UL[n]
+              - UR[n]) + beta * norm(fpt, dim)* (FnL[n] - FnR[n]);
+        }
       }
     }
-    /* If boundary, use right state only */
-    else if (LDG_bias(fpt) == 1)
+    /* If Neumann boundary, use right state only */
+    else
     {
       for (unsigned int n = 0; n < nVars; n++)
       {
-        double F = FnR[n] + tau * (UL[n] - UR[n]);
-        Fcomm(fpt, n, 0) += F * dA(fpt);
-        Fcomm(fpt, n, 1) -= F * dA(fpt);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          FR[n][dim] += tau * norm(fpt, dim)* (UL[n] - UR[n]);
+        }
+      }
+    }
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        double F = FR[n][dim] * norm(fpt, dim) * dA(fpt);
+        Fcomm(fpt, n, 0) += F;
+        Fcomm(fpt, n, 1) -= F;
       }
     }
   }
