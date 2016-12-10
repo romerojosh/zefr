@@ -77,6 +77,7 @@ template void allocate_device_data<double>(double* &device_data, unsigned int si
 template void allocate_device_data<double*>(double** &device_data, unsigned int size);
 template void allocate_device_data<unsigned int>(unsigned int* &device_data, unsigned int size);
 template void allocate_device_data<int>(int* &device_data, unsigned int size);
+template void allocate_device_data<char>(char* &device_data, unsigned int size);
 template void allocate_device_data<MotionVars>(MotionVars* &device_data, unsigned int size);
 
 
@@ -91,6 +92,7 @@ template void free_device_data<double>(double* &device_data);
 template void free_device_data<double*>(double** &device_data);
 template void free_device_data<unsigned int>(unsigned int* &device_data);
 template void free_device_data<int>(int* &device_data);
+template void free_device_data<char>(char* &device_data);
 template void free_device_data<MotionVars>(MotionVars* &device_data);
 
 template <typename T>
@@ -112,6 +114,7 @@ template void copy_to_device<double>(double* device_data, const double* host_dat
 template void copy_to_device<double*>(double** device_data, double* const* host_data, unsigned int size, int stream);
 template void copy_to_device<unsigned int>(unsigned int* device_data, const unsigned int* host_data, unsigned int size, int stream);
 template void copy_to_device<int>(int* device_data, const int* host_data,  unsigned int size, int stream);
+template void copy_to_device<char>(char* device_data, const char* host_data,  unsigned int size, int stream);
 template void copy_to_device<MotionVars>(MotionVars* device_data, const MotionVars* host_data,  unsigned int size, int stream);
 
 template <typename T>
@@ -133,6 +136,7 @@ template void copy_from_device<double>(double* host_data, const double* device_d
 template void copy_from_device<double*>(double** host_data, double* const* device_data, unsigned int size, int stream);
 template void copy_from_device<unsigned int>(unsigned int* host_data, const unsigned int* device_data, unsigned int size, int stream);
 template void copy_from_device<int>(int* host_data, const int* device_data, unsigned int size, int stream);
+template void copy_from_device<char>(char* host_data, const char* device_data, unsigned int size, int stream);
 
 void sync_stream(unsigned int stream)
 {
@@ -162,7 +166,7 @@ void copy_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned 
 
 void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   copy_kernel<<<blocks, threads>>>(vec1, vec2, size);
 
@@ -183,7 +187,7 @@ void add_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsigned i
 
 void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   add_kernel<<<blocks, threads>>>(vec1, vec2, size);
 
@@ -204,7 +208,7 @@ void subtract_kernel(mdvector_gpu<double> vec1, mdvector_gpu<double> vec2, unsig
 
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   subtract_kernel<<<blocks, threads>>>(vec1, vec2, size);
 
@@ -225,7 +229,7 @@ void fill_kernel(mdvector_gpu<double> vec, double val, unsigned int size)
 
 void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val)
 {
-  unsigned int threads = 192;
+  unsigned int threads = 128;
   unsigned int blocks = min((size + threads - 1) /threads, MAX_GRID_DIM);
   fill_kernel<<<blocks, threads>>>(vec, val, size);
 
@@ -370,7 +374,7 @@ void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, co
 template <unsigned int nVars>
 __global__
 void dFcdU_from_faces(mdvector_gpu<double> dFcdU_gfpts, mdvector_gpu<double> dFcdU_fpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<int> fpt2gfpt_slot, mdvector_gpu<unsigned int> gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
+    mdvector_gpu<char> fpt2gfpt_slot, mdvector_gpu<char> gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     unsigned int nEles, unsigned int nFpts)
 {
   const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
@@ -422,7 +426,7 @@ void dFcdU_from_faces(mdvector_gpu<double> dFcdU_gfpts, mdvector_gpu<double> dFc
 }
 
 void dFcdU_from_faces_wrapper(mdvector_gpu<double> &dFcdU_gfpts, mdvector_gpu<double> &dFcdU_fpts, 
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, mdvector_gpu<unsigned int> &gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<char> &gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
     unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation)
 {
   unsigned int threads = 128;

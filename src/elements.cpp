@@ -545,37 +545,37 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
 
       unsigned int slot = geo->fpt2gfpt_slot(fpt,e);
 
-      /* --- Calculate outward unit normal vector at flux point --- */
-      // Transform face normal from reference to physical space [JGinv .dot. tNorm]
-      for (uint dim1 = 0; dim1 < nDims; dim1++)
-      {
-        faces->norm(gfpt,dim1,slot) = 0.;
-        for (uint dim2 = 0; dim2 < nDims; dim2++)
-          faces->norm(gfpt,dim1,slot) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
-      }
-
-      // Store magnitude of face normal (equivalent to face area in finite-volume land)
+      /* --- Calculate outward unit normal vector at flux point ("left" element only) --- */
       if (slot == 0)
       {
-        faces->dA(gfpt) = 0;
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->dA(gfpt) += faces->norm(gfpt,dim,slot)*faces->norm(gfpt,dim,slot);
-        faces->dA(gfpt) = sqrt(faces->dA(gfpt));
-      }
+        // Transform face normal from reference to physical space [JGinv .dot. tNorm]
+        for (uint dim1 = 0; dim1 < nDims; dim1++)
+        {
+          faces->norm(gfpt,dim1) = 0.;
+          for (uint dim2 = 0; dim2 < nDims; dim2++)
+            faces->norm(gfpt,dim1) += inv_jaco_fpts(fpt,e,dim2,dim1) * tnorm(fpt,dim2);
+        }
 
-      // Normalize
-      // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
-      // (A normal vector at a point doesn't make sense anyways)
-      if (std::fabs(faces->dA(gfpt)) < 1e-10)
-      {
-        faces->dA(gfpt) = 0.;
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt,dim,slot) = 0;
-      }
-      else
-      {
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt,dim,slot) /= faces->dA(gfpt);
+        // Store magnitude of face normal (equivalent to face area in finite-volume land)
+          faces->dA(gfpt) = 0;
+          for (uint dim = 0; dim < nDims; dim++)
+            faces->dA(gfpt) += faces->norm(gfpt,dim)*faces->norm(gfpt,dim);
+          faces->dA(gfpt) = sqrt(faces->dA(gfpt));
+
+        // Normalize
+        // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
+        // (A normal vector at a point doesn't make sense anyways)
+        if (std::fabs(faces->dA(gfpt)) < 1e-10)
+        {
+          faces->dA(gfpt) = 0.;
+          for (uint dim = 0; dim < nDims; dim++)
+            faces->norm(gfpt,dim) = 0;
+        }
+        else
+        {
+          for (uint dim = 0; dim < nDims; dim++)
+            faces->norm(gfpt,dim) /= faces->dA(gfpt);
+        }
       }
     }
   }
@@ -745,7 +745,8 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
               continue;
 
             unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
-            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * faces->norm(gfpt,dim,slot) * faces->dA(gfpt);
+            double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+            dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * fac * faces->norm(gfpt,dim) * faces->dA(gfpt);
           }
         }
       }
@@ -1345,17 +1346,19 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
         }
       }
 
+      /* Get metric terms */
+      double inv_jaco[nDims][nDims];
+
+      for (int dim1 = 0; dim1 < nDims; dim1++)
+        for (int dim2 = 0; dim2 < nDims; dim2++)
+          inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
       double dU[nVars][nDims] = {{0.0}};
       if (input->viscous)
       {
-        /* Transform gradient to physical space */
         double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-        double inv_jaco[nDims][nDims];
 
-        for (int dim1 = 0; dim1 < nDims; dim1++)
-          for (int dim2 = 0; dim2 < nDims; dim2++)
-            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-
+        /* Transform gradient to physical space */
         for (unsigned int var = 0; var < nVars; var++)
         {
           for (int dim1 = 0; dim1 < nDims; dim1++)
@@ -1401,14 +1404,6 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
       if (!input->motion)
       {
         /* Transform flux to reference space */
-        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-        {
-          for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-          {
-            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
-          }
-        }
-
         double tF[nVars][nDims] = {{0.0}};;
 
         for (unsigned int var = 0; var < nVars; var++)

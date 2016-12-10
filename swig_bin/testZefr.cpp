@@ -15,12 +15,12 @@ int main(int argc, char *argv[])
   int gridID = 0;
   int nGrids = 2;
 
-  //gridID = rank%nGrids; //(rank > (size/2));
-  gridID = rank>0;
+  gridID = rank%nGrids; //(rank > (size/2));
+  //gridID = rank>0;
 
   /* Basic sphere test case */
-  nGrids = 2;
-  gridID = (rank >= size / nGrids);
+  //nGrids = 2;
+  //gridID = (rank >= size / nGrids);
   //if (rank <= 1) gridID = 0;
   //if (rank > 1) gridID = 1;
 

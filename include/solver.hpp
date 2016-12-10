@@ -128,7 +128,7 @@ class FRSolver
   public:
     double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);
-    void setup(_mpi_comm comm_in);
+    void setup(_mpi_comm comm_in, _mpi_comm comm_world = DEFAULT_COMM);
     void compute_residual(unsigned int stage, unsigned int color = 0);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
@@ -160,6 +160,9 @@ class FRSolver
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
+#ifdef _GPU
+    void report_gpu_mem_usage();
+#endif
     void filter_solution();
 
     void compute_forces(std::array<double, 3>& force_conv, std::array<double, 3>& force_visc, std::ofstream* f);

@@ -87,7 +87,7 @@ void extrapolate_Fn_wrapper(mdvector_gpu<double>& oppE,
     mdvector_gpu<double>& F_spts, mdvector_gpu<double>& tempF_fpts,
     mdvector_gpu<double>& dFn_fpts, mdvector_gpu<double>& norm,
     mdvector_gpu<double>& dA, mdvector_gpu<int>& fpt2gfpt,
-    mdvector_gpu<int>& fpt2slot, unsigned int nSpts, unsigned int nFpts,
+    mdvector_gpu<char>& fpt2slot, unsigned int nSpts, unsigned int nFpts,
     unsigned int nEles, unsigned int nDims, unsigned int nVars, bool motion);
 
 /* Additional wrappers */
@@ -133,7 +133,7 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
 
 void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
     mdvector_gpu<double> &inv_jaco, mdvector_gpu<double> &tnorm,
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2slot, int nFpts,
+    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2slot, int nFpts,
     int nEles, int nDims);
 
 //! For overset grid interpolation

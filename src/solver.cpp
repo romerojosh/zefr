@@ -80,11 +80,11 @@ FRSolver::FRSolver(InputStruct *input, int order)
 
 }
 
-void FRSolver::setup(_mpi_comm comm_in)
+void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 {
   myComm = comm_in;
 #ifdef _MPI
-  worldComm = MPI_COMM_WORLD;
+  worldComm = comm_world;
 #endif
 
   if (input->rank == 0) std::cout << "Reading mesh: " << input->meshfile << std::endl;
@@ -156,7 +156,11 @@ void FRSolver::setup(_mpi_comm comm_in)
   solver_data_to_device();
 #endif
 
-  setup_views();
+  setup_views(); // Note: This function allocates addtional GPU memory for views
+
+#ifdef _GPU
+  report_gpu_mem_usage();
+#endif
 
 }
 
@@ -551,11 +555,10 @@ void FRSolver::solver_data_to_device()
   }
 
   /* Implicit solver data structures */
-  eles->deltaU_d = eles->deltaU;
-  eles->RHS_d = eles->RHS;
-
   if (input->dt_scheme == "MCGS")
   {
+    eles->deltaU_d = eles->deltaU;
+    eles->RHS_d = eles->RHS;
     eles->LHS_d = eles->LHSs[0];
 
     if (input->inv_mode)
@@ -641,17 +644,24 @@ void FRSolver::solver_data_to_device()
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
   eles->divF_spts_d = eles->divF_spts;
-  eles->jaco_spts_d = eles->jaco_spts;
   eles->inv_jaco_spts_d = eles->inv_jaco_spts;
   eles->jaco_det_spts_d = eles->jaco_det_spts;
   eles->vol_d = eles->vol;
-  eles->h_ref_d = eles->h_ref;
+
+  if (input->CFL_type == 2)
+    eles->h_ref_d = eles->h_ref;
 
   if (input->viscous)
   {
     eles->dU_spts_d = eles->dU_spts;
     eles->Ucomm_d = eles->Ucomm;
     eles->dU_fpts_d = eles->dU_fpts;
+  }
+  
+  //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
+  if (input->motion || input->dt_scheme == "MCGS")
+  {
+    eles->jaco_spts_d = eles->jaco_spts;
   }
 
   if (input->motion)
@@ -694,11 +704,8 @@ void FRSolver::solver_data_to_device()
   }
 
   /* Solution data structures (faces) */
-  //faces->U_d = faces->U;
   faces->U_bnd_d = faces->U_bnd;
   faces->P_d = faces->P;
-  //faces->Ucomm_d = faces->Ucomm;
-  //faces->Fcomm_d = faces->Fcomm;
   faces->Ucomm_bnd_d = faces->Ucomm_bnd;
   faces->Fcomm_bnd_d = faces->Fcomm_bnd;
   faces->norm_d = faces->norm;
@@ -709,7 +716,6 @@ void FRSolver::solver_data_to_device()
 
   if (input->viscous)
   {
-    //faces->dU_d = faces->dU;
     faces->dU_bnd_d = faces->dU_bnd;
   }
 
@@ -1365,7 +1371,7 @@ void FRSolver::initialize_U()
       for (unsigned int color = 1; color <= geo.nColors; color++)
       {
         eles->LHSs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0);
-        eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, false, true);
+        eles->LHSInvs[color - 1].assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, nElesMax}, 0, true);
         LUptrs[color - 1].resize(nElesMax);
       }
       
@@ -1488,65 +1494,79 @@ void FRSolver::setup_views()
 {
   /* Setup face view of element solution data struture */
   // TODO: Might not want to allocate all these at once. Turn this into a function maybe?
-  mdvector<double*> U_ptr_map({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Fcomm_ptr_map({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Ucomm_ptr_map;
-  mdvector<double*> dU_ptr_map;
+  mdvector<double*> U_base_ptrs({2 * geo.nGfpts});
+  mdvector<double*> Fcomm_base_ptrs({2 * geo.nGfpts});
+  mdvector<unsigned int> U_strides({2 * geo.nGfpts});
+  mdvector<double*> Ucomm_base_ptrs;
+  mdvector<double*> dU_base_ptrs;
+  mdvector<unsigned int> dU_strides;
+
   if (input->viscous)
   {
-    Ucomm_ptr_map.assign({geo.nGfpts, eles->nVars, 2});
-    dU_ptr_map.assign({geo.nGfpts, eles->nVars, eles->nDims, 2});
+    Ucomm_base_ptrs.assign({2 * geo.nGfpts});
+    dU_base_ptrs.assign({2 * geo.nGfpts});
+    dU_strides.assign({2 * geo.nGfpts, 2});
   }
 #ifdef _GPU
-  mdvector<double*> U_ptr_map_d({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Fcomm_ptr_map_d({geo.nGfpts, eles->nVars, 2});
-  mdvector<double*> Ucomm_ptr_map_d;
-  mdvector<double*> dU_ptr_map_d;
+  mdvector<double*> U_base_ptrs_d({2 * geo.nGfpts});
+  mdvector<double*> Fcomm_base_ptrs_d({2 * geo.nGfpts});
+  mdvector<unsigned int> U_strides_d({2 * geo.nGfpts});
+  mdvector<double*> Ucomm_base_ptrs_d;
+  mdvector<double*> dU_base_ptrs_d;
+  mdvector<unsigned int> dU_strides_d;
+
   if (input->viscous)
   {
-    Ucomm_ptr_map_d.assign({geo.nGfpts, eles->nVars, 2});
-    dU_ptr_map_d.assign({geo.nGfpts, eles->nVars, eles->nDims, 2});
+    Ucomm_base_ptrs_d.assign({2 * geo.nGfpts});
+    dU_base_ptrs_d.assign({2 * geo.nGfpts});
+    dU_strides_d.assign({2 * geo.nGfpts, 2});
   }
 #endif
 
   /* Set pointers for internal faces */
 #pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < eles->nVars; n++)
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
     {
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+      int gfpt = geo.fpt2gfpt(fpt,ele);
+      /* Check if flux point is on ghost edge */
+      if (gfpt == -1)
       {
-        int gfpt = geo.fpt2gfpt(fpt,ele);
-        /* Check if flux point is on ghost edge */
-        if (gfpt == -1)
-        {
-          continue;
-        }
-
-        int slot = geo.fpt2gfpt_slot(fpt,ele);
-
-        U_ptr_map(gfpt, n, slot) = &eles->U_fpts(fpt, ele, n);
-        Fcomm_ptr_map(gfpt, n, slot) = &eles->Fcomm(fpt, ele, n);
-        if (input->viscous) Ucomm_ptr_map(gfpt, n, slot) = &eles->Ucomm(fpt, ele, n);
-#ifdef _GPU
-        U_ptr_map_d(gfpt, n, slot) = eles->U_fpts_d.get_ptr(fpt, ele, n);
-        Fcomm_ptr_map_d(gfpt, n, slot) = eles->Fcomm_d.get_ptr(fpt, ele, n);
-        if (input->viscous) Ucomm_ptr_map_d(gfpt, n, slot) = eles->Ucomm_d.get_ptr(fpt, ele, n);
-#endif
-
-        if (input->viscous)
-        {
-          for (unsigned int dim = 0; dim < eles->nDims; dim++)
-          {
-            dU_ptr_map(gfpt, n, dim, slot) = &eles->dU_fpts(fpt, ele, n, dim);
-#ifdef _GPU
-            dU_ptr_map_d(gfpt, n, dim, slot) = eles->dU_fpts_d.get_ptr(fpt, ele, n, dim);
-#endif
-          }
-        }
-        
+        continue;
       }
+
+      int slot = geo.fpt2gfpt_slot(fpt,ele);
+
+      U_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
+      U_strides(gfpt + slot * geo.nGfpts) = eles->U_fpts.get_stride(1);
+
+      Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Fcomm(fpt, ele, 0);
+
+      if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Ucomm(fpt, ele, 0);
+#ifdef _GPU
+      U_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
+      U_strides_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_stride(1);
+
+      Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Fcomm_d.get_ptr(fpt, ele, 0);
+
+      if (input->viscous) Ucomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Ucomm_d.get_ptr(fpt, ele, 0);
+#endif
+
+      if (input->viscous)
+      {
+        dU_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->dU_fpts(fpt, ele, 0, 0);
+        dU_strides(gfpt + slot * geo.nGfpts, 0) = eles->dU_fpts.get_stride(1);
+        dU_strides(gfpt + slot * geo.nGfpts, 1) = eles->dU_fpts.get_stride(2);
+
+#ifdef _GPU
+        dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->dU_fpts_d.get_ptr(fpt, ele, 0, 0);
+        dU_strides_d(gfpt + slot * geo.nGfpts, 0) = eles->dU_fpts_d.get_stride(1);
+        dU_strides_d(gfpt + slot * geo.nGfpts, 1) = eles->dU_fpts_d.get_stride(2);
+#endif
+       
+      }
+      
     }
   }
 
@@ -1556,25 +1576,32 @@ void FRSolver::setup_views()
   {
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
-      U_ptr_map(gfpt, n, 1) = &faces->U_bnd(i, n);
-      Fcomm_ptr_map(gfpt, n, 1) = &faces->Fcomm_bnd(i, n);
-      if (input->viscous) Ucomm_ptr_map(gfpt, n, 1) = &faces->Ucomm_bnd(i, n);
+      U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0);
+      U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(0);
+
+      Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(i, 0);
+
+      if (input->viscous) Ucomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Ucomm_bnd(i, 0);
 
 #ifdef _GPU
-      U_ptr_map_d(gfpt, n, 1) = faces->U_bnd_d.get_ptr(i, n);
-      Fcomm_ptr_map_d(gfpt, n, 1) = faces->Fcomm_bnd_d.get_ptr(i, n);
-      if (input->viscous) Ucomm_ptr_map_d(gfpt, n, 1) = faces->Ucomm_bnd_d.get_ptr(i, n);
+      U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0);
+      U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(0);
+
+      Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(i, 0);
+
+      if (input->viscous) Ucomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Ucomm_bnd_d.get_ptr(i, 0);
 #endif
 
       if (input->viscous)
       {
-        for (unsigned int dim = 0; dim < eles->nDims; dim++)
-        {
-          dU_ptr_map(gfpt, n, dim, 1) = &faces->dU_bnd(i, n, dim);
+        dU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dU_bnd(i, 0, 0);
+        dU_strides(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd.get_stride(0);
+        dU_strides(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd.get_stride(1);
 #ifdef _GPU
-          dU_ptr_map_d(gfpt, n, dim, 1) = faces->dU_bnd_d.get_ptr(i, n, dim);
+        dU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_ptr(i, 0, 0);
+        dU_strides_d(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd_d.get_stride(0);
+        dU_strides_d(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd_d.get_stride(1);
 #endif
-        }
       }
     }
 
@@ -1582,23 +1609,24 @@ void FRSolver::setup_views()
   }
 
   /* Create views of element data for faces */
-  faces->U.assign(U_ptr_map);
-  faces->Fcomm.assign(Fcomm_ptr_map);
+  faces->U.assign(U_base_ptrs, U_strides, geo.nGfpts);
+  faces->Fcomm.assign(Fcomm_base_ptrs, U_strides, geo.nGfpts);
   if (input->viscous)
   {
-    faces->Ucomm.assign(Ucomm_ptr_map);
-    faces->dU.assign(dU_ptr_map);
+    faces->Ucomm.assign(Ucomm_base_ptrs, U_strides, geo.nGfpts);
+    faces->dU.assign(dU_base_ptrs, dU_strides, geo.nGfpts);
   }
 
 #ifdef _GPU
-  faces->U_d.assign(U_ptr_map_d);
-  faces->Fcomm_d.assign(Fcomm_ptr_map_d);
+  faces->U_d.assign(U_base_ptrs_d, U_strides_d, geo.nGfpts);
+  faces->Fcomm_d.assign(Fcomm_base_ptrs_d, U_strides_d, geo.nGfpts);
   if (input->viscous)
   {
-    faces->Ucomm_d.assign(Ucomm_ptr_map_d);
-    faces->dU_d.assign(dU_ptr_map_d);
+    faces->Ucomm_d.assign(Ucomm_base_ptrs_d, U_strides_d, geo.nGfpts);
+    faces->dU_d.assign(dU_base_ptrs_d, dU_strides_d, geo.nGfpts);
   }
 #endif
+
 }
 
 void FRSolver::dFcdU_from_faces()
@@ -1991,7 +2019,8 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   }
 
 #ifdef _MPI
-  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+  std::cout << __FILE__ << ":" __LINE__ << ": rank " << rank << ": befre MPI_Allreduce for dt" << std::endl;
+  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, worldComm);
 #endif
 
   // Determine the time step scaling factor and the new time step
@@ -2406,7 +2435,7 @@ void FRSolver::compute_element_dt()
 
 #ifdef _MPI
     /// TODO: If interfacing with other explicit solver, work together here
-    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &dt(0), 1, MPI_DOUBLE, MPI_MIN, worldComm);
 #endif
 
   }
@@ -2573,7 +2602,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   MPI_Info info;
   MPI_Info_create(&info);
   H5Pset_fapl_mpio(h5_mpi_plist, geo.myComm, info);
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(myComm);
   H5File file(filename, H5F_ACC_TRUNC, h5_mpi_plist);
 
   std::vector<int> n_eles_p(input->nRanks);
@@ -2883,22 +2912,22 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   if (input->overset)
   {
-    try {
-    Attribute att = dset.openAttribute("iblank");
-    DataSpace dspaceI = att.getSpace();
-    hsize_t dim[1];
-    dspaceI.getSimpleExtentDims(dim);
+    /*try {
+      Attribute att = dset.openAttribute("iblank");
+      DataSpace dspaceI = att.getSpace();
+      hsize_t dim[1];
+      dspaceI.getSimpleExtentDims(dim);
 
-    if (dim[0] != geo.nEles)
-      ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+      if (dim[0] != geo.nEles)
+        ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
 
-    geo.iblank_cell.assign({geo.nEles});
-    att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+      geo.iblank_cell.assign({geo.nEles});
+      att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
     }
     catch (const std::exception &e) {
-      // No attribute found; ignore
-      geo.iblank_cell.assign({geo.nEles});
-    }
+      // No iblank attribute - ignore (will be re-calculated anyways)
+      geo.iblank_cell.assign({geo.nEles}, 1);
+    }*/
   }
 
   dset.close();
@@ -4603,7 +4632,7 @@ void FRSolver::report_forces(std::ofstream &f)
 
   for (int i = 0; i < 3; i++)
   {
-    force_conv[i] *= (1. - input->P_fs) * fac;
+    force_conv[i] *= fac;
     force_visc[i] *= fac;
   }
 
@@ -4888,7 +4917,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
         force_conv[dim] += eles->weights_fpts(idx) * PL *
-          faces->norm(fpt, dim, 0) * faces->dA(fpt);
+          faces->norm(fpt, dim) * faces->dA(fpt);
       }
 
       if (input->viscous)
@@ -4942,8 +4971,8 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_fpts(idx) * taun[dim] *
@@ -5017,9 +5046,9 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           double tauyz = mu * (dv_dz + dw_dy);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0) + tauxz * faces->norm(fpt, 2, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0) + tauyz * faces->norm(fpt, 2, 0);
-          taun[3] = tauxz * faces->norm(fpt, 0, 0) + tauyz * faces->norm(fpt, 1, 0) + tauzz * faces->norm(fpt, 2, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1) + tauxz * faces->norm(fpt, 2);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
+          taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_fpts(idx) * taun[dim] *
@@ -5062,7 +5091,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
         force[dim] = eles->weights_fpts(idx) * PL *
-          faces->norm(fpt, dim, 0) * faces->dA(fpt);
+          faces->norm(fpt, dim) * faces->dA(fpt);
 
       if (input->viscous)
       {
@@ -5115,8 +5144,8 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force[dim] -= eles->weights_fpts(idx) * taun[dim] * faces->dA(fpt);
@@ -5188,9 +5217,9 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           double tauyz = mu * (dv_dz + dw_dy);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0, 0) + tauxy * faces->norm(fpt, 1, 0) + tauxz * faces->norm(fpt, 2, 0);
-          taun[1] = tauxy * faces->norm(fpt, 0, 0) + tauyy * faces->norm(fpt, 1, 0) + tauyz * faces->norm(fpt, 2, 0);
-          taun[3] = tauxz * faces->norm(fpt, 0, 0) + tauyz * faces->norm(fpt, 1, 0) + tauzz * faces->norm(fpt, 2, 0);
+          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1) + tauxz * faces->norm(fpt, 2);
+          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
+          taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
 
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force[dim] -= eles->weights_fpts(idx) * taun[dim] *
@@ -5221,16 +5250,29 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
   }
 }
 
+//void FRSolver::filter_solution()
+//{
+//  if (!input->filt_on) return;
+  
+//  /* Sense discontinuities and filter solution */
+//  unsigned int status = 1;
+//  for (unsigned int level = 0; level < input->filt_maxLevels && status; level++)
+//  {
+//    filt.apply_sensor();
+//    status = filt.apply_expfilter(level);
+//  }
+//}
+
 void FRSolver::filter_solution()
 {
-  if (!input->filt_on) return; 
-  
-  /* Sense discontinuities and filter solution */
-  unsigned int status = 1;
-  for (unsigned int level = 0; level < input->filt_maxLevels && status; level++)
+  if (input->filt_on)
   {
     filt.apply_sensor();
-    status = filt.apply_filter(level);
+
+    /* Method 1 */
+    filt.apply_expfilter();
+    if(input->filt2on)
+      filt.apply_expfilter_type2();
   }
 }
 
@@ -5397,3 +5439,32 @@ void FRSolver::rigid_body_update(unsigned int stage)
   ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
 #endif
 }
+
+#ifdef _GPU
+void FRSolver::report_gpu_mem_usage()
+{
+  size_t free, total, used;
+  cudaMemGetInfo(&free, &total);
+  used = total - free;
+
+#ifndef _MPI
+  std::cout << "GPU Memory Usage: " << used/1e6 << " MB used of " << total/1e6 << " MB available" << std::endl;
+#else
+  size_t used_max, used_min;
+
+  if (input->rank == 0)
+  {
+    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);  
+    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);  
+
+    std::cout << "GPU Memory Usage: " << (used_min/1e6) << " (min) - " << (used_max/1e6) << " (max) MB used of " << total/1e6;
+    std::cout << " MB available per GPU" << std::endl;
+  }
+  else
+  {
+    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);  
+    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);  
+  }
+#endif
+}
+#endif
