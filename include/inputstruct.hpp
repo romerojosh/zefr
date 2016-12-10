@@ -149,6 +149,9 @@ struct InputStruct
   double rot_angle;
   double xc[3], dxc[3], vc[3], dvc[3];
 
+  double mass;    //! Mass of moving body of interest
+  double Imat[9]; //! Inertia tensor of input geometry of interest
+
   /* --- Additional Mesh Variables --- */
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 

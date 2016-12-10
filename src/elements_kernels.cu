@@ -1278,6 +1278,7 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
       nEles, nVars, nDims);
 }
 
+//! Copy node positions from GeoStruct's array to ele's array
 __global__
 void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
     mdvector_gpu<int> ele2node, unsigned int nEles, unsigned int nNodes)
@@ -1292,6 +1293,7 @@ void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
   nodes(node, ele, dim) = g_nodes(dim, ele2node(node, ele));
 }
 
+//! Copy fpt positions from ele's array to face's array
 __global__
 void copy_coords_face(mdvector_gpu<double> coord, mdvector_gpu<double> e_coord,
     mdvector_gpu<int> fpt2gfpt, unsigned int nEles, unsigned int nFpts)
@@ -1341,6 +1343,64 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
 
   copy_coords_face<<<blocksF,threads>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
 }
+
+template<unsigned int nDims>
+__global__
+void add_cg_offset(mdvector_gpu<double> nodes, mdvector_gpu<double> x_cg, unsigned int nNodes)
+{
+  int node = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (node >= nNodes)
+    return;
+
+  for (unsigned int i = node; i < nNodes; i += gridDim.x * blockDim.x)
+    for (unsigned int d = 0; d < nDims; d++)
+      nodes(d,i) += x_cg(d);
+}
+
+void update_nodes_rigid_wrapper(mdvector_gpu<double> &nodes_init, mdvector_gpu<double> &nodes,
+    mdvector_gpu<double> &Rmat, mdvector_gpu<double> &x_cg, unsigned int nNodes, unsigned int nDims)
+{
+  // Apply rotation matrix to body-frame nodes
+  double *A = Rmat.data();
+  double *B = nodes_init.data();
+  double *C = nodes.data();
+
+  cublasDGEMM_wrapper(nDims, nNodes, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
+
+  // Add in translation of body's CG
+  int threads = 128;
+  int blocks = min((nNodes + threads - 1) / threads, MAX_GRID_DIM);
+
+  if (nDims == 3)
+    add_cg_offset<3><<<blocks,threads>>>(nodes, x_cg, nNodes);
+  else
+    add_cg_offset<2><<<blocks,threads>>>(nodes, x_cg, nNodes);
+}
+
+void update_transforms_rigid_wrapper(mdvector_gpu<double> &inv_jaco_spts_init,
+    mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &norm_init,
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims)
+{
+  for (unsigned int d = 0; d < nDims; d++)
+  {
+    // Apply rotation matrix to body-frame jacobian
+    double *A = Rmat.data();
+    double *B = inv_jaco_spts_init.data() + d * nSpts*nEles*nDims;
+    double *C = inv_jaco_spts.data() + d * nSpts*nEles*nDims;
+
+    cublasDGEMM_wrapper(nDims, nEles*nSpts*nDims, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
+  }
+
+  // Apply rotation matrix to body-frame normals
+  double* A = norm_init.data();
+  double* B = Rmat.data();
+  double* C = norm.data();
+
+  cublasDGEMM_transB_wrapper(nFpts, nDims, nDims, 1.0, A, nFpts, B, nDims, 0.0, C, nFpts);
+}
+
 
 template<unsigned int nDims>
 __global__

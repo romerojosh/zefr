@@ -637,6 +637,7 @@ void FRSolver::solver_data_to_device()
   eles->U_fpts_d = eles->U_fpts;
   eles->Uavg_d = eles->Uavg;
   eles->weights_spts_d = eles->weights_spts;
+  eles->weights_fpts_d = eles->weights_fpts;
   eles->Fcomm_d = eles->Fcomm;
   eles->F_spts_d = eles->F_spts;
   eles->divF_spts_d = eles->divF_spts;
@@ -670,6 +671,12 @@ void FRSolver::solver_data_to_device()
     eles->dF_spts_d = eles->dF_spts;
     eles->dFn_fpts_d = eles->dFn_fpts;
     eles->tempF_fpts_d = eles->tempF_fpts;
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      eles->inv_jaco_spts_init_d = eles->inv_jaco_spts_init;
+      faces->norm_init_d = faces->norm_d;
+    }
 
     /* Moving-grid parameters for convenience / ease of future additions
      * (add to input.hpp, then also here) */
@@ -1760,15 +1767,6 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   // Update grid to end of time step (if not already done so)
   if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
     move(flow_time);
-
-#ifdef _BUILD_LIB
-  // Update the overset connectivity to the new grid positions
-  if (input->overset && input->motion)
-  {
-    ZEFR->tg_preprocess();
-    ZEFR->tg_process_connectivity();
-  }
-#endif
 }
 
 
@@ -1881,18 +1879,6 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 
     // Update grid to position of next time step
     move(flow_time);
-
-#ifdef _BUILD_LIB
-    // Update the overset connectivity to the new grid positions
-    if (input->overset && input->motion)
-    {
-      ZEFR->tg_preprocess();
-      ZEFR->tg_process_connectivity();
-#ifdef _GPU
-      ZEFR->update_iblank_gpu();
-#endif
-    }
-#endif
   }
 
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
@@ -2037,9 +2023,25 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     flow_time = prev_time;
 #ifdef _CPU
     eles->U_spts = U_ini;
+
+    if (input->motion == 10)
+    {
+      eles->nodes = x_ini;
+      geo.vel_cg = v_ini;
+      geo.q = q_ini;
+      geo.omega = omega_ini;
+    }
 #endif
 #ifdef _GPU
     device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
+
+    if (input->motion == 10)
+    {
+      device_copy(eles->nodes_d, x_ini_d, x_ini_d.max_size());
+      device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
+      device_copy(geo.q_d, q_ini_d, q_ini_d.max_size());
+      device_copy(geo.qdot_d, qdot_ini_d, qdot_ini_d.max_size());
+    }
 #endif
     // Try again with new dt
     step_adaptive_LSRK(source);
@@ -2062,6 +2064,18 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   U_ini = eles->U_spts;
   U_til = eles->U_spts;
   rk_err.fill(0.0);
+
+  if (input->motion == 10)
+  {
+    x_ini = eles->nodes;
+    x_til = eles->nodes;
+    v_ini = geo.vel_cg;
+    v_til = geo.vel_cg;
+    q_ini = geo.q;
+    q_til = geo.q;
+    omega_ini = geo.omega;
+    omega_til = geo.omega;
+  }
 #endif
 
 #ifdef _GPU
@@ -2071,6 +2085,18 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   // Get current delta t [dt(0)] (updated on GPU)
   copy_from_device(dt.data(), dt_d.data(), 1);
+
+  if (input->motion == 10)
+  {
+    device_copy(x_ini_d, eles->nodes_d, eles->nodes_d.max_size());
+    device_copy(x_til_d, eles->nodes_d, eles->nodes_d.max_size());
+    device_copy(v_ini_d, eles->vel_cg_d, eles->vel_cg_d.max_size());
+    device_copy(v_til_d, eles->vel_cg_d, eles->vel_cg_d.max_size());
+    device_copy(q_ini_d, eles->theta_d, eles->theta_d.max_size());
+    device_copy(q_til_d, eles->theta_d, eles->theta_d.max_size());
+    device_copy(qdot_ini_d, eles->omega_d, eles->omega_d.max_size());
+    device_copy(omega_til_d, eles->omega_d, eles->omega_d.max_size());
+  }
 
   check_error();
 #endif
@@ -2160,6 +2186,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
     // Update grid to position of next time step
     // move(flow_time);
+    rigid_body_update(stage);
 
 #ifdef _BUILD_LIB
     // Update the overset connectivity to the new grid positions
@@ -2856,6 +2883,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   if (input->overset)
   {
+    try {
     Attribute att = dset.openAttribute("iblank");
     DataSpace dspaceI = att.getSpace();
     hsize_t dim[1];
@@ -2866,6 +2894,11 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
     geo.iblank_cell.assign({geo.nEles});
     att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+    }
+    catch (const std::exception &e) {
+      // No attribute found; ignore
+      geo.iblank_cell.assign({geo.nEles});
+    }
   }
 
   dset.close();
@@ -5217,4 +5250,150 @@ void FRSolver::move(double time)
 #endif
 
   eles->move(faces);
+
+#ifdef _BUILD_LIB
+    // Update the overset connectivity to the new grid positions
+    if (input->overset)
+    {
+      ZEFR->tg_preprocess();
+      ZEFR->tg_process_connectivity();
+#ifdef _GPU
+      ZEFR->update_iblank_gpu();
+#endif
+    }
+#endif
+}
+
+void FRSolver::rigid_body_update(unsigned int stage)
+{
+  if (input->motion != 10) return;
+
+  std::array<double,3> force, torque;
+#ifdef _CPU
+  compute_moments(force,torque);
+#endif
+#ifdef _GPU
+  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,faces->norm_d,
+      faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,faces->force_d,faces->moment_d,input->gamma,input->rt,
+      input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
+      geo.nBndFaces,geo.nFptsPerFace);
+#endif
+
+  int c1[3] = {1,2,0}; // Cross-product index maps
+  int c2[3] = {2,0,1};
+
+  double ai = rk_alpha(stage);
+  double bi = rk_beta(stage);
+
+  Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
+  Quat qdot(geo.qdot(0),geo.qdot(1),geo.qdot(2),geo.qdot(3));
+  Quat omega = 2.*q.conj()*qdot;
+
+  // q_ddot = .5*(qdot*w + q*[Jinv*(tau - w x J*w)])
+  Quat Jw;
+  for (unsigned i = 0; i < 4; i++)
+    for (unsigned j = 0; j < 4; j++)
+      Jw[i] += geo.Jmat(i,j) * geo.omega(j);
+
+  Quat tau(0.0, torque[0],torque[1],torque[2]);
+  Quat tmp1 = tau - (2.*q.conj()*qdot).cross(Jw);
+  Quat wdot;
+  for (unsigned i = 0; i < 4; i++)
+    for (unsigned j = 0; j < 4; j++)
+      wdot[i] += geo.Jinv(i,j) * tmp1[j];
+
+  Quat q_res = .5*q*omega; // Omega in body coords
+  Quat qdot_res = .5*(qdot*omega + q*wdot);
+  double v_res[3] = {force[0]/geo.mass, force[1]/geo.mass, force[2]/geo.mass};
+
+  auto tmp_x_cg = geo.x_cg;
+
+  // ---- Update x, v, q, qdot ----
+
+  if (stage < nStages - 1)
+  {
+    for (unsigned int d = 0; d < eles->nDims; d++)
+    {
+      geo.x_cg(d) = x_til(d) - ai*dt(0) * geo.vel_cg(d);
+      x_til(d) = geo.x_cg(d) - (bi-ai)*dt(0) * geo.vel_cg(d);
+
+      geo.vel_cg(d) = v_til(d) - ai*dt(0) * v_res[d];
+      v_til(d) = geo.vel_cg(d) - (bi-ai)*dt(0) * v_res[d];
+    }
+
+    for (unsigned int i = 0; i < 4; i++)
+    {
+      geo.q(i) = q_til(i) - ai*dt(0) * q_res[i];
+      q_til(i) = geo.q(i) - (bi-ai)*dt(0) * q_res[i];
+
+      geo.qdot(i) = qdot_til(i) - ai*dt(0) * qdot_res[i];
+      qdot_til(i) = geo.qdot(i) - (bi-ai)*dt(0) * qdot_res[i];
+    }
+  }
+  else
+  {
+    for (unsigned int d = 0; d < geo.nDims; d++)
+    {
+      geo.x_cg(d) = x_til(d) - bi*dt(0) * geo.vel_cg(d);
+      geo.vel_cg(d) = v_til(d) - bi*dt(0) * v_res[d];
+    }
+
+    for (unsigned int i = 0; i < 4; i++)
+    {
+      geo.q(i) = q_til(i) - bi*dt(0) * q_res[i];
+      geo.qdot(i) = qdot_til(i) - bi*dt(0) * qdot_res[i];
+    }
+  }
+
+  // ---- Update derived quantities (omega; nodal positions & velocities) ----
+
+  for (unsigned int i = 0; i < 4; i++)
+  {
+    q[i] = geo.q(i);
+    qdot[i] = geo.qdot(i);
+  }
+
+  omega = 2*q.conj()*qdot;
+  for (unsigned int i = 0; i < geo.nDims; i++)
+    geo.omega(i) = omega[i+1];
+
+  // RmatN = Rmat * Rmat_prev^T
+  auto Rmat = getRotationMatrix(q);
+  geo.dRmat.fill(0.);
+  for (unsigned int i = 0; i < 3; i++)
+    for (unsigned int j = 0; j < 3; j++)
+      for (unsigned int k = 0; k < 3; k++)
+        geo.dRmat(i,j) += Rmat(i,k) * geo.Rmat(j,k);
+  geo.Rmat = Rmat;
+
+  // 'Spin' of omega (cross-product in matrix form)
+  for (int i = 0; i < 3; i++)
+  {
+    geo.Wmat(i,c2[i]) =  geo.omega(c1[i]);
+    geo.Wmat(i,c1[i]) = -geo.omega(c2[i]);
+  }
+
+  for (unsigned int d = 0; d < geo.nDims; d++)
+    geo.dx_cg(d) = geo.x_cg(d) - tmp_x_cg(d);
+
+#ifdef _GPU
+  //eles->nodes_d = eles->nodes;
+  geo.x_cg_d = geo.x_cg;
+  geo.dx_cg_d = geo.dx_cg;
+  geo.vel_cg_d = geo.vel_cg;
+  geo.q_d = geo.q;
+  geo.qdot_d = geo.qdot;
+  geo.Rmat_d = geo.Rmat;
+  geo.dRmat_d = geo.dRmat;
+  geo.omega_d = geo.omega;
+  geo.Wmat_d = geo.Wmat;
+
+  eles->move(faces);
+#endif
+
+#ifdef _BUILD_LIB
+  // Rmat transforms body->global, but is stored column-major here
+  // Transpose (accessing as row-major) transforms global->body as TIOGA needs
+  ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+#endif
 }

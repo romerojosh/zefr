@@ -100,6 +100,9 @@ class Faces
     mdvector<double> dFdURconv, dUcdUR, dFdURvisc, dFddURvisc;
     mdvector<double> dURdUL, ddURddUL;
 
+    /* Moving-Grid Variables */
+    mdvector<double> norm_init;
+
     _mpi_comm myComm;
 #ifdef _MPI
     mdview<double> U_mpi, dU_mpi;
@@ -133,10 +136,14 @@ class Faces
     mdvector_gpu<int> LDG_bias_d;
 
     mdvector_gpu<double> Vg_d;
+    mdvector_gpu<double> force_d, moment_d; //! Force / Moment *per boundary face* for reduction op
 
     /* Structures for implicit method */
     mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;
     mdvector_gpu<double> dFcdU_d, dUcdU_d;
+
+    /* Moving-Grid Vars */
+    mdvector_gpu<double> norm_init_d;
 
 #ifdef _MPI
     std::map<unsigned int, mdvector_gpu<double>> U_sbuffs_d, U_rbuffs_d;

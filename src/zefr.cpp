@@ -271,8 +271,13 @@ void Zefr::mpi_init(MPI_Comm comm_in, int n_grids, int grid_id)
   MPI_Get_processor_name(hostname, &len);
 //  std::cout << "Global rank " << grank << " is on processor " << hostname << std::endl;
   //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
-  cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
-  //cudaSetDevice(0);
+
+  std::string hostName(hostname);
+  if (hostName == "romeo")
+    cudaSetDevice(0);
+  else
+    cudaSetDevice(grank%4); // Hardcoded for ICME K80 nodes for now.
+
 //  printf("My CUDA device for rank %d(%d) is %d / %d\n",rank,grank,grank%4,nDevices);
 
 //  cudaDeviceProp prop;
@@ -613,6 +618,11 @@ void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
   tg_preprocess = preprocess;
   tg_process_connectivity = connect;
   overset_interp = dataUpdate;
+}
+
+void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* off, int nDims))
+{
+  tg_update_transform = setTransform;
 }
 
 #endif /* _BUILD_LIB */

@@ -226,12 +226,32 @@ InputStruct read_input_file(std::string inputfile)
   if (input.motion)
   {
     read_param(f, "motion_type", input.motion_type);
-    if (input.motion_type == 4)
+    if (input.motion_type == CIRCULAR_TRANS)
     {
       read_param(f, "moveAx", input.moveAx);
       read_param(f, "moveAy", input.moveAy);
       read_param(f, "moveFx", input.moveFx);
       read_param(f, "moveFy", input.moveFy);
+    }
+    else if (input.motion_type == RIGID_BODY)
+    {
+      // Mass of moving body
+      read_param(f, "mass", input.mass);
+
+      // Diagonal components of inertia tensor [in 'world' coordinates]
+      read_param(f, "Ixx", input.Imat[0]);
+      read_param(f, "Iyy", input.Imat[4]);
+      read_param(f, "Izz", input.Imat[8]);
+
+      // Off-diagonal components
+      read_param(f, "Ixy", input.Imat[1], 0.);
+      read_param(f, "Ixz", input.Imat[2], 0.);
+      read_param(f, "Iyz", input.Imat[5], 0.);
+
+      // Apply symmetry
+      input.Imat[3] = input.Imat[1];
+      input.Imat[6] = input.Imat[2];
+      input.Imat[7] = input.Imat[5];
     }
   }
 

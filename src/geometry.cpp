@@ -3042,7 +3042,7 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
 
   switch (input->motion_type)
   {
-    case 1:
+    case TEST1:
     {
       double t0 = 10;
       double Atx = 2;
@@ -3061,7 +3061,7 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       }
       break;
     }
-    case 2:
+    case TEST2:
     {
       double t0 = 10.*sqrt(5.);
       double DX = 5;
@@ -3100,7 +3100,7 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       }
       break;
     }
-    case 3:
+    case TEST3:
     {
       if (geo.gridID==0)
       {
@@ -3118,7 +3118,7 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       }
       break;
     }
-    case 4:
+    case CIRCULAR_TRANS:
     {
       /// Rigid oscillation in a circle
       if (geo.gridID == 0)
@@ -3138,7 +3138,7 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       }
       break;
     }
-    case 5:
+    case RADIAL_VIBE:
     {
       /// Radial Expansion / Contraction
       if (geo.gridID == 0) {
@@ -3161,7 +3161,7 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       }
       break;
     }
-    case 10:
+    case RIGID_BODY:
     {
       /// 6 DOF Rotation / Translation
 

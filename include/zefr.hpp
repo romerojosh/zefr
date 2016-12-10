@@ -126,6 +126,8 @@ public:
   void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
                            void (*dataUpdate)(int, double*, int));
 
+  void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
+
 private:
   // Generic data about the run
   int rank = 0, nRanks = 1;
@@ -161,6 +163,9 @@ private:
 
   //! Callback function to TIOGA to process connectivity
   void (*tg_process_connectivity) (void);
+
+  //! Callback to set a new rotation matrix & offset for TIOGA's ADT class
+  void (*tg_update_transform)(double* Rmat, double* offset, int ndim);
 };
 
 #endif /* _zefr_hpp */

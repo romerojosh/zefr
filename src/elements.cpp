@@ -2566,13 +2566,44 @@ void Elements::poly_squeeze_ppts()
 void Elements::move(std::shared_ptr<Faces> faces)
 {
 #ifdef _CPU
+  if (input->motion_type == RIGID_BODY)
+  {
+    // Update grid position based on rigid-body motion: CG offset + rotation
+    for (unsigned int i = 0; i < geo->nNodes; i++)
+      for (unsigned int d = 0; d < nDims; d++)
+        geo->coord_nodes(d,i) = geo->x_cg(d);
+
+    auto &A = geo->Rmat(0,0);
+    auto &B = geo->coords_init(0,0);
+    auto &C = geo->coord_nodes(0,0);
+
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
+                    1.0, &A, nDims, &B, nDims, 0.0, &C, nDims);
+#else
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
+              1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
+#endif
+  }
+
   update_point_coords(faces);
   update_grid_velocities(faces);
-  if (input->motion_type != 4) // don't do for rigid motion
+  if (input->motion_type != CIRCULAR_TRANS) // don't do for rigid motion
     calc_transforms(faces);
 #endif
 
 #ifdef _GPU
+  if (input->motion_type == RIGID_BODY)
+  {
+    // Positions
+    update_nodes_rigid_wrapper(geo->coords_init_d, geo->coord_nodes_d, geo->Rmat_d,
+        geo->x_cg_d, geo->nNodes, geo->nDims);
+
+    // Velocities -- DOUBLE CHECK THIS IS CORRECT!
+    update_nodes_rigid_wrapper(geo->coords_init_d, geo->grid_vel_nodes_d, geo->Wmat_d,
+        geo->vel_cg_d, geo->nNodes, geo->nDims);
+  }
+
   update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
       shape_fpts_d, geo->coord_spts_d, geo->coord_fpts_d, faces->coord_d,
       geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
@@ -2581,15 +2612,27 @@ void Elements::move(std::shared_ptr<Faces> faces)
       shape_fpts_d, grid_vel_spts_d, grid_vel_fpts_d, faces->Vg_d,
       geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
 
-  calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
-      inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
-      nFpts, nNodes, nEles, nDims);
+  if (input->motion_type == RIGID_BODY)
+  {
+    /// TODO: kernels that take in 'body-coords' transforms and applies rotation matrix
+    /* At times 1 and 2, jaco_1 = R_1 * jaco_0;  jaco_2 = R_2 * jaco_0
+     * So to update from 1 to 2, jaco_2 = R_2 * R_1^inv * jaco_1
+     * Where R is the matrix form of the body's roation quaternion */
+    update_transforms_rigid_wrapper(inv_jaco_spts_init_d, inv_jaco_spts_d,
+        faces->norm_init_d, faces->norm_d, geo->dRmat_d, nSpts, faces->nFpts, nEles, nDims);
+  }
+  else
+  {
+    calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
+                            inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
+                            nFpts, nNodes, nEles, nDims);
 
-  calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
-      geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nFpts, nEles, nDims);
+    calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
+                         geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nFpts, nEles, nDims);
 
-  if (input->CFL == 2)
-    update_h_ref_wrapper(h_ref_d, geo->coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+    if (input->CFL_type == 2)
+      update_h_ref_wrapper(h_ref_d, geo->coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+  }
 
   check_error();
 #endif

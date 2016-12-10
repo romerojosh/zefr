@@ -79,6 +79,8 @@ class Elements
     mdvector<double> oppD0, oppE_Fn;
     mdvector<double> dFn_fpts, tempF_fpts;
 
+    mdvector<double> inv_jaco_spts_init;
+
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
     mdvector<double> oppE_ppts, oppE_qpts;
@@ -124,7 +126,7 @@ class Elements
     mdvector_gpu<double> jaco_spts_d, inv_jaco_spts_d, jaco_det_spts_d;
     mdvector_gpu<double> jaco_fpts_d, inv_jaco_fpts_d;
     mdvector_gpu<double> vol_d;
-    mdvector_gpu<double> weights_spts_d;
+    mdvector_gpu<double> weights_spts_d, weights_fpts_d;
     mdvector_gpu<double> h_ref_d;
 
     /* Motion Related */
@@ -134,6 +136,10 @@ class Elements
     mdvector_gpu<double> dF_spts_d, dUr_spts_d;
     mdvector_gpu<double> oppD0_d, oppE_Fn_d;
     mdvector_gpu<double> dFn_fpts_d, tempF_fpts_d;
+
+    mdvector_gpu<double> inv_jaco_spts_init_d;
+
+    mdvector_gpu<double> vel_cg_d, omega_d, theta_d;
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;

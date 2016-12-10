@@ -244,6 +244,12 @@ void cublasDGEMM_transA_wrapper(int M, int N, int K, const double alpha, const d
   cublasDgemm(cublas_handles[stream], CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
+void cublasDGEMM_transB_wrapper(int M, int N, int K, const double alpha, const double* A,
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream)
+{
+  cublasDgemm(cublas_handles[stream], CUBLAS_OP_N, CUBLAS_OP_T, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
+}
+
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
     int lda, const double** Barray, int ldb, const double beta, double** Carray, int ldc, int batchCount)
 {
@@ -1267,6 +1273,244 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 #endif
 
 __global__
+void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<double> P, mdvector_gpu<double> coord,
+    mdvector_gpu<double> norm, mdvector_gpu<double> &dA, mdvector_gpu<uint> fpt2bnd,
+    mdvector_gpu<double> weights, mdvector_gpu<double> &force, mdvector_gpu<double> &moment,
+    double gamma, double rt, double c_sth, double mu_in, bool viscous, bool fix_vis, int nDims, int start_fpt,
+    int nFaces, int nFptsPerFace)
+{
+  const unsigned int face = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (face >= nFaces)
+    return;
+
+  const unsigned int face_start = face * nFptsPerFace + start_fpt;
+  const unsigned int bnd_start = face * nFptsPerFace;
+
+  const int c1[3] = {1,2,0}; // For cross-products
+  const int c2[3] = {2,0,1};
+
+  double taun[3];
+  double tot_force[3] = {0,0,0};
+  double tot_moment[3] = {0,0,0};
+
+  unsigned int bnd_id = fpt2bnd(bnd_start);
+
+  switch (bnd_id)
+  {
+    // All wall boundary conditions
+    case SLIP_WALL_G:
+    case SLIP_WALL_P:
+    case ISOTHERMAL_NOSLIP_G:
+    case ISOTHERMAL_NOSLIP_P:
+    case ISOTHERMAL_NOSLIP_MOVING_G:
+    case ISOTHERMAL_NOSLIP_MOVING_P:
+    case ADIABATIC_NOSLIP_G:
+    case ADIABATIC_NOSLIP_P:
+    case ADIABATIC_NOSLIP_MOVING_G:
+    case ADIABATIC_NOSLIP_MOVING_P:
+    {
+      for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+      {
+        double tmp_force[3] = {0,0,0};
+        int gfpt = face_start + fpt;
+//        int lfpt = bnd_start + fpt;
+
+        /* Get pressure */
+        double PL = P(gfpt, 0);
+
+        /* Sum inviscid force contributions */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          tmp_force[dim] = weights(fpt) * PL * norm(gfpt, dim, 0) * dA(gfpt);
+
+        if (viscous)
+        {
+          if (nDims == 2)
+          {
+            /* Setting variables for convenience */
+            /* States */
+            double rho = U(gfpt, 0, 0);
+            double momx = U(gfpt, 1, 0);
+            double momy = U(gfpt, 2, 0);
+            double e = U(gfpt, 3, 0);
+
+            double u = momx / rho;
+            double v = momy / rho;
+            double e_int = e / rho - 0.5 * (u*u + v*v);
+
+            /* Gradients */
+            double rho_dx = dU(gfpt, 0, 0, 0);
+            double momx_dx = dU(gfpt, 1, 0, 0);
+            double momy_dx = dU(gfpt, 2, 0, 0);
+
+            double rho_dy = dU(gfpt, 0, 1, 0);
+            double momx_dy = dU(gfpt, 1, 1, 0);
+            double momy_dy = dU(gfpt, 2, 1, 0);
+
+            /* Set viscosity */
+            double mu;
+            if (fix_vis)
+            {
+              mu = mu_in;
+            }
+            /* If desired, use Sutherland's law */
+            else
+            {
+              double rt_ratio = (gamma - 1.0) * e_int / (rt);
+              mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+            }
+
+            double du_dx = (momx_dx - rho_dx * u) / rho;
+            double du_dy = (momx_dy - rho_dy * u) / rho;
+
+            double dv_dx = (momy_dx - rho_dx * v) / rho;
+            double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+            double diag = (du_dx + dv_dy) / 3.0;
+
+            double tauxx = 2.0 * mu * (du_dx - diag);
+            double tauxy = mu * (du_dy + dv_dx);
+            double tauyy = 2.0 * mu * (dv_dy - diag);
+
+            /* Get viscous normal stress */
+            taun[0] = tauxx * norm(gfpt, 0, 0) + tauxy * norm(gfpt, 1, 0);
+            taun[1] = tauxy * norm(gfpt, 0, 0) + tauyy * norm(gfpt, 1, 0);
+
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(gfpt);
+          }
+          else if (nDims == 3)
+          {
+            /* Setting variables for convenience */
+            /* States */
+            double rho = U(gfpt, 0, 0);
+            double momx = U(gfpt, 1, 0);
+            double momy = U(gfpt, 2, 0);
+            double momz = U(gfpt, 3, 0);
+            double e = U(gfpt, 4, 0);
+
+            double u = momx / rho;
+            double v = momy / rho;
+            double w = momz / rho;
+            double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
+
+            /* Gradients */
+            double rho_dx = dU(gfpt, 0, 0, 0);
+            double momx_dx = dU(gfpt, 1, 0, 0);
+            double momy_dx = dU(gfpt, 2, 0, 0);
+            double momz_dx = dU(gfpt, 3, 0, 0);
+
+            double rho_dy = dU(gfpt, 0, 1, 0);
+            double momx_dy = dU(gfpt, 1, 1, 0);
+            double momy_dy = dU(gfpt, 2, 1, 0);
+            double momz_dy = dU(gfpt, 3, 1, 0);
+
+            double rho_dz = dU(gfpt, 0, 2, 0);
+            double momx_dz = dU(gfpt, 1, 2, 0);
+            double momy_dz = dU(gfpt, 2, 2, 0);
+            double momz_dz = dU(gfpt, 3, 2, 0);
+
+            /* Set viscosity */
+            double mu;
+            if (fix_vis)
+            {
+              mu = mu_in;
+            }
+            /* If desired, use Sutherland's law */
+            else
+            {
+              double rt_ratio = (gamma - 1.0) * e_int / (rt);
+              mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+            }
+
+            double du_dx = (momx_dx - rho_dx * u) / rho;
+            double du_dy = (momx_dy - rho_dy * u) / rho;
+            double du_dz = (momx_dz - rho_dz * u) / rho;
+
+            double dv_dx = (momy_dx - rho_dx * v) / rho;
+            double dv_dy = (momy_dy - rho_dy * v) / rho;
+            double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+            double dw_dx = (momz_dx - rho_dx * w) / rho;
+            double dw_dy = (momz_dy - rho_dy * w) / rho;
+            double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+            double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+
+            double tauxx = 2.0 * mu * (du_dx - diag);
+            double tauyy = 2.0 * mu * (dv_dy - diag);
+            double tauzz = 2.0 * mu * (dw_dz - diag);
+            double tauxy = mu * (du_dy + dv_dx);
+            double tauxz = mu * (du_dz + dw_dx);
+            double tauyz = mu * (dv_dz + dw_dy);
+
+            /* Get viscous normal stress */
+            taun[0] = tauxx * norm(gfpt, 0, 0) + tauxy * norm(gfpt, 1, 0) + tauxz * norm(gfpt, 2, 0);
+            taun[1] = tauxy * norm(gfpt, 0, 0) + tauyy * norm(gfpt, 1, 0) + tauyz * norm(gfpt, 2, 0);
+            taun[3] = tauxz * norm(gfpt, 0, 0) + tauyz * norm(gfpt, 1, 0) + tauzz * norm(gfpt, 2, 0);
+
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(gfpt);
+          }
+        }
+
+        // Add fpt's contribution to total force and moment
+        for (unsigned int d = 0; d < nDims; d++)
+          tot_force[d] += tmp_force[d];
+
+        if (nDims == 3)
+        {
+          for (unsigned int d = 0; d < nDims; d++)
+            tot_moment[d] += coord(gfpt,c1[d]) * tmp_force[c2[d]] - coord(gfpt,c2[d]) * tmp_force[c1[d]];
+        }
+        else
+        {
+          // Only a 'z' component in 2D
+          tot_moment[2] += coord(gfpt,0) * tmp_force[1] - coord(gfpt,1) * tmp_force[0];
+        }
+      }
+
+      // Write final sum for face to global memory
+      for (int d = 0; d < nDims; d++)
+      {
+        force(face,d) = tot_force[d];
+        moment(face,d) = tot_moment[d];
+      }
+
+      break;
+    }
+
+    default:
+      // Not a wall boundary - ignore
+      break;
+  }
+}
+
+void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,3> &tot_moment,
+    mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double>& P_fpts, mdvector_gpu<double> &coord,
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<uint> &fpt2bnd,
+    mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
+    double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace)
+{
+  int threads = 192;
+  int blocks = (nFaces + threads - 1) / threads;
+
+  if (nVars < 4) // Only applicable to Euler / Navier-Stokes
+    return;
+
+  compute_moments<<<blocks, threads>>>(U_fpts,dU_fpts,P_fpts,coord,norm,dA,fpt2bnd,weights_fpts,
+      force_face,moment_face,gamma,rt,c_sth,mu,viscous,fix_vis,nDims,start_fpt,nFaces,nFptsPerFace);
+
+  for (int d = 0; d < nDims; d++)
+  {
+    thrust::device_ptr<double> f_ptr = thrust::device_pointer_cast(force_face.data()+d*nFaces);
+    thrust::device_ptr<double> m_ptr = thrust::device_pointer_cast(moment_face.data()+d*nFaces);
+    tot_force[d] = thrust::reduce(f_ptr, f_ptr+nFaces, 0.);
+    tot_moment[d] = thrust::reduce(m_ptr, m_ptr+nFaces, 0.);
+  }
+}
+
+__global__
 void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvector_gpu<double> Vg,
     MotionVars *params, unsigned int nNodes, unsigned int nDims, int motion_type, double time, int gridID = 0)
 {
@@ -1277,7 +1521,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
 
   switch (motion_type)
   {
-    case 1:
+    case TEST1:
     {
       double t0 = 10;
       double Atx = 2;
@@ -1292,7 +1536,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
       break;
     }
-    case 2:
+    case TEST2:
     {
       double t0 = 10.*sqrt(5.);
       double DX = 5;
@@ -1323,7 +1567,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       }
       break;
     }
-    case 3:
+    case TEST3:
     {
       if (gridID==0)
       {
@@ -1337,7 +1581,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       }
       break;
     }
-    case 4:
+    case CIRCULAR_TRANS:
     {
       /// Rigid oscillation in a circle
       if (gridID == 0)
@@ -1353,7 +1597,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       }
       break;
     }
-    case 5:
+    case RADIAL_VIBE:
     {
       /// Radial Expansion / Contraction
       if (gridID == 0) {

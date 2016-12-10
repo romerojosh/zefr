@@ -82,6 +82,10 @@ void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* 
 void cublasDGEMM_transA_wrapper(int M, int N, int K, const double alpha, const double* A,
     int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream = 0);
 
+// cublasDGEMM with transposed 'B'
+void cublasDGEMM_transB_wrapper(int M, int N, int K, const double alpha, const double* A,
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream = 0);
+
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
     int lda, const double** Barray, int ldb, const double beta, double** Carray, int ldc, int batchCount);
 
@@ -178,6 +182,12 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
     mdview_gpu<double> &dU, unsigned int nVars, unsigned int nDims, int stream = -1, bool overset = false,
     int* iblank = NULL);
 #endif
+
+void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,3> &tot_moment,
+    mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double> &P_fpts, mdvector_gpu<double> &coord,
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<uint> &fpt2bnd,
+    mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
+    double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace);
 
 void move_grid_wrapper(mdvector_gpu<double> &coords,
     mdvector_gpu<double>& coords_0, mdvector_gpu<double> &Vg, MotionVars *params,

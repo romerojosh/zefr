@@ -561,6 +561,32 @@ mdvector<double> getRotationMatrix(double axis[3], double angle)
   return mat;
 }
 
+mdvector<double> getRotationMatrix(const Quat &q)
+{
+  Vec3 Axis = Vec3(q[1],q[2],q[3]);
+  double mag = Axis.norm();
+  double ax = Axis.x /= mag;
+  double ay = Axis.y /= mag;
+  double az = Axis.z /= mag;
+
+  mdvector<double> mat({3,3}, 0);
+
+  double angle = 2*acos(q[0]/q.norm()); // Must have unit quaternion
+  double s = sin(angle);
+  double c = cos(angle);
+  double c1 = 1.-c;
+
+  double axyc = ax*ay*c1;
+  double axzc = ax*az*c1;
+  double ayzc = ay*az*c1;
+
+  mat(0,0) = c + ax*ax*c1;  mat(0,1) = axyc - az*s;  mat(0,2) = axzc + ay*s;
+  mat(1,0) = axyc + az*s;   mat(1,1) = c + ay*ay*c1; mat(1,2) = ayzc - ax*s;
+  mat(2,0) = axzc - ay*s;   mat(2,1) = ayzc + ax*s;  mat(2,2) = c + az*az*c1;
+
+  return mat;
+}
+
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
 {
   if (ijk_maps_quad.count(nNodes))
@@ -927,4 +953,92 @@ std::vector<uint> get_int_list(uint N, uint start)
     list[i] = start + i;
 
   return list;
+}
+
+mdvector<double> quat_mul(const mdvector<double> &p, const mdvector<double> &q)
+{
+  // Assuming real part is last value [ i, j, k, real ]
+  mdvector<double> z({4}, 0.0);
+
+  z(0) = p(3)*q(3) - p(0)*q(0) - p(1)*q(1) - p(2)*q(1);
+  z(1) = p(3)*q(0) + p(0)*q(3) + p(1)*q(2) - p(2)*q(1);
+  z(2) = p(3)*q(1) - p(0)*q(2) + p(1)*q(3) + p(2)*q(0);
+  z(3) = p(3)*q(2) + p(0)*q(1) - p(1)*q(0) + p(2)*q(3);
+
+  return z;
+}
+
+Quat Quat::conj(void)
+{
+  Quat p;
+  p[0] = q[0];
+
+  for (unsigned i = 1; i < 4; i++)
+    p[i] = -q[i];
+
+  return p;
+}
+
+Quat Quat::operator+(const Quat &p)
+{
+  Quat z;
+  for (unsigned i = 0; i < 4; i++)
+    z[i] = q[i] + p[i];
+  return z;
+}
+
+Quat Quat::operator-(const Quat &p)
+{
+  Quat z;
+  for (unsigned i = 0; i < 4; i++)
+    z[i] = q[i] + p[i];
+  return z;
+}
+
+void Quat::operator+=(const Quat &p)
+{
+  for (unsigned i = 0; i < 4; i++)
+    q[i] += p[i];
+}
+
+void Quat::operator-=(const Quat &p)
+{
+  for (unsigned i = 0; i < 4; i++)
+    q[i] -= p[i];
+}
+
+Quat Quat::cross(const Quat& p)
+{
+  // Vector op - Assuming we are ignoring the real component of the quaternion
+  Quat z;
+  z[1] = q[2]*p[3] - q[3]*p[2];
+  z[2] = q[3]*p[1] - q[1]*p[3];
+  z[3] = q[1]*p[2] - q[2]*p[1];
+  return z;
+}
+
+Quat Quat::operator*(const Quat &p)
+{
+  Quat z;
+  z[0] = q[0]*p[0] - q[1]*p[1] - q[2]*p[2] - q[3]*p[3];
+  z[1] = q[0]*p[1] + q[1]*p[0] + q[2]*p[3] - q[3]*p[2];
+  z[2] = q[0]*p[2] + q[2]*p[0] + q[3]*p[1] - q[1]*p[3];
+  z[3] = q[0]*p[3] + q[3]*p[0] + q[1]*p[2] - q[2]*p[1];
+}
+
+Quat Quat::operator*(const std::array<double,3> &p)
+{
+  Quat z;
+  z[0] = -q[1]*p[1] - q[2]*p[2] - q[3]*p[3];
+  z[1] = q[0]*p[1] + q[2]*p[3] - q[3]*p[2];
+  z[2] = q[0]*p[2] + q[3]*p[1] - q[1]*p[3];
+  z[3] = q[0]*p[3] + q[1]*p[2] - q[2]*p[1];
+}
+
+Quat operator*(double a, const Quat &b)
+{
+  Quat c;
+  for (unsigned i = 0; i < 4; i++)
+    c[i] = a*b[i];
+  return c;
 }

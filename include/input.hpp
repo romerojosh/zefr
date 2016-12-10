@@ -103,6 +103,16 @@ enum BC_TYPE {
   OVERSET_CLOSURE
 };
 
+enum MOTION_TYPE {
+  STATIC = 0,
+  TEST1 = 1,
+  TEST2 = 2,
+  TEST3 = 3,
+  CIRCULAR_TRANS = 4,
+  RADIAL_VIBE = 5,
+  RIGID_BODY = 10
+};
+
 extern std::map<std::string,int> bcStr2Num;
 
 /*! Useful 3D point object with simple geometric functions */
