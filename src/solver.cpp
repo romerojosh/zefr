@@ -1662,7 +1662,11 @@ void FRSolver::setup_views()
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0);
-      U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(i, 0);
+      
+      if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
+        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(i, 0);
+      else
+        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0); // point U_ldg to correct MPI data;
 
       U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(0);
 
