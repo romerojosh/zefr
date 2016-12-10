@@ -1834,6 +1834,19 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
       if (iblank[fpt] == 0)
         return;
 
+    /* Setting sign of beta (from HiFiLES) */
+    if (nDims == 2)
+    {
+      if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
+        beta = -beta;
+    }
+    else if (nDims == 3)
+    {
+      if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
+        beta = -beta;
+    }
+
+
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -2055,10 +2068,22 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __device__ __forceinline__
 void LDG_flux(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], double dUR[nVars][nDims], double Fcomm[nVars],
     double norm[nDims], double AdvDiff_D, double &diffCo, double gamma, double prandtl, double mu, double rt, double c_sth, 
-    bool fix_vis, char LDG_bias, double beta, double tau)
+    bool fix_vis, int LDG_bias, double beta, double tau)
 {
   double FL[nVars][nDims] = {{0.0}}; double FR[nVars][nDims] = {{0.0}};
   double FnL[nVars] = {0.0}; double FnR[nVars] = {0.0};
+
+  /* Setting sign of beta (from HiFiLES) */
+  if (nDims == 2)
+  {
+    if (norm[0] + norm[1] < 0.0)
+      beta = -beta;
+  }
+  else if (nDims == 3)
+  {
+    if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
+      beta = -beta;
+  }
 
   /* Get numerical diffusion coefficient */
   if (equation == AdvDiff || equation == Burgers)
@@ -2090,26 +2115,42 @@ void LDG_flux(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], doub
     }
   }
 
+
   /* Compute common normal viscous flux and accumulate */
   /* If interior, use central */
   if (LDG_bias == 0)
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm[n] += 0.5 * (FnL[n] + FnR[n]) + tau * (UL[n]
-        - UR[n]) + beta * (FnL[n] - FnR[n]);
-
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        FR[n][dim] = 0.5 * (FL[n][dim] + FR[n][dim]) + 
+          tau * norm[dim] * (UL[n] - UR[n]) + beta * norm[dim] * (FnL[n] - FnR[n]);
+      }
     }
   }
   /* If boundary, use right state only */
-  else if (LDG_bias == 1)
+  else
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      Fcomm[n] += FnR[n] + tau * (UL[n] - UR[n]);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        FR[n][dim] += tau * norm[dim] * (UL[n] - UR[n]);
+      }
     }
   }
 
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    double F = 0.0;
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      F += FR[n][dim] * norm[dim];
+    }
+
+    Fcomm[n] += F;
+  }
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
