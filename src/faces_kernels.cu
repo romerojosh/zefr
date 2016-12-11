@@ -286,13 +286,13 @@ void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv,
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
-void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int, 
+void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, double rho_fs, 
     const mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, const mdvector_gpu<double> V_wall, mdvector_gpu<double> Vg,
     const mdvector_gpu<double> norm_fs, const mdvector_gpu<double> norm,
     const mdvector_gpu<char> gfpt2bnd, const mdvector_gpu<unsigned int> per_fpt_list,
-    mdvector_gpu<int> LDG_bias, bool motion = false)
+    mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias, bool motion = false)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -311,6 +311,7 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
       for (unsigned int n = 0; n < nVars; n++)
       {
         U(fpt, n, 1) = U(per_fpt, n, 0);
+        U_ldg(fpt, n, 1) = U_ldg(per_fpt, n, 0);
       }
       break;
     }
@@ -321,24 +322,25 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
       {
         /* Set boundaries to zero */
         U(fpt, 0, 1) = 0;
+        U_ldg(fpt, 0, 1) = 0;
       }
       else
       {
         /* Set boundaries to freestream values */
         U(fpt, 0, 1) = rho_fs;
+        U_ldg(fpt, 0, 1) = rho_fs;
 
         double Vsq = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
           U(fpt, dim+1, 1) = rho_fs * V_fs(dim);
+          U_ldg(fpt, dim+1, 1) = rho_fs * V_fs(dim);
           Vsq += V_fs(dim) * V_fs(dim);
         }
 
+        U_ldg(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5*rho_fs * Vsq; 
         U(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5*rho_fs * Vsq; 
       }
-
-      /* Set LDG bias */
-      LDG_bias(fpt) = 0;
 
       break;
     }
@@ -348,10 +350,6 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
       /* Extrapolate boundary values from interior */
       for (unsigned int n = 0; n < nVars; n++)
         U(fpt, n, 1) = U(fpt, n, 0);
-
-      /* Set LDG bias */
-      //LDG_bias(fpt) = -1;
-      LDG_bias(fpt) = 0;
 
       break;
     }
@@ -434,10 +432,6 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
       U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
 
-      /* Set LDG bias */
-      //LDG_bias(fpt) = -1;
-      LDG_bias(fpt) = 0;
-
       break;
     }
 
@@ -462,10 +456,6 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
       /* Fix pressure */
       U(fpt, nDims + 1, 1) = P_fs/(gamma-1.0) + 0.5 * momF; 
-
-      /* Set LDG bias */
-      LDG_bias(fpt) = -1;
-      //LDG_bias(fpt) = 0;
 
       break;
     }
@@ -533,17 +523,24 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
       rhoR = std::pow(rhoR, 1.0 / (gamma - 1));
 
       U(fpt, 0, 1) = rhoR;
+      U_ldg(fpt, 0, 1) = rhoR;
       for (unsigned int dim = 0; dim < nDims; dim++)
+      {
         U(fpt, dim + 1, 1) = rhoR * VR[dim];
+        U_ldg(fpt, dim + 1, 1) = rhoR * VR[dim];
+      }
 
       PR = rhoR / gamma * cstar * cstar;
       U(fpt, nDims + 1, 1) = PR / (gamma - 1);
+      U_ldg(fpt, nDims + 1, 1) = PR / (gamma - 1);
       for (unsigned int dim = 0; dim < nDims; dim++)
+      {
         U(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
+        U_ldg(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
+      }
 
       /* Set LDG bias */
-      LDG_bias(fpt) = -1;
-      //LDG_bias(fpt) = 0;
+      LDG_bias(fpt) = 1;
 
       break;
     }
@@ -585,8 +582,8 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
       /* Recompute energy with extrapolated pressure and new momentum */
       U(fpt, nDims + 1, 1) = PL / (gamma - 1)  + 0.5 * momFR / U(fpt, 0, 1);
 
-      /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      /* Set bias */
+      rus_bias(fpt) = 1;
 
       break;
     }
@@ -614,58 +611,45 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
       U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
 
-      /* Set LDG bias */
-      LDG_bias(fpt) = 0;
-      //LDG_bias(fpt) = 2;
-
       break;
     }
 
 
     case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
     {
-      double momF = 0.0;
+      double VG[nVars] = {0.0};
+
+      if (motion)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          VG[dim] = Vg(fpt, dim);
+      }
+
+      double rhoL = U(fpt, 0, 0);
+
+      U(fpt, 0, 1) = rhoL;
+      U_ldg(fpt, 0, 1) = rhoL;
+
+      /* Set velocity to zero (or grid wall velocity) */
+      double Vsq = 0; double Vsq_grid = 0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        double VL = U(fpt, dim+1, 0) / rhoL;
+        double V = -VL + 2 * VG[dim];
+        U(fpt, dim+1, 1) = rhoL * V;
+        Vsq += V * V;
+
+        U_ldg(fpt, dim+1, 1) =  VG[dim];
+        Vsq_grid += VG[dim] * VG[dim];
       }
+        
+      double cp_over_gam =  R_ref / (gamma - 1);
 
-      momF /= U(fpt, 0, 0);
+      U(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * T_wall + 0.5 * Vsq);
+      U_ldg(fpt, nDims + 1, 1) = rhoL * cp_over_gam * T_wall;
 
-      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
-      double PR = PL;
-      double TR = T_wall;
-      
-      U(fpt, 0, 1) = PR / (R_ref * TR);
-
-      if (motion)
-      {
-        /* Set momentum to rhoR * wall's grid velocity */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, 0, 1) * Vg(fpt, dim);
-      }
-      else
-      {
-        /* Set momentum to zero */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = 0.0;
-      }
-
-      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
-
-      if (motion)
-      {
-        /* Add wall-velocity component to prescribe energy */
-        double vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          vsq += Vg(fpt, dim) * Vg(fpt, dim);
-
-        U(fpt, nDims+1, 1) += 0.5 * U(fpt, 0, 1) * vsq;
-      }
-
-      /* Set LDG bias */
-      LDG_bias(fpt) = -1;
-
+      /* Set bias */
+      LDG_bias(fpt) = 1;
       break;
     }
 
@@ -678,33 +662,31 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
     case ISOTHERMAL_NOSLIP_MOVING_P: /* Moving Isothermal No-slip Wall (prescribed) */
     {
-      double momF = 0.0;
+      double rhoL = U(fpt, 0, 0);
+
+      U(fpt, 0, 1) = rhoL;
+      U_ldg(fpt, 0, 1) = rhoL;
+
+      /* Set velocity to zero (or wall velocity) */
+      double Vsq = 0; double Vsq_wall = 0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        double VL = U(fpt, dim+1, 0) / U(fpt, 0, 0);
+        double V = -VL + 2*(V_wall(dim));
+        U(fpt, dim+1, 1) = rhoL * V;
+        Vsq += V * V;
+
+        U_ldg(fpt, dim+1, 1) = rhoL * V_wall(dim);
+        Vsq_wall += V_wall(dim) * V_wall(dim);
       }
+        
+      double cp_over_gam = R_ref / (gamma - 1);
 
-      momF /= U(fpt, 0, 0);
+      U(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * T_wall + 0.5 * Vsq);
+      U_ldg(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * T_wall + 0.5 * Vsq_wall);
 
-      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
-
-      double PR = PL;
-      double TR = T_wall;
-      
-      U(fpt, 0, 1) = PR / (R_ref * TR);
-
-      /* Set velocity to wall velocity */
-      double V_wall_sq = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        U(fpt, dim+1, 1) = U(fpt, 0 , 1) * V_wall(dim);
-        V_wall_sq += V_wall(dim) * V_wall(dim);
-      }
-
-      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
-
-      /* Set LDG bias */
-      LDG_bias(fpt) = -1;
+      /* Set bias */
+      LDG_bias(fpt) = 1;
 
       break;
     }
@@ -719,46 +701,35 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
     case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
     {
-      /* Extrapolate density */
-      U(fpt, 0, 1) = U(fpt, 0, 0);
+      double VG[nVars] = {0.0};
+      if (motion)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          VG[dim] = Vg(fpt, dim);
+      }
 
-      /* Extrapolate pressure */
-      double momF = 0.0;
+      /* Extrapolate density */
+      double rhoL = U(fpt, 0, 0);
+      U(fpt, 0, 1) = rhoL;
+      U_ldg(fpt, 0, 1) = rhoL;
+
+      /* Set right state (common) velocity to zero (or wall velocity) */
+      double Vsq = 0.0; double VLsq = 0.0; double Vsq_grid = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        double VL = U(fpt, dim+1, 0) / rhoL; 
+        double V = -VL + 2 * VG[dim];
+        U(fpt, dim+1, 1) = rhoL * V;
+        U_ldg(fpt, dim+1, 1) = rhoL * VG[dim];
+
+        Vsq += V * V;
+        VLsq += VL * VL;
+        Vsq_grid += VG[dim] * VG[dim];
       }
 
-      momF /= U(fpt, 0, 0);
-
-      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
-      double PR = PL; 
-
-      if (motion)
-      {
-        /* Set momentum to rhoR * wall's grid velocity */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, 0, 1) * Vg(fpt, dim);
-      }
-      else
-      {
-        /* Set momentum to zero */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = 0.0;
-      }
-
-      /* Recompute energy */
-      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0);
-
-      if (motion)
-      {
-        /* Add wall-velocity component to prescribe energy */
-        double vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          vsq += Vg(fpt, dim) * Vg(fpt, dim);
-
-        U(fpt, nDims+1, 1) += 0.5 * U(fpt, 0, 1) * vsq;
-      }
+      double EL = U(fpt, nDims + 1, 0);
+      U(fpt, nDims + 1, 1) = EL + 0.5 * rhoL * (Vsq - VLsq);
+      U_ldg(fpt, nDims + 1, 1) = EL + 0.5 * rhoL * (Vsq_grid - VLsq);
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
@@ -777,29 +748,27 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
     case ADIABATIC_NOSLIP_MOVING_P: /* Moving Adiabatic No-slip Wall (prescribed) */
     {
       /* Extrapolate density */
-      U(fpt, 0, 1) = U(fpt, 0, 0);
+      double rhoL = U(fpt, 0, 0);
+      U(fpt, 0, 1) = rhoL;
+      U_ldg(fpt, 0, 1) = rhoL;
 
-      /* Extrapolate pressure */
-      double momF = 0.0;
+      /* Set right state (common) velocity to zero (or wall velocity) */
+      double Vsq = 0.0; double VLsq = 0.0; double Vsq_wall = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        double VL = U(fpt, dim+1, 0) / rhoL; 
+        double V = -VL+ 2 * V_wall(dim);
+        U(fpt, dim+1, 1) = rhoL * V;
+        U_ldg(fpt, dim+1, 1) = rhoL * V_wall(dim);
+
+        Vsq += V * V;
+        VLsq += VL * VL;
+        Vsq_wall += V_wall(dim) * V_wall(dim);
       }
 
-      momF /= U(fpt, 0, 0);
-
-      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
-      double PR = PL; 
-
-      /* Set velocity to wall velocity */
-      double V_wall_sq = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        U(fpt, dim+1, 1) = U(fpt, 0 , 1) * V_wall(dim);
-        V_wall_sq += V_wall(dim) * V_wall(dim);
-      }
-
-      U(fpt, nDims + 1, 1) = PR / (gamma - 1.0) + 0.5 * U(fpt, 0, 1) * V_wall_sq;
+      double EL = U(fpt, nDims + 1, 0);
+      U(fpt, nDims + 1, 1) = EL + 0.5 * rhoL * (Vsq - VLsq);
+      U_ldg(fpt, nDims + 1, 1) = EL - 0.5 * rhoL * (VLsq + Vsq_wall);
 
       /* Set LDG bias */
       LDG_bias(fpt) = 1;
@@ -823,12 +792,12 @@ void apply_bcs(mdview_gpu<double> U, unsigned int nFpts, unsigned int nGfpts_int
 
 }
 
-void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int nGfpts_int, 
+void apply_bcs_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &Vg,
     mdvector_gpu<double> &norm_fs,  mdvector_gpu<double> &norm, mdvector_gpu<char> &gfpt2bnd,
-    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<int> &LDG_bias, unsigned int equation,
+    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias, unsigned int equation,
     bool motion)
 {
   if (nGfpts_bnd == 0) return;
@@ -839,29 +808,29 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, unsigned int nFpts, unsigned int n
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+      apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
     else
-      apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+      apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
   }
   else if (equation == Burgers)
   {
     if (nDims == 2)
-      apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+      apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
     else
-      apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+      apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+      apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
     else
-      apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, LDG_bias, motion);
+      apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
   }
 }
 
@@ -1850,7 +1819,7 @@ template <unsigned int nDims, unsigned int nVars>
 __global__
 void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm, 
     const mdvector_gpu<double> norm, double beta, unsigned int nFpts,
-    const mdvector_gpu<int> LDG_bias, unsigned int startFpt, unsigned int endFpt,
+    const mdvector_gpu<char> LDG_bias, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, const int* iblank = NULL)
 {
     const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -1877,6 +1846,7 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
         beta = -beta;
     }
 
+
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
@@ -1892,7 +1862,7 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
         Ucomm(fpt, n, 1) = UC;
       }
     }
-    /* If on boundary, don't use beta (this is from HiFILES. Need to check) */
+    /* If on boundary, don't use beta */
     else
     {
       for (unsigned int n = 0; n < nVars; n++)
@@ -1905,7 +1875,7 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
 
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation, mdvector_gpu<int> &LDG_bias, unsigned int startFpt,
+    unsigned int nDims, unsigned int equation, mdvector_gpu<char> &LDG_bias, unsigned int startFpt,
     unsigned int endFpt, bool overset, int* iblank) 
 {
   unsigned int threads = 128;
@@ -1936,7 +1906,7 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __device__ __forceinline__
 void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars], 
     double &PL, double &PR,  double norm[nDims], double &waveSp, double *AdvDiff_A, 
-    double Vgn, double gamma, double rus_k, int LDG_bias)
+    double Vgn, double gamma, double rus_k, char rus_bias)
 {
 
   double FL[nVars][nDims];
@@ -1989,7 +1959,6 @@ void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars],
     double aR = std::sqrt(gamma * P / UR[0]);
     PR = P;
 
-
     /* Compute speed of sound */
     //double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / UL[0]));
     //double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / UR[0]));
@@ -2023,25 +1992,25 @@ void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars],
   }
 
   /* Compute common normal flux */
-  if (LDG_bias == 2) /* Centered */
+  if (rus_bias == 0) /* Upwinded */
+  {
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      Fcomm[n] = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0 - rus_k) * (UR[n]-UL[n]));
+    }
+  }
+  else if (rus_bias == 2) /* Centered */
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
       Fcomm[n] = 0.5 * (FnR[n] + FnL[n]);
     }
   }
-  else if (LDG_bias != 0) /* Prescribed right-state */
+  else /* Prescribed right-state */
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
       Fcomm[n] = FnR[n];
-    }
-  }
-  else /* Upwinded */
-  {
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      Fcomm[n] = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0 - rus_k) * (UR[n]-UL[n]));
     }
   }
 }
@@ -2137,10 +2106,10 @@ void LDG_flux(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], doub
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__ 
-void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
+void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu<double> dU,
     mdview_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<double> diffCo,
-    mdvector_gpu<int> LDG_bias,  mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double AdvDiff_D, double gamma, double rus_k, 
+    mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias,  mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double AdvDiff_D, double gamma, double rus_k, 
     double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, 
     unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, bool viscous, bool motion, bool overset, int* iblank)
 {
@@ -2153,7 +2122,8 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
   if (overset and iblank[fpt] == 0)
     return;
 
-  double UL[nVars]; double UR[nVars]; double Fc[nVars];
+  double UL[nVars]; double UR[nVars];
+  double Fc[nVars];
   double norm[nDims];
   double Vgn = 0.0;
 
@@ -2180,7 +2150,8 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
   if (fconv_type == Rusanov)
   {
     rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, P(fpt, 0), P(fpt, 1), norm, waveSp_gfpts(fpt),
-        AdvDiff_A.data(), Vgn, gamma, rus_k, LDG_bias(fpt));
+        AdvDiff_A.data(), Vgn, gamma, rus_k, rus_bias(fpt));
+
   }
 
   if (viscous)
@@ -2192,6 +2163,8 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
     /* Get left and right gradients */
     for (unsigned int n = 0; n < nVars; n++)
     {
+      UR[n] = U_ldg(fpt, n, 1); // Overwrite right state with "LDG" boundary values
+
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         dUL[n][dim] = dU(fpt, n, dim, 0); dUR[n][dim] = dU(fpt, n, dim, 1);
@@ -2201,7 +2174,6 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
     if (fvisc_type == LDG)
       LDG_flux<nVars, nDims, equation>(UL, UR, dUL, dUR, Fc, norm, AdvDiff_D, diffCo(fpt), gamma, 
           prandtl, mu, rt, c_sth, fix_vis, LDG_bias(fpt), beta, tau);
-         
   }
 
   /* Write common flux to global memory */
@@ -2213,10 +2185,10 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> dU,
   }
 }
 
-void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
+void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, mdview_gpu<double> &dU,
     mdview_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, mdvector_gpu<double> &diffCo,
-    mdvector_gpu<int> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double AdvDiff_D, double gamma, double rus_k, 
+    mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double AdvDiff_D, double gamma, double rus_k, 
     double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, 
     bool viscous, bool motion, bool overset, int* iblank)
@@ -2227,28 +2199,28 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      compute_common_F<1, 2, AdvDiff><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+      compute_common_F<1, 2, AdvDiff><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
         mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
     else
-      compute_common_F<1, 3, AdvDiff><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+      compute_common_F<1, 3, AdvDiff><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
         mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
   }
   else if (equation == Burgers)
   {
     if (nDims == 2)
-      compute_common_F<1, 2, Burgers><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+      compute_common_F<1, 2, Burgers><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
         mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
     else
-      compute_common_F<1, 3, Burgers><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+      compute_common_F<1, 3, Burgers><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
         mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      compute_common_F<4, 2, EulerNS><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+      compute_common_F<4, 2, EulerNS><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
         mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
     else
-      compute_common_F<5, 3, EulerNS><<<blocks, threads>>>(U, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
+      compute_common_F<5, 3, EulerNS><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
         mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
   }
 
@@ -2258,7 +2230,7 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, 
     mdvector_gpu<double> dFcdU, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts, 
-    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<int> LDG_bias,
+    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<char> LDG_bias,
     double gamma, double rus_k, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -2461,7 +2433,7 @@ void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv,
 
 void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
     mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<int> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
+    mdvector_gpu<char> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 128;
@@ -2527,7 +2499,7 @@ void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<dou
 
 __global__
 void unpack_fringe_u(mdvector_gpu<double> U_fringe,
-    mdview_gpu<double> U, mdvector_gpu<unsigned int> fringe_fpts,
+    mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdvector_gpu<unsigned int> fringe_fpts,
     mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
     unsigned int nFpts, unsigned int nVars)
 {
@@ -2536,24 +2508,25 @@ void unpack_fringe_u(mdvector_gpu<double> U_fringe,
   const unsigned int fpt = (tot_ind / nVars) % nFpts;
   const unsigned int face = tot_ind / (nFpts * nVars);
 
-  if (fpt >= nFpts || face >= nFringe || var >= nVars)
+  if (face >= nFringe)
     return;
 
   const unsigned int gfpt = fringe_fpts(fpt, face);
   const unsigned int side = fringe_side(fpt, face);
 
-  //U(gfpt, var, side) = U_fringe(fpt, face, var); /// TODO: look into further
-  U(gfpt, var, side) = U_fringe(var, fpt, face);
+  U(gfpt, var, side) = U_fringe(fpt, face, var); /// TODO: look into further
+  //U(gfpt, var, side) = U_fringe(var, fpt, face);
+  U_ldg(gfpt, var, side) = U_fringe(fpt, face, var);
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
-    mdview_gpu<double> &U, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, mdvector_gpu<unsigned int> &fringe_fpts,
     mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe, unsigned int nFpts, unsigned int nVars)
 {
   int threads = 192;
   int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
 
-  unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, fringe_fpts,
+  unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, U_ldg, fringe_fpts,
       fringe_side, nFringe, nFpts, nVars);
 
   check_error();
@@ -2579,7 +2552,8 @@ void unpack_fringe_grad(mdvector_gpu<double> dU_fringe,
 
   //dU(gfpt, var, dim, side) = dU_fringe(fpt, face, var, dim);
   for (unsigned int dim = 0; dim < nDims; dim++)
-    dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face); /// TODO
+    dU(gfpt, var, dim, side) = dU_fringe(fpt, face, var, dim); /// TODO
+    //dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face); /// TODO
 }
 
 void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,

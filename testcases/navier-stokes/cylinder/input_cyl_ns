@@ -4,7 +4,7 @@ meshfile cyl_quad_ns.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
-mesh_bound  wall_ns_iso_p  wall_ns_iso_p
+mesh_bound  wall_ns_iso_p  wall_ns_adi_p
 mesh_bound  char  char
 
 # Solver:
@@ -26,8 +26,8 @@ restart_file cyl_uquad/cyl_uquad_000220000.vtu
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix cyl_uquad
-write_freq    1000
-report_freq   100
+write_freq    100
+report_freq   10
 res_type      1
 force_freq    1000
 error_freq    0
@@ -37,8 +37,8 @@ nQpts1D       10
 fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
-ldg_b      0.0
-ldg_tau    1.0
+ldg_b      0.5
+ldg_tau    0.1
 
 # Equation Specific Parameters:
 ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
