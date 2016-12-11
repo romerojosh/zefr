@@ -83,7 +83,7 @@ class Elements
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
-    mdvector<double> oppE_ppts, oppE_qpts;
+    mdvector<double> oppE_ppts, oppE_qpts, oppRestart;
     mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fcomm, Ucomm;
@@ -160,6 +160,7 @@ class Elements
 
     virtual void set_locs() = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
+    virtual void set_oppRestart(unsigned int order_restart, bool use_shape = false) = 0;
     virtual mdvector<double> calc_shape(unsigned int shape_order,
                              const std::vector<double> &loc) = 0;
     virtual mdvector<double> calc_d_shape(unsigned int shape_order,

@@ -337,7 +337,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
   std::string param, line;
   double val;
   unsigned int order_restart;
-  mdvector<double> U_restart, oppRestart;
+  mdvector<double> U_restart;
 
   /* Load data from restart file */
   while (f >> param)
@@ -358,47 +358,12 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 
     if (param == "<PointData>")
     {
+      /* Setup extrapolation operator from equistant restart points */
+      eles->set_oppRestart(order_restart, true);
 
-      unsigned int nSpts1D_restart = order_restart + 1;
-      unsigned int nSpts2D_restart = nSpts1D_restart * nSpts1D_restart;
-      unsigned int nPpts1D = nSpts1D_restart + 2;
-      unsigned int nPpts2D = nPpts1D * nPpts1D;
+      unsigned int nRpts = eles->oppRestart.get_dim(1);
 
-      unsigned int nSpts_restart = (unsigned int) std::pow(nSpts1D_restart, input->nDims);
-      unsigned int nPpts = (unsigned int) std::pow(nPpts1D, input->nDims);
-
-      U_restart.assign({nSpts_restart, eles->nEles, eles->nVars});
-
-      /* Setup extrapolation operator from restart points */
-      oppRestart.assign({eles->nSpts, nSpts_restart});
-      auto loc_spts_restart_1D = Gauss_Legendre_pts(order_restart + 1); 
-
-      std::vector<double> loc(input->nDims);
-      for (unsigned int rpt = 0; rpt < nSpts_restart; rpt++)
-      {
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          for (unsigned int dim = 0; dim < input->nDims; dim++)
-            loc[dim] = eles->loc_spts(spt , dim);
-
-          if (input->nDims == 2)
-          {
-            int i = rpt % nSpts1D_restart;
-            int j = rpt / nSpts1D_restart;
-            oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) * 
-                                  Lagrange(loc_spts_restart_1D, j, loc[1]);
-          }
-          else
-          {
-            int i = rpt % nSpts1D_restart;
-            int j = (rpt / nSpts1D_restart) % nSpts1D_restart;
-            int k = rpt / nSpts2D_restart;
-            oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) * 
-                                  Lagrange(loc_spts_restart_1D, j, loc[1]) *
-                                  Lagrange(loc_spts_restart_1D, k, loc[2]);
-          }
-        }
-      }
+      U_restart.assign({nRpts, eles->nEles, eles->nVars});
 
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
@@ -410,45 +375,26 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
           /// TODO: make sure this is setup correctly first
           if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
-          unsigned int spt = 0;
-          for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+          for (unsigned int rpt = 0; rpt < nRpts; rpt++)
           {
-            f >> val;
-
-            /* Logic to deal with extra plot point (corner nodes and flux points). */
-            if (input->nDims == 2)
-            {
-              if (ppt < nPpts1D || ppt > nPpts1D * (nPpts1D-1) || ppt%nPpts1D == 0 || 
-                  (ppt+1)%nPpts1D == 0)
-                continue;
-            }
-            else
-            {
-              int shift = (ppt / nPpts2D) * nPpts2D;
-              if (ppt < nPpts2D || ppt < nPpts1D + shift || ppt > nPpts1D * (nPpts1D-1) + shift || 
-                  (ppt-shift) % nPpts1D == 0 || (ppt+1-shift)%nPpts1D == 0 || ppt > nPpts2D * (nPpts1D - 1))
-                continue;
-            }
-
-            U_restart(spt, ele, n) = val;
-            spt++;
+            f >> U_restart(rpt, ele, n);
           }
         }
         std::getline(f,line);
       }
 
       /* Extrapolate values from restart points to solution points */
-      auto &A = oppRestart(0, 0);
+      auto &A = eles->oppRestart(0, 0);
       auto &B = U_restart(0, 0, 0);
       auto &C = eles->U_spts(0, 0, 0);
 
 #ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
-          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, oppRestart.ldim(), &B, 
+          eles->nEles * eles->nVars, nRpts, 1.0, &A, eles->oppRestart.ldim(), &B, 
           U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
-          eles->nEles * eles->nVars, nSpts_restart, 1.0, &A, oppRestart.ldim(), &B, 
+          eles->nEles * eles->nVars, nRpts, 1.0, &A, eles->oppRestart.ldim(), &B, 
           U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #endif
 
@@ -2829,9 +2775,6 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     int restartOrder = (input->nDims == 2)
                      ? (std::sqrt(nSpts)-1) : (std::cbrt(nSpts)-1);
 
-    unsigned int nSpts1D_restart = restartOrder + 1;
-    unsigned int nSpts2D_restart = nSpts1D_restart * nSpts1D_restart;
-
     // Transpose solution data from PyFR to Zefr layout
     mdvector<double> U_restart({nSpts,nEles,nVars});
     for (int ele = 0; ele < nEles; ele++)
@@ -2840,50 +2783,21 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
           U_restart(spt,ele,var) = u_tmp(ele,var,spt);
 
     // Setup extrapolation operator from restart points
-    auto loc_spts_restart_1D = Gauss_Legendre_pts(restartOrder + 1);
-
-    mdvector<double> oppRestart({eles->nSpts, nSpts});
-
-    std::vector<double> loc(input->nDims);
-    for (unsigned int rpt = 0; rpt < nSpts; rpt++)
-    {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-      {
-        for (unsigned int dim = 0; dim < input->nDims; dim++)
-          loc[dim] = eles->loc_spts(spt , dim);
-
-        if (input->nDims == 2)
-        {
-          int i = rpt % nSpts1D_restart;
-          int j = rpt / nSpts1D_restart;
-          oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) *
-                                Lagrange(loc_spts_restart_1D, j, loc[1]);
-        }
-        else
-        {
-          int i = rpt % nSpts1D_restart;
-          int j = (rpt / nSpts1D_restart) % nSpts1D_restart;
-          int k = rpt / nSpts2D_restart;
-          oppRestart(spt,rpt) = Lagrange(loc_spts_restart_1D, i, loc[0]) *
-                                Lagrange(loc_spts_restart_1D, j, loc[1]) *
-                                Lagrange(loc_spts_restart_1D, k, loc[2]);
-        }
-      }
-    }
+    eles->set_oppRestart(restartOrder);
 
 
     // Extrapolate values from restart points to solution points
-    auto &A = oppRestart(0, 0);
+    auto &A = eles->oppRestart(0, 0);
     auto &B = U_restart(0, 0, 0);
     auto &C = eles->U_spts(0, 0, 0);
 
 #ifdef _OMP
     omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts,
-        eles->nEles * eles->nVars, nSpts, 1.0, &A, oppRestart.ldim(), &B,
+        eles->nEles * eles->nVars, nSpts, 1.0, &A, eles->oppRestart.ldim(), &B,
         U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #else
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts,
-        eles->nEles * eles->nVars, nSpts, 1.0, &A, oppRestart.ldim(), &B,
+        eles->nEles * eles->nVars, nSpts, 1.0, &A, eles->oppRestart.ldim(), &B,
         U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #endif
   }
@@ -3864,7 +3778,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 
   // Prep the index lists [to grab data from a face of an ele]
   int nDims = geo.nDims;
-  int nPts1D = order+3;
+  int nPts1D = order+1;
   int nPtsFace = nPts1D;
   if (nDims==3) nPtsFace *= nPts1D;
   int nSubCells = nPts1D - 1;
