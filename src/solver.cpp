@@ -276,80 +276,8 @@ void FRSolver::setup_output()
     std::string cmd = "mkdir -p " + input->output_prefix;
     system(cmd.c_str());
   }
-
-  if (eles->nDims == 2)
-  {
-    unsigned int nSubelements1D = eles->nSpts1D+1;
-    eles->nSubelements = nSubelements1D * nSubelements1D;
-    eles->nNodesPerSubelement = 4;
-
-    /* Allocate memory for local plot point connectivity and solution at plot points */
-    geo.ppt_connect.assign({4, eles->nSubelements});
-
-    /* Setup plot "subelement" connectivity */
-    std::vector<unsigned int> nd(4,0);
-
-    unsigned int ele = 0;
-    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
-
-    for (unsigned int i = 0; i < nSubelements1D; i++)
-    {
-      for (unsigned int j = 0; j < nSubelements1D; j++)
-      {
-        for (unsigned int node = 0; node < 4; node ++)
-        {
-          geo.ppt_connect(node, ele) = nd[node] + j;
-        }
-
-        ele++;
-      }
-
-      for (unsigned int node = 0; node < 4; node ++)
-        nd[node] += nSubelements1D + 1;
-    }
-  }
-  else if (eles->nDims == 3)
-  {
-    unsigned int nSubelements1D = eles->nSpts1D+1;
-    eles->nSubelements = nSubelements1D * nSubelements1D * nSubelements1D;
-    eles->nNodesPerSubelement = 8;
-
-    /* Allocate memory for local plot point connectivity and solution at plot points */
-    geo.ppt_connect.assign({8, eles->nSubelements});
-
-    /* Setup plot "subelement" connectivity */
-    std::vector<unsigned int> nd(8,0);
-
-    unsigned int ele = 0;
-    nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
-    nd[4] = (nSubelements1D + 1) * (nSubelements1D + 1); nd[5] = nd[4] + 1; 
-    nd[6] = nd[4] + nSubelements1D + 2; nd[7] = nd[4] + nSubelements1D + 1;
-
-    for (unsigned int i = 0; i < nSubelements1D; i++)
-    {
-      for (unsigned int j = 0; j < nSubelements1D; j++)
-      {
-        for (unsigned int k = 0; k < nSubelements1D; k++)
-        {
-          for (unsigned int node = 0; node < 8; node ++)
-          {
-            geo.ppt_connect(node, ele) = nd[node] + k;
-          }
-
-          ele++;
-        }
-
-        for (unsigned int node = 0; node < 8; node ++)
-          nd[node] += (nSubelements1D + 1);
-
-      }
-
-      for (unsigned int node = 0; node < 8; node ++)
-        nd[node] += (nSubelements1D + 1);
-    }
-
-  }
-
+       
+  eles->setup_ppt_connectivity();
 }
 
 void FRSolver::restart(std::string restart_file, unsigned restart_iter)
@@ -725,7 +653,7 @@ void FRSolver::solver_data_to_device()
   geo.fpt2gfpt_slot_d = geo.fpt2gfpt_slot;
   geo.gfpt2bnd_d = geo.gfpt2bnd;
   geo.per_fpt_list_d = geo.per_fpt_list;
-  geo.coord_spts_d = geo.coord_spts;
+  eles->coord_spts_d = eles->coord_spts;
 
   if (input->motion)
   {
@@ -733,7 +661,7 @@ void FRSolver::solver_data_to_device()
     geo.coord_nodes_d = geo.coord_nodes;
     geo.coords_init_d = geo.coords_init;
     geo.grid_vel_nodes_d = geo.grid_vel_nodes;
-    geo.coord_fpts_d = geo.coord_fpts;
+    eles->coord_fpts_d = eles->coord_fpts;
   }
 
   /* Input parameters */
@@ -1403,8 +1331,8 @@ void FRSolver::initialize_U()
         {
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            double x = geo.coord_spts(spt, ele, 0);
-            double y = geo.coord_spts(spt, ele, 1);
+            double x = eles->coord_spts(spt, ele, 0);
+            double y = eles->coord_spts(spt, ele, 1);
 
             eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
           }
@@ -1416,9 +1344,9 @@ void FRSolver::initialize_U()
         {
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            double x = geo.coord_spts(spt, ele, 0);
-            double y = geo.coord_spts(spt, ele, 1);
-            double z = geo.coord_spts(spt, ele, 2);
+            double x = eles->coord_spts(spt, ele, 0);
+            double y = eles->coord_spts(spt, ele, 1);
+            double z = eles->coord_spts(spt, ele, 2);
 
             eles->U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
 
@@ -1462,8 +1390,8 @@ void FRSolver::initialize_U()
         {
           for (unsigned int spt = 0; spt < eles->nSpts; spt++)
           {
-            double x = geo.coord_spts(spt, ele, 0);
-            double y = geo.coord_spts(spt, ele, 1);
+            double x = eles->coord_spts(spt, ele, 0);
+            double y = eles->coord_spts(spt, ele, 1);
 
             eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
           }
@@ -1732,11 +1660,11 @@ void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned in
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int spt = 0; spt < eles->nSpts; spt++)
       {
-          double x = geo.coord_spts(spt, ele, 0);
-          double y = geo.coord_spts(spt, ele, 1);
+          double x = eles->coord_spts(spt, ele, 0);
+          double y = eles->coord_spts(spt, ele, 1);
           double z = 0;
           if (eles->nDims == 3)
-            z = geo.coord_spts(spt, ele, 2);
+            z = eles->coord_spts(spt, ele, 2);
 
           eles->divF_spts(spt, ele, n, stage) += compute_source_term(x, y, z, flow_time, n, input) * 
             eles->jaco_det_spts(spt, ele);
@@ -1747,7 +1675,7 @@ void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned in
 #endif
 
 #ifdef _GPU
-  add_source_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, geo.coord_spts_d, eles->nSpts, eles->nEles,
+  add_source_wrapper(eles->divF_spts_d, eles->jaco_det_spts_d, eles->coord_spts_d, eles->nSpts, eles->nEles,
       eles->nVars, eles->nDims, input->equation, flow_time, stage, startEle, endEle);
   check_error();
 #endif
@@ -3013,26 +2941,28 @@ void FRSolver::write_solution(const std::string &_prefix)
 
     f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
     f << "<PPointData>" << std::endl;
+
+    std::vector<std::string> var;
     if (input->equation == AdvDiff || input->equation == Burgers)
     {
-      f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
-      f << std::endl;
+      var = {"u"};
     }
     else if (input->equation == EulerNS)
     {
-      std::vector<std::string> var;
       if (eles->nDims == 2)
         var = {"rho", "xmom", "ymom", "energy"};
       else
         var = {"rho", "xmom", "ymom", "zmom", "energy"};
 
-      for (unsigned int n = 0; n < eles->nVars; n++)
-      {
-        f << "<PDataArray type=\"Float32\" Name=\"" << var[n];
-        f << "\" format=\"ascii\"/>";
-        f << std::endl;
-      }
     }
+
+    for (unsigned int n = 0; n < eles->nVars; n++)
+    {
+      f << "<PDataArray type=\"Float32\" Name=\"" << var[n];
+      f << "\" format=\"ascii\"/>";
+      f << std::endl;
+    }
+
     if (input->filt_on && input->sen_write)
     {
       f << "<PDataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\"/>";
@@ -3092,14 +3022,6 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
   f << "<!-- ITER " << iter << " -->" << std::endl;
 
-  int nEles = eles->nEles;
-  if (input->overset)
-  {
-    /* Remove blanked elements from total element count */
-    for (int ele = 0; ele < eles->nEles; ele++)
-      if (geo.iblank_cell(ele) != NORMAL) nEles--;
-  }
-
   if (input->motion)
   {
     eles->update_plot_point_coords();
@@ -3108,9 +3030,23 @@ void FRSolver::write_solution(const std::string &_prefix)
 #endif
   }
 
+  unsigned int nEles = eles->nEles;
+
+  if (input->overset)
+  {
+    /* Remove blanked elements from total cell count */
+    for (int ele = 0; ele < eles->nEles; ele++)
+      if (geo.iblank_cell(ele) != NORMAL) nEles--;
+  }
+
+  unsigned int nCells = 0;
+  unsigned int nPts = 0;
+  nCells += eles->nSubelements * nEles;
+  nPts += eles->nPpts * nEles;
+
   f << "<UnstructuredGrid>" << std::endl;
-  f << "<Piece NumberOfPoints=\"" << eles->nPpts * nEles << "\" ";
-  f << "NumberOfCells=\"" << eles->nSubelements * nEles << "\">";
+  f << "<Piece NumberOfPoints=\"" << nPts << "\" ";
+  f << "NumberOfCells=\"" << nCells << "\">";
   f << std::endl;
 
   
@@ -3119,31 +3055,18 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
   f << "format=\"ascii\">" << std::endl; 
 
-  if (eles->nDims == 2)
+  // TODO: Change order of ppt structures for better looping 
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    // TODO: Change order of ppt structures for better looping 
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+    for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
+      f << eles->coord_ppts(ppt, ele, 0) << " ";
+      f << eles->coord_ppts(ppt, ele, 1) << " ";
+      if (geo.nDims == 2)
         f << 0.0 << std::endl;
-      }
-    }
-  }
-  else
-  {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
-      }
+      else
+        f << eles->coord_ppts(ppt, ele, 2) << std::endl;
     }
   }
 
@@ -3154,7 +3077,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<Cells>" << std::endl;
   f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
   f << "format=\"ascii\">"<< std::endl;
-  int count = 0; // To account for blanked elements
+  int shift = 0; // To account for blanked elements
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
@@ -3162,11 +3085,11 @@ void FRSolver::write_solution(const std::string &_prefix)
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
       {
-        f << geo.ppt_connect(i, subele) + count*eles->nPpts << " ";
+        f << eles->ppt_connect(i, subele) + shift << " ";
       }
       f << std::endl;
     }
-    count++;
+    shift += eles->nPpts;
   }
   f << "</DataArray>" << std::endl;
 
@@ -3187,17 +3110,19 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" ";
   f << "format=\"ascii\">"<< std::endl;
-  unsigned int nCells = eles->nSubelements * nEles;
-  if (eles->nDims == 2)
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 9 << " ";
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      if (eles->etype == QUAD)
+        f << 9  << " ";
+      else if (eles->etype == TRI)
+        f << 5  << " ";
+      else if (eles->etype == HEX)
+        f << 12 << " ";
+    }
   }
-  else
-  {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 12 << " ";
-  }
+
   f << std::endl;
   f << "</DataArray>" << std::endl;
   f << "</Cells>" << std::endl;
@@ -3205,8 +3130,6 @@ void FRSolver::write_solution(const std::string &_prefix)
   /* Write solution information */
   f << "<PointData>" << std::endl;
 
-  /* TEST: Write cell average solution */
-  //eles->compute_Uavg();
 
   /* Extrapolate solution to plot points */
   auto &A = eles->oppE_ppts(0, 0);
@@ -3215,7 +3138,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, else->oppE_ppts.ldim(), &B, 
       eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
@@ -3235,49 +3158,37 @@ void FRSolver::write_solution(const std::string &_prefix)
     eles->poly_squeeze_ppts();
   }
 
+  std::vector<std::string> var;
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
-    f << "<DataArray type=\"Float32\" Name=\"u\" ";
+    var = {"u"};
+  }
+  else if(input->equation == EulerNS)
+  {
+    if (eles->nDims == 2)
+      var = {"rho", "xmom", "ymom", "energy"};
+    else
+      var = {"rho", "xmom", "ymom", "zmom", "energy"};
+  }
+
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
     f << "format=\"ascii\">"<< std::endl;
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << std::scientific << std::setprecision(16) << eles->U_ppts(ppt, ele, 0);
-        f  << " ";
+        f << std::scientific << std::setprecision(16);
+        f << eles->U_ppts(ppt, ele, n);
+        f << " ";
       }
+
       f << std::endl;
     }
+
     f << "</DataArray>" << std::endl;
-  }
-  else if(input->equation == EulerNS)
-  {
-    std::vector<std::string> var;
-    if (eles->nDims == 2)
-      var = {"rho", "xmom", "ymom", "energy"};
-    else
-      var = {"rho", "xmom", "ymom", "zmom", "energy"};
-
-    for (unsigned int n = 0; n < eles->nVars; n++)
-    {
-      f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
-      f << "format=\"ascii\">"<< std::endl;
-      
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
-      {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-        {
-          f << std::scientific << std::setprecision(16);
-          f << eles->U_ppts(ppt, ele, n);
-          f << " ";
-        }
-
-        f << std::endl;
-      }
-      f << "</DataArray>" << std::endl;
-    }
   }
 
   if (input->filt_on && input->sen_write)
@@ -3422,8 +3333,8 @@ void FRSolver::write_color()
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
         f << 0.0 << std::endl;
       }
     }
@@ -3435,9 +3346,9 @@ void FRSolver::write_color()
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
       {
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 2) << std::endl;
       }
     }
   }
@@ -3456,7 +3367,7 @@ void FRSolver::write_color()
     {
       for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
       {
-        f << geo.ppt_connect(i, subele) + count*eles->nPpts << " ";
+        f << eles->ppt_connect(i, subele) + count*eles->nPpts << " ";
       }
       f << std::endl;
     }
@@ -3737,8 +3648,8 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       for (int pt = 0; pt < nPtsFace; pt++)
       {
         int ppt = index_map(ind,pt);
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
         f << 0.0 << std::endl;
       }
     }
@@ -3752,9 +3663,9 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       for (int pt = 0; pt < nPtsFace; pt++)
       {
         int ppt = index_map(ind,pt);
-        f << geo.coord_ppts(ppt, ele, 0) << " ";
-        f << geo.coord_ppts(ppt, ele, 1) << " ";
-        f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+        f << eles->coord_ppts(ppt, ele, 0) << " ";
+        f << eles->coord_ppts(ppt, ele, 1) << " ";
+        f << eles->coord_ppts(ppt, ele, 2) << std::endl;
       }
     }
   }
@@ -4195,8 +4106,8 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         for (int pt = 0; pt < nPtsFace; pt++)
         {
           int ppt = index_map(ind,pt);
-          f << geo.coord_ppts(ppt, ele, 0) << " ";
-          f << geo.coord_ppts(ppt, ele, 1) << " ";
+          f << eles->coord_ppts(ppt, ele, 0) << " ";
+          f << eles->coord_ppts(ppt, ele, 1) << " ";
           f << 0.0 << std::endl;
         }
       }
@@ -4210,9 +4121,9 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         for (int pt = 0; pt < nPtsFace; pt++)
         {
           int ppt = index_map(ind,pt);
-          f << geo.coord_ppts(ppt, ele, 0) << " ";
-          f << geo.coord_ppts(ppt, ele, 1) << " ";
-          f << geo.coord_ppts(ppt, ele, 2) << std::endl;
+          f << eles->coord_ppts(ppt, ele, 0) << " ";
+          f << eles->coord_ppts(ppt, ele, 1) << " ";
+          f << eles->coord_ppts(ppt, ele, 2) << std::endl;
         }
       }
     }
@@ -4725,15 +4636,15 @@ void FRSolver::report_error(std::ofstream &f)
           }
           else 
           {
-            U_true = compute_U_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0, 
+            U_true = compute_U_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0, 
                 flow_time, n, input);
           }
 
           if (input->viscous)
           {
-            dU_true[0] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0,
+            dU_true[0] = compute_dU_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0,
                                          flow_time, n, 0, input);
-            dU_true[1] = compute_dU_true(geo.coord_qpts(qpt,ele,0), geo.coord_qpts(qpt,ele,1), 0,
+            dU_true[1] = compute_dU_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0,
                                          flow_time, n, 1, input);
           }
 

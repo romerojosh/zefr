@@ -41,6 +41,7 @@ extern "C" {
 
 Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
 {
+  etype = HEX;
   this->geo = geo;
   this->input = input;  
   this->shape_order = geo->shape_order;  
@@ -551,6 +552,47 @@ void Hexas::setup_PMG(int pro_order, int res_order)
   oppRes_d = oppRes;
 #endif
 
+}
+
+void Hexas::setup_ppt_connectivity()
+{
+  unsigned int nSubelements1D = nSpts1D+1;
+  nSubelements = nSubelements1D * nSubelements1D * nSubelements1D;
+  nNodesPerSubelement = 8;
+
+  /* Allocate memory for local plot point connectivity and solution at plot points */
+  ppt_connect.assign({8, nSubelements});
+
+  /* Setup plot "subelement" connectivity */
+  std::vector<unsigned int> nd(8,0);
+
+  unsigned int ele = 0;
+  nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+  nd[4] = (nSubelements1D + 1) * (nSubelements1D + 1); nd[5] = nd[4] + 1; 
+  nd[6] = nd[4] + nSubelements1D + 2; nd[7] = nd[4] + nSubelements1D + 1;
+
+  for (unsigned int i = 0; i < nSubelements1D; i++)
+  {
+    for (unsigned int j = 0; j < nSubelements1D; j++)
+    {
+      for (unsigned int k = 0; k < nSubelements1D; k++)
+      {
+        for (unsigned int node = 0; node < 8; node ++)
+        {
+          ppt_connect(node, ele) = nd[node] + k;
+        }
+
+        ele++;
+      }
+
+      for (unsigned int node = 0; node < 8; node ++)
+        nd[node] += (nSubelements1D + 1);
+
+    }
+
+    for (unsigned int node = 0; node < 8; node ++)
+      nd[node] += (nSubelements1D + 1);
+  }
 }
 
 void Hexas::transform_dFdU()

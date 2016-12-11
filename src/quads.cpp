@@ -42,6 +42,7 @@ extern "C" {
 //Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
 Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
 {
+  etype = QUAD;
   this->geo = geo;
   this->input = input;  
   this->shape_order = geo->shape_order;  
@@ -433,6 +434,38 @@ void Quads::setup_PMG(int pro_order, int res_order)
   oppPro_d = oppPro;
   oppRes_d = oppRes;
 #endif
+}
+
+void Quads::setup_ppt_connectivity()
+{
+  unsigned int nSubelements1D = nSpts1D+1;
+  nSubelements = nSubelements1D * nSubelements1D;
+  nNodesPerSubelement = 4;
+
+  /* Allocate memory for local plot point connectivity and solution at plot points */
+  ppt_connect.assign({4, nSubelements});
+
+  /* Setup plot "subelement" connectivity */
+  std::vector<unsigned int> nd(4,0);
+
+  unsigned int ele = 0;
+  nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+
+  for (unsigned int i = 0; i < nSubelements1D; i++)
+  {
+    for (unsigned int j = 0; j < nSubelements1D; j++)
+    {
+      for (unsigned int node = 0; node < 4; node ++)
+      {
+        ppt_connect(node, ele) = nd[node] + j;
+      }
+
+      ele++;
+    }
+
+    for (unsigned int node = 0; node < 4; node ++)
+      nd[node] += nSubelements1D + 1;
+  }
 }
 
 void Quads::transform_dFdU()

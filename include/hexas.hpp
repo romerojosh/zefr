@@ -55,6 +55,7 @@ class Hexas: public Elements
     Hexas(GeoStruct *geo, InputStruct *input, int order = -1);
 
     void setup_PMG(int pro_order, int res_order);
+    void setup_ppt_connectivity();
 
     /* Routines for implicit method */
     void transform_dFdU();

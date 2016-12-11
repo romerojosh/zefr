@@ -69,10 +69,9 @@ struct GeoStruct
     std::map<std::vector<unsigned int>, int> bnd_faces, per_bnd_rot;
     std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
     std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
-    mdvector<unsigned int> ppt_connect;
     mdvector<int> fpt2gfpt;
     mdvector<char> fpt2gfpt_slot;
-    mdvector<double> ele_nodes, coord_nodes, coord_spts, coord_fpts, coord_ppts, coord_qpts;
+    mdvector<double> ele_nodes, coord_nodes;
     mdvector<unsigned int> face_nodes;
     mdvector<int> ele_adj;
 
@@ -115,7 +114,6 @@ struct GeoStruct
     mdvector_gpu<char> fpt2gfpt_slot_d;
     mdvector_gpu<unsigned int> per_fpt_list_d;
     mdvector_gpu<char> gfpt2bnd_d;
-    mdvector_gpu<double> coord_spts_d, coord_fpts_d;
     mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
     mdvector_gpu<int> ele2nodes_d;
 #ifdef _MPI
