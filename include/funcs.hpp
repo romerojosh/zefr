@@ -211,4 +211,11 @@ std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1
   return list;
 }
 
+/* Helper function to write raw binary to file */
+template<typename T>
+void binary_write(std::ostream &f, T value)
+{
+  f.write((char *) &value, sizeof(T));
+}
+
 #endif /* funcs_hpp */

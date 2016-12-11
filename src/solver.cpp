@@ -2850,8 +2850,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     std::ofstream f(ss.str());
     f << "<?xml version=\"1.0\"?>" << std::endl;
     f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
-    f << "byte_order=\"LittleEndian\" ";
-    f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+    f << "byte_order=\"LittleEndian\">" << std::endl;
 
     f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
     f << "<PPointData>" << std::endl;
@@ -2872,9 +2871,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
-      f << "<PDataArray type=\"Float32\" Name=\"" << var[n];
-      f << "\" format=\"ascii\"/>";
-      f << std::endl;
+      f << "<PDataArray type=\"Float64\" Name=\"" << var[n] << "\"/>" << std::endl;
     }
 
     if (input->filt_on && input->sen_write)
@@ -2890,8 +2887,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
     f << "</PPointData>" << std::endl;
     f << "<PPoints>" << std::endl;
-    f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
-    f << "format=\"ascii\"/>" << std::endl;
+    f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" />" << std::endl;
     f << "</PPoints>" << std::endl;
 
     for (unsigned int n = 0; n < input->nRanks; n++)
@@ -2922,14 +2918,12 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   auto outputfile = ss.str();
 
-  /* Write parition solution to file in .vtu format */
-  std::ofstream f(outputfile);
+  /* Write partition solution to file in binary .vtu format */
+  std::ofstream f(outputfile, std::ios::binary);
 
   /* Write header */
   f << "<?xml version=\"1.0\"?>" << std::endl;
-  f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
-  f << "byte_order=\"LittleEndian\" ";
-  f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
+  f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\" >" << std::endl;
 
   /* Write comments for solution order, iteration number and flowtime */
   f << "<!-- ORDER " << input->order << " -->" << std::endl;
@@ -2964,113 +2958,10 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << std::endl;
 
   
-  /* Write plot point coordinates */
-  f << "<Points>" << std::endl;
-  f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
-  f << "format=\"ascii\">" << std::endl; 
 
-  // TODO: Change order of ppt structures for better looping 
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-    {
-      f << eles->coord_ppts(ppt, ele, 0) << " ";
-      f << eles->coord_ppts(ppt, ele, 1) << " ";
-      if (geo.nDims == 2)
-        f << 0.0 << std::endl;
-      else
-        f << eles->coord_ppts(ppt, ele, 2) << std::endl;
-    }
-  }
-
-  f << "</DataArray>" << std::endl;
-  f << "</Points>" << std::endl;
-
-  /* Write cell information */
-  f << "<Cells>" << std::endl;
-  f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
-  f << "format=\"ascii\">"<< std::endl;
-  int shift = 0; // To account for blanked elements
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
-    {
-      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
-      {
-        f << eles->ppt_connect(i, subele) + shift << " ";
-      }
-      f << std::endl;
-    }
-    shift += eles->nPpts;
-  }
-  f << "</DataArray>" << std::endl;
-
-  f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
-  f << "format=\"ascii\">"<< std::endl;
-  unsigned int offset = eles->nNodesPerSubelement;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
-    {
-      f << offset << " ";
-      offset += eles->nNodesPerSubelement;
-    }
-  }
-  f << std::endl;
-  f << "</DataArray>" << std::endl;
-
-  f << "<DataArray type=\"UInt8\" Name=\"types\" ";
-  f << "format=\"ascii\">"<< std::endl;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
-  {
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
-    {
-      if (eles->etype == QUAD)
-        f << 9  << " ";
-      else if (eles->etype == TRI)
-        f << 5  << " ";
-      else if (eles->etype == HEX)
-        f << 12 << " ";
-    }
-  }
-
-  f << std::endl;
-  f << "</DataArray>" << std::endl;
-  f << "</Cells>" << std::endl;
-
+  size_t b_offset = 0;
   /* Write solution information */
   f << "<PointData>" << std::endl;
-
-
-  /* Extrapolate solution to plot points */
-  auto &A = eles->oppE_ppts(0, 0);
-  auto &B = eles->U_spts(0, 0, 0);
-  auto &C = eles->U_ppts(0, 0, 0);
-
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, else->oppE_ppts.ldim(), &B, 
-      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
-#else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
-      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
-#endif
-
-  /* Apply squeezing if needed */
-  if (input->squeeze)
-  {
-    eles->compute_Uavg();
-
-#ifdef _GPU
-    eles->Uavg = eles->Uavg_d;
-#endif
-
-    eles->poly_squeeze_ppts();
-  }
 
   std::vector<std::string> var;
   if (input->equation == AdvDiff || input->equation == Burgers)
@@ -3087,22 +2978,9 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
-    f << "<DataArray type=\"Float32\" Name=\"" << var[n] << "\" ";
-    f << "format=\"ascii\">"<< std::endl;
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        f << std::scientific << std::setprecision(16);
-        f << eles->U_ppts(ppt, ele, n);
-        f << " ";
-      }
-
-      f << std::endl;
-    }
-
-    f << "</DataArray>" << std::endl;
+    f << "<DataArray type=\"Float64\" Name=\"" << var[n] << "\" ";
+    f << "format=\"appended\" offset=\"" << b_offset << "\"/>"<< std::endl;
+    b_offset += (nEles * eles->nPpts * sizeof(double) + sizeof(unsigned int));
   }
 
   if (input->filt_on && input->sen_write)
@@ -3146,10 +3024,151 @@ void FRSolver::write_solution(const std::string &_prefix)
     }
     f << "</DataArray>" << std::endl;
   }
-
   f << "</PointData>" << std::endl;
+
+  /* Write plot point information (single precision) */
+  f << "<Points>" << std::endl;
+  f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" format=\"appended\" ";
+  f << "offset=\""<< b_offset << "\"/>" << std::endl;
+  f << "</Points>" << std::endl;
+  b_offset += (nEles * eles->nPpts * 3 * sizeof(float) + sizeof(unsigned int));
+
+  /* Write cell information */
+  f << "<Cells>" << std::endl;
+  f << "<DataArray type=\"UInt32\" Name=\"connectivity\" format=\"appended\" ";
+  f << "offset=\""<< b_offset << "\"/>" << std::endl;
+  b_offset += (nEles * eles->nSubelements * eles->nNodesPerSubelement * sizeof(unsigned int) + sizeof(unsigned int));
+
+
+
+  f << "<DataArray type=\"UInt32\" Name=\"offsets\" format=\"appended\" ";
+  f << "offset=\""<< b_offset << "\"/>" << std::endl;
+  b_offset += (nEles * eles->nSubelements * sizeof(unsigned int) + sizeof(unsigned int));
+
+  f << "<DataArray type=\"UInt8\" Name=\"types\" format=\"appended\" ";
+  f << "offset=\""<< b_offset << "\"/>" << std::endl;
+  b_offset += (nEles * eles->nSubelements * sizeof(char) + sizeof(unsigned int));
+  f << "</Cells>" << std::endl;
+
   f << "</Piece>" << std::endl;
   f << "</UnstructuredGrid>" << std::endl;
+
+  /* Adding raw binary data as AppendedData*/
+  f << "<AppendedData encoding=\"raw\">" << std::endl;
+  f << "_"; // leading underscore
+
+  /* Write solution data */
+  /* Extrapolate solution to plot points */
+  auto &A = eles->oppE_ppts(0, 0);
+  auto &B = eles->U_spts(0, 0, 0);
+  auto &C = eles->U_ppts(0, 0, 0);
+
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, else->oppE_ppts.ldim(), &B, 
+      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
+#else
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
+      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
+#endif
+
+  /* Apply squeezing if needed */
+  if (input->squeeze)
+  {
+    eles->compute_Uavg();
+
+#ifdef _GPU
+    eles->Uavg = eles->Uavg_d;
+#endif
+
+    eles->poly_squeeze_ppts();
+  }
+
+  unsigned int nBytes = nEles * eles->nPpts * sizeof(double);
+
+  for (unsigned int n = 0; n < eles->nVars; n++)
+  {
+    binary_write(f, nBytes);
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        binary_write(f, eles->U_ppts(ppt, ele, n));
+      }
+    }
+  }
+
+  /* Write plot point coordinates */
+  nBytes = nEles * eles->nPpts * 3 * sizeof(float);
+  binary_write(f, nBytes);
+  double dzero = 0.0;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+    for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+    {
+      binary_write(f, (float) eles->coord_ppts(ppt, ele, 0));
+      binary_write(f, (float) eles->coord_ppts(ppt, ele, 1));
+      if (geo.nDims == 2)
+        binary_write(f, 0.0f);
+      else
+        binary_write(f, (float) eles->coord_ppts(ppt, ele, 2));
+    }
+  }
+
+  /* Write cell information */
+  // Write connectivity
+  nBytes = nEles * eles->nSubelements * eles->nNodesPerSubelement * sizeof(unsigned int);
+  binary_write(f, nBytes);
+  int shift = 0; // To account for blanked elements
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      {
+        binary_write(f, eles->ppt_connect(i, subele) + shift);
+      }
+    }
+    shift += eles->nPpts;
+  }
+
+  // Offsets
+  nBytes = nEles * eles->nSubelements * sizeof(unsigned int);
+  binary_write(f, nBytes);
+  unsigned int offset = eles->nNodesPerSubelement;
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      binary_write(f, offset);
+      offset += eles->nNodesPerSubelement;
+    }
+  }
+
+  // Types
+  nBytes = nEles * eles->nSubelements * sizeof(char);
+  binary_write(f, nBytes);
+  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  {
+    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    {
+      if (eles->etype == QUAD)
+        binary_write(f, (char) 9);
+      else if (eles->etype == TRI)
+        binary_write(f, (char) 5);
+      else if (eles->etype == HEX)
+        binary_write(f, (char) 12);
+    }
+  }
+
+  f << std::endl;
+  f << "</AppendedData>" << std::endl;
+
   f << "</VTKFile>" << std::endl;
   f.close();
 }
