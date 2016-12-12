@@ -1253,6 +1253,13 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     }
   }
 
+  // MPI HACK
+  if (geo.ele_set.count(TRI))
+  {
+    geo.nFacesPerEle = 3; geo.nNodesPerFace = 2;
+    geo.nCornerNodes = 3; 
+  }
+
   /* Setup face-node maps for easier processing */
   set_face_nodes(geo);
 
@@ -1371,7 +1378,8 @@ void set_face_nodes(GeoStruct &geo)
   /* Define node indices for faces */
   geo.face_nodes.assign({geo.nFacesPerEle, geo.nNodesPerFace}, 0);
 
-  if (geo.nDims == 2)
+  // MPI HACK
+  if (geo.nDims == 2 && geo.ele_set.count(QUAD))
   {
     /* Face 0: Bottom */
     geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
@@ -1442,6 +1450,10 @@ void set_face_nodes(GeoStruct &geo)
 
       /* Face 2: Left */
       geo.face_nodesBT[etype][2] = {2, 0};
+
+      geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
+      geo.face_nodes(1, 0) = 1; geo.face_nodes(1, 1) = 2;
+      geo.face_nodes(2, 0) = 2; geo.face_nodes(2, 1) = 0;
     }
     else if (etype == HEX)
     {
@@ -3216,6 +3228,13 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
   if (input->rank == 0)
     std::cout << "Total # MPI Faces: " << mpi_faces_glob.size() << std::endl;
+
+  // MPI HACK: Copy data to BT data structres
+  for (auto etype : geo.ele_set)
+  {
+    geo.nElesBT[etype] = geo.nEles;
+    geo.ele2nodesBT[etype] = geo.ele2nodes;
+  }
 }
 #endif
 

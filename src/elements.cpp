@@ -76,15 +76,15 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     dU_qpts.assign({nQpts, nEles, nVars, nDims});
   }
 
-  if (input->dt_scheme == "LSRK")
+  if (input->dt_scheme != "LSRK")
   {
     divF_spts.assign({nSpts, nEles, nVars, input->nStages});
-    U_til.assign({nSpts, nEles, nVars});
-    rk_err.assign({nSpts, nEles, nVars});
   }
   else
   {
     divF_spts.assign({nSpts, nEles, nVars, 1});
+    U_til.assign({nSpts, nEles, nVars});
+    rk_err.assign({nSpts, nEles, nVars});
   }
 
   U_ini.assign({nSpts, nEles, nVars});
