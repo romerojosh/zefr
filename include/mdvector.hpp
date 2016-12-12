@@ -98,6 +98,9 @@ class mdvector
     std::array<unsigned int,6> shape(void) const;
 
     //! Method to return vector strides
+    unsigned int get_dim(unsigned int dim) const;
+
+    //! Method to return vector strides
     unsigned int get_stride(unsigned int dim) const;
 
     //! Method to get leading dimension
@@ -300,6 +303,12 @@ template <typename T>
 std::array<unsigned int,6> mdvector<T>::shape(void) const
 {
   return dims;
+}
+
+template <typename T>
+unsigned int mdvector<T>::get_dim(unsigned int dim) const
+{
+  return dims[dim];
 }
 
 template <typename T>

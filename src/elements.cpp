@@ -3018,7 +3018,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
 
 #ifdef _GPU
   update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
-      shape_fpts_d, geo->coord_spts_d, geo->coord_fpts_d, faces->coord_d,
+      shape_fpts_d, coord_spts_d, coord_fpts_d, faces->coord_d,
       geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
 
   update_coords_wrapper(grid_vel_nodes_d, geo->grid_vel_nodes_d, shape_spts_d,
@@ -3033,7 +3033,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
       geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nFpts, nEles, nDims);
 
   if (input->CFL == 2)
-    update_h_ref_wrapper(h_ref_d, geo->coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+    update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
 
   check_error();
 #endif

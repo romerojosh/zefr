@@ -129,7 +129,6 @@ struct GeoStruct
     mdvector_gpu<char> fpt2gfpt_slot_d;
     mdvector_gpu<unsigned int> per_fpt_list_d;
     mdvector_gpu<char> gfpt2bnd_d;
-    mdvector_gpu<double> coord_spts_d, coord_fpts_d;
     mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
     mdvector_gpu<int> ele2nodes_d;
 #ifdef _MPI

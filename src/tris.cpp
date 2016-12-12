@@ -295,9 +295,11 @@ void Tris::set_vandermonde_mats()
   //  std::cout << std::endl;
   //}
 
-
-
   
+}
+
+void Tris::set_oppRestart(unsigned int order_restart, bool use_shape)
+{
 }
 
 double Tris::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)

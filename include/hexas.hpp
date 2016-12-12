@@ -35,6 +35,7 @@ class Hexas: public Elements
   private:
     void set_locs();
     void set_normals(std::shared_ptr<Faces> faces);
+    void set_oppRestart(unsigned int order_restart, bool use_shape = false);
 
     mdvector<double> calc_shape(unsigned int shape_order,
                                 const std::vector<double> &loc);
