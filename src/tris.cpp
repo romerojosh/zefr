@@ -76,8 +76,7 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
 
   nFptsPerFace = nSpts1D;
   nFpts = nSpts1D * nFaces;
-  //nPpts = (nSpts1D + 2) * (nSpts1D + 2);
-  //nPpts = (3 + 1) * (3 + 2) / 2;
+  nPpts = nSpts;
   
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
@@ -146,8 +145,7 @@ void Tris::set_locs()
   }
   
   /* Setup plot point locations */
-  auto loc_ppts_1D = Shape_pts(3); unsigned int nPpts1D = loc_ppts_1D.size();
-  nPpts = (nPpts1D) * (nPpts1D + 1) / 2;
+  auto loc_ppts_1D = Shape_pts(order); unsigned int nPpts1D = loc_ppts_1D.size();
   loc_ppts.assign({nPpts,nDims});
 
   unsigned int ppt = 0;
@@ -164,7 +162,7 @@ void Tris::set_locs()
     }
   }
 
-  /* Setup gauss quadrature point locations and weights */
+  /* Setup gauss quadrature point locations and weights (fixed to 45 point WS rule) */
   loc_qpts = WS_Tri_pts(8);
   weights_qpts = WS_Tri_weights(8);
 
@@ -300,6 +298,60 @@ void Tris::set_vandermonde_mats()
 
 void Tris::set_oppRestart(unsigned int order_restart, bool use_shape)
 {
+  /* Setup restart point locations */
+  auto loc_rpts_1D = Shape_pts(order_restart); unsigned int nRpts1D = loc_rpts_1D.size();
+  unsigned int nRpts = (order_restart + 1) * (order_restart + 2) / 2;
+
+  mdvector<double> loc_rpts({nRpts,nDims});
+  unsigned int rpt = 0;
+  for (unsigned int i = 0; i < nRpts1D; i++)
+  {
+    for (unsigned int j = 0; j < nRpts1D; j++)
+    {
+      if (j <= nRpts1D - i - 1)
+      {
+        loc_rpts(rpt,0) = loc_rpts_1D[j];
+        loc_rpts(rpt,1) = loc_rpts_1D[i];
+        rpt++;
+      }
+    }
+  }
+
+  /* Setup extrapolation operator from restart points */
+  oppRestart.assign({nSpts, nRpts});
+
+  /* Set vandermonde and inverse for orthonormal Dubiner basis at restart points */
+  mdvector<double> vand({nRpts, nRpts});
+
+  for (unsigned int i = 0; i < nRpts; i++)
+    for (unsigned int j = 0; j < nRpts; j++)
+      vand(i,j) = Dubiner2D(order_restart, loc_rpts(i, 0), loc_rpts(i, 1), j); 
+
+  vand.calc_LU();
+
+  mdvector<double> inv_vand({nRpts, nRpts});
+  
+  mdvector<double> eye({nRpts, nRpts}, 0); 
+  for (unsigned int i = 0; i < nRpts; i++)
+    eye(i,i) = 1.0;
+
+  vand.solve(inv_vand, eye);
+
+  /* Compute Lagrange restart basis */
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+    {
+      double val = 0.0;
+      for (unsigned int i = 0; i < nRpts; i++)
+      {
+        val += inv_vand(i, rpt) * Dubiner2D(order_restart, loc_spts(spt, 0), loc_spts(spt, 1), i);
+      }
+
+      oppRestart(spt, rpt) = val;
+    }
+  }
+
 }
 
 double Tris::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
@@ -500,7 +552,7 @@ void Tris::setup_PMG(int pro_order, int res_order)
 
 void Tris::setup_ppt_connectivity()
 {
-  unsigned int nPts1D = 4;
+  unsigned int nPts1D = order + 1;
   nSubelements = (nPts1D - 1) * (nPts1D - 1);
   nNodesPerSubelement = 3;
 
