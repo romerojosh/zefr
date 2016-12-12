@@ -218,4 +218,11 @@ void binary_write(std::ostream &f, T value)
   f.write((char *) &value, sizeof(T));
 }
 
+/* Helper function to read raw binary to from */
+template<typename T>
+void binary_read(std::istream &f, T &value)
+{
+  f.read((char *) &value, sizeof(T));
+}
+
 #endif /* funcs_hpp */

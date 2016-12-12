@@ -276,6 +276,10 @@ void FRSolver::setup_output()
     std::string cmd = "mkdir -p " + input->output_prefix;
     system(cmd.c_str());
   }
+
+#ifdef _MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
        
   eles->setup_ppt_connectivity();
 }
@@ -339,6 +343,15 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
   unsigned int order_restart;
   mdvector<double> U_restart;
 
+  unsigned int nEles = eles->nEles;
+
+  if (input->overset)
+  {
+    /* Remove blanked elements from total cell count */
+    for (int ele = 0; ele < eles->nEles; ele++)
+      if (geo.iblank_cell(ele) != NORMAL) nEles--;
+  }
+
   /* Load data from restart file */
   while (f >> param)
   {
@@ -356,8 +369,11 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       f >> order_restart;
     }
 
-    if (param == "<PointData>")
+    if (param == "<AppendedData")
     {
+      std::getline(f,line);
+      f.ignore(1); 
+
       /* Setup extrapolation operator from equistant restart points */
       eles->set_oppRestart(order_restart, true);
 
@@ -365,22 +381,21 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 
       U_restart.assign({nRpts, eles->nEles, eles->nVars});
 
+      unsigned int temp; 
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
-        std::getline(f,line);
-        std::getline(f,line);
+        binary_read(f, temp);
 
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        for (unsigned int ele = 0; ele < nEles; ele++)
         {
           /// TODO: make sure this is setup correctly first
           if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
           for (unsigned int rpt = 0; rpt < nRpts; rpt++)
           {
-            f >> U_restart(rpt, ele, n);
+            binary_read(f, U_restart(rpt, ele, n));
           }
         }
-        std::getline(f,line);
       }
 
       /* Extrapolate values from restart points to solution points */
