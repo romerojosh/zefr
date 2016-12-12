@@ -172,6 +172,7 @@ void mdvector_gpu<T>::free_data()
 template <typename T>
 void mdvector_gpu<T>::assign(std::vector<unsigned> dims, T* vec, int stream)
 {
+  nDims = dims.size();
   size_ = 1;
   for (auto &dim : dims)
     size_ *= dim;
@@ -186,7 +187,14 @@ void mdvector_gpu<T>::assign(std::vector<unsigned> dims, T* vec, int stream)
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
 
-    std::copy(dims.data(), dims.data()+dims.size(), strides_h);
+    for (int i = 1; i < nDims; i++)
+    {
+      strides_h[i-1] = 1;
+      for (unsigned int j = 0; j < i; j++)
+        strides_h[i-1] *= dims[j];
+    }
+
+    std::copy(dims.data(), dims.data()+dims.size(), dim_h);
 
     allocated = true;
   }

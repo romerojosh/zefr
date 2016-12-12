@@ -2151,7 +2151,6 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
   {
     rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, P(fpt, 0), P(fpt, 1), norm, waveSp_gfpts(fpt),
         AdvDiff_A.data(), Vgn, gamma, rus_k, rus_bias(fpt));
-
   }
 
   if (viscous)
@@ -2514,9 +2513,8 @@ void unpack_fringe_u(mdvector_gpu<double> U_fringe,
   const unsigned int gfpt = fringe_fpts(fpt, face);
   const unsigned int side = fringe_side(fpt, face);
 
-  U(gfpt, var, side) = U_fringe(fpt, face, var); /// TODO: look into further
-  //U(gfpt, var, side) = U_fringe(var, fpt, face);
-  U_ldg(gfpt, var, side) = U_fringe(fpt, face, var);
+  U(gfpt, var, side) = U_fringe(var,fpt,face); //fpt, face, var); /// TODO: look into further
+  U_ldg(gfpt, var, side) = U_fringe(var,fpt,face);
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
