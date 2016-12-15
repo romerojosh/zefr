@@ -4391,10 +4391,10 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     auto t2 = std::chrono::high_resolution_clock::now();
     auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1);
 
-    f << iter << " " << current_runtime.count() << " ";
+    f << iter << " " << std::scientific << flow_time << " " << current_runtime.count() << " ";
 
     for (auto val : res)
-      f << std::scientific << val / nDoF << " ";
+      f << val / nDoF << " ";
     f << std::endl;
 
     /* Store maximum residual */
@@ -4494,14 +4494,14 @@ void FRSolver::report_forces(std::ofstream &f)
 
     std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
 
-    f << iter << " ";
+    f << iter << " " << std::scientific << std::setprecision(16) << flow_time << " ";
 
-    f << std::scientific << std::setprecision(16) << CL_conv << " " << CD_conv;
+    f  << CL_conv << " " << CD_conv;
 
     if (input->viscous)
     {
       std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
-      f << std::scientific << std::setprecision(16) << " " << CL_visc << " " << CD_visc;
+      f << CL_visc << " " << CD_visc;
     }
 
     std::cout << std::endl;
@@ -4682,10 +4682,10 @@ void FRSolver::report_error(std::ofstream &f)
     std::cout << std::endl;
 
     /* Write to file */
-    f << iter << " ";
+    f << iter << " " << std::scientific << std::setprecision(16) << flow_time << " ";
 
     for (auto &val : l2_error)
-      f << std::scientific << std::setprecision(16) << std::sqrt(val / vol) << " ";
+      f << std::sqrt(val / vol) << " ";
     f << std::endl;
   }
 
