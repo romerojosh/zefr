@@ -729,18 +729,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Compute parent space common flux at non-MPI flux points */
     faces->compute_common_F(startFpt, endFpt);
 
-    /*
-    std::cout << "FCOMM" << std::endl;
-    for (int i = 0; i < eles->nEles; i++)
-    {
-      for (int n = 0; n < eles->nFpts; n++)
-        std::cout << eles->Fcomm(i, n) << std::endl;
-      std::cout << std::endl;
-    }
-
-    ThrowException("BREAK!");
-    */
-
     /* Compute solution point contribution to divergence of flux */
     if (input->motion)
     {
@@ -767,13 +755,21 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       /* Compute common interface solution and convective flux at non-MPI flux points */
       faces->compute_common_U(startFpt, endFpt);
 
+#ifdef _MPI
+      /* Receieve U data */
+      faces->recv_U_data();
+      
+      /* Complete computation on remaining flux points */
+      faces->compute_common_U(startFptMpi, geo.nGfpts);
+#endif
+
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
         // Compute unit advection flux at solution points with wavespeed along dim
         eles->compute_unit_advF(startEle, endEle, dim); 
 
         // Convert common U to common normal advection flux
-        faces->common_U_to_F(startFpt, endFpt, dim);
+        faces->common_U_to_F(startFpt, geo.nGfpts, dim);
 
         // Compute physical gradient (times jacobian determinant) along via divergence of F
         eles->compute_dU_spts_via_divF(startEle, endEle, dim);
@@ -785,22 +781,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       /* Compute common interface solution and convective flux at non-MPI flux points */
       faces->compute_common_U(startFpt, endFpt);
 
-      /*
-      std::cout << "UCOMM" << std::endl;
-      for (int i = 0; i < eles->nEles; i++)
-      {
-        for (int n = 0; n < eles->nFpts; n++)
-        {
-          for (int j = 0; j < eles->nVars; j++)
-            std::cout << eles->Ucomm(n, i, j) << " ";
-          std::cout << std::endl;
-        }
-        std::cout << std::endl;
-      }
-      */
-
-      //ThrowException("BREAK!");
-      
       /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
       eles->compute_dU_spts(startEle, endEle);
 
@@ -1344,7 +1324,11 @@ void FRSolver::setup_views()
 
 #ifdef _GPU
       U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0);
-      U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(i, 0);
+      if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
+        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(i, 0);
+      else
+        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0); // point U_ldg to correct MPI data;
+
       U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(0);
 
       Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(i, 0);
@@ -4367,7 +4351,7 @@ void FRSolver::report_forces(std::ofstream &f)
 
     std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
 
-    f << iter << " ";
+    f << iter << " " << flow_time << " ";
 
     f << std::scientific << std::setprecision(16) << CL_conv << " " << CD_conv;
 
