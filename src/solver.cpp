@@ -4501,7 +4501,7 @@ void FRSolver::report_forces(std::ofstream &f)
     if (input->viscous)
     {
       std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
-      f << CL_visc << " " << CD_visc;
+      f << " " << CL_visc << " " << CD_visc;
     }
 
     std::cout << std::endl;
