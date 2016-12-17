@@ -35,6 +35,7 @@ class Quads: public Elements
   private:
     void set_locs();
     void set_normals(std::shared_ptr<Faces> faces);
+    void set_oppRestart(unsigned int order_restart, bool use_shape = false);
 
     mdvector<double> calc_shape(unsigned int shape_order,
                                 const double* loc);
@@ -62,6 +63,7 @@ class Quads: public Elements
     Quads(GeoStruct *geo, InputStruct *input, int order = -1);
 
     void setup_PMG(int pro_order, int res_order);
+    void setup_ppt_connectivity();
 
     /* Routines for implicit method */
     void transform_dFdU();

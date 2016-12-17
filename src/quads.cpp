@@ -42,6 +42,7 @@ extern "C" {
 //Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
 Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
 {
+  etype = QUAD;
   this->geo = geo;
   this->input = input;  
   this->shape_order = geo->shape_order;  
@@ -75,7 +76,7 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   }
 
   nFpts = nSpts1D * nFaces;
-  nPpts = (nSpts1D + 2) * (nSpts1D + 2);
+  nPpts = nSpts;
   
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
@@ -172,15 +173,13 @@ void Quads::set_locs()
     }
   }
   
-  /* Setup plot point locations */
-  auto loc_ppts_1D = loc_spts_1D;
-  loc_ppts_1D.insert(loc_ppts_1D.begin(), -1.0);
-  loc_ppts_1D.insert(loc_ppts_1D.end(), 1.0);
+  /* Setup plot point locations (equispaced) */
+  auto loc_ppts_1D = Shape_pts(order);
 
   unsigned int ppt = 0;
-  for (unsigned int i = 0; i < nSpts1D+2; i++)
+  for (unsigned int i = 0; i < nSpts1D; i++)
   {
-    for (unsigned int j = 0; j < nSpts1D+2; j++)
+    for (unsigned int j = 0; j < nSpts1D; j++)
     {
       loc_ppts(ppt,0) = loc_ppts_1D[j];
       loc_ppts(ppt,1) = loc_ppts_1D[i];
@@ -237,6 +236,36 @@ void Quads::set_normals(std::shared_ptr<Faces> faces)
         tnorm(fpt,1) = 0.0; break;
     }
 
+  }
+}
+
+void Quads::set_oppRestart(unsigned int order_restart, bool use_shape)
+{
+  unsigned int nRpts1D = (order_restart + 1);
+  unsigned int nRpts = nRpts1D * nRpts1D;
+
+  /* Setup extrapolation operator from restart points */
+  oppRestart.assign({nSpts, nRpts});
+
+  std::vector<double> loc_rpts_1D;
+  if (!use_shape)
+    loc_rpts_1D = Gauss_Legendre_pts(order_restart + 1); 
+  else
+    loc_rpts_1D = Shape_pts(order_restart); 
+
+  std::vector<double> loc(input->nDims);
+  for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int dim = 0; dim < input->nDims; dim++)
+        loc[dim] = loc_spts(spt , dim);
+
+      int i = rpt % nRpts1D;
+      int j = rpt / nRpts1D;
+      oppRestart(spt,rpt) = Lagrange(loc_rpts_1D, i, loc[0]) * 
+                            Lagrange(loc_rpts_1D, j, loc[1]);
+    }
   }
 }
 
@@ -433,6 +462,38 @@ void Quads::setup_PMG(int pro_order, int res_order)
   oppPro_d = oppPro;
   oppRes_d = oppRes;
 #endif
+}
+
+void Quads::setup_ppt_connectivity()
+{
+  unsigned int nSubelements1D = nSpts1D - 1;
+  nSubelements = nSubelements1D * nSubelements1D;
+  nNodesPerSubelement = 4;
+
+  /* Allocate memory for local plot point connectivity and solution at plot points */
+  ppt_connect.assign({4, nSubelements});
+
+  /* Setup plot "subelement" connectivity */
+  std::vector<unsigned int> nd(4,0);
+
+  unsigned int ele = 0;
+  nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+
+  for (unsigned int i = 0; i < nSubelements1D; i++)
+  {
+    for (unsigned int j = 0; j < nSubelements1D; j++)
+    {
+      for (unsigned int node = 0; node < 4; node ++)
+      {
+        ppt_connect(node, ele) = nd[node] + j;
+      }
+
+      ele++;
+    }
+
+    for (unsigned int node = 0; node < 4; node ++)
+      nd[node] += nSubelements1D + 1;
+  }
 }
 
 void Quads::transform_dFdU()

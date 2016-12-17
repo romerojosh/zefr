@@ -294,15 +294,15 @@ void apply_nondim(InputStruct &input)
   for (unsigned int dim = 0; dim < input.nDims; dim++)
     input.V_fs(dim) = V_fs_mag * input.norm_fs(dim);
 
-  input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
-  input.P_fs = input.rho_fs * input.R * input.T_fs;
-
   /* If using Sutherland's law, update viscosity */
   if (!input.fix_vis)
   {
     input.mu = input.mu * std::pow(input.T_fs / input.T_gas, 1.5) * ((input.T_gas + input.S)/
         (input.T_fs + input.S));
   }
+
+  input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
+  input.P_fs = input.rho_fs * input.R * input.T_fs;
 
   /* -- Set reference quantities for nondimensionalization --
    * Note that we are setting rho_ref s.t. we get a 'normalized' density of 2.

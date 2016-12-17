@@ -516,7 +516,7 @@ void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 
   for (int spt = 0; spt < nNodes; spt++)
     for (int dim = 0; dim < geo->nDims; dim++)
-      xyz[3*spt+dim] = geo->coord_spts(spt, cellID, dim);
+      xyz[3*spt+dim] = solver->eles->coord_spts(spt, cellID, dim);
 }
 
 void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
