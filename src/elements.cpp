@@ -902,7 +902,7 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
   }
 
   /* CDG: For a given face, compute contribution to derivative from common solution at flux points on face
-   * and extrpolated solutions at flux points for all other faces */
+   * and extrapolated solutions at flux points for all other faces */
   if (input->fvisc_type == "CDG")
   {
     for (unsigned int face = 0; face < nFaces; face++)
@@ -2392,11 +2392,21 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             for (unsigned int face = 0; face < nFaces; face++)
             {
               /* Copy common solution derivative and extrapolated solution derivative to temporary data structure */
+              std::vector<double> dUtempdU(nFpts);
+              for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+              {
+                unsigned int fptFace = fpt / nSpts1D;
+                dUtempdU[fpt] = geo->dUf_Ucomm(fptFace, ele, face) * dUcdU_fpts(fpt, ele, ni, nj, 0)
+                         + (1 - geo->dUf_Ucomm(fptFace, ele, face));
+              }
+
+              /*
               std::vector<double> dUtempdU(nFpts, 1.0);
               for (unsigned int i = face*nSpts1D; i < (face+1)*nSpts1D; i++)
               {
                 dUtempdU[i] = dUcdU_fpts(i, ele, ni, nj, 0);
               }
+              */
 
               /* Compute center viscous supplementary matrix */
               Cvisc0.fill(0);       
