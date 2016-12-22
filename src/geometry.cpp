@@ -2542,7 +2542,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 void setup_CDG(GeoStruct &geo)
 {
   /* CDG: Identify common solutions needed for common derivatives */
-  /* TODO: Needs to be changed for non-periodic boundary conditions */
   geo.dUf_Ucomm.assign({geo.nFacesPerEle, geo.nEles, geo.nFacesPerEle}, 0);
   for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
   {
@@ -2557,13 +2556,21 @@ void setup_CDG(GeoStruct &geo)
       {
         if (f1 == face) {continue;}
 
+        /* Use common solution for boundary conditions */
         int ele1N = geo.ele_adj(f1, ele1);
-        for (unsigned int f2 = 0; f2 < geo.nFacesPerEle; f2++)
-        {
-          int ele2N = geo.ele_adj(f2, ele2);
-          if (ele1N == ele2N)
-          {
+        if (ele1N == -1) {
             geo.dUf_Ucomm(f1, ele1, face) = 1;
+        }
+
+        /* Use common solution for unstructured 3 vertex case */
+        else if (ele2 != -1) {
+          for (unsigned int f2 = 0; f2 < geo.nFacesPerEle; f2++)
+          {
+            int ele2N = geo.ele_adj(f2, ele2);
+            if (ele1N == ele2N)
+            {
+              geo.dUf_Ucomm(f1, ele1, face) = 1;
+            }
           }
         }
       }
