@@ -111,7 +111,7 @@ struct InputStruct
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
   bool viscous, p_multi, restart, fix_vis, squeeze, serendipity, source;
   std::vector<unsigned int> mg_levels, mg_steps;
-  std::string fconv_type, fvisc_type;
+  unsigned int fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau;
   double AdvDiff_D, dt, res_tol, CFL, rel_fac, CFL_max, CFL_ratio;
   mdvector<double> AdvDiff_A, V_fs, norm_fs, V_wall, norm_wall;
@@ -123,12 +123,20 @@ struct InputStruct
   double exps0, s_factor;
   unsigned int rank, nRanks;
   unsigned int filt_on, sen_write, sen_norm, filt_maxLevels;
+  unsigned int shockcapture, limiter, filt2on;
   double sen_Jfac, filt_gamma;
-  double iter = 0, initIter = 0, time = 0, rkTime = 0;
+  double alpha, filtexp, nonlin_exp, filtexp2, alpha2;
+  unsigned int iter = 0, initIter = 0;
+
+  /* --- Adaptive time-stepping --- */
+  double pi_alpha, pi_beta;     //! PI-controller valuse
+  double sfact, maxfac, minfac; //! delta-t adjustment factors
+  double atol, rtol;
 
   /* --- I/O --- */
-  short write_paraview, write_pyfr, plot_surfaces;
-  int restart_iter;
+  short write_paraview, write_pyfr, plot_surfaces, plot_overset, write_LHS;
+  unsigned int restart_iter, restart_type;
+  std::string restart_case;
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp;
@@ -138,6 +146,10 @@ struct InputStruct
 
   double moveAx, moveAy, moveAz;
   double moveFx, moveFy, moveFz;
+
+  double rot_axis[3];
+  double rot_angle;
+  double xc[3], dxc[3], vc[3], dvc[3];
 
   /* --- Additional Mesh Variables --- */
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's

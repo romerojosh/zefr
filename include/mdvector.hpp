@@ -28,13 +28,6 @@
  *
  */
 
-#ifdef _CPU
-static const unsigned int CACHE_LINE_SIZE = 64;
-#endif
-#ifdef _GPU
-static const unsigned int CACHE_LINE_SIZE = 128;
-#endif
-
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -80,10 +73,12 @@ class mdvector
     //! Constructors
     mdvector();
     ~mdvector();
-    mdvector(std::vector<unsigned int> dims, T value = 0, bool pad = false, bool pinned = false);
+    mdvector(const mdvector<T> &orig);
+    mdvector<T>& operator= (const mdvector<T> &orig);
+    mdvector(std::vector<unsigned int> dims, T value = T(), bool pinned = false);
 
     //! Setup operator
-    void assign(std::vector<unsigned int> dims, T value = T(), bool pad = false, bool pinned = false);
+    void assign(std::vector<unsigned int> dims, T value = T(), bool pinned = false);
 
     //! Push back operator (for compatibility)
     void push_back(T value); 
@@ -94,7 +89,7 @@ class mdvector
     //! Size operator
     size_t size() const;
     //
-    //! Method to return number of values (with padding)
+    //! Method to return number of values
     size_t max_size() const;
 
     int get_nDims(void) { return nDims; }
@@ -103,7 +98,10 @@ class mdvector
     std::array<unsigned int,6> shape(void) const;
 
     //! Method to return vector strides
-    std::array<unsigned int,6> get_strides(void) const;
+    unsigned int get_dim(unsigned int dim) const;
+
+    //! Method to return vector strides
+    unsigned int get_stride(unsigned int dim) const;
 
     //! Method to get leading dimension
     unsigned int ldim() const; 
@@ -135,7 +133,8 @@ class mdvector
     void remove_dim_2(unsigned int ind);
     void remove_dim_3(unsigned int ind);
 
-    //! Method to return pointer to strides (for GPU)
+    //! Method to return pointer to dim and strides (for GPU)
+    const unsigned int* dims_ptr() const;
     const unsigned int* strides_ptr() const;
 
     //! Overloaded methods to access data
@@ -163,9 +162,47 @@ template <typename T>
 mdvector<T>::mdvector(){};
 
 template <typename T>
-mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, bool pad, bool pinned)
+mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, bool pinned)
 {
-  this->assign(dims, value, pad, pinned);
+  this->assign(dims, value, pinned);
+}
+
+template <typename T>
+mdvector<T>::mdvector(const mdvector<T> &orig)
+{
+  this->nDims = orig.nDims;
+  this->size_ = orig.size_;
+  this->max_size_ = orig.max_size_;
+  this->dims = orig.dims;
+  this->strides = orig.strides;
+  this->values = orig.values;
+
+  this->pinned = orig.pinned;
+
+  if (!this->pinned)
+    this->values_ptr = this->values.data();
+  else
+    ThrowException("Unsupported copy of pinned mdvector detected! Don't do this!");
+}
+
+template <typename T>
+mdvector<T>& mdvector<T>::operator= (const mdvector<T> &orig)
+{
+  this->nDims = orig.nDims;
+  this->size_ = orig.size_;
+  this->max_size_ = orig.max_size_;
+  this->dims = orig.dims;
+  this->strides = orig.strides;
+  this->values = orig.values;
+
+  this->pinned = orig.pinned;
+
+  if (!this->pinned)
+    this->values_ptr = this->values.data();
+  else
+    ThrowException("Unsupported copy of pinned mdvector detected! Don't do this!");
+
+  return *this;
 }
 
 template <typename T>
@@ -180,7 +217,7 @@ mdvector<T>::~mdvector()
 }
 
 template <typename T>
-void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad, bool pinned)
+void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pinned)
 {
   nDims = (int)dims.size();
 
@@ -190,16 +227,15 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad, bool
 
   for (unsigned int i = 0; i < nDims; i++)
   {
-    strides[i] = dims[i];
-
-    /* Pad leading dimension to cache line boundary */
-    if (i == 0 and nDims > 1 and pad)
+    if (i > 0)
     {
-      strides[i] += dims[i] % (CACHE_LINE_SIZE / sizeof(T));
+      strides[i-1] = 1;
+      for (unsigned int j = 0; j < i; j++)
+        strides[i-1] *= dims[j];
     }
 
     size_ *= dims[i];
-    max_size_ *= strides[i];
+    max_size_ *= dims[i];
 
     this->dims[i] = dims[i];
   }
@@ -208,7 +244,10 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pad, bool
   this->pinned = pinned;
 #endif
   if (!this->pinned)
+  {
     values.assign(max_size_, (T)value);
+    values_ptr = values.data();
+  }
   else
   {
 #ifdef _GPU
@@ -252,6 +291,7 @@ void mdvector<T>::push_back(T value) /* Only valid for 1D arrays! */
     values.push_back(value);
     size_++;
     max_size_++;
+    values_ptr = values.data();
   }
   else
   {
@@ -266,9 +306,15 @@ std::array<unsigned int,6> mdvector<T>::shape(void) const
 }
 
 template <typename T>
-std::array<unsigned int,6> mdvector<T>::get_strides(void) const
+unsigned int mdvector<T>::get_dim(unsigned int dim) const
 {
-  return strides;
+  return dims[dim];
+}
+
+template <typename T>
+unsigned int mdvector<T>::get_stride(unsigned int dim) const
+{
+  return strides[dim];
 }
 
 template <typename T>
@@ -346,49 +392,49 @@ template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0) 
 {
   //assert(ndims == 1);
-  return values[idx0];
+  return values_ptr[idx0];
 }
 
 template <typename T>
-T mdvector<T>::operator() (unsigned int idx0)const
+T mdvector<T>::operator() (unsigned int idx0) const
 {
   //assert(ndims == 1);
-  return values[idx0];
+  return values_ptr[idx0];
 }
 
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) 
 {
   //assert(ndims == 2);
-  return values[idx1 * strides[0] + idx0];
+  return values_ptr[idx1 * strides[0] + idx0];
 }
 
 template <typename T>
 T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) const
 {
   //assert(ndims == 2);
-  return values[idx1 * strides[0] + idx0];
+  return values_ptr[idx1 * strides[0] + idx0];
 }
 
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
 {
   //assert(ndims == 3);
-  return values[(idx2 * strides[1] + idx1) * strides[0] + idx0];
+  return values_ptr[idx2 * strides[1] + idx1 * strides[0] + idx0];
 }
 
 template <typename T>
 T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
 {
   //assert(ndims == 3);
-  return values[(idx2 * strides[1] + idx1) * strides[0] + idx0];
+  return values_ptr[idx2 * strides[1] + idx1 * strides[0] + idx0];
 }
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
     unsigned int idx3) 
 {
   //assert(ndims == 4);
-  return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+  return values_ptr[idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
 }
 
 template <typename T>
@@ -396,159 +442,7 @@ T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int id
     unsigned int idx3) const
 {
   //assert(ndims == 4);
-  return values[((idx3 * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
-}
-
-template<typename T>
-void mdvector<T>::add_dim_0(int ind, const T& val)
-{
-  if (ind == -1) ind = dims[0]; // Add to end by default
-
-  /* Insert new 'row' of memory */
-  unsigned int stride0 = dims[0]*dims[1]*dims[2];
-  unsigned int stride1 = dims[0]*dims[1];
-  unsigned int stride2 = dims[0];
-  unsigned int rowSize = 1;
-  unsigned int offset = ind*rowSize;
-  for (int i = dims[3]-1; i >= 0; i--) {
-    for (int j = dims[2]-1; j >= 0; j--) {
-      for (int k = dims[1]-1; k >= 0; k--) {
-        auto it = values.begin() + i*stride0 + j*stride1 + k*stride2 + offset;
-        values.insert(it, rowSize, val);
-      }
-    }
-  }
-
-  dims[0]++;
-  strides[0]++;
-  size_ = values.size();
-}
-
-template<typename T>
-void mdvector<T>::add_dim_1(int ind, const T &val)
-{
-  if (ind == -1) ind = dims[1]; // Add to end by default
-
-  /* Insert new 'column' of memory */
-  unsigned int stride0 = dims[0]*dims[1]*dims[2];
-  unsigned int stride1 = dims[0]*dims[1];
-  unsigned int colSize = dims[0];
-  unsigned int offset = ind*colSize;
-  for (int i = dims[3]-1; i >= 0; i--) {
-    for (int j = dims[2]-1; j >= 0; j--) {
-      auto it = values.begin() + i*stride0 + j*stride1 + offset;
-      values.insert(it, colSize, val);
-    }
-  }
-
-  dims[1]++;
-  strides[1]++;
-  size_ = values.size();
-}
-
-template<typename T>
-void mdvector<T>::add_dim_2(int ind, const T &val)
-{
-  if (ind == -1) ind = dims[2]; // Add to end by default
-
-  /* Insert new 'page' of memory */
-  unsigned int stride   = dims[0]*dims[1]*dims[2];
-  unsigned int pageSize = dims[0]*dims[1];
-  unsigned int offset = ind*pageSize;
-  for (int i = dims[3]-1; i >= 0; i--) {
-    auto it = values.begin() + i*stride + offset;
-    values.insert(it, pageSize, val);
-  }
-
-  dims[2]++;
-  strides[2]++;
-  size_ = values.size();
-}
-
-template<typename T>
-void mdvector<T>::add_dim_3(int ind, const T &val)
-{
-  if (ind == -1) ind = dims[3]; // Add to end by default
-
-  /* Insert new 'book' of memory */
-  unsigned int bookSize = dims[0]*dims[1]*dims[2];
-  auto it = values.begin() + bookSize*ind;
-  values.insert(it, bookSize, val);
-  dims[3]++;
-  strides[3]++;
-  size_ = values.size();
-}
-
-template<typename T>
-void mdvector<T>::remove_dim_0(unsigned int ind)
-{
-  /* Remove 'row' of memory */
-  unsigned int stride0 = dims[0]*dims[1]*dims[2];
-  unsigned int stride1 = dims[0]*dims[1];
-  unsigned int stride2 = dims[0];
-  unsigned int rowSize = 1;
-  unsigned int offset = ind*rowSize;
-  for (int i = dims[3]-1; i >= 0; i--) {
-    for (int j = dims[2]-1; j >= 0; j--) {
-      for (int k = dims[1]-1; k >= 0; k--) {
-        auto it = values.begin() + i*stride0 + j*stride1 + k*stride2 + offset;
-        values.erase(it, it+rowSize);
-      }
-    }
-  }
-
-  dims[0]--;
-  strides[0]--;
-  size_ = values.size();
-}
-
-template<typename T>
-void mdvector<T>::remove_dim_1(unsigned int ind)
-{
-  /* Remove 'column' of memory */
-  unsigned int stride0 = dims[0]*dims[1]*dims[2];
-  unsigned int stride1 = dims[0]*dims[1];
-  unsigned int colSize = dims[0];
-  unsigned int offset = ind*colSize;
-  for (int i = dims[3]-1; i >= 0; i--) {
-    for (int j = dims[2]-1; j >= 0; j--) {
-      auto it = values.begin() + i*stride0 + j*stride1 + offset;
-      values.erase(it, it+colSize);
-    }
-  }
-
-  dims[1]--;
-  strides[1]--;
-  size_ = values.size();
-}
-
-template<typename T>
-void mdvector<T>::remove_dim_2(unsigned int ind)
-{
-  /* Remove 'page' of memory */
-  unsigned int stride   = dims[0]*dims[1]*dims[2];
-  unsigned int pageSize = dims[0]*dims[1];
-  unsigned int offset = ind*pageSize;
-  for (int i = dims[3]-1; i >= 0; i--) {
-    auto it = values.begin() + i*stride + offset;
-    values.erase(it, it+pageSize);
-  }
-
-  dims[2]--;
-  strides[2]--;
-  size_ = values.size();
-}
-
-template<typename T>
-void mdvector<T>::remove_dim_3(unsigned int ind)
-{
-  /* Remove 'book' of memory */
-  unsigned int bookSize = dims[0]*dims[1]*dims[2];
-  auto it = values.begin() + bookSize*ind;
-  values.erase(it, it+bookSize);
-  dims[3]--;
-  strides[3]--;
-  size_ = values.size();
+  return values_ptr[idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
 }
 
 template <typename T>
@@ -556,7 +450,7 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
     unsigned int idx3, unsigned int idx4) 
 {
   //assert(ndims == 5);
-  return values[(((idx4 * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+  return values[idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
 }
 
 template <typename T>
@@ -564,7 +458,7 @@ T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int id
     unsigned int idx3, unsigned int idx4) const
 {
   //assert(ndims == 5);
-  return values[(((idx4 * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+  return values[idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
 }
 
 template <typename T>
@@ -572,7 +466,7 @@ T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int i
     unsigned int idx3, unsigned int idx4, unsigned int idx5) 
 {
   //assert(ndims == 6);
-  return values[((((idx5 * strides[4] + idx4) * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+  return values[idx5 * strides[4] + idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
 }
 
 template <typename T>
@@ -580,7 +474,229 @@ T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int id
     unsigned int idx3, unsigned int idx4, unsigned int idx5) const
 {
   //assert(ndims == 6);
-  return values[((((idx5 * strides[4] + idx4) * strides[3] + idx3) * strides[2] + idx2) * strides[1] + idx1) * strides[0] + idx0];
+  return values[idx5 * strides[4] + idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
+}
+
+template<typename T>
+void mdvector<T>::add_dim_0(int ind, const T& val)
+{
+  if (!pinned)
+  {
+    if (ind == -1) ind = dims[0]; // Add to end by default
+
+    /* Insert new 'row' of memory */
+    unsigned int stride0 = dims[0]*dims[1]*dims[2];
+    unsigned int stride1 = dims[0]*dims[1];
+    unsigned int stride2 = dims[0];
+    unsigned int rowSize = 1;
+    unsigned int offset = ind*rowSize;
+    for (int i = dims[3]-1; i >= 0; i--) {
+      for (int j = dims[2]-1; j >= 0; j--) {
+        for (int k = dims[1]-1; k >= 0; k--) {
+          auto it = values.begin() + i*stride0 + j*stride1 + k*stride2 + offset;
+          values.insert(it, rowSize, val);
+        }
+      }
+    }
+
+    dims[0]++;
+    strides[0]++;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template<typename T>
+void mdvector<T>::add_dim_1(int ind, const T &val)
+{
+  if (!pinned)
+  {
+    if (ind == -1) ind = dims[1]; // Add to end by default
+
+    /* Insert new 'column' of memory */
+    unsigned int stride0 = dims[0]*dims[1]*dims[2];
+    unsigned int stride1 = dims[0]*dims[1];
+    unsigned int colSize = dims[0];
+    unsigned int offset = ind*colSize;
+    for (int i = dims[3]-1; i >= 0; i--) {
+      for (int j = dims[2]-1; j >= 0; j--) {
+        auto it = values.begin() + i*stride0 + j*stride1 + offset;
+        values.insert(it, colSize, val);
+      }
+    }
+
+    dims[1]++;
+    strides[1]++;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template<typename T>
+void mdvector<T>::add_dim_2(int ind, const T &val)
+{
+  if (!pinned)
+  {
+    if (ind == -1) ind = dims[2]; // Add to end by default
+
+    /* Insert new 'page' of memory */
+    unsigned int stride   = dims[0]*dims[1]*dims[2];
+    unsigned int pageSize = dims[0]*dims[1];
+    unsigned int offset = ind*pageSize;
+    for (int i = dims[3]-1; i >= 0; i--) {
+      auto it = values.begin() + i*stride + offset;
+      values.insert(it, pageSize, val);
+    }
+
+    dims[2]++;
+    strides[2]++;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template<typename T>
+void mdvector<T>::add_dim_3(int ind, const T &val)
+{
+  if (!pinned)
+  {
+    if (ind == -1) ind = dims[3]; // Add to end by default
+
+    /* Insert new 'book' of memory */
+    unsigned int bookSize = dims[0]*dims[1]*dims[2];
+    auto it = values.begin() + bookSize*ind;
+    values.insert(it, bookSize, val);
+    dims[3]++;
+    strides[3]++;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template<typename T>
+void mdvector<T>::remove_dim_0(unsigned int ind)
+{
+  if (!pinned)
+  {
+    /* Remove 'row' of memory */
+    unsigned int stride0 = dims[0]*dims[1]*dims[2];
+    unsigned int stride1 = dims[0]*dims[1];
+    unsigned int stride2 = dims[0];
+    unsigned int rowSize = 1;
+    unsigned int offset = ind*rowSize;
+    for (int i = dims[3]-1; i >= 0; i--) {
+      for (int j = dims[2]-1; j >= 0; j--) {
+        for (int k = dims[1]-1; k >= 0; k--) {
+          auto it = values.begin() + i*stride0 + j*stride1 + k*stride2 + offset;
+          values.erase(it, it+rowSize);
+        }
+      }
+    }
+
+    dims[0]--;
+    strides[0]--;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template<typename T>
+void mdvector<T>::remove_dim_1(unsigned int ind)
+{
+  if (!pinned)
+  {
+    /* Remove 'column' of memory */
+    unsigned int stride0 = dims[0]*dims[1]*dims[2];
+    unsigned int stride1 = dims[0]*dims[1];
+    unsigned int colSize = dims[0];
+    unsigned int offset = ind*colSize;
+    for (int i = dims[3]-1; i >= 0; i--) {
+      for (int j = dims[2]-1; j >= 0; j--) {
+        auto it = values.begin() + i*stride0 + j*stride1 + offset;
+        values.erase(it, it+colSize);
+      }
+    }
+
+    dims[1]--;
+    strides[1]--;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template<typename T>
+void mdvector<T>::remove_dim_2(unsigned int ind)
+{
+  if (!pinned)
+  {
+    /* Remove 'page' of memory */
+    unsigned int stride   = dims[0]*dims[1]*dims[2];
+    unsigned int pageSize = dims[0]*dims[1];
+    unsigned int offset = ind*pageSize;
+    for (int i = dims[3]-1; i >= 0; i--) {
+      auto it = values.begin() + i*stride + offset;
+      values.erase(it, it+pageSize);
+    }
+
+    dims[2]--;
+    strides[2]--;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template<typename T>
+void mdvector<T>::remove_dim_3(unsigned int ind)
+{
+  if (!pinned)
+  {
+    /* Remove 'book' of memory */
+    unsigned int bookSize = dims[0]*dims[1]*dims[2];
+    auto it = values.begin() + bookSize*ind;
+    values.erase(it, it+bookSize);
+    dims[3]--;
+    strides[3]--;
+    size_ = values.size();
+    values_ptr = values.data();
+  }
+  else
+  {
+    ThrowException("Cannot modify dimensions of pinned mdvector!");
+  }
+}
+
+template <typename T>
+const unsigned int* mdvector<T>::dims_ptr() const
+{
+  return dims.data();
 }
 
 template <typename T>
@@ -612,5 +728,80 @@ mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
   return *this;
 }
 #endif
+
+/* mdview class to allow indirect data access from faces */
+// NOTE: Assumes index in last place used for slot always, and thus
+// applies to strided access into base_ptrs/strides vectors. 
+template <typename T>
+class mdview
+{
+  private:
+    mdvector<T*> base_ptrs;
+    mdvector<unsigned int> strides;
+    unsigned int base_stride;
+
+  public:
+    mdview(){}
+
+    mdview(mdvector<T*> &base_ptrs, mdvector<unsigned int>& strides, unsigned int base_stride)
+    {
+      this->base_ptrs = base_ptrs;
+      this->strides = strides;
+      this->base_stride = base_stride;
+    }
+
+    void assign(mdvector<T*> &base_ptrs, mdvector<unsigned int>& strides, unsigned int base_stride)
+    {
+      this->base_ptrs = base_ptrs;
+      this->strides = strides;
+      this->base_stride = base_stride;
+    }
+
+    T& operator() (unsigned int idx0) 
+    {
+      return *(base_ptrs(idx0));
+    }
+
+    T operator() (unsigned int idx0) const
+    {
+      return *(base_ptrs(idx0));
+    }
+
+    T& operator() (unsigned int idx0, unsigned int idx1) 
+    {
+      return *(base_ptrs(idx0 + base_stride * idx1));
+    }
+
+    T operator() (unsigned int idx0, unsigned int idx1) const
+    {
+      return *(base_ptrs(idx0 + base_stride * idx1));
+    }
+
+    T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
+    {
+      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
+    }
+
+    T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
+    {
+      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
+    }
+
+    T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+        unsigned int idx3) 
+    {
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
+          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
+    }
+
+    T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
+        unsigned int idx3) const
+    {
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
+          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
+    }
+
+};
+
 
 #endif /* mdvector_hpp */

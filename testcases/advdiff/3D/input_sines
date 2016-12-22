@@ -9,7 +9,7 @@ mesh_bound  fluid  fluid
 # Solver:
 order     2
 equation AdvDiff    (AdvDiff, EulerNS)
-viscous  0
+viscous  1
 spt_type Legendre
 squeeze  0
 s_factor  0.0
@@ -17,7 +17,7 @@ s_factor  0.0
 # Timestepping:
 n_steps 2000
 dt_scheme RK44      (Euler, RK44, RK54)
-dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
 CFL	  1.00
 
@@ -45,4 +45,4 @@ ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 AdvDiff_Ax 1
 AdvDiff_Ay 1
 AdvDiff_Az 1
-AdvDiff_D 0.0
+AdvDiff_D 0.1

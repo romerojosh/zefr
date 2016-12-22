@@ -42,6 +42,7 @@ extern "C" {
 //Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
 Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
 {
+  etype = QUAD;
   this->geo = geo;
   this->input = input;  
   this->shape_order = geo->shape_order;  
@@ -75,7 +76,7 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   }
 
   nFpts = nSpts1D * nFaces;
-  nPpts = (nSpts1D + 2) * (nSpts1D + 2);
+  nPpts = nSpts;
   
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
@@ -114,6 +115,8 @@ void Quads::set_locs()
   weights_spts.assign({nSpts1D});
   for (unsigned int spt = 0; spt < nSpts1D; spt++)
     weights_spts(spt) = weights_spts_temp[spt];
+
+  weights_fpts = weights_spts;
 
   loc_DFR_1D = loc_spts_1D;
   loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
@@ -170,15 +173,13 @@ void Quads::set_locs()
     }
   }
   
-  /* Setup plot point locations */
-  auto loc_ppts_1D = loc_spts_1D;
-  loc_ppts_1D.insert(loc_ppts_1D.begin(), -1.0);
-  loc_ppts_1D.insert(loc_ppts_1D.end(), 1.0);
+  /* Setup plot point locations (equispaced) */
+  auto loc_ppts_1D = Shape_pts(order);
 
   unsigned int ppt = 0;
-  for (unsigned int i = 0; i < nSpts1D+2; i++)
+  for (unsigned int i = 0; i < nSpts1D; i++)
   {
-    for (unsigned int j = 0; j < nSpts1D+2; j++)
+    for (unsigned int j = 0; j < nSpts1D; j++)
     {
       loc_ppts(ppt,0) = loc_ppts_1D[j];
       loc_ppts(ppt,1) = loc_ppts_1D[i];
@@ -235,6 +236,36 @@ void Quads::set_normals(std::shared_ptr<Faces> faces)
         tnorm(fpt,1) = 0.0; break;
     }
 
+  }
+}
+
+void Quads::set_oppRestart(unsigned int order_restart, bool use_shape)
+{
+  unsigned int nRpts1D = (order_restart + 1);
+  unsigned int nRpts = nRpts1D * nRpts1D;
+
+  /* Setup extrapolation operator from restart points */
+  oppRestart.assign({nSpts, nRpts});
+
+  std::vector<double> loc_rpts_1D;
+  if (!use_shape)
+    loc_rpts_1D = Gauss_Legendre_pts(order_restart + 1); 
+  else
+    loc_rpts_1D = Shape_pts(order_restart); 
+
+  std::vector<double> loc(input->nDims);
+  for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int dim = 0; dim < input->nDims; dim++)
+        loc[dim] = loc_spts(spt , dim);
+
+      int i = rpt % nRpts1D;
+      int j = rpt / nRpts1D;
+      oppRestart(spt,rpt) = Lagrange(loc_rpts_1D, i, loc[0]) * 
+                            Lagrange(loc_rpts_1D, j, loc[1]);
+    }
   }
 }
 
@@ -433,107 +464,42 @@ void Quads::setup_PMG(int pro_order, int res_order)
 #endif
 }
 
-void Quads::transform_dU(unsigned int startEle, unsigned int endEle)
+void Quads::setup_ppt_connectivity()
 {
-#ifdef _CPU
-#pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < nVars; n++)
+  unsigned int nSubelements1D = nSpts1D - 1;
+  nSubelements = nSubelements1D * nSubelements1D;
+  nNodesPerSubelement = 4;
+
+  /* Allocate memory for local plot point connectivity and solution at plot points */
+  ppt_connect.assign({4, nSubelements});
+
+  /* Setup plot "subelement" connectivity */
+  std::vector<unsigned int> nd(4,0);
+
+  unsigned int ele = 0;
+  nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+
+  for (unsigned int i = 0; i < nSubelements1D; i++)
   {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
+    for (unsigned int j = 0; j < nSubelements1D; j++)
     {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int node = 0; node < 4; node ++)
       {
-        double dUtemp = dU_spts(spt, ele, n, 0);
-
-        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * jaco_spts(spt, ele, 1, 1) -
-                                  dU_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 1, 0);
-
-        dU_spts(spt, ele, n, 1) = dU_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 0) -
-                                  dUtemp * jaco_spts(spt, ele, 0, 1);
-
-        dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
-        dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
+        ppt_connect(node, ele) = nd[node] + j;
       }
+
+      ele++;
     }
+
+    for (unsigned int node = 0; node < 4; node ++)
+      nd[node] += nSubelements1D + 1;
   }
-
-  /* CDG: Transform gradient for each face */
-  if (input->fvisc_type == "CDG")
-  {
-#pragma omp parallel for collapse(4)
-    for (unsigned int face = 0; face < nFaces; face++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = startEle; ele < endEle; ele++)
-        {
-          if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            double dUtemp = dUf_spts(spt, ele, n, 0, face);
-
-            dUf_spts(spt, ele, n, 0, face) = dUf_spts(spt, ele, n, 0, face) * jaco_spts(spt, ele, 1, 1) -
-                                             dUf_spts(spt, ele, n, 1, face) * jaco_spts(spt, ele, 1, 0);
-
-            dUf_spts(spt, ele, n, 1, face) = dUf_spts(spt, ele, n, 1, face) * jaco_spts(spt, ele, 0, 0) -
-                                             dUtemp * jaco_spts(spt, ele, 0, 1);
-
-            dUf_spts(spt, ele, n, 0, face) /= jaco_det_spts(spt, ele);
-            dUf_spts(spt, ele, n, 1, face) /= jaco_det_spts(spt, ele);
-          }
-        }
-      }
-    }
-  }
-#endif
-
-#ifdef _GPU
-  transform_dU_quad_wrapper(dU_spts_d, jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation);
-  //dU_spts = dU_spts_d;
-  check_error();
-#endif
-
-}
-
-void Quads::transform_flux(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
-    {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        double Ftemp = F_spts(spt, ele, n, 0);
-
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * jaco_spts(spt, ele, 1, 1)
-                               - F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 1);
-        F_spts(spt, ele, n, 1) = F_spts(spt, ele, n, 1) * jaco_spts(spt, ele, 0, 0)
-                               - Ftemp * jaco_spts(spt, ele, 1, 0);
-      }
-    }
-  }
-#endif
-
-#ifdef _GPU
-  transform_flux_quad_wrapper(F_spts_d, jaco_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation, startEle, endEle);
-
-  check_error();
-#endif
 }
 
 void Quads::transform_dFdU()
 {
 #ifdef _CPU
-#pragma omp parallel for collapse(4)
+#pragma omp parallel for collapse(3)
   for (unsigned int nj = 0; nj < nVars; nj++)
   {
     for (unsigned int ni = 0; ni < nVars; ni++)

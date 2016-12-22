@@ -109,6 +109,8 @@ mdvector<double> adjoint(const mdvector<double> &mat);
 
 double determinant(const mdvector<double> &mat);
 
+mdvector<double> getRotationMatrix(double axis[3], double angle);
+
 template<typename T>
 int findFirst(const std::vector<T>& vec, T val)
 {
@@ -199,7 +201,7 @@ void fuzzysort_ind(const mdvector<T> &mat, uint *inds, uint ninds, uint nDims, u
 }
 
 template<typename T>
-std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1e-6)
+std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1e-8)
 {
   auto dims = mat.shape();
   auto list = get_int_list(dims[1]);
@@ -207,6 +209,20 @@ std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1
   fuzzysort_ind(mat, list.data(), list.size(), dims[0], dim, tol);
 
   return list;
+}
+
+/* Helper function to write raw binary to file */
+template<typename T>
+void binary_write(std::ostream &f, T value)
+{
+  f.write((char *) &value, sizeof(T));
+}
+
+/* Helper function to read raw binary to from */
+template<typename T>
+void binary_read(std::istream &f, T &value)
+{
+  f.read((char *) &value, sizeof(T));
 }
 
 #endif /* funcs_hpp */

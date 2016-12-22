@@ -15,7 +15,7 @@ squeeze  0
 s_factor  0.0
 
 # Timestepping:
-n_steps 5000
+n_steps 1000
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001

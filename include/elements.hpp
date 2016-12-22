@@ -50,6 +50,7 @@ class Elements
   protected:
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
+    ELE_TYPE etype;
 
     /* Geometric Parameters */
     unsigned int order, shape_order;
@@ -57,6 +58,7 @@ class Elements
     unsigned int nSpts, nFpts, nSpts1D, nPpts, nQpts;
     unsigned int nFaces, nNodes;
     unsigned int nSubelements, nNodesPerSubelement;
+    mdvector<double> coord_spts, coord_fpts, coord_ppts, coord_qpts;
 
     mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes, loc_qpts;
     mdvector<unsigned int> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;
@@ -69,7 +71,7 @@ class Elements
     mdvector<double> jaco_fpts, jaco_det_fpts, inv_jaco_fpts;
     mdvector<double> nodes;
     mdvector<double> vol;
-    mdvector<double> weights_spts;
+    mdvector<double> weights_spts, weights_fpts;
     mdvector<double> h_ref;
     std::vector<double> weights_qpts;
 
@@ -81,7 +83,7 @@ class Elements
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
-    mdvector<double> oppE_ppts, oppE_qpts;
+    mdvector<double> oppE_ppts, oppE_qpts, oppRestart;
     mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg;
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fcomm, Ucomm;
@@ -113,6 +115,9 @@ class Elements
 
     mdvector<double> U_donors, dU_donors;
 
+    /* Output data structures */
+    mdvector<unsigned int> ppt_connect;
+
 #ifdef _GPU
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d, oppDiv_fpts_d;
@@ -126,6 +131,8 @@ class Elements
     mdvector_gpu<double> vol_d;
     mdvector_gpu<double> weights_spts_d;
     mdvector_gpu<double> h_ref_d;
+    mdvector_gpu<double> coord_spts_d, coord_fpts_d;
+
 
     /* Motion Related */
     mdvector_gpu<double> grid_vel_nodes_d, grid_vel_spts_d, grid_vel_fpts_d, grid_vel_ppts_d;
@@ -156,6 +163,7 @@ class Elements
 
     virtual void set_locs() = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
+    virtual void set_oppRestart(unsigned int order_restart, bool use_shape = false) = 0;
     virtual mdvector<double> calc_shape(unsigned int shape_order,
                              const std::vector<double> &loc) = 0;
     virtual mdvector<double> calc_d_shape(unsigned int shape_order,
@@ -175,6 +183,7 @@ class Elements
   public:
     void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
     virtual void setup_PMG(int pro_order, int res_order) = 0;
+    virtual void setup_ppt_connectivity() = 0;
     void extrapolate_U(unsigned int startEle, unsigned int endEle);
     void extrapolate_dU(unsigned int startEle, unsigned int endEle);
     void compute_dU(unsigned int startEle, unsigned int endEle);
@@ -183,10 +192,11 @@ class Elements
     void compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle);
-    void compute_Fconv(unsigned int startEle, unsigned int endEle);
-    void compute_Fvisc(unsigned int startEle, unsigned int endEle);
-    virtual void transform_flux(unsigned int startEle, unsigned int endEle) = 0;
-    virtual void transform_dU(unsigned int startEle, unsigned int endEle) = 0;
+
+    template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+    void compute_F(unsigned int startEle, unsigned int endEle);
+
+    void compute_F(unsigned int startEle, unsigned int endEle);
 
     //! Calculate geometric transforms
     void calc_transforms(std::shared_ptr<Faces> faces);

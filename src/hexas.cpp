@@ -41,6 +41,7 @@ extern "C" {
 
 Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
 {
+  etype = HEX;
   this->geo = geo;
   this->input = input;  
   this->shape_order = geo->shape_order;  
@@ -71,7 +72,7 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   }
 
   nFpts = (nSpts1D * nSpts1D) * nFaces;
-  nPpts = (nSpts1D + 2) * (nSpts1D + 2) * (nSpts1D + 2);
+  nPpts = nSpts;
   
   if (input->equation == AdvDiff || input->equation == Burgers)
   {
@@ -110,6 +111,12 @@ void Hexas::set_locs()
   weights_spts.assign({nSpts1D});
   for (unsigned int spt = 0; spt < nSpts1D; spt++)
     weights_spts(spt) = weights_spts_temp[spt];
+
+  // For integration of quantities over faces
+  weights_fpts.assign({nSpts1D,nSpts1D});
+  for (unsigned int fpt1 = 0; fpt1 < nSpts1D; fpt1++)
+    for (unsigned int fpt2 = 0; fpt2 < nSpts1D; fpt2++)
+      weights_fpts(fpt1,fpt2) = weights_spts(fpt1)*weights_spts(fpt2);
 
   loc_DFR_1D = loc_spts_1D;
   loc_DFR_1D.insert(loc_DFR_1D.begin(), -1.0);
@@ -227,17 +234,15 @@ void Hexas::set_locs()
     }
   }
   
-  /* Setup plot point locations */
-  auto loc_ppts_1D = loc_spts_1D;
-  loc_ppts_1D.insert(loc_ppts_1D.begin(), -1.0);
-  loc_ppts_1D.insert(loc_ppts_1D.end(), 1.0);
+  /* Setup plot point locations (equidistant) */
+  auto loc_ppts_1D = Shape_pts(order);
 
   unsigned int ppt = 0;
-  for (unsigned int i = 0; i < nSpts1D+2; i++)
+  for (unsigned int i = 0; i < nSpts1D; i++)
   {
-    for (unsigned int j = 0; j < nSpts1D+2; j++)
+    for (unsigned int j = 0; j < nSpts1D; j++)
     {
-      for (unsigned int k = 0; k < nSpts1D+2; k++)
+      for (unsigned int k = 0; k < nSpts1D; k++)
       {
         loc_ppts(ppt,0) = loc_ppts_1D[k];
         loc_ppts(ppt,1) = loc_ppts_1D[j];
@@ -316,6 +321,39 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
         tnorm(fpt,2) = 0.0; break;
     }
 
+  }
+}
+
+void Hexas::set_oppRestart(unsigned int order_restart, bool use_shape)
+{
+  unsigned int nRpts1D = (order_restart + 1);
+  unsigned int nRpts2D = nRpts1D * nRpts1D;
+  unsigned int nRpts = nRpts1D * nRpts1D * nRpts1D;
+
+  /* Setup extrapolation operator from restart points */
+  oppRestart.assign({nSpts, nRpts});
+
+  std::vector<double> loc_rpts_1D;
+  if (!use_shape)
+    loc_rpts_1D = Gauss_Legendre_pts(order_restart + 1); 
+  else
+    loc_rpts_1D = Shape_pts(order_restart); 
+
+  std::vector<double> loc(input->nDims);
+  for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+  {
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+    {
+      for (unsigned int dim = 0; dim < input->nDims; dim++)
+        loc[dim] = loc_spts(spt , dim);
+
+      int i = rpt % nRpts1D;
+      int j = (rpt / nRpts1D) % nRpts1D;
+      int k = rpt / nRpts2D;
+      oppRestart(spt,rpt) = Lagrange(loc_rpts_1D, i, loc[0]) * 
+                            Lagrange(loc_rpts_1D, j, loc[1]) *
+                            Lagrange(loc_rpts_1D, k, loc[2]);
+    }
   }
 }
 
@@ -547,131 +585,45 @@ void Hexas::setup_PMG(int pro_order, int res_order)
 
 }
 
-void Hexas::transform_dU(unsigned int startEle, unsigned int endEle)
+void Hexas::setup_ppt_connectivity()
 {
-#ifdef _CPU
-#pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < nVars; n++)
+  unsigned int nSubelements1D = nSpts1D - 1;
+  nSubelements = nSubelements1D * nSubelements1D * nSubelements1D;
+  nNodesPerSubelement = 8;
+
+  /* Allocate memory for local plot point connectivity and solution at plot points */
+  ppt_connect.assign({8, nSubelements});
+
+  /* Setup plot "subelement" connectivity */
+  std::vector<unsigned int> nd(8,0);
+
+  unsigned int ele = 0;
+  nd[0] = 0; nd[1] = 1; nd[2] = nSubelements1D + 2; nd[3] = nSubelements1D + 1;
+  nd[4] = (nSubelements1D + 1) * (nSubelements1D + 1); nd[5] = nd[4] + 1; 
+  nd[6] = nd[4] + nSubelements1D + 2; nd[7] = nd[4] + nSubelements1D + 1;
+
+  for (unsigned int i = 0; i < nSubelements1D; i++)
   {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
+    for (unsigned int j = 0; j < nSubelements1D; j++)
     {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int k = 0; k < nSubelements1D; k++)
       {
-        double dUtemp0 = dU_spts(spt, ele, n, 0);
-        double dUtemp1 = dU_spts(spt, ele, n, 1);
-
-        dU_spts(spt, ele, n, 0) = dU_spts(spt, ele, n, 0) * inv_jaco_spts(spt, ele, 0, 0) +
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 0) +
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 0);
-
-        dU_spts(spt, ele, n, 1) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 1) +
-                                  dU_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 1) +
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 1);
-                                  
-        dU_spts(spt, ele, n, 2) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 2) +
-                                  dUtemp1 * inv_jaco_spts(spt, ele, 1, 2) +
-                                  dU_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 2);
-
-        dU_spts(spt, ele, n, 0) /= jaco_det_spts(spt, ele);
-        dU_spts(spt, ele, n, 1) /= jaco_det_spts(spt, ele);
-        dU_spts(spt, ele, n, 2) /= jaco_det_spts(spt, ele);
-      }
-    }
-  }
-
-  /* CDG: Transform gradient for each face */
-  if (input->fvisc_type == "CDG")
-  {
-#pragma omp parallel for collapse(4)
-    for (unsigned int face = 0; face < nFaces; face++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int ele = startEle; ele < endEle; ele++)
+        for (unsigned int node = 0; node < 8; node ++)
         {
-          if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            double dUtemp0 = dUf_spts(spt, ele, n, 0, face);
-            double dUtemp1 = dUf_spts(spt, ele, n, 1, face);
-
-            dUf_spts(spt, ele, n, 0, face) = dUf_spts(spt, ele, n, 0, face) * inv_jaco_spts(spt, ele, 0, 0) +
-                                             dUf_spts(spt, ele, n, 1, face) * inv_jaco_spts(spt, ele, 1, 0) +
-                                             dUf_spts(spt, ele, n, 2, face) * inv_jaco_spts(spt, ele, 2, 0);
-
-            dUf_spts(spt, ele, n, 1, face) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 1) +
-                                             dUf_spts(spt, ele, n, 1, face) * inv_jaco_spts(spt, ele, 1, 1) +
-                                             dUf_spts(spt, ele, n, 2, face) * inv_jaco_spts(spt, ele, 2, 1);
-                                      
-            dUf_spts(spt, ele, n, 2, face) = dUtemp0 * inv_jaco_spts(spt, ele, 0, 2) +
-                                             dUtemp1 * inv_jaco_spts(spt, ele, 1, 2) +
-                                             dUf_spts(spt, ele, n, 2, face) * inv_jaco_spts(spt, ele, 2, 2);
-
-            dUf_spts(spt, ele, n, 0, face) /= jaco_det_spts(spt, ele);
-            dUf_spts(spt, ele, n, 1, face) /= jaco_det_spts(spt, ele);
-            dUf_spts(spt, ele, n, 2, face) /= jaco_det_spts(spt, ele);
-          }
+          ppt_connect(node, ele) = nd[node] + k;
         }
-      }
-    }
-  }
-#endif
 
-#ifdef _GPU
-  transform_dU_hexa_wrapper(dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation, input->overset, geo->iblank_cell_d.data());
-  //dU_spts = dU_spts_d;
-  check_error();
-#endif
-
-}
-
-void Hexas::transform_flux(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
-    {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-      for (unsigned int spt = 0; spt < nSpts; spt++)
-      {
-        double Ftemp0 = F_spts(spt, ele, n, 0);
-        double Ftemp1 = F_spts(spt, ele, n, 1);
-
-        F_spts(spt, ele, n, 0) = F_spts(spt, ele, n, 0) * inv_jaco_spts(spt, ele, 0, 0) +
-                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 0, 1) +
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 0, 2);
-
-        F_spts(spt, ele, n, 1) = Ftemp0 * inv_jaco_spts(spt, ele, 1, 0) +
-                                  F_spts(spt, ele, n, 1) * inv_jaco_spts(spt, ele, 1, 1) +
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 1, 2);
-                                  
-        F_spts(spt, ele, n, 2) = Ftemp0 * inv_jaco_spts(spt, ele, 2, 0) +
-                                  Ftemp1 * inv_jaco_spts(spt, ele, 2, 1) +
-                                  F_spts(spt, ele, n, 2) * inv_jaco_spts(spt, ele, 2, 2);
-
+        ele++;
       }
 
+      for (unsigned int node = 0; node < 8; node ++)
+        nd[node] += (nSubelements1D + 1);
+
     }
+
+    for (unsigned int node = 0; node < 8; node ++)
+      nd[node] += (nSubelements1D + 1);
   }
-
-#endif
-
-#ifdef _GPU
-  //F_spts_d = F_spts;
-  transform_flux_hexa_wrapper(F_spts_d, inv_jaco_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation, input->overset, geo->iblank_cell_d.data());
-
-  check_error();
-
-  //F_spts = F_spts_d;
-#endif
 }
 
 void Hexas::transform_dFdU()

@@ -106,8 +106,21 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "CFL_max", input.CFL_max, 1.0);
   read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
 
+  // NOTE: to reduce time step size (generally speaking), reduce atol and rtol
+  read_param(f, "err_atol", input.atol, 0.00001);
+  read_param(f, "err_rtol", input.rtol, 0.00001);
+  read_param(f, "pi_alpha", input.pi_alpha, 0.7);
+  read_param(f, "pi_beta", input.pi_beta, 0.4);
+
+  read_param(f, "safety_factor", input.sfact, 0.8);
+  read_param(f, "max_factor", input.maxfac, 2.5);
+  read_param(f, "min_factor", input.minfac, 0.3);
+
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
+  read_param(f, "restart_case", input.restart_case, std::string(""));
+  read_param(f, "restart_type", input.restart_type, (unsigned int)0);
+  read_param(f, "restart_iter", input.restart_iter, (unsigned int)0);
 
   read_param(f, "mg_cycle", input.mg_cycle, std::string("V"));
   read_param(f, "FMG_vcycles", input.FMG_vcycles, (unsigned int) 1);
@@ -129,6 +142,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "write_paraview", input.write_paraview, (short)1);
   read_param(f, "write_pyfr", input.write_pyfr, (short)0);
   read_param(f, "plot_surfaces", input.plot_surfaces, (short)1);
+  read_param(f, "plot_overset", input.plot_overset, (short)0);
+  read_param(f, "write_LHS", input.write_LHS, (short)0);
   read_param(f, "write_freq", input.write_freq);
   read_param(f, "report_freq", input.report_freq);
   read_param(f, "res_type", input.res_type);
@@ -138,8 +153,18 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "err_field", input.err_field, (unsigned int) 0);
   read_param(f, "nQpts1D", input.nQpts1D);
 
-  read_param(f, "fconv_type", input.fconv_type);
-  read_param(f, "fvisc_type", input.fvisc_type);
+  read_param(f, "fconv_type", str);
+  if (str == "Rusanov")
+    input.fconv_type = Rusanov;
+  else
+    ThrowException("Equation not recognized!");
+
+  read_param(f, "fvisc_type", str);
+  if (str == "LDG")
+    input.fvisc_type = LDG;
+  else
+    ThrowException("Equation not recognized!");
+
   read_param(f, "rus_k", input.rus_k);
   read_param(f, "ldg_b", input.ldg_b);
   read_param(f, "ldg_tau", input.ldg_tau);
@@ -194,6 +219,22 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "filt_gamma", input.filt_gamma, 0.1);
   read_param(f, "filt_maxLevels", input.filt_maxLevels, (unsigned int) 1);
 
+  if (input.filt_on && input.order <= 1)
+  {
+    std::cout << "WARNING: requesting filtering yet P <= 1. Filtering will not be used." << std::endl;
+    input.filt_on = 0;
+  }
+
+  // Abhishek's filtering parameters
+  read_param(f, "limiter", input.limiter, (unsigned int) 0);
+  read_param(f, "alpha", input.alpha, 1.0);
+  read_param(f, "filtexp", input.filtexp, 2.0);
+  read_param(f, "nonlin_exp", input.nonlin_exp, 2.0);
+  read_param(f, "filt2on", input.filt2on, (unsigned int) 0);
+  // For second filter for conv. accn
+  read_param(f, "alpha2", input.alpha2, 1.0);
+  read_param(f, "filtexp2", input.filtexp2, 4.0);
+
   read_param(f, "overset", input.overset, false);
   read_param_vec(f, "overset_grids", input.oversetGrids);
 
@@ -233,15 +274,15 @@ void apply_nondim(InputStruct &input)
   for (unsigned int dim = 0; dim < input.nDims; dim++)
     input.V_fs(dim) = V_fs_mag * input.norm_fs(dim);
 
-  input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
-  input.P_fs = input.rho_fs * input.R * input.T_fs;
-
   /* If using Sutherland's law, update viscosity */
   if (!input.fix_vis)
   {
     input.mu = input.mu * std::pow(input.T_fs / input.T_gas, 1.5) * ((input.T_gas + input.S)/
         (input.T_fs + input.S));
   }
+
+  input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
+  input.P_fs = input.rho_fs * input.R * input.T_fs;
 
   /* -- Set reference quantities for nondimensionalization --
    * Note that we are setting rho_ref s.t. we get a 'normalized' density of 2.

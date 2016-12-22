@@ -61,16 +61,16 @@ class Faces
 
     void apply_bcs();
     void apply_bcs_dU();
+
+    template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
-    void roe_flux(unsigned int startFpt, unsigned int endFpt);
+
+    template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void LDG_flux(unsigned int startFpt, unsigned int endFpt);
-    void central_flux();
-    void transform_flux();
 
     /* Routines for implicit method */
     void apply_bcs_dFdU();
     void rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt);
-    void roe_dFcdU(unsigned int startFpt, unsigned int endFpt);
     void LDG_dFcdU(unsigned int startFpt, unsigned int endFpt);
     void transform_dFcdU();
 
@@ -82,11 +82,12 @@ class Faces
 #endif
 
   protected:
-    mdvector<double> U, dU, Fconv, Fvisc, Fcomm, Fcomm_temp, Ucomm, P;
+    mdvector<double> P;
+    mdview<double> U, dU, Fcomm, Ucomm;
+    mdvector<double> U_bnd, dU_bnd, Fcomm_bnd, Ucomm_bnd;
     mdvector<double> norm, jaco, coord;
     mdvector<double> dA, waveSp, diffCo;
     mdvector<int> LDG_bias;
-    std::vector<double> FL, FR, WL, WR;
 
     mdvector<double> Vg;  //! Grid velocity
 
@@ -101,6 +102,8 @@ class Faces
 
     _mpi_comm myComm;
 #ifdef _MPI
+    mdview<double> U_mpi, dU_mpi;
+
     /* Send and receive buffers to MPI communication. Keyed by paired rank. */
     std::map<unsigned int, mdvector<double>> U_sbuffs, U_rbuffs;
 
@@ -122,7 +125,9 @@ class Faces
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> U_d, dU_d, Fconv_d, Fvisc_d, Fcomm_d, Fcomm_temp_d, Ucomm_d, P_d;
+    mdvector_gpu<double> P_d;
+    mdview_gpu<double> U_d, dU_d, Fcomm_d, Ucomm_d;
+    mdvector_gpu<double> U_bnd_d, dU_bnd_d, Fcomm_bnd_d, Ucomm_bnd_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<double> dA_d, waveSp_d, diffCo_d;
     mdvector_gpu<int> LDG_bias_d;
@@ -151,8 +156,6 @@ class Faces
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U(unsigned int startFpt, unsigned int endFpt);
     void compute_common_F(unsigned int startFpt, unsigned int endFpt);
-    void compute_Fconv(unsigned int startFpt, unsigned int endFpt);
-    void compute_Fvisc(unsigned int startFpt, unsigned int endFpt);
     
     /* Routines for implicit method */
     void compute_dFdUconv(unsigned int startFpt, unsigned int endFpt);

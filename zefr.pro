@@ -56,7 +56,8 @@ HEADERS += \
     include/inputstruct.hpp \
     include/zefr_interface.hpp \
     include/inputstruct.hpp \
-    include/filter_kernels.h
+    include/filter_kernels.h \
+    include/flux.hpp
 
 DISTFILES += \
     swig_bin/zefr.i \

@@ -22,16 +22,21 @@ RELEASE_FLAGS = -Ofast
 ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
 else
-	CXXFLAGS += $(WARN_OFF)
-	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result,-Wno-narrowing,-Wno-literal-suffix
+	CXXFLAGS += $(WARN_OFF) 
+	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result,-Wno-narrowing,-Wno-literal-suffix -Xcudafe "--diag_suppress=subscript_out_of_range"
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CXXFLAGS += $(DEBUG_FLAGS)
-	CUFLAGS += -g -O1
+	CXXFLAGS += -g -O3 #-D_NVTX
+	CUFLAGS += -g -O3 #-D_NVTX
+else 
+ifeq ($(strip $(DEBUG_LEVEL)),2)
+	CXXFLAGS += -g -O0 #-D_NVTX
+	CUFLAGS += -g -O0 #-D_NVTX
 else
 	CXXFLAGS += $(RELEASE_FLAGS)
 	CUFLAGS += -O3 -use_fast_math
+endif
 endif
 
 # Setting OpenMP flags
@@ -156,7 +161,7 @@ test: lib
 test_static: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test_static: static
 	cp $(BINDIR)/libzefr.a $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr $(LIBS) -L$(TIOGA_LIB_DIR)/ -ltioga $(SWIGDIR)/lib/libzefr.a -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) 
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp $(SWIGDIR)/lib/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a -o $(SWIGDIR)/testZefr $(LIBS)
 
 
 # Implicit Rules
