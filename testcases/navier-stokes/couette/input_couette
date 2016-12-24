@@ -4,6 +4,7 @@ meshfile couette_quad_4x8.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
+mesh_bound  periodic  periodic
 mesh_bound  wall_ns_iso  wall_ns_iso_p
 mesh_bound  wall_ns_iso_move  wall_ns_iso_move_p
 

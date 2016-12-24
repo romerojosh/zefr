@@ -565,7 +565,7 @@ void Faces::apply_bcs()
       }
 
 
-      case ISOTHERMAL_NOSLIP_MOVING_P: /* No-slip Wall (isothermal and moving) */
+      case ISOTHERMAL_NOSLIP_MOVING_P: /* Isothermal No-slip Wall (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -1017,8 +1017,31 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
+      case SUP_IN: /* Farfield and Supersonic Inlet */
+      {
+        ThrowException("Farfield and Supersonic Inlet boundary condition not implemented for implicit method");
+        break;
+      }
+
+      case SUP_OUT: /* Supersonic Outlet */
+      {
+        ThrowException("Supersonic Outlet boundary condition not implemented for implicit method");
+        break;
+      }
+
+      case SUB_IN: /* Subsonic Inlet */
+      {
+        ThrowException("Subsonic Inlet boundary condition not implemented for implicit method");
+        break;
+      }
+
       case SUB_OUT: /* Subsonic Outlet */
       {
+        if (nDims == 3)
+        {
+          ThrowException("3D Subsonic Outlet boundary condition not implemented for implicit method");
+        }
+
         /* Primitive Variables */
         double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
         double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
@@ -1425,6 +1448,11 @@ void Faces::apply_bcs_dFdU()
       case SYMMETRY_G: /* Symmetry (ghost) */
       case SLIP_WALL_G: /* Slip Wall (ghost) */
       {
+        if (nDims == 3)
+        {
+          ThrowException("3D Symmetry/Slip Wall (ghost) boundary condition not implemented for implicit method");
+        }
+
         double nx = norm(fpt, 0);
         double ny = norm(fpt, 1);
 
@@ -1451,8 +1479,105 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case ADIABATIC_NOSLIP_P: /* No-slip Wall (adiabatic) */
+      case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
       {
+        if (nDims == 3)
+        {
+          ThrowException("3D Isothermal No-slip Wall (prescribed) boundary condition not implemented for implicit method");
+        }
+
+        /* Primitive Variables */
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+
+        /* Matrix Parameters */
+        double a1 = (input->gamma-1.0) / (input->R_ref * input->T_wall);
+        double a2 = 0.5 * (uL*uL + vL*vL);
+
+        dURdUL(0, 0) = a1 * a2;
+        dURdUL(1, 0) = 0;
+        dURdUL(2, 0) = 0;
+        dURdUL(3, 0) = a2;
+
+        dURdUL(0, 1) = -a1 * uL;
+        dURdUL(1, 1) = 0;
+        dURdUL(2, 1) = 0;
+        dURdUL(3, 1) = -uL;
+
+        dURdUL(0, 2) = -a1 * vL;
+        dURdUL(1, 2) = 0;
+        dURdUL(2, 2) = 0;
+        dURdUL(3, 2) = -vL;
+
+        dURdUL(0, 3) = a1;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
+        dURdUL(3, 3) = 1;
+
+        break;
+      }
+
+      case ISOTHERMAL_NOSLIP_G: /* Isothermal No-slip Wall (ghost) */
+      {
+        ThrowException("Isothermal No-slip Wall (ghost) boundary condition not implemented for implicit method");
+        break;
+      }
+
+      case ISOTHERMAL_NOSLIP_MOVING_P: /* Isothermal No-slip Wall, moving (prescribed) */
+      {
+        if (nDims == 3)
+        {
+          ThrowException("3D Isothermal No-slip Wall, moving (prescribed) boundary condition not implemented for implicit method");
+        }
+
+        /* Primitive Variables */
+        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
+        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+        
+        double uR = input->V_wall(0);
+        double vR = input->V_wall(1);
+
+        /* Matrix Parameters */
+        double a1 = (input->gamma-1.0) / (input->R_ref * input->T_wall);
+        double a2 = 0.5 * (uL*uL + vL*vL);
+        double a3 = 1.0 + 0.5 * a1 * (uR*uR + vR*vR);
+
+        dURdUL(0, 0) = a1 * a2;
+        dURdUL(1, 0) = a1 * a2 * uR;
+        dURdUL(2, 0) = a1 * a2 * vR;
+        dURdUL(3, 0) = a2 * a3;
+
+        dURdUL(0, 1) = -a1 * uL;
+        dURdUL(1, 1) = -a1 * uL * uR;
+        dURdUL(2, 1) = -a1 * uL * vR;
+        dURdUL(3, 1) = -uL * a3;
+
+        dURdUL(0, 2) = -a1 * vL;
+        dURdUL(1, 2) = -a1 * vL * uR;
+        dURdUL(2, 2) = -a1 * vL * vR;
+        dURdUL(3, 2) = -vL * a3;
+
+        dURdUL(0, 3) = a1;
+        dURdUL(1, 3) = a1 * uR;
+        dURdUL(2, 3) = a1 * vR;
+        dURdUL(3, 3) = a3;
+
+        break;
+      }
+
+      case ISOTHERMAL_NOSLIP_MOVING_G: /* Isothermal No-slip Wall, moving (ghost) */
+      {
+        ThrowException("Isothermal No-slip Wall, moving (ghost) boundary condition not implemented for implicit method");
+        break;
+      }
+
+      case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
+      {
+        if (nDims == 3)
+        {
+          ThrowException("3D Adiabatic No-slip Wall (prescribed) boundary condition not implemented for implicit method");
+        }
+
         double nx = norm(fpt, 0);
         double ny = norm(fpt, 1);
 
@@ -1570,6 +1695,24 @@ void Faces::apply_bcs_dFdU()
           ddURddUL(3, 3, 1, 1) = 1.0 - ny*ny;
         }
 
+        break;
+      }
+
+      case ADIABATIC_NOSLIP_G: /* Adiabatic No-slip Wall (ghost) */
+      {
+        ThrowException("Adiabatic No-slip Wall (ghost) boundary condition not implemented for implicit method");
+        break;
+      }
+
+      case ADIABATIC_NOSLIP_MOVING_P: /* Adiabatic No-slip Wall, moving (prescribed) */
+      {
+        ThrowException("Adiabatic No-slip Wall, moving (prescribed) boundary condition not implemented for implicit method");
+        break;
+      }
+
+      case ADIABATIC_NOSLIP_MOVING_G: /* Adiabatic No-slip Wall, moving (ghost) */
+      {
+        ThrowException("Adiabatic No-slip Wall, moving (ghost) boundary condition not implemented for implicit method");
         break;
       }
 
