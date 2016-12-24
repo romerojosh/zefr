@@ -45,7 +45,8 @@ enum EQN {
 
 enum FC_TYPE {
   Rusanov = 0,
-  LDG = 1
+  LDG = 1,
+  CDG = 2
 };
 
 enum ELE_TYPE {

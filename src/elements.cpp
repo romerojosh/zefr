@@ -675,7 +675,7 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
 void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
 {
 #ifdef _CPU
-  if (input->fvisc_type == "LDG")
+  if (input->fvisc_type == LDG)
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -697,7 +697,7 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
   }
 
   /* CDG: For each face, extrapolate the associated gradient to its corresponding face */
-  else if (input->fvisc_type == "CDG")
+  else if (input->fvisc_type == CDG)
   {
     for (unsigned int face = 0; face < nFaces; face++)
     {
@@ -911,7 +911,7 @@ void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
   }
 
   /* CDG: Copy dU_spts to nFaces */
-  if (input->fvisc_type == "CDG") 
+  if (input->fvisc_type == CDG) 
   {
     for (unsigned int face = 0; face < nFaces; face++)
     {
@@ -964,7 +964,7 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
 
   /* CDG: For a given face, compute contribution to derivative from common solution at flux points on face
    * and extrapolated solutions at flux points for all other faces */
-  if (input->fvisc_type == "CDG")
+  if (input->fvisc_type == CDG)
   {
     for (unsigned int face = 0; face < nFaces; face++)
     {
@@ -1424,6 +1424,52 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
   double tdU[nVars][nDims];
   double inv_jaco[nDims][nDims];
 
+  /* CDG: Transform gradient for each face */
+  if (input->viscous && input->fvisc_type == CDG) 
+  {
+    for (unsigned int ele = startEle; ele < endEle; ele++)
+    {
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+        /* Get metric terms */
+        double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+        for (int dim1 = 0; dim1 < nDims; dim1++)
+          for (int dim2 = 0; dim2 < nDims; dim2++)
+            inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+
+        for (unsigned int face = 0; face < nFaces; face++) 
+        {
+          /* Get reference space gradients */
+          for (unsigned int var = 0; var < nVars; var++)
+          {
+            for(unsigned int dim = 0; dim < nDims; dim++)
+            {
+              tdU[var][dim] = dUf_spts(spt, ele, var, dim, face);
+            }
+          }
+
+          /* Transform gradient to physical space */
+          double dU[nVars][nDims] = {{0.0}};
+          for (unsigned int var = 0; var < nVars; var++)
+          {
+            for (int dim1 = 0; dim1 < nDims; dim1++)
+            {
+              for (int dim2 = 0; dim2 < nDims; dim2++)
+              {
+                dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
+              }
+
+              dU[var][dim1] *= inv_jaco_det;
+
+              /* Write physical gradient to global memory */
+              dUf_spts(spt, ele, var, dim1, face) = dU[var][dim1];
+            }
+          }
+        }
+      }
+    }
+  }
+
   for (unsigned int ele = startEle; ele < endEle; ele++)
   {
     for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -1444,8 +1490,6 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
       }
 
       /* Get metric terms */
-      double inv_jaco[nDims][nDims];
-
       for (int dim1 = 0; dim1 < nDims; dim1++)
         for (int dim2 = 0; dim2 < nDims; dim2++)
           inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
@@ -2210,7 +2254,7 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             }
           }
 
-          if (input->fvisc_type == "LDG")
+          if (input->fvisc_type == LDG)
           {
             /* (Center) Term 2 */
             CtempFS.fill(0);
@@ -2251,7 +2295,7 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             }
           }
 
-          else if (input->fvisc_type == "CDG")
+          else if (input->fvisc_type == CDG)
           {
             /* CDG: Compute (Center) Term 2 for each face */
             for (unsigned int face = 0; face < nFaces; face++)

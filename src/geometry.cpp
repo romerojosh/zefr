@@ -91,7 +91,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   else
     setup_global_fpts_pyfr(input, geo, order);
 
-  if (input->fvisc_type == "CDG")
+  if (input->fvisc_type == CDG)
   {
     setup_CDG(geo);
   }

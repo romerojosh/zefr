@@ -1809,9 +1809,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 {
-  
   /* Compute common solution */
-  if (input->fvisc_type == LDG)
+  if (input->fvisc_type == LDG || input->fvisc_type == CDG)
   {
 #ifdef _CPU
 #pragma omp parallel for 

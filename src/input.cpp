@@ -162,6 +162,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "fvisc_type", str);
   if (str == "LDG")
     input.fvisc_type = LDG;
+  else if (str == "CDG")
+    input.fvisc_type = CDG;
   else
     ThrowException("Equation not recognized!");
 
