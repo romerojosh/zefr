@@ -66,7 +66,7 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
   }
   else if (input->equation == EulerNS)
   {
-    if (!input->test_case == 2)
+    if (input->test_case != 2)
     {
       double G = 5.0;
       double R = 1.;
