@@ -80,9 +80,10 @@ class FRSolver
     double expa, expb;
 
     /* --- Rigid-Body Motion --- */
+    mdvector<double> x_ini, x_til;         //! Position of body CG
     mdvector<double> v_ini, v_til;         //! Velocity of body CG
     mdvector<double> omega_ini, omega_til; //! Angular velocity of body
-    mdvector<double> x_ini, x_til;         //! Grid node positions
+    mdvector<double> nodes_ini, nodes_til; //! Grid node positions
     mdvector<double> q_ini, q_til; //! Grid rotation vector
     mdvector<double> qdot_ini, qdot_til; //! Grid rotation vector
 
@@ -99,10 +100,11 @@ class FRSolver
     mdvector_gpu<double> U_ini_d, dt_d, rk_alpha_d, rk_beta_d;
     mdvector_gpu<double> U_til_d, rk_err_d;  //! Low-Storage Adaptive RK scheme
 
+    mdvector_gpu<double> nodes_ini_d, nodes_til_d;
     mdvector_gpu<double> x_ini_d, x_til_d;
     mdvector_gpu<double> v_ini_d, v_til_d;
     mdvector_gpu<double> q_ini_d, q_til_d;
-    mdvector_gpu<double> qdot_ini_d, omega_til_d;
+    mdvector_gpu<double> qdot_ini_d, qdot_til_d;
 #endif
 
     _mpi_comm myComm, worldComm;

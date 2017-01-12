@@ -103,6 +103,39 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.iblank_face.assign(geo.nFaces, NORMAL);
   }
 
+  if ( nDims == 3 && (input->motion && input->motion_type == RIGID_BODY) )
+  {
+    geo.q.assign({4});
+    geo.qdot.assign({4});
+    geo.omega.assign({3});
+    geo.x_cg.assign({3});
+    geo.vel_cg.assign({3});
+    geo.mass = input->mass;
+
+    // Inertia tensor for body [Using initial coords as static body coord sys]
+    geo.Jmat.assign({3,3});
+    geo.Jmat(0,0) = input->Imat[0];
+    geo.Jmat(1,1) = input->Imat[4];
+    geo.Jmat(2,2) = input->Imat[8];
+
+    // Off-diagonal components
+    geo.Jmat(0,1) = input->Imat[1];
+    geo.Jmat(0,2) = input->Imat[2];
+    geo.Jmat(1,2) = input->Imat[5];
+
+    // Apply symmetry
+    geo.Jmat(1,0) = geo.Jmat(0,1);
+    geo.Jmat(2,0) = geo.Jmat(0,2);
+    geo.Jmat(2,1) = geo.Jmat(1,2);
+
+    // Calculate inverse
+    double det = determinant(geo.Jmat);
+    geo.Jinv = adjoint(geo.Jmat);
+    for (unsigned int i = 0; i < 3; i++)
+      for (unsigned int j = 0; j < 3; j++)
+        geo.Jinv(i,j) /= det;
+  }
+
   return geo;
 }
 
@@ -514,6 +547,9 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       }
     }
   }
+
+  if (input->motion)
+    geo.coords_init = geo.coord_nodes;
 
   std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles << ", nMpiFaces = " << geo.nMpiFaces << std::endl;
 #endif
@@ -3123,18 +3159,19 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       /// Rigid oscillation in a circle
       if (geo.gridID == 0)
       {
-//        double Ax = input->moveAx; // Amplitude  (m)
-//        double Ay = input->moveAy; // Amplitude  (m)
-//        double fx = input->moveFx; // Frequency  (Hz)
-//        double fy = input->moveFy; // Frequency  (Hz)
-//        #pragma omp parallel for
-//        for (uint node = 0; node < nNodes ; node++)
-//        {
-//          geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
-//          geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
-//          geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
-//          geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
-//        }
+        double Ax = input->moveAx; // Amplitude  (m)
+        double Ay = input->moveAy; // Amplitude  (m)
+        double fx = input->moveFx; // Frequency  (Hz)
+        double fy = input->moveFy; // Frequency  (Hz)
+
+#pragma omp parallel for
+        for (uint node = 0; node < nNodes ; node++)
+        {
+          geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
+          geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
+          geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
+          geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
+        }
       }
       break;
     }

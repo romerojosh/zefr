@@ -1021,7 +1021,7 @@ void normal_flux(mdvector_gpu<double> tempF, mdvector_gpu<double> dFn,
   if (gfpt < 0)
     return;
 
-  double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+  double fac = (slot == 1) ? -1 : 1; // factor to negate normal if "right" element (slot = 1)
   dFn(fpt,ele,var) -= tempF(fpt,ele) * fac * norm(gfpt,dim) * dA(gfpt);
 }
 

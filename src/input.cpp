@@ -254,7 +254,7 @@ InputStruct read_input_file(std::string inputfile)
       // Mass of moving body
       read_param(f, "mass", input.mass);
 
-      // Diagonal components of inertia tensor [in 'world' coordinates]
+      // Diagonal components of inertia tensor [in initial 'world' coordinates]
       read_param(f, "Ixx", input.Imat[0]);
       read_param(f, "Iyy", input.Imat[4]);
       read_param(f, "Izz", input.Imat[8]);

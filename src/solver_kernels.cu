@@ -1278,7 +1278,7 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 
 __global__
 void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<double> P, mdvector_gpu<double> coord,
-    mdvector_gpu<double> norm, mdvector_gpu<double> &dA, mdvector_gpu<char> fpt2bnd,
+    mdvector_gpu<double> x_cg, mdvector_gpu<double> norm, mdvector_gpu<double> &dA, mdvector_gpu<char> fpt2bnd,
     mdvector_gpu<double> weights, mdvector_gpu<double> &force, mdvector_gpu<double> &moment,
     double gamma, double rt, double c_sth, double mu_in, bool viscous, bool fix_vis, int nDims, int start_fpt,
     int nFaces, int nFptsPerFace)
@@ -1465,12 +1465,12 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
         if (nDims == 3)
         {
           for (unsigned int d = 0; d < nDims; d++)
-            tot_moment[d] += coord(gfpt,c1[d]) * tmp_force[c2[d]] - coord(gfpt,c2[d]) * tmp_force[c1[d]];
+            tot_moment[d] += (coord(gfpt,c1[d])-x_cg(c1[d])) * tmp_force[c2[d]] - (coord(gfpt,c2[d])-x_cg(c2[d])) * tmp_force[c1[d]];
         }
         else
         {
           // Only a 'z' component in 2D
-          tot_moment[2] += coord(gfpt,0) * tmp_force[1] - coord(gfpt,1) * tmp_force[0];
+          tot_moment[2] += (coord(gfpt,0)-x_cg(0)) * tmp_force[1] - (coord(gfpt,1)-x_cg(1)) * tmp_force[0];
         }
       }
 
@@ -1492,7 +1492,7 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
 
 void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,3> &tot_moment,
     mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double>& P_fpts, mdvector_gpu<double> &coord,
-    mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<char> &fpt2bnd,
+    mdvector_gpu<double> &x_cg, mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<char> &fpt2bnd,
     mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
     double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace)
 {
@@ -1502,7 +1502,7 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
   if (nVars < 4) // Only applicable to Euler / Navier-Stokes
     return;
 
-  compute_moments<<<blocks, threads>>>(U_fpts,dU_fpts,P_fpts,coord,norm,dA,fpt2bnd,weights_fpts,
+  compute_moments<<<blocks, threads>>>(U_fpts,dU_fpts,P_fpts,coord,x_cg,norm,dA,fpt2bnd,weights_fpts,
       force_face,moment_face,gamma,rt,c_sth,mu,viscous,fix_vis,nDims,start_fpt,nFaces,nFptsPerFace);
 
   for (int d = 0; d < nDims; d++)

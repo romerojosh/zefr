@@ -146,8 +146,6 @@ class Elements
 
     mdvector_gpu<double> inv_jaco_spts_init_d;
 
-    mdvector_gpu<double> vel_cg_d, omega_d, theta_d;
-
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
 

@@ -745,7 +745,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
               continue;
 
             unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
-            double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+            double fac = (slot == 1) ? -1 : 1; // factor to negate normal if "right" element (slot = 1)
             dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * fac * faces->norm(gfpt,dim) * faces->dA(gfpt);
           }
         }
@@ -2573,17 +2573,35 @@ void Elements::move(std::shared_ptr<Faces> faces)
     auto &C = geo->coord_nodes(0,0);
 
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
-                    1.0, &A, nDims, &B, nDims, 0.0, &C, nDims);
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
+                      1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
-              1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
+                1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
+#endif
+
+    /// TODO: Check that this is mathematiclaly correct
+    // Update grid position based on rigid-body motion: CG offset + rotation
+    for (unsigned int i = 0; i < geo->nNodes; i++)
+      for (unsigned int d = 0; d < nDims; d++)
+        geo->grid_vel_nodes(d,i) = geo->vel_cg(d);
+
+    auto &Av = geo->Wmat(0,0);
+    auto &Bv = geo->coords_init(0,0);
+    auto &Cv = geo->grid_vel_nodes(0,0);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
+                      1.0, &Av, nDims, &Bv, nDims, 1.0, &Cv, nDims);
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nNodes, nDims,
+                1.0, &Av, nDims, &Bv, nDims, 1.0, &Cv, nDims);
 #endif
   }
 
   update_point_coords(faces);
   update_grid_velocities(faces);
-  if (input->motion_type != CIRCULAR_TRANS) // don't do for rigid motion
+  if (input->motion_type != CIRCULAR_TRANS) // don't do for rigid translation
     calc_transforms(faces);
 #endif
 
@@ -2614,7 +2632,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
      * So to update from 1 to 2, jaco_2 = R_2 * R_1^inv * jaco_1
      * Where R is the matrix form of the body's roation quaternion */
     update_transforms_rigid_wrapper(inv_jaco_spts_init_d, inv_jaco_spts_d,
-        faces->norm_init_d, faces->norm_d, geo->dRmat_d, nSpts, faces->nFpts, nEles, nDims);
+        faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims);
   }
   else
   {

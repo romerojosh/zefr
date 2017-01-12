@@ -1368,8 +1368,9 @@ void FRSolver::initialize_U()
           {
             double x = eles->coord_spts(spt, ele, 0);
             double y = eles->coord_spts(spt, ele, 1);
+            double z = (eles->nDims == 2) ? 0 : eles->coord_spts(spt, ele, 2);
 
-            eles->U_spts(spt, ele, n) = compute_U_init(x, y, 0, n, input);
+            eles->U_spts(spt, ele, n) = compute_U_init(x, y, z, n, input);
           }
         }
       }
@@ -1926,7 +1927,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   }
 
 #ifdef _MPI
-  std::cout << __FILE__ << ":" << __LINE__ << ": rank " << input->rank << ": befre MPI_Allreduce for dt" << std::endl;
+  //std::cout << __FILE__ << ":" << __LINE__ << ": rank " << input->rank << ": befre MPI_Allreduce for dt" << std::endl; /// DEBUGGING
   MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, worldComm);
 #endif
 
@@ -1959,20 +1960,22 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
 #ifdef _CPU
     eles->U_spts = U_ini;
 
-    if (input->motion == 10)
+    if (input->motion == RIGID_BODY)
     {
-      eles->nodes = x_ini;
+      eles->nodes = nodes_ini;
       geo.vel_cg = v_ini;
+      geo.x_cg = x_ini;
       geo.q = q_ini;
-      geo.omega = omega_ini;
+      geo.qdot = qdot_ini;
     }
 #endif
 #ifdef _GPU
     device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
 
-    if (input->motion == 10)
+    if (input->motion == RIGID_BODY)
     {
-      device_copy(eles->nodes_d, x_ini_d, x_ini_d.max_size());
+      device_copy(eles->nodes_d, nodes_ini_d, nodes_ini_d.max_size());
+      device_copy(geo.x_cg_d, x_ini_d, x_ini_d.max_size());
       device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
       device_copy(geo.q_d, q_ini_d, q_ini_d.max_size());
       device_copy(geo.qdot_d, qdot_ini_d, qdot_ini_d.max_size());
@@ -2000,16 +2003,13 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   U_til = eles->U_spts;
   rk_err.fill(0.0);
 
-  if (input->motion == 10)
+  if (input->motion == RIGID_BODY)
   {
-    x_ini = eles->nodes;
-    x_til = eles->nodes;
-    v_ini = geo.vel_cg;
-    v_til = geo.vel_cg;
-    q_ini = geo.q;
-    q_til = geo.q;
-    omega_ini = geo.omega;
-    omega_til = geo.omega;
+    nodes_ini = eles->nodes; nodes_til = eles->nodes;
+    x_ini = geo.x_cg;        x_til = geo.x_cg;
+    v_ini = geo.vel_cg;      v_til = geo.vel_cg;
+    q_ini = geo.q;           q_til = geo.q;
+    qdot_ini = geo.qdot;     qdot_til = geo.qdot;
   }
 #endif
 
@@ -2021,16 +2021,18 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   // Get current delta t [dt(0)] (updated on GPU)
   copy_from_device(dt.data(), dt_d.data(), 1);
 
-  if (input->motion == 10)
+  if (input->motion == RIGID_BODY)
   {
-    device_copy(x_ini_d, eles->nodes_d, eles->nodes_d.max_size());
-    device_copy(x_til_d, eles->nodes_d, eles->nodes_d.max_size());
-    device_copy(v_ini_d, eles->vel_cg_d, eles->vel_cg_d.max_size());
-    device_copy(v_til_d, eles->vel_cg_d, eles->vel_cg_d.max_size());
-    device_copy(q_ini_d, eles->theta_d, eles->theta_d.max_size());
-    device_copy(q_til_d, eles->theta_d, eles->theta_d.max_size());
-    device_copy(qdot_ini_d, eles->omega_d, eles->omega_d.max_size());
-    device_copy(omega_til_d, eles->omega_d, eles->omega_d.max_size());
+    device_copy(nodes_ini_d, eles->nodes_d, eles->nodes_d.max_size());
+    device_copy(nodes_til_d, eles->nodes_d, eles->nodes_d.max_size());
+    device_copy(x_ini_d, geo.x_cg_d, geo.x_cg_d.max_size());
+    device_copy(x_til_d, geo.x_cg_d, geo.x_cg_d.max_size());
+    device_copy(v_ini_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
+    device_copy(v_til_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
+    device_copy(q_ini_d, geo.q_d, geo.q_d.max_size());
+    device_copy(q_til_d, geo.q_d, geo.q_d.max_size());
+    device_copy(qdot_ini_d, geo.qdot_d, geo.qdot_d.max_size());
+    device_copy(qdot_til_d, geo.qdot_d, geo.qdot_d.max_size());
   }
 
   check_error();
@@ -3139,7 +3141,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
 #ifdef _OMP
   omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, else->oppE_ppts.ldim(), &B, 
+      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B,
       eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
 #else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
@@ -5089,14 +5091,14 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
       if (eles->nDims == 3)
       {
         for (unsigned int d = 0; d < eles->nDims; d++)
-          tot_moment[d] += faces->coord(fpt,c1[d]) * force[c2[d]]
-              - faces->coord(fpt,c2[d]) * force[c1[d]];
+          tot_moment[d] += (faces->coord(fpt,c1[d]) - geo.x_cg(c1[d])) * force[c2[d]]
+              - (faces->coord(fpt,c2[d]) - geo.x_cg(c2[d])) * force[c1[d]];
       }
       else
       {
         // Only a 'z' component in 2D
-        tot_moment[2] += faces->coord(fpt,0) * force[1]
-            - faces->coord(fpt,1) * force[0];
+        tot_moment[2] += (faces->coord(fpt,0) - geo.x_cg(0)) * force[1]
+            - (faces->coord(fpt,1) - geo.x_cg(1)) * force[0];
       }
 
       count++;
@@ -5169,7 +5171,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
   compute_moments(force,torque);
 #endif
 #ifdef _GPU
-  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,faces->norm_d,
+  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
       faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,faces->force_d,faces->moment_d,input->gamma,input->rt,
       input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
       geo.nBndFaces,geo.nFptsPerFace);
@@ -5184,22 +5186,29 @@ void FRSolver::rigid_body_update(unsigned int stage)
   Quat qdot(geo.qdot(0),geo.qdot(1),geo.qdot(2),geo.qdot(3));
   Quat omega = 2.*q.conj()*qdot;
 
+  // Transform moments from global coords to body coords
+  Quat tau(0.0, torque[0],torque[1],torque[2]);
+  tau = q.conj()*tau*q;
+
+  // Transform forces to body coords
+  Quat F(0,force[0],force[1],force[2]);
+  F = q.conj()*F*q;
+
   // q_ddot = .5*(qdot*w + q*[Jinv*(tau - w x J*w)])
   Quat Jw;
-  for (unsigned i = 0; i < 4; i++)
-    for (unsigned j = 0; j < 4; j++)
-      Jw[i] += geo.Jmat(i,j) * geo.omega(j);
+  for (unsigned i = 0; i < 3; i++)
+    for (unsigned j = 0; j < 3; j++)
+      Jw[i+1] += geo.Jmat(i,j) * geo.omega(j);
 
-  Quat tau(0.0, torque[0],torque[1],torque[2]);
   Quat tmp1 = tau - (2.*q.conj()*qdot).cross(Jw);
   Quat wdot;
-  for (unsigned i = 0; i < 4; i++)
-    for (unsigned j = 0; j < 4; j++)
-      wdot[i] += geo.Jinv(i,j) * tmp1[j];
+  for (unsigned i = 0; i < 3; i++)
+    for (unsigned j = 0; j < 3; j++)
+      wdot[i+1] += geo.Jinv(i,j) * tmp1[j+1];
 
   Quat q_res = .5*q*omega; // Omega in body coords
   Quat qdot_res = .5*(qdot*omega + q*wdot);
-  double v_res[3] = {force[0]/geo.mass, force[1]/geo.mass, force[2]/geo.mass};
+  double v_res[3] = {F[1]/geo.mass, F[2]/geo.mass, F[3]/geo.mass};
 
   auto tmp_x_cg = geo.x_cg;
 
@@ -5210,8 +5219,8 @@ void FRSolver::rigid_body_update(unsigned int stage)
     double ai = rk_alpha(stage);
     for (unsigned int d = 0; d < eles->nDims; d++)
     {
-      geo.x_cg(d) = x_til(d) - ai*dt(0) * geo.vel_cg(d);
-      x_til(d) = geo.x_cg(d) - (bi-ai)*dt(0) * geo.vel_cg(d);
+      geo.x_cg(d) = nodes_til(d) - ai*dt(0) * geo.vel_cg(d);
+      nodes_til(d) = geo.x_cg(d) - (bi-ai)*dt(0) * geo.vel_cg(d);
 
       geo.vel_cg(d) = v_til(d) - ai*dt(0) * v_res[d];
       v_til(d) = geo.vel_cg(d) - (bi-ai)*dt(0) * v_res[d];
@@ -5230,7 +5239,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
   {
     for (unsigned int d = 0; d < geo.nDims; d++)
     {
-      geo.x_cg(d) = x_til(d) - bi*dt(0) * geo.vel_cg(d);
+      geo.x_cg(d) = nodes_til(d) - bi*dt(0) * geo.vel_cg(d);
       geo.vel_cg(d) = v_til(d) - bi*dt(0) * v_res[d];
     }
 
