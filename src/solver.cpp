@@ -1805,7 +1805,8 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-    flow_time = prev_time + rk_alpha(nStages-1) * dt(0);
+    if (nStages > 1)
+      flow_time = prev_time + rk_alpha(nStages-2) * dt(0);
 
     compute_residual(nStages-1);
 #ifdef _CPU
