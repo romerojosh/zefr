@@ -297,7 +297,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       ss << "_Grid" << input->gridID;
     }
 
-    ss << "_" << std::setw(0) << std::setfill('0') << restart_iter;
+    ss << "_" << std::setw(9) << std::setfill('0') << restart_iter;
 
 #ifdef _MPI
     ss << ".pvtu";
