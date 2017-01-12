@@ -154,7 +154,7 @@ int main(int argc, char* argv[])
 
   auto t1 = std::chrono::high_resolution_clock::now();
   /* Main iteration loop */
-  for (unsigned int n = 1; (n <= input.n_steps) && (solver.res_max > input.res_tol); n++)
+  for (unsigned int n = input.initIter+1; (n <= input.n_steps) && (solver.res_max > input.res_tol); n++)
   {
     if (!input.p_multi)
     {
