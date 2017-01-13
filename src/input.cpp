@@ -90,6 +90,7 @@ InputStruct read_input_file(std::string inputfile)
     ThrowException("Equation not recognized!");
 
   read_param(f, "viscous", input.viscous);
+  read_param(f, "disable_nondim", input.disable_nondim, false);
   read_param(f, "source", input.source, false);
   read_param(f, "squeeze", input.squeeze, false);
   read_param(f, "s_factor", input.s_factor, 0.0);
@@ -251,6 +252,16 @@ InputStruct read_input_file(std::string inputfile)
     }
     else if (input.motion_type == RIGID_BODY)
     {
+      // Initial translational velocity
+      read_param(f, "vx0", input.v0[0], 0.);
+      read_param(f, "vy0", input.v0[1], 0.);
+      read_param(f, "vz0", input.v0[2], 0.);
+
+      // Initial angular velocity
+      read_param(f, "wx0", input.w0[0], 0.);
+      read_param(f, "wy0", input.w0[1], 0.);
+      read_param(f, "wz0", input.w0[2], 0.);
+
       // Mass of moving body
       read_param(f, "mass", input.mass);
 
@@ -303,6 +314,22 @@ void apply_nondim(InputStruct &input)
 
   input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
   input.P_fs = input.rho_fs * input.R * input.T_fs;
+  input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
+  input.c_sth = input.S / input.T_gas;
+
+  if (input.disable_nondim)
+  {
+    input.R_ref = input.R;
+    input.T_tot_fs = input.T_fs * (1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs);
+    input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs,
+                                           input.gamma / (input.gamma - 1.0));
+
+    double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
+    for (unsigned int n = 0; n < input.nDims; n++)
+      input.V_wall(n) = V_wall_mag * input.norm_wall(n) / V_fs_mag;
+
+    return;
+  }
 
   /* -- Set reference quantities for nondimensionalization --
    * Note that we are setting rho_ref s.t. we get a 'normalized' density of 2.
@@ -313,8 +340,6 @@ void apply_nondim(InputStruct &input)
   input.P_ref = input.rho_fs * V_fs_mag * V_fs_mag;
   input.mu_ref = input.rho_fs * V_fs_mag * input.L_fs;
   input.R_ref = input.R * input.T_fs / (V_fs_mag * V_fs_mag);
-  input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
-  input.c_sth = input.S / input.T_gas;
 
   /* Nondimensionalize freestream quantities */
   input.mu = input.mu/input.mu_ref;

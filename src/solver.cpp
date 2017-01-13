@@ -5183,6 +5183,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
   double bi = rk_beta(stage);
 
   Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
+  q.normalize();
   Quat qdot(geo.qdot(0),geo.qdot(1),geo.qdot(2),geo.qdot(3));
   Quat omega = 2.*q.conj()*qdot;
 
@@ -5206,7 +5207,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
     for (unsigned j = 0; j < 3; j++)
       wdot[i+1] += geo.Jinv(i,j) * tmp1[j+1];
 
-  Quat q_res = .5*q*omega; // Omega in body coords
+  Quat q_res = .5*q*omega; // Omega is in body coords
   Quat qdot_res = .5*(qdot*omega + q*wdot);
   double v_res[3] = {F[1]/geo.mass, F[2]/geo.mass, F[3]/geo.mass};
 
@@ -5257,6 +5258,12 @@ void FRSolver::rigid_body_update(unsigned int stage)
     q[i] = geo.q(i);
     qdot[i] = geo.qdot(i);
   }
+
+  // Normalize q's for later use
+  double qnorm = q.norm();
+  q.normalize();
+  for (unsigned int i = 0; i < 4; i++)
+    geo.q(i) /= qnorm;
 
   omega = 2*q.conj()*qdot;
   for (unsigned int i = 0; i < geo.nDims; i++)

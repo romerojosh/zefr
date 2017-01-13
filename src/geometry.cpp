@@ -112,6 +112,16 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.vel_cg.assign({3});
     geo.mass = input->mass;
 
+    geo.q(0) = 1.;  // Initialize to unit quaternion of no rotation
+
+    // Initial translational & angular velocity
+    for (int d = 0; d < 3; d++)
+    {
+      geo.omega(d) = input->w0[d];
+      geo.qdot(d+1) = 0.5*input->w0[d];
+      geo.vel_cg(d) = input->v0[d];
+    }
+
     // Inertia tensor for body [Using initial coords as static body coord sys]
     geo.Jmat.assign({3,3});
     geo.Jmat(0,0) = input->Imat[0];
