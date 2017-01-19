@@ -1155,7 +1155,7 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
 #pragma omp parallel for collapse(2)
     for (uint spt = 0; spt < nSpts; spt++)
     {
-      for (uint e = nVars; e < endEle; e++)
+      for (uint e = startEle; e < endEle; e++)
       {
         for (uint k = 0; k < nVars; k++)
           divF_spts(spt,e,k,stage) = 0;
