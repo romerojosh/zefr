@@ -116,10 +116,11 @@ void update_nodes_rigid_wrapper(mdvector_gpu<double> &nodes_init, mdvector_gpu<d
     mdvector_gpu<double> &Rmat, mdvector_gpu<double> &x_cg, unsigned int nNodes, unsigned int nDims);
 
 //! Update transforms & normals based on rigid-body motion
-void update_transforms_rigid_wrapper(mdvector_gpu<double> &inv_jaco_spts_init,
+void update_transforms_rigid_wrapper(mdvector_gpu<double>& jaco_spts_init,
+    mdvector_gpu<double> &inv_jaco_spts_init, mdvector_gpu<double>& jaco_spts,
     mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &norm_init,
     mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
-    unsigned int nFpts, unsigned int nEles, unsigned int nDims);
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims, bool need_inv);
 
 void update_h_ref_wrapper(mdvector_gpu<double>& h_ref,
     mdvector_gpu<double>& coord_fpts, unsigned int nEles, unsigned int nFpts, unsigned int nPts1D,

@@ -144,7 +144,7 @@ class Elements
     mdvector_gpu<double> oppD0_d, oppE_Fn_d;
     mdvector_gpu<double> dFn_fpts_d, tempF_fpts_d;
 
-    mdvector_gpu<double> inv_jaco_spts_init_d;
+    mdvector_gpu<double> jaco_spts_init_d, inv_jaco_spts_init_d;
 
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;

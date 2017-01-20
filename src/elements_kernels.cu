@@ -1380,50 +1380,6 @@ void add_cg_offset(mdvector_gpu<double> nodes, mdvector_gpu<double> x_cg, unsign
       nodes(d,i) += x_cg(d);
 }
 
-void update_nodes_rigid_wrapper(mdvector_gpu<double> &nodes_init, mdvector_gpu<double> &nodes,
-    mdvector_gpu<double> &Rmat, mdvector_gpu<double> &x_cg, unsigned int nNodes, unsigned int nDims)
-{
-  // Apply rotation matrix to body-frame nodes
-  double *A = Rmat.data();
-  double *B = nodes_init.data();
-  double *C = nodes.data();
-
-  cublasDGEMM_wrapper(nDims, nNodes, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
-
-  // Add in translation of body's CG
-  int threads = 128;
-  int blocks = min((nNodes + threads - 1) / threads, MAX_GRID_DIM);
-
-  if (nDims == 3)
-    add_cg_offset<3><<<blocks,threads>>>(nodes, x_cg, nNodes);
-  else
-    add_cg_offset<2><<<blocks,threads>>>(nodes, x_cg, nNodes);
-}
-
-void update_transforms_rigid_wrapper(mdvector_gpu<double> &inv_jaco_spts_init,
-    mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &norm_init,
-    mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
-    unsigned int nFpts, unsigned int nEles, unsigned int nDims)
-{
-  for (unsigned int d = 0; d < nDims; d++)
-  {
-    // Apply rotation matrix to body-frame jacobian
-    double *A = Rmat.data();
-    double *B = inv_jaco_spts_init.data() + d * nSpts*nEles*nDims;
-    double *C = inv_jaco_spts.data() + d * nSpts*nEles*nDims;
-
-    cublasDGEMM_wrapper(nDims, nEles*nSpts*nDims, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
-  }
-
-  // Apply rotation matrix to body-frame normals
-  double* A = norm_init.data();
-  double* B = Rmat.data();
-  double* C = norm.data();
-
-  cublasDGEMM_transB_wrapper(nFpts, nDims, nDims, 1.0, A, nFpts, B, nDims, 0.0, C, nFpts);
-}
-
-
 template<unsigned int nDims>
 __global__
 void update_h_ref(mdvector_gpu<double> h_ref, mdvector_gpu<double> coord_fpts,
@@ -1562,6 +1518,61 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
     inverse_transform_hexa<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
         NULL,nEles,nFpts);
   }
+
+  check_error();
+}
+
+void update_transforms_rigid_wrapper(mdvector_gpu<double> &jaco_spts_init, mdvector_gpu<double> &inv_jaco_spts_init,
+    mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &norm_init,
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims, bool need_inv)
+{
+  for (unsigned int d = 0; d < nDims; d++)
+  {
+    // Apply rotation matrix to body-frame jacobian
+    double *B = Rmat.data();
+    double *A = jaco_spts_init.data() + d * nSpts*nEles*nDims;
+    double *C = jaco_spts.data() + d * nSpts*nEles*nDims;
+
+    cublasDGEMM_transB_wrapper(nEles*nSpts, nDims, nDims, 1.0, A, nEles*nSpts, B, nDims, 0.0, C, nEles*nSpts);
+  }
+
+  if (need_inv)
+  {
+    int threads = 128;
+    int blocks = (nSpts * nEles + threads - 1) / threads;
+
+    inverse_transform_hexa<<<blocks,threads>>>(jaco_spts,inv_jaco_spts,NULL,nEles,nSpts);
+  }
+
+  // Apply rotation matrix to body-frame normals
+  double* A = norm_init.data();
+  double* B = Rmat.data();
+  double* C = norm.data();
+
+  cublasDGEMM_transB_wrapper(nFpts, nDims, nDims, 1.0, A, norm_init.ldim(), B, Rmat.ldim(), 0.0, C, norm.ldim());
+
+  check_error();
+}
+
+void update_nodes_rigid_wrapper(mdvector_gpu<double> &nodes_init, mdvector_gpu<double> &nodes,
+    mdvector_gpu<double> &Rmat, mdvector_gpu<double> &x_cg, unsigned int nNodes, unsigned int nDims)
+{
+  // Apply rotation matrix to body-frame nodes
+  double *A = Rmat.data();
+  double *B = nodes_init.data();
+  double *C = nodes.data();
+
+  cublasDGEMM_wrapper(nDims, nNodes, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
+
+  // Add in translation of body's CG
+  int threads = 128;
+  int blocks = min((nNodes + threads - 1) / threads, MAX_GRID_DIM);
+
+  if (nDims == 3)
+    add_cg_offset<3><<<blocks,threads>>>(nodes, x_cg, nNodes);
+  else
+    add_cg_offset<2><<<blocks,threads>>>(nodes, x_cg, nNodes);
 }
 
 __global__
@@ -1617,6 +1628,8 @@ void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
 
   calc_normals<<<blocks,threads>>>(norm,dA,inv_jaco,tnorm,fpt2gfpt,fpt2slot,
       nFpts,nEles,nDims);
+
+  check_error();
 }
 
 template <unsigned int nVars>

@@ -184,6 +184,19 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
         for (unsigned int k = 0; k < 3; k++)
           geo.Wmat(i,j) += geo.Rmat(i,k) * W(k,j);
 
+#ifdef _GPU
+  //eles->nodes_d = eles->nodes;
+  geo.x_cg_d = geo.x_cg;
+  geo.dx_cg_d = geo.dx_cg;
+  geo.vel_cg_d = geo.vel_cg;
+  geo.q_d = geo.q;
+  geo.qdot_d = geo.qdot;
+  geo.Rmat_d = geo.Rmat;
+  geo.dRmat_d = geo.dRmat;
+  geo.omega_d = geo.omega;
+  geo.Wmat_d = geo.Wmat;
+#endif
+
     eles->move(faces);
   }
 }
@@ -656,8 +669,21 @@ void FRSolver::solver_data_to_device()
 
     if (input->motion_type == RIGID_BODY)
     {
-      eles->inv_jaco_spts_init_d = eles->inv_jaco_spts_init;
-      faces->norm_init_d = faces->norm_d;
+      if (input->viscous)
+        eles->inv_jaco_spts_init_d = eles->inv_jaco_spts;
+      eles->jaco_spts_init_d = eles->jaco_spts;
+      faces->norm_init_d = faces->norm;
+
+      nodes_ini_d = eles->nodes;
+      nodes_til_d = eles->nodes;
+      x_ini_d = geo.x_cg;
+      x_til_d = geo.x_cg;
+      v_ini_d = geo.vel_cg;
+      v_til_d = geo.vel_cg;
+      q_ini_d = geo.q;
+      q_til_d = geo.q;
+      qdot_ini_d = geo.qdot;
+      qdot_til_d = geo.qdot;
     }
 
     /* Moving-grid parameters for convenience / ease of future additions
@@ -2106,6 +2132,11 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   if (input->motion_type == RIGID_BODY)
   {
+    x_ini = geo.x_cg;        x_til = geo.x_cg;
+    v_ini = geo.vel_cg;      v_til = geo.vel_cg;
+    q_ini = geo.q;           q_til = geo.q;
+    qdot_ini = geo.qdot;     qdot_til = geo.qdot;
+
     device_copy(nodes_ini_d, eles->nodes_d, eles->nodes_d.max_size());
     device_copy(nodes_til_d, eles->nodes_d, eles->nodes_d.max_size());
     device_copy(x_ini_d, geo.x_cg_d, geo.x_cg_d.max_size());
@@ -5356,10 +5387,15 @@ void FRSolver::rigid_body_update(unsigned int stage)
 //  compute_moments(force,torque);
 #endif
 #ifdef _GPU
-  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
-      faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,faces->force_d,faces->moment_d,input->gamma,input->rt,
-      input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
-      geo.nBndFaces,geo.nFptsPerFace);
+//  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
+//      faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,faces->force_d,faces->moment_d,input->gamma,input->rt,
+//      input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
+//      geo.nBndFaces,geo.nFptsPerFace);
+#endif
+
+#ifdef _MPI
+  MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
+  MPI_Allreduce(MPI_IN_PLACE, torque.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
 #endif
 
   // Add in force from gravity

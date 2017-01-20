@@ -2601,7 +2601,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
   update_point_coords(faces);
   update_grid_velocities(faces);
   if (input->motion_type != CIRCULAR_TRANS) // don't do for rigid translation
-    calc_transforms(faces);
+    calc_transforms(faces);  /// TODO: copy over GPU algo for rigid-body (to save cost)
 #endif
 
 #ifdef _GPU
@@ -2630,8 +2630,8 @@ void Elements::move(std::shared_ptr<Faces> faces)
     /* At times 1 and 2, jaco_1 = R_1 * jaco_0;  jaco_2 = R_2 * jaco_0
      * So to update from 1 to 2, jaco_2 = R_2 * R_1^inv * jaco_1
      * Where R is the matrix form of the body's roation quaternion */
-    update_transforms_rigid_wrapper(inv_jaco_spts_init_d, inv_jaco_spts_d,
-        faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims);
+    update_transforms_rigid_wrapper(jaco_spts_init_d, inv_jaco_spts_init_d, jaco_spts_d, inv_jaco_spts_d,
+        faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims, input->viscous);
   }
   else
   {
@@ -2645,8 +2645,6 @@ void Elements::move(std::shared_ptr<Faces> faces)
     if (input->CFL_type == 2)
       update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
   }
-
-  check_error();
 #endif
 }
 
