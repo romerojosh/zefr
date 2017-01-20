@@ -3110,7 +3110,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     }
     if (input->motion)
     {
-      f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\"/>";
+      f << "<PDataArray type=\"Float64\" NumberOfComponents=\"3\" Name=\"grid_velocity\"/>";
       f << std::endl;
     }
 
@@ -3323,6 +3323,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   unsigned int nBytes = nEles * eles->nPpts * sizeof(double);
   double dzero = 0.0;
+  float fzero = 0.0f;
 
   /* Write out conservative variables */
 
@@ -3370,7 +3371,7 @@ void FRSolver::write_solution(const std::string &_prefix)
       binary_write(f, (float) eles->coord_ppts(ppt, ele, 0));
       binary_write(f, (float) eles->coord_ppts(ppt, ele, 1));
       if (geo.nDims == 2)
-        binary_write(f, 0.0f);
+        binary_write(f, fzero);
       else
         binary_write(f, (float) eles->coord_ppts(ppt, ele, 2));
     }
@@ -3380,7 +3381,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   // Write connectivity
   nBytes = nEles * eles->nSubelements * eles->nNodesPerSubelement * sizeof(unsigned int);
   binary_write(f, nBytes);
-  int shift = 0; // To account for blanked elements
+  unsigned int shift = 0; // To account for blanked elements
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
