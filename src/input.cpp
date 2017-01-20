@@ -252,6 +252,9 @@ InputStruct read_input_file(std::string inputfile)
     }
     else if (input.motion_type == RIGID_BODY)
     {
+      // Acceleration due to gravity [NOTE: assumed along -z axis]
+      read_param(f, "g", input.g, 0.);
+
       // Initial translational velocity
       read_param(f, "vx0", input.v0[0], 0.);
       read_param(f, "vy0", input.v0[1], 0.);
@@ -280,6 +283,10 @@ InputStruct read_input_file(std::string inputfile)
       input.Imat[6] = input.Imat[2];
       input.Imat[7] = input.Imat[5];
     }
+  }
+  else
+  {
+    input.motion_type = 0;
   }
 
   f.close();

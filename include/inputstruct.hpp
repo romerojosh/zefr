@@ -151,6 +151,7 @@ struct InputStruct
   double rot_angle;
   double xc[3], dxc[3], vc[3], dvc[3];
 
+  double g;       //! Gravitational acceleration (default to 0 / no gravity)
   double v0[3];   //! Initial grid translational velocity
   double w0[3];   //! Initial grid angular velocity
   double mass;    //! Mass of moving body of interest

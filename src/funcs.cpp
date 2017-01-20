@@ -670,9 +670,16 @@ mdvector<double> getRotationMatrix(double axis[3], double angle)
 {
   Vec3 Axis = Vec3(axis[0],axis[1],axis[2]);
   double mag = Axis.norm();
-  double ax = Axis.x /= mag;
-  double ay = Axis.y /= mag;
-  double az = Axis.z /= mag;
+  double ax = Axis.x; ax /= mag;
+  double ay = Axis.y; ay /= mag;
+  double az = Axis.z; az /= mag;
+
+  if (mag > 1e-8)
+  {
+    ax /= mag;
+    ay /= mag;
+    az /= mag;
+  }
 
   mdvector<double> mat({3,3}, 0);
 
@@ -695,9 +702,16 @@ mdvector<double> getRotationMatrix(const Quat &q)
 {
   Vec3 Axis = Vec3(q[1],q[2],q[3]);
   double mag = Axis.norm();
-  double ax = Axis.x /= mag;
-  double ay = Axis.y /= mag;
-  double az = Axis.z /= mag;
+  double ax = Axis.x;
+  double ay = Axis.y;
+  double az = Axis.z;
+
+  if (mag > 1e-8)
+  {
+    ax /= mag;
+    ay /= mag;
+    az /= mag;
+  }
 
   mdvector<double> mat({3,3}, 0);
 
@@ -1154,6 +1168,7 @@ Quat Quat::operator*(const Quat &p)
   z[1] = q[0]*p[1] + q[1]*p[0] + q[2]*p[3] - q[3]*p[2];
   z[2] = q[0]*p[2] + q[2]*p[0] + q[3]*p[1] - q[1]*p[3];
   z[3] = q[0]*p[3] + q[3]*p[0] + q[1]*p[2] - q[2]*p[1];
+  return z;
 }
 
 Quat Quat::operator*(const std::array<double,3> &p)
@@ -1163,12 +1178,13 @@ Quat Quat::operator*(const std::array<double,3> &p)
   z[1] = q[0]*p[1] + q[2]*p[3] - q[3]*p[2];
   z[2] = q[0]*p[2] + q[3]*p[1] - q[1]*p[3];
   z[3] = q[0]*p[3] + q[1]*p[2] - q[2]*p[1];
+  return z;
 }
 
 Quat operator*(double a, const Quat &b)
 {
   Quat c;
-  for (unsigned i = 0; i < 4; i++)
+  for (unsigned int i = 0; i < 4; i++)
     c[i] = a*b[i];
   return c;
 }

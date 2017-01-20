@@ -162,6 +162,30 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
   report_gpu_mem_usage();
 #endif
 
+  // Update grid to current status based on restart file if needed
+  if (input->restart && input->motion && input->motion_type == RIGID_BODY)
+  {
+    Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
+    geo.Rmat = getRotationMatrix(q);
+
+    // Wmat = Matrix to get velocity due to rotation
+    // W = 'Spin' of omega (cross-product in matrix form)
+    int c1[3] = {1,2,0}; // Cross-product index maps
+    int c2[3] = {2,0,1};
+    mdvector<double> W({3,3}, 0.);
+    for (int i = 0; i < 3; i++)
+    {
+      W(i,c2[i]) =  geo.omega(c1[i]);
+      W(i,c1[i]) = -geo.omega(c2[i]);
+    }
+    geo.Wmat.assign({3,3}, 0.);
+    for (unsigned int i = 0; i < 3; i++)
+      for (unsigned int j = 0; j < 3; j++)
+        for (unsigned int k = 0; k < 3; k++)
+          geo.Wmat(i,j) += geo.Rmat(i,k) * W(k,j);
+
+    eles->move(faces);
+  }
 }
 
 void FRSolver::setup_update()
@@ -349,6 +373,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       if (geo.iblank_cell(ele) != NORMAL) nEles--;
   }
 
+  bool has_gv = false; // can do the same here for all 'extra' fields
+
   /* Load data from restart file */
   while (f >> param)
   {
@@ -366,6 +392,30 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
     if (param == "ORDER")
     {
       f >> order_restart;
+    }
+    if (param == "X_CG")
+    {
+      geo.x_cg.assign({3});
+      f >> geo.x_cg(0) >> geo.x_cg(1) >> geo.x_cg(2);
+    }
+    if (param == "V_CG")
+    {
+      geo.x_cg.assign({3});
+      f >> geo.x_cg(0) >> geo.x_cg(1) >> geo.x_cg(2);
+    }
+    if (param == "ROT-Q")
+    {
+      geo.q.assign({4});
+      f >> geo.q(0) >> geo.q(1) >> geo.q(2) >> geo.q(3);
+    }
+    if (param == "OMEGA")
+    {
+      geo.omega.assign({3});
+      f >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
+    }
+    if (param == "grid_velocity")
+    {
+      has_gv = true;
     }
 
     if (param == "<AppendedData")
@@ -411,6 +461,39 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
           eles->nEles * eles->nVars, nRpts, 1.0, &A, eles->oppRestart.ldim(), &B, 
           U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #endif
+
+      /* Read grid velocity */
+      if (input->motion && has_gv)
+      {
+        U_restart.assign({nRpts, eles->nEles, 3});
+
+        unsigned int temp;
+        binary_read(f, temp);
+        for (unsigned int ele = 0; ele < nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
+          for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+            for (unsigned int n = 0; n < eles->nVars; n++)
+              binary_read(f, U_restart(rpt, ele, n));
+        }
+
+        /* Extrapolate values from restart points to solution points */
+        int m = eles->nSpts;
+        int k = nRpts;
+        int n = nEles * eles->nDims;
+        auto &A = eles->oppRestart(0, 0);
+        auto &B = U_restart(0, 0, 0);
+        auto &C = eles->grid_vel_spts(0, 0, 0);
+
+  #ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                          1.0, &A, m, &B, k, 0.0, &C, m);
+  #else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                    1.0, &A, m, &B, k, 0.0, &C, m);
+  #endif
+      }
 
     }
   }
@@ -1913,6 +1996,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   // Calculate error (infinity norm of RK error) and scaling factor for dt
   double max_err = 0;
 #ifdef _CPU
+
   for (uint n = 0; n < eles->nVars; n++)
   {
     for (uint ele = 0; ele < eles->nEles; ele++)
@@ -1927,7 +2011,6 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   }
 
 #ifdef _MPI
-  //std::cout << __FILE__ << ":" << __LINE__ << ": rank " << input->rank << ": befre MPI_Allreduce for dt" << std::endl; /// DEBUGGING
   MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, worldComm);
 #endif
 
@@ -1960,7 +2043,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
 #ifdef _CPU
     eles->U_spts = U_ini;
 
-    if (input->motion == RIGID_BODY)
+    if (input->motion_type == RIGID_BODY)
     {
       eles->nodes = nodes_ini;
       geo.vel_cg = v_ini;
@@ -1972,7 +2055,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
 #ifdef _GPU
     device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
 
-    if (input->motion == RIGID_BODY)
+    if (input->motion_type == RIGID_BODY)
     {
       device_copy(eles->nodes_d, nodes_ini_d, nodes_ini_d.max_size());
       device_copy(geo.x_cg_d, x_ini_d, x_ini_d.max_size());
@@ -2003,7 +2086,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   U_til = eles->U_spts;
   rk_err.fill(0.0);
 
-  if (input->motion == RIGID_BODY)
+  if (input->motion_type == RIGID_BODY)
   {
     nodes_ini = eles->nodes; nodes_til = eles->nodes;
     x_ini = geo.x_cg;        x_til = geo.x_cg;
@@ -2021,7 +2104,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   // Get current delta t [dt(0)] (updated on GPU)
   copy_from_device(dt.data(), dt_d.data(), 1);
 
-  if (input->motion == RIGID_BODY)
+  if (input->motion_type == RIGID_BODY)
   {
     device_copy(nodes_ini_d, eles->nodes_d, eles->nodes_d.max_size());
     device_copy(nodes_til_d, eles->nodes_d, eles->nodes_d.max_size());
@@ -2120,8 +2203,8 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 #endif
 
     // Update grid to position of next time step
-    // move(flow_time);
     rigid_body_update(stage);
+    move(flow_time);
 
 #ifdef _BUILD_LIB
     // Update the overset connectivity to the new grid positions
@@ -2135,6 +2218,27 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     }
 #endif
   }
+
+//  if (input->motion_type == RIGID_BODY)
+//  {
+//    std::cout.setf(std::ios::scientific, std::ios::floatfield);
+//    std::cout.precision(4);
+
+//    std::cout << "  q: ";
+//    for (int i = 0; i < 4; i++)
+//      std::cout << std::setw(8) << geo.q(i);
+//    std::cout << "  w: ";
+//    for (int i = 0; i < 3; i++)
+//      std::cout << std::setw(8) << geo.omega(i);
+//    std::cout << "  v: ";
+//    for (int i = 0; i < 3; i++)
+//      std::cout << std::setw(8) << geo.vel_cg(i);
+//    std::cout << "  x: ";
+//    for (int i = 0; i < 3; i++)
+//      std::cout << std::setw(8) << geo.x_cg(i);
+//    std::cout << "  dt: " << dt(0) << "  " << flow_time;
+//    std::cout << std::endl;
+//  }
 
   flow_time = prev_time + dt(0);
 }
@@ -2496,6 +2600,36 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   ss << "tcurr = " << flow_time << std::endl;
   //ss << "wall-time = " << input->??"
   ss << std::endl;
+
+  if (input->motion)
+  {
+    if (input->motion_type == RIGID_BODY)
+    {
+      ss << "[moving-grid]" << std::endl;
+
+      ss << "x-cg =";
+      for (int d = 0; d < geo.nDims; d++)
+        ss << " " << geo.x_cg(d);
+      ss << std::endl;
+
+      ss << "v-cg =";
+      for (int d = 0; d < geo.nDims; d++)
+        ss << " " << geo.vel_cg(d);
+      ss << std::endl;
+
+      ss << "rot-q =";
+      for (int d = 0; d < 4; d++)
+        ss << " " << geo.q(d);
+      ss << std::endl;
+
+      ss << "omega =";
+      for (int d = 0; d < 3; d++)
+        ss << " " << geo.omega(d);
+      ss << std::endl;
+
+      ss << std::endl;
+    }
+  }
 
   std::string stats = ss.str();
 
@@ -2889,7 +3023,26 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     {
       // "tcurr = ####"
       ss >> tmp >> flow_time;
-      break;
+    }
+    if (key == "x-cg")
+    {
+      geo.x_cg.assign({geo.nDims});
+      ss >> tmp >> geo.x_cg(0) >> geo.x_cg(1) >> geo.x_cg(2);
+    }
+    if (key == "v-cg")
+    {
+      geo.vel_cg.assign({geo.nDims});
+      ss >> tmp >> geo.vel_cg(0) >> geo.vel_cg(1) >> geo.vel_cg(2);
+    }
+    if (key == "rot-q")
+    {
+      geo.q.assign({4});
+      ss >> tmp >> geo.q(0) >> geo.q(1) >> geo.q(2) >> geo.q(3);
+    }
+    if (key == "omega")
+    {
+      geo.omega.assign({3});
+      ss >> tmp >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
     }
 
     ss.str(""); ss.clear();
@@ -2957,7 +3110,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     }
     if (input->motion)
     {
-      f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" format=\"ascii\"/>";
+      f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\"/>";
       f << std::endl;
     }
 
@@ -3008,6 +3161,29 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   if (input->motion)
   {
+    if (input->motion_type == RIGID_BODY)
+    {
+      f << "<!-- X_CG ";
+      for (int d = 0; d < 3; d++)
+        f << std::scientific << std::setprecision(16) << geo.x_cg(d) << " ";
+      f << " -->" << std::endl;
+
+      f << "<!-- V_CG ";
+      for (int d = 0; d < 3; d++)
+        f << std::scientific << std::setprecision(16) << geo.vel_cg(d) << " ";
+      f << " -->" << std::endl;
+
+      f << "<!-- ROT-Q ";
+      for (int d = 0; d < 4; d++)
+        f << std::scientific << std::setprecision(16) << geo.q(d) << " ";
+      f << " -->" << std::endl;
+
+      f << "<!-- OMEGA ";
+      for (int d = 0; d < 3; d++)
+        f << std::scientific << std::setprecision(16) << geo.omega(d) << " ";
+      f << " -->" << std::endl;
+    }
+
     eles->update_plot_point_coords();
 #ifdef _GPU
     eles->grid_vel_nodes = eles->grid_vel_nodes_d;
@@ -3081,25 +3257,11 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     eles->get_grid_velocity_ppts();
 
-    f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" Name=\"grid_velocity\" ";
-    f << "format=\"ascii\">"<< std::endl;
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
-      {
-        for (unsigned int dim = 0; dim < eles->nDims; dim++)
-        {
-          f << std::scientific << std::setprecision(16);
-          f << eles->grid_vel_ppts(ppt, ele, dim);
-          f  << " ";
-        }
-        if (eles->nDims == 2) f << 0.0 << " ";
-      }
-      f << std::endl;
-    }
-    f << "</DataArray>" << std::endl;
+    f << "<DataArray type=\"Float64\" NumberOfComponents=\"3\" Name=\"grid_velocity\" ";
+    f << "format=\"appended\" offset=\"" << b_offset << "\"/>"<< std::endl;
+    b_offset += (nEles * eles->nPpts * 3 * sizeof(double) + sizeof(unsigned int));
   }
+
   f << "</PointData>" << std::endl;
 
   /* Write plot point information (single precision) */
@@ -3114,8 +3276,6 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<DataArray type=\"UInt32\" Name=\"connectivity\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   b_offset += (nEles * eles->nSubelements * eles->nNodesPerSubelement * sizeof(unsigned int) + sizeof(unsigned int));
-
-
 
   f << "<DataArray type=\"UInt32\" Name=\"offsets\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
@@ -3162,6 +3322,9 @@ void FRSolver::write_solution(const std::string &_prefix)
   }
 
   unsigned int nBytes = nEles * eles->nPpts * sizeof(double);
+  double dzero = 0.0;
+
+  /* Write out conservative variables */
 
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
@@ -3176,10 +3339,29 @@ void FRSolver::write_solution(const std::string &_prefix)
     }
   }
 
+
+  /* Write out grid velocity (for moving grids) */
+  if (input->motion)
+  {
+    nBytes = nEles * eles->nPpts * 3 * sizeof(double);
+    binary_write(f, nBytes);
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      {
+        for (unsigned int dim = 0; dim < eles->nDims; dim++)
+          binary_write(f, eles->grid_vel_ppts(ppt, ele, dim));
+
+        if (eles->nDims == 2)
+          binary_write(f, dzero);
+      }
+    }
+  }
+
   /* Write plot point coordinates */
   nBytes = nEles * eles->nPpts * 3 * sizeof(float);
   binary_write(f, nBytes);
-  double dzero = 0.0;
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
@@ -4919,7 +5101,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
 
 void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<double,3> &tot_moment)
 {
-  /*! ---- TAKING ALL MOMENTS ABOUT THE ORIGIN ---- */
+  /*! ---- TAKING ALL MOMENTS ABOUT 'geo.x_cg' ---- */
   tot_force.fill(0.0);
   tot_moment.fill(0.0);
 
@@ -5003,7 +5185,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
           taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
 
-          for (unsigned int dim = 0; dim < eles->nDims; dim++)
+          for (int dim = 0; dim < 2; dim++)
             force[dim] -= eles->weights_fpts(idx) * taun[dim] * faces->dA(fpt);
         }
         else if (eles->nDims == 3)
@@ -5164,11 +5346,13 @@ void FRSolver::move(double time)
 
 void FRSolver::rigid_body_update(unsigned int stage)
 {
-  if (input->motion != 10) return;
+  if (input->motion_type != RIGID_BODY) return;
 
-  std::array<double,3> force, torque;
+  // ---- Compute forces & moments in the global coordinate system ----
+
+  std::array<double,3> force = {0,0,0}, torque = {0,0,0};
 #ifdef _CPU
-  compute_moments(force,torque);
+//  compute_moments(force,torque);
 #endif
 #ifdef _GPU
   compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
@@ -5176,6 +5360,9 @@ void FRSolver::rigid_body_update(unsigned int stage)
       input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
       geo.nBndFaces,geo.nFptsPerFace);
 #endif
+
+  // Add in force from gravity
+  force[2] -= input->g*geo.mass;
 
   int c1[3] = {1,2,0}; // Cross-product index maps
   int c2[3] = {2,0,1};
@@ -5185,21 +5372,18 @@ void FRSolver::rigid_body_update(unsigned int stage)
   Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
   q.normalize();
   Quat qdot(geo.qdot(0),geo.qdot(1),geo.qdot(2),geo.qdot(3));
-  Quat omega = 2.*q.conj()*qdot;
+  Quat omega;
+  omega = 2.*(q.conj())*qdot; // body-frame omega
 
   // Transform moments from global coords to body coords
   Quat tau(0.0, torque[0],torque[1],torque[2]);
   tau = q.conj()*tau*q;
 
-  // Transform forces to body coords
-  Quat F(0,force[0],force[1],force[2]);
-  F = q.conj()*F*q;
-
-  // q_ddot = .5*(qdot*w + q*[Jinv*(tau - w x J*w)])
+  // ---- q_ddot = .5*(qdot*w + q*[Jinv*(tau - w x J*w)]) ----
   Quat Jw;
   for (unsigned i = 0; i < 3; i++)
     for (unsigned j = 0; j < 3; j++)
-      Jw[i+1] += geo.Jmat(i,j) * geo.omega(j);
+      Jw[i+1] += geo.Jmat(i,j) * omega[j+1];
 
   Quat tmp1 = tau - (2.*q.conj()*qdot).cross(Jw);
   Quat wdot;
@@ -5209,7 +5393,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   Quat q_res = .5*q*omega; // Omega is in body coords
   Quat qdot_res = .5*(qdot*omega + q*wdot);
-  double v_res[3] = {F[1]/geo.mass, F[2]/geo.mass, F[3]/geo.mass};
+  double v_res[3] = {force[0]/geo.mass, force[1]/geo.mass, force[2]/geo.mass};
 
   auto tmp_x_cg = geo.x_cg;
 
@@ -5220,34 +5404,34 @@ void FRSolver::rigid_body_update(unsigned int stage)
     double ai = rk_alpha(stage);
     for (unsigned int d = 0; d < eles->nDims; d++)
     {
-      geo.x_cg(d) = nodes_til(d) - ai*dt(0) * geo.vel_cg(d);
-      nodes_til(d) = geo.x_cg(d) - (bi-ai)*dt(0) * geo.vel_cg(d);
+      geo.x_cg(d) = x_til(d) + ai*dt(0) * geo.vel_cg(d);
+      x_til(d) = geo.x_cg(d) + (bi-ai)*dt(0) * geo.vel_cg(d);
 
-      geo.vel_cg(d) = v_til(d) - ai*dt(0) * v_res[d];
-      v_til(d) = geo.vel_cg(d) - (bi-ai)*dt(0) * v_res[d];
+      geo.vel_cg(d) = v_til(d) + ai*dt(0) * v_res[d];
+      v_til(d) = geo.vel_cg(d) + (bi-ai)*dt(0) * v_res[d];
     }
 
     for (unsigned int i = 0; i < 4; i++)
     {
-      geo.q(i) = q_til(i) - ai*dt(0) * q_res[i];
-      q_til(i) = geo.q(i) - (bi-ai)*dt(0) * q_res[i];
+      geo.q(i) = q_til(i) + ai*dt(0) * q_res[i];
+      q_til(i) = geo.q(i) + (bi-ai)*dt(0) * q_res[i];
 
-      geo.qdot(i) = qdot_til(i) - ai*dt(0) * qdot_res[i];
-      qdot_til(i) = geo.qdot(i) - (bi-ai)*dt(0) * qdot_res[i];
+      geo.qdot(i) = qdot_til(i) + ai*dt(0) * qdot_res[i];
+      qdot_til(i) = geo.qdot(i) + (bi-ai)*dt(0) * qdot_res[i];
     }
   }
   else
   {
     for (unsigned int d = 0; d < geo.nDims; d++)
     {
-      geo.x_cg(d) = nodes_til(d) - bi*dt(0) * geo.vel_cg(d);
-      geo.vel_cg(d) = v_til(d) - bi*dt(0) * v_res[d];
+      geo.x_cg(d) = x_til(d) + bi*dt(0) * geo.vel_cg(d);
+      geo.vel_cg(d) = v_til(d) + bi*dt(0) * v_res[d];
     }
 
     for (unsigned int i = 0; i < 4; i++)
     {
-      geo.q(i) = q_til(i) - bi*dt(0) * q_res[i];
-      geo.qdot(i) = qdot_til(i) - bi*dt(0) * qdot_res[i];
+      geo.q(i) = q_til(i) + bi*dt(0) * q_res[i];
+      geo.qdot(i) = qdot_til(i) + bi*dt(0) * qdot_res[i];
     }
   }
 
@@ -5265,7 +5449,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
   for (unsigned int i = 0; i < 4; i++)
     geo.q(i) /= qnorm;
 
-  omega = 2*q.conj()*qdot;
+  omega = 2*qdot*q.conj(); // Global-frame omega
   for (unsigned int i = 0; i < geo.nDims; i++)
     geo.omega(i) = omega[i+1];
 
@@ -5278,15 +5462,23 @@ void FRSolver::rigid_body_update(unsigned int stage)
         geo.dRmat(i,j) += Rmat(i,k) * geo.Rmat(j,k);
   geo.Rmat = Rmat;
 
-  // 'Spin' of omega (cross-product in matrix form)
+  // v_g = q * (omega_b cross x_b) * q_conj = Rmat * W_b * x_b = Wmat * x_b
+  // W is 'Spin' of omega (cross-product in matrix form)
+  omega = 2*q.conj()*qdot;
+  mdvector<double> W({3,3}, 0.);
   for (int i = 0; i < 3; i++)
   {
-    geo.Wmat(i,c2[i]) =  geo.omega(c1[i]);
-    geo.Wmat(i,c1[i]) = -geo.omega(c2[i]);
+    W(i,c2[i]) =  omega[c1[i]+1];
+    W(i,c1[i]) = -omega[c2[i]+1];
   }
+  geo.Wmat.fill(0.);
+  for (unsigned int i = 0; i < 3; i++)
+    for (unsigned int j = 0; j < 3; j++)
+      for (unsigned int k = 0; k < 3; k++)
+        geo.Wmat(i,j) += Rmat(i,k) * W(k,j);
 
-  for (unsigned int d = 0; d < geo.nDims; d++)
-    geo.dx_cg(d) = geo.x_cg(d) - tmp_x_cg(d);
+//  for (unsigned int d = 0; d < geo.nDims; d++)
+//    geo.dx_cg(d) = geo.x_cg(d) - tmp_x_cg(d);
 
 #ifdef _GPU
   //eles->nodes_d = eles->nodes;
@@ -5306,7 +5498,8 @@ void FRSolver::rigid_body_update(unsigned int stage)
 #ifdef _BUILD_LIB
   // Rmat transforms body->global, but is stored column-major here
   // Transpose (accessing as row-major) transforms global->body as TIOGA needs
-  ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+  if (input->overset)
+    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
 #endif
 }
 

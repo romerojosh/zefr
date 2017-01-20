@@ -103,7 +103,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.iblank_face.assign(geo.nFaces, NORMAL);
   }
 
-  if ( nDims == 3 && (input->motion && input->motion_type == RIGID_BODY) )
+  if ( nDims == 3 && (input->motion_type == RIGID_BODY) )
   {
     geo.q.assign({4});
     geo.qdot.assign({4});
@@ -112,13 +112,17 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.vel_cg.assign({3});
     geo.mass = input->mass;
 
+    geo.Wmat.assign({3,3});
+    geo.Rmat.assign({3,3});
+    geo.dRmat.assign({3,3});
+
     geo.q(0) = 1.;  // Initialize to unit quaternion of no rotation
 
     // Initial translational & angular velocity
     for (int d = 0; d < 3; d++)
     {
-      geo.omega(d) = input->w0[d];
-      geo.qdot(d+1) = 0.5*input->w0[d];
+      geo.omega(d) = input->w0[d];      // Global coords
+      geo.qdot(d+1) = 0.5*input->w0[d]; // Body coords
       geo.vel_cg(d) = input->v0[d];
     }
 
@@ -3211,9 +3215,12 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
     case RIGID_BODY:
     {
       /// 6 DOF Rotation / Translation
+      break; /// TODO: consider organization; Done entirely in eles->move() currently
 
       // Rotation Component
-      auto rotMat = getRotationMatrix(input->rot_axis,input->rot_angle);
+      //auto rotMat = getRotationMatrix(input->rot_axis,input->rot_angle);
+      Quat q(geo.q(0), geo.q(1), geo.q(2), geo.q(3));
+      auto rotMat = getRotationMatrix(q);
 
       int m = 3;
       int k = 3;
