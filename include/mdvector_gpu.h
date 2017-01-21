@@ -81,6 +81,8 @@ class mdvector_gpu
     //! Allocate memory & dimensions of vec w/o copying values
     void set_size(mdvector<T>& vec);
 
+    void set_size(std::vector<unsigned> dims);
+
     //! Assignment (copy from host)
     mdvector_gpu<T>& operator= (mdvector<T>& vec);
 
@@ -211,6 +213,7 @@ void mdvector_gpu<T>::set_size(mdvector<T>& vec)
 
   if(!allocated)
   {
+    nDims = vec.get_nDims();
     size_ = vec.size();
     max_size_ = vec.max_size();
     ldim_ = vec.ldim();
@@ -220,6 +223,48 @@ void mdvector_gpu<T>::set_size(mdvector<T>& vec)
     copy_to_device(strides, vec.strides_ptr(), 6);
 
     std::copy(vec.strides_ptr(), vec.strides_ptr()+6, strides_h);
+    std::copy(vec.dims_ptr(), vec.dims_ptr()+nDims, dim_h);
+
+    allocated = true;
+  }
+}
+
+template <typename T>
+void mdvector_gpu<T>::set_size(std::vector<unsigned int> dims)
+{
+  nDims = (int)dims.size();
+
+  size_ = 1;
+  unsigned int new_size = 1;
+
+  for (unsigned int i = 0; i < nDims; i++)
+  {
+    if (i > 0)
+    {
+      strides_h[i-1] = 1;
+      for (unsigned int j = 0; j < i; j++)
+        strides_h[i-1] *= dims[j];
+    }
+
+    size_ *= dims[i];
+    new_size *= dims[i];
+
+    strides_h[i] = dims[i];
+    dim_h[i] = dims[i];
+  }
+
+  if (allocated && max_size_ != new_size)
+    free_data();
+
+  if(!allocated)
+  {
+    size_ = new_size;
+    max_size_ = new_size;
+    ldim_ = dims[0];
+    allocate_device_data(values, max_size_);
+    allocate_device_data(strides, 6);
+
+    copy_to_device(strides, strides_h, 6);
 
     allocated = true;
   }

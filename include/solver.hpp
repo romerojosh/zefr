@@ -105,6 +105,8 @@ class FRSolver
     mdvector_gpu<double> v_ini_d, v_til_d;
     mdvector_gpu<double> q_ini_d, q_til_d;
     mdvector_gpu<double> qdot_ini_d, qdot_til_d;
+
+    mdvector_gpu<double> force_d, moment_d; //! Force / Moment *per boundary face* for reduction op
 #endif
 
     _mpi_comm myComm, worldComm;

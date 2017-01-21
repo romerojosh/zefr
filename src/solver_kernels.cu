@@ -1278,8 +1278,8 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 
 __global__
 void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<double> P, mdvector_gpu<double> coord,
-    mdvector_gpu<double> x_cg, mdvector_gpu<double> norm, mdvector_gpu<double> &dA, mdvector_gpu<char> fpt2bnd,
-    mdvector_gpu<double> weights, mdvector_gpu<double> &force, mdvector_gpu<double> &moment,
+    mdvector_gpu<double> x_cg, mdvector_gpu<double> norm, mdvector_gpu<double> dA, mdvector_gpu<char> fpt2bnd,
+    mdvector_gpu<double> weights, mdvector_gpu<double> force, mdvector_gpu<double> moment,
     double gamma, double rt, double c_sth, double mu_in, bool viscous, bool fix_vis, int nDims, int start_fpt,
     int nFaces, int nFptsPerFace)
 {
@@ -1494,7 +1494,8 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
     mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double>& P_fpts, mdvector_gpu<double> &coord,
     mdvector_gpu<double> &x_cg, mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<char> &fpt2bnd,
     mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
-    double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace)
+    double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims,
+    int start_fpt, int nFaces, int nFptsPerFace)
 {
   int threads = 192;
   int blocks = (nFaces + threads - 1) / threads;
@@ -1512,6 +1513,8 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
     tot_force[d] = thrust::reduce(f_ptr, f_ptr+nFaces, 0.);
     tot_moment[d] = thrust::reduce(m_ptr, m_ptr+nFaces, 0.);
   }
+
+  check_error();
 }
 
 __global__

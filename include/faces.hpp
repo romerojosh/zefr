@@ -136,7 +136,6 @@ class Faces
     mdvector_gpu<char> rus_bias_d, LDG_bias_d;
 
     mdvector_gpu<double> Vg_d;
-    mdvector_gpu<double> force_d, moment_d; //! Force / Moment *per boundary face* for reduction op
 
     /* Structures for implicit method */
     mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;

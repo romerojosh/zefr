@@ -1679,6 +1679,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.nFaces = 0;
     geo.faceList.resize(0);
 
+    geo.nBndFaces = geo.bnd_faces.size();
+
     /* Additional Connectivity Arrays */
 #ifdef _MPI
     geo.mpiFaces.resize(0);

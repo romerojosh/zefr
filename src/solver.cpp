@@ -676,6 +676,7 @@ void FRSolver::solver_data_to_device()
 
       nodes_ini_d = eles->nodes;
       nodes_til_d = eles->nodes;
+      geo.x_cg_d = geo.x_cg;
       x_ini_d = geo.x_cg;
       x_til_d = geo.x_cg;
       v_ini_d = geo.vel_cg;
@@ -1310,6 +1311,16 @@ void FRSolver::initialize_U()
     eles->dF_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims, eles->nDims});
     eles->dFn_fpts.assign({eles->nFpts, eles->nEles, eles->nVars});
     eles->tempF_fpts.assign({eles->nFpts, eles->nEles});
+
+#ifdef _GPU
+    if (input->motion_type == RIGID_BODY)
+    {
+      force_d.set_size({geo.nBndFaces, geo.nDims});
+      moment_d.set_size({geo.nBndFaces, geo.nDims});
+      device_fill(force_d, force_d.max_size(), 0.);
+      device_fill(moment_d, moment_d.max_size(), 0.);
+    }
+#endif
   }
 
   /* Allocate memory for implicit method data structures */
@@ -5384,13 +5395,13 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   std::array<double,3> force = {0,0,0}, torque = {0,0,0};
 #ifdef _CPU
-//  compute_moments(force,torque);
+  compute_moments(force,torque);
 #endif
 #ifdef _GPU
-//  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
-//      faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,faces->force_d,faces->moment_d,input->gamma,input->rt,
-//      input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
-//      geo.nBndFaces,geo.nFptsPerFace);
+  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
+      faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,force_d,moment_d,input->gamma,input->rt,
+      input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
+      geo.nBndFaces,geo.nFptsPerFace);
 #endif
 
 #ifdef _MPI
@@ -5400,7 +5411,8 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   // Add in force from gravity
   force[2] -= input->g*geo.mass;
-
+  if (current_iter % 100 == 0 && stage == 0)
+    printf("force = %.3e  %.3e  %.3e\n",force[0],force[1],force[2]);
   int c1[3] = {1,2,0}; // Cross-product index maps
   int c2[3] = {2,0,1};
 
