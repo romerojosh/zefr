@@ -255,6 +255,9 @@ InputStruct read_input_file(std::string inputfile)
       // Acceleration due to gravity [NOTE: assumed along -z axis]
       read_param(f, "g", input.g, 0.);
 
+      // Do fully dynamic 6DOF simulation by computing forces & moments on body
+      read_param(f, "full_6dof", input.full_6dof, false);
+
       // Initial translational velocity
       read_param(f, "vx0", input.v0[0], 0.);
       read_param(f, "vy0", input.v0[1], 0.);

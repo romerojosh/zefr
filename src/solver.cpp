@@ -265,7 +265,7 @@ void FRSolver::setup_update()
         rk_c(i) += rk_beta(j);
     }
 
-    expa = input->pi_alpha / 4.;
+    expa = input->pi_alpha / 4.; // 4 := order of time-stepping scheme
     expb = input->pi_beta / 4.;
     prev_err = 1.;
 
@@ -324,7 +324,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
   {
     std::stringstream ss;
 
-    ss << restart_file;
+    ss << restart_file << "/" << restart_file;
 
     if (input->overset)
     {
@@ -379,13 +379,6 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 
   unsigned int nEles = eles->nEles;
 
-  if (input->overset)
-  {
-    /* Remove blanked elements from total cell count */
-    for (int ele = 0; ele < eles->nEles; ele++)
-      if (geo.iblank_cell(ele) != NORMAL) nEles--;
-  }
-
   bool has_gv = false; // can do the same here for all 'extra' fields
 
   /* Load data from restart file */
@@ -413,8 +406,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
     }
     if (param == "V_CG")
     {
-      geo.x_cg.assign({3});
-      f >> geo.x_cg(0) >> geo.x_cg(1) >> geo.x_cg(2);
+      geo.vel_cg.assign({3});
+      f >> geo.vel_cg(0) >> geo.vel_cg(1) >> geo.vel_cg(2);
     }
     if (param == "ROT-Q")
     {
@@ -425,6 +418,12 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
     {
       geo.omega.assign({3});
       f >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
+    }
+    if (param == "IBLANK" && input->overset)
+    {
+      geo.iblank_cell.assign({eles->nEles});
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        f >> geo.iblank_cell(ele);
     }
     if (param == "grid_velocity")
     {
@@ -450,7 +449,6 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 
         for (unsigned int ele = 0; ele < nEles; ele++)
         {
-          /// TODO: make sure this is setup correctly first
           if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
           for (unsigned int rpt = 0; rpt < nRpts; rpt++)
@@ -679,10 +677,13 @@ void FRSolver::solver_data_to_device()
       geo.x_cg_d = geo.x_cg;
       x_ini_d = geo.x_cg;
       x_til_d = geo.x_cg;
+      geo.vel_cg_d = geo.vel_cg;
       v_ini_d = geo.vel_cg;
       v_til_d = geo.vel_cg;
+      geo.q_d = geo.q;
       q_ini_d = geo.q;
       q_til_d = geo.q;
+      geo.qdot_d = geo.qdot;
       qdot_ini_d = geo.qdot;
       qdot_til_d = geo.qdot;
     }
@@ -1315,10 +1316,13 @@ void FRSolver::initialize_U()
 #ifdef _GPU
     if (input->motion_type == RIGID_BODY)
     {
-      force_d.set_size({geo.nBndFaces, geo.nDims});
-      moment_d.set_size({geo.nBndFaces, geo.nDims});
-      device_fill(force_d, force_d.max_size(), 0.);
-      device_fill(moment_d, moment_d.max_size(), 0.);
+      if (geo.nBndFaces != 0)
+      {
+        force_d.set_size({geo.nBndFaces, geo.nDims});
+        moment_d.set_size({geo.nBndFaces, geo.nDims});
+        device_fill(force_d, force_d.max_size(), 0.);
+        device_fill(moment_d, moment_d.max_size(), 0.);
+      }
     }
 #endif
   }
@@ -3200,6 +3204,15 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<!-- ORDER " << input->order << " -->" << std::endl;
   f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
   f << "<!-- ITER " << iter << " -->" << std::endl;
+  if (input->overset)
+  {
+    f << "<!-- IBLANK ";
+    for (unsigned int ic = 0; ic < eles->nEles; ic++)
+    {
+      f << geo.iblank_cell(ic) << " ";
+    }
+    f << " -->" << std::endl;
+  }
 
   if (input->motion)
   {
@@ -5394,25 +5407,29 @@ void FRSolver::rigid_body_update(unsigned int stage)
   // ---- Compute forces & moments in the global coordinate system ----
 
   std::array<double,3> force = {0,0,0}, torque = {0,0,0};
+
+  if (input->full_6dof)
+  {
 #ifdef _CPU
-  compute_moments(force,torque);
+    compute_moments(force,torque);
 #endif
 #ifdef _GPU
-  compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
-      faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,force_d,moment_d,input->gamma,input->rt,
-      input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
-      geo.nBndFaces,geo.nFptsPerFace);
+    compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
+        faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,force_d,moment_d,input->gamma,input->rt,
+        input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
+        geo.nBndFaces,geo.nFptsPerFace);
 #endif
 
 #ifdef _MPI
-  MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
-  MPI_Allreduce(MPI_IN_PLACE, torque.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
+    MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
+    MPI_Allreduce(MPI_IN_PLACE, torque.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
 #endif
+  }
 
   // Add in force from gravity
   force[2] -= input->g*geo.mass;
-  if (current_iter % 100 == 0 && stage == 0)
-    printf("force = %.3e  %.3e  %.3e\n",force[0],force[1],force[2]);
+//  if (current_iter % 100 == 0 && stage == 0)
+//    printf("force = %.3e  %.3e  %.3e\n",force[0],force[1],force[2]);
   int c1[3] = {1,2,0}; // Cross-product index maps
   int c2[3] = {2,0,1};
 

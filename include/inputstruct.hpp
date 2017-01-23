@@ -139,7 +139,7 @@ struct InputStruct
   std::string restart_case;
 
   /* --- Overset / Moving-Grid Variables --- */
-  bool motion, overset, use_lgp;
+  bool motion, overset, use_lgp, full_6dof;
   unsigned int gridID = 0;
   unsigned int oversetMethod, nGrids, quad_order, motion_type;
   std::vector<std::string> oversetGrids;
