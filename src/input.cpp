@@ -252,6 +252,9 @@ InputStruct read_input_file(std::string inputfile)
     }
     else if (input.motion_type == RIGID_BODY)
     {
+      if (input.nDims != 3)
+        ThrowException("Rigid-Body motion implemented in 3D only");
+
       // Acceleration due to gravity [NOTE: assumed along -z axis]
       read_param(f, "g", input.g, 0.);
 

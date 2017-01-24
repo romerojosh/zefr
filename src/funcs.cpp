@@ -731,6 +731,14 @@ mdvector<double> getRotationMatrix(const Quat &q)
   return mat;
 }
 
+mdvector<double> identityMatrix(unsigned int N)
+{
+  mdvector<double> mat({N,N}, 0.0);
+  for (unsigned int i = 0; i < N; i++)
+    mat(i,i) = 1;
+  return mat;
+}
+
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
 {
   if (ijk_maps_quad.count(nNodes))

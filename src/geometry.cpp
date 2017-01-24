@@ -121,8 +121,11 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     // Initial translational & angular velocity
     for (int d = 0; d < 3; d++)
     {
-      geo.omega(d) = input->w0[d];      // Global coords
-      geo.qdot(d+1) = 0.5*input->w0[d]; // Body coords
+      if (geo.gridID == 0)
+      {
+        geo.omega(d) = input->w0[d];      // Global coords
+        geo.qdot(d+1) = 0.5*input->w0[d]; // Body coords
+      }
       geo.vel_cg(d) = input->v0[d];
     }
 

@@ -167,6 +167,8 @@ double determinant(const mdvector<double> &mat);
 mdvector<double> getRotationMatrix(double axis[3], double angle);
 mdvector<double> getRotationMatrix(const Quat &q);
 
+mdvector<double> identityMatrix(unsigned int N);
+
 template<typename T>
 int findFirst(const std::vector<T>& vec, T val)
 {

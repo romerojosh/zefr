@@ -99,6 +99,10 @@ int main(int argc, char* argv[])
   input.rank = rank;
   input.nRanks = nRanks;
 
+#ifdef _GPU
+  initialize_cuda();
+#endif
+
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   FRSolver solver(&input);
   solver.setup(comm);
@@ -109,10 +113,6 @@ int main(int argc, char* argv[])
     if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
     pmg.setup(&input, solver, comm);
   }
-
-#ifdef _GPU
-  initialize_cuda();
-#endif
 
   /* Open file to write history output */
   std::ofstream hist_file;
@@ -242,6 +242,10 @@ Zefr::Zefr(void)
   }
 
   solver = NULL;
+
+#ifdef _GPU
+  initialize_cuda();
+#endif
 }
 
 #ifdef _MPI
@@ -262,7 +266,7 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
   if (nDevices < nRanks)
   {
     //ThrowException("Not enough GPUs for this run. Allocate more!");
-  }
+  } 
 
   int grank = rank;
   MPI_Comm_rank(worldComm,&grank);
@@ -316,10 +320,6 @@ void Zefr::setup_solver(void)
     if (rank == 0) std::cout << "Setting up multigrid..." << std::endl;
     pmg->setup(&input, *solver, myComm);
   }
-
-#ifdef _GPU
-  initialize_cuda();
-#endif
 
   /* Open files to write residual / force / error history output */
   if (input.restart) /* If restarted, append to existing file */

@@ -73,7 +73,7 @@ endif
 # Setting HDF5 flags
 ifneq ($(strip $(HDF5)),NO)
 	INCS += -I$(strip $(HDF5_INC_DIR))/
-	LIBS += -L$(strip $(HDF5_LIB_DIR))/ -lhdf5 -lhdf5_cpp
+	LIBS += -L$(strip $(HDF5_LIB_DIR))/ -lhdf5 -lhdf5_cpp -Wl,-rpath=$(strip $(HDF5_LIB_DIR))/
 endif
 
 # Setting Architecture flags

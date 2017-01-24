@@ -166,7 +166,10 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
   if (input->restart && input->motion && input->motion_type == RIGID_BODY)
   {
     Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
-    geo.Rmat = getRotationMatrix(q);
+    if (geo.gridID == 0)
+      geo.Rmat = getRotationMatrix(q);
+    else
+      geo.Rmat = identityMatrix(3);
 
     // Wmat = Matrix to get velocity due to rotation
     // W = 'Spin' of omega (cross-product in matrix form)
@@ -2251,18 +2254,6 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     // Update grid to position of next time step
     rigid_body_update(stage);
     move(flow_time);
-
-#ifdef _BUILD_LIB
-    // Update the overset connectivity to the new grid positions
-    if (input->overset && input->motion)
-    {
-      ZEFR->tg_preprocess();
-      ZEFR->tg_process_connectivity();
-#ifdef _GPU
-      ZEFR->update_iblank_gpu();
-#endif
-    }
-#endif
   }
 
 //  if (input->motion_type == RIGID_BODY)
@@ -2655,22 +2646,22 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
       ss << "x-cg =";
       for (int d = 0; d < geo.nDims; d++)
-        ss << " " << geo.x_cg(d);
+        ss << " " << std::scientific << std::setprecision(16) << geo.x_cg(d);
       ss << std::endl;
 
       ss << "v-cg =";
       for (int d = 0; d < geo.nDims; d++)
-        ss << " " << geo.vel_cg(d);
+        ss << " " << std::scientific << std::setprecision(16) << geo.vel_cg(d);
       ss << std::endl;
 
       ss << "rot-q =";
       for (int d = 0; d < 4; d++)
-        ss << " " << geo.q(d);
+        ss << " " << std::scientific << std::setprecision(16) << geo.q(d);
       ss << std::endl;
 
       ss << "omega =";
       for (int d = 0; d < 3; d++)
-        ss << " " << geo.omega(d);
+        ss << " " << std::scientific << std::setprecision(16) << geo.omega(d);
       ss << std::endl;
 
       ss << std::endl;
@@ -3062,6 +3053,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
   std::string str, key, tmp;
   std::stringstream ss;
   std::istringstream stats(geo.stats);
+
   while (std::getline(stats, str))
   {
     ss.str(str);  ss >> key;
@@ -3089,9 +3081,23 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     {
       geo.omega.assign({3});
       ss >> tmp >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
+
+      geo.qdot.assign({4});
+      for (int i = 0; i < 3; i++)
+        geo.qdot(i+1) = 0.5*geo.omega(i);
     }
 
     ss.str(""); ss.clear();
+    key.clear();
+  }
+
+  if (input->motion_type == RIGID_BODY)
+  {
+    Quat q(geo.q(0), geo.q(1), geo.q(2), geo.q(3));
+    Quat omega(0., geo.omega(0), geo.omega(1), geo.omega(2));
+    Quat qdot = 0.5*omega*q;
+    for (int i = 0; i < 4; i++)
+      geo.qdot(i) = qdot[i];
   }
 }
 
@@ -5379,24 +5385,26 @@ void FRSolver::move(double time)
 #endif
 
 #ifdef _GPU
-  move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
-      motion_vars_d, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
-
-  check_error();
+  if (input->motion_type != RIGID_BODY)
+  {
+    move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
+                      motion_vars_d, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
+    check_error();
+  }
 #endif
 
   eles->move(faces);
 
 #ifdef _BUILD_LIB
-    // Update the overset connectivity to the new grid positions
-    if (input->overset)
-    {
-      ZEFR->tg_preprocess();
-      ZEFR->tg_process_connectivity();
+  // Update the overset connectivity to the new grid positions
+  if (input->overset)
+  {
+    ZEFR->tg_preprocess();
+    ZEFR->tg_process_connectivity();
 #ifdef _GPU
-      ZEFR->update_iblank_gpu();
+    ZEFR->update_iblank_gpu();
 #endif
-    }
+  }
 #endif
 }
 
@@ -5408,7 +5416,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   std::array<double,3> force = {0,0,0}, torque = {0,0,0};
 
-  if (input->full_6dof)
+  if (input->full_6dof && input->gridID == 0) // Don't apply to overset bkgd grids
   {
 #ifdef _CPU
     compute_moments(force,torque);
@@ -5421,7 +5429,8 @@ void FRSolver::rigid_body_update(unsigned int stage)
 #endif
 
 #ifdef _MPI
-    MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
+    // Update translational motion in sync across grids, but not rotation
+    MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, worldComm);
     MPI_Allreduce(MPI_IN_PLACE, torque.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
 #endif
   }
@@ -5557,15 +5566,13 @@ void FRSolver::rigid_body_update(unsigned int stage)
   geo.dRmat_d = geo.dRmat;
   geo.omega_d = geo.omega;
   geo.Wmat_d = geo.Wmat;
-
-  eles->move(faces);
 #endif
 
 #ifdef _BUILD_LIB
   // Rmat transforms body->global, but is stored column-major here
   // Transpose (accessing as row-major) transforms global->body as TIOGA needs
-  if (input->overset)
-    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+///  if (input->overset)
+///    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
 #endif
 }
 
