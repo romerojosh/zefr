@@ -2,7 +2,7 @@
 #include "tiogaInterface.h"
 
 #include "mpi.h"
-//#include <valgrind/callgrind.h>
+#include <valgrind/callgrind.h>
 
 int main(int argc, char *argv[])
 {
@@ -117,6 +117,8 @@ int main(int argc, char *argv[])
    * data interpolation.  Likewise with moving grids and connectivity update */
   z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_, tioga_dataupdate_ab);
 
+  z->set_rigid_body_callbacks(tioga_set_transform);
+
   if (nGrids > 1)
   {
     tioga_preprocess_grids_();
@@ -138,7 +140,7 @@ int main(int argc, char *argv[])
   Timer tgTime("TIOGA Interp Time: ");
   inp.waitTimer.setPrefix("ZEFR MPI Time: ");
 
-//  CALLGRIND_START_INSTRUMENTATION;
+  CALLGRIND_START_INSTRUMENTATION;
 
   for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
@@ -146,20 +148,20 @@ int main(int argc, char *argv[])
     z->do_step();
     runTime.stopTimer();
 
-    if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
-      z->write_residual();
+//    if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
+//      z->write_residual();
 
-    if (inp.write_freq > 0 and (iter%inp.write_freq == 0 or iter == inp.n_steps))
-      z->write_solution();
+//    if (inp.write_freq > 0 and (iter%inp.write_freq == 0 or iter == inp.n_steps))
+//      z->write_solution();
 
-    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
-      z->write_forces();
+//    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
+//      z->write_forces();
 
-    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
-      z->write_error();
+//    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
+//      z->write_error();
   }
 
-//  CALLGRIND_STOP_INSTRUMENTATION;
+  CALLGRIND_STOP_INSTRUMENTATION;
 
 //  z->write_solution();
 

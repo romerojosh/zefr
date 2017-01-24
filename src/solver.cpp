@@ -315,7 +315,7 @@ void FRSolver::setup_output()
   }
 
 #ifdef _MPI
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(worldComm);
 #endif
        
   eles->setup_ppt_connectivity();
@@ -5399,7 +5399,8 @@ void FRSolver::move(double time)
   // Update the overset connectivity to the new grid positions
   if (input->overset)
   {
-    ZEFR->tg_preprocess();
+    if (input->motion_type != RIGID_BODY)
+      ZEFR->tg_preprocess();
     ZEFR->tg_process_connectivity();
 #ifdef _GPU
     ZEFR->update_iblank_gpu();
@@ -5571,8 +5572,8 @@ void FRSolver::rigid_body_update(unsigned int stage)
 #ifdef _BUILD_LIB
   // Rmat transforms body->global, but is stored column-major here
   // Transpose (accessing as row-major) transforms global->body as TIOGA needs
-///  if (input->overset)
-///    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+  if (input->overset)
+    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
 #endif
 }
 

@@ -74,6 +74,8 @@ if nGrids > 1:
     z.set_tioga_callbacks(tg.tioga_preprocess_grids_, 
         tg.tioga_performconnectivity_, tg.tioga_dataupdate_ab)
 
+    z.set_rigid_body_callbacks(tg.tioga_set_transform)
+
     # Perform overset connectivity / hole blanking
     print("Beginning connectivity...")
     tgTime = zefr.Timer("TIOGA Time: ")
