@@ -1168,7 +1168,10 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
             Jacobian(i,j) = jaco_spts(spt,e,i,j);
           Jacobian(i,nDims) = grid_vel_spts(spt,e,i);
         }
-        auto S = adjoint(Jacobian);
+
+        if (tmp_S.size() != 16)
+          tmp_S.resize({4,4});
+        adjoint_4x4(Jacobian.data(), S.data());
 
         for (uint dim1 = 0; dim1 < nDims; dim1++)
           for (uint dim2 = 0; dim2 < nDims; dim2++)
@@ -2887,6 +2890,32 @@ std::vector<double> Elements::getBoundingBox(int ele)
   return bbox;
 }
 
+void Elements::getBoundingBox(int ele, double bbox[6])
+{
+  for (unsigned int i = 0; i < 3; i++)
+  {
+    bbox[i]   =  INFINITY;
+    bbox[i+3] = -INFINITY;
+  }
+
+  for (unsigned int node = 0; node < nNodes; node++)
+  {
+    unsigned int nd = geo->ele2nodes(node, ele);
+    for (int dim = 0; dim < nDims; dim++)
+    {
+      double pos = geo->coord_nodes(dim,nd);
+      bbox[dim]   = std::min(bbox[dim],  pos);
+      bbox[dim+3] = std::max(bbox[dim+3],pos);
+    }
+  }
+
+  if (nDims == 2)
+  {
+    bbox[2] = 0;
+    bbox[5] = 0;
+  }
+}
+
 bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 {
   // First, do a quick check to see if the point is even close to being in the element
@@ -2898,7 +2927,9 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   xmax = ymax = zmax = -1e15;
   double eps = 1e-10;
 
-  auto box = getBoundingBox(ele);
+  double box[6];
+//  auto box = getBoundingBox(ele);
+  getBoundingBox(ele,box);
   xmin = box[0];  ymin = box[1];  zmin = box[2];
   xmax = box[3];  ymax = box[4];  zmax = box[5];
 
@@ -2915,10 +2946,17 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
   double tol = 1e-12*h;
 
-  mdvector<double> shape({nNodes});
-  mdvector<double> dshape({nNodes,nDims});
-  mdvector<double> grad({nDims,nDims});
-  mdvector<double> ginv({nDims,nDims});
+//  mdvector<double> tmp_shape({nNodes});
+//  mdvector<double> tmp_dshape({nNodes,nDims});
+//  mdvector<double> tmp_grad({nDims,nDims});
+//  mdvector<double> tmp_ginv({nDims,nDims});
+  if (tmp_shape.size() != nNodes)
+  {
+    tmp_shape.resize({nNodes});
+    tmp_dshape.resize({nNodes, nDims});
+    tmp_grad.resize({nDims, nDims});
+    tmp_ginv.resize({nDims, nDims});
+  }
 
   int iter = 0;
   int iterMax = 20;
@@ -2927,11 +2965,11 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
   while (norm > tol && iter < iterMax)
   {
-    calc_shape(shape, shape_order, rst);
-    calc_d_shape(dshape, shape_order, rst);
+    calc_shape(tmp_shape, shape_order, rst);
+    calc_d_shape(tmp_dshape, shape_order, rst);
 
     point dx = pos;
-    grad.fill(0);
+    tmp_grad.fill(0);
     for (int node = 0; node < nNodes; node++)
     {
       int nd = geo->ele2nodes(node, ele);
@@ -2939,20 +2977,20 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
       {
         for (int j = 0; j < nDims; j++)
         {
-          grad(i,j) += geo->coord_nodes(i,nd)*dshape(node,j);
+          tmp_grad(i,j) += geo->coord_nodes(i,nd)*tmp_dshape(node,j);
         }
-        dx[i] -= shape(node)*geo->coord_nodes(i,nd);
+        dx[i] -= tmp_shape(node)*geo->coord_nodes(i,nd);
       }
     }
 
-    double detJ = determinant(grad);
+    double detJ = det_3x3(tmp_grad.data());
 
-    adjoint(grad,ginv);
+    adjoint_3x3(tmp_grad.data(),tmp_ginv.data());
 
     point delta = {0,0,0};
     for (int i=0; i<nDims; i++)
       for (int j=0; j<nDims; j++)
-        delta[i] += ginv(i,j)*dx[j]/detJ;
+        delta[i] += tmp_ginv(i,j)*dx[j]/detJ;
 
     norm = dx.norm();
     for (int i = 0; i < nDims; i++)

@@ -52,6 +52,10 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   nDims = 3;
   nFaces = 6;
   nNodes = geo->nNodesPerEle;
+  nNdSide = cbrt(nNodes);
+
+  if (nNdSide*nNdSide*nNdSide != nNodes && !input->serendipity)
+    ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
   
   geo->nFacesPerEle = 6;
   geo->nNodesPerFace = 4;
@@ -717,27 +721,33 @@ void Hexas::calc_shape(mdvector<double> &shape_val, unsigned int shape_order,
   }
   else
   {
-    int nSide = cbrt(nNodes);
+//    int nSide = cbrt(nNodes);
 
-    if (nSide*nSide*nSide != nNodes)
+//    if (nSide*nSide*nSide != nNodes)
+//    {
+//      std::cout << "nNodes = " << nNodes << std::endl;
+//      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
+//    }
+
+    if (xlist.size() != nNdSide)
     {
-      std::cout << "nNodes = " << nNodes << std::endl;
-      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
+      xlist.resize(nNdSide);
+      double dxi = 2./(nNdSide-1);
+
+      for (int i=0; i<nNdSide; i++)
+        xlist[i] = -1. + i*dxi;
     }
 
-    std::vector<double> xlist(nSide);
-    double dxi = 2./(nSide-1);
-
-    for (int i=0; i<nSide; i++)
-      xlist[i] = -1. + i*dxi;
-
-    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
+    if (ijk2gmsh.size() != nNodes)
+      ijk2gmsh = structured_to_gmsh_hex(nNodes);
 
     // Pre-compute Lagrange function values to avoid redundant calculations
-    std::vector<double> lag_i(nSide), lag_j(nSide), lag_k(nSide);
+//    std::vector<double> lag_i(nSide), lag_j(nSide), lag_k(nSide);
+    if (lag_i.size() != nNdSide)
+      lag_i.resize(nNdSide); lag_j.resize(nNdSide); lag_k.resize(nNdSide);
 
 #pragma omp parallel for
-    for (int i = 0; i < nSide; i++)
+    for (int i = 0; i < nNdSide; i++)
     {
       lag_i[i] = Lagrange(xlist,  xi, i);
       lag_j[i] = Lagrange(xlist, eta, i);
@@ -745,10 +755,10 @@ void Hexas::calc_shape(mdvector<double> &shape_val, unsigned int shape_order,
     }
 
 #pragma omp parallel for collapse(3)
-    for (int k = 0; k < nSide; k++)
-      for (int j = 0; j < nSide; j++)
-        for (int i = 0; i < nSide; i++)
-          shape_val(ijk2gmsh[i+nSide*(j+nSide*k)]) = lag_i[i] * lag_j[j] * lag_k[k];
+    for (int k = 0; k < nNdSide; k++)
+      for (int j = 0; j < nNdSide; j++)
+        for (int i = 0; i < nNdSide; i++)
+          shape_val(ijk2gmsh[i+nNdSide*(j+nNdSide*k)]) = lag_i[i] * lag_j[j] * lag_k[k];
   }
 }
 
@@ -839,25 +849,36 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, unsigned int shape_order,
   }
   else
   {
-    int nSide = cbrt(nNodes);
+//    int nSide = cbrt(nNodes);
 
-    if (nSide*nSide*nSide != nNodes)
-      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
+//    if (nSide*nSide*nSide != nNodes)
+//      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
 
-    std::vector<double> xlist(nSide);
-    double dxi = 2./(nSide-1);
+    //std::vector<double> xlist(nSide);
+    if (xlist.size() != nNdSide)
+    {
+      xlist.resize(nNdSide);
+      double dxi = 2./(nNdSide-1);
 
-    for (int i=0; i<nSide; i++)
-      xlist[i] = -1. + i*dxi;
+      for (int i=0; i<nNdSide; i++)
+        xlist[i] = -1. + i*dxi;
+    }
 
-    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
+//    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
+    if (ijk2gmsh.size() != nNodes)
+      ijk2gmsh = structured_to_gmsh_hex(nNodes);
 
     // Pre-compute Lagrange function values to save redundant calculations
-    std::vector<double>  lag_i(nSide),  lag_j(nSide),  lag_k(nSide);
-    std::vector<double> dlag_i(nSide), dlag_j(nSide), dlag_k(nSide);
+    //std::vector<double>  lag_i(nSide),  lag_j(nSide),  lag_k(nSide);
+    //std::vector<double> dlag_i(nSide), dlag_j(nSide), dlag_k(nSide);
+    if (dlag_i.size() != nNdSide)
+    {
+      lag_i.resize(nNdSide);   lag_j.resize(nNdSide);  lag_k.resize(nNdSide);
+      dlag_i.resize(nNdSide); dlag_j.resize(nNdSide); dlag_k.resize(nNdSide);
+    }
 
 #pragma omp parallel for
-    for (int i = 0; i < nSide; i++)
+    for (int i = 0; i < nNdSide; i++)
     {
       lag_i[i] = Lagrange(xlist,  xi, i);  dlag_i[i] = dLagrange(xlist,  xi, i);
       lag_j[i] = Lagrange(xlist, eta, i);  dlag_j[i] = dLagrange(xlist, eta, i);
@@ -865,13 +886,13 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, unsigned int shape_order,
     }
 
 #pragma omp parallel for collapse(3)
-    for (int k = 0; k < nSide; k++)
+    for (int k = 0; k < nNdSide; k++)
     {
-      for (int j = 0; j < nSide; j++)
+      for (int j = 0; j < nNdSide; j++)
       {
-        for (int i = 0; i < nSide; i++)
+        for (int i = 0; i < nNdSide; i++)
         {
-          int pt = i + nSide * (j + nSide * k);
+          int pt = i + nNdSide * (j + nNdSide * k);
           dshape_val(ijk2gmsh[pt],0) = dlag_i[i] *  lag_j[j] *  lag_k[k];
           dshape_val(ijk2gmsh[pt],1) =  lag_i[i] * dlag_j[j] *  lag_k[k];
           dshape_val(ijk2gmsh[pt],2) =  lag_i[i] *  lag_j[j] * dlag_k[k];

@@ -152,7 +152,7 @@ lib: $(SOBJS)
 test: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test: lib
 	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(TIOGA_LIB_DIR)/ -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) -o $(SWIGDIR)/testZefr
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr -L$(TIOGA_LIB_DIR)/ -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) $(LIBS)
 
 # Compile the testZefr wrapper program using static linking
 .PHONY: test_static

@@ -83,6 +83,15 @@ class Elements
 
     mdvector<double> inv_jaco_spts_init;
 
+    /* Performance hacks for Hexas::calc_shape and calc_d_shape, and others */
+    unsigned int nNdSide;
+    std::vector<double> xlist;
+    std::vector<double> lag_i, lag_j, lag_k;
+    std::vector<double> dlag_i, dlag_j, dlag_k;
+    std::vector<int> ijk2gmsh;
+    mdvector<double> tmp_shape, tmp_dshape, tmp_grad, tmp_ginv;
+    mdvector<double> tmp_S;
+
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
     mdvector<double> oppE_ppts, oppE_qpts, oppRestart;
@@ -245,6 +254,7 @@ class Elements
     void get_interp_weights(double* rst, double* weights, int& nweights, int buffSize);
 
     std::vector<double> getBoundingBox(int ele);
+    void getBoundingBox(int ele, double bbox[6]);
 
 #ifdef _GPU
     void donor_u_from_device(int* donorIDs_in, int nDonors_in);

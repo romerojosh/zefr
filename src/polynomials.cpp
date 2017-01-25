@@ -24,59 +24,63 @@
 #include "macros.hpp"
 #include "polynomials.hpp"
 
-double Lagrange(const std::vector<double> &xiGrid, double xi, unsigned int mode)
-{
-  return Lagrange(xiGrid, mode, xi);
-}
+//double Lagrange(const std::vector<double> &xiGrid, double xi, unsigned int mode)
+//{
+//  return Lagrange(xiGrid, mode, xi);
+//}
 
-double Lagrange(const std::vector<double> &xiGrid, unsigned int mode, double xi)
-{
-  double val = 1.0;
-  unsigned int npts = (unsigned int) xiGrid.size();
+//double Lagrange(const std::vector<double> &xiGrid, unsigned int mode, double xi)
+//{
+//  double val = 1.0;
+//  unsigned int npts = (unsigned int) xiGrid.size();
 
-  assert(mode < npts);
+//  assert(mode < npts);
 
-  for (unsigned int i = 0; i < npts; i++)
-    if (i != mode)
-      val *= (xi - xiGrid[i])/(xiGrid[mode] - xiGrid[i]);
+//  for (unsigned int i = 0; i < mode; i++)
+//    val *= (xi - xiGrid[i])/(xiGrid[mode] - xiGrid[i]);
 
-  return val;
-}
+//  for (unsigned int i = mode + 1; i < npts; i++)
+//    val *= (xi - xiGrid[i])/(xiGrid[mode] - xiGrid[i]);
 
-double dLagrange(const std::vector<double>& xiGrid, double xi, unsigned int mode)
-{
-  return Lagrange_d1(xiGrid, mode, xi);
-}
+//  return val;
+//}
 
-double Lagrange_d1(const std::vector<double>& xiGrid, unsigned int mode, double xi)
-{
-  double val = 0.0;
-  unsigned int npts = (unsigned int) xiGrid.size();
+//double dLagrange(const std::vector<double>& xiGrid, double xi, unsigned int mode)
+//{
+//  return Lagrange_d1(xiGrid, mode, xi);
+//}
 
-  assert(mode < npts);
+//double Lagrange_d1(const std::vector<double>& xiGrid, unsigned int mode, double xi)
+//{
+//  double val = 0.0;
+//  unsigned int npts = (unsigned int) xiGrid.size();
 
-  /* Compute normalization constant */
-  double den = 1.0;
-  for (unsigned int i = 0; i < npts; i++)
-    if (i != mode)
-      den *= (xiGrid[mode] - xiGrid[i]);
+//  assert(mode < npts);
 
-  /* Compute sum of products */
-  for (unsigned int j = 0; j < npts; j++)
-  {
-    if (j == mode)
-      continue;
+//  /* Compute normalization constant */
+//  double den = 1.0;
+//  for (unsigned int i = 0; i < mode; i++)
+//    den *= (xiGrid[mode] - xiGrid[i]);
 
-    double term = 1.0;
-    for (unsigned int i = 0; i < npts; i++)
-      if (i != mode and i != j)
-        term *= (xi - xiGrid[i]);
+//  for (unsigned int i = mode+1; i < npts; i++)
+//    den *= (xiGrid[mode] - xiGrid[i]);
 
-    val += term;
-  } 
+//  /* Compute sum of products */
+//  for (unsigned int j = 0; j < npts; j++)
+//  {
+//    if (j == mode)
+//      continue;
 
-  return val/den;
-}
+//    double term = 1.0;
+//    for (unsigned int i = 0; i < npts; i++)
+//      if (i != mode and i != j)
+//        term *= (xi - xiGrid[i]);
+
+//    val += term;
+//  }
+
+//  return val/den;
+//}
 
 double Legendre(unsigned int P, double xi)
 {

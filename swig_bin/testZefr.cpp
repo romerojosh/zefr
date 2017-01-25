@@ -148,17 +148,17 @@ int main(int argc, char *argv[])
     z->do_step();
     runTime.stopTimer();
 
-//    if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
-//      z->write_residual();
+    if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
+      z->write_residual();
 
-//    if (inp.write_freq > 0 and (iter%inp.write_freq == 0 or iter == inp.n_steps))
-//      z->write_solution();
+    if (inp.write_freq > 0 and (iter%inp.write_freq == 0 or iter == inp.n_steps))
+      z->write_solution();
 
-//    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
-//      z->write_forces();
+    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
+      z->write_forces();
 
-//    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
-//      z->write_error();
+    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
+      z->write_error();
   }
 
   CALLGRIND_STOP_INSTRUMENTATION;

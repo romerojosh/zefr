@@ -157,10 +157,17 @@ unsigned int step(const T& val)
 
 //std::ostream& operator<<(std::ostream &os, const point &pt);
 
+double det_2x2(const double* mat);
+double det_3x3(const double* mat);
+double det_4x4(const double* mat);
+
 mdvector<double> adjoint(const mdvector<double> &mat);
 
 //! In-place matrix adjoint
 void adjoint(const mdvector<double> &mat, mdvector<double> &adj);
+
+void adjoint_3x3(double *mat, double *adj);
+void adjoint_4x4(double *mat, double *adj);
 
 double determinant(const mdvector<double> &mat);
 

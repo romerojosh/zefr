@@ -619,6 +619,53 @@ void adjoint(const mdvector<double> &mat, mdvector<double> &adj)
   }
 }
 
+void adjoint_3x3(double *mat, double *adj)
+{
+  double a11 = mat[0], a12 = mat[1], a13 = mat[2];
+  double a21 = mat[3], a22 = mat[4], a23 = mat[5];
+  double a31 = mat[6], a32 = mat[7], a33 = mat[8];
+
+  adj[0] = a22*a33 - a23*a32;
+  adj[1] = a13*a32 - a12*a33;
+  adj[2] = a12*a23 - a13*a22;
+
+  adj[3] = a23*a31 - a21*a33;
+  adj[4] = a11*a33 - a13*a31;
+  adj[5] = a13*a21 - a11*a23;
+
+  adj[6] = a21*a32 - a22*a31;
+  adj[7] = a12*a31 - a11*a32;
+  adj[8] = a11*a22 - a12*a21;
+}
+
+void adjoint_4x4(double *mat, double *adj)
+{
+  double a11 = mat[0],  a12 = mat[1],  a13 = mat[2],  a14 = mat[3];
+  double a21 = mat[4],  a22 = mat[5],  a23 = mat[6],  a24 = mat[7];
+  double a31 = mat[8],  a32 = mat[9],  a33 = mat[10], a34 = mat[11];
+  double a41 = mat[12], a42 = mat[13], a43 = mat[14], a44 = mat[15];
+
+  adj[0] = -a24*a33*a42 + a23*a34*a42 + a24*a32*a43 - a22*a34*a43 - a23*a32*a44 + a22*a33*a44;
+  adj[1] =  a14*a33*a42 - a13*a34*a42 - a14*a32*a43 + a12*a34*a43 + a13*a32*a44 - a12*a33*a44;
+  adj[2] = -a14*a23*a42 + a13*a24*a42 + a14*a22*a43 - a12*a24*a43 - a13*a22*a44 + a12*a23*a44;
+  adj[3] =  a14*a23*a32 - a13*a24*a32 - a14*a22*a33 + a12*a24*a33 + a13*a22*a34 - a12*a23*a34;
+
+  adj[4] =  a24*a33*a41 - a23*a34*a41 - a24*a31*a43 + a21*a34*a43 + a23*a31*a44 - a21*a33*a44;
+  adj[5] = -a14*a33*a41 + a13*a34*a41 + a14*a31*a43 - a11*a34*a43 - a13*a31*a44 + a11*a33*a44;
+  adj[6] =  a14*a23*a41 - a13*a24*a41 - a14*a21*a43 + a11*a24*a43 + a13*a21*a44 - a11*a23*a44;
+  adj[7] = -a14*a23*a31 + a13*a24*a31 + a14*a21*a33 - a11*a24*a33 - a13*a21*a34 + a11*a23*a34;
+
+  adj[8] = -a24*a32*a41 + a22*a34*a41 + a24*a31*a42 - a21*a34*a42 - a22*a31*a44 + a21*a32*a44;
+  adj[9] =  a14*a32*a41 - a12*a34*a41 - a14*a31*a42 + a11*a34*a42 + a12*a31*a44 - a11*a32*a44;
+  adj[10]= -a14*a22*a41 + a12*a24*a41 + a14*a21*a42 - a11*a24*a42 - a12*a21*a44 + a11*a22*a44;
+  adj[11]=  a14*a22*a31 - a12*a24*a31 - a14*a21*a32 + a11*a24*a32 + a12*a21*a34 - a11*a22*a34;
+
+  adj[12]=  a23*a32*a41 - a22*a33*a41 - a23*a31*a42 + a21*a33*a42 + a22*a31*a43 - a21*a32*a43;
+  adj[13]= -a13*a32*a41 + a12*a33*a41 + a13*a31*a42 - a11*a33*a42 - a12*a31*a43 + a11*a32*a43;
+  adj[14]=  a13*a22*a41 - a12*a23*a41 - a13*a21*a42 + a11*a23*a42 + a12*a21*a43 - a11*a22*a43;
+  adj[15]= -a13*a22*a31 + a12*a23*a31 + a13*a21*a32 - a11*a23*a32 - a12*a21*a33 + a11*a22*a33;
+}
+
 double determinant(const mdvector<double> &mat)
 {
   auto dims = mat.shape();

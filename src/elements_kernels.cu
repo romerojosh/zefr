@@ -81,7 +81,7 @@ double determinant(double* mat, unsigned int M)
 }
 
 __device__
-void adjoint(double *mat, double *adj, int M)
+void device_adjoint(double *mat, double *adj, int M)
 {
   unsigned int N = M;
 
@@ -118,7 +118,7 @@ void adjoint(double *mat, double *adj, int M)
 }
 
 __device__
-void adjoint_4x4(double *mat, double *adj)
+void device_adjoint_4x4(double *mat, double *adj)
 {
   double a11 = mat[0],  a12 = mat[1],  a13 = mat[2],  a14 = mat[3];
   double a21 = mat[4],  a22 = mat[5],  a23 = mat[6],  a24 = mat[7];
