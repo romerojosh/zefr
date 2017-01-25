@@ -174,14 +174,16 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup positions of all element's shape nodes in one array */
   if (input->meshfile.find(".pyfr") != std::string::npos)
+  {
     nodes = geo->ele_nodes; /// TODO: setup for Gmsh grids as well
+  }
   else
+  {
     for (unsigned int dim = 0; dim < nDims; dim++)
       for (unsigned int ele = 0; ele < nEles; ele++)
         for (unsigned int node = 0; node < nNodes; node++)
-        {
           nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
-        }
+  }
 
   int ms = nSpts;
   int mf = nFpts;
@@ -1171,16 +1173,16 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
 
         if (tmp_S.size() != 16)
           tmp_S.resize({4,4});
-        adjoint_4x4(Jacobian.data(), S.data());
+        adjoint_4x4(Jacobian.data(), tmp_S.data());
 
         for (uint dim1 = 0; dim1 < nDims; dim1++)
           for (uint dim2 = 0; dim2 < nDims; dim2++)
             for (uint k = 0; k < nVars; k++)
-              divF_spts(spt,e,k,stage) += dF_spts(spt,e,k,dim1,dim2)*S(dim2,dim1);
+              divF_spts(spt,e,k,stage) += dF_spts(spt,e,k,dim1,dim2)*tmp_S(dim2,dim1);
 
         for (uint dim = 0; dim < nDims; dim++)
           for (uint k = 0; k < nVars; k++)
-            divF_spts(spt,e,k,stage) += dUr_spts(spt,e,k,dim)*S(dim,nDims);
+            divF_spts(spt,e,k,stage) += dUr_spts(spt,e,k,dim)*tmp_S(dim,nDims);
       }
     }
   }
@@ -2744,13 +2746,7 @@ void Elements::update_plot_point_coords(void)
 {
 #ifdef _GPU
   // Copy back, since updated only on GPU
-  geo->coord_nodes = geo->coord_nodes_d;
-
-#pragma omp parallel for collapse(3)
-  for (uint node = 0; node < nNodes; node++)
-    for (uint ele = 0; ele < nEles; ele++)
-      for (uint dim = 0; dim < nDims; dim++)
-        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+  nodes = nodes_d;
 #endif
 
   int mp = nPpts;
@@ -2918,9 +2914,6 @@ void Elements::getBoundingBox(int ele, double bbox[6])
 
 bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 {
-  // First, do a quick check to see if the point is even close to being in the element
-  point pos = point(xyz);
-
   double xmin, ymin, zmin;
   double xmax, ymax, zmax;
   xmin = ymin = zmin =  1e15;
@@ -2928,13 +2921,12 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   double eps = 1e-10;
 
   double box[6];
-//  auto box = getBoundingBox(ele);
   getBoundingBox(ele,box);
   xmin = box[0];  ymin = box[1];  zmin = box[2];
   xmax = box[3];  ymax = box[4];  zmax = box[5];
 
-  if (pos.x < xmin-eps || pos.y < ymin-eps || pos.z < zmin-eps ||
-      pos.x > xmax+eps || pos.y > ymax+eps || pos.z > zmax+eps) {
+  if (xyz[0] < xmin-eps || xyz[1] < ymin-eps || xyz[2] < zmin-eps ||
+      xyz[0] > xmax+eps || xyz[1] > ymax+eps || xyz[2] > zmax+eps) {
     // Point does not lie within cell - return an obviously bad ref position
     rst[0] = 99.; rst[1] = 99.; rst[2] = 99.;
     return false;
@@ -2946,54 +2938,63 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
   double tol = 1e-12*h;
 
-//  mdvector<double> tmp_shape({nNodes});
-//  mdvector<double> tmp_dshape({nNodes,nDims});
-//  mdvector<double> tmp_grad({nDims,nDims});
-//  mdvector<double> tmp_ginv({nDims,nDims});
   if (tmp_shape.size() != nNodes)
   {
     tmp_shape.resize({nNodes});
     tmp_dshape.resize({nNodes, nDims});
     tmp_grad.resize({nDims, nDims});
     tmp_ginv.resize({nDims, nDims});
+    tmp_coords.resize({nDims, nNodes});
   }
 
   int iter = 0;
   int iterMax = 20;
   double norm = 1;
-  rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
+
+  bool restart_rst = true;
+  for (int i = 0; i < 3; i++)
+  {
+    if (std::abs(rst[i]) > 1.)
+    {
+      restart_rst = false;
+      break;
+    }
+  }
+
+  if (!restart_rst)
+  {
+    rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
+  }
+
+  for (int nd = 0; nd < nNodes; nd++)
+    for (int d = 0; d < 3; d++)
+      tmp_coords(d,nd) = geo->coord_nodes(d, geo->ele2nodes(nd, ele));
 
   while (norm > tol && iter < iterMax)
   {
     calc_shape(tmp_shape, shape_order, rst);
     calc_d_shape(tmp_dshape, shape_order, rst);
 
-    point dx = pos;
-    tmp_grad.fill(0);
+    point dx(xyz[0],xyz[1],xyz[2]);
+
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nDims, nNodes,
+        1.0, tmp_coords.data(), nDims, tmp_dshape.data(), nNodes, 0.0, tmp_grad.data(), nDims);
+
     for (int node = 0; node < nNodes; node++)
-    {
-      int nd = geo->ele2nodes(node, ele);
-      for (int i = 0; i < nDims; i++)
-      {
-        for (int j = 0; j < nDims; j++)
-        {
-          tmp_grad(i,j) += geo->coord_nodes(i,nd)*tmp_dshape(node,j);
-        }
-        dx[i] -= tmp_shape(node)*geo->coord_nodes(i,nd);
-      }
-    }
+      for (int i = 0; i < 3; i++)
+        dx[i] -= tmp_shape(node)*tmp_coords(i,node);
 
     double detJ = det_3x3(tmp_grad.data());
 
     adjoint_3x3(tmp_grad.data(),tmp_ginv.data());
 
-    point delta = {0,0,0};
-    for (int i=0; i<nDims; i++)
-      for (int j=0; j<nDims; j++)
+    double delta[3] = {0,0,0};
+    for (int i = 0; i < 3; i++)
+      for (int j = 0; j < 3; j++)
         delta[i] += tmp_ginv(i,j)*dx[j]/detJ;
 
     norm = dx.norm();
-    for (int i = 0; i < nDims; i++)
+    for (int i = 0; i < 3; i++)
       rst[i] = std::max(std::min(rst[i]+delta[i],1.),-1.);
 
     iter++;

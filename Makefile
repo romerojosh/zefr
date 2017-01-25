@@ -25,8 +25,8 @@ else
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CXXFLAGS += -g -O3 #-D_NVTX
-	CUFLAGS += -g -O3 #-D_NVTX
+	CXXFLAGS += -g -O3 -D_NVTX
+	CUFLAGS += -g -O3 -D_NVTX
 else 
 ifeq ($(strip $(DEBUG_LEVEL)),2)
 	CXXFLAGS += -g -O0 #-D_NVTX

@@ -163,44 +163,51 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 #endif
 
   // Update grid to current status based on restart file if needed
-  if (input->restart && input->motion && input->motion_type == RIGID_BODY)
+  if (input->restart && input->motion)
   {
-    Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
-    if (geo.gridID == 0)
-      geo.Rmat = getRotationMatrix(q);
-    else
-      geo.Rmat = identityMatrix(3);
-
-    // Wmat = Matrix to get velocity due to rotation
-    // W = 'Spin' of omega (cross-product in matrix form)
-    int c1[3] = {1,2,0}; // Cross-product index maps
-    int c2[3] = {2,0,1};
-    mdvector<double> W({3,3}, 0.);
-    for (int i = 0; i < 3; i++)
+    if (input->motion_type == RIGID_BODY)
     {
-      W(i,c2[i]) =  geo.omega(c1[i]);
-      W(i,c1[i]) = -geo.omega(c2[i]);
-    }
-    geo.Wmat.assign({3,3}, 0.);
-    for (unsigned int i = 0; i < 3; i++)
-      for (unsigned int j = 0; j < 3; j++)
-        for (unsigned int k = 0; k < 3; k++)
-          geo.Wmat(i,j) += geo.Rmat(i,k) * W(k,j);
+      Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
+      if (geo.gridID == 0)
+        geo.Rmat = getRotationMatrix(q);
+      else
+        geo.Rmat = identityMatrix(3);
+
+      // Wmat = Matrix to get velocity due to rotation
+      // W = 'Spin' of omega (cross-product in matrix form)
+      int c1[3] = {1,2,0}; // Cross-product index maps
+      int c2[3] = {2,0,1};
+      mdvector<double> W({3,3}, 0.);
+      for (int i = 0; i < 3; i++)
+      {
+        W(i,c2[i]) =  geo.omega(c1[i]);
+        W(i,c1[i]) = -geo.omega(c2[i]);
+      }
+      geo.Wmat.assign({3,3}, 0.);
+      for (unsigned int i = 0; i < 3; i++)
+        for (unsigned int j = 0; j < 3; j++)
+          for (unsigned int k = 0; k < 3; k++)
+            geo.Wmat(i,j) += geo.Rmat(i,k) * W(k,j);
 
 #ifdef _GPU
-  //eles->nodes_d = eles->nodes;
-  geo.x_cg_d = geo.x_cg;
-  geo.dx_cg_d = geo.dx_cg;
-  geo.vel_cg_d = geo.vel_cg;
-  geo.q_d = geo.q;
-  geo.qdot_d = geo.qdot;
-  geo.Rmat_d = geo.Rmat;
-  geo.dRmat_d = geo.dRmat;
-  geo.omega_d = geo.omega;
-  geo.Wmat_d = geo.Wmat;
+      geo.x_cg_d = geo.x_cg;
+//      geo.dx_cg_d = geo.dx_cg;
+      geo.vel_cg_d = geo.vel_cg;
+//      geo.q_d = geo.q;
+//      geo.qdot_d = geo.qdot;
+      geo.Rmat_d = geo.Rmat;
+//      geo.dRmat_d = geo.dRmat;
+//      geo.omega_d = geo.omega;
+      geo.Wmat_d = geo.Wmat;
 #endif
 
-    eles->move(faces);
+#ifdef _BUILD_LIB
+      if (input->overset)
+        ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+#endif
+    }
+
+    move(restart_time);
   }
 }
 
@@ -389,7 +396,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
   {
     if (param == "TIME")
     {
-      f >> flow_time;
+      f >> restart_time;
+      flow_time = restart_time;
     }
     if (param == "ITER")
     {
@@ -2040,7 +2048,6 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   // Calculate error (infinity norm of RK error) and scaling factor for dt
   double max_err = 0;
 #ifdef _CPU
-
   for (uint n = 0; n < eles->nVars; n++)
   {
     for (uint ele = 0; ele < eles->nEles; ele++)
@@ -2086,6 +2093,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     flow_time = prev_time;
 #ifdef _CPU
     eles->U_spts = U_ini;
+#endif
 
     if (input->motion_type == RIGID_BODY)
     {
@@ -2095,7 +2103,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
       geo.q = q_ini;
       geo.qdot = qdot_ini;
     }
-#endif
+
 #ifdef _GPU
     device_copy(eles->U_spts_d, U_ini_d, U_ini_d.max_size());
 
@@ -2104,10 +2112,11 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
       device_copy(eles->nodes_d, nodes_ini_d, nodes_ini_d.max_size());
       device_copy(geo.x_cg_d, x_ini_d, x_ini_d.max_size());
       device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
-      device_copy(geo.q_d, q_ini_d, q_ini_d.max_size());
-      device_copy(geo.qdot_d, qdot_ini_d, qdot_ini_d.max_size());
+//      device_copy(geo.q_d, q_ini_d, q_ini_d.max_size());
+//      device_copy(geo.qdot_d, qdot_ini_d, qdot_ini_d.max_size());
     }
 #endif
+
     // Try again with new dt
     step_adaptive_LSRK(source);
   }
@@ -2133,10 +2142,6 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
   if (input->motion_type == RIGID_BODY)
   {
     nodes_ini = eles->nodes; nodes_til = eles->nodes;
-    x_ini = geo.x_cg;        x_til = geo.x_cg;
-    v_ini = geo.vel_cg;      v_til = geo.vel_cg;
-    q_ini = geo.q;           q_til = geo.q;
-    qdot_ini = geo.qdot;     qdot_til = geo.qdot;
   }
 #endif
 
@@ -2150,32 +2155,40 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   if (input->motion_type == RIGID_BODY)
   {
-    x_ini = geo.x_cg;        x_til = geo.x_cg;
-    v_ini = geo.vel_cg;      v_til = geo.vel_cg;
-    q_ini = geo.q;           q_til = geo.q;
-    qdot_ini = geo.qdot;     qdot_til = geo.qdot;
-
     device_copy(nodes_ini_d, eles->nodes_d, eles->nodes_d.max_size());
     device_copy(nodes_til_d, eles->nodes_d, eles->nodes_d.max_size());
     device_copy(x_ini_d, geo.x_cg_d, geo.x_cg_d.max_size());
     device_copy(x_til_d, geo.x_cg_d, geo.x_cg_d.max_size());
     device_copy(v_ini_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
     device_copy(v_til_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
-    device_copy(q_ini_d, geo.q_d, geo.q_d.max_size());
-    device_copy(q_til_d, geo.q_d, geo.q_d.max_size());
-    device_copy(qdot_ini_d, geo.qdot_d, geo.qdot_d.max_size());
-    device_copy(qdot_til_d, geo.qdot_d, geo.qdot_d.max_size());
+//    device_copy(q_ini_d, geo.q_d, geo.q_d.max_size());
+//    device_copy(q_til_d, geo.q_d, geo.q_d.max_size());
+//    device_copy(qdot_ini_d, geo.qdot_d, geo.qdot_d.max_size());
+//    device_copy(qdot_til_d, geo.qdot_d, geo.qdot_d.max_size());
   }
 
   check_error();
 #endif
 
+  if (input->motion_type == RIGID_BODY)
+  {
+    x_ini = geo.x_cg;        x_til = geo.x_cg;
+    v_ini = geo.vel_cg;      v_til = geo.vel_cg;
+    q_ini = geo.q;           q_til = geo.q;
+    qdot_ini = geo.qdot;     qdot_til = geo.qdot;
+  }
+
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < nStages; stage++)
   {
+    PUSH_NVTX_RANGE("ONE_STAGE",6);
     flow_time = prev_time + rk_c(stage) * dt(0);
 
+    move(flow_time); // Set grid to current evaluation time
+
     compute_residual(0);
+
+    rigid_body_update(stage);
 
     double ai = (stage < nStages - 1) ? rk_alpha(stage) : 0;
     double bi = rk_beta(stage);
@@ -2252,8 +2265,9 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 #endif
 
     // Update grid to position of next time step
-    rigid_body_update(stage);
-    move(flow_time);
+//    rigid_body_update(stage);
+//    move(flow_time);
+    POP_NVTX_RANGE;
   }
 
 //  if (input->motion_type == RIGID_BODY)
@@ -3060,7 +3074,8 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     if (key == "tcurr")
     {
       // "tcurr = ####"
-      ss >> tmp >> flow_time;
+      ss >> tmp >> restart_time;
+      flow_time = restart_time;
     }
     if (key == "x-cg")
     {
@@ -5379,6 +5394,7 @@ void FRSolver::filter_solution()
 void FRSolver::move(double time)
 {
   if (!input->motion) return;
+  if (time == grid_time) return; // Already set
 
 #ifdef _CPU
   move_grid(input, geo, time);
@@ -5407,6 +5423,8 @@ void FRSolver::move(double time)
 #endif
   }
 #endif
+
+  grid_time = time;
 }
 
 void FRSolver::rigid_body_update(unsigned int stage)
@@ -5559,13 +5577,13 @@ void FRSolver::rigid_body_update(unsigned int stage)
 #ifdef _GPU
   //eles->nodes_d = eles->nodes;
   geo.x_cg_d = geo.x_cg;
-  geo.dx_cg_d = geo.dx_cg;
+//  geo.dx_cg_d = geo.dx_cg;
   geo.vel_cg_d = geo.vel_cg;
-  geo.q_d = geo.q;
-  geo.qdot_d = geo.qdot;
+//  geo.q_d = geo.q;
+//  geo.qdot_d = geo.qdot;
   geo.Rmat_d = geo.Rmat;
-  geo.dRmat_d = geo.dRmat;
-  geo.omega_d = geo.omega;
+//  geo.dRmat_d = geo.dRmat;
+//  geo.omega_d = geo.omega;
   geo.Wmat_d = geo.Wmat;
 #endif
 

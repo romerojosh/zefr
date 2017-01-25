@@ -721,14 +721,6 @@ void Hexas::calc_shape(mdvector<double> &shape_val, unsigned int shape_order,
   }
   else
   {
-//    int nSide = cbrt(nNodes);
-
-//    if (nSide*nSide*nSide != nNodes)
-//    {
-//      std::cout << "nNodes = " << nNodes << std::endl;
-//      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
-//    }
-
     if (xlist.size() != nNdSide)
     {
       xlist.resize(nNdSide);
@@ -742,9 +734,10 @@ void Hexas::calc_shape(mdvector<double> &shape_val, unsigned int shape_order,
       ijk2gmsh = structured_to_gmsh_hex(nNodes);
 
     // Pre-compute Lagrange function values to avoid redundant calculations
-//    std::vector<double> lag_i(nSide), lag_j(nSide), lag_k(nSide);
     if (lag_i.size() != nNdSide)
+    {
       lag_i.resize(nNdSide); lag_j.resize(nNdSide); lag_k.resize(nNdSide);
+    }
 
 #pragma omp parallel for
     for (int i = 0; i < nNdSide; i++)
@@ -754,11 +747,14 @@ void Hexas::calc_shape(mdvector<double> &shape_val, unsigned int shape_order,
       lag_k[i] = Lagrange(xlist,  mu, i);
     }
 
-#pragma omp parallel for collapse(3)
+    int pt = 0;
     for (int k = 0; k < nNdSide; k++)
       for (int j = 0; j < nNdSide; j++)
         for (int i = 0; i < nNdSide; i++)
-          shape_val(ijk2gmsh[i+nNdSide*(j+nNdSide*k)]) = lag_i[i] * lag_j[j] * lag_k[k];
+        {
+          shape_val(ijk2gmsh[pt]) = lag_i[i] * lag_j[j] * lag_k[k];
+          pt++;
+        }
   }
 }
 
@@ -849,12 +845,6 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, unsigned int shape_order,
   }
   else
   {
-//    int nSide = cbrt(nNodes);
-
-//    if (nSide*nSide*nSide != nNodes)
-//      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
-
-    //std::vector<double> xlist(nSide);
     if (xlist.size() != nNdSide)
     {
       xlist.resize(nNdSide);
@@ -864,13 +854,10 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, unsigned int shape_order,
         xlist[i] = -1. + i*dxi;
     }
 
-//    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
     if (ijk2gmsh.size() != nNodes)
       ijk2gmsh = structured_to_gmsh_hex(nNodes);
 
     // Pre-compute Lagrange function values to save redundant calculations
-    //std::vector<double>  lag_i(nSide),  lag_j(nSide),  lag_k(nSide);
-    //std::vector<double> dlag_i(nSide), dlag_j(nSide), dlag_k(nSide);
     if (dlag_i.size() != nNdSide)
     {
       lag_i.resize(nNdSide);   lag_j.resize(nNdSide);  lag_k.resize(nNdSide);
@@ -885,19 +872,15 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, unsigned int shape_order,
       lag_k[i] = Lagrange(xlist,  mu, i);  dlag_k[i] = dLagrange(xlist,  mu, i);
     }
 
-#pragma omp parallel for collapse(3)
+    int pt = 0;
     for (int k = 0; k < nNdSide; k++)
-    {
       for (int j = 0; j < nNdSide; j++)
-      {
         for (int i = 0; i < nNdSide; i++)
         {
-          int pt = i + nNdSide * (j + nNdSide * k);
           dshape_val(ijk2gmsh[pt],0) = dlag_i[i] *  lag_j[j] *  lag_k[k];
           dshape_val(ijk2gmsh[pt],1) =  lag_i[i] * dlag_j[j] *  lag_k[k];
           dshape_val(ijk2gmsh[pt],2) =  lag_i[i] *  lag_j[j] * dlag_k[k];
+          pt++;
         }
-      }
-    }
   }
 }
