@@ -2950,6 +2950,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   int iter = 0;
   int iterMax = 20;
   double norm = 1;
+  double norm_prev = 2;
 
   bool restart_rst = true;
   for (int i = 0; i < 3; i++)
@@ -2996,6 +2997,11 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
     norm = dx.norm();
     for (int i = 0; i < 3; i++)
       rst[i] = std::max(std::min(rst[i]+delta[i],1.),-1.);
+
+    if (norm > .9*norm_prev) // If it's clear we're not converging
+      break;
+
+    norm_prev = norm;
 
     iter++;
   }

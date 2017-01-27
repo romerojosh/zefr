@@ -5571,19 +5571,10 @@ void FRSolver::rigid_body_update(unsigned int stage)
       for (unsigned int k = 0; k < 3; k++)
         geo.Wmat(i,j) += Rmat(i,k) * W(k,j);
 
-//  for (unsigned int d = 0; d < geo.nDims; d++)
-//    geo.dx_cg(d) = geo.x_cg(d) - tmp_x_cg(d);
-
 #ifdef _GPU
-  //eles->nodes_d = eles->nodes;
   geo.x_cg_d = geo.x_cg;
-//  geo.dx_cg_d = geo.dx_cg;
   geo.vel_cg_d = geo.vel_cg;
-//  geo.q_d = geo.q;
-//  geo.qdot_d = geo.qdot;
   geo.Rmat_d = geo.Rmat;
-//  geo.dRmat_d = geo.dRmat;
-//  geo.omega_d = geo.omega;
   geo.Wmat_d = geo.Wmat;
 #endif
 

@@ -268,7 +268,7 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   } 
 
-  int grank = rank;
+  grank = rank;
   MPI_Comm_rank(worldComm,&grank);
 
   char hostname[MPI_MAX_PROCESSOR_NAME];

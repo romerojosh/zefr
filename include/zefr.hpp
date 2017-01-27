@@ -131,6 +131,7 @@ public:
 private:
   // Generic data about the run
   int rank = 0, nRanks = 1;
+  int grank = 0;   //! Global MPI rank
   int myGrid = 0;  //! For overset: which grid this rank belongs to
   int nGrids = 1;  //! For overset: # of grids in entire system
 
