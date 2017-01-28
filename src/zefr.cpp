@@ -106,6 +106,9 @@ int main(int argc, char* argv[])
   if (rank == 0) std::cout << "Setting up FRSolver..." << std::endl;
   FRSolver solver(&input);
   solver.setup(comm);
+
+  if (input.restart)
+    solver.restart_solution();
   
   PMGrid pmg;
   if (input.p_multi)
@@ -338,6 +341,12 @@ void Zefr::setup_solver(void)
   geo = &solver->geo;
 
   t_start = std::chrono::high_resolution_clock::now();
+}
+
+void Zefr::restart_solution(void)
+{
+  if (input.restart)
+    solver->restart_solution();
 }
 
 void Zefr::do_step(void)

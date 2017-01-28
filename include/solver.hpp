@@ -135,6 +135,7 @@ class FRSolver
     double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);
     void setup(_mpi_comm comm_in, _mpi_comm comm_world = DEFAULT_COMM);
+    void restart_solution(void);
     void compute_residual(unsigned int stage, unsigned int color = 0);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU

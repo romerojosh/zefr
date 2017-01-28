@@ -112,39 +112,6 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
   if (input->rank == 0) std::cout << "Initializing solution..." << std::endl;
   initialize_U();
 
-
-  if (input->restart)
-  {
-    if (input->restart_type == 0)
-    {
-      if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file + " ..." << std::endl;
-
-      // Backwards compatibility: full filename given
-      if (input->restart_file.find(".vtu")  != std::string::npos or
-          input->restart_file.find(".pvtu") != std::string::npos)
-      {
-        restart(input->restart_file);
-      }
-      else if (input->restart_file.find(".pyfr") != std::string::npos)
-      {
-        restart_pyfr(input->restart_file);
-      }
-      else
-        ThrowException("Unknown file type for restart file.");
-    }
-    else
-    {
-      if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_case + "_" + std::to_string(input->restart_iter) + " ..." << std::endl;
-
-      // New version: Use case name + iteration number to find file
-      // [Overset compatible]
-      if (input->restart_type == 1) // ParaView
-        restart(input->restart_case, input->restart_iter);
-      else if (input->restart_type == 2) // PyFR
-        restart_pyfr(input->restart_case, input->restart_iter);
-    }
-  }
-
   if (input->filt_on)
   {
     if (input->rank == 0) std::cout << "Setting up filter..." << std::endl;
@@ -161,9 +128,41 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 #ifdef _GPU
   report_gpu_mem_usage();
 #endif
+}
 
+void FRSolver::restart_solution(void)
+{
+  if (input->restart_type == 0)
+  {
+    if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file + " ..." << std::endl;
+
+    // Backwards compatibility: full filename given
+    if (input->restart_file.find(".vtu")  != std::string::npos or
+        input->restart_file.find(".pvtu") != std::string::npos)
+    {
+      restart(input->restart_file);
+    }
+    else if (input->restart_file.find(".pyfr") != std::string::npos)
+    {
+      restart_pyfr(input->restart_file);
+    }
+    else
+      ThrowException("Unknown file type for restart file.");
+  }
+  else
+  {
+    if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_case + "_" + std::to_string(input->restart_iter) + " ..." << std::endl;
+
+    // New version: Use case name + iteration number to find file
+    // [Overset compatible]
+    if (input->restart_type == 1) // ParaView
+      restart(input->restart_case, input->restart_iter);
+    else if (input->restart_type == 2) // PyFR
+      restart_pyfr(input->restart_case, input->restart_iter);
+  }
+  
   // Update grid to current status based on restart file if needed
-  if (input->restart && input->motion)
+  if (input->motion)
   {
     if (input->motion_type == RIGID_BODY)
     {
@@ -191,13 +190,8 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
 #ifdef _GPU
       geo.x_cg_d = geo.x_cg;
-//      geo.dx_cg_d = geo.dx_cg;
       geo.vel_cg_d = geo.vel_cg;
-//      geo.q_d = geo.q;
-//      geo.qdot_d = geo.qdot;
       geo.Rmat_d = geo.Rmat;
-//      geo.dRmat_d = geo.dRmat;
-//      geo.omega_d = geo.omega;
       geo.Wmat_d = geo.Wmat;
 #endif
 
@@ -207,7 +201,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 #endif
     }
 
-    move(restart_time);
+    move(flow_time);
   }
 }
 
@@ -5415,12 +5409,14 @@ void FRSolver::move(double time)
   // Update the overset connectivity to the new grid positions
   if (input->overset)
   {
+    PUSH_NVTX_RANGE("tg_conn", 5);
     if (input->motion_type != RIGID_BODY)
       ZEFR->tg_preprocess();
     ZEFR->tg_process_connectivity();
 #ifdef _GPU
     ZEFR->update_iblank_gpu();
 #endif
+    POP_NVTX_RANGE;
   }
 #endif
 

@@ -63,6 +63,9 @@ public:
   //! Perform preprocessing and prepare to run case
   void setup_solver(void);
 
+  //! Read the restart file(s) and (for moving grids) update the geo accordingly
+  void restart_solution(void);
+
   //! Run one full time step, including any filtering or multigrid operations
   void do_step(void);
 

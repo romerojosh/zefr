@@ -2,7 +2,8 @@
 #include "tiogaInterface.h"
 
 #include "mpi.h"
-#include <valgrind/callgrind.h>
+//#include <valgrind/callgrind.h>
+#include <callgrind.h>
 
 int main(int argc, char *argv[])
 {
@@ -69,20 +70,29 @@ int main(int argc, char *argv[])
   }
 
   Zefr *z = zefr::get_zefr_object();
+  InputStruct &inp = z->get_input();
+
+  // Setup the TIOGA connectivity object
+  tioga_init_(MPI_COMM_WORLD);
+
+  if (nGrids > 1) inp.overset = 1;
+
+  if (inp.motion && inp.motion_type == RIGID_BODY)
+    z->set_rigid_body_callbacks(tioga_set_transform);
+
   z->setup_solver();
+
+  /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
+   * accomodate both multi-stage RK time stepping + viscous cases with gradient
+   * data interpolation.  Likewise with moving grids and connectivity update */
+  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_, tioga_dataupdate_ab);
 
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
   CallbackFuncs cbs = zefr::get_callback_funcs();
-  InputStruct &inp = z->get_input();
-
-  if (nGrids > 1) inp.overset = 1;
 
   Timer tg_time;
   tg_time.startTimer();
-
-  // Setup the TIOGA connectivity object
-  tioga_init_(MPI_COMM_WORLD);
 
   if (rank == 0)
     std::cout << "Setting TIOGA callback functions..." << std::endl;
@@ -112,13 +122,6 @@ int main(int argc, char *argv[])
       cbs.fringe_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d);
   }
 
-  /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
-   * accomodate both multi-stage RK time stepping + viscous cases with gradient
-   * data interpolation.  Likewise with moving grids and connectivity update */
-  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_, tioga_dataupdate_ab);
-
-  z->set_rigid_body_callbacks(tioga_set_transform);
-
   if (nGrids > 1)
   {
     tioga_preprocess_grids_();
@@ -129,6 +132,9 @@ int main(int argc, char *argv[])
   // setup cell/face iblank data for use on GPU
   if (nGrids > 1 && zefr::use_gpus())
     z->update_iblank_gpu();
+printf("input.restart = %d\n",inp.restart);
+  if (inp.restart)
+    z->restart_solution();
 
   // Output initial solution and grid
 //  z->write_solution();
