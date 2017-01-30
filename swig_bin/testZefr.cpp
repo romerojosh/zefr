@@ -80,12 +80,12 @@ int main(int argc, char *argv[])
   if (inp.motion && inp.motion_type == RIGID_BODY)
     z->set_rigid_body_callbacks(tioga_set_transform);
 
-  z->setup_solver();
-
   /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
    * accomodate both multi-stage RK time stepping + viscous cases with gradient
    * data interpolation.  Likewise with moving grids and connectivity update */
   z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_, tioga_dataupdate_ab);
+
+  z->setup_solver();
 
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
   // setup cell/face iblank data for use on GPU
   if (nGrids > 1 && zefr::use_gpus())
     z->update_iblank_gpu();
-printf("input.restart = %d\n",inp.restart);
+
   if (inp.restart)
     z->restart_solution();
 

@@ -160,6 +160,10 @@ void FRSolver::restart_solution(void)
     else if (input->restart_type == 2) // PyFR
       restart_pyfr(input->restart_case, input->restart_iter);
   }
+
+#ifdef _GPU
+ eles->U_spts_d = eles->U_spts;
+#endif
   
   // Update grid to current status based on restart file if needed
   if (input->motion)
@@ -2997,7 +3001,8 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   if (input->overset)
   {
-    /*try {
+    if (dset.attrExists("iblank"))
+    {
       Attribute att = dset.openAttribute("iblank");
       DataSpace dspaceI = att.getSpace();
       hsize_t dim[1];
@@ -3009,10 +3014,11 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
       geo.iblank_cell.assign({geo.nEles});
       att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
     }
-    catch (const std::exception &e) {
+    else
+    {
       // No iblank attribute - ignore (will be re-calculated anyways)
       geo.iblank_cell.assign({geo.nEles}, 1);
-    }*/
+    }
   }
 
   dset.close();
