@@ -565,7 +565,7 @@ void Faces::apply_bcs()
       }
 
 
-      case ISOTHERMAL_NOSLIP_MOVING_P: /* Isothermal No-slip Wall (prescribed) */
+      case ISOTHERMAL_NOSLIP_MOVING_P: /* Isothermal No-slip Wall, moving (prescribed) */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
