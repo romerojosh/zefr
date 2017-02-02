@@ -1294,7 +1294,8 @@ void FRSolver::initialize_U()
   if (input->viscous)
     eles->Ucomm.assign({eles->nFpts, eles->nEles, eles->nVars});
   eles->U_ppts.assign({eles->nPpts, eles->nEles, eles->nVars});
-  eles->U_qpts.assign({eles->nQpts, eles->nEles, eles->nVars});
+  if (input->error_freq > 0)
+    eles->U_qpts.assign({eles->nQpts, eles->nEles, eles->nVars});
 
   if (input->squeeze)
     eles->Uavg.assign({eles->nEles, eles->nVars});
@@ -1307,7 +1308,8 @@ void FRSolver::initialize_U()
   {
     eles->dU_spts.assign({eles->nSpts, eles->nEles, eles->nVars, eles->nDims});
     eles->dU_fpts.assign({eles->nFpts, eles->nEles, eles->nVars, eles->nDims});
-    eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
+    if (input->error_freq > 0)
+      eles->dU_qpts.assign({eles->nQpts, eles->nEles, eles->nVars, eles->nDims});
   }
 
   if (input->dt_scheme != "LSRK")
@@ -5602,16 +5604,18 @@ void FRSolver::report_gpu_mem_usage()
 
   if (input->rank == 0)
   {
-    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);  
-    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);  
+    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, myComm);
+    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, myComm);
 
+    if (input->overset)
+      std::cout << "Grid " << input->gridID << ": ";
     std::cout << "GPU Memory Usage: " << (used_min/1e6) << " (min) - " << (used_max/1e6) << " (max) MB used of " << total/1e6;
     std::cout << " MB available per GPU" << std::endl;
   }
   else
   {
-    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);  
-    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);  
+    MPI_Reduce(&used, &used_max, 1, MPI_UNSIGNED_LONG, MPI_MAX, 0, myComm);
+    MPI_Reduce(&used, &used_min, 1, MPI_UNSIGNED_LONG, MPI_MIN, 0, myComm);
   }
 #endif
 }

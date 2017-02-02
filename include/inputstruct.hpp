@@ -137,6 +137,7 @@ struct InputStruct
   short write_paraview, write_pyfr, plot_surfaces, plot_overset, write_LHS;
   unsigned int restart_iter, restart_type;
   std::string restart_case;
+  bool catch_signals = false;
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp, full_6dof;

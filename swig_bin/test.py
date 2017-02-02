@@ -32,10 +32,17 @@ gridSize = gridComm.Get_size()
 # Setup the ZEFR solver object; process the grids
 inputFile = "input_sphere"
 zefr.initialize(gridComm,inputFile,nGrids,GridID)
-z = zefr.get_zefr_object()
-z.setup_solver()
 
+z = zefr.get_zefr_object()
 inp = z.get_input()
+
+if nGrids > 1:
+    z.set_rigid_body_callbacks(tg.tioga_set_transform)
+
+    z.set_tioga_callbacks(tg.tioga_preprocess_grids_, 
+        tg.tioga_performconnectivity_, tg.tioga_dataupdate_ab)
+
+z.setup_solver()
 
 # Setup the TIOGA object; prepare to receive grid data
 if nGrids > 1:
@@ -45,8 +52,6 @@ if nGrids > 1:
     geo = zefr.get_basic_geo_data()   # Basic geometry/connectivity data
     geoAB = zefr.get_extra_geo_data() # Geo data for AB method
     cbs = zefr.get_callback_funcs()   # Callback functions for high-order/AB method
-    U_spts = zefr.get_q_spts()
-    U_fpts = zefr.get_q_fpts()
     
     tg.tioga_registergrid_data_(geo.btag, geo.nnodes, geo.xyz, geo.iblank,
         geo.nwall, geo.nover, geo.wallNodes, geo.overNodes,
@@ -64,17 +69,13 @@ if nGrids > 1:
         cbs.donor_frac, cbs.convert_to_modal)
     
     tg.tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
-            cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt)
+            cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt,
+            cbs.get_q_spts, cbs.get_dq_spts)
     
     if zefr.use_gpus():
         print("Setting GPU callback functions")
         tg.tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,
-            cbs.fringe_data_to_device)
-
-    z.set_tioga_callbacks(tg.tioga_preprocess_grids_, 
-        tg.tioga_performconnectivity_, tg.tioga_dataupdate_ab)
-
-    z.set_rigid_body_callbacks(tg.tioga_set_transform)
+            cbs.fringe_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d)
 
     # Perform overset connectivity / hole blanking
     print("Beginning connectivity...")

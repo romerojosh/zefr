@@ -139,6 +139,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "n_LHS_blocks", input.n_LHS_blocks, (unsigned int) 1);
   read_param(f, "LU_pivot", input.LU_pivot, false);
 
+  read_param(f, "catch_signals", input.catch_signals, false);
   read_param(f, "output_prefix", input.output_prefix);
   read_param(f, "write_paraview", input.write_paraview, (short)1);
   read_param(f, "write_pyfr", input.write_pyfr, (short)0);

@@ -144,5 +144,7 @@ void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
 //! For runs using GPUs - copy updated fringe data to device
 void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
 
+void signal_handler(int signum);
+
 } /* namespace zefr */
 #endif /* _zefr_interface_hpp */

@@ -17,6 +17,8 @@
  * along with ZEFR.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <csignal>
+
 #include "zefr_interface.hpp"
 
 Zefr *ZEFR = NULL;
@@ -29,6 +31,14 @@ void initialize(MPI_Comm comm_in, char *inputFile, int nGrids, int gridID, MPI_C
   if (!ZEFR) ZEFR = new Zefr(comm_in, nGrids, gridID, world_comm);
 
   ZEFR->read_input(inputFile);
+
+  auto input = ZEFR->get_input();
+
+  if (input.catch_signals)
+  {
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+  }
 }
 #else
 void initialize(char *input_file)
@@ -208,6 +218,21 @@ void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *da
 #ifdef _GPU
   ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag, data);
 #endif
+}
+
+void signal_handler(int signum)
+{
+  if (signum == SIGINT)
+    std::cout << "Received signal SIGINT - dumping solution to file" << std::endl;
+  else if (signum == SIGTERM)
+    std::cout << "Received signal SIGTERM - dumping solution to file and quitting" << std::endl;
+  else
+    exit(signum);
+
+  ZEFR->write_solution();
+
+  if (signum == SIGTERM)
+    exit(signum);
 }
 
 } /* namespace zefr */
