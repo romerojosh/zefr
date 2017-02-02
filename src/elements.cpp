@@ -2998,7 +2998,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
     for (int i = 0; i < 3; i++)
       rst[i] = std::max(std::min(rst[i]+delta[i],1.),-1.);
 
-    if (norm > .9*norm_prev) // If it's clear we're not converging
+    if (iter > 1 && norm > .99*norm_prev) // If it's clear we're not converging
       break;
 
     norm_prev = norm;
