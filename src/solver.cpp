@@ -588,6 +588,7 @@ void FRSolver::solver_data_to_device()
 
   /* Solution data structures (faces) */
   faces->U_bnd_d = faces->U_bnd;
+  faces->U_bnd_ldg_d = faces->U_bnd_ldg;
   faces->P_d = faces->P;
   faces->Ucomm_bnd_d = faces->Ucomm_bnd;
   faces->Fcomm_bnd_d = faces->Fcomm_bnd;
@@ -595,6 +596,7 @@ void FRSolver::solver_data_to_device()
   faces->dA_d = faces->dA;
   faces->waveSp_d = faces->waveSp;
   faces->diffCo_d = faces->diffCo;
+  faces->rus_bias_d = faces->rus_bias;
   faces->LDG_bias_d = faces->LDG_bias;
 
   if (input->viscous)
@@ -732,7 +734,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   {
     /* Compute common interface solution and convective flux at non-MPI flux points */
     faces->compute_common_U(startFpt, endFpt);
-    
+
     /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_spts(startEle, endEle);
 
@@ -1295,7 +1297,7 @@ void FRSolver::initialize_U()
             double x = eles->coord_spts(spt, ele, 0);
             double y = eles->coord_spts(spt, ele, 1);
 
-            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, 0, 0, 0, input);
+            eles->U_spts(spt, ele, 0) = compute_U_init(x, y, 0, 0, input);
           }
         }
       }
@@ -1309,7 +1311,7 @@ void FRSolver::initialize_U()
             double y = eles->coord_spts(spt, ele, 1);
             double z = eles->coord_spts(spt, ele, 2);
 
-            eles->U_spts(spt, ele, 0) = compute_U_true(x, y, z, 0, 0, input);
+            eles->U_spts(spt, ele, 0) = compute_U_init(x, y, z, 0, input);
 
           }
         }
@@ -1354,7 +1356,7 @@ void FRSolver::initialize_U()
             double x = eles->coord_spts(spt, ele, 0);
             double y = eles->coord_spts(spt, ele, 1);
 
-            eles->U_spts(spt, ele, n) = compute_U_true(x, y, 0, 0, n, input);
+            eles->U_spts(spt, ele, n) = compute_U_init(x, y, 0, n, input);
           }
         }
       }
@@ -1371,6 +1373,7 @@ void FRSolver::setup_views()
   /* Setup face view of element solution data struture */
   // TODO: Might not want to allocate all these at once. Turn this into a function maybe?
   mdvector<double*> U_base_ptrs({2 * geo.nGfpts});
+  mdvector<double*> U_ldg_base_ptrs({2 * geo.nGfpts});
   mdvector<double*> Fcomm_base_ptrs({2 * geo.nGfpts});
   mdvector<unsigned int> U_strides({2 * geo.nGfpts});
   mdvector<double*> Ucomm_base_ptrs;
@@ -1385,6 +1388,7 @@ void FRSolver::setup_views()
   }
 #ifdef _GPU
   mdvector<double*> U_base_ptrs_d({2 * geo.nGfpts});
+  mdvector<double*> U_ldg_base_ptrs_d({2 * geo.nGfpts});
   mdvector<double*> Fcomm_base_ptrs_d({2 * geo.nGfpts});
   mdvector<unsigned int> U_strides_d({2 * geo.nGfpts});
   mdvector<double*> Ucomm_base_ptrs_d;
@@ -1400,7 +1404,6 @@ void FRSolver::setup_views()
 #endif
 
   /* Set pointers for internal faces */
-#pragma omp parallel for collapse(3)
   for (unsigned int ele = 0; ele < eles->nEles; ele++)
   {
     for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
@@ -1415,6 +1418,7 @@ void FRSolver::setup_views()
       int slot = geo.fpt2gfpt_slot(fpt,ele);
 
       U_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
+      U_ldg_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
       U_strides(gfpt + slot * geo.nGfpts) = eles->U_fpts.get_stride(1);
 
       Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Fcomm(fpt, ele, 0);
@@ -1422,6 +1426,7 @@ void FRSolver::setup_views()
       if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Ucomm(fpt, ele, 0);
 #ifdef _GPU
       U_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
+      U_ldg_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
       U_strides_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_stride(1);
 
       Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Fcomm_d.get_ptr(fpt, ele, 0);
@@ -1453,6 +1458,12 @@ void FRSolver::setup_views()
     for (unsigned int n = 0; n < eles->nVars; n++)
     {
       U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0);
+      
+      if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
+        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(i, 0);
+      else
+        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0); // point U_ldg to correct MPI data;
+
       U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(0);
 
       Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(i, 0);
@@ -1461,6 +1472,7 @@ void FRSolver::setup_views()
 
 #ifdef _GPU
       U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0);
+      U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(i, 0);
       U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(0);
 
       Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(i, 0);
@@ -1486,6 +1498,7 @@ void FRSolver::setup_views()
 
   /* Create views of element data for faces */
   faces->U.assign(U_base_ptrs, U_strides, geo.nGfpts);
+  faces->U_ldg.assign(U_ldg_base_ptrs, U_strides, geo.nGfpts);
   faces->Fcomm.assign(Fcomm_base_ptrs, U_strides, geo.nGfpts);
   if (input->viscous)
   {
@@ -1495,6 +1508,7 @@ void FRSolver::setup_views()
 
 #ifdef _GPU
   faces->U_d.assign(U_base_ptrs_d, U_strides_d, geo.nGfpts);
+  faces->U_ldg_d.assign(U_ldg_base_ptrs_d, U_strides_d, geo.nGfpts);
   faces->Fcomm_d.assign(Fcomm_base_ptrs_d, U_strides_d, geo.nGfpts);
   if (input->viscous)
   {
@@ -4605,27 +4619,7 @@ void FRSolver::report_error(std::ofstream &f)
 
         /* Compute errors */
         double U_error;
-        if (input->test_case == 2) // Couette flow case
-        {
-          if (!input->viscous) 
-            ThrowException("Couette flow test case selected but viscosity disabled.");
-          
-          double rho = eles->U_qpts(qpt, ele, 0);
-          double u =  eles->U_qpts(qpt, ele, 1) / rho;
-          double rho_dx = eles->dU_qpts(qpt, ele, 0, 0);
-          double rho_dy = eles->dU_qpts(qpt, ele, 0, 1);
-          double momx_dx = eles->dU_qpts(qpt, ele, 1, 0);
-          double momx_dy = eles->dU_qpts(qpt, ele, 1, 1);
-
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-
-          U_error = U_true - u;
-          dU_error[0] = dU_true[0] - du_dx;
-          dU_error[1] = dU_true[1] - du_dy;
-          vol = 1;
-        }
-        else if (input->test_case == 3) // Isentropic bump
+        if (input->test_case == 3) // Isentropic bump
         {
           double momF = 0.0;
           for (unsigned int dim = 0; dim < eles->nDims; dim ++)

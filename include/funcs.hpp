@@ -30,6 +30,7 @@ extern "C" {
 #include "mdvector.hpp"
 
 /* Computes solution at specified time and location */
+double compute_U_init(double x, double y, double z, unsigned int var, const InputStruct *input);
 double compute_U_true(double x, double y, double z, double t, unsigned int var, const InputStruct *input);
 double compute_dU_true(double x, double y, double z, double t, unsigned int var, 
     unsigned int dim, const InputStruct *input);
