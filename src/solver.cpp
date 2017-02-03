@@ -313,7 +313,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       ss << "_Grid" << input->gridID;
     }
 
-    ss << "_" << std::setw(0) << std::setfill('0') << restart_iter;
+    ss << "_" << std::setw(9) << std::setfill('0') << restart_iter;
 
 #ifdef _MPI
     ss << ".pvtu";
@@ -1506,10 +1506,11 @@ void FRSolver::update(const mdvector<double> &source)
 void FRSolver::update(const mdvector_gpu<double> &source)
 #endif
 {
+  prev_time = flow_time;
+
   if (input->dt_scheme == "LSRK")
   {
     step_adaptive_LSRK(source);
-    //step_LSRK(source);
   }
   else
   {
@@ -1517,9 +1518,10 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       step_MCGS(source);
     else
       step_RK(source);
-
-    current_iter++;
   }
+
+  flow_time = prev_time + dt(0);
+  current_iter++;
 
   // Update grid to end of time step (if not already done so)
   if (input->dt_scheme != "MCGS" && (input->nStages == 1 || (input->nStages > 1 && rk_alpha(input->nStages-2) != 1)))
@@ -1553,9 +1555,13 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   check_error();
 #endif
 
+<<<<<<< HEAD
   prev_time = flow_time;
 
   unsigned int nSteps = (input->dt_scheme == "RKj") ? input->nStages : input->nStages - 1;
+=======
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
+>>>>>>> d2780cba3fc5406cec00b12060558ef8cbf37cac
 
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < nSteps; stage++)
@@ -1659,7 +1665,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
+<<<<<<< HEAD
     flow_time = prev_time + rk_alpha(input->nStages-2) * eles->dt(0);
+=======
+    if (nStages > 1)
+      flow_time = prev_time + rk_alpha(nStages-2) * dt(0);
+>>>>>>> d2780cba3fc5406cec00b12060558ef8cbf37cac
 
     compute_residual(input->nStages-1);
 #ifdef _CPU
@@ -1790,7 +1801,6 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   {
     // Accept the time step and continue on
     prev_err = max_err;
-    current_iter++;
   }
   else
   {
@@ -1835,8 +1845,6 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   check_error();
 #endif
-
-  prev_time = flow_time;
 
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < input->nStages; stage++)
