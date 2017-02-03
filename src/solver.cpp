@@ -790,19 +790,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
-  /* Extrapolate solution to flux points */
-  eles->extrapolate_U(startEle, endEle);
-
 #ifdef _BUILD_LIB
   if (input->overset)
   {
-    PUSH_NVTX_RANGE("overset_U", 2);
-//    MPI_Pcontrol(1, "overset_interp_u");
-    ZEFR->overset_interp(faces->nVars, eles->U_spts.data(), 0);
-//    MPI_Pcontrol(-1, "overset_interp_u");
+    PUSH_NVTX_RANGE("overset_U_send", 2);
+    ZEFR->overset_interp_send(faces->nVars, 0);
     POP_NVTX_RANGE;
   }
 #endif
+
+  /* Extrapolate solution to flux points */
+  eles->extrapolate_U(startEle, endEle);
 
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
@@ -862,11 +860,20 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* If running viscous, use this scheduling */
   else
   {
-    /* Compute common interface solution and convective flux at non-MPI flux points */
-    faces->compute_common_U(startFpt, endFpt);
-
     /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_spts(startEle, endEle);
+
+#ifdef _BUILD_LIB
+  if (input->overset)
+  {
+    PUSH_NVTX_RANGE("overset_U_recv", 2);
+    ZEFR->overset_interp_recv(faces->nVars, 0);
+    POP_NVTX_RANGE;
+  }
+#endif
+
+    /* Compute common interface solution and convective flux at non-MPI flux points */
+    faces->compute_common_U(startFpt, endFpt);
 
 #ifdef _MPI
     /* Receieve U data */
@@ -879,13 +886,19 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_fpts(startEle, endEle);
 
+    /* Interpolate gradient data to/from other grid(s) */
+#ifdef _BUILD_LIB
+    if (input->overset)
+    {
+      PUSH_NVTX_RANGE("overset_grad_send", 2);
+      ZEFR->overset_interp_send(faces->nVars, 1);
+      POP_NVTX_RANGE;
+    }
+#endif
+
     /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
     if (input->motion)
       eles->compute_dU0(startEle, endEle);
-
-    /* Transform gradient of state variables to physical space from 
-     * reference space */
-    //eles->transform_dU(startEle, endEle);
 
     /* Compute flux at solution points */
     eles->compute_F(startEle, endEle);
@@ -896,16 +909,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
     faces->send_dU_data();
-
-    /* Interpolate gradient data to/from other grid(s) */
-#ifdef _BUILD_LIB
-    if (input->overset)
-    {
-      PUSH_NVTX_RANGE("overset_grad", 2);
-      ZEFR->overset_interp(faces->nVars, eles->dU_spts.data(), 1);
-      POP_NVTX_RANGE;
-    }
-#endif
 #endif
 
     /* Apply boundary conditions to the gradient */
@@ -923,6 +926,16 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       /* Compute solution point contribution to divergence of flux */
       eles->compute_divF_spts(stage, startEle, endEle);
     }
+
+    /* Unpack gradient data from other grid(s) */
+#ifdef _BUILD_LIB
+    if (input->overset)
+    {
+      PUSH_NVTX_RANGE("overset_grad_recv", 2);
+      ZEFR->overset_interp_recv(faces->nVars, 1);
+      POP_NVTX_RANGE;
+    }
+#endif
 
     /* Compute common interface flux at non-MPI flux points */
     faces->compute_common_F(startFpt, endFpt);

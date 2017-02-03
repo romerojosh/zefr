@@ -2,8 +2,8 @@
 #include "tiogaInterface.h"
 
 #include "mpi.h"
-//#include <valgrind/callgrind.h>
-#include <callgrind.h>
+#include <valgrind/callgrind.h>
+//#include <callgrind.h>
 
 int main(int argc, char *argv[])
 {
@@ -83,7 +83,8 @@ int main(int argc, char *argv[])
   /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
    * accomodate both multi-stage RK time stepping + viscous cases with gradient
    * data interpolation.  Likewise with moving grids and connectivity update */
-  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_, tioga_dataupdate_ab);
+  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
+      tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
 
   z->setup_solver();
 

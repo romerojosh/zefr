@@ -617,11 +617,13 @@ void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, 
 }
 
 void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
-                               void (*dataUpdate)(int, double*, int))
+                               void (*dataUpdate_send)(int, int),
+                               void (*dataUpdate_recv)(int, int))
 {
   tg_preprocess = preprocess;
   tg_process_connectivity = connect;
-  overset_interp = dataUpdate;
+  overset_interp_send = dataUpdate_send;
+  overset_interp_recv = dataUpdate_send;
 }
 
 void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* off, int nDims))

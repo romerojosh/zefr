@@ -127,7 +127,7 @@ public:
   void set_dataUpdate_callback(void (*dataUpdate)(int, double*, int));
 
   void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
-                           void (*dataUpdate)(int, double*, int));
+                           void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int));
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
 
@@ -162,6 +162,9 @@ private:
 
   //! Callback function to TIOGA to perform overset interpolation
   void (*overset_interp)(int nVars, double* U_spts, int gradFlag);
+
+  void (*overset_interp_send)(int nVars, int gradFlag);
+  void (*overset_interp_recv)(int nVars, int gradFlag);
 
   //! Callback function to TIOGA to pre-process the grids
   void (*tg_preprocess) (void);
