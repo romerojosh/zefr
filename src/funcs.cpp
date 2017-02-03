@@ -51,7 +51,7 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
             std::sin(M_PI * y);
       
       //val =  std::sin(2 * M_PI * x/10.) + std::sin(2 * M_PI * y/10.);
-      //val = std::exp(-x*x-y*y);
+      //val = std::exp(20.*(-x*x-y*y));
       //val =  step((x - input->AdvDiff_A(0) * t));
     }
     else if (input->nDims == 3)
@@ -66,7 +66,7 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
   }
   else if (input->equation == EulerNS)
   {
-    if (!input->test_case == 2)
+    if (input->test_case != 2)
     {
       double G = 5.0;
       double R = 1.;
@@ -122,17 +122,19 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
       double cp = gamma * R / (gamma - 1);
 
       double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
+      double rho_avg = 4.*(P * std::sqrt(Pr*(Pr*Vw*Vw+8*cp*Tw))*std::log((std::sqrt(Pr*(Pr*Vw*Vw+8*cp*Tw))+Pr*Vw)/
+            (std::sqrt(Pr*(Pr*Vw*Vw+8*cp*Tw))-Pr*Vw))*gamma)/(Pr*Vw*(Pr*Vw*Vw+8*cp*Tw)*(gamma-1));
 
       switch (var)
       {
         case 0:
-          val = rho; break;
+          val = rho_avg; break;
         case 1:
-          val = rho * Vw; break;
+          val = rho_avg * Vw; break;
         case 2:
           val = 0.0; break;
         case 3:
-          val = P / (gamma - 1) + 0.5 * rho * Vw * Vw; break;
+          val = P / (gamma - 1) + 0.5 * rho_avg * Vw * Vw; break;
       }
 
     }

@@ -841,22 +841,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Compute common interface flux at non-MPI flux points */
     faces->compute_common_F(startFpt, endFpt);
 
-    /*
-    std::cout << "FCOMM" << std::endl;
-    for (int i = 0; i < eles->nEles; i++)
-    {
-      for (int n = 0; n < eles->nFpts; n++)
-      {
-        for (int j = 0; j < eles->nVars; j++)
-          std::cout << eles->Fcomm(n, i, j) << " ";
-        std::cout << std::endl;
-      }
-      std::cout << std::endl;
-    }
-
-    ThrowException("BREAK!");
-    */
-
 #ifdef _MPI
     /* Receive gradient data */
     faces->recv_dU_data();
@@ -1534,7 +1518,6 @@ void FRSolver::update(const mdvector_gpu<double> &source)
     else
       step_RK(source);
 
-    flow_time += eles->dt(0);
     current_iter++;
   }
 
@@ -1676,7 +1659,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-    flow_time = prev_time + rk_alpha(input->nStages-1) * eles->dt(0);
+    flow_time = prev_time + rk_alpha(input->nStages-2) * eles->dt(0);
 
     compute_residual(input->nStages-1);
 #ifdef _CPU
@@ -1754,6 +1737,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     check_error();
 #endif
   }
+
 }
 
 #ifdef _CPU

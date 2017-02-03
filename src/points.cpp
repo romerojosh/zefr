@@ -17,14 +17,12 @@
  * along with ZEFR.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef points_hpp
-#define points_hpp
-
 #include <cmath>
 #include <vector>
 
 #include "macros.hpp"
 #include "mdvector.hpp"
+#include "points.hpp"
 
 // TODO: Can get open-source scripts for generating quadrature points for arbitrary P>0
 std::vector<double> Gauss_Legendre_pts(unsigned int P)
@@ -817,4 +815,164 @@ mdvector<double> WS_Tri_weights(unsigned int P)
   return weights;
 }
 
-#endif /* points_hpp */
+mdvector<double> RW_Tri_pts(unsigned int P)
+{
+  unsigned int nPts = (P+1)*(P+2)/2;
+  mdvector<double> pts({nPts, 2});
+
+  switch(P)
+  {
+    case 1:
+      pts(0, 0) = -0.666666666667;
+      pts(1, 0) = 0.333333333333;
+      pts(2, 0) = -0.666666666667;
+
+      pts(0, 1) = 0.333333333333;
+      pts(1, 1) = -0.666666666667;
+      pts(2, 1) = -0.666666666667;
+      break;
+
+    case 2:
+      pts(0, 0) = -0.81684757298;
+      pts(1, 0) = 0.633695145961;
+      pts(2, 0) = -0.81684757298;
+      pts(3, 0) = -0.108103018168;
+      pts(4, 0) = -0.783793963664;
+      pts(5, 0) = -0.108103018168;
+
+      pts(0, 1) = 0.633695145961;
+      pts(1, 1) = -0.81684757298;
+      pts(2, 1) = -0.81684757298;
+      pts(3, 1) = -0.783793963664;
+      pts(4, 1) = -0.108103018168;
+      pts(5, 1) = -0.108103018168;
+      break;
+
+    case 3:
+      // WS
+      pts = symm_pts_tri({1./3.}, {0.055564052669793}, {0.295533711735893}, {0.070255540518384});
+
+      // FW err opt
+      //pts = symm_pts_tri({1./3.}, {.05275582964828789}, {.293034268156967841039435067323947406114147778}, {.06998504422734275906007349011531234});
+
+      // fmincon eps 1e-8 tolcon 1e-9 ws start
+      //pts = symm_pts_tri({1./3.}, {0.055744804500109}, {0.290384222060825}, {0.070841762329827});
+
+      // fmincon eps 1e-10 tolcon 1e-11 ws start
+      //pts = symm_pts_tri({1./3.}, {0.055758983558155}, {0.290285227512689}, {0.070857385399496});
+
+      break;
+
+    case 4:
+      // WS
+      pts = symm_pts_tri({}, {0.035870877695734,0.241729395767967,0.474308787777079}, {0.201503881881800}, {0.047312487011716});
+
+      // fmincon eps 1e-8 tolcon 1e-9 ws start
+      //pts = symm_pts_tri({}, {0.034997794563496, 0.242941826150418, 0.473422728963121}, {0.200163370171128}, {0.047078563918947});
+
+      // fmincon eps 1e-10 tolcon 1e-11 ws start
+      //pts = symm_pts_tri({}, {0.034681580220044, 0.243071555674492, 0.473372556704605}, {0.200039998995093}, {0.047293668511439});
+      
+      break;
+
+    default:
+      ThrowException("RW_Tri_pts undefined for provided order!");
+  }
+
+  return pts;
+}
+
+mdvector<double> symm_pts_tri(std::vector<double> a3, std::vector<double> a21, std::vector<double> a111, std::vector<double> b111)
+{
+  auto n3 = a3.size();
+  auto n21 = a21.size();
+  auto n111 = a111.size();
+
+  int nPts = n3 + n21 * 3 + n111 * 6;
+
+  mdvector<double> pts({nPts, 2}, 0);
+
+  std::vector<std::vector<double>> trans(2);
+  trans[0] = {-1, 1, -1};
+  trans[1] = {-1, -1, 1};
+
+  int pt = 0;
+
+  // n3 orbits
+  for (unsigned int i = 0; i < n3; i++)
+  {
+    std::vector<double> lam = {a3[i], a3[i], a3[i]}; 
+
+    for (unsigned int j = 0; j < 2; j++)
+    {
+      for (unsigned int k = 0; k < 3; k++)
+      {
+        pts(pt, j) += lam[k] * trans[j][k];
+      }
+    }
+
+    pt++;  
+  }
+
+  // n21 orbits
+  std::vector<std::vector<int>> perm21(3);
+  perm21[0] = {0, 1, 2};
+  perm21[1] = {2, 0, 1};
+  perm21[2] = {0, 2, 1};
+
+  for (unsigned int i = 0; i < n21; i++)
+  {
+    std::vector<double> lam0 = {a21[i], a21[i], 1 - 2 * a21[i]}; 
+
+    for (unsigned int n = 0; n < 3; n++)
+    {
+      auto lam = lam0;
+      for (unsigned int m = 0; m < 3; m++)
+        lam[m] = lam0[perm21[n][m]];
+
+      for (unsigned int j = 0; j < 2; j++)
+      {
+        for (unsigned int k = 0; k < 3; k++)
+        {
+          pts(pt, j) += lam[k] * trans[j][k];
+        }
+      }
+
+      pt++;  
+    }
+  }
+
+  // n111 orbits
+  std::vector<std::vector<int>> perm111(6);
+  perm111[0] = {0, 1, 2};
+  perm111[1] = {2, 0, 1};
+  perm111[2] = {0, 2, 1};
+  perm111[3] = {2, 1, 0};
+  perm111[4] = {1, 0, 2};
+  perm111[5] = {1, 2, 0};
+
+  for (unsigned int i = 0; i < n111; i++)
+  {
+    std::vector<double> lam0 = {a111[i], b111[i], 1 - a111[i] - b111[i]}; 
+
+    for (unsigned int n = 0; n < 6; n++)
+    {
+      auto lam = lam0;
+      for (unsigned int m = 0; m < 3; m++)
+        lam[m] = lam0[perm111[n][m]];
+
+      for (unsigned int j = 0; j < 2; j++)
+      {
+        for (unsigned int k = 0; k < 3; k++)
+        {
+          pts(pt, j) += lam[k] * trans[j][k];
+        }
+      }
+
+      pt++;  
+    }
+  }
+
+  return pts;
+  
+}

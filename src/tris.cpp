@@ -39,7 +39,6 @@ extern "C" {
 #include "solver_kernels.h"
 #endif
 
-//Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
 Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
 {
   etype = TRI;
@@ -54,22 +53,16 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
   nFaces = 3;
   nNodes = (shape_order+1) * (shape_order+2) / 2;
   
-  //geo->nFacesPerEle = 4;
-  //geo->nNodesPerFace = 2;
-  //geo->nCornerNodes = 4;
-
   /* If order argument is not provided, use order in input file */
   if (order == -1)
   {
     nSpts = (input->order + 1) * (input->order + 2) / 2;
-    //nSpts1D = input->order + 1;
     nSpts1D = input->order + 2;
     this->order = input->order;
   }
   else
   {
     nSpts = (order + 1) * (order + 2) / 2;
-    //nSpts1D = order + 1;
     nSpts1D = order + 2;
     this->order = order;
   }
@@ -96,13 +89,11 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
 void Tris::set_locs()
 {
   /* Allocate memory for point location structures */
-  //loc_spts.assign({nSpts,nDims}); 
   loc_qpts.assign({nQpts,nDims}); 
 
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
    loc_spts_1D = Gauss_Legendre_pts(order+2); 
-   //loc_spts_1D = Gauss_Legendre_pts(order+1); 
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
@@ -115,8 +106,8 @@ void Tris::set_locs()
 
 
   /* Setup solution point locations and quadrature weights */
-  loc_spts = WS_Tri_pts(order);
-  weights_spts = WS_Tri_weights(order);
+  loc_spts = RW_Tri_pts(order);
+  weights_spts = WS_Tri_weights(order); //TODO: weights at new points
 
   /* Setup flux point locations */
   loc_fpts.assign({nFpts,nDims});
@@ -191,7 +182,6 @@ void Tris::set_normals(std::shared_ptr<Faces> faces)
         tnorm(fpt,1) = 0.0; break;
 
     }
-
   }
 
   /* Can set vandermonde matrices now */
@@ -209,15 +199,6 @@ void Tris::set_vandermonde_mats()
       vandDB(i,j) = Dubiner2D(order, loc_spts(i, 0), loc_spts(i, 1), j); 
     }
 
-  //for (unsigned int i = 0; i < nSpts; i++)
-  //{
-  //  for (unsigned int j = 0; j < nSpts; j++)
-  //  {
-  //    std::cout << vandDB(i,j) << " ";
-  //  }
-  //  std::cout << std::endl;
-  //}
-
   vandDB.calc_LU();
 
   inv_vandDB.assign({nSpts, nSpts}); 
@@ -228,14 +209,6 @@ void Tris::set_vandermonde_mats()
 
   vandDB.solve(inv_vandDB, eye);
 
-  //for (unsigned int i = 0; i < nSpts; i++)
-  //{
-  //  for (unsigned int j = 0; j < nSpts; j++)
-  //  {
-  //    std::cout << inv_vandDB(i,j) << " ";
-  //  }
-  //  std::cout << std::endl;
-  //}
 
   /* Set vandermonde for Raviart-Thomas monomial basis over combined solution and flux point set*/
   vandRT.assign({2*nSpts+nFpts, 2*nSpts+nFpts}, 0.0);
@@ -264,36 +237,16 @@ void Tris::set_vandermonde_mats()
     }
   }
 
-  //for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
-  //{
-  //  for (unsigned int j = 0; j < 2*nSpts + nFpts; j++)
-  //  {
-  //    std::cout << vandRT(i,j) << " ";
-  //  }
-  //  std::cout << std::endl;
-  //}
-
   vandRT.calc_LU();
 
   inv_vandRT.assign({2*nSpts + nFpts, 2*nSpts * nFpts}); 
   
-  //eye.assign({2*nSpts + nFpts, 2*nSpts + nFpts}, 0); 
   mdvector<double>eye2({2*nSpts + nFpts, 2*nSpts + nFpts}, 0); 
   for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
     eye2(i,i) = 1.0;
 
   vandRT.solve(inv_vandRT, eye2);
 
-  //for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
-  //{
-  //  for (unsigned int j = 0; j < 2*nSpts + nFpts; j++)
-  //  {
-  //    std::cout << inv_vandRT(i,j) << " ";
-  //  }
-  //  std::cout << std::endl;
-  //}
-
-  
 }
 
 void Tris::set_oppRestart(unsigned int order_restart, bool use_shape)
@@ -447,107 +400,6 @@ double Tris::calc_d_nodal_basis_fpts(unsigned int fpt,
 
 void Tris::setup_PMG(int pro_order, int res_order)
 {
-//  unsigned int nSpts_pro_1D = pro_order + 1;
-//  unsigned int nSpts_res_1D = res_order + 1;
-//  unsigned int nSpts_pro = nSpts_pro_1D * nSpts_pro_1D;
-//  unsigned int nSpts_res = nSpts_res_1D * nSpts_res_1D;
-//
-//  std::vector<double> loc(nDims, 0.0);
-//
-//  if (order != input->order)
-//  {
-//    /* Setup prolongation operator */
-//    oppPro.assign({nSpts_pro, nSpts});
-//
-//    std::vector<mdvector<double>> opps(pro_order + 1);
-//
-//    /* Form operator by sequential multiplication of single order prolongation operators */
-//    for (int P = pro_order; P > order; P--)
-//    {
-//      opps[P].assign({(P+1) * (P+1), P * P}, 0);
-//
-//      auto loc_spts_P1_1D = Gauss_Legendre_pts(P+1); 
-//      auto loc_spts_P2_1D = Gauss_Legendre_pts(P); 
-//
-//      for (unsigned int spt = 0; spt < P * P; spt++)
-//      {
-//        int i = spt % P;
-//        int j = spt / P;
-//        for (unsigned int pspt = 0; pspt < (P+1) * (P+1); pspt++)
-//        {
-//          loc[0] = loc_spts_P1_1D[pspt % (P+1)];
-//          loc[1] = loc_spts_P1_1D[pspt / (P+1)];
-//
-//          opps[P](pspt, spt) = Lagrange(loc_spts_P2_1D, i, loc[0]) * 
-//                               Lagrange(loc_spts_P2_1D, j, loc[1]);
-//        }
-//      }
-//    }
-//
-//    for (int P = pro_order; P > order + 1; P--)
-//    {
-//      mdvector<double> opp({nSpts_pro, (P-1) * (P-1)});
-//
-//      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, (P-1) * (P-1),
-//          P * P, 1.0, opps[P].data(), opps[P].ldim(), opps[P-1].data(), opps[P-1].ldim(), 0.0, opp.data(), opp.ldim());
-//
-//      opps[P-1] = opp;
-//    }
-//
-//    oppPro = opps[order + 1];
-//
-//  }
-//
-//  if (order != 0)
-//  {
-//    /* Setup restriction operator */
-//    oppRes.assign({nSpts_res, nSpts});
-//
-//    std::vector<mdvector<double>> opps(order + 1);
-//
-//    /* Form operator by sequential multiplication of single order restriction operators */
-//    for (int P = res_order; P < order; P++)
-//    {
-//      opps[P].assign({(P+1) * (P+1), (P+2) * (P+2)}, 0);
-//
-//      auto loc_spts_P1_1D = Gauss_Legendre_pts(P+1); 
-//      auto loc_spts_P2_1D = Gauss_Legendre_pts(P+2); 
-//
-//      for (unsigned int spt = 0; spt < (P+2) * (P+2); spt++)
-//      {
-//        int i = spt % (P+2);
-//        int j = spt / (P+2);
-//
-//        for (unsigned int rspt = 0; rspt < (P+1) * (P+1); rspt++)
-//        {
-//          loc[0] = loc_spts_P1_1D[rspt % (P+1)];
-//          loc[1] = loc_spts_P1_1D[rspt / (P+1)];
-//
-//          opps[P](rspt, spt) = Lagrange(loc_spts_P2_1D, i, loc[0]) * 
-//                               Lagrange(loc_spts_P2_1D, j, loc[1]);
-//        }
-//      }
-//    }
-//
-//    for (int P = res_order; P < order - 1; P++)
-//    {
-//      mdvector<double> opp({nSpts_res, (P+3) * (P+3)});
-//
-//      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, (P+3) * (P+3),
-//          (P+2) * (P+2), 1.0, opps[P].data(), opps[P].ldim(), opps[P+1].data(), opps[P+1].ldim(), 0.0, opp.data(), opp.ldim());
-//
-//      opps[P+1] = opp;
-//    }
-//
-//    oppRes = opps[order - 1];
-//
-//  }
-//
-//#ifdef _GPU
-//  /* Copy PMG operators to device */
-//  oppPro_d = oppPro;
-//  oppRes_d = oppRes;
-//#endif
 }
 
 void Tris::setup_ppt_connectivity()
