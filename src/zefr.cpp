@@ -623,7 +623,7 @@ void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
   tg_preprocess = preprocess;
   tg_process_connectivity = connect;
   overset_interp_send = dataUpdate_send;
-  overset_interp_recv = dataUpdate_send;
+  overset_interp_recv = dataUpdate_recv;
 }
 
 void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* off, int nDims))
