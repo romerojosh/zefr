@@ -1520,7 +1520,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
       step_RK(source);
   }
 
-  flow_time = prev_time + dt(0);
+  flow_time = prev_time + eles->dt(0);
   current_iter++;
 
   // Update grid to end of time step (if not already done so)
@@ -1555,13 +1555,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   check_error();
 #endif
 
-<<<<<<< HEAD
-  prev_time = flow_time;
-
   unsigned int nSteps = (input->dt_scheme == "RKj") ? input->nStages : input->nStages - 1;
-=======
-  unsigned int nSteps = (input->dt_scheme == "RKj") ? nStages : nStages - 1;
->>>>>>> d2780cba3fc5406cec00b12060558ef8cbf37cac
 
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < nSteps; stage++)
@@ -1665,12 +1659,8 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-<<<<<<< HEAD
-    flow_time = prev_time + rk_alpha(input->nStages-2) * eles->dt(0);
-=======
     if (nStages > 1)
-      flow_time = prev_time + rk_alpha(nStages-2) * dt(0);
->>>>>>> d2780cba3fc5406cec00b12060558ef8cbf37cac
+      flow_time = prev_time + rk_alpha(input->nStages-2) * eles->dt(0);
 
     compute_residual(input->nStages-1);
 #ifdef _CPU
