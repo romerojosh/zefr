@@ -131,6 +131,11 @@ public:
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
 
+#ifdef _GPU
+  cudaStream_t get_tg_stream_handle(void);
+  cudaEvent_t get_tg_event_handle(void);
+#endif
+
 private:
   // Generic data about the run
   int rank = 0, nRanks = 1;

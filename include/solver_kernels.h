@@ -53,6 +53,9 @@ struct MotionVars
 
 void initialize_cuda();
 
+cudaEvent_t get_event_handle(int event);
+cudaStream_t get_stream_handle(int stream);
+
 /* Wrappers for alloc/free GPU memory */
 template<typename T>
 void allocate_device_data(T* &device_data, unsigned int size);
@@ -72,7 +75,7 @@ void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val = 0.);
 
 void sync_stream(unsigned int stream);
 void event_record(unsigned int event, unsigned int stream);
-void stream_wait_event(unsigned int event, unsigned int stream);
+void stream_wait_event(unsigned int stream, unsigned int event);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
@@ -193,5 +196,13 @@ void move_grid_wrapper(mdvector_gpu<double> &coords,
     mdvector_gpu<double>& coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,
     int gridID = 0);
+
+void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe, mdview_gpu<double> &U, mdview_gpu<double> &U_ldg,
+    mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars, int stream = -1);
+
+void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe, mdview_gpu<double> &dU,
+    mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims, int stream = -1);
 
 #endif /* solver_kernels_h */

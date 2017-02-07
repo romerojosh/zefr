@@ -833,10 +833,6 @@ void Faces::apply_bcs_dU()
         //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
         //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1)) + rho_dy * U(fpt, 3, 1) / rho; 
       }
-      else if (bnd_id == OVERSET)
-      {
-        // Do nothing...? [need to treat same as internal]
-      }
       else
       {
         /* Compute energy gradient */
@@ -933,6 +929,10 @@ void Faces::apply_bcs_dU()
         //dU(fpt, 4, 2, 1) = (dT_dz - dT_dn * norm(fpt, 2)) + rho_dz * U(fpt, 4, 1) / rho; 
       }
 
+    }
+    else if (bnd_id == OVERSET)
+    {
+      // Do nothing...? [need to treat same as internal]
     }
     else /* Otherwise, right state gradient equals left state gradient */
     {
@@ -3510,7 +3510,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
   fringe_side_d = fringe_side;
 
   unpack_fringe_u_wrapper(U_fringe_d,U_d,U_ldg_d,fringe_fpts_d,fringe_side_d,nFringe,
-      geo->nFptsPerFace,nVars);
+      geo->nFptsPerFace,nVars,3);
 
   check_error();
 }
@@ -3543,7 +3543,7 @@ void Faces::fringe_grad_to_device(int nFringe)
   dU_fringe_d = dU_fringe;
 
   unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
-      nFringe,geo->nFptsPerFace,nVars,nDims);
+      nFringe,geo->nFptsPerFace,nVars,nDims,3);
 
   check_error();
 }
@@ -3553,7 +3553,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 {
   if (nFringe == 0) return;
 
-  U_fringe_d.assign({nVars, geo->nFptsPerFace, nFringe}, data);
+  U_fringe_d.assign({nVars, geo->nFptsPerFace, nFringe}, data, 3);
 
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
   {
@@ -3578,7 +3578,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
   }
 
   unpack_fringe_u_wrapper(U_fringe_d,U_d,U_ldg_d,fringe_fpts_d,fringe_side_d,nFringe,
-      geo->nFptsPerFace,nVars);
+      geo->nFptsPerFace,nVars,3);
 
   check_error();
 }
@@ -3590,10 +3590,10 @@ void Faces::fringe_grad_to_device(int nFringe, double *data)
 
   if (nFringe == 0) return;
 
-  dU_fringe_d.assign({nVars, nDims, geo->nFptsPerFace, nFringe}, data);
+  dU_fringe_d.assign({nVars, nDims, geo->nFptsPerFace, nFringe}, data, 3);
 
   unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
-      nFringe,geo->nFptsPerFace,nVars,nDims);
+      nFringe,geo->nFptsPerFace,nVars,nDims,3);
 
   check_error();
 }

@@ -3,7 +3,6 @@
 
 #include "mpi.h"
 #include <valgrind/callgrind.h>
-//#include <callgrind.h>
 
 int main(int argc, char *argv[])
 {
@@ -121,6 +120,9 @@ int main(int argc, char *argv[])
   {
     tioga_set_ab_callback_gpu_(cbs.donor_data_from_device, 
       cbs.fringe_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d);
+#ifdef _GPU
+    tioga_set_stream_handle(z->get_tg_stream_handle(), z->get_tg_event_handle());
+#endif
   }
 
   if (nGrids > 1)

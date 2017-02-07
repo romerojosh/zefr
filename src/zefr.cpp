@@ -282,7 +282,7 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
   //cid = grank%16; // For XStream nodes
   //cid = grank%4; // For ICME K80 nodes
   cid = grank % nDevices; /// TODO: use MPI_local_rank % nDevices
-  printf("rank %d on grid %d --> CUDA device %d\n",rank,myGrid,cid);
+  //printf("rank %d on grid %d --> CUDA device %d\n",rank,myGrid,cid);
   cudaSetDevice(cid); 
   check_error();
 
@@ -607,6 +607,7 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
     else
       solver->faces->fringe_grad_to_device(nFringe);
   }
+
   check_error();
 #endif
 }
@@ -630,5 +631,17 @@ void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* of
 {
   tg_update_transform = setTransform;
 }
+
+#ifdef _GPU
+cudaStream_t Zefr::get_tg_stream_handle(void)
+{
+  return get_stream_handle(3);
+}
+
+cudaEvent_t Zefr::get_tg_event_handle(void)
+{
+  return get_event_handle(2);
+}
+#endif
 
 #endif /* _BUILD_LIB */

@@ -776,6 +776,12 @@ void FRSolver::solver_data_to_device()
 
 void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 {
+#if defined(_GPU) && defined(_BUILD_LIB)
+  // Record event for start of compute_res (solution up-to-date for calculation)
+  event_record(2, 0);
+  stream_wait_event(3, 2);
+#endif
+
   unsigned int startEle = 0; unsigned int endEle = eles->nEles;
   unsigned int startFpt = 0; unsigned int endFpt = geo.nGfpts;
 
@@ -790,6 +796,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
   }
 
+  /* Extrapolate solution to flux points */
+  eles->extrapolate_U(startEle, endEle);
+
 #ifdef _BUILD_LIB
   if (input->overset)
   {
@@ -798,9 +807,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     POP_NVTX_RANGE;
   }
 #endif
-
-  /* Extrapolate solution to flux points */
-  eles->extrapolate_U(startEle, endEle);
 
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
@@ -823,7 +829,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
 
-
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
@@ -836,6 +841,15 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       eles->compute_gradF_spts(startEle, endEle);
       eles->compute_dU0(startEle, endEle);
     }
+
+#ifdef _BUILD_LIB
+  if (input->overset)
+  {
+    PUSH_NVTX_RANGE("overset_U_recv", 2);
+    ZEFR->overset_interp_recv(faces->nVars, 0);
+    POP_NVTX_RANGE;
+  }
+#endif
 
     /* Compute parent space common flux at non-MPI flux points */
     faces->compute_common_F(startFpt, endFpt);
@@ -878,13 +892,26 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #ifdef _MPI
     /* Receieve U data */
     faces->recv_U_data();
-    
+
     /* Complete computation on remaining flux points */
     faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
     /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_fpts(startEle, endEle);
+
+#ifdef _GPU
+    // Record event upon completion of corrected gradient
+    event_record(3, 0);
+    stream_wait_event(3, 3);
+#endif
+
+    /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
+    if (input->motion)
+      eles->compute_dU0(startEle, endEle);
+
+    /* Compute flux at solution points */
+    eles->compute_F(startEle, endEle);
 
     /* Interpolate gradient data to/from other grid(s) */
 #ifdef _BUILD_LIB
@@ -896,15 +923,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     }
 #endif
 
-    /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
-    if (input->motion)
-      eles->compute_dU0(startEle, endEle);
-
-    /* Compute flux at solution points */
-    eles->compute_F(startEle, endEle);
-
     /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
     eles->extrapolate_dU(startEle, endEle);
+
+#if defined(_GPU) && defined(_BUILD_LIB)
+    event_record(4,0);
+    stream_wait_event(3,4);
+#endif
 
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
@@ -933,6 +958,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     {
       PUSH_NVTX_RANGE("overset_grad_recv", 2);
       ZEFR->overset_interp_recv(faces->nVars, 1);
+      // Wait for updated data on GPU before moving on to common_F
+      event_record(2, 3);
+      stream_wait_event(0, 2);
       POP_NVTX_RANGE;
     }
 #endif

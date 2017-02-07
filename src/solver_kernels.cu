@@ -43,10 +43,12 @@
 
 static const unsigned int MAX_GRID_DIM = 65535;
 
+#define N_EVENTS 6
+
 /* Create handles for default (0) and concurrent (1-16) streams */
 static std::vector<cublasHandle_t> cublas_handles(17);
 static std::vector<cudaStream_t> stream_handles(17);
-static std::vector<cudaEvent_t> event_handles(2);
+static std::vector<cudaEvent_t> event_handles(N_EVENTS);
 
 void initialize_cuda()
 {
@@ -62,8 +64,18 @@ void initialize_cuda()
     cublasSetStream(cublas_handles[i], stream_handles[i]);
   }
 
-  cudaEventCreateWithFlags(&event_handles[0], cudaEventDisableTiming);
-  cudaEventCreateWithFlags(&event_handles[1], cudaEventDisableTiming);
+  for (int i = 0; i < N_EVENTS; i++)
+    cudaEventCreateWithFlags(&event_handles[i], cudaEventDisableTiming);
+}
+
+cudaEvent_t get_event_handle(int event)
+{
+  return event_handles[event];
+}
+
+cudaStream_t get_stream_handle(int stream)
+{
+  return stream_handles[stream];
 }
 
 template <typename T>
@@ -1635,4 +1647,103 @@ void move_grid_wrapper(mdvector_gpu<double> &coords,
   int blocks = (nNodes + threads - 1) / threads;
   move_grid<<<blocks, threads>>>(coords, coords_0, Vg, params, nNodes, nDims,
       motion_type, time, gridID);
+}
+
+
+__global__
+void unpack_fringe_u(mdvector_gpu<double> U_fringe,
+    mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdvector_gpu<unsigned int> fringe_fpts,
+    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars)
+{
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int fpt = (tot_ind / nVars) % nFpts;
+  const unsigned int face = tot_ind / (nFpts * nVars);
+
+  if (face >= nFringe)
+    return;
+
+  const unsigned int gfpt = fringe_fpts(fpt, face);
+  const unsigned int side = fringe_side(fpt, face);
+
+  double val = U_fringe(var,fpt,face);
+  U(gfpt, var, side) = val; //fpt, face, var); /// TODO: look into further
+  U_ldg(gfpt, var, side) = val;
+}
+
+void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
+    mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe, unsigned int nFpts,
+    unsigned int nVars, int stream)
+{
+  int threads = 192;
+  int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+  {
+    unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, U_ldg, fringe_fpts,
+        fringe_side, nFringe, nFpts, nVars);
+  }
+  else
+  {
+    unpack_fringe_u<<<blocks, threads, 0, stream_handles[stream]>>>(U_fringe, U,
+        U_ldg, fringe_fpts, fringe_side, nFringe, nFpts, nVars);
+  }
+
+  check_error();
+}
+
+template <unsigned nDims>
+__global__
+void unpack_fringe_grad(mdvector_gpu<double> dU_fringe,
+    mdview_gpu<double> dU, mdvector_gpu<unsigned int> fringe_fpts,
+    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars)
+{
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int fpt = (tot_ind / nVars) % nFpts;
+  const unsigned int face = tot_ind / (nFpts * nVars);
+
+  if (fpt >= nFpts || face >= nFringe || var >= nVars)
+    return;
+
+  const unsigned int gfpt = fringe_fpts(fpt, face);
+  const unsigned int side = fringe_side(fpt, face);
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face);
+}
+
+void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
+    mdview_gpu<double> &dU, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims, int stream)
+{
+  int threads  = 192;
+  int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+  {
+    if (nDims == 2)
+      unpack_fringe_grad<2><<<blocks, threads>>>(dU_fringe, dU, fringe_fpts,
+                                                 fringe_side, nFringe, nFpts, nVars);
+
+    else if (nDims == 3)
+      unpack_fringe_grad<3><<<blocks, threads>>>(dU_fringe, dU, fringe_fpts,
+                                                 fringe_side, nFringe, nFpts, nVars);
+  }
+  else
+  {
+    if (nDims == 2)
+      unpack_fringe_grad<2><<<blocks, threads, 0, stream_handles[stream]>>>
+          (dU_fringe, dU, fringe_fpts, fringe_side, nFringe, nFpts, nVars);
+
+    else if (nDims == 3)
+      unpack_fringe_grad<3><<<blocks, threads, 0, stream_handles[stream]>>>
+          (dU_fringe, dU, fringe_fpts, fringe_side, nFringe, nFpts, nVars);
+  }
+
+  check_error();
 }
