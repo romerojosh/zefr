@@ -712,7 +712,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
 
-
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
@@ -798,10 +797,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
       if (input->motion)
         eles->compute_dU0(startEle, endEle);
-
-      /* Transform gradient of state variables to physical space from 
-       * reference space */
-      //eles->transform_dU(startEle, endEle);
     }
 
     /* Compute flux at solution points */

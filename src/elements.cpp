@@ -484,16 +484,6 @@ void Elements::setup_FR()
     }
   }
 
-//  std::cout << "oppE" << std::endl;
-//  for (unsigned int i = 0; i < nFpts; i++)
-//  {
-//    for (unsigned int j = 0; j < nSpts; j++)
-//    {
-//      std::cout << oppE(i,j) << " ";
-//    }
-//    std::cout << std::endl;
-//  }
-
   /* Setup spt to fpt extrapolation operator for normal flux (oppE_Fn) */
   for (unsigned int dim = 0; dim < nDims; dim++)
     for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -515,26 +505,6 @@ void Elements::setup_FR()
       }
     }
   }
-
-//  std::cout << "oppD" << std::endl;
-//  for (unsigned int i = 0; i < nSpts; i++)
-//  {
-//    for (unsigned int j = 0; j < nSpts; j++)
-//    {
-//      std::cout << oppD(i,j,0) << " ";
-//    }
-//    std::cout << std::endl;
-//  }
-//
-//  for (unsigned int i = 0; i < nSpts; i++)
-//  {
-//    for (unsigned int j = 0; j < nSpts; j++)
-//    {
-//      std::cout << oppD(i,j,1) << " ";
-//    }
-//    std::cout << std::endl;
-//  }
-
 
   /* Setup differentiation operator (oppD) for solution points */
   /* Note: This one is the 'traditional' FR derivative [fpts not included] */
@@ -567,27 +537,6 @@ void Elements::setup_FR()
     }
   }
 
-//  std::cout << "oppD_fpts" << std::endl;
-//  for (unsigned int i = 0; i < nSpts; i++)
-//  {
-//    for (unsigned int j = 0; j < nFpts; j++)
-//    {
-//      std::cout << oppD_fpts(i,j,0) << " ";
-//    }
-//    std::cout << std::endl;
-//  }
-//
-//  for (unsigned int i = 0; i < nSpts; i++)
-//  {
-//    for (unsigned int j = 0; j < nFpts; j++)
-//    {
-//      std::cout << oppD_fpts(i,j,1) << " ";
-//    }
-//    std::cout << std::endl;
-//  }
-//
-
-
   /* Setup divergence operator (oppDiv_fpts) for flux points by combining dimensions of oppD_fpts */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
@@ -618,19 +567,6 @@ void Elements::setup_FR()
       }
     }
   }
-
-//  std::cout << "oppDiv_fpts" << std::endl;
-//  for (unsigned int i = 0; i < nSpts; i++)
-//  {
-//    for (unsigned int j = 0; j < nFpts; j++)
-//    {
-//      std::cout << oppDiv_fpts(i,j) << " ";
-//    }
-//    std::cout << std::endl;
-//  }
-
-
-
 }
 
 void Elements::setup_aux()

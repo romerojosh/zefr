@@ -89,10 +89,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   if (format == GMSH)
   {
     if (geo.ele_set.count(TRI))
-    {
-      std::cout << "JDR: MODIFIED ORDER OF GLOBAL FPTS " << std::endl;
-      setup_global_fpts(input, geo, order+1);
-    }
+      setup_global_fpts(input, geo, order + 1); // triangles require P+2 flux points on faces
     else
       setup_global_fpts(input, geo, order);
   }
@@ -852,11 +849,11 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 2:
         case 3:
         case 9:
-        case 10: // Quadratic (Lagrange) quad
-        case 16: // Quadratic (Serendipity) quad
-        case 36: // Cubic quad
-        case 37: // Quartic quad
-        case 38: // Quintic quad
+        case 10: 
+        case 16: 
+        case 36: 
+        case 37: 
+        case 38: 
           geo.nBnds++; break;
 
         default:
@@ -986,209 +983,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 37: // Quartic quad
         case 38: // Quintic quad
           break;
-
-        //case 4: /* 4-node Tetrahedral */
-        //{
-        //  /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
-        //   * fully tetrahedral meshes. */
-        //  std::vector<unsigned int> nodes(4,0);
-
-        //  for (unsigned int i = 0; i < 4; i++)
-        //  {
-        //    f >> nodes[i];
-        //  }
-
-        //  /* Locate minimum node index and position */
-        //  auto it_min = std::min_element(nodes.begin(), nodes.end());
-        //  auto min_node = *it_min;
-
-        //  unsigned int min_pos = 0;
-        //  for (unsigned int i = 0; i < 4; i++)
-        //  {
-        //    if (nodes[i] == min_node)
-        //      min_pos = i;
-        //  }
-
-        //  /* Set minimum node to "top" collapsed node */
-        //  geo.ele2nodes(4, ele) = min_node;
-        //  geo.ele2nodes(5, ele) = min_node;
-        //  geo.ele2nodes(6, ele) = min_node;
-        //  geo.ele2nodes(7, ele) = min_node;
-
-        //  nodes.erase(it_min);
-
-        //  /* Find next minimum node */
-        //  it_min = std::min_element(nodes.begin(), nodes.end());
-        //  min_node = *it_min;
-
-
-        //  /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
-        //   * Reorder for CCW orientation if needed */
-        //  while (nodes[2] != min_node)
-        //  {
-        //    std::rotate(nodes.begin(), nodes.begin() + 1, nodes.end());
-        //  }
-        //  if (min_pos == 0 || min_pos == 2)
-        //  {
-        //    geo.ele2nodes(0, ele) = nodes[1];
-        //    geo.ele2nodes(1, ele) = nodes[0];
-        //    geo.ele2nodes(2, ele) = nodes[2];
-        //    geo.ele2nodes(3, ele) = nodes[2];
-        //  }
-        //  else if (min_pos == 1 || min_pos == 3)
-        //  {
-        //    geo.ele2nodes(0, ele) = nodes[0];
-        //    geo.ele2nodes(1, ele) = nodes[1];
-        //    geo.ele2nodes(2, ele) = nodes[2];
-        //    geo.ele2nodes(3, ele) = nodes[2];
-        //  }
-
-        //  ele++; break;
-        //}
-
-        //case 5: /* 8-node Hexahedral */
-        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-        //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-        //  ele++; break;
-
-        //case 6: /* 6-node Prism */
-        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele);
-        //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele);
-        //  geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele);
-        //  geo.ele2nodes(7,ele) = geo.ele2nodes(6,ele);
-        //  ele++; break;
-
-        //case 7: /* 5-node Pyramid */
-        //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1, ele) >> geo.ele2nodes(2, ele);
-        //  f >> geo.ele2nodes(3, ele) >> geo.ele2nodes(4,ele);
-        //  geo.ele2nodes(5, ele) = geo.ele2nodes(4, ele);
-        //  geo.ele2nodes(6, ele) = geo.ele2nodes(4, ele);
-        //  geo.ele2nodes(7, ele) = geo.ele2nodes(4, ele);
-        //  ele++; break;
-
-        //case 11: /* 10-node Tetrahedron (read as collapsed 20-node serendipity) */
-        //{
-        //  /* Selecting collapsed nodes per Hesthaven's thesis. Works for non-periodic
-        //   * fully tetrahedral meshes. */
-        //  std::vector<unsigned int> nodes(10,0);
-        //  std::vector<unsigned int> verts(4,0);
-
-        //  for (unsigned int i = 0; i < 10; i++)
-        //  {
-        //    f >> nodes[i];
-        //    //nodes[i] = i;
-        //  }
-
-        //  for (unsigned int i = 0; i < 4; i++)
-        //  {
-        //    verts[i] = nodes[i];
-        //  }
-
-        //  /* Locate minimum vertex index and position */
-        //  auto it_min = std::min_element(verts.begin(), verts.end());
-        //  auto min_vert = *it_min;
-
-        //  unsigned int min_pos = 0;
-        //  for (unsigned int i = 0; i < 4; i++)
-        //  {
-        //    if (verts[i] == min_vert)
-        //      min_pos = i;
-        //  }
-
-        //  //std::cout << ele << " " << min_pos << std::endl;
-
-        //  /* Set minimum node to "top" collapsed node */
-        //  geo.ele2nodes(4, ele) = min_vert; geo.ele2nodes(5, ele) = min_vert;
-        //  geo.ele2nodes(6, ele) = min_vert; geo.ele2nodes(7, ele) = min_vert;
-        //  geo.ele2nodes(16,ele) =  min_vert; geo.ele2nodes(17,ele) = min_vert;
-        //  geo.ele2nodes(18,ele) =  min_vert; geo.ele2nodes(19,ele) = min_vert;
-
-        //  verts.erase(it_min);
-
-        //  /* Get bottom and middle edge vertices, based on min_pos */
-        //  std::vector<unsigned int> bverts(3,0);
-        //  std::vector<unsigned int> mverts(3,0);
-        //  if (min_pos == 0)
-        //  {
-        //    bverts = {nodes[5], nodes[8], nodes[9]};
-        //    mverts = {nodes[4], nodes[6], nodes[7]};
-        //  }
-        //  else if (min_pos == 1)
-        //  {
-        //    bverts = {nodes[6], nodes[8], nodes[7]};
-        //    mverts = {nodes[4], nodes[5], nodes[9]};
-        //  }
-        //  else if (min_pos == 2)
-        //  {
-        //    bverts = {nodes[4], nodes[9], nodes[7]};
-        //    mverts = {nodes[6], nodes[5], nodes[8]};
-        //  }
-        //  else
-        //  {
-        //    bverts = {nodes[4], nodes[5], nodes[6]};
-        //    mverts = {nodes[7], nodes[9], nodes[8]};
-        //  }
-
-        //  /* Find next minimum vertex */
-        //  it_min = std::min_element(verts.begin(), verts.end());
-        //  min_vert = *it_min;
-
-
-        //  /* Rotate base nodes so that second minimum is "bottom" collapsed node. 
-        //   * Reorder for CCW orientation if needed */
-        //  while (verts[2] != min_vert)
-        //  {
-        //    std::rotate(verts.begin(), verts.begin() + 1, verts.end());
-        //    std::rotate(bverts.begin(), bverts.begin() + 1, bverts.end());
-        //    std::rotate(mverts.begin(), mverts.begin() + 1, mverts.end());
-        //  }
-        //  if (min_pos == 0 || min_pos == 2)
-        //  {
-        //    geo.ele2nodes(0, ele) = verts[1];
-        //    geo.ele2nodes(1, ele) = verts[0];
-        //    geo.ele2nodes(2, ele) = verts[2];
-        //    geo.ele2nodes(3, ele) = verts[2];
-
-        //    geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[2];
-        //    geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[1];
-
-        //    geo.ele2nodes(12,ele) =  mverts[1]; geo.ele2nodes(13,ele) = mverts[0];
-        //    geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
-        //  }
-        //  else if (min_pos == 1 || min_pos == 3)
-        //  {
-        //    geo.ele2nodes(0, ele) = verts[0];
-        //    geo.ele2nodes(1, ele) = verts[1];
-        //    geo.ele2nodes(2, ele) = verts[2];
-        //    geo.ele2nodes(3, ele) = verts[2];
-
-        //    geo.ele2nodes(8,ele) =  bverts[0]; geo.ele2nodes(9,ele) = bverts[1];
-        //    geo.ele2nodes(10,ele) = verts[2]; geo.ele2nodes(11,ele) = bverts[2];
-
-        //    geo.ele2nodes(12,ele) =  mverts[0]; geo.ele2nodes(13,ele) = mverts[1];
-        //    geo.ele2nodes(14,ele) =  mverts[2]; geo.ele2nodes(15,ele) = mverts[2];
-        //  }
-
-        //  ele++; break;
-        //}
-
-        //case 12: /* Triquadratic Hex */
-        //{
-        //  if (input->serendipity) /* Read as 20-node serendipity */
-        //  {
-        //    f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-        //    f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-        //    f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
-        //    f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
-        //    f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
-        //  }
-        //  else /* Read as 27-node Lagrange tensor-product */
-        //  {
-        //    for (unsigned int nd = 0; nd < 27; nd++)
-        //      f >> geo.ele2nodes(nd,ele);
-        //  }
-        //  std::getline(f,line); ele++; break;
-        //}
 
         /* Process hexahedral elements */
         case 5: /* 8-node Hexahedral */
@@ -1709,17 +1503,6 @@ void couple_periodic_bnds(GeoStruct &geo)
         ThrowException("Unpaired periodic face detected. Check your mesh.");
     }
   }
-
-  /*
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-  {
-    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
-    {
-      std::cout << geo.ele_adj(n, ele) << " ";
-    }
-  }
-  std::cout << std::endl;
-  */
 }
 
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
