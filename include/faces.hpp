@@ -83,11 +83,11 @@ class Faces
 
   protected:
     mdvector<double> P;
-    mdview<double> U, dU, Fcomm, Ucomm;
-    mdvector<double> U_bnd, dU_bnd, Fcomm_bnd, Ucomm_bnd;
+    mdview<double> U, dU, Fcomm, Ucomm, U_ldg;
+    mdvector<double> U_bnd, U_bnd_ldg, dU_bnd, Fcomm_bnd, Ucomm_bnd;
     mdvector<double> norm, jaco, coord;
     mdvector<double> dA, waveSp, diffCo;
-    mdvector<int> LDG_bias;
+    mdvector<char> rus_bias, LDG_bias;
 
     mdvector<double> Vg;  //! Grid velocity
 
@@ -126,11 +126,11 @@ class Faces
 
 #ifdef _GPU
     mdvector_gpu<double> P_d;
-    mdview_gpu<double> U_d, dU_d, Fcomm_d, Ucomm_d;
-    mdvector_gpu<double> U_bnd_d, dU_bnd_d, Fcomm_bnd_d, Ucomm_bnd_d;
+    mdview_gpu<double> U_d, U_ldg_d, dU_d, Fcomm_d, Ucomm_d;
+    mdvector_gpu<double> U_bnd_d, U_bnd_ldg_d, dU_bnd_d, Fcomm_bnd_d, Ucomm_bnd_d;
     mdvector_gpu<double> norm_d, jaco_d, coord_d;
     mdvector_gpu<double> dA_d, waveSp_d, diffCo_d;
-    mdvector_gpu<int> LDG_bias_d;
+    mdvector_gpu<char> rus_bias_d, LDG_bias_d;
 
     mdvector_gpu<double> Vg_d;
 
