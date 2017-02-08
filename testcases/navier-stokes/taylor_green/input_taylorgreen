@@ -1,0 +1,59 @@
+# Geometry:
+nDims    3
+meshfile hex16.pyfrm
+
+# Boundary Conditions
+mesh_bound  periodic  periodic
+
+# Solver:
+order    4
+equation EulerNS    (AdvDiff, EulerNS)
+viscous  1
+spt_type Legendre
+
+# Timestepping:
+n_steps   1000
+dt_scheme LSRK      (Euler, RK44, RK54)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	      0.0001
+CFL	      0.3
+CFL_type  1
+
+# Reporting:
+# Note: You can suppress output by setting freq to zero. 
+output_prefix taylorgreen
+write_freq     1000
+write_pyfr     1
+write_paraview 0
+report_freq    100
+res_type       1
+force_freq     0
+error_freq     0
+nQpts1D        10
+plot_surfaces  0
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.0
+ldg_tau    1.0
+
+# Equation Specific Parameters:
+ic_type    1     (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+test_case  4     (2 = Couette, 4 = Taylor-Green)
+
+# Euler/Navier-Stokes
+T_gas    291.15
+gamma    1.4
+R        286.9
+mu       1.827E-5
+prandtl  0.72
+S        120
+
+# Navier-Stokes specific
+fix_vis  1
+mach_fs  0.1
+Re_fs    1600
+L_fs     1
+T_fs     300
