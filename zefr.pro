@@ -32,7 +32,8 @@ SOURCES += \
     src/filter_kernels.cu \
     src/zefr_interface.cpp \
     swig_bin/testZefr.cpp \
-    src/filter.cpp
+    src/filter.cpp \
+    src/integrator.cpp
 
 HEADERS += \
     include/elements_kernels.h \
