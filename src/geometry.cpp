@@ -787,19 +787,15 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
       switch(val)
       {
-        /* Trilinear Hex/Tet/Prism/Pyramid */
-        case 4:
+        /* Trilinear Hex */
         case 5:
-        case 6:
-        case 7:
           geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.shape_order = 1; geo.nNodesPerEle = 8; break;
           geo.nElesBT[HEX]++;
           geo.shape_orderBT[HEX] = 1; geo.nNodesPerEleBT[HEX] = 8; break;
 
-
-        case 11:
+        /* Triquadratic Hex */
         case 12:
           geo.ele_set.insert(HEX);
           geo.nEles++;
@@ -818,6 +814,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           }
           break;
 
+        /* Tricubic Hex */
         case 92:
           geo.ele_set.insert(HEX);
           geo.nEles++;
@@ -828,6 +825,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.nNodesPerEleBT[HEX] = 64;
           break;
 
+        /* Triquartic Hex */
         case 93:
           geo.ele_set.insert(HEX);
           geo.nEles++;
@@ -838,6 +836,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.nNodesPerEleBT[HEX] = 125;
           break;
 
+        /* Triquintic Hex */
         case 94:
           geo.ele_set.insert(HEX);
           geo.nEles++;
@@ -870,6 +869,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
   for (auto etype : geo.ele_set) 
   {
     geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype]});
+    geo.eleID[etype].assign({geo.nElesBT[etype]});
     geo.nElesBT[etype] = 0; // zero out ele by type count to use for indexing
   }
 
@@ -1036,6 +1036,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     }
   }
   
+  /* Correct node values to be 0-indexed. Also assign global eleIDs. */
+  unsigned int eleID = 0;
   for (auto etype : geo.ele_set)
   {
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
@@ -1044,15 +1046,16 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       {
         geo.ele2nodesBT[etype](n,ele)--;
       }
+      geo.eleID[etype](ele) = eleID++;
     }
   }
 
   // MPI HACK
-  if (geo.ele_set.count(TRI))
-  {
-    geo.nFacesPerEle = 3; geo.nNodesPerFace = 2;
-    geo.nCornerNodes = 3; 
-  }
+  //if (geo.ele_set.count(TRI))
+  //{
+  //  geo.nFacesPerEle = 3; geo.nNodesPerFace = 2;
+  //  geo.nCornerNodes = 3; 
+  //}
 
   /* Setup face-node maps for easier processing */
   set_face_nodes(geo);
@@ -1172,8 +1175,7 @@ void set_face_nodes(GeoStruct &geo)
   /* Define node indices for faces */
   geo.face_nodes.assign({geo.nFacesPerEle, geo.nNodesPerFace}, 0);
 
-  // MPI HACK
-  if (geo.nDims == 2 && geo.ele_set.count(QUAD))
+  if (geo.nDims == 2)
   {
     /* Face 0: Bottom */
     geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
@@ -1244,10 +1246,6 @@ void set_face_nodes(GeoStruct &geo)
 
       /* Face 2: Left */
       geo.face_nodesBT[etype][2] = {2, 0};
-
-      geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
-      geo.face_nodes(1, 0) = 1; geo.face_nodes(1, 1) = 2;
-      geo.face_nodes(2, 0) = 2; geo.face_nodes(2, 1) = 0;
     }
     else if (etype == HEX)
     {
@@ -1552,7 +1550,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodes(face_nodes[i], ele);
+          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
         }
 
         /* Check if face is collapsed */
@@ -1564,10 +1562,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         {
           continue;
         }
-        //else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
-        //{
-          face.assign(nodes.begin(), nodes.end());
-        //}
+
+        face.assign(nodes.begin(), nodes.end());
 
         std::sort(face.begin(), face.end());
 
@@ -1659,10 +1655,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         {
           continue;
         }
-        //else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
-        //{
-          face.assign(nodes.begin(), nodes.end());
-        //}
+
+        face.assign(nodes.begin(), nodes.end());
 
         std::sort(face.begin(), face.end());
 
@@ -2126,8 +2120,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
   for (auto etype : geo.ele_set)
   {
-    geo.fpt2gfptBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-    geo.fpt2gfpt_slotBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+    geo.fpt2gfptBT[etype].assign({geo.nFacesPerEleBT[etype] * nFptsPerFace, geo.nElesBT[etype]});
+    geo.fpt2gfpt_slotBT[etype].assign({geo.nFacesPerEleBT[etype] * nFptsPerFace, geo.nElesBT[etype]});
 
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {

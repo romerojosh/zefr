@@ -54,6 +54,7 @@ struct GeoStruct
 {
   /* Maps to organize geometry data by element type */
   std::set<ELE_TYPE> ele_set; // Set of element types discovered in mesh
+  std::map<ELE_TYPE, mdvector<unsigned int>> eleID; // unique ID of element across all element types
   std::map<ELE_TYPE, unsigned int> nElesBT;
   std::map<ELE_TYPE, unsigned int> shape_orderBT;
   std::map<ELE_TYPE, unsigned int> nFacesPerEleBT;

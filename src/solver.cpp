@@ -103,7 +103,15 @@ void FRSolver::setup(_mpi_comm comm_in)
   for (auto etype : geo.ele_set)
   {
     if (etype == QUAD)
-       elesObjs.push_back(std::make_shared<Quads>(&geo, input, order));
+    {
+      if(!geo.ele_set.count(TRI))
+        elesObjs.push_back(std::make_shared<Quads>(&geo, input, order));
+      else
+      {
+        std::cout << "Increased order of quads!" << std::endl;
+        elesObjs.push_back(std::make_shared<Quads>(&geo, input, order + 1));
+      }
+    }
     else if (etype == TRI)
        elesObjs.push_back(std::make_shared<Tris>(&geo, input, order));
     else if (etype == HEX)
@@ -122,7 +130,10 @@ void FRSolver::setup(_mpi_comm comm_in)
 
   faces->setup(eles->nDims, eles->nVars);
 
-  eles->setup(faces, myComm);
+  //eles->setup(faces, myComm);
+
+  for (auto e : elesObjs)
+    e->setup(faces, myComm);
 
 
   if (input->rank == 0) std::cout << "Setting up output..." << std::endl;
@@ -130,7 +141,8 @@ void FRSolver::setup(_mpi_comm comm_in)
 
   if (input->rank == 0) std::cout << "Initializing solution..." << std::endl;
   //initialize_U();
-  eles->initialize_U();
+  for (auto e : elesObjs)
+    e->initialize_U();
 
 
   if (input->restart)
@@ -297,7 +309,8 @@ void FRSolver::setup_output()
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
        
-  eles->setup_ppt_connectivity();
+  for (auto e : elesObjs)
+    e->setup_ppt_connectivity();
 }
 
 void FRSolver::restart(std::string restart_file, unsigned restart_iter)
@@ -676,10 +689,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #endif
 
   /* If using coloring, modify range to extrapolate data from previously updated colors */
-  if (color && geo.nColors > 1)
-  {
-    startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
-  }
+  //if (color && geo.nColors > 1)
+  //{
+  //  startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
+  //}
 
 #ifdef _BUILD_LIB
   if (input->overset)
@@ -689,20 +702,22 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #endif
 
   /* Extrapolate solution to flux points */
-  eles->extrapolate_U(startEle, endEle);
+  for (auto e : elesObjs)
+    e->extrapolate_U(startEle, e->nEles);
+
 
   /* If "squeeze" stabilization enabled, apply  it */
-  if (input->squeeze)
-  {
-    eles->compute_Uavg();
-    eles->poly_squeeze();
-  }
+  //if (input->squeeze)
+  //{
+  //  eles->compute_Uavg();
+  //  eles->poly_squeeze();
+  //}
 
   /* For coloring, modify range to sweep through current color */
-  if (color && geo.nColors > 1)
-  {
-    startEle = geo.ele_color_range[color - 1]; endEle = geo.ele_color_range[color];
-  }
+  //if (color && geo.nColors > 1)
+  //{
+  //  startEle = geo.ele_color_range[color - 1]; endEle = geo.ele_color_range[color];
+  //}
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
@@ -715,14 +730,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* If running inviscid, use this scheduling. */
   if(!input->viscous)
   {
-    /* Compute flux at solution points */
-    eles->compute_F(startEle, endEle);
-
-    /* Transform solution point fluxes from physical to reference space */
-    if (input->motion)
+    for (auto e : elesObjs)
     {
-      eles->compute_gradF_spts(startEle, endEle);
-      eles->compute_dU0(startEle, endEle);
+      /* Compute flux at solution points */
+      e->compute_F(startEle, e->nEles);
+
+      /* Transform solution point fluxes from physical to reference space */
+      if (input->motion)
+      {
+        e->compute_gradF_spts(startEle, e->nEles);
+        e->compute_dU0(startEle, e->nEles);
+      }
     }
 
     /* Compute parent space common flux at non-MPI flux points */
@@ -734,7 +752,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       eles->transform_gradF_spts(stage, startEle, endEle);
     }
     else
-      eles->compute_divF_spts(stage, startEle, endEle);
+    {
+      for (auto e: elesObjs)
+        e->compute_divF_spts(stage, startEle, e->nEles);
+    }
 
 #ifdef _MPI
     /* Receive U data */
@@ -854,7 +875,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   else
   {
     /* Compute flux point contribution to divergence of flux */
-    eles->compute_divF_fpts(stage, startEle, endEle);
+    for (auto e : elesObjs)
+      e->compute_divF_fpts(stage, startEle, e->nEles);
   }
 
   /* Add source term (if required) */
@@ -1235,50 +1257,53 @@ void FRSolver::setup_views()
 #endif
 
   /* Set pointers for internal faces */
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  for (auto e : elesObjs)
   {
-    for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      int gfpt = geo.fpt2gfpt(fpt,ele);
-      /* Check if flux point is on ghost edge */
-      if (gfpt == -1)
+      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
       {
-        continue;
-      }
+        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
+        /* Check if flux point is on ghost edge */
+        if (gfpt == -1)
+        {
+          continue;
+        }
 
-      int slot = geo.fpt2gfpt_slot(fpt,ele);
+        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
 
-      U_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
-      U_ldg_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->U_fpts(fpt, ele, 0);
-      U_strides(gfpt + slot * geo.nGfpts) = eles->U_fpts.get_stride(1);
+        U_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, ele, 0);
+        U_ldg_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, ele, 0);
+        U_strides(gfpt + slot * geo.nGfpts) = e->U_fpts.get_stride(1);
 
-      Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Fcomm(fpt, ele, 0);
+        Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &e->Fcomm(fpt, ele, 0);
 
-      if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->Ucomm(fpt, ele, 0);
+        if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &e->Ucomm(fpt, ele, 0);
 #ifdef _GPU
-      U_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
-      U_ldg_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_ptr(fpt, ele, 0);
-      U_strides_d(gfpt + slot * geo.nGfpts) = eles->U_fpts_d.get_stride(1);
+        U_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_ptr(fpt, ele, 0);
+        U_ldg_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_ptr(fpt, ele, 0);
+        U_strides_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_stride(1);
 
-      Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Fcomm_d.get_ptr(fpt, ele, 0);
+        Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->Fcomm_d.get_ptr(fpt, ele, 0);
 
-      if (input->viscous) Ucomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->Ucomm_d.get_ptr(fpt, ele, 0);
+        if (input->viscous) Ucomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->Ucomm_d.get_ptr(fpt, ele, 0);
 #endif
 
-      if (input->viscous)
-      {
-        dU_base_ptrs(gfpt + slot * geo.nGfpts) = &eles->dU_fpts(fpt, ele, 0, 0);
-        dU_strides(gfpt + slot * geo.nGfpts, 0) = eles->dU_fpts.get_stride(1);
-        dU_strides(gfpt + slot * geo.nGfpts, 1) = eles->dU_fpts.get_stride(2);
+        if (input->viscous)
+        {
+          dU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dU_fpts(fpt, ele, 0, 0);
+          dU_strides(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts.get_stride(1);
+          dU_strides(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts.get_stride(2);
 
 #ifdef _GPU
-        dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = eles->dU_fpts_d.get_ptr(fpt, ele, 0, 0);
-        dU_strides_d(gfpt + slot * geo.nGfpts, 0) = eles->dU_fpts_d.get_stride(1);
-        dU_strides_d(gfpt + slot * geo.nGfpts, 1) = eles->dU_fpts_d.get_stride(2);
+          dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_ptr(fpt, ele, 0, 0);
+          dU_strides_d(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts_d.get_stride(1);
+          dU_strides_d(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts_d.get_stride(2);
 #endif
-       
+         
+        }
+        
       }
-      
     }
   }
 
@@ -1542,7 +1567,10 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 {
 #ifdef _CPU
   if (input->nStages > 1)
-    eles->U_ini = eles->U_spts;
+  {
+    for (auto e : elesObjs)
+      e->U_ini = e->U_spts;
+  }
 #endif
 
 #ifdef _GPU
@@ -1570,84 +1598,87 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     }
 
 #ifdef _CPU
-    if (source.size() == 0)
+    for (auto e : elesObjs)
     {
+      if (source.size() == 0)
+      {
 #pragma omp parallel for collapse(2)
-      for (unsigned int n = 0; n < eles->nVars; n++)
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int n = 0; n < e->nVars; n++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
-            if (input->dt_type != 2)
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
             {
-              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(0) /
-                  eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
-            }
-            else
-            {
-              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(ele) /
-                  eles->jaco_det_spts(spt, ele) * eles->divF_spts(spt, ele, n, stage);
+              if (input->dt_type != 2)
+              {
+                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(spt, ele, n, stage);
+              }
+              else
+              {
+                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(spt, ele, n, stage);
+              }
             }
           }
-        }
-    }
-    else
-    {
+      }
+      else
+      {
 #pragma omp parallel for collapse(2)
-      for (unsigned int n = 0; n < eles->nVars; n++)
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
-        {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int n = 0; n < e->nVars; n++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
-            if (input->dt_type != 2)
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
             {
-              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(0) /
-                  eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-            }
-            else
-            {
-              eles->U_spts(spt, ele, n) = eles->U_ini(spt, ele, n) - rk_alpha(stage) * eles->dt(ele) /
-                  eles->jaco_det_spts(spt,ele) * (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+              if (input->dt_type != 2)
+              {
+                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+              }
+              else
+              {
+                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+              }
             }
           }
-        }
+      }
     }
 #endif
 
 #ifdef _GPU
-    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
-    unsigned int last_stage = (input->dt_scheme == "RKj") ? input->nStages + 1 : input->nStages;
+      /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+      unsigned int last_stage = (input->dt_scheme == "RKj") ? input->nStages + 1 : input->nStages;
 
-    if (source.size() == 0)
-    {
-      RK_update_wrapper(eles->U_spts_d, eles->U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, eles->dt_d,
-                        rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-                        input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
-    }
-    else
-    {
-      RK_update_source_wrapper(eles->U_spts_d, eles->U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, eles->dt_d,
-                               rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
-                               input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
-    }
-    check_error();
+      if (source.size() == 0)
+      {
+        RK_update_wrapper(eles->U_spts_d, eles->U_ini_d, eles->divF_spts_d, eles->jaco_det_spts_d, eles->dt_d,
+                          rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+                          input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+      }
+      else
+      {
+        RK_update_source_wrapper(eles->U_spts_d, eles->U_ini_d, eles->divF_spts_d, source, eles->jaco_det_spts_d, eles->dt_d,
+                                 rk_alpha_d, input->dt_type, eles->nSpts, eles->nEles, eles->nVars, eles->nDims,
+                                 input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+      }
+      check_error();
 #endif
 
-    // Update grid to position of next time step
-    move(flow_time);
+      // Update grid to position of next time step
+      move(flow_time);
 
 #ifdef _BUILD_LIB
-    // Update the overset connectivity to the new grid positions
-    if (input->overset && input->motion)
-    {
-      ZEFR->tg_preprocess();
-      ZEFR->tg_process_connectivity();
+      // Update the overset connectivity to the new grid positions
+      if (input->overset && input->motion)
+      {
+        ZEFR->tg_preprocess();
+        ZEFR->tg_process_connectivity();
 #ifdef _GPU
-      ZEFR->update_iblank_gpu();
+        ZEFR->update_iblank_gpu();
 #endif
-    }
+      }
 #endif
   }
 
@@ -1660,58 +1691,66 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     compute_residual(input->nStages-1);
 #ifdef _CPU
     if (input->nStages > 1)
-      eles->U_spts = eles->U_ini;
+    {
+      for (auto e : elesObjs)
+        e->U_spts = e->U_ini;
+    }
     else if (input->dt_type != 0)
+    {
       compute_element_dt();
+    }
 #endif
 #ifdef _GPU
     device_copy(eles->U_spts_d, eles->U_ini_d, eles->U_spts_d.max_size());
 #endif
 
 #ifdef _CPU
-    for (unsigned int stage = 0; stage < input->nStages; stage++)
+    for (auto e : elesObjs)
     {
-      if (source.size() == 0)
+      for (unsigned int stage = 0; stage < input->nStages; stage++)
       {
+        if (source.size() == 0)
+        {
 #pragma omp parallel for collapse(2)
-        for (unsigned int n = 0; n < eles->nVars; n++)
-          for (unsigned int ele = 0; ele < eles->nEles; ele++)
-          {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-              if (input->dt_type != 2)
-              {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(0) / eles->jaco_det_spts(spt,ele) *
-                    eles->divF_spts(spt, ele, n, stage);
-              }
-              else
-              {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(ele) / eles->jaco_det_spts(spt,ele) *
-                    eles->divF_spts(spt, ele, n, stage);
-              }
-          }
-      }
-      else
-      {
-#pragma omp parallel for collapse(2)
-        for (unsigned int n = 0; n < eles->nVars; n++)
-          for (unsigned int ele = 0; ele < eles->nEles; ele++)
-          {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          for (unsigned int n = 0; n < e->nVars; n++)
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
-              if (input->dt_type != 2)
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+                if (input->dt_type != 2)
+                {
+                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt,ele) *
+                      e->divF_spts(spt, ele, n, stage);
+                }
+                else
+                {
+                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
+                      e->divF_spts(spt, ele, n, stage);
+                }
+            }
+        }
+        else
+        {
+#pragma omp parallel for collapse(2)
+          for (unsigned int n = 0; n < e->nVars; n++)
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
               {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(0) / eles->jaco_det_spts(spt,ele) *
-                    (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
-              }
-              else
-              {
-                eles->U_spts(spt, ele, n) -= rk_beta(stage) * eles->dt(ele) / eles->jaco_det_spts(spt,ele) *
-                    (eles->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                if (input->dt_type != 2)
+                {
+                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt,ele) *
+                      (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                }
+                else
+                {
+                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
+                      (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                }
               }
             }
-          }
+        }
       }
     }
 #endif
@@ -2799,8 +2838,12 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   unsigned int nCells = 0;
   unsigned int nPts = 0;
-  nCells += eles->nSubelements * nEles;
-  nPts += eles->nPpts * nEles;
+
+  for (auto e : elesObjs)
+  {
+    nCells += e->nSubelements * e->nEles;
+    nPts += e->nPpts * e->nEles;
+  }
 
   f << "<UnstructuredGrid>" << std::endl;
   f << "<Piece NumberOfPoints=\"" << nPts << "\" ";
@@ -2829,7 +2872,9 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     f << "<DataArray type=\"Float64\" Name=\"" << var[n] << "\" ";
     f << "format=\"appended\" offset=\"" << b_offset << "\"/>"<< std::endl;
-    b_offset += (nEles * eles->nPpts * sizeof(double) + sizeof(unsigned int));
+    b_offset += sizeof(unsigned int);
+    for (auto e : elesObjs)
+      b_offset += (e->nEles * e->nPpts * sizeof(double));
   }
 
   if (input->filt_on && input->sen_write)
@@ -2880,23 +2925,31 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   f << "</Points>" << std::endl;
-  b_offset += (nEles * eles->nPpts * 3 * sizeof(float) + sizeof(unsigned int));
+  b_offset += sizeof(unsigned int);
+  for (auto e : elesObjs)
+    b_offset += (e->nEles * e->nPpts * 3 * sizeof(float));
 
   /* Write cell information */
   f << "<Cells>" << std::endl;
   f << "<DataArray type=\"UInt32\" Name=\"connectivity\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
-  b_offset += (nEles * eles->nSubelements * eles->nNodesPerSubelement * sizeof(unsigned int) + sizeof(unsigned int));
+  b_offset += sizeof(unsigned int);
+  for (auto e : elesObjs)
+    b_offset += (e->nEles * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int));
 
 
 
   f << "<DataArray type=\"UInt32\" Name=\"offsets\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
-  b_offset += (nEles * eles->nSubelements * sizeof(unsigned int) + sizeof(unsigned int));
+  b_offset += sizeof(unsigned int);
+  for (auto e : elesObjs)
+    b_offset += (e->nEles * e->nSubelements * sizeof(unsigned int));
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
-  b_offset += (nEles * eles->nSubelements * sizeof(char) + sizeof(unsigned int));
+  b_offset += sizeof(unsigned int);
+  for (auto e : elesObjs)
+    b_offset += (e->nEles * e->nSubelements * sizeof(char));
   f << "</Cells>" << std::endl;
 
   f << "</Piece>" << std::endl;
@@ -2908,110 +2961,148 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   /* Write solution data */
   /* Extrapolate solution to plot points */
-  auto &A = eles->oppE_ppts(0, 0);
-  auto &B = eles->U_spts(0, 0, 0);
-  auto &C = eles->U_ppts(0, 0, 0);
+  for (auto e : elesObjs)
+  {
+    auto &A = e->oppE_ppts(0, 0);
+    auto &B = e->U_spts(0, 0, 0);
+    auto &C = e->U_ppts(0, 0, 0);
 
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, else->oppE_ppts.ldim(), &B, 
-      eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
+        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B, 
+        e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nPpts, 
-        eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_ppts.ldim(), &B, 
-        eles->U_spts.ldim(), 0.0, &C, eles->U_ppts.ldim());
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
+          e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B, 
+          e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
 #endif
 
-  /* Apply squeezing if needed */
-  if (input->squeeze)
-  {
-    eles->compute_Uavg();
+    /* Apply squeezing if needed */
+    //if (input->squeeze)
+    //{
+    //  eles->compute_Uavg();
 
 #ifdef _GPU
-    eles->Uavg = eles->Uavg_d;
+    //  eles->Uavg = eles->Uavg_d;
 #endif
 
-    eles->poly_squeeze_ppts();
+    //  eles->poly_squeeze_ppts();
+    //}
   }
 
-  unsigned int nBytes = nEles * eles->nPpts * sizeof(double);
+  unsigned int nBytes = 0;
+
+  for (auto e : elesObjs)
+    nBytes += e->nEles * e->nPpts * sizeof(double);
 
   for (unsigned int n = 0; n < eles->nVars; n++)
   {
     binary_write(f, nBytes);
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (auto e : elesObjs)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        binary_write(f, eles->U_ppts(ppt, ele, n));
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
+        {
+          binary_write(f, e->U_ppts(ppt, ele, n));
+          //binary_write(f, double(ele));
+        }
       }
     }
   }
 
   /* Write plot point coordinates */
-  nBytes = nEles * eles->nPpts * 3 * sizeof(float);
+  nBytes = 0;
+  for (auto e : elesObjs)
+    nBytes += e->nEles * e->nPpts * 3 * sizeof(float);
   binary_write(f, nBytes);
+
   double dzero = 0.0;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      binary_write(f, (float) eles->coord_ppts(ppt, ele, 0));
-      binary_write(f, (float) eles->coord_ppts(ppt, ele, 1));
-      if (geo.nDims == 2)
-        binary_write(f, 0.0f);
-      else
-        binary_write(f, (float) eles->coord_ppts(ppt, ele, 2));
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
+      {
+        binary_write(f, (float) e->coord_ppts(ppt, ele, 0));
+        binary_write(f, (float) e->coord_ppts(ppt, ele, 1));
+        if (geo.nDims == 2)
+          binary_write(f, 0.0f);
+        else
+          binary_write(f, (float) e->coord_ppts(ppt, ele, 2));
+      }
     }
   }
 
   /* Write cell information */
   // Write connectivity
-  nBytes = nEles * eles->nSubelements * eles->nNodesPerSubelement * sizeof(unsigned int);
+  nBytes = 0;
+  for (auto e : elesObjs)
+    nBytes += e->nEles * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int);
   binary_write(f, nBytes);
+
   int shift = 0; // To account for blanked elements
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
       {
-        binary_write(f, eles->ppt_connect(i, subele) + shift);
+        for (unsigned int i = 0; i < e->nNodesPerSubelement; i++)
+        {
+          binary_write(f, e->ppt_connect(i, subele) + shift);
+        }
       }
+      shift += e->nPpts;
     }
-    shift += eles->nPpts;
   }
 
   // Offsets
-  nBytes = nEles * eles->nSubelements * sizeof(unsigned int);
+  nBytes = 0;
+  for (auto e: elesObjs)
+    nBytes += e->nEles * e->nSubelements * sizeof(unsigned int);
+
   binary_write(f, nBytes);
-  unsigned int offset = eles->nNodesPerSubelement;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+
+  //unsigned int offset = eles->nNodesPerSubelement;
+  unsigned int offset = 0;
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      binary_write(f, offset);
-      offset += eles->nNodesPerSubelement;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
+      {
+        offset += e->nNodesPerSubelement;
+        binary_write(f, offset);
+        //offset += eles->nNodesPerSubelement;
+      }
     }
   }
 
   // Types
-  nBytes = nEles * eles->nSubelements * sizeof(char);
+  nBytes = 0;
+  for (auto e : elesObjs)
+    nBytes += e->nEles * e->nSubelements * sizeof(char);
   binary_write(f, nBytes);
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+
+  for (auto e : elesObjs)
   {
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      if (eles->etype == QUAD)
-        binary_write(f, (char) 9);
-      else if (eles->etype == TRI)
-        binary_write(f, (char) 5);
-      else if (eles->etype == HEX)
-        binary_write(f, (char) 12);
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
+      {
+        if (e->etype == QUAD)
+          binary_write(f, (char) 9);
+        else if (e->etype == TRI)
+          binary_write(f, (char) 5);
+        else if (e->etype == HEX)
+          binary_write(f, (char) 12);
+      }
     }
   }
 
