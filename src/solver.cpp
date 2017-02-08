@@ -777,9 +777,12 @@ void FRSolver::solver_data_to_device()
 void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 {
 #if defined(_GPU) && defined(_BUILD_LIB)
-  // Record event for start of compute_res (solution up-to-date for calculation)
-  event_record(2, 0);
-  stream_wait_event(3, 2);
+  if (input->overset)
+  {
+    // Record event for start of compute_res (solution up-to-date for calculation)
+    event_record(2, 0);
+    stream_wait_event(3, 2);
+  }
 #endif
 
   unsigned int startEle = 0; unsigned int endEle = eles->nEles;
@@ -900,10 +903,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
     eles->compute_dU_fpts(startEle, endEle);
 
-#ifdef _GPU
-    // Record event upon completion of corrected gradient
-    event_record(3, 0);
-    stream_wait_event(3, 3);
+#if defined(_GPU) && defined(_BUILD_LIB)
+    if (input->overset)
+    {
+      // Record event upon completion of corrected gradient
+      event_record(3, 0);
+      stream_wait_event(3, 3);
+    }
 #endif
 
     /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
@@ -927,8 +933,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     eles->extrapolate_dU(startEle, endEle);
 
 #if defined(_GPU) && defined(_BUILD_LIB)
-    event_record(4,0);
-    stream_wait_event(3,4);
+    if (input->overset)
+    {
+      event_record(4,0);
+      stream_wait_event(3,4);
+    }
 #endif
 
 #ifdef _MPI
