@@ -373,6 +373,7 @@ void Faces::apply_bcs()
       }
 
       case CHAR: /* Characteristic (from PyFR) */
+      case CHAR_P: /* Characteristic (prescribed) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
@@ -449,6 +450,12 @@ void Faces::apply_bcs()
         {
           U(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
           U_ldg(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
+        }
+
+        /* Set Char (prescribed) */
+        if (bnd_id == CHAR_P)
+        {
+          rus_bias(fpt) = 1;
         }
 
         /* Set bias */
@@ -1065,6 +1072,7 @@ void Faces::apply_bcs_dFdU()
       }
 
       case CHAR: /* Characteristic (from PyFR) */
+      case CHAR_P: /* Characteristic (prescribed) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
@@ -2591,7 +2599,7 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
 #endif
 
 #ifdef _GPU
-    rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, LDG_bias_d,
+    rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, rus_bias_d,
         input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
     check_error();
 #endif
@@ -2722,7 +2730,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       }
     }
 
-    if (LDG_bias(fpt) == 2)
+    if (rus_bias(fpt) == 2) /* Central */
     {
       for (unsigned int nj = 0; nj < nVars; nj++)
       {
@@ -2737,7 +2745,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       }
       continue;
     }
-    else if (LDG_bias(fpt) != 0)
+    else if (rus_bias(fpt) == 1) /* Set flux state */
     {
       for (unsigned int nj = 0; nj < nVars; nj++)
       {

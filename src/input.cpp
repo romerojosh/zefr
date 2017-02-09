@@ -32,6 +32,7 @@ std::map<std::string,int> bcStr2Num = {
   {"none", NONE},
   {"fluid", NONE},
   {"periodic", PERIODIC},
+  {"char_p", CHAR_P},
   {"char", CHAR},
   {"farfield", SUP_IN},
   {"inlet_sup", SUP_IN},

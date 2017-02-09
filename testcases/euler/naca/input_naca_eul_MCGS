@@ -3,7 +3,7 @@ nDims    2
 meshfile naca_32x32_b2.msh
 
 # Boundary Conditions
-mesh_bound  char  char
+mesh_bound  char  char_p
 mesh_bound  wall_slip_p  wall_slip_p
 mesh_bound  fluid  fluid
 
