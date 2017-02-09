@@ -113,7 +113,12 @@ void FRSolver::setup(_mpi_comm comm_in)
       }
     }
     else if (etype == TRI)
+    {
+      if (input->viscous and !input->grad_via_div)
+        ThrowException("Need to enable grad_via_div to use triangles for viscous problems!");
+
        elesObjs.push_back(std::make_shared<Tris>(&geo, input, order));
+    }
     else if (etype == HEX)
        elesObjs.push_back(std::make_shared<Hexas>(&geo, input, order));
     
@@ -783,17 +788,20 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
-      for (unsigned int dim = 0; dim < eles->nDims; dim++)
+      for (auto e : elesObjs)
       {
-        // Compute unit advection flux at solution points with wavespeed along dim
-        eles->compute_unit_advF(startEle, endEle, dim); 
+        for (unsigned int dim = 0; dim < eles->nDims; dim++)
+        {
+          // Compute unit advection flux at solution points with wavespeed along dim
+          e->compute_unit_advF(startEle, e->nEles, dim); 
 
-        // Convert common U to common normal advection flux
-        faces->common_U_to_F(startFpt, geo.nGfpts, dim);
+          // Convert common U to common normal advection flux
+          faces->common_U_to_F(startFpt, geo.nGfpts, dim);
 
-        // Compute physical gradient (times jacobian determinant) along via divergence of F
-        eles->compute_dU_spts_via_divF(startEle, endEle, dim);
-        eles->compute_dU_fpts_via_divF(startEle, endEle, dim);
+          // Compute physical gradient (times jacobian determinant) along via divergence of F
+          e->compute_dU_spts_via_divF(startEle, e->nEles, dim);
+          e->compute_dU_fpts_via_divF(startEle, e->nEles, dim);
+        }
       }
     }
     else
@@ -802,7 +810,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       faces->compute_common_U(startFpt, endFpt);
 
       /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
-      eles->compute_dU_spts(startEle, endEle);
+      for (auto e : elesObjs)
+        e->compute_dU_spts(startEle, e->nEles);
 
 #ifdef _MPI
       /* Receieve U data */
@@ -813,18 +822,22 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #endif
 
       /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
-      eles->compute_dU_fpts(startEle, endEle);
+      for (auto e : elesObjs)
+        e->compute_dU_fpts(startEle, e->nEles);
 
       /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
       if (input->motion)
         eles->compute_dU0(startEle, endEle);
     }
 
-    /* Compute flux at solution points */
-    eles->compute_F(startEle, endEle);
+    for (auto e : elesObjs)
+    {
+      /* Compute flux at solution points */
+      e->compute_F(startEle, e->nEles);
 
-    /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
-    eles->extrapolate_dU(startEle, endEle);
+      /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
+      e->extrapolate_dU(startEle, e->nEles);
+    }
 
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
@@ -851,7 +864,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     else
     {
       /* Compute solution point contribution to divergence of flux */
-      eles->compute_divF_spts(stage, startEle, endEle);
+      for (auto e : elesObjs)
+        e->compute_divF_spts(stage, startEle, e->nEles);
     }
 
     /* Compute common interface flux at non-MPI flux points */
@@ -1787,15 +1801,18 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   // Calculate error (infinity norm of RK error) and scaling factor for dt
   double max_err = 0;
 #ifdef _CPU
-  for (uint n = 0; n < eles->nVars; n++)
+  for (auto e : elesObjs)
   {
-    for (uint ele = 0; ele < eles->nEles; ele++)
+    for (uint n = 0; n < e->nVars; n++)
     {
-      for (uint spt = 0; spt < eles->nSpts; spt++)
+      for (uint ele = 0; ele < e->nEles; ele++)
       {
-        double err = std::abs(eles->rk_err(spt,ele,n)) /
-            (input->atol + input->rtol * std::max( std::abs(eles->U_spts(spt,ele,n)), std::abs(eles->U_ini(spt,ele,n)) ));
-        max_err = std::max(max_err, err);
+        for (uint spt = 0; spt < e->nSpts; spt++)
+        {
+          double err = std::abs(e->rk_err(spt,ele,n)) /
+              (input->atol + input->rtol * std::max( std::abs(e->U_spts(spt,ele,n)), std::abs(e->U_ini(spt,ele,n)) ));
+          max_err = std::max(max_err, err);
+        }
       }
     }
   }
@@ -1808,7 +1825,8 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   double fac = pow(max_err, -expa) * pow(prev_err, expb);
   fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
 
-  eles->dt(0) *= fac;
+  for (auto e : elesObjs)
+    e->dt(0) *= fac;
 #endif
 
 #ifdef _GPU
@@ -1831,7 +1849,8 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     // Reject step - reset solution back to beginning of time step
     flow_time = prev_time;
 #ifdef _CPU
-    eles->U_spts = eles->U_ini;
+    for (auto e : elesObjs)
+      e->U_spts = e->U_ini;
 #endif
 #ifdef _GPU
     device_copy(eles->U_spts_d, eles->U_ini_d, eles->U_ini_d.max_size());
@@ -1854,9 +1873,12 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   // Copy current solution into "U_ini" ['rold' in PyFR]
 #ifdef _CPU
-  eles->U_ini = eles->U_spts;
-  eles->U_til = eles->U_spts;
-  eles->rk_err.fill(0.0);
+  for (auto e : elesObjs)
+  {
+    e->U_ini = e->U_spts;
+    e->U_til = e->U_spts;
+    e->rk_err.fill(0.0);
+  }
 #endif
 
 #ifdef _GPU
@@ -1883,51 +1905,54 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
 #ifdef _CPU
     // Update Error
-    for (unsigned int n = 0; n < eles->nVars; n++)
+    for (auto e : elesObjs)
     {
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int n = 0; n < e->nVars; n++)
       {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        {
-          eles->rk_err(spt,ele,n) -= (bi - bhi) * eles->dt(0) /
-              eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
-        }
-      }
-    }
-
-    // Update solution registers
-    if (stage < input->nStages - 1)
-    {
-#pragma omp parallel for collapse(2)
-      for (unsigned int n = 0; n < eles->nVars; n++)
-      {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
           if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
           {
-            eles->U_spts(spt,ele,n) = eles->U_til(spt,ele,n) - ai * eles->dt(0) /
-                eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
-
-            eles->U_til(spt,ele,n) = eles->U_spts(spt,ele,n) - (bi - ai) * eles->dt(0) /
-                eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
+            e->rk_err(spt,ele,n) -= (bi - bhi) * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
           }
         }
       }
-    }
-    else
-    {
-#pragma omp parallel for collapse(2)
-      for (unsigned int n = 0; n < eles->nVars; n++)
+
+      // Update solution registers
+      if (stage < input->nStages - 1)
       {
-        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int n = 0; n < e->nVars; n++)
         {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
-            eles->U_spts(spt,ele,n) = eles->U_til(spt,ele,n) - bi * eles->dt(0) /
-                eles->jaco_det_spts(spt,ele) * eles->divF_spts(spt,ele,n,0);
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            {
+              e->U_spts(spt,ele,n) = e->U_til(spt,ele,n) - ai * e->dt(0) /
+                  e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
+
+              e->U_til(spt,ele,n) = e->U_spts(spt,ele,n) - (bi - ai) * e->dt(0) /
+                  e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
+            }
+          }
+        }
+      }
+      else
+      {
+#pragma omp parallel for collapse(2)
+        for (unsigned int n = 0; n < e->nVars; n++)
+        {
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            {
+              e->U_spts(spt,ele,n) = e->U_til(spt,ele,n) - bi * e->dt(0) /
+                  e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
+            }
           }
         }
       }
@@ -4235,30 +4260,36 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   std::vector<double> res(eles->nVars,0.0);
 
   unsigned int nEles = 0;
-  for (unsigned int n = 0; n < eles->nVars; n++)
+
+  for (auto e : elesObjs)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int n = 0; n < e->nVars; n++)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        if (input->res_type == 0)
-          res[n] = std::max(res[n], std::abs(eles->divF_spts(spt,ele,n,0)
-                                             / eles->jaco_det_spts(spt, ele)));
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          if (input->res_type == 0)
+            res[n] = std::max(res[n], std::abs(e->divF_spts(spt,ele,n,0)
+                                               / e->jaco_det_spts(spt, ele)));
 
-        else if (input->res_type == 1)
-          res[n] += std::abs(eles->divF_spts(spt,ele,n,0)
-                             / eles->jaco_det_spts(spt, ele));
+          else if (input->res_type == 1)
+            res[n] += std::abs(e->divF_spts(spt,ele,n,0)
+                               / e->jaco_det_spts(spt, ele));
 
-        else if (input->res_type == 2)
-          res[n] += eles->divF_spts(spt,ele,n,0) * eles->divF_spts(spt,ele,n,0)
-                  / (eles->jaco_det_spts(spt, ele) * eles->jaco_det_spts(spt, ele));
+          else if (input->res_type == 2)
+            res[n] += e->divF_spts(spt,ele,n,0) * e->divF_spts(spt,ele,n,0)
+                    / (e->jaco_det_spts(spt, ele) * e->jaco_det_spts(spt, ele));
+        }
+        nEles++;
       }
-      nEles++;
     }
   }
 
-  unsigned int nDoF =  (eles->nSpts * nEles);
+  unsigned int nDoF = 0;
+  for (auto e : elesObjs)
+    nDoF += (e->nSpts * e->nEles);
 
   // HACK: Change nStages back
   if (input->dt_scheme == "MCGS")
