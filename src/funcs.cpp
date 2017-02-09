@@ -66,7 +66,7 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
   }
   else if (input->equation == EulerNS)
   {
-    if (input->test_case != 2)
+    if (input->test_case == 1 || input->test_case == 3)
     {
       double G = 5.0;
       double R = 1.;
@@ -110,7 +110,38 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
         }
       }
     }
-    else
+    else if (input->test_case == 4)
+    {
+      /* Taylor-Green Vortex Test Case */
+      if (input->nDims == 2)
+        ThrowException("Taylor-Green Vortex test case for 3D cases only");
+
+      double L = input->L_fs;
+      double U0 = input->v_fs;
+      double Rho0 = input->rho_fs;
+      double P0 = input->P_fs;
+
+      double u =  U0 * sin(x/L) * cos(y/L) * cos(z/L);
+      double v = -U0 * cos(x/L) * sin(y/L) * cos(z/L);
+
+      double p = P0 + Rho0*U0*U0/16. * (cos(2*x/L) + cos(2*y/L)) * (cos(2*z/L) + 2);
+      double rho = p / (input->R_ref * input->T_fs);
+
+      switch (var)
+      {
+        case 0:
+          val = rho; break;
+        case 1:
+          val = rho * u; break;
+        case 2:
+          val = rho * v; break;
+        case 3:
+          val = 0.0; break;
+        case 4:
+          val = p/(input->gamma - 1.0) + 0.5 * rho * (u * u + v * v); break;
+      }
+    }
+    else if (input->test_case == 2)
     {
       /* Couette flow test case */
       double gamma = input->gamma;
@@ -222,28 +253,36 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
     }
     else
     {
-      /* Couette flow test case */
-      double gamma = input->gamma;
-      double Pr = input->prandtl;
-      double P = input->P_fs;
-      double R = input->R_ref;
-      double Vw = input->V_wall(0);
-      double Tw = input->T_wall;
-      double cp = gamma * R / (gamma - 1);
-
-      double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
-
-      switch (var)
+      if (input->test_case == 2)
       {
-        case 0:
-          val = rho; break;
-        case 1:
-          val = rho * (Vw*y); break;
-        case 2:
-          val = 0.0; break;
-        case 3:
-          val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) * 
-              2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
+        /* Couette flow test case */
+        double gamma = input->gamma;
+        double Pr = input->prandtl;
+        double P = input->P_fs;
+        double R = input->R_ref;
+        double Vw = input->V_wall(0);
+        double Tw = input->T_wall;
+        double cp = gamma * R / (gamma - 1);
+
+        double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
+
+        switch (var)
+        {
+          case 0:
+            val = rho; break;
+          case 1:
+            val = rho * (Vw*y); break;
+          case 2:
+            val = 0.0; break;
+          case 3:
+            val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
+                                           2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
+        }
+      }
+      else if (input->test_case == 4)
+      {
+        /* Taylor-Green Vortex Test Case */
+        ThrowException("Error formula for Taylor-Green Vortex test case not implemented");
       }
     }
   }
