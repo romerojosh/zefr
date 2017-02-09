@@ -72,7 +72,7 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
 /* Face common value kernel wrappers (Implicit Method) */
 void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
     mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<char> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
+    mdvector_gpu<char> &rus_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
 
 /* Face transformation kernel wrappers (Implicit Method) */

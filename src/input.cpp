@@ -32,6 +32,7 @@ std::map<std::string,int> bcStr2Num = {
   {"none", NONE},
   {"fluid", NONE},
   {"periodic", PERIODIC},
+  {"char_p", CHAR_P},
   {"char", CHAR},
   {"farfield", SUP_IN},
   {"inlet_sup", SUP_IN},
@@ -309,6 +310,10 @@ void apply_nondim(InputStruct &input)
   input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs * 
       input.mach_fs, input.gamma /
       (input.gamma - 1.0));
+
+  input.v_fs = 1.0;
+  input.T_fs = 1.0;
+  input.R = input.R_ref; /// TODO: replace all usage of "R_ref"
 
   /* Compute and nondimensionalize wall quantities */
   double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
