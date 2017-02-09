@@ -541,6 +541,7 @@ void Faces::apply_bcs()
       }
 
       case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
+      case ISOTHERMAL_NOSLIP_P2: /* Prescribed for both right states */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -575,6 +576,14 @@ void Faces::apply_bcs()
         U_ldg(fpt, nDims + 1, 1) = rhoL * cp_over_gam * input->T_wall;
 
         /* Set bias */
+        if (bnd_id == ISOTHERMAL_NOSLIP_P2)
+        {
+          rus_bias(fpt) = 1;
+          for (unsigned int var = 0; var < nVars; var++)
+          {
+            U(fpt, var, 1) = U_ldg(fpt, var, 1);
+          }
+        }
         LDG_bias(fpt) = 1;
 
         break;
@@ -592,6 +601,7 @@ void Faces::apply_bcs()
 
 
       case ISOTHERMAL_NOSLIP_MOVING_P: /* Isothermal No-slip Wall, moving (prescribed) */
+      case ISOTHERMAL_NOSLIP_MOVING_P2: /* Prescribed for both right states */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -620,6 +630,14 @@ void Faces::apply_bcs()
         U_ldg(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq_wall);
 
         /* Set bias */
+        if (bnd_id == ISOTHERMAL_NOSLIP_MOVING_P2)
+        {
+          rus_bias(fpt) = 1;
+          for (unsigned int var = 0; var < nVars; var++)
+          {
+            U(fpt, var, 1) = U_ldg(fpt, var, 1);
+          }
+        }
         LDG_bias(fpt) = 1;
         
         break;
@@ -1505,6 +1523,7 @@ void Faces::apply_bcs_dFdU()
       }
 
       case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
+      case ISOTHERMAL_NOSLIP_P2: /* Prescribed for both right states */
       {
         if (nDims == 3)
         {
@@ -1549,6 +1568,7 @@ void Faces::apply_bcs_dFdU()
       }
 
       case ISOTHERMAL_NOSLIP_MOVING_P: /* Isothermal No-slip Wall, moving (prescribed) */
+      case ISOTHERMAL_NOSLIP_MOVING_P2: /* Prescribed for both right states */
       {
         if (nDims == 3)
         {
