@@ -60,6 +60,7 @@ struct GeoStruct
   std::map<ELE_TYPE, unsigned int> nFacesPerEleBT;
   std::map<ELE_TYPE, unsigned int> nNodesPerEleBT;
   std::map<ELE_TYPE, unsigned int> nNodesPerFaceBT;
+  std::map<ELE_TYPE, unsigned int> nCornerNodesBT;
   std::map<ELE_TYPE, unsigned int> nFptsPerFaceBT;
   std::map<ELE_TYPE, mdvector<int>> ele2nodesBT;
   //std::map<ELE_TYPE, mdvector<unsigned int>> face_nodesBT;
@@ -76,6 +77,7 @@ struct GeoStruct
 
   /* Connectivity Data */
   mdvector<int> ele2nodes, ele2face, face2nodes, face2eles, face2eles_idx;
+  std::map<ELE_TYPE, mdvector<int>> ele2faceBT;
 
   std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
   std::vector<unsigned int> ele_color_range, ele_color_nEles;
@@ -127,6 +129,7 @@ struct GeoStruct
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d;
+    std::map<ELE_TYPE, mdvector_gpu<int>> fpt2gfptBT_d;
     mdvector_gpu<char> fpt2gfpt_slot_d;
     mdvector_gpu<unsigned int> per_fpt_list_d;
     mdvector_gpu<char> gfpt2bnd_d;

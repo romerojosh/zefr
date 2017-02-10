@@ -303,6 +303,8 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   coord_qpts.assign({nQpts, nEles, nDims});
   nodes.assign({nNodes, nEles, nDims});
 
+  std::cout << etype  << " " << nEles << std::endl;
+
   /* Setup positions of all element's shape nodes in one array */
   if (input->meshfile.find(".pyfr") != std::string::npos)
     nodes = geo->ele_nodes; /// TODO: setup for Gmsh grids as well
@@ -374,7 +376,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     {
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        int gfpt = geo->fpt2gfpt(fpt,ele);
+        int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
         /* Check if on ghost edge */
         if (gfpt != -1)
         {

@@ -104,7 +104,7 @@ void FRSolver::setup(_mpi_comm comm_in)
   {
     if (etype == QUAD)
     {
-      if(!geo.ele_set.count(TRI))
+      if(!geo.nElesBT.count(TRI)) //note: nElesBT used here since TRI can be removed from ele_set during MPI preprocessing.
         elesObjs.push_back(std::make_shared<Quads>(&geo, input, order));
       else
       {
@@ -575,6 +575,7 @@ void FRSolver::solver_data_to_device()
       e->dFdU_spts_d = e->dFdU_spts;
       e->dFcdU_fpts_d = e->dFcdU_fpts;
 
+      //geo.fpt2gfptBT_d[e->etype] = geo.fpt2gfptBT[e->etype];
     }
 
     //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
@@ -1708,7 +1709,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-    if (nStages > 1)
+    if (input->nStages > 1)
       flow_time = prev_time + rk_alpha(input->nStages-2) * eles->dt(0);
 
     compute_residual(input->nStages-1);
@@ -1922,7 +1923,6 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
     compute_residual(0);
 
-    double ai = rk_alpha(stage);
     double bi = rk_beta(stage);
     double bhi = rk_bhat(stage);
 
@@ -1946,6 +1946,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
       // Update solution registers
       if (stage < input->nStages - 1)
       {
+        double ai = rk_alpha(stage);
 #pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < e->nVars; n++)
         {
@@ -2128,100 +2129,108 @@ void FRSolver::compute_element_dt()
    * consistent with 1D CFL estimates. */
   if (input->CFL_type == 1)
   {
+    for (auto e : elesObjs)
+    {
 #pragma omp parallel for
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    { 
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      { 
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
-      for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
-      {
-        /* Skip if on ghost edge. */
-        int gfpt = geo.fpt2gfpt(fpt,ele);
-        if (gfpt == -1)
-          continue;
+        for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+        {
+          /* Skip if on ghost edge. */
+          int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
+          if (gfpt == -1)
+            continue;
 
-        int_waveSp += eles->weights_fpts(fpt % eles->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(gfpt);
+          int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(gfpt); //TODO: Tris require distinct dAs for each side
+        }
+
+        e->dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * e->vol(ele) / int_waveSp;
       }
-
-      eles->dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * eles->vol(ele) / int_waveSp;
     }
   }
 
   /* CFL-estimate based on MacCormack for NS */
   else if (input->CFL_type == 2)
   {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
-    { 
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      /* Compute inverse of timestep in each face */
-      std::vector<double> dtinv(2*eles->nDims);
-      for (unsigned int face = 0; face < 2*eles->nDims; face++)
-      {
-        for (unsigned int fpt = face * eles->nFptsPerFace; fpt < (face+1) * eles->nFptsPerFace; fpt++)
+    for (auto e : elesObjs)
+    {
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      { 
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        /* Compute inverse of timestep in each face */
+        std::vector<double> dtinv(2*e->nDims);
+        for (unsigned int face = 0; face < 2*e->nDims; face++)
         {
-          /* Skip if on ghost edge. */
-          int gfpt = geo.fpt2gfpt(fpt,ele);
-          if (gfpt == -1)
-            continue;
+          for (unsigned int fpt = face * e->nFptsPerFace; fpt < (face+1) * e->nFptsPerFace; fpt++)
+          {
+            /* Skip if on ghost edge. */
+            int gfpt = geo.fpt2gfpt(fpt,ele);
+            if (gfpt == -1)
+              continue;
 
-          double dtinv_temp = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * eles->h_ref(fpt, ele));
-          if (input->viscous)
-            dtinv_temp += faces->diffCo(gfpt) / (get_cfl_limit_diff(order, input->ldg_b) * eles->h_ref(fpt, ele) * eles->h_ref(fpt, ele));
-          dtinv[face] = std::max(dtinv[face], dtinv_temp);
+            double dtinv_temp = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * e->h_ref(fpt, ele));
+            if (input->viscous)
+              dtinv_temp += faces->diffCo(gfpt) / (get_cfl_limit_diff(order, input->ldg_b) * e->h_ref(fpt, ele) * e->h_ref(fpt, ele));
+            dtinv[face] = std::max(dtinv[face], dtinv_temp);
+          }
         }
-      }
 
-      /* Find maximum in each dimension */
-      if (eles->nDims == 2)
-      {
-        dtinv[0] = std::max(dtinv[0], dtinv[2]);
-        dtinv[1] = std::max(dtinv[1], dtinv[3]);
+        /* Find maximum in each dimension */
+        if (e->nDims == 2)
+        {
+          dtinv[0] = std::max(dtinv[0], dtinv[2]);
+          dtinv[1] = std::max(dtinv[1], dtinv[3]);
 
-        eles->dt(ele) = CFL / (dtinv[0] + dtinv[1]);
-      }
-      else
-      {
-        dtinv[0] = std::max(dtinv[0],dtinv[1]);
-        dtinv[1] = std::max(dtinv[2],dtinv[3]);
-        dtinv[2] = std::max(dtinv[4],dtinv[5]);
+          e->dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+        }
+        else
+        {
+          dtinv[0] = std::max(dtinv[0],dtinv[1]);
+          dtinv[1] = std::max(dtinv[2],dtinv[3]);
+          dtinv[2] = std::max(dtinv[4],dtinv[5]);
 
-        /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
-        eles->dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
+          /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
+          e->dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
+        }
       }
     }
   }
 
   if (input->dt_type == 1) /* Global minimum */
   {
-    if (input->overset)
+    double minDT = INFINITY;
+
+    for (auto e : elesObjs)
     {
-      double minDT = INFINITY;
-      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        minDT = std::min(minDT, eles->dt(ele));
+        minDT = std::min(minDT, e->dt(ele));
       }
-      eles->dt(0) = minDT;
-    }
-    else
-    {
-      eles->dt(0) = *std::min_element(eles->dt.data(), eles->dt.data()+eles->nEles);
     }
 
 #ifdef _MPI
     /// TODO: If interfacing with other explicit solver, work together here
-    MPI_Allreduce(MPI_IN_PLACE, &eles->dt(0), 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &minDT, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 #endif
+
+    for (auto e : elesObjs)
+      e->dt(0) = minDT;
 
   }
 #endif
 
 #ifdef _GPU
-  compute_element_dt_wrapper(eles->dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfpt_d, 
-      eles->weights_fpts_d, eles->vol_d, eles->h_ref_d, eles->nFptsPerFace, CFL, input->ldg_b, order, 
-      input->dt_type, input->CFL_type, eles->nFpts, eles->nEles, eles->nDims, myComm,
-      input->overset, geo.iblank_cell_d.data());
+  for (auto e : elesObjs)
+  {
+    compute_element_dt_wrapper(e->dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfptBT_d[e->etype], 
+        e->weights_fpts_d, e->vol_d, e->h_ref_d, e->nFptsPerFace, CFL, input->ldg_b, order, 
+        input->dt_type, input->CFL_type, e->nFpts, e->nEles, e->nDims, myComm,
+        input->overset, geo.iblank_cell_d.data());
+  }
 
   check_error();
 #endif
