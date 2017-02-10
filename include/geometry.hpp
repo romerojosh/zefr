@@ -55,6 +55,7 @@ struct GeoStruct
   /* Maps to organize geometry data by element type */
   std::set<ELE_TYPE> ele_set; // Set of element types discovered in mesh
   std::map<ELE_TYPE, mdvector<unsigned int>> eleID; // unique ID of element across all element types
+  mdvector<ELE_TYPE> eleType; // element type by unique ID; 
   std::map<ELE_TYPE, unsigned int> nElesBT;
   std::map<ELE_TYPE, unsigned int> shape_orderBT;
   std::map<ELE_TYPE, unsigned int> nFacesPerEleBT;
@@ -97,6 +98,7 @@ struct GeoStruct
 
   unsigned int nColors;
   mdvector<unsigned int> ele_color;
+  std::map<ELE_TYPE, mdvector<unsigned int>> ele_colorBT;
 
   unsigned int nBounds;               //! Number of distinct mesh boundary regions
   std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID

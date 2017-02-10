@@ -1831,6 +1831,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
     }
   }
 
+
 #ifdef _MPI
   MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 #endif
@@ -1847,14 +1848,25 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   max_err = 0.0;
   for (auto e : elesObjs)
   {
-    double err = set_adaptive_dt_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->dt_d, e->dt(0),
-        e->nSpts, e->nEles, e->nVars, input->atol, input->rtol, expa, expb,
-        input->minfac, input->maxfac, input->sfact, prev_err, worldComm, input->overset,
-        geo.iblank_cell_d.data());
+
+    double err = get_rk_error_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->nSpts, e->nEles,
+        e->nVars, input->atol, input->rtol, worldComm, input->overset, geo.iblank_cell_d.data());
+
+    err = std::isnan(err) ? INFINITY : err; // convert NaNs to "large" error
 
     max_err = std::max(max_err, err);
+
+  }
+
+  for (auto e : elesObjs)
+  {
+    set_adaptive_dt_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->dt_d, e->dt(0),
+        e->nSpts, e->nEles, e->nVars, input->atol, input->rtol, expa, expb,
+        input->minfac, input->maxfac, input->sfact, max_err, prev_err, worldComm, input->overset,
+        geo.iblank_cell_d.data());
   }
 #endif
+
 
   if (eles->dt(0) < 1e-14)
     ThrowException("dt approaching 0 - quitting simulation");
@@ -1908,10 +1920,11 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
     device_copy(e->U_til_d, e->U_spts_d, e->U_spts_d.max_size());
     device_fill(e->rk_err_d, e->rk_err_d.max_size());
-
+    
     // Get current delta t [dt(0)] (updated on GPU)
     copy_from_device(e->dt.data(), e->dt_d.data(), 1);
   }
+  
 
   check_error();
 #endif
@@ -1923,6 +1936,8 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
     compute_residual(0);
 
+    //double ai = (stage < input->nStages - 1) ? rk_alpha(stage) : 0.0;
+    double ai = rk_alpha(stage);
     double bi = rk_beta(stage);
     double bhi = rk_bhat(stage);
 
@@ -1946,7 +1961,6 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
       // Update solution registers
       if (stage < input->nStages - 1)
       {
-        double ai = rk_alpha(stage);
 #pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < e->nVars; n++)
         {
@@ -3244,14 +3258,23 @@ void FRSolver::write_color()
       if (geo.iblank_cell(ele) != NORMAL) nEles--;
   }
 
+  unsigned int nCells = 0;
+  unsigned int nPts = 0;
+
+  for (auto e : elesObjs)
+  {
+    nCells += e->nSubelements * e->nEles;
+    nPts += e->nPpts * e->nEles;
+  }
+
   /* Write header */
   f << "<?xml version=\"1.0\"?>" << std::endl;
   f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" ";
   f << "byte_order=\"LittleEndian\" ";
   f << "compressor=\"vtkZLibDataCompressor\">" << std::endl;
   f << "<UnstructuredGrid>" << std::endl;
-  f << "<Piece NumberOfPoints=\"" << eles->nPpts * nEles << "\" ";
-  f << "NumberOfCells=\"" << eles->nSubelements * nEles << "\">";
+  f << "<Piece NumberOfPoints=\"" << nPts << "\" ";
+  f << "NumberOfCells=\"" << nCells << "\">";
   f << std::endl;
   
   /* Write plot point coordinates */
@@ -3259,30 +3282,33 @@ void FRSolver::write_color()
   f << "<DataArray type=\"Float32\" NumberOfComponents=\"3\" ";
   f << "format=\"ascii\">" << std::endl; 
 
-  if (eles->nDims == 2)
+  for (auto e : elesObjs)
   {
-    // TODO: Change order of ppt structures for better looping 
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    if (e->nDims == 2)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      // TODO: Change order of ppt structures for better looping 
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        f << eles->coord_ppts(ppt, ele, 0) << " ";
-        f << eles->coord_ppts(ppt, ele, 1) << " ";
-        f << 0.0 << std::endl;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
+        {
+          f << e->coord_ppts(ppt, ele, 0) << " ";
+          f << e->coord_ppts(ppt, ele, 1) << " ";
+          f << 0.0 << std::endl;
+        }
       }
     }
-  }
-  else
-  {
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    else
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        f << eles->coord_ppts(ppt, ele, 0) << " ";
-        f << eles->coord_ppts(ppt, ele, 1) << " ";
-        f << eles->coord_ppts(ppt, ele, 2) << std::endl;
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
+        {
+          f << e->coord_ppts(ppt, ele, 0) << " ";
+          f << e->coord_ppts(ppt, ele, 1) << " ";
+          f << e->coord_ppts(ppt, ele, 2) << std::endl;
+        }
       }
     }
   }
@@ -3293,32 +3319,39 @@ void FRSolver::write_color()
   f << "<Cells>" << std::endl;
   f << "<DataArray type=\"Int32\" Name=\"connectivity\" ";
   f << "format=\"ascii\">"<< std::endl;
-  int count = 0;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  int shift = 0;
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      for (unsigned int i = 0; i < eles->nNodesPerSubelement; i++)
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
       {
-        f << eles->ppt_connect(i, subele) + count*eles->nPpts << " ";
+        for (unsigned int i = 0; i < e->nNodesPerSubelement; i++)
+        {
+          f << e->ppt_connect(i, subele) + shift << " ";
+        }
+        f << std::endl;
       }
-      f << std::endl;
+
+      shift += e->nPpts;
     }
-    count++;
   }
   f << "</DataArray>" << std::endl;
 
   f << "<DataArray type=\"Int32\" Name=\"offsets\" ";
   f << "format=\"ascii\">"<< std::endl;
-  unsigned int offset = eles->nNodesPerSubelement;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  unsigned int offset = 0;
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int subele = 0; subele < eles->nSubelements; subele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      f << offset << " ";
-      offset += eles->nNodesPerSubelement;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
+      {
+        offset += e->nNodesPerSubelement;
+        f << offset << " ";
+      }
     }
   }
   f << std::endl;
@@ -3326,16 +3359,20 @@ void FRSolver::write_color()
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" ";
   f << "format=\"ascii\">"<< std::endl;
-  unsigned int nCells = eles->nSubelements * nEles;
-  if (eles->nDims == 2)
+  for (auto e : elesObjs)
   {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 9 << " ";
-  }
-  else
-  {
-    for (unsigned int cell = 0; cell < nCells; cell++)
-      f << 12 << " ";
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      for (unsigned int subele = 0; subele < e->nSubelements; subele++)
+      {
+        if (e->etype == QUAD)
+          f << 9 << " ";
+        else if (e->etype == TRI)
+          f << 5 << " ";
+        else if (e->etype == HEX)
+          f << 12 << " ";
+      }
+    }
   }
   f << std::endl;
   f << "</DataArray>" << std::endl;
@@ -3345,15 +3382,18 @@ void FRSolver::write_color()
   f << "<PointData>" << std::endl;
   f << "<DataArray type=\"Int32\" Name=\"color\" ";
   f << "format=\"ascii\">"<< std::endl;
-  for (unsigned int ele = 0; ele < eles->nEles; ele++)
+  for (auto e : elesObjs)
   {
-    if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-    for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      f << std::scientific << std::setprecision(16) << geo.ele_color(ele);
-      f  << " ";
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
+      {
+        f << std::scientific << std::setprecision(16) << geo.ele_colorBT[e->etype](ele);
+        f  << " ";
+      }
+      f << std::endl;
     }
-    f << std::endl;
   }
   f << "</DataArray>" << std::endl;
   f << "</PointData>" << std::endl;
@@ -4372,8 +4412,16 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
     if (input->dt_type == 2)
     {
-      std::cout << "dt: " <<  *std::min_element(eles->dt.data(), eles->dt.data()+eles->nEles) << " (min) ";
-      std::cout << *std::max_element(eles->dt.data(), eles->dt.data()+eles->nEles) << " (max)";
+      double minDT = INFINITY; double maxDT = 0.0; 
+
+      for (auto e : elesObjs)
+      {
+        minDT = std::min(minDT, *std::min_element(e->dt.data(), e->dt.data() + e->nEles));
+        maxDT = std::max(maxDT, *std::max_element(e->dt.data(), e->dt.data() + e->nEles));
+      }
+
+      std::cout << "dt: " <<  minDT << " (min) ";
+      std::cout << maxDT << " (max)";
     }
     else
     {
@@ -4410,8 +4458,12 @@ void FRSolver::report_forces(std::ofstream &f)
 
   /* If using GPU, copy out solution, gradient and pressure */
 #ifdef _GPU
-  eles->U_fpts = eles->U_fpts_d;
-  eles->dU_fpts = eles->dU_fpts_d;
+  for (auto e : elesObjs)
+  {
+    e->U_fpts = e->U_fpts_d;
+    if (input->viscous)
+      e->dU_fpts = e->dU_fpts_d;
+  }
   faces->P = faces->P_d;
 #endif
 
@@ -4512,64 +4564,67 @@ void FRSolver::report_error(std::ofstream &f)
 
   /* If using GPU, copy out solution */
 #ifdef _GPU
-  eles->U_spts = eles->U_spts_d;
-  if (input->viscous)
+  for (auto e : elesObjs)
   {
-    eles->dU_spts = eles->dU_spts_d;
+    e->U_spts = e->U_spts_d;
+    if (input->viscous)
+      e->dU_spts = e->dU_spts_d;
   }
 #endif
-
-  /* Extrapolate solution to quadrature points */
-  auto &A = eles->oppE_qpts(0, 0);
-  auto &B = eles->U_spts(0, 0, 0);
-  auto &C = eles->U_qpts(0, 0, 0);
-
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->oppE_qpts.ldim(), &B, 
-      eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
-#else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts, 
-      eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B, 
-      eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
-#endif
-
-  /* Extrapolate derivatives to quadrature points */
-  if (input->viscous)
-  {
-    for (unsigned int dim = 0; dim < eles->nDims; dim++)
-    {
-      auto &A = eles->oppE_qpts(0, 0);
-      auto &B = eles->dU_spts(0, 0, 0, dim);
-      auto &C = eles->dU_qpts(0, 0, 0, dim);
-
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts,
-                        eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B,
-                        eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
-#else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nQpts,
-                  eles->nEles * eles->nVars, eles->nSpts, 1.0, &A, eles->U_qpts.ldim(), &B,
-                  eles->U_spts.ldim(), 0.0, &C, eles->U_qpts.ldim());
-#endif
-
-    }
-  }
 
   std::vector<double> l2_error(2,0.0);
   double vol = 0;
 
-  unsigned int n = input->err_field;
-  std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
+  for (auto e : elesObjs)
+  {
+    /* Extrapolate solution to quadrature points */
+    auto &A = e->oppE_qpts(0, 0);
+    auto &B = e->U_spts(0, 0, 0);
+    auto &C = e->U_qpts(0, 0, 0);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts, 
+        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_qpts.ldim(), &B, 
+        e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts, 
+        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B, 
+        e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
+#endif
+
+    /* Extrapolate derivatives to quadrature points */
+    if (input->viscous)
+    {
+      for (unsigned int dim = 0; dim < e->nDims; dim++)
+      {
+        auto &A = e->oppE_qpts(0, 0);
+        auto &B = e->dU_spts(0, 0, 0, dim);
+        auto &C = e->dU_qpts(0, 0, 0, dim);
+
+#ifdef _OMP
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts,
+                          e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B,
+                          e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
+#else
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts,
+                    e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B,
+                    e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
+#endif
+
+      }
+    }
+
+    unsigned int n = input->err_field;
+    std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
 #pragma omp for 
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int qpt = 0; qpt < eles->nQpts; qpt++)
+      for (unsigned int qpt = 0; qpt < e->nQpts; qpt++)
       {
         double U_true = 0.0;
 
-        if (eles->nDims == 2)
+        if (e->nDims == 2)
         {
           /* Compute true solution and derivatives */
           if (input->test_case == 3) // Isentropic Bump
@@ -4578,20 +4633,20 @@ void FRSolver::report_error(std::ofstream &f)
           }
           else 
           {
-            U_true = compute_U_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0, 
+            U_true = compute_U_true(e->coord_qpts(qpt,ele,0), e->coord_qpts(qpt,ele,1), 0, 
                 flow_time, n, input);
           }
 
           if (input->viscous)
           {
-            dU_true[0] = compute_dU_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0,
+            dU_true[0] = compute_dU_true(e->coord_qpts(qpt,ele,0), e->coord_qpts(qpt,ele,1), 0,
                                          flow_time, n, 0, input);
-            dU_true[1] = compute_dU_true(eles->coord_qpts(qpt,ele,0), eles->coord_qpts(qpt,ele,1), 0,
+            dU_true[1] = compute_dU_true(e->coord_qpts(qpt,ele,0), e->coord_qpts(qpt,ele,1), 0,
                                          flow_time, n, 1, input);
           }
 
         }
-        else if (eles->nDims == 3)
+        else if (e->nDims == 3)
         {
           ThrowException("Under construction!");
         }
@@ -4601,33 +4656,34 @@ void FRSolver::report_error(std::ofstream &f)
         if (input->test_case == 3) // Isentropic bump
         {
           double momF = 0.0;
-          for (unsigned int dim = 0; dim < eles->nDims; dim ++)
+          for (unsigned int dim = 0; dim < e->nDims; dim ++)
           {
-            momF += eles->U_qpts(qpt, ele, dim + 1) * eles->U_qpts(qpt, ele, dim + 1);
+            momF += e->U_qpts(qpt, ele, dim + 1) * e->U_qpts(qpt, ele, dim + 1);
           }
 
-          momF /= eles->U_qpts(qpt, ele, 0);
+          momF /= e->U_qpts(qpt, ele, 0);
 
-          double P = (input->gamma - 1.0) * (eles->U_qpts(qpt, ele, 3) - 0.5 * momF);
+          double P = (input->gamma - 1.0) * (e->U_qpts(qpt, ele, 3) - 0.5 * momF);
 
-          U_error = (U_true - P/std::pow(eles->U_qpts(qpt, ele, 0), input->gamma)) / U_true;
-          vol += eles->weights_qpts(qpt) * eles->jaco_det_qpts(qpt, ele); 
+          U_error = (U_true - P/std::pow(e->U_qpts(qpt, ele, 0), input->gamma)) / U_true;
+          vol += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele); 
         }
         else
         {
-          U_error = U_true - eles->U_qpts(qpt, ele, n);
+          U_error = U_true - e->U_qpts(qpt, ele, n);
           if (input->viscous)
           {
-            dU_error[0] = dU_true[0] - eles->dU_qpts(qpt, ele, n, 0); 
-            dU_error[1] = dU_true[1] - eles->dU_qpts(qpt, ele, n, 1);
+            dU_error[0] = dU_true[0] - e->dU_qpts(qpt, ele, n, 0); 
+            dU_error[1] = dU_true[1] - e->dU_qpts(qpt, ele, n, 1);
           }
           vol = 1;
         }
 
-        l2_error[0] += eles->weights_qpts(qpt) * eles->jaco_det_qpts(qpt, ele) * U_error * U_error; 
-        l2_error[1] += eles->weights_qpts(qpt) * eles->jaco_det_qpts(qpt, ele) * (U_error * U_error +
+        l2_error[0] += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele) * U_error * U_error; 
+        l2_error[1] += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele) * (U_error * U_error +
             dU_error[0] * dU_error[0] + dU_error[1] * dU_error[1]); 
       }
+    }
   }
 
 #ifdef _MPI
@@ -4701,6 +4757,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
+        //TODO: need weights_fpts for specific element type!
         force_conv[dim] += eles->weights_fpts(idx) * PL *
           faces->norm(fpt, dim) * faces->dA(fpt);
       }

@@ -136,7 +136,7 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   read_element_connectivity(f, geo, input);
   read_boundary_faces(f, geo);
 
-  //set_ele_adjacency(geo);
+  set_ele_adjacency(geo);
 
   f.close();
 
@@ -626,6 +626,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
   
   /* Correct node values to be 0-indexed. Also assign global eleIDs. */
   unsigned int eleID = 0;
+  geo.eleType.assign({geo.nEles});
   for (auto etype : geo.ele_set)
   {
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
@@ -634,16 +635,12 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       {
         geo.ele2nodesBT[etype](n,ele)--;
       }
-      geo.eleID[etype](ele) = eleID++;
+      geo.eleID[etype](ele) = eleID;
+      geo.eleType(eleID) = etype;
+
+      eleID++;
     }
   }
-
-  // MPI HACK
-  //if (geo.ele_set.count(TRI))
-  //{
-  //  geo.nFacesPerEle = 3; geo.nNodesPerFace = 2;
-  //  geo.nCornerNodes = 3; 
-  //}
 
   /* Setup face-node maps for easier processing */
   set_face_nodes(geo);
@@ -861,73 +858,88 @@ void set_face_nodes(GeoStruct &geo)
 void set_ele_adjacency(GeoStruct &geo)
 {
   std::map<std::vector<unsigned int>, std::vector<unsigned int>> face2eles;
-  std::vector<unsigned int> face(geo.nNodesPerFace,0);
 
-  /* Fill face2eles structure */
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  /* Sizing ele_adj for possible element type with greatest number of faces */
+  if (geo.nDims == 2)
+    geo.ele_adj.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
+  else
+    geo.ele_adj.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
+
+  for (auto etype : geo.ele_set)
   {
-    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
+
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {
-      face.assign(geo.nNodesPerFace, 0);
-
-      for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+      for (auto face_nodes : geo.face_nodesBT[etype])
       {
-        face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
-      }
+        face.assign(face_nodes.size(), 0);
 
-      /* Check if face is collapsed */
-      std::set<unsigned int> nodes;
-      for (auto node : face)
-        nodes.insert(node);
+        for (unsigned int i = 0; i < face_nodes.size(); i++)
+        {
+          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
+        }
 
-      if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
-      {
-        continue;
-      }
-      else if (nodes.size() == 3) /* Triangular collapsed face. Must tread carefully... */
-      {
+        /* Check if face is collapsed */
+        std::set<unsigned int> nodes;
+        for (auto node : face)
+          nodes.insert(node);
+
+        if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
+        {
+          continue;
+        }
+
         face.assign(nodes.begin(), nodes.end());
-      }
 
-      std::sort(face.begin(), face.end());
-      face2eles[face].push_back(ele);
+        std::sort(face.begin(), face.end());
+
+        face2eles[face].push_back(geo.eleID[etype](ele));
+      }
     }
   }
 
-  /* Generate element adjacency (element to elements connectivity) */
-  geo.ele_adj.assign({geo.nFacesPerEle, geo.nEles});
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  for (auto etype : geo.ele_set)
   {
-    for (unsigned int n = 0; n < geo.nFacesPerEle; n++)
+    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
+
+    /* Generate element adjacency (element to elements connectivity) */
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {
-      face.assign(geo.nNodesPerFace, 0);
-
-      for (unsigned int i = 0; i < geo.nNodesPerFace; i++)
+      unsigned int n = 0;
+      for (auto face_nodes : geo.face_nodesBT[etype])
       {
-        face[i] = geo.ele2nodes(geo.face_nodes(n, i), ele);
-      }
+        face.assign(face_nodes.size(), 0);
 
-      /* Reduce to only unique nodes to deal with triangular collapsed face */
-      std::set<unsigned int> nodes;
-      for (auto node : face)
-        nodes.insert(node);
+        for (unsigned int i = 0; i < face_nodes.size(); i++)
+        {
+          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
+        }
 
-      face.assign(nodes.begin(), nodes.end());
+        /* Reduce to only unique nodes to deal with triangular collapsed face */
+        std::set<unsigned int> nodes;
+        for (auto node : face)
+          nodes.insert(node);
 
-      std::sort(face.begin(), face.end());
+        face.assign(nodes.begin(), nodes.end());
 
-      if (face2eles.count(face))
-      {        
-        if (face2eles[face].empty() or face2eles[face].back() == ele)
-          geo.ele_adj(n, ele) = -1;
+        std::sort(face.begin(), face.end());
+
+        if (face2eles.count(face))
+        {        
+          if (face2eles[face].empty() or face2eles[face].back() == geo.eleID[etype](ele))
+            geo.ele_adj(n, geo.eleID[etype](ele)) = -1;
+          else
+            geo.ele_adj(n, geo.eleID[etype](ele)) = face2eles[face].back();
+
+          face2eles[face].pop_back();
+        }
         else
-          geo.ele_adj(n, ele) = face2eles[face].back();
+        {
+          geo.ele_adj(n, geo.eleID[etype](ele)) = -1;
+        }
 
-        face2eles[face].pop_back();
-      }
-      else
-      {
-        geo.ele_adj(n, ele) = -1;
+        n++;
       }
     }
   }
@@ -1732,10 +1744,15 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
 {
   /* Setup element colors */
   geo.ele_color.assign({geo.nEles});
+  for (auto etype : geo.ele_set)
+    geo.ele_colorBT[etype].assign({geo.nElesBT[etype]}, 0);
+
   if (input->nColors == 1)
   {
     geo.nColors = 1;
     geo.ele_color.fill(1);
+    for (auto etype : geo.ele_set)
+      geo.ele_colorBT[etype].fill(1);
   }
   else
   {
@@ -1743,8 +1760,7 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
     std::vector<bool> used(geo.nColors, false);
     std::vector<unsigned int> counts(geo.nColors, 0);
     std::queue<unsigned int> eleQ;
-    geo.ele_color.fill(0);
-    geo.ele_color(0) = 0;
+    //geo.ele_color(0) = 0;
 
     eleQ.push(0);
 
@@ -1752,16 +1768,22 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
     while (!eleQ.empty())
     {
       unsigned int ele = eleQ.front();
+      auto etype = geo.eleType(ele);
       eleQ.pop();
 
-      if (geo.ele_color(ele) != 0)
+      //if (geo.ele_color(ele) != 0)
+      //  continue;
+      if (geo.ele_colorBT[etype](ele - geo.eleID[etype](0)) != 0)
         continue;
 
-      for (unsigned int face = 0; face < geo.nFacesPerEle; face++)
+      for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
       {
         int eleN = geo.ele_adj(face, ele);
+        ELE_TYPE etypeN;
 
-        if (eleN != -1 && geo.ele_color(eleN) == 0)
+        if (eleN != -1) etypeN = geo.eleType(eleN);
+
+        if (eleN != -1 && geo.ele_colorBT[etypeN](eleN - geo.eleID[etypeN](0)) == 0)
         {
           eleQ.push(eleN);
         }
@@ -1769,7 +1791,7 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
         if (eleN == -1)
           continue;
 
-        unsigned int colorN = geo.ele_color(eleN);
+        unsigned int colorN = geo.ele_colorBT[etypeN](eleN - geo.eleID[etypeN](0));
 
         /* Record if neighbor is using a given color */
         if (colorN != 0)
@@ -1810,7 +1832,7 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
         ThrowException("Could not color graph with number of colors provided. Increase nColors!");
       }
 
-      geo.ele_color(ele) = color;
+      geo.ele_colorBT[etype](ele - geo.eleID[etype](0)) = color;
       counts[color-1]++;
       used.assign(geo.nColors, false);
     }
@@ -2169,13 +2191,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
   if (input->rank == 0)
     std::cout << "Total # MPI Faces: " << mpi_faces_glob.size() << std::endl;
-
-  // MPI HACK: Copy data to BT data structres
-  //for (auto etype : geo.ele_set)
-  //{
-  //  geo.nElesBT[etype] = geo.nEles;
-  //  geo.ele2nodesBT[etype] = geo.ele2nodes;
-  //}
 }
 #endif
 

@@ -826,11 +826,11 @@ double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err,
     mdvector_gpu<double> &dt_in, double &dt_out, uint nSpts, uint nEles,
     uint nVars, double atol, double rtol, double expa, double expb,
-    double minfac, double maxfac, double sfact, double prev_err,
+    double minfac, double maxfac, double sfact, double max_err, double prev_err,
     _mpi_comm comm_in, bool overset, int* iblank)
 {
-  double max_err = get_rk_error_wrapper(U_spts, U_ini, rk_err, nSpts, nEles,
-      nVars, atol, rtol, comm_in, overset, iblank);
+  //double max_err = get_rk_error_wrapper(U_spts, U_ini, rk_err, nSpts, nEles,
+  //    nVars, atol, rtol, comm_in, overset, iblank);
 
   // Determine the time step scaling factor and the new time step
   double fac = pow(max_err, -expa) * pow(prev_err, expb);
