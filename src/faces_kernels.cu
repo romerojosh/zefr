@@ -304,18 +304,6 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
   /* Apply specified boundary condition */
   switch(bnd_id)
   {
-    case PERIODIC: /* Periodic */
-    {
-      unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
-
-      for (unsigned int n = 0; n < nVars; n++)
-      {
-        U(fpt, n, 1) = U(per_fpt, n, 0);
-        U_ldg(fpt, n, 1) = U_ldg(per_fpt, n, 0);
-      }
-      break;
-    }
-  
     case SUP_IN: /* Farfield and Supersonic Inlet */
     {
       if (equation == AdvDiff || equation == Burgers)
@@ -848,19 +836,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
   unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
 
   /* Apply specified boundary condition */
-  if (bnd_id == PERIODIC) /* Periodic */
-  {
-    unsigned int per_fpt = per_fpt_list(fpt - nGfpts_int);
-
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int n = 0; n < nVars; n++)
-      {	  
-        dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
-      }
-    }
-  }
-  else if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
+  if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
           bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* Adibatic Wall */
   {
     double norm[nDims];

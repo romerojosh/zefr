@@ -201,18 +201,6 @@ void Faces::apply_bcs()
     /* Apply specified boundary condition */
     switch(bnd_id)
     {
-      case PERIODIC:/* Periodic */
-      {
-        unsigned int per_fpt = geo->per_fpt_list(fpt - geo->nGfpts_int);
-
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-          U(fpt, n, 1) = U(per_fpt, n, 0);
-          U_ldg(fpt, n, 1) = U_ldg(per_fpt, n, 0);
-        }
-        break;
-      }
-    
       case SUP_IN: /* Farfield and Supersonic Inlet */
       {
         if (input->equation == AdvDiff || input->equation == Burgers)
@@ -752,18 +740,7 @@ void Faces::apply_bcs_dU()
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Apply specified boundary condition */
-    if (bnd_id == PERIODIC) /* Periodic */
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-            unsigned int per_fpt = geo->per_fpt_list(fpt - geo->nGfpts_int);
-            dU(fpt, n, dim, 1) = dU(per_fpt, n, dim, 0);
-        }
-      }
-    }
-    else if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
+    if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
             bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* Adibatic Wall */
     {
       /* Extrapolate density gradient */
