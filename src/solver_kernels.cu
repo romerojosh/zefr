@@ -1613,6 +1613,14 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
         coords(1,node) = coords_0(1,node) + Ay*(1-cos(2.*PI*fy*time));
         Vg(0,node) = 2.*PI*fx*Ax*cos(2.*PI*fx*time);
         Vg(1,node) = 2.*PI*fy*Ay*sin(2.*PI*fy*time);
+
+        if (nDims == 3)
+        {
+          double Az = params->moveAz;
+          double fz = params->moveFz;
+          coords(2,node) = coords_0(2,node) - Az*sin(2.*PI*fz*time);
+          Vg(2,node) = -2.*PI*fz*Az*cos(2.*PI*fz*time);
+        }
       }
       break;
     }
@@ -1743,6 +1751,46 @@ void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
     else if (nDims == 3)
       unpack_fringe_grad<3><<<blocks, threads, 0, stream_handles[stream]>>>
           (dU_fringe, dU, fringe_fpts, fringe_side, nFringe, nFpts, nVars);
+  }
+
+  check_error();
+}
+
+
+
+__global__
+void unpack_unblank_u(mdvector_gpu<double> U_unblank,
+    mdvector_gpu<double> U, mdvector_gpu<int> cellIDs,
+    unsigned int nCells, unsigned int nSpts, unsigned int nVars)
+{
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int spt = (tot_ind / nVars) % nSpts;
+  const unsigned int ic = tot_ind / (nSpts * nVars);
+
+  if (ic >= nCells)
+    return;
+
+  const unsigned int ele = cellIDs(ic);
+
+  U(spt, ele, var) = U_unblank(var,spt,ic);
+}
+
+void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
+    mdvector_gpu<double>& U, mdvector_gpu<int> &cellIDs,
+    unsigned int nCells, unsigned int nSpts, unsigned int nVars, int stream)
+{
+  int threads = 192;
+  int blocks = (nCells * nSpts * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+  {
+    unpack_unblank_u<<<blocks, threads>>>(U_unblank, U, cellIDs, nCells, nSpts, nVars);
+  }
+  else
+  {
+    unpack_unblank_u<<<blocks, threads, 0, stream_handles[stream]>>>(U_unblank, U,
+        cellIDs, nCells, nSpts, nVars);
   }
 
   check_error();

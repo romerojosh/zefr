@@ -158,6 +158,7 @@ CallbackFuncs get_callback_funcs(void)
   /* GPU-specific functions */
   call.donor_data_from_device = donor_data_from_device;
   call.fringe_data_to_device = fringe_data_to_device;
+  call.unblank_data_to_device = unblank_data_to_device;
   /// TODO: replace ^ with these:
   call.get_q_spts_d = get_q_spts_d;
   call.get_dq_spts_d = get_dq_spts_d;
@@ -217,6 +218,13 @@ void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *da
 {
 #ifdef _GPU
   ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag, data);
+#endif
+}
+
+void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
+{
+#ifdef _GPU
+  ZEFR->unblank_data_to_device(fringeIDs, nFringe, gradFlag, data);
 #endif
 }
 

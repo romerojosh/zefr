@@ -79,6 +79,7 @@ struct CallbackFuncs
   double& (*get_grad_fpt)(int faceID, int fpt, int dim, int var);
   void (*donor_data_from_device)(int* donorIDs, int nDonors, int gradFlag);
   void (*fringe_data_to_device)(int* fringeIDs, int nFringe, int gradFlag, double *data);
+  void (*unblank_data_to_device)(int* cellIDs, int nCells, int gradFlag, double *data);
 };
 
 namespace zefr {
@@ -143,6 +144,8 @@ void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
 
 //! For runs using GPUs - copy updated fringe data to device
 void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
+
+void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
 
 void signal_handler(int signum);
 

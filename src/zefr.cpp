@@ -612,6 +612,18 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
 #endif
 }
 
+void Zefr::unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
+{
+#ifdef _GPU
+  if (gradFlag == 0)
+    solver->eles->unblank_u_to_device(fringeIDs, nFringe, data);
+//  else
+//    solver->eles->unblank_grad_to_device(nFringe, data);
+
+  check_error();
+#endif
+}
+
 void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, int gradFlag))
 {
   overset_interp = dataUpdate;

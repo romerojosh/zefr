@@ -153,6 +153,12 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
         geo.Jinv(i,j) /= det;
   }
 
+  if (input->overset && input->motion_type == CIRCULAR_TRANS)
+  {
+    geo.Rmat.assign({3,3});
+    geo.x_cg.assign({3,3});
+  }
+
   return geo;
 }
 
@@ -3183,6 +3189,9 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
         double fx = input->moveFx; // Frequency  (Hz)
         double fy = input->moveFy; // Frequency  (Hz)
 
+        double Az = input->moveAz;
+        double fz = input->moveFz;
+
 #pragma omp parallel for
         for (uint node = 0; node < nNodes ; node++)
         {
@@ -3190,6 +3199,11 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
           geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
           geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
           geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
+          if (geo.nDims == 3)
+          {
+            geo.coord_nodes(2,node) = geo.coords_init(2,node) - Az*sin(2.*pi*fz*time);
+            geo.grid_vel_nodes(2,node) = -2.*pi*fz*Az*cos(2.*pi*fz*time);
+          }
         }
       }
       break;

@@ -15,8 +15,8 @@ int main(int argc, char *argv[])
   int gridID = 0;
   int nGrids = 2;
 
-  gridID = rank%nGrids; //(rank > (size/2));
-  //gridID = rank>0;
+  //gridID = rank%nGrids; //(rank > (size/2));
+  gridID = rank>0;
 
   /* Basic sphere test case */
   //nGrids = 2;
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
 
   if (nGrids > 1) inp.overset = 1;
 
-  if (inp.motion && inp.motion_type == RIGID_BODY)
+  if (inp.motion && (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS))
     z->set_rigid_body_callbacks(tioga_set_transform);
 
   /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
@@ -118,8 +118,8 @@ int main(int argc, char *argv[])
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())
   {
-    tioga_set_ab_callback_gpu_(cbs.donor_data_from_device, 
-      cbs.fringe_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d);
+    tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,  cbs.fringe_data_to_device,
+        cbs.unblank_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d);
 #ifdef _GPU
     tioga_set_stream_handle(z->get_tg_stream_handle(), z->get_tg_event_handle());
 #endif
@@ -140,7 +140,8 @@ int main(int argc, char *argv[])
     z->restart_solution();
 
   // Output initial solution and grid
-//  z->write_solution();
+  if (!inp.restart)
+    z->write_solution();
 
   MPI_Barrier(MPI_COMM_WORLD);
 

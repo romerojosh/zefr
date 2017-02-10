@@ -250,6 +250,11 @@ InputStruct read_input_file(std::string inputfile)
       read_param(f, "moveAy", input.moveAy);
       read_param(f, "moveFx", input.moveFx);
       read_param(f, "moveFy", input.moveFy);
+      if (input.nDims == 3)
+      {
+        read_param(f, "moveAz", input.moveAz, 0.0);
+        read_param(f, "moveFz", input.moveFz, 0.0);
+      }
     }
     else if (input.motion_type == RIGID_BODY)
     {

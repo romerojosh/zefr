@@ -5467,6 +5467,21 @@ void FRSolver::move(double time)
   // Update the overset connectivity to the new grid positions
   if (input->overset)
   {
+    if (input->motion_type == CIRCULAR_TRANS)
+    {
+      if (input->gridID == 0)
+      {
+        geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
+        geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
+        if (geo.nDims == 3)
+          geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
+      }
+      else
+        geo.x_cg.assign({3},0.0);
+
+      ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+    }
+
     PUSH_NVTX_RANGE("tg_conn", 5);
     if (input->motion_type != RIGID_BODY)
       ZEFR->tg_preprocess();

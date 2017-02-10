@@ -167,6 +167,8 @@ class Elements
     mdvector_gpu<double> RHS_d;
 
     mdvector_gpu<double> U_donors_d, dU_donors_d;
+    mdvector_gpu<double> U_unblank_d;
+    mdvector_gpu<int> unblankIDs_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);
@@ -259,6 +261,8 @@ class Elements
 #ifdef _GPU
     void donor_u_from_device(int* donorIDs_in, int nDonors_in);
     void donor_grad_from_device(int* donorIDs_in, int nDonors_in);
+
+    void unblank_u_to_device(int *cellIDs, int nCells, double* data);
 #endif
 
     void move(std::shared_ptr<Faces> faces);
