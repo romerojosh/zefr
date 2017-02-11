@@ -377,8 +377,9 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
         int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
+        int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
         /* Check if on ghost edge */
-        if (gfpt != -1)
+        if (gfpt != -1 and slot == 0)
         {
           faces->coord(gfpt, dim) = coord_fpts(fpt,ele,dim);
         }

@@ -137,8 +137,22 @@ void FRSolver::setup(_mpi_comm comm_in)
 
   //eles->setup(faces, myComm);
 
+  /* Partial element setup for flux point orientation */
   for (auto e : elesObjs)
+  {
+    e->set_locs();
+    e->set_shape();
+    e->set_coords(faces);
+  }
+
+  if (geo.nDims == 3)
+    orient_fpts();
+
+  /* Complete element setup */
+  for (auto e : elesObjs)
+  {
     e->setup(faces, myComm);
+  }
 
 
   if (input->rank == 0) std::cout << "Setting up output..." << std::endl;
@@ -199,6 +213,70 @@ void FRSolver::setup(_mpi_comm comm_in)
   report_gpu_mem_usage();
 #endif
 
+}
+
+void FRSolver::orient_fpts()
+{
+  mdvector<double> fpt_coords_L({geo.nDims, geo.nGfpts}), fpt_coords_R({geo.nDims, geo.nGfpts});
+  std::vector<unsigned int> idxL(geo.nGfpts), idxR(geo.nGfpts), idxsort(geo.nGfpts);
+
+ 
+  /* Gather all flux point coordinates */
+  for (auto e : elesObjs)
+  {
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+      {
+        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
+        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+
+        for (unsigned int dim = 0; dim < geo.nDims; dim++)
+        {
+          if (slot == 0)
+            fpt_coords_L(dim, gfpt) = e->coord_fpts(fpt, ele, dim);
+          else
+            fpt_coords_R(dim, gfpt) = e->coord_fpts(fpt, ele, dim);
+        }
+      }
+    }
+  }
+
+  for (unsigned int fpt = 0; fpt < geo.nGfpts; fpt++)
+  {
+    idxL[fpt] = fpt; idxR[fpt] = fpt; idxsort[fpt] = fpt;
+  }
+
+  for (unsigned int f = 0; f < geo.nGfpts_int/geo.nFptsPerFace; f++)
+  {
+    unsigned int shift = f * geo.nFptsPerFace;
+    fuzzysort_ind(fpt_coords_L, idxL.data() + shift, geo.nFptsPerFace, geo.nDims);
+    fuzzysort_ind(fpt_coords_R, idxR.data() + shift, geo.nFptsPerFace, geo.nDims);
+  }
+
+  std::sort(idxsort.begin(), idxsort.end(), [&](unsigned int a, unsigned int b) {return idxL[a] < idxL[b];});
+  auto idxR_copy = idxR;
+  for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
+    idxR[fpt] = idxR_copy[idxsort[fpt]];
+
+
+  /* Reindex right faces */
+  for (auto e : elesObjs)
+  {
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+      {
+        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+
+        if (slot == 1)
+        {
+          int gfpt_old = geo.fpt2gfptBT[e->etype](fpt,ele);
+          geo.fpt2gfptBT[e->etype](fpt, ele) = idxR[gfpt_old];
+        }
+      }
+    }
+  }
 }
 
 void FRSolver::setup_update()

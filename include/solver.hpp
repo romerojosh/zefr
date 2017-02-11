@@ -100,6 +100,7 @@ class FRSolver
     void restart_pyfr(std::string restart_file, unsigned restart_iter = 0);
     void setup_update();
     void setup_output();
+    void orient_fpts();
 
 #ifdef _GPU
     void solver_data_to_device();

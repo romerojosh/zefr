@@ -1201,16 +1201,27 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   geo.procR.resize(0);
   geo.mpiLocF.resize(0);
 #endif
-  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles}, -1);
-  geo.face2eles.assign({2, unique_faces.size()}, -1);
   geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
   geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
+  geo.face2eles.assign({2, unique_faces.size()}, -1);
+  
+  if (geo.nDims == 2)
+  {
+    geo.ele2face.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
 #ifdef _BUILD_LIB
-  geo.face2nodes.assign({geo.nNodesPerFace, unique_faces.size()}, -1);
+    geo.face2nodes.assign({geo.nNodesPerFaceBT[QUAD], unique_faces.size()}, -1);
 #endif
+  }
+  else
+  {
+    geo.ele2face.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
+#ifdef _BUILD_LIB
+    geo.face2nodes.assign({geo.nNodesPerFaceBT[HEX], unique_faces.size()}, -1);
+#endif
+  }
 
-  for (auto etype : geo.ele_set)
-    geo.ele2faceBT[etype].assign({geo.nFacesPerEleBT[etype], geo.nElesBT[etype]}, -1);
+  //for (auto etype : geo.ele_set)
+  //  geo.ele2faceBT[etype].assign({geo.nFacesPerEleBT[etype], geo.nElesBT[etype]}, -1);
 
   std::set<int> overPts, wallPts;
   std::set<std::vector<unsigned int>> overFaces;
@@ -1264,11 +1275,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if(!face_fpts.count(face))
         {
-          //geo.ele2face(n, ele) = geo.nFaces;
-          //geo.face2eles(0, geo.nFaces) = ele;
+          geo.ele2face(n, geo.eleID[etype](ele)) = geo.nFaces;
+          geo.face2eles(0, geo.nFaces) = geo.eleID[etype](ele);
 #ifdef _BUILD_LIB
-          for (int j = 0; j < geo.nNodesPerFace; j++)
-            geo.face2nodes(j,geo.nFaces) = geo.ele2nodes(geo.face_nodes(n, j), ele);
+          for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
+            geo.face2nodes(j, geo.nFaces) = geo.ele2nodes(geo.face_nodesBT[etype](n, j), geo.eleID[etype](ele));
 #endif
 
           /* Check if face is on boundary */
@@ -1373,76 +1384,16 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               nd = geo.per_node_pairs[nd];
           }
 
-
           int ff = geo.nodes_to_face[face];
-          //geo.ele2face(n, ele) = ff;
-          //geo.face2eles(1, ff) = ele;
+          geo.ele2face(n, geo.eleID[etype](ele)) = ff;
+          geo.face2eles(1, ff) = geo.eleID[etype](ele);
 
           auto fpts = face_fpts[face];
-          auto face0_ordered = geo.face2ordered[face];
           
-          /* Determine rotation using ordered faces*/
-          unsigned int rot = 0;
-          if (geo.nDims == 3)
-          {
-            while (face_ordered[rot] != face0_ordered[0])
-            {
-              rot++;
-            }
-          }
-          else
-          {
-            rot = 4;
-          }
-
-          /* Based on rotation, couple flux points */
-          switch (rot)
-          {
-            case 0:
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                for (unsigned int j = 0; j < nFpts1D; j++)
-                {
-                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[i * nFpts1D + j];
-                }
-              } break;
-
-            case 1:
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                for (unsigned int j = 0; j < nFpts1D; j++)
-                {
-                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFpts1D - i + j * nFpts1D - 1];
-                }
-              } break;
-
-            case 2:
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                for (unsigned int j = 0; j < nFpts1D; j++)
-                {
-                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - i * nFpts1D - j - 1];
-                }
-              } break;
-
-            case 3:
-              for (unsigned int i = 0; i < nFpts1D; i++)
-              {
-                for (unsigned int j = 0; j < nFpts1D; j++)
-                {
-                  ele2fptsBT[etype][ele][n*nFptsPerFace + i + j*nFpts1D] = fpts[nFptsPerFace - (j+1) * nFpts1D + i];
-                }
-              } break;
-
-            case 4:
-              for (unsigned int i = 0; i < nFptsPerFace; i++)
-              {
-                  ele2fptsBT[etype][ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
-              } break;
-          }
-          
+          /* Associate existing flux points with this face (oriented later for 3D cases) */
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
+            ele2fptsBT[etype][ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
             ele2fpts_slotBT[etype][ele][n*nFptsPerFace + i] = 1;
           }
         }
