@@ -1158,6 +1158,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   }
   std::cout << "geo.nGfpts_int " << geo.nGfpts_int << std::endl;
   std::cout << "geo.nGfpts_bnd " << geo.nGfpts_bnd << std::endl;
+  std::cout << "geo.nGfpts_mpi " << geo.nGfpts_mpi << std::endl;
   std::cout << "geo.nBnds " << geo.nBnds << std::endl;
   std::cout << "unique_faces size: " << unique_faces.size() << std::endl;
 
@@ -1404,8 +1405,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   geo.nMpiFaces = geo.mpiFaces.size();
   geo.faceID_R.resize(geo.nMpiFaces);
   geo.mpiRotR.resize(geo.nMpiFaces);
+
+  /* Loop over MPI faces (skipping periodic MPI faces in this loop) */
   for (const auto &face : mpi_faces_to_process)
   {
+    if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC) continue; 
     auto ranks = geo.mpi_faces[face];
     int sendRank = *std::min_element(ranks.begin(), ranks.end());
     int recvRank = *std::max_element(ranks.begin(), ranks.end());
@@ -1443,6 +1447,52 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     else
     {
       ThrowException("Error in mpi_faces. Neither rank is this rank.");
+    }
+  }
+
+  if (geo.per_bnd_flag)
+  {
+    /* Process periodic faces from ordered vector for consistency between ranks */
+    for (const auto &face : geo.per_mpi_faces)
+    {
+      auto ranks = geo.mpi_faces[face];
+      int sendRank = *std::min_element(ranks.begin(), ranks.end());
+      int recvRank = *std::max_element(ranks.begin(), ranks.end());
+
+      int faceID = geo.nodes_to_face[face];
+      int ff = findFirst(geo.mpiFaces, faceID);
+
+      /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
+
+      if (rank == sendRank)
+      {
+        auto fpts = face_fpts[face];
+
+        /* Append flux points to fpt_buffer_map in existing order */
+        for (auto fpt : fpts)
+          geo.fpt_buffer_map[recvRank].push_back(fpt);
+
+        /* Send ordered face to paired rank */
+        MPI_Status temp;
+        MPI_Send(&faceID, 1, MPI_INT, recvRank, 0, geo.myComm);
+        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
+      }
+      else if (rank == recvRank)
+      {
+        auto fpts = face_fpts[face];
+
+        MPI_Status temp;
+        MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, sendRank, 0, geo.myComm, &temp);
+        MPI_Send(&faceID, 1, MPI_INT, sendRank, 0, geo.myComm);
+
+        /* Append existing flux points with this face in reverse order (works as is for 2D, oriented later for 3D cases) */
+        for (unsigned int i = 0; i < nFptsPerFace; i++)
+          geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
+      }
+      else
+      {
+        ThrowException("Error in mpi_faces. Neither rank is this rank.");
+      }
     }
   }
 
@@ -1749,6 +1799,12 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
         /* Sort for consistency */
         std::sort(face.begin(), face.end());
+
+        if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC)
+        {
+          if (face2ranks.count(geo.per_bnd_pairs[face]))
+            face = geo.per_bnd_pairs[face];
+        }
         
         face2ranks[face].insert(face_rank);
 
@@ -1756,6 +1812,10 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
         if (face2ranks[face].size() == 2)
         {
           mpi_faces_glob[face] = face2ranks[face];
+          if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC)
+          {
+            mpi_faces_glob[geo.per_bnd_pairs[face]] = face2ranks[face];
+          }
         }
       }
     }
@@ -1857,7 +1917,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       geo.bnd_faces[bnd_face] = bcType;
     }
   }
-
+  
   for (auto entry : face2bnd_glob)
   {
     std::vector<unsigned int> bnd_face = entry.first;
@@ -1881,6 +1941,55 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
         nd = geo.node_map_g2p[nd];
       }
       geo.face2bnd[bnd_face] = bnd_id;
+    }
+  }
+
+  if (geo.per_bnd_flag)
+  {
+    /* Process periodic boundaries exist*/
+    std::set<std::vector<unsigned int>> processed;
+    auto per_bnd_pairs_glob = geo.per_bnd_pairs;
+    geo.per_bnd_pairs.clear();
+
+    /* Iterate over all boundary faces */
+    for (auto entry : per_bnd_pairs_glob)
+    {
+      std::vector<unsigned int> face1 = entry.first;
+      std::vector<unsigned int> face2 = entry.second;
+
+      /* If all nodes are on this partition, keep face data */
+      bool myFace1 = true;
+      for (auto nd : face1)
+        if (!uniqueNodes.count(nd))
+          myFace1 = false;
+      
+      bool myFace2 = true;
+      for (auto nd : face2)
+        if (!uniqueNodes.count(nd))
+          myFace2 = false;
+
+      /* Renumber nodes */
+      for (auto &nd : face1)
+        nd = geo.node_map_g2p[nd];
+      for (auto &nd : face2)
+        nd = geo.node_map_g2p[nd];
+
+      /* Periodic boundary fully within partition, no MPI needed */
+      if (myFace1 and myFace2)
+      {
+        geo.per_bnd_pairs[face1] = face2;
+      }
+      /* Otherwise, MPI boundary. Store ordered vector of faces to iterate over later */
+      else if (myFace1 and !processed.count(face1))
+      {
+        geo.per_mpi_faces.push_back(face1);
+        processed.insert(face1); // to avoid duplicates
+      }
+      else if (myFace2 and !processed.count(face2))
+      {
+        geo.per_mpi_faces.push_back(face2);
+        processed.insert(face2);
+      }
     }
   }
 

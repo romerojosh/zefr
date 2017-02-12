@@ -121,6 +121,7 @@ struct GeoStruct
   _mpi_comm myComm;
 #ifdef _MPI
   std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
+  std::vector<std::vector<unsigned int>> per_mpi_faces;
   std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
   std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
   std::map<unsigned int, MPI_Datatype> mpi_types;

@@ -145,6 +145,7 @@ void FRSolver::setup(_mpi_comm comm_in)
     e->set_coords(faces);
   }
 
+  /* For 3D cases, need to orient face flux points */
   if (geo.nDims == 3)
     orient_fpts();
 
