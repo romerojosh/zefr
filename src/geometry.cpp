@@ -1053,29 +1053,6 @@ void couple_periodic_bnds(GeoStruct &geo)
           }
           */
 
-          /* Fill in map coupling nodes */
-          for (unsigned int node1 = 0; node1 < nNodesPerFace; node1++)
-          {
-            unsigned int per_node = -1;
-
-            for (unsigned int node2 = 0; node2 < nNodesPerFace; node2++)
-            {
-              unsigned int count2 = 0;
-              for (unsigned int dim = 0; dim < geo.nDims; dim++)
-              {
-                if (std::abs(coords_face1(node1, dim) - coords_face2(node2,dim)) < 1e-6)
-                  count2++;
-              }
-
-              if (count2++ == geo.nDims - 1)
-              {
-                per_node = node2; break;
-              }
-            }
-
-            geo.per_node_pairs[face1[node1]] = face2[per_node];
-          }
-
           break;
         }
       }
@@ -1275,11 +1252,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if(!face_fpts.count(face))
         {
-          geo.ele2face(n, geo.eleID[etype](ele)) = geo.nFaces;
-          geo.face2eles(0, geo.nFaces) = geo.eleID[etype](ele);
+          //geo.ele2face(n, geo.eleID[etype](ele)) = geo.nFaces;
+          //geo.face2eles(0, geo.nFaces) = geo.eleID[etype](ele);
 #ifdef _BUILD_LIB
-          for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
-            geo.face2nodes(j, geo.nFaces) = geo.ele2nodes(geo.face_nodesBT[etype](n, j), geo.eleID[etype](ele));
+          //for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
+          //  geo.face2nodes(j, geo.nFaces) = geo.ele2nodes(geo.face_nodesBT[etype](n, j), geo.eleID[etype](ele));
 #endif
 
           /* Check if face is on boundary */
@@ -1377,20 +1354,13 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         /* If face has already been encountered, must assign existing global flux points */
         else
         {
-          if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC) 
-          {
-            // Renumber face to match periodic paired face
-            for (auto &nd : face_ordered)
-              nd = geo.per_node_pairs[nd];
-          }
-
           int ff = geo.nodes_to_face[face];
-          geo.ele2face(n, geo.eleID[etype](ele)) = ff;
-          geo.face2eles(1, ff) = geo.eleID[etype](ele);
+          //geo.ele2face(n, geo.eleID[etype](ele)) = ff;
+          //geo.face2eles(1, ff) = geo.eleID[etype](ele);
 
           auto fpts = face_fpts[face];
           
-          /* Associate existing flux points with this face (oriented later for 3D cases) */
+          /* Associate existing flux points with this face in reverse order (works as is for 2D, oriented later for 3D cases) */
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
             ele2fptsBT[etype][ele][n*nFptsPerFace + i] = fpts[nFptsPerFace - i - 1];
@@ -1445,16 +1415,9 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
     /* Additional note: Deadlock is avoided due to consistent global ordering of mpi_faces map */
 
-    /* If partition has minimum (of 2) ranks assigned to this face, use its flux point order. Send
-     * information to other rank. */
     if (rank == sendRank)
     {
       auto fpts = face_fpts[face];
-      auto face_ordered = geo.face2ordered[face];
-
-      /* Convert face_ordered node indexing to global indexing */
-      for (auto &nd : face_ordered)
-        nd = geo.node_map_p2g[nd];
 
       /* Append flux points to fpt_buffer_map in existing order */
       for (auto fpt : fpts)
@@ -1462,116 +1425,25 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
       /* Send ordered face to paired rank */
       MPI_Status temp;
-      MPI_Send(face_ordered.data(), geo.nNodesPerFace, MPI_INT, recvRank, 0, geo.myComm);
       MPI_Send(&faceID, 1, MPI_INT, recvRank, 0, geo.myComm);
       MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
-      MPI_Recv(&geo.mpiRotR[ff], 1, MPI_INT, recvRank, 0, geo.myComm, &temp);
     }
     else if (rank == recvRank)
     {
       auto fpts = face_fpts[face];
-      auto face_ordered = geo.face2ordered[face];
-      auto face_ordered_mpi = face_ordered;
 
-      /* Receive ordered face from paired rank */
       MPI_Status temp;
-      MPI_Recv(face_ordered_mpi.data(), geo.nNodesPerFace, MPI_INT, sendRank, 0, geo.myComm, &temp);
       MPI_Recv(&geo.faceID_R[ff], 1, MPI_INT, sendRank, 0, geo.myComm, &temp);
       MPI_Send(&faceID, 1, MPI_INT, sendRank, 0, geo.myComm);
 
-      /* Convert received face_ordered node indexing to partition local indexing */
-      for (auto &nd : face_ordered_mpi)
-        nd = geo.node_map_g2p[nd];
-
-      /* Determine rotation using ordered faces*/
-      unsigned int rot = 0;
-      if (geo.nDims == 3)
-      {
-        while (face_ordered[rot] != face_ordered_mpi[0])
-        //while (face_ordered_mpi[rot] != face_ordered[0])
-        {
-          rot++;
-        }
-      }
-      else
-      {
-        rot = 4;
-      }
-
-      geo.mpiRotR[ff] = rot;
-      MPI_Send(&geo.mpiRotR[ff], 1, MPI_INT, sendRank, 0, geo.myComm);
-
-      /* Based on rotation, append flux points to fpt_buffer_map (to be consistent with paired rank fpt order) */
-      switch (rot)
-      {
-        case 0:
-          for (unsigned int j = 0; j < nFpts1D; j++)
-          {
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-               geo.fpt_buffer_map[sendRank].push_back(fpts[i * nFpts1D + j]);
-            }
-          } break;
-
-        case 1:
-          for (unsigned int j = 0; j < nFpts1D; j++)
-          {
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-              geo.fpt_buffer_map[sendRank].push_back(fpts[nFpts1D - i + j * nFpts1D - 1]);
-            }
-          } break;
-
-        case 2:
-          for (unsigned int j = 0; j < nFpts1D; j++)
-          {
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-              geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i * nFpts1D - j - 1]);
-            }
-          } break;
-
-        case 3:
-          for (unsigned int j = 0; j < nFpts1D; j++)
-          {
-            for (unsigned int i = 0; i < nFpts1D; i++)
-            {
-              geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - (j+1) * nFpts1D + i]);
-            }
-          } break;
-
-        case 4:
-          for (unsigned int i = 0; i < nFptsPerFace; i++)
-          {
-            geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
-          } break;
-      }
+      /* Append existing flux points with this face in reverse order (works as is for 2D, oriented later for 3D cases) */
+      for (unsigned int i = 0; i < nFptsPerFace; i++)
+        geo.fpt_buffer_map[sendRank].push_back(fpts[nFptsPerFace - i - 1]);
     }
     else
     {
       ThrowException("Error in mpi_faces. Neither rank is this rank.");
     }
-  }
-
-  MPI_Barrier(geo.myComm);
-
-  /* Create MPI Derived type for sends/receives */
-  for (auto &entry : geo.fpt_buffer_map)
-  {
-    unsigned int sendRank = entry.first;
-    auto fpts = entry.second;
-    std::vector<int> block_len(nVars * fpts.size(), 1);
-    std::vector<int> disp(nVars * fpts.size(), 0);
-    
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      for (unsigned int i = 0; i < fpts.size(); i++)
-        disp[i + var * fpts.size()] = fpts(i) + var * gfpt_mpi;
-    }
-    
-    MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]);
-
-    MPI_Type_commit(&geo.mpi_types[sendRank]);
   }
 
   MPI_Barrier(geo.myComm);
@@ -1592,22 +1464,18 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
   for (auto etype : geo.ele_set)
   {
-    //std::cout << "etype: " << std::endl;
     geo.fpt2gfptBT[etype].assign({geo.nFacesPerEleBT[etype] * nFptsPerFace, geo.nElesBT[etype]});
     geo.fpt2gfpt_slotBT[etype].assign({geo.nFacesPerEleBT[etype] * nFptsPerFace, geo.nElesBT[etype]});
 
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {
-      //std::cout << "ele: " << ele;
       for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * nFptsPerFace; fpt++)
       {
         //geo.fpt2gfpt(fpt,ele) = ele2fptsBT[etype][ele][fpt];
         //geo.fpt2gfpt_slot(fpt,ele) = ele2fpts_slotBT[etype][ele][fpt];
         geo.fpt2gfptBT[etype](fpt,ele) = ele2fptsBT[etype][ele][fpt];
         geo.fpt2gfpt_slotBT[etype](fpt,ele) = ele2fpts_slotBT[etype][ele][fpt];
-        //std::cout << " " << ele2fptsBT[etype][ele][fpt];
       }
-      //std::cout << std::endl;
     }
   }
 }
@@ -1899,7 +1767,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     auto ele2nodes_glob = geo.ele2nodesBT[etype];
     geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], (unsigned int) myElesBT[etype].size()}, 0);
 
-    std::cout << "etype: " << etype << " myEles.size: " << myElesBT[etype].size() << std::endl;
+    std::cout << " etype: " << etype << " myEles.size: " << myElesBT[etype].size() << std::endl;
     for (unsigned int ele = 0; ele < myElesBT[etype].size(); ele++)
     {
       for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)

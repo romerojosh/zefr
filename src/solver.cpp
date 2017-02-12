@@ -219,7 +219,6 @@ void FRSolver::orient_fpts()
 {
   mdvector<double> fpt_coords_L({geo.nDims, geo.nGfpts}), fpt_coords_R({geo.nDims, geo.nGfpts});
   std::vector<unsigned int> idxL(geo.nGfpts), idxR(geo.nGfpts), idxsort(geo.nGfpts);
-
  
   /* Gather all flux point coordinates */
   for (auto e : elesObjs)
@@ -247,6 +246,7 @@ void FRSolver::orient_fpts()
     idxL[fpt] = fpt; idxR[fpt] = fpt; idxsort[fpt] = fpt;
   }
 
+  /* Get consistent coupling via fuzzysort */
   for (unsigned int f = 0; f < geo.nGfpts_int/geo.nFptsPerFace; f++)
   {
     unsigned int shift = f * geo.nFptsPerFace;
@@ -254,13 +254,14 @@ void FRSolver::orient_fpts()
     fuzzysort_ind(fpt_coords_R, idxR.data() + shift, geo.nFptsPerFace, geo.nDims);
   }
 
+  /* Sort again to make left face indexing contiguous */
   std::sort(idxsort.begin(), idxsort.end(), [&](unsigned int a, unsigned int b) {return idxL[a] < idxL[b];});
   auto idxR_copy = idxR;
   for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
     idxR[fpt] = idxR_copy[idxsort[fpt]];
 
 
-  /* Reindex right faces */
+  /* Reindex right face flux points */
   for (auto e : elesObjs)
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -277,6 +278,19 @@ void FRSolver::orient_fpts()
       }
     }
   }
+
+#ifdef _MPI
+  /* For MPI, just use coupling from fuzzysort directly */
+  for (auto &entry : geo.fpt_buffer_map)
+  {
+    auto &fpts = entry.second;
+    for (unsigned int f = 0; f < fpts.size()/geo.nFptsPerFace; f++)
+    {
+      unsigned int shift = f * geo.nFptsPerFace;
+      fuzzysort_ind(fpt_coords_L, fpts.data() + shift, geo.nFptsPerFace, geo.nDims);
+    }
+  }
+#endif
 }
 
 void FRSolver::setup_update()
