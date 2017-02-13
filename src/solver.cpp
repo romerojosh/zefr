@@ -576,6 +576,9 @@ void FRSolver::solver_data_to_device()
     e->jaco_det_spts_d = e->jaco_det_spts;
     e->vol_d = e->vol;
 
+    geo.fpt2gfptBT_d[e->etype] = geo.fpt2gfptBT[e->etype];
+    geo.fpt2gfpt_slotBT_d[e->etype] = geo.fpt2gfpt_slotBT[e->etype];
+
     if (input->CFL_type == 2)
       e->h_ref_d = e->h_ref;
 
@@ -668,7 +671,6 @@ void FRSolver::solver_data_to_device()
       e->dFdU_spts_d = e->dFdU_spts;
       e->dFcdU_fpts_d = e->dFcdU_fpts;
 
-      //geo.fpt2gfptBT_d[e->etype] = geo.fpt2gfptBT[e->etype];
     }
 
     //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
@@ -1633,24 +1635,24 @@ void FRSolver::add_source(unsigned int stage, unsigned int startEle, unsigned in
 /* Note: Source term in update() is used primarily for multigrid. To add a true source term, define
  * a source term in funcs.cpp and set source input flag to 1. */
 #ifdef _CPU
-void FRSolver::update(const mdvector<double> &source)
+void FRSolver::update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif 
 #ifdef _GPU
-void FRSolver::update(const mdvector_gpu<double> &source)
+void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
   prev_time = flow_time;
 
   if (input->dt_scheme == "LSRK")
   {
-    step_adaptive_LSRK(source);
+    step_adaptive_LSRK(sourceBT);
   }
   else
   {
     if (input->dt_scheme == "MCGS")
-      step_MCGS(source);
+      step_MCGS(sourceBT);
     else
-      step_RK(source);
+      step_RK(sourceBT);
   }
 
   flow_time = prev_time + eles->dt(0);
@@ -1672,10 +1674,10 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 
 
 #ifdef _CPU
-void FRSolver::step_RK(const mdvector<double> &source)
+void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
-void FRSolver::step_RK(const mdvector_gpu<double> &source)
+void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
 #ifdef _CPU
@@ -1714,7 +1716,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #ifdef _CPU
     for (auto e : elesObjs)
     {
-      if (source.size() == 0)
+      if (!sourceBT.count(e->etype))
       {
 #pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < e->nVars; n++)
@@ -1748,12 +1750,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
               if (input->dt_type != 2)
               {
                 e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(0) /
-                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
               }
               else
               {
                 e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(ele) /
-                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
               }
             }
           }
@@ -1767,7 +1769,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 
       for (auto e : elesObjs)
       {
-        if (source.size() == 0)
+        if (!sourceBT.count(e->etype))
         {
           RK_update_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
                             rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
@@ -1775,7 +1777,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
         }
         else
         {
-          RK_update_source_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, source, e->jaco_det_spts_d, e->dt_d,
+          RK_update_source_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
                                    rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
                                    input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
         }
@@ -1827,7 +1829,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     {
       for (unsigned int stage = 0; stage < input->nStages; stage++)
       {
-        if (source.size() == 0)
+        if (!sourceBT.count(e->etype))
         {
 #pragma omp parallel for collapse(2)
           for (unsigned int n = 0; n < e->nVars; n++)
@@ -1859,12 +1861,12 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
                 if (input->dt_type != 2)
                 {
                   e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt,ele) *
-                      (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                      (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
                 }
                 else
                 {
                   e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
-                      (e->divF_spts(spt, ele, n, stage) + source(spt, ele, n));
+                      (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
                 }
               }
             }
@@ -1876,7 +1878,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #ifdef _GPU
     for (auto e : elesObjs)
     {
-      if (source.size() == 0)
+      if (!sourceBT.count(e->etype))
       {
         RK_update_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
                           rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
@@ -1884,7 +1886,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
       }
       else
       {
-        RK_update_source_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, source, e->jaco_det_spts_d, e->dt_d,
+        RK_update_source_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
                                  rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
                                  input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
       }
@@ -1897,13 +1899,13 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 }
 
 #ifdef _CPU
-void FRSolver::step_adaptive_LSRK(const mdvector<double> &source)
+void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
-void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
+void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
-  step_LSRK(source);
+  step_LSRK(sourceBT);
 
   // Calculate error (infinity norm of RK error) and scaling factor for dt
   double max_err = 0;
@@ -1982,15 +1984,15 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
       device_copy(e->U_spts_d, e->U_ini_d, e->U_ini_d.max_size());
 #endif
     // Try again with new dt
-    step_adaptive_LSRK(source);
+    step_adaptive_LSRK(sourceBT);
   }
 }
 
 #ifdef _CPU
-void FRSolver::step_LSRK(const mdvector<double> &source)
+void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
-void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
+void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
   /* NOTE: this implementation is not the 'true' low-storage implementation
@@ -2093,7 +2095,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 #ifdef _GPU
     for (auto e : elesObjs)
     {
-      if (source.size() == 0)
+      if (!sourceBT.count(e->etype))
       {
         LSRK_update_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d, e->divF_spts_d,
             e->jaco_det_spts_d, e->dt(0), ai, bi, bhi, e->nSpts, e->nEles,
@@ -2102,7 +2104,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
       else
       {
         LSRK_update_source_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d,
-            e->divF_spts_d, source, e->jaco_det_spts_d, e->dt(0), ai, bi, bhi,
+            e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt(0), ai, bi, bhi,
             e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->overset,
             geo.iblank_cell_d.data());
       }
@@ -2130,10 +2132,10 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 }
 
 #ifdef _CPU
-void FRSolver::step_MCGS(const mdvector<double> &source)
+void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &source)
 #endif
 #ifdef _GPU
-void FRSolver::step_MCGS(const mdvector_gpu<double> &source)
+void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source)
 #endif
 {
   /* Sweep through colors */
@@ -2188,7 +2190,7 @@ void FRSolver::step_MCGS(const mdvector_gpu<double> &source)
     }
     else
     {
-      compute_RHS_source(source, color);
+      //compute_RHS_source(source, color); //TODO: Fix this.
     }
 
 #ifdef _GPU
@@ -2248,10 +2250,11 @@ void FRSolver::compute_element_dt()
         {
           /* Skip if on ghost edge. */
           int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
+          int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
           if (gfpt == -1)
             continue;
 
-          int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(gfpt); //TODO: Tris require distinct dAs for each side
+          int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(gfpt, slot); 
         }
 
         e->dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * e->vol(ele) / int_waveSp;
@@ -2334,7 +2337,7 @@ void FRSolver::compute_element_dt()
   for (auto e : elesObjs)
   {
     compute_element_dt_wrapper(e->dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfptBT_d[e->etype], 
-        e->weights_fpts_d, e->vol_d, e->h_ref_d, e->nFptsPerFace, CFL, input->ldg_b, order, 
+        geo.fpt2gfpt_slotBT_d[e->etype], e->weights_fpts_d, e->vol_d, e->h_ref_d, e->nFptsPerFace, CFL, input->ldg_b, order, 
         input->dt_type, input->CFL_type, e->nFpts, e->nEles, e->nDims, myComm,
         input->overset, geo.iblank_cell_d.data());
   }
@@ -4486,6 +4489,30 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   }
 #endif
 
+  double minDT = INFINITY; double maxDT = 0.0; 
+
+  if (input->dt_type == 2)
+  {
+    for (auto e : elesObjs)
+    {
+      minDT = std::min(minDT, *std::min_element(e->dt.data(), e->dt.data() + e->nEles));
+      maxDT = std::max(maxDT, *std::max_element(e->dt.data(), e->dt.data() + e->nEles));
+    }
+
+#ifdef _MPI
+    if (input->rank == 0)
+    {
+      MPI_Reduce(MPI_IN_PLACE, &minDT, 1, MPI_DOUBLE, MPI_MIN, 0, myComm);
+      MPI_Reduce(MPI_IN_PLACE, &maxDT, 1, MPI_DOUBLE, MPI_MAX, 0, myComm);
+    }
+    else
+    {
+      MPI_Reduce(&minDT, &minDT, 1, MPI_DOUBLE, MPI_MIN, 0, myComm);
+      MPI_Reduce(&maxDT, &maxDT, 1, MPI_DOUBLE, MPI_MAX, 0, myComm);
+    }
+#endif
+  }
+
   /* Print residual to terminal (normalized by number of solution points) */
   if (input->rank == 0) 
   {
@@ -4505,13 +4532,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
     if (input->dt_type == 2)
     {
-      double minDT = INFINITY; double maxDT = 0.0; 
-
-      for (auto e : elesObjs)
-      {
-        minDT = std::min(minDT, *std::min_element(e->dt.data(), e->dt.data() + e->nEles));
-        maxDT = std::max(maxDT, *std::max_element(e->dt.data(), e->dt.data() + e->nEles));
-      }
 
       std::cout << "dt: " <<  minDT << " (min) ";
       std::cout << maxDT << " (max)";

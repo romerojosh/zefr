@@ -120,24 +120,24 @@ class FRSolver
     void compute_residual(unsigned int stage, unsigned int color = 0);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
-    void update(const mdvector<double> &source = mdvector<double>());
+    void update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Implicit Multi-Color Gauss-Seidel update loop
-    void step_MCGS(const mdvector<double>& source = mdvector<double>());
+    void step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Standard explicit (diagonal) Runge-Kutta update loop
-    void step_RK(const mdvector<double>& source = mdvector<double>());
+    void step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop
-    void step_LSRK(const mdvector<double>& source = mdvector<double>());
-    void step_adaptive_LSRK(const mdvector<double>& source = mdvector<double>());
+    void step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+    void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 #endif
 #ifdef _GPU
-    void update(const mdvector_gpu<double> &source = mdvector_gpu<double>());
-    void step_MCGS(const mdvector_gpu<double>& source = mdvector_gpu<double>());
-    void step_RK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
-    void step_LSRK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
-    void step_adaptive_LSRK(const mdvector_gpu<double>& source = mdvector_gpu<double>());
+    void update(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif
 
     void write_solution(const std::string &_prefix);

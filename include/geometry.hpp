@@ -132,7 +132,7 @@ struct GeoStruct
 
 #ifdef _GPU
     mdvector_gpu<int> fpt2gfpt_d;
-    std::map<ELE_TYPE, mdvector_gpu<int>> fpt2gfptBT_d;
+    std::map<ELE_TYPE, mdvector_gpu<int>> fpt2gfptBT_d, fpt2gfpt_slotBT_d;
     mdvector_gpu<char> fpt2gfpt_slot_d;
     mdvector_gpu<unsigned int> per_fpt_list_d;
     mdvector_gpu<char> gfpt2bnd_d;

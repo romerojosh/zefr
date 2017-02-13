@@ -106,7 +106,8 @@ void Tris::set_locs()
 
 
   /* Setup solution point locations and quadrature weights */
-  loc_spts = RW_Tri_pts(order);
+  //loc_spts = RW_Tri_pts(order);
+  loc_spts = WS_Tri_pts(order);
   weights_spts = WS_Tri_weights(order); //TODO: weights at new points
 
   /* Setup flux point locations */
@@ -400,6 +401,74 @@ double Tris::calc_d_nodal_basis_fpts(unsigned int fpt,
 
 void Tris::setup_PMG(int pro_order, int res_order)
 {
+  unsigned int nSpts_pro = (pro_order + 1) * (pro_order + 2) / 2;
+  unsigned int nSpts_res = (res_order + 1) * (res_order + 2) / 2;
+
+  std::vector<double> loc(nDims, 0.0);
+
+  if (order != pro_order)
+  {
+    /* Setup prolongation operator */
+    oppPro.assign({nSpts_pro, nSpts});
+
+    /* Set vandermonde matrix for pro_order solution points*/
+    auto loc_spts_pro = WS_Tri_pts(pro_order);
+    mdvector<double> vand_pro({nSpts_pro, nSpts_pro});
+
+    for (unsigned int i = 0; i < nSpts_pro; i++)
+      for (unsigned int j = 0; j < nSpts_pro; j++)
+        vand_pro(i,j) = Dubiner2D(pro_order, loc_spts_pro(i, 0), loc_spts_pro(i, 1), j); 
+
+    
+    /* Set prolongation identity operator (injects modes) */
+    mdvector<double> eye({nSpts_pro, nSpts}, 0); 
+    for (unsigned int i = 0; i < nSpts; i++)
+      eye(i,i) = 1.0;
+
+    /* Form operator by triple matrix product (u_pro = vand_pro * I * inv_vand * u) */
+    mdvector<double> temp({nSpts_pro, nSpts}, 0.0);
+
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts,
+        1.0, eye.data(), eye.ldim(), inv_vandDB.data(), inv_vandDB.ldim(), 0.0, temp.data(), temp.ldim());
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts_pro,
+        1.0, vand_pro.data(), vand_pro.ldim(), temp.data(), temp.ldim(), 0.0, oppPro.data(), oppPro.ldim());
+
+  }
+
+  if (order != 0)
+  {
+    /* Setup restriction operator */
+    oppRes.assign({nSpts_res, nSpts});
+
+    /* Set vandermonde matrix for res_order solution points*/
+    auto  loc_spts_res = WS_Tri_pts(res_order);
+    mdvector<double> vand_res({nSpts_res, nSpts_res});
+
+    for (unsigned int i = 0; i < nSpts_res; i++)
+      for (unsigned int j = 0; j < nSpts_res; j++)
+        vand_res(i,j) = Dubiner2D(res_order, loc_spts_res(i, 0), loc_spts_res(i, 1), j); 
+
+    
+    /* Set restriction identity operator (truncates modes) */
+    mdvector<double> eye({nSpts_res, nSpts}, 0); 
+    for (unsigned int i = 0; i < nSpts_res; i++)
+      eye(i,i) = 1.0;
+
+    /* Form operator by triple matrix product (u_res = vand_res * I * inv_vand * u) */
+    mdvector<double> temp({nSpts_res, nSpts}, 0.0);
+
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts,
+        1.0, eye.data(), eye.ldim(), inv_vandDB.data(), inv_vandDB.ldim(), 0.0, temp.data(), temp.ldim());
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts_res,
+        1.0, vand_res.data(), vand_res.ldim(), temp.data(), temp.ldim(), 0.0, oppRes.data(), oppRes.ldim());
+
+  }
+
+#ifdef _GPU
+  /* Copy PMG operators to device */
+  oppPro_d = oppPro;
+  oppRes_d = oppRes;
+#endif
 }
 
 void Tris::setup_ppt_connectivity()

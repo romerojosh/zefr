@@ -245,6 +245,11 @@ mdvector<double> WS_Tri_pts(unsigned int P)
 
   switch(P)
   {
+    case 0:
+      pts(0, 0) = -0.333333333333;
+      pts(0, 1) = -0.333333333333;
+      break;
+
     case 1:
       pts(0, 0) = -0.666666666667;
       pts(1, 0) = 0.333333333333;
@@ -619,6 +624,10 @@ mdvector<double> WS_Tri_weights(unsigned int P)
 
   switch(P)
   {
+    case 0:
+      weights(0) = 2.0; // TODO: Is this correct?
+      break;
+
     case 1:
       weights(0) = 0.666666666667;
       weights(1) = 0.666666666667;

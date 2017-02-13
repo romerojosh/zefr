@@ -38,23 +38,22 @@ class PMGrid
   private:
     InputStruct *input = NULL;
     int order, nLevels;
-    std::vector<mdvector<double>> corrections, sources, solutions;
+    std::vector<std::map<ELE_TYPE, mdvector<double>>> correctionsBT, sourcesBT, solutionsBT;
     std::vector<std::shared_ptr<FRSolver>> grids;
 
 #ifdef _GPU
-    std::vector<mdvector_gpu<double>> corrections_d, sources_d, solutions_d;
+    std::vector<std::map<ELE_TYPE, mdvector_gpu<double>>> correctionsBT_d, sourcesBT_d, solutionsBT_d;
 #endif
 
     void restrict_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
-    void prolong_pmg(FRSolver &grid_fine, FRSolver &grid_coarse);
-    void prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSolver &grid_f);
+    void prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector<double>> &correctionBT, FRSolver &grid_f);
     void prolong_U(FRSolver &grid_c, FRSolver &grid_f);
-    void compute_source_term(FRSolver &grid, mdvector<double> &source);
+    void compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector<double>> &sourceBT);
 
     /* Overloaded methods for GPU */
 #ifdef _GPU
-    void compute_source_term(FRSolver &grid, mdvector_gpu<double> &source);
-    void prolong_err(FRSolver &grid_c, mdvector_gpu<double> &correction_c, FRSolver &grid_f);
+    void compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT);
+    void prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector_gpu<double>> &correctionBT, FRSolver &grid_f);
 #endif
 
   public:

@@ -47,18 +47,29 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver, _mpi_comm comm_in)
   if (input->mg_levels.size() != input->mg_steps.size())
     ThrowException("Inconsistent number of mg_levels and mg_steps provided!");
 
-  corrections.resize(nLevels);
-  sources.resize(nLevels);
-  solutions.resize(nLevels);
+  correctionsBT.resize(nLevels);
+  sourcesBT.resize(nLevels);
+  solutionsBT.resize(nLevels);
 
 #ifdef _GPU
-  corrections_d.resize(nLevels);
-  sources_d.resize(nLevels);
-  solutions_d.resize(nLevels);
+  correctionsBT_d.resize(nLevels);
+  sourcesBT_d.resize(nLevels);
+  solutionsBT_d.resize(nLevels);
 #endif
 
+
+  bool tri_flag = solver.geo.nElesBT.count(TRI); // check if triangles are in grid
+
   /* Setup fine grid PMG operators */
-  solver.eles->setup_PMG(order, input->mg_levels[1]);
+  for (auto e : solver.elesObjs)
+  {
+    if (e->etype == QUAD and tri_flag) // need to adjust for increased quad order in this case
+    {
+      e->setup_PMG(order + 1, input->mg_levels[1] + 1);
+    }
+    else
+      e->setup_PMG(order, input->mg_levels[1]);
+  }
   grids.push_back(nullptr); // Placeholder spot in grids array
 
   /* Instantiate coarse grid solvers */
@@ -73,31 +84,41 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver, _mpi_comm comm_in)
     if (input->rank == 0) std::cout << "P_res = " << P_res << std::endl;
     grids.push_back(std::make_shared<FRSolver>(input, P));
     grids[n]->setup(comm_in);
-    grids[n]->eles->setup_PMG(P_pro, P_res);
 
-    /* Allocate memory for corrections and source terms */
-    corrections[n] = grids[n]->eles->U_spts;
-    sources[n] = grids[n]->eles->U_spts;
-    solutions[n] = grids[n]->eles->U_spts;
-    corrections[n].fill(0.0);
-    sources[n].fill(0.0);
-    solutions[n].fill(0.0);
+    for (auto e : grids[n]->elesObjs)
+    {
+      if (e->etype == QUAD and tri_flag)
+        e->setup_PMG(P_pro + 1, P_res + 1);
+      else
+        e->setup_PMG(P_pro, P_res);
+
+      /* Allocate memory for corrections and source terms */
+      correctionsBT[n][e->etype] = e->U_spts;
+      sourcesBT[n][e->etype] = e->U_spts;
+      solutionsBT[n][e->etype] = e->U_spts;
+      correctionsBT[n][e->etype].fill(0.0);
+      sourcesBT[n][e->etype].fill(0.0);
+      solutionsBT[n][e->etype].fill(0.0);
 
 #ifdef _GPU
-    /* If using GPU, allocate device memory */
-    corrections_d[n] = corrections[n];
-    sources_d[n] = sources[n];
-    solutions_d[n] = solutions[n];
+      /* If using GPU, allocate device memory */
+      correctionsBT_d[n][e->etype] = correctionsBT[n][e->etype];
+      sourcesBT_d[n][e->etype] = sourcesBT[n][e->etype];
+      solutionsBT_d[n][e->etype] = solutionsBT[n][e->etype];
 #endif
+    }
   }
 
   /* Allocate memory for fine grid correction and initialize to zero */
-  corrections[0] = solver.eles->U_spts;
-  corrections[0].fill(0.0);
+  for (auto e : solver.elesObjs)
+  {
+    correctionsBT[0][e->etype] = e->U_spts;
+    correctionsBT[0][e->etype].fill(0.0);
 
 #ifdef _GPU
-  corrections_d[0] = corrections[0];
+    correctionsBT_d[0][e->etype] = correctionsBT[0][e->etype];
 #endif
+  }
 }
 
 void PMGrid::v_cycle(FRSolver &solver, int level)
@@ -114,40 +135,44 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
   {
     /* Generate source term */
 #ifdef _CPU
-    compute_source_term(*grids[n], sources[n]);
+    compute_source_term(*grids[n], sourcesBT[n]);
 #endif
 
 #ifdef _GPU
-    compute_source_term(*grids[n], sources_d[n]);
+    compute_source_term(*grids[n], sourcesBT_d[n]);
 #endif
 
     /* Copy initial solution to solution storage */
 #ifdef _CPU
+    for (auto e : grids[n]->elesObjs)
+    {
 #pragma omp parallel for collapse(2)
-    for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
-      for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
-      {
-        if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
-        for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
-          solutions[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var);
-      }
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            solutionsBT[n][e->etype](spt, ele, var) = e->U_spts(spt, ele, var);
+        }
+    }
 #endif
 
 #ifdef _GPU
-    device_copy(solutions_d[n], grids[n]->eles->U_spts_d, solutions_d[n].max_size());
+    for (auto e : grids[n]->elesObjs)
+      device_copy(solutionsBT_d[n][e->etype], e->U_spts_d, solutionsBT_d[n][e->etype].max_size());
 #endif
 
     /* Update solution on coarse level */
     for (unsigned int step = 0; step < input->mg_steps[n]; step++)
     {
 #ifdef _CPU
-      grids[n]->update(sources[n]);
+      grids[n]->update(sourcesBT[n]);
       grids[n]->filter_solution();
 #endif
 
 #ifdef _GPU
-      grids[n]->update(sources_d[n]);
+      grids[n]->update(sourcesBT_d[n]);
       grids[n]->filter_solution();
 #endif
     }
@@ -158,19 +183,23 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
       /* Update residual and add source */
       grids[n]->compute_residual(0);
 #ifdef _CPU
+      for (auto e : grids[n]->elesObjs)
+      {
 #pragma omp parallel for collapse(2)
-      for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
-        for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
-        {
-          if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
-          for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
-            grids[n]->eles->divF_spts(spt, ele, var, 0) += sources[n](spt, ele, var);
-        }
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              e->divF_spts(spt, ele, var, 0) += sourcesBT[n][e->etype](spt, ele, var);
+          }
+      }
 #endif
 
 #ifdef _GPU
-      device_add(grids[n]->eles->divF_spts_d, sources_d[n], sources_d[n].max_size());
+      for (auto e : grids[n]->elesObjs)
+        device_add(e->divF_spts_d, sourcesBT_d[n][e->etype], sourcesBT_d[n][e->etype].max_size());
 #endif
 
       /* Restrict to next coarse level */
@@ -188,12 +217,12 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
       for (unsigned int step = 0; step < input->mg_steps[n]; step++)
       {
 #ifdef _CPU
-        grids[n]->update(sources[n]);
+        grids[n]->update(sourcesBT[n]);
         grids[n]->filter_solution();
 #endif
 
 #ifdef _GPU
-        grids[n]->update(sources_d[n]);
+        grids[n]->update(sourcesBT_d[n]);
         grids[n]->filter_solution();
 #endif
       }
@@ -201,34 +230,40 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 
     /* Generate error */
 #ifdef _CPU
+    for (auto e : grids[n]->elesObjs)
+    {
 #pragma omp parallel for collapse(2)
-    for (unsigned int var = 0; var < grids[n]->eles->nVars; var++)
-      for (unsigned int ele = 0; ele < grids[n]->eles->nEles; ele++)
-      {
-        if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
-        for (unsigned int spt = 0; spt < grids[n]->eles->nSpts; spt++)
-          corrections[n](spt, ele, var) = grids[n]->eles->U_spts(spt, ele, var) - 
-            solutions[n](spt, ele, var);
-      }
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            correctionsBT[n][e->etype](spt, ele, var) = e->U_spts(spt, ele, var) - 
+              solutionsBT[n][e->etype](spt, ele, var);
+        }
+    }
 #endif
 
 #ifdef _GPU
     /* Note: Doing this with two separate kernels might be more expensive. Can write a
      * single kernel for this eventually */
-    device_subtract(grids[n]->eles->U_spts_d, solutions_d[n], solutions_d[n].max_size());
-    device_copy(corrections_d[n], grids[n]->eles->U_spts_d, corrections_d[n].max_size());
+    for (auto e : grids[n]->elesObjs)
+    {
+      device_subtract(e->U_spts_d, solutionsBT_d[n][e->etype], solutionsBT_d[n][e->etype].max_size());
+      device_copy(correctionsBT_d[n][e->etype], e->U_spts_d, correctionsBT_d[n][e->etype].max_size());
+    }
 #endif
 
     /* Prolong error and add to fine grid solution */
     if (n > level + 1)
     {
 #ifdef _CPU
-      prolong_err(*grids[n], corrections[n], *grids[n - 1]);
+      prolong_err(*grids[n], correctionsBT[n], *grids[n - 1]);
 #endif
 
 #ifdef _GPU
-      prolong_err(*grids[n], corrections_d[n], *grids[n - 1]);
+      prolong_err(*grids[n], correctionsBT_d[n], *grids[n - 1]);
 #endif
     }
   }
@@ -237,11 +272,11 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
   if (level != nLevels - 1)
   {
 #ifdef _CPU
-    prolong_err(*grids[level + 1], corrections[level + 1], solver);
+    prolong_err(*grids[level + 1], correctionsBT[level + 1], solver);
 #endif
 
 #ifdef _GPU
-    prolong_err(*grids[level + 1], corrections_d[level + 1], solver);
+    prolong_err(*grids[level + 1], correctionsBT_d[level + 1], solver);
 #endif
   }
 
@@ -264,7 +299,8 @@ void PMGrid::cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_
     /* Perform FMG cycle */
     for (int n = nLevels - 1; n > 0; n--)
     {
-      std::cout << "FMG P: " << input->mg_levels[n] << std::endl;
+      if (input->rank == 0)
+        std::cout << "FMG P: " << input->mg_levels[n] << std::endl;
       for (unsigned int cycle = 0; cycle < input->FMG_vcycles; cycle++)
       {
         /* Update current level */
@@ -321,166 +357,200 @@ void PMGrid::cycle(FRSolver &solver, std::ofstream& histfile, std::chrono::high_
 void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
 {
 #ifdef _CPU
-  /* Restrict solution */
-  auto &A = grid_f.eles->oppRes(0, 0);
-  auto &B = grid_f.eles->U_spts(0, 0, 0);
-  auto &C = grid_c.eles->U_spts(0, 0, 0);
+  for (auto ef : grid_f.elesObjs)
+  {
+    for (auto ec : grid_c.elesObjs)
+    {
+      if (ef->etype != ec->etype) continue;
+
+      /* Restrict solution */
+      auto &A = ef->oppRes(0, 0);
+      auto &B = ef->U_spts(0, 0, 0);
+      auto &C = ec->U_spts(0, 0, 0);
 
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_f.eles->oppRes.ldim(), &B, grid_f.eles->U_spts.ldim(), 0.0, &C, grid_c.eles->U_spts.ldim());
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
+          ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
+          ef->oppRes.ldim(), &B, ef->U_spts.ldim(), 0.0, &C, ec->U_spts.ldim());
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_f.eles->oppRes.ldim(), &B, grid_f.eles->U_spts.ldim(), 0.0, &C, grid_c.eles->U_spts.ldim());
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
+          ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
+          ef->oppRes.ldim(), &B, ef->U_spts.ldim(), 0.0, &C, ec->U_spts.ldim());
 #endif
 
-  
-  auto &B2 = grid_f.eles->divF_spts(0, 0, 0, 0);
-  auto &C2 = grid_c.eles->divF_spts(0, 0, 0, 0);
+      
+      auto &B2 = ef->divF_spts(0, 0, 0, 0);
+      auto &C2 = ec->divF_spts(0, 0, 0, 0);
 
-  /* Restrict residual */
+      /* Restrict residual */
 #ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_f.eles->oppRes.ldim(), &B2, grid_f.eles->divF_spts.ldim(), 0.0, &C2, grid_c.eles->divF_spts.ldim());
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
+          ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
+          ef->oppRes.ldim(), &B2, ef->divF_spts.ldim(), 0.0, &C2, ec->divF_spts.ldim());
 #else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_c.eles->nSpts, 
-      grid_f.eles->nEles * grid_f.eles->nVars, grid_f.eles->nSpts, 1.0, &A, 
-      grid_f.eles->oppRes.ldim(), &B2, grid_f.eles->divF_spts.ldim(), 0.0, &C2, grid_c.eles->divF_spts.ldim());
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
+          ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
+          ef->oppRes.ldim(), &B2, ef->divF_spts.ldim(), 0.0, &C2, ec->divF_spts.ldim());
 #endif
+    }
+  }
 
 #endif
 
 #ifdef _GPU
-  /* Restrict solution */
-  cublasDGEMM_wrapper(grid_c.eles->nSpts, grid_f.eles->nEles * grid_f.eles->nVars, 
-      grid_f.eles->nSpts, 1.0, grid_f.eles->oppRes_d.data(), grid_c.eles->nSpts, 
-      grid_f.eles->U_spts_d.data(), grid_f.eles->nSpts, 0.0, grid_c.eles->U_spts_d.data(), 
-      grid_c.eles->nSpts);
-
-  /* Restrict residual */
-  cublasDGEMM_wrapper(grid_c.eles->nSpts, grid_f.eles->nEles * grid_f.eles->nVars, 
-      grid_f.eles->nSpts, 1.0, grid_f.eles->oppRes_d.data(), grid_c.eles->nSpts, 
-      grid_f.eles->divF_spts_d.data(), grid_f.eles->nSpts, 0.0, 
-      grid_c.eles->divF_spts_d.data(), grid_c.eles->nSpts);
-#endif
-}
-
-void PMGrid::prolong_pmg(FRSolver &grid_c, FRSolver &grid_f)
-{
-  for (unsigned int n = 0; n < grid_c.eles->nVars; n++)
+  for (auto ef : grid_f.elesObjs)
   {
-    auto &A = grid_c.eles->oppPro(0, 0);
-    auto &B = grid_c.eles->U_spts(0, 0, n);
-    auto &C = grid_f.eles->U_spts(0, 0, n);
+    for (auto ec : grid_c.elesObjs)
+    {
+      if (ef->etype != ec->etype) continue;
 
-#ifdef _OMP    
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_c.eles->oppPro.ldim(), 
-        &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
-#else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-        grid_f.eles->nEles, grid_c.eles->nSpts, 1.0, &A, grid_c.eles->oppPro.ldim(), 
-        &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
-#endif
+      /* Restrict solution */
+      cublasDGEMM_wrapper(ec->nSpts, ef->nEles * ef->nVars, 
+          ef->nSpts, 1.0, ef->oppRes_d.data(), ec->nSpts, 
+          ef->U_spts_d.data(), ef->nSpts, 0.0, ec->U_spts_d.data(), 
+          ec->nSpts);
+
+      /* Restrict residual */
+      cublasDGEMM_wrapper(ec->nSpts, ef->nEles * ef->nVars, 
+          ef->nSpts, 1.0, ef->oppRes_d.data(), ec->nSpts, 
+          ef->divF_spts_d.data(), ef->nSpts, 0.0, 
+          ec->divF_spts_d.data(), ec->nSpts);
+    }
   }
-
-}
-
-void PMGrid::prolong_err(FRSolver &grid_c, mdvector<double> &correction_c, FRSolver &grid_f)
-{
-  auto &A = grid_c.eles->oppPro(0, 0);
-  auto &B = correction_c(0, 0, 0);
-  auto &C = grid_f.eles->U_spts(0, 0, 0);
-
-  /* Prolong error */
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
-      &A, grid_c.eles->oppPro.ldim(), &B, correction_c.ldim(), 1.0, &C, grid_f.eles->U_spts.ldim());
-#else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, input->rel_fac, 
-      &A, grid_c.eles->oppPro.ldim(), &B, correction_c.ldim(), 1.0, &C, grid_f.eles->U_spts.ldim());
 #endif
 }
+
+void PMGrid::prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector<double>> &correctionBT, FRSolver &grid_f)
+{
+  for (auto ef : grid_f.elesObjs)
+  {
+    for (auto ec : grid_c.elesObjs)
+    {
+      if (ef->etype != ec->etype) continue;
+
+      auto &A = ec->oppPro(0, 0);
+      auto &B = correctionBT[ec->etype](0, 0, 0);
+      auto &C = ef->U_spts(0, 0, 0);
+
+      /* Prolong error */
+#ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
+          ec->nEles * ec->nVars, ec->nSpts, input->rel_fac, 
+          &A, ec->oppPro.ldim(), &B, correctionBT[ec->etype].ldim(), 1.0, &C, ef->U_spts.ldim());
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
+          ec->nEles * ec->nVars, ec->nSpts, input->rel_fac, 
+          &A, ec->oppPro.ldim(), &B, correctionBT[ec->etype].ldim(), 1.0, &C, ef->U_spts.ldim());
+#endif
+    }
+  }
+}
+
+#ifdef _GPU
+void PMGrid::prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector_gpu<double>> &correctionBT_d, FRSolver &grid_f)
+{
+  for (auto ef : grid_f.elesObjs)
+  {
+    for (auto ec : grid_c.elesObjs)
+    {
+      if (ef->etype != ec->etype) continue;
+
+      /* Prolong error */
+      cublasDGEMM_wrapper(ef->nSpts, ef->nEles * ef->nVars, 
+          ec->nSpts, input->rel_fac, ec->oppPro_d.data(), ef->nSpts, 
+          correctionBT_d[ec->etype].data(), ec->nSpts, 1.0, ef->U_spts_d.data(),
+          ef->nSpts);
+    }
+  }
+}
+#endif 
 
 void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
 {
 #ifdef _CPU
-  auto &A = grid_c.eles->oppPro(0, 0);
-  auto &B = grid_c.eles->U_spts(0, 0, 0);
-  auto &C = grid_f.eles->U_spts(0, 0, 0);
-
-  /* Prolong error */
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, 1.0, 
-      &A, grid_c.eles->oppPro.ldim(), &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
-#else
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, grid_f.eles->nSpts, 
-      grid_c.eles->nEles * grid_c.eles->nVars, grid_c.eles->nSpts, 1.0, 
-      &A, grid_c.eles->oppPro.ldim(), &B, grid_c.eles->U_spts.ldim(), 0.0, &C, grid_f.eles->U_spts.ldim());
-#endif
-#endif
-
-#ifdef _GPU
-  cublasDGEMM_wrapper(grid_f.eles->nSpts, grid_c.eles->nEles * grid_c.eles->nVars, 
-      grid_c.eles->nSpts, 1.0, grid_c.eles->oppPro_d.data(), grid_f.eles->nSpts, 
-      grid_c.eles->U_spts_d.data(), grid_c.eles->nSpts, 0.0, grid_f.eles->U_spts_d.data(), 
-      grid_f.eles->nSpts);
-#endif
-}
-
-#ifdef _GPU
-void PMGrid::prolong_err(FRSolver &grid_c, mdvector_gpu<double> &correction_c, FRSolver &grid_f)
-{
-  /* Prolong error */
-  cublasDGEMM_wrapper(grid_f.eles->nSpts, grid_f.eles->nEles * grid_f.eles->nVars, 
-      grid_c.eles->nSpts, input->rel_fac, grid_c.eles->oppPro_d.data(), grid_f.eles->nSpts, 
-      correction_c.data(), grid_c.eles->nSpts, 1.0, grid_f.eles->U_spts_d.data(),
-      grid_f.eles->nSpts);
-}
-#endif 
-
-void PMGrid::compute_source_term(FRSolver &grid, mdvector<double> &source)
-{
-  /* Copy restricted fine grid residual to source term */
-#pragma omp parallel for collapse(2)
-  for (unsigned int n = 0; n < grid.eles->nVars; n++)
-    for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
+  for (auto ef : grid_f.elesObjs)
+  {
+    for (auto ec : grid_c.elesObjs)
     {
-      if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+      if (ef->etype != ec->etype) continue;
+      auto &A = ec->oppPro(0, 0);
+      auto &B = ec->U_spts(0, 0, 0);
+      auto &C = ef->U_spts(0, 0, 0);
 
-      for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
-        source(spt,ele,n) = grid.eles->divF_spts(spt,ele,n,0);
+      /* Prolong error */
+#ifdef _OMP
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
+          ec->nEles * ec->nVars, ec->nSpts, 1.0, 
+          &A, ec->oppPro.ldim(), &B, ec->U_spts.ldim(), 0.0, &C, ef->U_spts.ldim());
+#else
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
+          ec->nEles * ec->nVars, ec->nSpts, 1.0, 
+          &A, ec->oppPro.ldim(), &B, ec->U_spts.ldim(), 0.0, &C, ef->U_spts.ldim());
+#endif
     }
+  }
+#endif
+
+#ifdef _GPU
+  for (auto ef : grid_f.elesObjs)
+  {
+    for (auto ec : grid_c.elesObjs)
+    {
+      if (ef->etype != ec->etype) continue;
+
+      cublasDGEMM_wrapper(ef->nSpts, ec->nEles * ec->nVars, 
+          ec->nSpts, 1.0, ec->oppPro_d.data(), ef->nSpts, 
+          ec->U_spts_d.data(), ec->nSpts, 0.0, ef->U_spts_d.data(), 
+          ef->nSpts);
+    }
+  }
+#endif
+}
+
+void PMGrid::compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+{
+  /* Copy restricted fine grid residual to source term */
+  for (auto e : grid.elesObjs)
+  {
+#pragma omp parallel for collapse(2)
+    for (unsigned int n = 0; n < e->nVars; n++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
+
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          sourceBT[e->etype](spt,ele,n) = e->divF_spts(spt,ele,n,0);
+      }
+  }
 
   /* Update residual on current coarse grid */
   grid.compute_residual(0);
 
   /* Subtract to generate source term */
+  for (auto e : grid.elesObjs)
+  {
 #pragma omp parallel for collapse(3)
-  for (unsigned int n = 0; n < grid.eles->nVars; n++)
-    for (unsigned int ele = 0; ele < grid.eles->nEles; ele++)
-      for (unsigned int spt = 0; spt < grid.eles->nSpts; spt++)
-        source(spt, ele, n) -= grid.eles->divF_spts(spt, ele, n, 0);
+    for (unsigned int n = 0; n < e->nVars; n++)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          sourceBT[e->etype](spt, ele, n) -= e->divF_spts(spt, ele, n, 0);
+  }
 
 }
 
 #ifdef _GPU
-void PMGrid::compute_source_term(FRSolver &grid, mdvector_gpu<double> &source)
+void PMGrid::compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT_d)
 {
   /* Copy restricted fine grid residual to source term */
-  device_copy(source, grid.eles->divF_spts_d, source.max_size());
+  for (auto e : grid.elesObjs)
+    device_copy(sourceBT_d[e->etype], e->divF_spts_d, sourceBT_d[e->etype].max_size());
 
   /* Update residual on current coarse grid */
   grid.compute_residual(0);
 
   /* Subtract to generate source term */
-  device_subtract(source, grid.eles->divF_spts_d, source.max_size());
+  for (auto e : grid.elesObjs)
+    device_subtract(sourceBT_d[e->etype], e->divF_spts_d, sourceBT_d[e->etype].max_size());
 
 }
 #endif

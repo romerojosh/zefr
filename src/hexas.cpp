@@ -477,7 +477,7 @@ void Hexas::setup_PMG(int pro_order, int res_order)
 
   std::vector<double> loc(nDims, 0.0);
 
-  if (order != input->order)
+  if (order != pro_order)
   {
     /* Setup prolongation operator */
     oppPro.assign({nSpts_pro, nSpts});
