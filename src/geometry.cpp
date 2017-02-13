@@ -1087,7 +1087,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   std::map<ELE_TYPE, std::vector<std::vector<int>>> ele2fptsBT;
   std::map<ELE_TYPE, std::vector<std::vector<int>>> ele2fpts_slotBT;
 
-
   /* Determine number of interior global flux points */
   std::set<std::vector<unsigned int>> unique_faces;
   geo.nGfpts_int = 0; geo.nGfpts_bnd = 0;
@@ -1198,9 +1197,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #endif
   }
 
-  //for (auto etype : geo.ele_set)
-  //  geo.ele2faceBT[etype].assign({geo.nFacesPerEleBT[etype], geo.nElesBT[etype]}, -1);
-
   std::set<int> overPts, wallPts;
   std::set<std::vector<unsigned int>> overFaces;
 
@@ -1253,11 +1249,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if(!face_fpts.count(face))
         {
-          //geo.ele2face(n, geo.eleID[etype](ele)) = geo.nFaces;
-          //geo.face2eles(0, geo.nFaces) = geo.eleID[etype](ele);
+          geo.ele2face(n, geo.eleID[etype](ele)) = geo.nFaces;
+          geo.face2eles(0, geo.nFaces) = geo.eleID[etype](ele);
 #ifdef _BUILD_LIB
-          //for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
-          //  geo.face2nodes(j, geo.nFaces) = geo.ele2nodes(geo.face_nodesBT[etype](n, j), geo.eleID[etype](ele));
+          for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
+            geo.face2nodes(j, geo.nFaces) = geo.ele2nodes(geo.face_nodesBT[etype](n, j), geo.eleID[etype](ele));
 #endif
 
           /* Check if face is on boundary */
@@ -1356,8 +1352,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         else
         {
           int ff = geo.nodes_to_face[face];
-          //geo.ele2face(n, geo.eleID[etype](ele)) = ff;
-          //geo.face2eles(1, ff) = geo.eleID[etype](ele);
+          geo.ele2face(n, geo.eleID[etype](ele)) = ff;
+          geo.face2eles(1, ff) = geo.eleID[etype](ele);
 
           auto fpts = face_fpts[face];
           
@@ -1509,9 +1505,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
   geo.nFaces = geo.faceList.size();
 
-  //geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-  //geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-
   for (auto etype : geo.ele_set)
   {
     geo.fpt2gfptBT[etype].assign({geo.nFacesPerEleBT[etype] * nFptsPerFace, geo.nElesBT[etype]});
@@ -1521,8 +1514,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     {
       for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * nFptsPerFace; fpt++)
       {
-        //geo.fpt2gfpt(fpt,ele) = ele2fptsBT[etype][ele][fpt];
-        //geo.fpt2gfpt_slot(fpt,ele) = ele2fpts_slotBT[etype][ele][fpt];
         geo.fpt2gfptBT[etype](fpt,ele) = ele2fptsBT[etype][ele][fpt];
         geo.fpt2gfpt_slotBT[etype](fpt,ele) = ele2fpts_slotBT[etype][ele][fpt];
       }
@@ -1821,11 +1812,25 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  /* Reduce connectivity to contain only partition local elements */
+  /* Set number of elements to partition local */
+  geo.nEles = 0;
+  for (auto etype : geo.ele_set)
+  {
+    geo.nElesBT[etype] = myElesBT[etype].size();
+    geo.nEles += (unsigned int) myElesBT[etype].size();
+
+    // remove etype if no elements of type in this partition
+    if (geo.nElesBT[etype] == 0) geo.ele_set.erase(etype); 
+  }
+
+  /* Reduce connectivity to contain only partition local elements. Also reindex eleIDs and eleTypes. */
+  unsigned int eleID = 0;
+  geo.eleType.assign({geo.nEles});
   for (auto etype : geo.ele_set)
   {
     auto ele2nodes_glob = geo.ele2nodesBT[etype];
     geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], (unsigned int) myElesBT[etype].size()}, 0);
+    geo.eleID[etype].assign({(unsigned int) myElesBT[etype].size()}, 0);
 
     std::cout << " etype: " << etype << " myEles.size: " << myElesBT[etype].size() << std::endl;
     for (unsigned int ele = 0; ele < myElesBT[etype].size(); ele++)
@@ -1834,6 +1839,9 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       {
         geo.ele2nodesBT[etype](nd, ele) = ele2nodes_glob(nd, myElesBT[etype][ele]);
       }
+      geo.eleID[etype](ele) = eleID;
+      geo.eleType(eleID) = etype;
+      eleID++;
     }
   }
 
@@ -1848,7 +1856,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  /* Obtain set of unique nodes on this partition */
+  /* Obtain set of unique nodes on this partition. Set number of nodes. */
   std::set<unsigned int> uniqueNodes;
   for (auto etype : geo.ele_set)
   {
@@ -1860,6 +1868,8 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       }
     }
   }
+
+  geo.nNodes = (unsigned int) uniqueNodes.size();
 
   /* Reduce node coordinate data to contain only partition local nodes */
   auto coord_nodes_glob = geo.coord_nodes;
@@ -1890,6 +1900,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   auto face2bnd_glob = geo.face2bnd;
   geo.bnd_faces.clear();
   geo.face2bnd.clear();
+  geo.nBnds = 0;
 
   /* Iterate over all boundary faces */
   for (auto entry : bnd_faces_glob)
@@ -1915,6 +1926,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
         nd = geo.node_map_g2p[nd];
       }
       geo.bnd_faces[bnd_face] = bcType;
+      geo.nBnds++;
     }
   }
   
@@ -2021,19 +2033,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
   
-  /* Set number of nodes/elements to partition local */
-  geo.nNodes = (unsigned int) uniqueNodes.size();
-  geo.nEles = 0;
-  for (auto etype : geo.ele_set)
-  {
-    geo.nElesBT[etype] = myElesBT[etype].size();
-    geo.nEles += (unsigned int) myElesBT[etype].size();
-
-    // remove etype if no elements of type in this partition
-    if (geo.nElesBT[etype] == 0) geo.ele_set.erase(etype); 
-  }
-
-
 
   std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles;
   std::cout << ", nMpiFaces = " << geo.mpi_faces.size() << std::endl;

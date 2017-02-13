@@ -4850,7 +4850,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
       /* Sum inviscid force contributions */
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
       {
-        //TODO: need weights_fpts for specific element type!
+        //TODO: need to fix quadrature weights for mixed element cases!
         force_conv[dim] += eles->weights_fpts(idx) * PL *
           faces->norm(fpt, dim) * faces->dA(fpt);
       }
@@ -4909,6 +4909,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
           taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
 
+          //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_fpts(idx) * taun[dim] *
               faces->dA(fpt);
@@ -4985,6 +4986,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
           taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
 
+          //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force_visc[dim] -= eles->weights_fpts(idx) * taun[dim] *
               faces->dA(fpt);
@@ -5024,6 +5026,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
       double PL = faces->P(fpt, 0);
 
       /* Sum inviscid force contributions */
+      //TODO: need to fix quadrature weights for mixed element cases!
       for (unsigned int dim = 0; dim < eles->nDims; dim++)
         force[dim] = eles->weights_fpts(idx) * PL *
           faces->norm(fpt, dim) * faces->dA(fpt);
@@ -5082,6 +5085,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
           taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
 
+          //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force[dim] -= eles->weights_fpts(idx) * taun[dim] * faces->dA(fpt);
         }
@@ -5156,6 +5160,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
           taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
 
+          //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < eles->nDims; dim++)
             force[dim] -= eles->weights_fpts(idx) * taun[dim] *
               faces->dA(fpt);
