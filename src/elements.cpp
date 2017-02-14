@@ -899,8 +899,8 @@ void Elements::setup_filter()
   }
 
   /* Form concentration sensor matrix */
+  // Form 1D operator for tensor product line
   oppS_1D.assign({nSpts1D, order + 1});
-  oppS.assign({nDims * nSpts, nSpts});
   mdvector<double> conc({nSpts1D, order + 1}, 0.0);
   
   if (order > 0) 
@@ -921,8 +921,14 @@ void Elements::setup_filter()
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
     nSpts1D, nSpts1D, nSpts1D, 1.0, &A, conc.ldim(), &B, inv_vand1D.ldim(), 0.0, &C, oppS_1D.ldim());
 
+  // Form multidimensional operator
+  // Note: This operator is constructed for tensor product elements. Application to tris/tets requires
+  // additional multiplication by interpolation operator to "collapsed" tensor product solution points, done later.
   if (nDims == 2) // Quads, Tris
   {
+    int nSpts2D = nSpts1D * nSpts1D;
+    oppS.assign({nDims * nSpts2D, nSpts2D});
+
     // xi lines
     for (unsigned int k = 0; k < nSpts1D; k++)
       for (unsigned int j = 0; j < nSpts1D; j++)
@@ -933,11 +939,13 @@ void Elements::setup_filter()
     for (unsigned int k = 0; k < nSpts1D; k++)
       for (unsigned int j = 0; j < nSpts1D; j++)
         for (unsigned int i = 0; i < nSpts1D; i++)
-          oppS(nSpts + i + k*nSpts1D, j*nSpts1D + k) = oppS_1D(i,j);   
+          oppS(nSpts2D + i + k*nSpts1D, j*nSpts1D + k) = oppS_1D(i,j);   
   } 
   else // Hexes, Tets
   {
     int nSpts2D = nSpts1D * nSpts1D;
+    int nSpts3D = nSpts1D * nSpts1D * nSpts1D;
+    oppS.assign({nDims * nSpts3D, nSpts3D});
 
     // xi lines
     for (unsigned int k = 0; k < nSpts2D; k++)
@@ -950,15 +958,17 @@ void Elements::setup_filter()
       for (unsigned int k = 0; k < nSpts1D; k++)
         for (unsigned int j = 0; j < nSpts1D; j++)
           for (unsigned int i = 0; i < nSpts1D; i++)
-            oppS(nSpts + i + k*nSpts1D + l*nSpts2D, j*nSpts1D + k + l*nSpts2D) = oppS_1D(i,j);
+            oppS(nSpts3D + i + k*nSpts1D + l*nSpts2D, j*nSpts1D + k + l*nSpts2D) = oppS_1D(i,j);
 
     // zeta lines
     for(unsigned int l = 0; l < nSpts1D; l++)
       for (unsigned int k = 0; k < nSpts1D; k++)
         for (unsigned int j = 0; j < nSpts1D; j++)
           for (unsigned int i = 0; i < nSpts1D; i++)
-            oppS(2*nSpts + i + k*nSpts1D + l*nSpts2D, j*nSpts2D + k + l*nSpts1D) = oppS_1D(i,j);
+            oppS(2*nSpts3D + i + k*nSpts1D + l*nSpts2D, j*nSpts2D + k + l*nSpts1D) = oppS_1D(i,j);
   }
+
+  modify_sensor(); // multiply by additional matrix for tri/tet
 
   /* Form exponential filter matrix */
   oppF.assign({nSpts, nSpts});

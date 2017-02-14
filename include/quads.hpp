@@ -54,6 +54,8 @@ class Quads: public Elements
                                    const std::vector<double> &loc,
                                    unsigned int dim);
 
+    void modify_sensor();
+
   public:
     Quads(GeoStruct *geo, InputStruct *input, int order = -1);
 
@@ -63,6 +65,7 @@ class Quads: public Elements
     /* Routines for implicit method */
     void transform_dFdU();
     double calc_d_nodal_basis_fr(unsigned int spt, const std::vector<double>& loc, unsigned int dim);
+
 };
 
 #endif /* quads_hpp */

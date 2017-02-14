@@ -57,18 +57,19 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
   if (order == -1)
   {
     nSpts = (input->order + 1) * (input->order + 2) / 2;
-    nSpts1D = input->order + 2;
+    nFptsPerFace = input->order + 2;
+    nSpts1D = input->order + 1; //nSpts1D only used for filter matrix setup
     this->order = input->order;
   }
   else
   {
     nSpts = (order + 1) * (order + 2) / 2;
-    nSpts1D = order + 2;
+    nFptsPerFace = order + 2;
+    nSpts1D = order + 1; 
     this->order = order;
   }
 
-  nFptsPerFace = nSpts1D;
-  nFpts = nSpts1D * nFaces;
+  nFpts = nFptsPerFace * nFaces;
   nPpts = nSpts;
   
   if (input->equation == AdvDiff || input->equation == Burgers)
@@ -91,9 +92,13 @@ void Tris::set_locs()
   /* Allocate memory for point location structures */
   loc_qpts.assign({nQpts,nDims}); 
 
+  std::vector<double> loc_fpts_1D; 
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
-   loc_spts_1D = Gauss_Legendre_pts(order+2); 
+  {
+   loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only 
+   loc_fpts_1D = Gauss_Legendre_pts(order+2);
+  }
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
@@ -115,21 +120,21 @@ void Tris::set_locs()
   unsigned int fpt = 0;
   for (unsigned int i = 0; i < nFaces; i++)
   {
-    for (unsigned int j = 0; j < nSpts1D; j++)
+    for (unsigned int j = 0; j < nFptsPerFace; j++)
     {
       switch(i)
       {
         case 0: /* Bottom edge */
-          loc_fpts(fpt,0) = loc_spts_1D[j];
+          loc_fpts(fpt,0) = loc_fpts_1D[j];
           loc_fpts(fpt,1) = -1.0; break;
 
         case 1: /* Hypotenuse */
-          loc_fpts(fpt,0) = loc_spts_1D[nSpts1D-j-1]; 
-          loc_fpts(fpt,1) = loc_spts_1D[j]; break;
+          loc_fpts(fpt,0) = loc_fpts_1D[nFptsPerFace-j-1]; 
+          loc_fpts(fpt,1) = loc_fpts_1D[j]; break;
 
         case 2: /* Left edge */
           loc_fpts(fpt,0) = -1.0;
-          loc_fpts(fpt,1) = loc_spts_1D[nSpts1D-j-1]; break;
+          loc_fpts(fpt,1) = loc_fpts_1D[nFptsPerFace-j-1]; break;
       }
 
       fpt++;
@@ -168,7 +173,7 @@ void Tris::set_normals(std::shared_ptr<Faces> faces)
   /* Setup parent-space (transformed) normals at flux points */
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
-    switch(fpt/nSpts1D)
+    switch(fpt/nFptsPerFace)
     {
       case 0: /* Bottom edge */
         tnorm(fpt,0) = 0.0;
@@ -667,3 +672,52 @@ mdvector<double> Tris::calc_d_shape(unsigned int shape_order,
 
   return dshape_val;
 }
+
+void Tris::modify_sensor()
+{
+  /* Obtain locations of "collapsed" quad solution points */
+  unsigned int nNodesQuad = 4;
+  mdvector<double> nodes({nDims, nNodesQuad}); 
+  nodes(0, 0) = -1.0; nodes(1, 0) = -1.0; 
+  nodes(0, 1) = 1.0; nodes(1, 1) = -1.0; 
+  nodes(0, 2) = -1.0; nodes(1, 2) = 1.0; 
+  nodes(0, 3) = -1.0; nodes(1, 3) = 1.0; 
+
+  int nSpts2D = nSpts1D * nSpts1D;
+  mdvector<double> loc_spts_quad({nSpts2D, nDims}, 0);
+
+  for (unsigned int spt = 0; spt < nSpts2D; spt++)
+  {
+    for (unsigned int nd = 0; nd < nNodesQuad; nd++)
+    {
+      int i = nd % 2; int j = nd / 2;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        loc_spts_quad(spt, dim) += nodes(dim, nd) * Lagrange({-1, 1}, loc_spts_1D[spt % nSpts1D], i) * 
+                                                    Lagrange({-1, 1}, loc_spts_1D[spt / nSpts1D], j);
+      }
+    }
+  }
+
+  /* Setup spt to collapsed spt extrapolation operator (oppEc) */
+  std::vector<double> loc(nDims, 0.0);
+  mdvector<double> oppEc({nSpts2D, nSpts});
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    for (unsigned int spt_q = 0; spt_q < nSpts2D; spt_q++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        loc[dim] = loc_spts_quad(spt_q , dim);
+
+      oppEc(spt_q, spt) = calc_nodal_basis(spt, loc);
+    }
+  }
+
+  /* Multiply oppS by oppEc to get modified operator */
+  auto temp = oppS;
+  oppS.assign({nSpts2D * nDims, nSpts});
+
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts2D * nDims, nSpts, nSpts2D,
+      1.0, temp.data(), temp.ldim(), oppEc.data(), oppEc.ldim(), 0.0, oppS.data(), oppS.ldim());
+
+} 

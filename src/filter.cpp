@@ -57,7 +57,9 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
     U_filt[e->etype].assign({e->nSpts, e->nEles, e->nVars});
     sensor[e->etype].assign({e->nEles});
     sensor_bool[e->etype].assign({e->nEles});
-    KS[e->etype].assign({e->nDims * e->nSpts, e->nEles, e->nVars});
+    int nSptsKS = e->nSpts1D * e->nSpts1D;
+    if (e->nDims == 3) nSptsKS *= e->nSpts1D;
+    KS[e->etype].assign({e->nDims * nSptsKS, e->nEles, e->nVars});
 
 #ifdef _GPU
     U_ini_d[e->etype] = U_ini[e->etype];
@@ -162,6 +164,9 @@ void Filter::apply_sensor()
     }
     
     // Calculate KS
+    int nSptsKS = e->nSpts1D * e->nSpts1D;
+    if (e->nDims == 3) nSptsKS *= e->nSpts1D;
+
     for (unsigned int var = 0; var < e->nVars; var++)
     {
       auto &A = e->oppS(0,0);
@@ -170,12 +175,12 @@ void Filter::apply_sensor()
 
 #ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-        e->nDims * e->nSpts, e->nEles, e->nSpts, 1.0, &A, e->nDims * e->nSpts,
-        &B, e->nSpts, 0.0, &C, e->nDims * e->nSpts);
+        e->nDims * nSptsKS, e->nEles, e->nSpts, 1.0, &A, e->nDims * nSptsKS,
+        &B, e->nSpts, 0.0, &C, e->nDims * nSptsKS);
 #else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-        e->nDims * e->nSpts, e->nEles, e->nSpts, 1.0, &A, e->nDims * e->nSpts,
-        &B, e->nSpts, 0.0, &C, e->nDims * e->nSpts);
+        e->nDims * nSptsKS, e->nEles, e->nSpts, 1.0, &A, e->nDims * nSptsKS,
+        &B, e->nSpts, 0.0, &C, e->nDims * nSptsKS);
 #endif
     }
 
@@ -190,7 +195,7 @@ void Filter::apply_sensor()
       {
         double sen = 0.0;
 #pragma omp parallel for reduction(max:sen)
-        for (unsigned int row = 0; row < e->nDims*e->nSpts; row++)
+        for (unsigned int row = 0; row < e->nDims*nSptsKS; row++)
         {
           KS[e->etype](row, ele, var) = pow(1.0/epsilon, Q/2.0) * pow(abs(KS[e->etype](row, ele, var)), Q);
           sen = std::max(sen, KS[e->etype](row, ele, var));
@@ -216,17 +221,19 @@ void Filter::apply_sensor()
     }
     
     // Calculate KS
+    int nSptsKS = e->nSpts1D * e->nSpts1D;
+    if (e->nDims == 3) nSptsKS *= e->nSpts1D;
     for (unsigned int var = 0; var < e->nVars; var++)
     {
-      cublasDGEMM_wrapper(e->nDims * e->nSpts, e->nEles, e->nSpts, 1.0,
-        e->oppS_d.data(), e->nDims * e->nSpts, U_ini_d[e->etype].data() + var * e->nEles * e->nSpts, e->nSpts, 0.0,
-        KS_d[e->etype].data() + var * e->nEles * e->nDims * e->nSpts, e->nDims * e->nSpts);
+      cublasDGEMM_wrapper(e->nDims * nSptsKS, e->nEles, e->nSpts, 1.0,
+        e->oppS_d.data(), e->nDims * nSptsKS, U_ini_d[e->etype].data() + var * e->nEles * e->nSpts, e->nSpts, 0.0,
+        KS_d[e->etype].data() + var * e->nEles * e->nDims * nSptsKS, e->nDims * nSptsKS);
     }
     
     // Apply non-linear enhancement and store sensor values
     double epsilon = log(e->order)/e->order;
     compute_sensor_wrapper(KS_d[e->etype], sensor_d[e->etype], threshJ[e->etype], e->nSpts,
-      e->nEles, e->nVars, e->nDims, input->nonlin_exp, epsilon);
+      e->nEles, e->nVars, e->nDims, nSptsKS, input->nonlin_exp, epsilon);
   }
 
 #endif

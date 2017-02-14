@@ -879,3 +879,5 @@ mdvector<double> Hexas::calc_d_shape(unsigned int shape_order,
 
   return dshape_val;
 }
+
+void Hexas::modify_sensor(){ /* Do nothing */ }

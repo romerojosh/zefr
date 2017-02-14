@@ -671,3 +671,5 @@ mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
 
   return dshape_val;
 }
+
+void Quads::modify_sensor(){ /* Do nothing */ }

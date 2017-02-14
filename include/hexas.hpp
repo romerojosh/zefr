@@ -53,6 +53,8 @@ class Hexas: public Elements
                                    const std::vector<double> &loc,
                                    unsigned int dim);
 
+    void modify_sensor();
+
   public:
     Hexas(GeoStruct *geo, InputStruct *input, int order = -1);
 

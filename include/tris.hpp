@@ -63,6 +63,8 @@ class Tris: public Elements
     /* Routines for implicit method */
     void transform_dFdU();
     double calc_d_nodal_basis_fr(unsigned int spt, const std::vector<double>& loc, unsigned int dim);
+
+    void modify_sensor();
 };
 
 #endif /* tris_hpp */

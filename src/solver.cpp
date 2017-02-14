@@ -3054,9 +3054,9 @@ void FRSolver::write_solution(const std::string &_prefix)
   for (auto e : elesObjs)
     filt.sensor[e->etype] = filt.sensor_d[e->etype];
 #endif
+    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
     for (auto e : elesObjs)
     {
-      f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
@@ -3066,8 +3066,8 @@ void FRSolver::write_solution(const std::string &_prefix)
         }
         f << std::endl;
       }
-      f << "</DataArray>" << std::endl;
     }
+    f << "</DataArray>" << std::endl;
   }
 
   if (input->motion)

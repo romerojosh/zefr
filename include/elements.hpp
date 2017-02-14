@@ -190,6 +190,8 @@ class Elements
     virtual double calc_d_nodal_basis_fr(unsigned int spt,
                    const std::vector<double>& loc, unsigned int dim) = 0;
 
+    virtual void modify_sensor() = 0;
+
   public:
     void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
     void setup_filter();

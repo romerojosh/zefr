@@ -58,7 +58,7 @@ void normalize_data_wrapper(mdvector_gpu<double>& U_spts, double normalTol, unsi
 __global__
 void compute_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
     double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
-    unsigned int nDims, double Q, double epsilon)
+    unsigned int nDims, unsigned int nSptsKS, double Q, double epsilon)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -69,7 +69,7 @@ void compute_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
   for (unsigned int var = 0; var < nVars; var++)
   {
     double sen = 0.0;
-    for (unsigned int row = 0; row < nDims * nSpts; row++)
+    for (unsigned int row = 0; row < nDims * nSptsKS; row++)
     {
       KS(row, ele, var) = pow(1.0/epsilon , Q/2.0) * pow(abs(KS(row, ele, var)), Q);
       sen = max(sen, KS(row, ele, var));
@@ -82,12 +82,12 @@ void compute_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
 
 void compute_sensor_wrapper(mdvector_gpu<double>& KS, mdvector_gpu<double>& sensor,
     double threshJ, unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
-    unsigned int nDims, double Q, double epsilon)
+    unsigned int nDims, unsigned int nSptsKS, double Q, double epsilon)
 {
   unsigned int threads = 192;
   unsigned int blocks = (nEles + threads - 1)/threads;
 
-  compute_sensor<<<blocks, threads>>>(KS, sensor, threshJ, nSpts, nEles, nVars, nDims, Q, epsilon);
+  compute_sensor<<<blocks, threads>>>(KS, sensor, threshJ, nSpts, nEles, nVars, nDims, nSptsKS, Q, epsilon);
 
 }
 
