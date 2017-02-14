@@ -546,6 +546,7 @@ void Faces::apply_bcs()
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
 
+        /*
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
@@ -557,7 +558,6 @@ void Faces::apply_bcs()
         U(fpt, 0, 1) = rhoL;
         U_ldg(fpt, 0, 1) = rhoL;
 
-        /* Set velocity to zero (or grid wall velocity) */
         double Vsq = 0; double Vsq_grid = 0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
@@ -575,13 +575,51 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq) ;
         U_ldg(fpt, nDims + 1, 1) = rhoL * cp_over_gam * input->T_wall;
 
-        /* Set bias */
         if (bnd_id == ISOTHERMAL_NOSLIP_P2)
         {
           rus_bias(fpt) = 1;
           for (unsigned int var = 0; var < nVars; var++)
           {
             U(fpt, var, 1) = U_ldg(fpt, var, 1);
+          }
+        }
+        LDG_bias(fpt) = 1;
+        */
+
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        if (input->motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            VG[dim] = U(fpt, 0, 0) * Vg(fpt, dim);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momF);
+
+        double PR = PL;
+        double TR = input->T_wall;
+        
+        U(fpt, 0, 1) = PR / (input->R_ref * TR);
+
+        /* Set velocity to zero (or wall velocity) */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(fpt, dim+1, 1) = VG[dim];
+
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0);
+
+        /* Set bias */
+        if (bnd_id == ISOTHERMAL_NOSLIP_P2)
+        {
+          rus_bias(fpt) = 1;
+          for (unsigned int var = 0; var < nVars; var++)
+          {
+            U_ldg(fpt, var, 1) = U(fpt, var, 1);
           }
         }
         LDG_bias(fpt) = 1;
@@ -606,12 +644,12 @@ void Faces::apply_bcs()
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
 
+        /*
         double rhoL = U(fpt, 0, 0);
 
         U(fpt, 0, 1) = rhoL;
         U_ldg(fpt, 0, 1) = rhoL;
 
-        /* Set velocity to zero (or wall velocity) */
         double Vsq = 0; double Vsq_wall = 0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
@@ -629,13 +667,49 @@ void Faces::apply_bcs()
         U(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq);
         U_ldg(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq_wall);
 
-        /* Set bias */
         if (bnd_id == ISOTHERMAL_NOSLIP_MOVING_P2)
         {
           rus_bias(fpt) = 1;
           for (unsigned int var = 0; var < nVars; var++)
           {
             U(fpt, var, 1) = U_ldg(fpt, var, 1);
+          }
+        }
+        LDG_bias(fpt) = 1;
+        */
+
+        double momF = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+        }
+
+        momF /= U(fpt, 0, 0);
+
+        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+
+        double PR = PL;
+        double TR = input->T_wall;
+        
+        U(fpt, 0, 1) = PR / (input->R_ref * TR);
+
+        /* Set velocity to wall velocity */
+        double V_wall_sq = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          U(fpt, dim+1, 1) = U(fpt, 0 , 1) * input->V_wall(dim);
+          V_wall_sq += input->V_wall(dim) * input->V_wall(dim);
+        }
+
+        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0 , 1) * V_wall_sq;
+
+        /* Set bias */
+        if (bnd_id == ISOTHERMAL_NOSLIP_MOVING_P2)
+        {
+          rus_bias(fpt) = 1;
+          for (unsigned int var = 0; var < nVars; var++)
+          {
+            U_ldg(fpt, var, 1) = U(fpt, var, 1);
           }
         }
         LDG_bias(fpt) = 1;
@@ -1538,6 +1612,28 @@ void Faces::apply_bcs_dFdU()
         double a1 = (input->gamma-1.0) / (input->R_ref * input->T_wall);
         double a2 = 0.5 * (uL*uL + vL*vL);
 
+        /*
+        dURdUL(0, 0) = 1;
+        dURdUL(1, 0) = 0;
+        dURdUL(2, 0) = 0;
+        dURdUL(3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0);
+
+        dURdUL(0, 1) = 0;
+        dURdUL(1, 1) = 0;
+        dURdUL(2, 1) = 0;
+        dURdUL(3, 1) = 0;
+
+        dURdUL(0, 2) = 0;
+        dURdUL(1, 2) = 0;
+        dURdUL(2, 2) = 0;
+        dURdUL(3, 2) = 0;
+
+        dURdUL(0, 3) = 0;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
+        dURdUL(3, 3) = 0;
+        */
+
         dURdUL(0, 0) = a1 * a2;
         dURdUL(1, 0) = 0;
         dURdUL(2, 0) = 0;
@@ -1586,6 +1682,28 @@ void Faces::apply_bcs_dFdU()
         double a1 = (input->gamma-1.0) / (input->R_ref * input->T_wall);
         double a2 = 0.5 * (uL*uL + vL*vL);
         double a3 = 1.0 + 0.5 * a1 * (uR*uR + vR*vR);
+
+        /*
+        dURdUL(0, 0) = 1;
+        dURdUL(1, 0) = uR;
+        dURdUL(2, 0) = vR;
+        dURdUL(3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0) + 0.5 * (uR*uR + vR*vR);
+
+        dURdUL(0, 1) = 0;
+        dURdUL(1, 1) = 0;
+        dURdUL(2, 1) = 0;
+        dURdUL(3, 1) = 0;
+
+        dURdUL(0, 2) = 0;
+        dURdUL(1, 2) = 0;
+        dURdUL(2, 2) = 0;
+        dURdUL(3, 2) = 0;
+
+        dURdUL(0, 3) = 0;
+        dURdUL(1, 3) = 0;
+        dURdUL(2, 3) = 0;
+        dURdUL(3, 3) = 0;
+        */
 
         dURdUL(0, 0) = a1 * a2;
         dURdUL(1, 0) = a1 * a2 * uR;

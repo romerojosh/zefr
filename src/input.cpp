@@ -313,14 +313,14 @@ void apply_nondim(InputStruct &input)
       input.mach_fs, input.gamma /
       (input.gamma - 1.0));
 
-  input.v_fs = 1.0;
-  input.T_fs = 1.0;
-  input.R = input.R_ref; /// TODO: replace all usage of "R_ref"
-
   /* Compute and nondimensionalize wall quantities */
   double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
   for (unsigned int n = 0; n < input.nDims; n++)
     input.V_wall(n) = V_wall_mag * input.norm_wall(n) / V_fs_mag;
 
   input.T_wall = input.T_wall / input.T_ref;
+
+  input.v_fs = 1.0;
+  input.T_fs = 1.0;
+  input.R = input.R_ref; /// TODO: replace all usage of "R_ref"
 }
