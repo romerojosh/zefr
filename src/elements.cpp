@@ -29,6 +29,7 @@ extern "C" {
 
 #include "elements.hpp"
 #include "faces.hpp"
+#include "filter.hpp"
 #include "flux.hpp"
 #include "funcs.hpp"
 #include "mdvector.hpp"
@@ -50,6 +51,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   set_shape();
   set_coords(faces);
   set_normals(faces);
+  set_vandermonde_mats();
   calc_transforms(faces);
   setup_FR();
   setup_aux();  
@@ -866,6 +868,119 @@ void Elements::initialize_U()
   {
     ThrowException("Solution initialization not recognized!");
   }
+}
+
+void Elements::setup_filter()
+{
+  /* Compute 1D vandermonde matrices and inverse */
+  mdvector<double> vand1D({nSpts1D, order + 1});
+  for (unsigned int j = 0; j <= order; j++)
+  {
+    double normC = std::sqrt(2.0 / (2.0 * j + 1.0));
+    for (unsigned int spt = 0; spt < nSpts1D; spt++)
+      vand1D(spt, j) = Legendre(j, loc_spts_1D[spt]) / normC;
+  }
+  
+  vand1D.calc_LU();
+  mdvector<double> inv_vand1D({nSpts1D, order + 1});
+  mdvector<double> eye({nSpts1D, order + 1});
+  for (unsigned int j = 0; j <= order; j++)
+    eye(j,j) = 1.0;
+
+  vand1D.solve(inv_vand1D, eye);
+  
+  /* Compute 1D vandermonde matrix for the derivative */
+  mdvector<double> vand1D_d1({nSpts1D, order + 1});
+  for (unsigned int j = 0; j <= order; j++)
+  {
+    double normC = std::sqrt(2.0 / (2.0 * j + 1.0));
+    for (unsigned int spt = 0; spt < nSpts1D; spt++)
+      vand1D_d1(spt, j) = Legendre_d1(j, loc_spts_1D[spt]) / normC;
+  }
+
+  /* Form concentration sensor matrix */
+  oppS_1D.assign({nSpts1D, order + 1});
+  oppS.assign({nDims * nSpts, nSpts});
+  mdvector<double> conc({nSpts1D, order + 1}, 0.0);
+  
+  if (order > 0) 
+  {
+    for (unsigned int j = 0; j <= order; j++)
+    {
+      for (unsigned int spt = 0; spt < nSpts1D; spt++)
+      {
+        double x = loc_spts_1D[spt];
+        conc(spt, j) = (M_PI / order) * std::sqrt(1.0 - x*x) * vand1D_d1(spt, j);
+      }
+    }
+  }
+
+  auto &A = conc(0, 0);
+  auto &B = inv_vand1D(0, 0);
+  auto &C = oppS_1D(0, 0);
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    nSpts1D, nSpts1D, nSpts1D, 1.0, &A, conc.ldim(), &B, inv_vand1D.ldim(), 0.0, &C, oppS_1D.ldim());
+
+  if (nDims == 2) // Quads, Tris
+  {
+    // xi lines
+    for (unsigned int k = 0; k < nSpts1D; k++)
+      for (unsigned int j = 0; j < nSpts1D; j++)
+        for (unsigned int i = 0; i < nSpts1D; i++)
+          oppS(i + k*nSpts1D, j + k*nSpts1D) = oppS_1D(i,j);
+      
+    // eta lines
+    for (unsigned int k = 0; k < nSpts1D; k++)
+      for (unsigned int j = 0; j < nSpts1D; j++)
+        for (unsigned int i = 0; i < nSpts1D; i++)
+          oppS(nSpts + i + k*nSpts1D, j*nSpts1D + k) = oppS_1D(i,j);   
+  } 
+  else // Hexes, Tets
+  {
+    int nSpts2D = nSpts1D * nSpts1D;
+
+    // xi lines
+    for (unsigned int k = 0; k < nSpts2D; k++)
+      for (unsigned int j = 0; j < nSpts1D; j++)
+        for (unsigned int i = 0; i < nSpts1D; i++)
+          oppS(i + k*nSpts1D, j + k*nSpts1D) = oppS_1D(i,j);
+
+    // eta lines
+    for(unsigned int l = 0; l < nSpts1D; l++)
+      for (unsigned int k = 0; k < nSpts1D; k++)
+        for (unsigned int j = 0; j < nSpts1D; j++)
+          for (unsigned int i = 0; i < nSpts1D; i++)
+            oppS(nSpts + i + k*nSpts1D + l*nSpts2D, j*nSpts1D + k + l*nSpts2D) = oppS_1D(i,j);
+
+    // zeta lines
+    for(unsigned int l = 0; l < nSpts1D; l++)
+      for (unsigned int k = 0; k < nSpts1D; k++)
+        for (unsigned int j = 0; j < nSpts1D; j++)
+          for (unsigned int i = 0; i < nSpts1D; i++)
+            oppS(2*nSpts + i + k*nSpts1D + l*nSpts2D, j*nSpts2D + k + l*nSpts1D) = oppS_1D(i,j);
+  }
+
+  /* Form exponential filter matrix */
+  oppF.assign({nSpts, nSpts});
+  mdvector<double> temp({nSpts, nSpts});
+
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    double sigma = calc_expfilter_coeffs(order, nSpts, input->alpha, input->filtexp, nDims, i);
+
+    for (unsigned int j = 0; j < nSpts; j++)
+      temp(i,j) = sigma * inv_vand(i,j);
+  }
+
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nSpts, nSpts, 1.0, 
+      vand.data(), vand.ldim(), temp.data(), temp.ldim(), 0.0, oppF.data(), oppF.ldim());
+
+#ifdef _GPU
+  /* Copy operators to GPU */
+  oppS_d = oppS;
+  oppF_d = oppF;
+#endif
+
 }
 
 void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)

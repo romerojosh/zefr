@@ -36,6 +36,7 @@ class Tris: public Elements
     void set_locs();
     void set_normals(std::shared_ptr<Faces> faces);
     void set_oppRestart(unsigned int order_restart, bool use_shape = false);
+    void set_vandermonde_mats();
 
     mdvector<double> calc_shape(unsigned int shape_order,
                                 const std::vector<double> &loc);
@@ -52,7 +53,6 @@ class Tris: public Elements
     double calc_d_nodal_basis_fpts(unsigned int fpt,
                                    const std::vector<double> &loc,
                                    unsigned int dim);
-    void set_vandermonde_mats();
 
   public:
     Tris(GeoStruct *geo, InputStruct *input, int order = -1);

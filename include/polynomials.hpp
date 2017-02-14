@@ -70,8 +70,9 @@ double Legendre(unsigned int P, double xi);
  */
 double Legendre_d1(unsigned int P, double xi);
 
-//! Multi-dimensional Legendre polynomial
-double LegendreND(unsigned int in_mode, const std::vector<double>& loc, unsigned int order, unsigned int nDims);
+//! Multi-dimensional Legendre polynomials
+double Legendre2D(unsigned int P, double xi, double eta, unsigned int mode);
+double Legendre3D(unsigned int P, double xi, double eta, double mu, unsigned int mode);
 
 double Jacobi(double xi, double a, double b, unsigned int mode);
 double dJacobi(double xi, double a, double b, unsigned int mode);

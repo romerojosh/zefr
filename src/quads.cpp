@@ -243,6 +243,29 @@ void Quads::set_normals(std::shared_ptr<Faces> faces)
   }
 }
 
+void Quads::set_vandermonde_mats()
+{
+  /* Set vandermonde and inverse for 2D Legendre basis */
+  vand.assign({nSpts, nSpts});
+
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    for (unsigned int j = 0; j < nSpts; j++)
+      vand(i,j) = Legendre2D(order, loc_spts(i, 0), loc_spts(i, 1), j);
+  }
+
+  vand.calc_LU();
+
+  inv_vand.assign({nSpts, nSpts});
+
+  mdvector<double> eye({nSpts, nSpts});
+
+  for (unsigned int j = 0; j < nSpts; j++)
+    eye(j,j) = 1.0;
+
+  vand.solve(inv_vand, eye);
+}
+
 void Quads::set_oppRestart(unsigned int order_restart, bool use_shape)
 {
   unsigned int nRpts1D = (order_restart + 1);
@@ -371,6 +394,7 @@ void Quads::setup_PMG(int pro_order, int res_order)
   unsigned int nSpts_res = nSpts_res_1D * nSpts_res_1D;
 
   std::vector<double> loc(nDims, 0.0);
+
 
   if (order != pro_order)
   {

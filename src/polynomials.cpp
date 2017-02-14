@@ -170,7 +170,7 @@ double Dubiner2D(unsigned int P, double xi, double eta, unsigned int mode)
 {
   double val;
   int nModes = (P + 1) * (P + 2) / 2;
-  if (mode > nModes) 
+  if (mode >= nModes) 
     ThrowException("ERROR: mode value is too high for given P!")
 
   double ab[2];
@@ -202,7 +202,7 @@ double dDubiner2D(unsigned int P, double xi, double eta, double dim, unsigned in
 {
   double val;
   int nModes = (P + 1) * (P + 2) / 2;
-  if (mode > nModes) 
+  if (mode >= nModes) 
     ThrowException("ERROR: mode value is too high for given P!")
 
   double ab[2];
@@ -357,76 +357,68 @@ double divRTMonomial2D(unsigned int P, double xi, double eta, unsigned int mode)
   return 0.0;
 }
 
-// Evaluate 2D legendre basis
-double LegendreND(unsigned int in_mode, const std::vector<double> &loc, unsigned int order, unsigned int nDims)
+double Legendre2D(unsigned int P, double xi, double eta, unsigned int mode)
 {
-  double leg_basis;
-  if (nDims == 2)
-  {
-    unsigned int n_dof = (order+1)*(order+1);
+  double val;
+  int nModes = (P + 1) * (P + 1);
+  if (mode >= nModes) 
+    ThrowException("ERROR: mode value is too high for given P!")
 
-    if (in_mode < n_dof)
+  double normCi, normCj;
+  unsigned int m = 0;
+
+  for (unsigned int k = 0; k <= 2*P; k++)
+  {
+    for (unsigned int j = 0; j < k+1; j++)
     {
-      double normCi, normCj;
-      unsigned int mode = 0;
-      #pragma omp parallel for
-      for (unsigned int k = 0; k <= 2*order; k++)
+      unsigned int i = k-j;
+      if (i <= P && j <= P) // Order would be (0,2) (1,1) (2,0) ... any hierarchical ordering is fine
       {
-        for (unsigned int j = 0; j < k+1; j++)
+        if (m == mode) // found the correct mode
         {
-          unsigned int i = k-j;
-          if (i <= order && j <= order) // Order would be (0,2) (1,1) (2,0) ... any hierarchical ordering is fine
+          normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
+          normCj = std::sqrt(2.0 / (2.0 * j + 1.0));
+          val = Legendre(i, xi) * Legendre(j, eta) / (normCi*normCj);
+        }
+        m++;
+      }
+    }
+  }
+
+  return val;
+}
+
+double Legendre3D(unsigned int P, double xi, double eta, double mu, unsigned int mode)
+{
+  double val;
+  int nModes = (P + 1) * (P + 1) * (P + 1);
+  if (mode >= nModes) 
+    ThrowException("ERROR: mode value is too high for given P!")
+
+
+  double normCi, normCj, normCk;
+  unsigned int m = 0;
+  for (unsigned int l=0; l <= 3*P; l++)
+  {
+    for (unsigned int k = 0; k <= l; k++)
+    {
+      for (unsigned int j = 0; j <= l-k; j++)
+      {
+        unsigned int i = l-k-j;
+        if (i <= P && j <= P && k <= P)
+        {
+          if (m == mode) // found the correct mode
           {
-            if (mode == in_mode) // found the correct mode
-            {
-              normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
-              normCj = std::sqrt(2.0 / (2.0 * j + 1.0));
-              leg_basis = Legendre(i,loc[0])*Legendre(j,loc[1])/(normCi*normCj);
-            }
-            mode++;
+            normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
+            normCj = std::sqrt(2.0 / (2.0 * j + 1.0));
+            normCk = std::sqrt(2.0 / (2.0 * k + 1.0));
+            val = Legendre(i, xi) * Legendre(j, eta) * Legendre(k, mu) / (normCi*normCj*normCk);
           }
+          m++;
         }
       }
     }
-    else
-      ThrowException("ERROR: Invalid mode when evaluating Legendre basis ....");
   }
-  else if (nDims == 3)
-  {
-    unsigned int n_dof = (order+1)*(order+1)*(order+1);
 
-    if (in_mode < n_dof)
-    {
-      double normCi, normCj,normCk;
-      unsigned int mode = 0;
-      #pragma omp parallel for
-      for (unsigned int l=0; l <= 3*order; l++)
-      {
-        for (unsigned int k = 0; k <= l; k++)
-        {
-          for (unsigned int j = 0; j <= l-k; j++)
-          {
-            unsigned int i = l-k-j;
-            if (i <= order && j <= order && k <= order)
-            {
-              if (mode == in_mode) // found the correct mode
-              {
-                normCi = std::sqrt(2.0 / (2.0 * i + 1.0));
-                normCj = std::sqrt(2.0 / (2.0 * j + 1.0));
-                normCk = std::sqrt(2.0 / (2.0 * k + 1.0));
-                leg_basis = Legendre(i,loc[0])*Legendre(j,loc[1])*Legendre(k,loc[2])/(normCi*normCj*normCk);
-              }
-              mode++;
-            }
-          }
-        }
-      }
-    }
-    else
-      ThrowException("ERROR: Invalid mode when evaluating Legendre basis ....");
-  }
-  else
-    ThrowException("ERROR: Legendre basis not implemented for higher than 3 dimensions");
-
-  return leg_basis;
+  return val;
 }

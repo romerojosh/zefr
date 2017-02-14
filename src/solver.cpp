@@ -3051,19 +3051,23 @@ void FRSolver::write_solution(const std::string &_prefix)
   if (input->filt_on && input->sen_write)
   {
 #ifdef _GPU
-    filt.sensor = filt.sensor_d;
+  for (auto e : elesObjs)
+    filt.sensor[e->etype] = filt.sensor_d[e->etype];
 #endif
-    f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
-    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    for (auto e : elesObjs)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int ppt = 0; ppt < eles->nPpts; ppt++)
+      f << "<DataArray type=\"Float32\" Name=\"sensor\" format=\"ascii\">"<< std::endl;
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        f << filt.sensor(ele) << " ";
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
+        {
+          f << filt.sensor[e->etype](ele) << " ";
+        }
+        f << std::endl;
       }
-      f << std::endl;
+      f << "</DataArray>" << std::endl;
     }
-    f << "</DataArray>" << std::endl;
   }
 
   if (input->motion)
@@ -3876,7 +3880,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       int ele = eleList[face];
       for (int pt = 0; pt < nPtsFace; pt++)
       {
-        f << filt.sensor(ele) << " ";
+        //f << filt.sensor(ele) << " ";
       }
       f << std::endl;
     }
@@ -4022,7 +4026,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 
 #ifdef _GPU
   if (input->filt_on && input->sen_write)
-    filt.sensor = filt.sensor_d;
+    //filt.sensor = filt.sensor_d;
 #endif
 
   // Write the ParaView file for each Gmsh boundary
@@ -4334,7 +4338,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         int ele = eleList[face];
         for (int pt = 0; pt < nPtsFace; pt++)
         {
-          f << filt.sensor(ele) << " ";
+          //f << filt.sensor(ele) << " ";
         }
         f << std::endl;
       }
@@ -5210,29 +5214,12 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
   }
 }
 
-//void FRSolver::filter_solution()
-//{
-//  if (!input->filt_on) return;
-  
-//  /* Sense discontinuities and filter solution */
-//  unsigned int status = 1;
-//  for (unsigned int level = 0; level < input->filt_maxLevels && status; level++)
-//  {
-//    filt.apply_sensor();
-//    status = filt.apply_expfilter(level);
-//  }
-//}
-
 void FRSolver::filter_solution()
 {
   if (input->filt_on)
   {
     filt.apply_sensor();
-
-    /* Method 1 */
     filt.apply_expfilter();
-    if(input->filt2on)
-      filt.apply_expfilter_type2();
   }
 }
 

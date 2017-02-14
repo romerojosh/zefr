@@ -218,8 +218,9 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "sen_write", input.sen_write, (unsigned int) 1);
   read_param(f, "sen_norm", input.sen_norm, (unsigned int) 1);
   read_param(f, "sen_Jfac", input.sen_Jfac, 1.0);
-  read_param(f, "filt_gamma", input.filt_gamma, 0.1);
-  read_param(f, "filt_maxLevels", input.filt_maxLevels, (unsigned int) 1);
+  read_param(f, "alpha", input.alpha, 1.0);
+  read_param(f, "filtexp", input.filtexp, 2.0);
+  read_param(f, "nonlin_exp", input.nonlin_exp, 2.0);
 
   if (input.filt_on && input.order <= 1)
   {
@@ -227,15 +228,6 @@ InputStruct read_input_file(std::string inputfile)
     input.filt_on = 0;
   }
 
-  // Abhishek's filtering parameters
-  read_param(f, "limiter", input.limiter, (unsigned int) 0);
-  read_param(f, "alpha", input.alpha, 1.0);
-  read_param(f, "filtexp", input.filtexp, 2.0);
-  read_param(f, "nonlin_exp", input.nonlin_exp, 2.0);
-  read_param(f, "filt2on", input.filt2on, (unsigned int) 0);
-  // For second filter for conv. accn
-  read_param(f, "alpha2", input.alpha2, 1.0);
-  read_param(f, "filtexp2", input.filtexp2, 4.0);
 
   read_param(f, "overset", input.overset, false);
   read_param_vec(f, "overset_grids", input.oversetGrids);

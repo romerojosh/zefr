@@ -184,31 +184,28 @@ void Tris::set_normals(std::shared_ptr<Faces> faces)
 
     }
   }
-
-  /* Can set vandermonde matrices now */
-  set_vandermonde_mats();
 }
 
 void Tris::set_vandermonde_mats()
 {
   /* Set vandermonde for orthonormal Dubiner basis */
-  vandDB.assign({nSpts, nSpts});
+  vand.assign({nSpts, nSpts});
 
   for (unsigned int i = 0; i < nSpts; i++)
     for (unsigned int j = 0; j < nSpts; j++)
     {
-      vandDB(i,j) = Dubiner2D(order, loc_spts(i, 0), loc_spts(i, 1), j); 
+      vand(i,j) = Dubiner2D(order, loc_spts(i, 0), loc_spts(i, 1), j); 
     }
 
-  vandDB.calc_LU();
+  vand.calc_LU();
 
-  inv_vandDB.assign({nSpts, nSpts}); 
+  inv_vand.assign({nSpts, nSpts}); 
   
   mdvector<double> eye({nSpts, nSpts}, 0); 
   for (unsigned int i = 0; i < nSpts; i++)
     eye(i,i) = 1.0;
 
-  vandDB.solve(inv_vandDB, eye);
+  vand.solve(inv_vand, eye);
 
 
   /* Set vandermonde for Raviart-Thomas monomial basis over combined solution and flux point set*/
@@ -275,21 +272,21 @@ void Tris::set_oppRestart(unsigned int order_restart, bool use_shape)
   oppRestart.assign({nSpts, nRpts});
 
   /* Set vandermonde and inverse for orthonormal Dubiner basis at restart points */
-  mdvector<double> vand({nRpts, nRpts});
+  mdvector<double> vand_r({nRpts, nRpts});
 
   for (unsigned int i = 0; i < nRpts; i++)
     for (unsigned int j = 0; j < nRpts; j++)
-      vand(i,j) = Dubiner2D(order_restart, loc_rpts(i, 0), loc_rpts(i, 1), j); 
+      vand_r(i,j) = Dubiner2D(order_restart, loc_rpts(i, 0), loc_rpts(i, 1), j); 
 
-  vand.calc_LU();
+  vand_r.calc_LU();
 
-  mdvector<double> inv_vand({nRpts, nRpts});
+  mdvector<double> inv_vand_r({nRpts, nRpts});
   
   mdvector<double> eye({nRpts, nRpts}, 0); 
   for (unsigned int i = 0; i < nRpts; i++)
     eye(i,i) = 1.0;
 
-  vand.solve(inv_vand, eye);
+  vand_r.solve(inv_vand_r, eye);
 
   /* Compute Lagrange restart basis */
   for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -299,7 +296,7 @@ void Tris::set_oppRestart(unsigned int order_restart, bool use_shape)
       double val = 0.0;
       for (unsigned int i = 0; i < nRpts; i++)
       {
-        val += inv_vand(i, rpt) * Dubiner2D(order_restart, loc_spts(spt, 0), loc_spts(spt, 1), i);
+        val += inv_vand_r(i, rpt) * Dubiner2D(order_restart, loc_spts(spt, 0), loc_spts(spt, 1), i);
       }
 
       oppRestart(spt, rpt) = val;
@@ -314,7 +311,7 @@ double Tris::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
   double val = 0.0;
   for (unsigned int i = 0; i < nSpts; i++)
   {
-    val += inv_vandDB(i, spt) * Dubiner2D(order, loc[0], loc[1], i);
+    val += inv_vand(i, spt) * Dubiner2D(order, loc[0], loc[1], i);
   }
 
   return val;
@@ -325,7 +322,7 @@ double Tris::calc_nodal_basis(unsigned int spt, double *loc)
   double val = 0.0;
   for (unsigned int i = 0; i < nSpts; i++)
   {
-    val += inv_vandDB(i, spt) * Dubiner2D(order, loc[0], loc[1], i);
+    val += inv_vand(i, spt) * Dubiner2D(order, loc[0], loc[1], i);
   }
 
   return val;
@@ -404,8 +401,6 @@ void Tris::setup_PMG(int pro_order, int res_order)
   unsigned int nSpts_pro = (pro_order + 1) * (pro_order + 2) / 2;
   unsigned int nSpts_res = (res_order + 1) * (res_order + 2) / 2;
 
-  std::vector<double> loc(nDims, 0.0);
-
   if (order != pro_order)
   {
     /* Setup prolongation operator */
@@ -429,7 +424,7 @@ void Tris::setup_PMG(int pro_order, int res_order)
     mdvector<double> temp({nSpts_pro, nSpts}, 0.0);
 
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts,
-        1.0, eye.data(), eye.ldim(), inv_vandDB.data(), inv_vandDB.ldim(), 0.0, temp.data(), temp.ldim());
+        1.0, eye.data(), eye.ldim(), inv_vand.data(), inv_vand.ldim(), 0.0, temp.data(), temp.ldim());
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts_pro,
         1.0, vand_pro.data(), vand_pro.ldim(), temp.data(), temp.ldim(), 0.0, oppPro.data(), oppPro.ldim());
 
@@ -458,7 +453,7 @@ void Tris::setup_PMG(int pro_order, int res_order)
     mdvector<double> temp({nSpts_res, nSpts}, 0.0);
 
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts,
-        1.0, eye.data(), eye.ldim(), inv_vandDB.data(), inv_vandDB.ldim(), 0.0, temp.data(), temp.ldim());
+        1.0, eye.data(), eye.ldim(), inv_vand.data(), inv_vand.ldim(), 0.0, temp.data(), temp.ldim());
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts_res,
         1.0, vand_res.data(), vand_res.ldim(), temp.data(), temp.ldim(), 0.0, oppRes.data(), oppRes.ldim());
 
@@ -574,21 +569,21 @@ mdvector<double> Tris::calc_shape(unsigned int shape_order,
   }
 
   /* Set vandermonde and inverse for orthonormal Dubiner basis at shape points*/
-  mdvector<double> vand({nNodes, nNodes});
+  mdvector<double> vand_s({nNodes, nNodes});
 
   for (unsigned int i = 0; i < nNodes; i++)
     for (unsigned int j = 0; j < nNodes; j++)
-      vand(i,j) = Dubiner2D(shape_order, loc_pts(i, 0), loc_pts(i, 1), j); 
+      vand_s(i,j) = Dubiner2D(shape_order, loc_pts(i, 0), loc_pts(i, 1), j); 
 
-  vand.calc_LU();
+  vand_s.calc_LU();
 
-  mdvector<double> inv_vand({nNodes, nNodes});
+  mdvector<double> inv_vand_s({nNodes, nNodes});
   
   mdvector<double> eye({nNodes, nNodes}, 0); 
   for (unsigned int i = 0; i < nNodes; i++)
     eye(i,i) = 1.0;
 
-  vand.solve(inv_vand, eye);
+  vand_s.solve(inv_vand_s, eye);
 
   /* Compute Lagrange shape basis */
   for (unsigned int nd = 0; nd < nNodes; nd++)
@@ -596,7 +591,7 @@ mdvector<double> Tris::calc_shape(unsigned int shape_order,
     double val = 0.0;
     for (unsigned int i = 0; i < nNodes; i++)
     {
-      val += inv_vand(i, nd) * Dubiner2D(shape_order, loc[0], loc[1], i);
+      val += inv_vand_s(i, nd) * Dubiner2D(shape_order, loc[0], loc[1], i);
     }
 
     shape_val(gmsh_nodes[shape_order][nd]) = val;
@@ -639,21 +634,21 @@ mdvector<double> Tris::calc_d_shape(unsigned int shape_order,
   }
 
   /* Set vandermonde and inverse for orthonormal Dubiner basis at shape points*/
-  mdvector<double> vand({nNodes, nNodes});
+  mdvector<double> vand_s({nNodes, nNodes});
 
   for (unsigned int i = 0; i < nNodes; i++)
     for (unsigned int j = 0; j < nNodes; j++)
-      vand(i,j) = Dubiner2D(shape_order, loc_pts(i, 0), loc_pts(i, 1), j); 
+      vand_s(i,j) = Dubiner2D(shape_order, loc_pts(i, 0), loc_pts(i, 1), j); 
 
-  vand.calc_LU();
+  vand_s.calc_LU();
 
-  mdvector<double> inv_vand({nNodes, nNodes});
+  mdvector<double> inv_vand_s({nNodes, nNodes});
   
   mdvector<double> eye({nNodes, nNodes}, 0); 
   for (unsigned int i = 0; i < nNodes; i++)
     eye(i,i) = 1.0;
 
-  vand.solve(inv_vand, eye);
+  vand_s.solve(inv_vand_s, eye);
 
   /* Compute Lagrange shape basis */
   for (unsigned int nd = 0; nd < nNodes; nd++)
@@ -663,7 +658,7 @@ mdvector<double> Tris::calc_d_shape(unsigned int shape_order,
       double val = 0.0;
       for (unsigned int i = 0; i < nNodes; i++)
       {
-        val += inv_vand(i, nd) * dDubiner2D(shape_order, loc[0], loc[1], dim, i);
+        val += inv_vand_s(i, nd) * dDubiner2D(shape_order, loc[0], loc[1], dim, i);
       }
 
       dshape_val(gmsh_nodes[shape_order][nd], dim) = val;

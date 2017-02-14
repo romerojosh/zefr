@@ -73,7 +73,7 @@ class Elements
     mdvector<double> vol;
     mdvector<double> weights_spts, weights_fpts, weights_qpts;
     mdvector<double> h_ref;
-    mdvector<double> vandDB, inv_vandDB, vandRT, inv_vandRT;
+    mdvector<double> vand, inv_vand, vandRT, inv_vandRT;
 
     /* Moving-Grid related structures */
     mdvector<double> grid_vel_nodes, grid_vel_spts, grid_vel_fpts, grid_vel_ppts;
@@ -91,6 +91,9 @@ class Elements
 
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;
+
+    /* Filter operators */
+    mdvector<double> oppS_1D, oppS, oppF;
 
     mdvector<double> dt, rk_err;
 
@@ -146,6 +149,9 @@ class Elements
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
 
+    /* Filter operators */
+    mdvector_gpu<double> oppS_d, oppF_d;
+
     mdvector_gpu<double> dt_d, rk_err_d;
 
     /* Element structures for implicit method */
@@ -167,6 +173,7 @@ class Elements
     virtual void set_locs() = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
     virtual void set_oppRestart(unsigned int order_restart, bool use_shape = false) = 0;
+    virtual void set_vandermonde_mats() = 0;
     virtual mdvector<double> calc_shape(unsigned int shape_order,
                              const std::vector<double> &loc) = 0;
     virtual mdvector<double> calc_d_shape(unsigned int shape_order,
@@ -185,6 +192,7 @@ class Elements
 
   public:
     void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
+    void setup_filter();
     virtual void setup_PMG(int pro_order, int res_order) = 0;
     virtual void setup_ppt_connectivity() = 0;
     void initialize_U();

@@ -327,6 +327,29 @@ void Hexas::set_normals(std::shared_ptr<Faces> faces)
   }
 }
 
+void Hexas::set_vandermonde_mats()
+{
+  /* Set vandermonde and inverse for 3D Legendre basis */
+  vand.assign({nSpts, nSpts});
+
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    for (unsigned int j = 0; j < nSpts; j++)
+      vand(i,j) = Legendre3D(order, loc_spts(i, 0), loc_spts(i, 1), loc_spts(i, 2), j);
+  }
+
+  vand.calc_LU();
+
+  inv_vand.assign({nSpts, nSpts});
+
+  mdvector<double> eye({nSpts, nSpts});
+
+  for (unsigned int j = 0; j < nSpts; j++)
+    eye(j,j) = 1.0;
+
+  vand.solve(inv_vand, eye);
+}
+
 void Hexas::set_oppRestart(unsigned int order_restart, bool use_shape)
 {
   unsigned int nRpts1D = (order_restart + 1);
