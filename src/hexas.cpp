@@ -44,18 +44,13 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   etype = HEX;
   this->geo = geo;
   this->input = input;  
-  this->shape_order = geo->shape_order;  
-  this->nEles = geo->nEles;  
+  this->nEles = geo->nElesBT[HEX];  
   this->nQpts = input->nQpts1D * input->nQpts1D * input->nQpts1D;
 
   /* Generic hexahedral geometry */
   nDims = 3;
   nFaces = 6;
-  nNodes = geo->nNodesPerEle;
-  
-  geo->nFacesPerEle = 6;
-  geo->nNodesPerFace = 4;
-  geo->nCornerNodes = 8;
+  nNodes = geo->nNodesPerEleBT[HEX];
 
   /* If order argument is not provided, use order in input file */
   if (order == -1)
@@ -693,8 +688,7 @@ void Hexas::transform_dFdU()
 #endif
 }
 
-mdvector<double> Hexas::calc_shape(unsigned int shape_order,
-                                   const std::vector<double> &loc)
+mdvector<double> Hexas::calc_shape(const std::vector<double> &loc)
 {
   mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
@@ -705,62 +699,31 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
   unsigned int j = 0;
   unsigned int k = 0;
 
-  /* 20-node Seredipity */
-  if (nNodes == 20 || (shape_order == 2 and input->serendipity))
+  int nSide = cbrt(nNodes);
+
+  if (nSide*nSide*nSide != nNodes)
   {
-    /* Corner Nodes */
-    shape_val(0) = 0.125 * (1. - xi) * (1. - eta) * (1. - mu) * (-xi - eta - mu - 2.); 
-    shape_val(1) = 0.125 * (1. + xi) * (1. - eta) * (1. - mu) * (xi - eta - mu - 2.);
-    shape_val(2) = 0.125 * (1. + xi) * (1. + eta) * (1. - mu) * (xi + eta - mu - 2.);
-    shape_val(3) = 0.125 * (1. - xi) * (1. + eta) * (1. - mu) * (-xi + eta - mu - 2.);
-    shape_val(4) = 0.125 * (1. - xi) * (1. - eta) * (1. + mu) * (-xi - eta + mu - 2.);
-    shape_val(5) = 0.125 * (1. + xi) * (1. - eta) * (1. + mu) * (xi - eta + mu - 2.);
-    shape_val(6) = 0.125 * (1. + xi) * (1. + eta) * (1. + mu) * (xi + eta + mu - 2.);
-    shape_val(7) = 0.125 * (1. - xi) * (1. + eta) * (1. + mu) * (-xi + eta + mu - 2.);
-
-    /* Edge Nodes */
-    shape_val(8) = 0.25 * (1. - xi*xi) * (1. - eta) * (1. - mu);
-    shape_val(9) = 0.25 * (1. + xi) * (1. - eta*eta) * (1. - mu);
-    shape_val(10) = 0.25 * (1. - xi*xi) * (1. + eta) * (1. - mu);
-    shape_val(11) = 0.25 * (1. - xi) * (1. - eta*eta) * (1. - mu);
-    shape_val(12) = 0.25 * (1. - xi) * (1. - eta) * (1. - mu*mu);
-    shape_val(13) = 0.25 * (1. + xi) * (1. - eta) * (1. - mu*mu);
-    shape_val(14) = 0.25 * (1. + xi) * (1. + eta) * (1. - mu*mu);
-    shape_val(15) = 0.25 * (1. - xi) * (1. + eta) * (1. - mu*mu);
-    shape_val(16) = 0.25 * (1. - xi*xi) * (1. - eta) * (1. + mu);
-    shape_val(17) = 0.25 * (1. + xi) * (1. - eta*eta) * (1. + mu);
-    shape_val(18) = 0.25 * (1. - xi*xi) * (1. + eta) * (1. + mu);
-    shape_val(19) = 0.25 * (1. - xi) * (1. - eta*eta) * (1. + mu);
-
+    std::cout << "nNodes = " << nNodes << std::endl;
+    ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
   }
-  else
+
+  std::vector<double> xlist(nSide);
+  double dxi = 2./(nSide-1);
+
+  for (int i=0; i<nSide; i++)
+    xlist[i] = -1. + i*dxi;
+
+  auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
+
+  int pt = 0;
+  for (int k = 0; k < nSide; k++)
   {
-    int nSide = cbrt(nNodes);
-
-    if (nSide*nSide*nSide != nNodes)
+    for (int j = 0; j < nSide; j++)
     {
-      std::cout << "nNodes = " << nNodes << std::endl;
-      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
-    }
-
-    std::vector<double> xlist(nSide);
-    double dxi = 2./(nSide-1);
-
-    for (int i=0; i<nSide; i++)
-      xlist[i] = -1. + i*dxi;
-
-    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
-
-    int pt = 0;
-    for (int k = 0; k < nSide; k++)
-    {
-      for (int j = 0; j < nSide; j++)
+      for (int i = 0; i < nSide; i++)
       {
-        for (int i = 0; i < nSide; i++)
-        {
-          shape_val(ijk2gmsh[pt]) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, k);
-          pt++;
-        }
+        shape_val(ijk2gmsh[pt]) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, k);
+        pt++;
       }
     }
   }
@@ -768,8 +731,7 @@ mdvector<double> Hexas::calc_shape(unsigned int shape_order,
   return shape_val;
 }
 
-mdvector<double> Hexas::calc_d_shape(unsigned int shape_order,
-                                     const std::vector<double> &loc)
+mdvector<double> Hexas::calc_d_shape(const std::vector<double> &loc)
 {
   mdvector<double> dshape_val({nNodes, nDims}, 0);
   double xi = loc[0];
@@ -780,99 +742,30 @@ mdvector<double> Hexas::calc_d_shape(unsigned int shape_order,
   unsigned int j = 0;
   unsigned int k = 0;
 
-  if (shape_order == 2 && input->serendipity)
+  int nSide = cbrt(nNodes);
+
+  if (nSide*nSide*nSide != nNodes)
+    ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
+
+  std::vector<double> xlist(nSide);
+  double dxi = 2./(nSide-1);
+
+  for (int i=0; i<nSide; i++)
+    xlist[i] = -1. + i*dxi;
+
+  auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
+
+  int pt = 0;
+  for (int k = 0; k < nSide; k++)
   {
-    dshape_val(0, 0) = -0.125 * (1. - eta) * (1. - mu) * (-2.*xi - eta - mu - 1.); 
-    dshape_val(1, 0) = 0.125 * (1. - eta) * (1. - mu) * (2.*xi - eta - mu - 1.); 
-    dshape_val(2, 0) = 0.125 * (1. + eta) * (1. - mu) * (2.*xi + eta - mu - 1.); 
-    dshape_val(3, 0) = -0.125 * (1. + eta) * (1. - mu) * (-2.*xi + eta - mu - 1.); 
-    dshape_val(4, 0) = -0.125 * (1. - eta) * (1. + mu) * (-2.*xi - eta + mu - 1.); 
-    dshape_val(5, 0) = 0.125 * (1. - eta) * (1. + mu) * (2.*xi - eta + mu - 1.); 
-    dshape_val(6, 0) = 0.125 * (1. + eta) * (1. + mu) * (2.*xi + eta + mu - 1.); 
-    dshape_val(7, 0) = -0.125 * (1. + eta) * (1. + mu) * (-2.*xi + eta + mu - 1.); 
-    dshape_val(8, 0) = -0.5 * xi * (1. - eta) * (1. - mu); 
-    dshape_val(9, 0) = 0.25 * (1. - eta*eta) * (1. - mu); 
-    dshape_val(10, 0) = -0.5 * xi * (1. + eta) * (1. - mu); 
-    dshape_val(11, 0) = -0.25 * (1. - eta*eta) * (1. - mu); 
-    dshape_val(12, 0) = -0.25 * (1. - eta) * (1. - mu*mu); 
-    dshape_val(13, 0) = 0.25 * (1. - eta) * (1. - mu*mu); 
-    dshape_val(14, 0) = 0.25 * (1. + eta) * (1. - mu*mu); 
-    dshape_val(15, 0) = -0.25 * (1. + eta) * (1. - mu*mu); 
-    dshape_val(16, 0) = -0.5 * xi * (1. - eta) * (1. + mu); 
-    dshape_val(17, 0) = 0.25 * (1. - eta*eta) * (1. + mu); 
-    dshape_val(18, 0) = -0.5 * xi * (1. + eta) * (1. + mu); 
-    dshape_val(19, 0) = -0.25 * (1. - eta*eta) * (1. + mu); 
-
-    dshape_val(0, 1) = -0.125 * (1. - xi) * (1. - mu) * (-xi -2.*eta - mu - 1.); 
-    dshape_val(1, 1) = -0.125 * (1. + xi) * (1. - mu) * (xi - 2.*eta - mu - 1.); 
-    dshape_val(2, 1) = 0.125 * (1. + xi) * (1. - mu) * (xi + 2.*eta - mu - 1.); 
-    dshape_val(3, 1) = 0.125 * (1. - xi) * (1. - mu) * (-xi + 2.*eta - mu - 1.); 
-    dshape_val(4, 1) = -0.125 * (1. - xi) * (1. + mu) * (-xi - 2.*eta + mu - 1.); 
-    dshape_val(5, 1) = -0.125 * (1. + xi) * (1. + mu) * (xi - 2.*eta + mu - 1.); 
-    dshape_val(6, 1) = 0.125 * (1. + xi) * (1. + mu) * (xi + 2.*eta + mu - 1.); 
-    dshape_val(7, 1) = 0.125 * (1. - xi) * (1. + mu) * (-xi + 2.*eta + mu - 1.); 
-    dshape_val(8, 1) = -0.25 * (1. - xi*xi) * (1. - mu); 
-    dshape_val(9, 1) = -0.5 * eta * (1. + xi) * (1. - mu); 
-    dshape_val(10, 1) = 0.25 * (1. - xi*xi) * (1. - mu); 
-    dshape_val(11, 1) = -0.5 * eta * (1. - xi) * (1. - mu); 
-    dshape_val(12, 1) = -0.25 * (1. - xi) * (1. - mu*mu); 
-    dshape_val(13, 1) = -0.25 * (1. + xi) * (1. - mu*mu); 
-    dshape_val(14, 1) = 0.25 * (1. + xi) * (1. - mu*mu); 
-    dshape_val(15, 1) = 0.25 * (1. - xi) * (1. - mu*mu); 
-    dshape_val(16, 1) = -0.25 * (1. - xi*xi) * (1. + mu); 
-    dshape_val(17, 1) = -0.5 * eta * (1. + xi) * (1. + mu); 
-    dshape_val(18, 1) = 0.25 * (1. - xi*xi) * (1. + mu); 
-    dshape_val(19, 1) = -0.5 * eta * (1. - xi) * (1. + mu); 
-
-    dshape_val(0, 2) = -0.125 * (1. - xi) * (1. - eta) * (-xi - eta - 2.*mu - 1.); 
-    dshape_val(1, 2) = -0.125 * (1. + xi) * (1. - eta) * (xi - eta - 2.*mu - 1.); 
-    dshape_val(2, 2) = -0.125 * (1. + xi) * (1. + eta) * (xi + eta - 2.*mu - 1.); 
-    dshape_val(3, 2) = -0.125 * (1. - xi) * (1. + eta) * (-xi + eta - 2.*mu - 1.); 
-    dshape_val(4, 2) = 0.125 * (1. - xi) * (1. - eta) * (-xi - eta + 2.*mu - 1.); 
-    dshape_val(5, 2) = 0.125 * (1. + xi) * (1. - eta) * (xi - eta + 2.*mu - 1.); 
-    dshape_val(6, 2) = 0.125 * (1. + xi) * (1. + eta) * (xi + eta + 2.*mu - 1.); 
-    dshape_val(7, 2) = 0.125 * (1. - xi) * (1. + eta) * (-xi + eta + 2.*mu - 1.); 
-    dshape_val(8, 2) = -0.25 * (1. - xi*xi) * (1. - eta); 
-    dshape_val(9, 2) = -0.25 * (1. + xi) * (1. - eta*eta); 
-    dshape_val(10, 2) = -0.25 * (1. - xi*xi) * (1. + eta); 
-    dshape_val(11, 2) = -0.25 * (1. - xi) * (1. - eta*eta); 
-    dshape_val(12, 2) = -0.5 * mu * (1. - xi) * (1. - eta); 
-    dshape_val(13, 2) = -0.5 * mu * (1. + xi) * (1. - eta); 
-    dshape_val(14, 2) = -0.5 * mu * (1. + xi) * (1. + eta); 
-    dshape_val(15, 2) = -0.5 * mu * (1. - xi) * (1. + eta); 
-    dshape_val(16, 2) = 0.25 * (1. - xi*xi) * (1. - eta); 
-    dshape_val(17, 2) = 0.25 * (1. + xi) * (1. - eta*eta); 
-    dshape_val(18, 2) = 0.25 * (1. - xi*xi) * (1. + eta); 
-    dshape_val(19, 2) = 0.25 * (1. - xi) * (1. - eta*eta); 
-
-  }
-  else
-  {
-    int nSide = cbrt(nNodes);
-
-    if (nSide*nSide*nSide != nNodes)
-      ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
-
-    std::vector<double> xlist(nSide);
-    double dxi = 2./(nSide-1);
-
-    for (int i=0; i<nSide; i++)
-      xlist[i] = -1. + i*dxi;
-
-    auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
-
-    int pt = 0;
-    for (int k = 0; k < nSide; k++)
+    for (int j = 0; j < nSide; j++)
     {
-      for (int j = 0; j < nSide; j++)
+      for (int i = 0; i < nSide; i++)
       {
-        for (int i = 0; i < nSide; i++)
-        {
-          dshape_val(ijk2gmsh[pt],0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
-          dshape_val(ijk2gmsh[pt],1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
-          dshape_val(ijk2gmsh[pt],2) =  Lagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) * dLagrange(xlist, mu, k);
-          pt++;
-        }
+        dshape_val(ijk2gmsh[pt],0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
+        dshape_val(ijk2gmsh[pt],1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
+        dshape_val(ijk2gmsh[pt],2) =  Lagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) * dLagrange(xlist, mu, k);
+        pt++;
       }
     }
   }

@@ -379,10 +379,6 @@ void dFcdU_from_faces(mdvector_gpu<double> dFcdU_gfpts, mdvector_gpu<double> dFc
 
   int gfpt = fpt2gfpt(fpt,ele);
 
-  /* Check if flux point is on ghost edge */
-  if (gfpt == -1)
-    return;
-
   int slot = fpt2gfpt_slot(fpt,ele);
   int notslot = 1;
   if (slot == 1)
@@ -870,11 +866,8 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
     double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      /* Skip if on ghost edge. */
       int gfpt = fpt2gfpt(fpt,ele);
       int slot = fpt2gfpt_slot(fpt,ele);
-      if (gfpt == -1)
-        continue;
 
       int_waveSp += weights_fpts(fpt % nFptsPerFace) * waveSp_gfpts(gfpt) * dA(gfpt, slot);
     }
@@ -891,10 +884,7 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
     {
       for (unsigned int fpt = face * nFptsPerFace; fpt < (face+1) * nFptsPerFace; fpt++)
       {
-        /* Skip if on ghost edge. */
         int gfpt = fpt2gfpt(fpt,ele);
-        if (gfpt == -1)
-          continue;
 
         /* Compute inverse of timestep for each fpt */
         double dtinv_temp = waveSp_gfpts(gfpt) / (get_cfl_limit_adv_dev(order) * h_ref(fpt, ele)) + 

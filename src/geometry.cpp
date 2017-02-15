@@ -287,72 +287,57 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       {
         /* Linear quad/tri */
         case 2:
-          if (!input->collapsed_mode)
-          {
-            geo.ele_set.insert(TRI);
-            geo.nEles++; 
-            geo.nElesBT[TRI]++;
-            geo.shape_order = 1; geo.nNodesPerEle = 3; 
-            geo.shape_orderBT[TRI] = 1; geo.nNodesPerEleBT[TRI] = 3; break;
-          }
+          geo.ele_set.insert(TRI);
+          geo.nEles++; 
+          geo.nElesBT[TRI]++;
+          geo.nNodesPerEle = 3; 
+          geo.nNodesPerEleBT[TRI] = 3; break;
+
         case 3:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.shape_order = 1; geo.nNodesPerEle = 4; 
-          geo.shape_orderBT[QUAD] = 1; geo.nNodesPerEleBT[QUAD] = 4; break;
+          geo.nNodesPerEle = 4; 
+          geo.nNodesPerEleBT[QUAD] = 4; break;
 
         /* Biquadratic quad/tri */
         case 9:
-          if (!input->collapsed_mode) 
-          {
-            geo.ele_set.insert(TRI);
-            geo.nEles++; 
-            geo.nElesBT[TRI]++;
-            geo.shape_order = 2; geo.nNodesPerEle = 6; 
-            geo.shape_orderBT[TRI] = 2; geo.nNodesPerEleBT[TRI] = 6; break;
-          }
+          geo.ele_set.insert(TRI);
+          geo.nEles++; 
+          geo.nElesBT[TRI]++;
+          geo.nNodesPerEle = 6; 
+          geo.nNodesPerEleBT[TRI] = 6; break;
+
         case 10:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.shape_order = 2; 
-          geo.shape_orderBT[QUAD] = 2; 
-          if (input->serendipity)
-          {
-            geo.nNodesPerEle = 8;
-            geo.nNodesPerEleBT[QUAD] = 8;
-          }
-          else
-          {
-            geo.nNodesPerEle = 9;
-            geo.nNodesPerEleBT[QUAD] = 9;
-          }
-          break;
+          geo.nNodesPerEle = 9;
+          geo.nNodesPerEleBT[QUAD] = 9; break;
 
         /* Bicubic quad */
         case 36:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.shape_order = 3; geo.nNodesPerEle = 16; 
-          geo.shape_orderBT[QUAD] = 3; geo.nNodesPerEleBT[QUAD] = 16; break;
+          geo.nNodesPerEle = 16; 
+          geo.nNodesPerEleBT[QUAD] = 16; break;
 
         /* Biquartic quad */
         case 37:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.shape_order = 4; geo.nNodesPerEle = 25; 
-          geo.shape_orderBT[QUAD] = 4; geo.nNodesPerEleBT[QUAD] = 25; break;
+          geo.nNodesPerEle = 25; 
+          geo.nNodesPerEleBT[QUAD] = 25; break;
 
         /* Biquintic quad */
         case 38:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.shape_order = 5; geo.nNodesPerEle = 36; 
-          geo.shape_orderBT[QUAD] = 5; geo.nNodesPerEleBT[QUAD] = 36; break;
+          geo.nNodesPerEle = 36; 
+          geo.nNodesPerEleBT[QUAD] = 36; break;
 
         case 1:
         case 8:
@@ -379,37 +364,25 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 5:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.shape_order = 1; geo.nNodesPerEle = 8;
+          geo.nNodesPerEle = 8;
           geo.nElesBT[HEX]++;
-          geo.shape_orderBT[HEX] = 1; geo.nNodesPerEleBT[HEX] = 8; break;
+          geo.nNodesPerEleBT[HEX] = 8; break;
 
         /* Triquadratic Hex */
         case 12:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.shape_order = 2;
           geo.nElesBT[HEX]++;
-          geo.shape_orderBT[HEX] = 2;
-          if (input->serendipity)
-          {
-            geo.nNodesPerEle = 20;
-            geo.nNodesPerEleBT[HEX] = 20;
-          }
-          else
-          {
-            geo.nNodesPerEle = 27;
-            geo.nNodesPerEleBT[HEX] = 27;
-          }
+          geo.nNodesPerEle = 27;
+          geo.nNodesPerEleBT[HEX] = 27;
           break;
 
         /* Tricubic Hex */
         case 92:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.shape_order = 3;
           geo.nNodesPerEle = 64;
           geo.nElesBT[HEX]++;
-          geo.shape_orderBT[HEX] = 3;
           geo.nNodesPerEleBT[HEX] = 64;
           break;
 
@@ -417,10 +390,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 93:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.shape_order = 4;
           geo.nNodesPerEle = 125;
           geo.nElesBT[HEX]++;
-          geo.shape_orderBT[HEX] = 4;
           geo.nNodesPerEleBT[HEX] = 125;
           break;
 
@@ -428,7 +399,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 94:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.shape_order = 5;
           geo.nNodesPerEle = 216;
           geo.nElesBT[HEX]++;
           break;
@@ -488,45 +458,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
         /* Process triangular elements */
         case 2: /* 3-node Triangle */
-          if (input->collapsed_mode)
-          {
-            unsigned int ele = geo.nElesBT[QUAD];
-            f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele);
-            geo.ele2nodes(0,ele) = geo.ele2nodesBT[QUAD](0,ele);
-            geo.ele2nodes(1,ele) = geo.ele2nodesBT[QUAD](1,ele);
-            geo.ele2nodes(2,ele) = geo.ele2nodesBT[QUAD](2,ele);
-
-            geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); 
-            geo.ele2nodesBT[QUAD](3,ele) = geo.ele2nodesBT[QUAD](2,ele); 
-            geo.nElesBT[QUAD]++; break;
-          }
         case 9: /* 6-node Triangle */
         {
-          if (input->collapsed_mode)
-          {
-            unsigned int ele = geo.nElesBT[QUAD];
-            f >> geo.ele2nodesBT[QUAD](0,ele) >> geo.ele2nodesBT[QUAD](1,ele) >> geo.ele2nodesBT[QUAD](2,ele); 
-            f >> geo.ele2nodesBT[QUAD](4,ele) >> geo.ele2nodesBT[QUAD](5,ele) >> geo.ele2nodesBT[QUAD](7,ele);
-            geo.ele2nodes(0,ele) = geo.ele2nodesBT[QUAD](0,ele);
-            geo.ele2nodes(1,ele) = geo.ele2nodesBT[QUAD](1,ele);
-            geo.ele2nodes(2,ele) = geo.ele2nodesBT[QUAD](2,ele);
-            geo.ele2nodes(4,ele) = geo.ele2nodesBT[QUAD](4,ele);
-            geo.ele2nodes(5,ele) = geo.ele2nodesBT[QUAD](5,ele);
-            geo.ele2nodes(7,ele) = geo.ele2nodesBT[QUAD](7,ele);
-
-            geo.ele2nodes(3,ele) = geo.ele2nodes(2,ele); geo.ele2nodes(6,ele) = geo.ele2nodes(2,ele);
-            geo.ele2nodesBT[QUAD](3,ele) = geo.ele2nodesBT[QUAD](2,ele); geo.ele2nodesBT[QUAD](6,ele) = geo.ele2nodesBT[QUAD](2,ele);
-
-            if (!input->serendipity)
-            {
-              //TODO set geo.ele2nodes(8,ele) to centroid
-              ThrowException("Biquadratic quad to triangles not implemented yet! Set serendipity = 1!");
-            }
-
-            geo.nElesBT[QUAD]++; break;
-          }
-
-          /* Process for generic triangle */
           unsigned int ele = geo.nElesBT[TRI];
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[TRI]; nd++)
           {
@@ -575,23 +508,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         /* Process hexahedral elements */
         case 5: /* 8-node Hexahedral */
         case 12: /* Triquadratic Hex */
-          //if (input->serendipity) /* Read as 20-node serendipity */
-          //{
-          //  unsigned int ele = geo.nElesBT[HEX];
-          //  f >> geo.ele2nodes(0,ele) >> geo.ele2nodes(1,ele) >> geo.ele2nodes(2,ele) >> geo.ele2nodes(3,ele);
-          //  f >> geo.ele2nodes(4,ele) >> geo.ele2nodes(5,ele) >> geo.ele2nodes(6,ele) >> geo.ele2nodes(7,ele);
-          //  f >> geo.ele2nodes(8,ele) >> geo.ele2nodes(11,ele) >> geo.ele2nodes(12,ele) >> geo.ele2nodes(9,ele);
-          //  f >> geo.ele2nodes(13,ele) >> geo.ele2nodes(10,ele) >> geo.ele2nodes(14,ele) >> geo.ele2nodes(15,ele);
-          //  f >> geo.ele2nodes(16,ele) >> geo.ele2nodes(19,ele) >> geo.ele2nodes(17,ele) >> geo.ele2nodes(18,ele);
-
-          //  f >> geo.ele2nodesBT[HEX](0,ele) >> geo.ele2nodesBT[HEX](1,ele) >> geo.ele2nodesBT[HEX](2,ele) >> geo.ele2nodesBT[HEX](3,ele);
-          //  f >> geo.ele2nodesBT[HEX](4,ele) >> geo.ele2nodesBT[HEX](5,ele) >> geo.ele2nodesBT[HEX](6,ele) >> geo.ele2nodesBT[HEX](7,ele);
-          //  f >> geo.ele2nodesBT[HEX](8,ele) >> geo.ele2nodesBT[HEX](11,ele) >> geo.ele2nodesBT[HEX](12,ele) >> geo.ele2nodesBT[HEX](9,ele);
-          //  f >> geo.ele2nodesBT[HEX](13,ele) >> geo.ele2nodesBT[HEX](10,ele) >> geo.ele2nodesBT[HEX](14,ele) >> geo.ele2nodesBT[HEX](15,ele);
-          //  f >> geo.ele2nodesBT[HEX](16,ele) >> geo.ele2nodesBT[HEX](19,ele) >> geo.ele2nodesBT[HEX](17,ele) >> geo.ele2nodesBT[HEX](18,ele);
-
-          //  geo.nElesBT[HEX]++; break;
-          //}
         case 92: /* Cubic Hex */
         case 93: /* Quartic Hex */
         case 94: /* Quintic Hex */
@@ -883,18 +799,7 @@ void set_ele_adjacency(GeoStruct &geo)
           face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
         }
 
-        /* Check if face is collapsed */
-        std::set<unsigned int> nodes;
-        for (auto node : face)
-          nodes.insert(node);
-
-        if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
-        {
-          continue;
-        }
-
-        face.assign(nodes.begin(), nodes.end());
-
+        /* Sort for consistency */
         std::sort(face.begin(), face.end());
 
         face2eles[face].push_back(geo.eleID[etype](ele));
@@ -918,13 +823,6 @@ void set_ele_adjacency(GeoStruct &geo)
         {
           face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
         }
-
-        /* Reduce to only unique nodes to deal with triangular collapsed face */
-        std::set<unsigned int> nodes;
-        for (auto node : face)
-          nodes.insert(node);
-
-        face.assign(nodes.begin(), nodes.end());
 
         std::sort(face.begin(), face.end());
 
@@ -1112,18 +1010,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
         }
 
-        /* Check if face is collapsed */
-        std::set<unsigned int> nodes;
-        for (auto node : face)
-          nodes.insert(node);
-
-        if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
-        {
-          continue;
-        }
-
-        face.assign(nodes.begin(), nodes.end());
-
         std::sort(face.begin(), face.end());
 
         if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC)
@@ -1223,18 +1109,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         }
 
         auto face_ordered = face;
-
-        /* Check if face is collapsed */
-        std::set<unsigned int> nodes;
-        for (auto node : face)
-          nodes.insert(node);
-
-        if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
-        {
-          continue;
-        }
-
-        face.assign(nodes.begin(), nodes.end());
 
         std::sort(face.begin(), face.end());
 
@@ -1775,19 +1649,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
           face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
         }
 
-        /* Check if face is collapsed */
-        std::set<unsigned int> nodes;
-        for (auto node : face)
-          nodes.insert(node);
-
-        if (nodes.size() <= geo.nDims - 1) /* Fully collapsed face. Assign no fpts. */
-        {
-          continue;
-        }
-
-        face.assign(nodes.begin(), nodes.end());
-
-
         /* Sort for consistency */
         std::sort(face.begin(), face.end());
 
@@ -2268,6 +2129,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   for (auto &name : dsNames)
   {
     std::string qcon = "spt_quad_p" + std::to_string(input->rank);
+    std::string tcon = "spt_tri_p" + std::to_string(input->rank);
     std::string hcon = "spt_hex_p" + std::to_string(input->rank);
     /// TODO: add support for reading triangles, tets, etc.
     /// (nEles += _, read into tmp array, duplicate node 2 like with Gmsh)
@@ -2288,18 +2150,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.nEles = dims[1];
     geo.nNodesPerEle = dims[0];
     geo.nNodes = geo.nEles * geo.nNodesPerEle;
-    if ((dims[0] == 8 && geo.nDims == 2) || (dims[0] == 20 && geo.nDims == 3))
-    {
-      input->serendipity = 1;
-      geo.shape_order = 2;
-    }
-    else
-    {
-      if (geo.nDims == 2)
-        geo.shape_order = std::sqrt(dims[0]) - 1;
-      else
-        geo.shape_order = std::cbrt(dims[0]) - 1;
-    }
 
     mdvector<double> tmp_nodes({dims[2],dims[1],dims[0]}); // NOTE: We use col-major, HDF5 uses row-major
 

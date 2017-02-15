@@ -468,15 +468,16 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
   std::string param, line;
   double val;
   unsigned int order_restart;
-  mdvector<double> U_restart;
+  std::map<ELE_TYPE, mdvector<double>> U_restart;
 
-  unsigned int nEles = eles->nEles;
+  std::map<ELE_TYPE, unsigned int> nElesBT = geo.nElesBT;
 
   if (input->overset)
   {
+    for (auto e : elesObjs)
     /* Remove blanked elements from total cell count */
-    for (int ele = 0; ele < eles->nEles; ele++)
-      if (geo.iblank_cell(ele) != NORMAL) nEles--;
+      for (int ele = 0; ele < e->nEles; ele++)
+        if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBT[e->etype]--;
   }
 
   /* Load data from restart file */
@@ -501,45 +502,61 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       std::getline(f,line);
       f.ignore(1); 
 
+      unsigned int nRpts;
       /* Setup extrapolation operator from equistant restart points */
-      eles->set_oppRestart(order_restart, true);
+      for (auto e : elesObjs)
+      {
+        if (e->etype == QUAD and geo.nElesBT.count(TRI)) // to deal with increased quad order with mixed grids
+        {
+          e->set_oppRestart(order_restart + 1, true);
+        }
+        else
+          e->set_oppRestart(order_restart, true);
 
-      unsigned int nRpts = eles->oppRestart.get_dim(1);
-
-      U_restart.assign({nRpts, eles->nEles, eles->nVars});
+        nRpts = e->oppRestart.get_dim(1);
+        U_restart[e->etype].assign({nRpts, e->nEles, e->nVars});
+      }
 
       unsigned int temp; 
       for (unsigned int n = 0; n < eles->nVars; n++)
       {
         binary_read(f, temp);
-
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (auto e: elesObjs)
         {
-          /// TODO: make sure this is setup correctly first
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          nRpts = e->oppRestart.get_dim(1);
 
-          for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+          for (unsigned int ele = 0; ele < nElesBT[e->etype]; ele++)
           {
-            binary_read(f, U_restart(rpt, ele, n));
+            /// TODO: make sure this is setup correctly first
+            if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
+
+            for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+            {
+              binary_read(f, U_restart[e->etype](rpt, ele, n));
+            }
           }
         }
       }
 
       /* Extrapolate values from restart points to solution points */
-      auto &A = eles->oppRestart(0, 0);
-      auto &B = U_restart(0, 0, 0);
-      auto &C = eles->U_spts(0, 0, 0);
+      for (auto e : elesObjs)
+      {
+        nRpts = e->oppRestart.get_dim(1);
+
+        auto &A = e->oppRestart(0, 0);
+        auto &B = U_restart[e->etype](0, 0, 0);
+        auto &C = e->U_spts(0, 0, 0);
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
-          eles->nEles * eles->nVars, nRpts, 1.0, &A, eles->oppRestart.ldim(), &B, 
-          U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, 
+            e->nEles * e->nVars, nRpts, 1.0, &A, e->oppRestart.ldim(), &B, 
+            U_restart[e->etype].ldim(), 0.0, &C, e->U_spts.ldim());
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts, 
-          eles->nEles * eles->nVars, nRpts, 1.0, &A, eles->oppRestart.ldim(), &B, 
-          U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, 
+            e->nEles * e->nVars, nRpts, 1.0, &A, e->oppRestart.ldim(), &B, 
+            U_restart[e->etype].ldim(), 0.0, &C, e->U_spts.ldim());
 #endif
-
+      }
     }
   }
 
@@ -1379,12 +1396,6 @@ void FRSolver::setup_views()
       for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
       {
         int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
-        /* Check if flux point is on ghost edge */
-        if (gfpt == -1)
-        {
-          continue;
-        }
-
         int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
 
         U_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, ele, 0);
@@ -1508,9 +1519,6 @@ void FRSolver::dFcdU_from_faces()
         for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
         {
           int gfpt = geo.fpt2gfpt(fpt,ele);
-          /* Check if flux point is on ghost edge */
-          if (gfpt == -1)
-            continue;
           int slot = geo.fpt2gfpt_slot(fpt,ele);
           int notslot = 1;
           if (slot == 1)
@@ -1550,9 +1558,6 @@ void FRSolver::dFcdU_from_faces()
           for (unsigned int fpt = 0; fpt < eles->nFpts; fpt++)
           {
             int gfpt = geo.fpt2gfpt(fpt,ele);
-            /* Check if flux point is on ghost edge */
-            if (gfpt == -1)
-              continue;
             int slot = geo.fpt2gfpt_slot(fpt,ele);
             int notslot = 1;
             if (slot == 1)
@@ -2248,11 +2253,8 @@ void FRSolver::compute_element_dt()
 
         for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
         {
-          /* Skip if on ghost edge. */
           int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
           int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
-          if (gfpt == -1)
-            continue;
 
           int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(gfpt, slot); 
         }
@@ -2276,10 +2278,7 @@ void FRSolver::compute_element_dt()
         {
           for (unsigned int fpt = face * e->nFptsPerFace; fpt < (face+1) * e->nFptsPerFace; fpt++)
           {
-            /* Skip if on ghost edge. */
             int gfpt = geo.fpt2gfpt(fpt,ele);
-            if (gfpt == -1)
-              continue;
 
             double dtinv_temp = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * e->h_ref(fpt, ele));
             if (input->viscous)

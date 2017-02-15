@@ -57,7 +57,6 @@ struct GeoStruct
   std::map<ELE_TYPE, mdvector<unsigned int>> eleID; // unique ID of element across all element types
   mdvector<ELE_TYPE> eleType; // element type by unique ID; 
   std::map<ELE_TYPE, unsigned int> nElesBT;
-  std::map<ELE_TYPE, unsigned int> shape_orderBT;
   std::map<ELE_TYPE, unsigned int> nFacesPerEleBT;
   std::map<ELE_TYPE, unsigned int> nNodesPerEleBT;
   std::map<ELE_TYPE, unsigned int> nNodesPerFaceBT;
@@ -71,7 +70,7 @@ struct GeoStruct
 
   unsigned int nEles = 0; 
   unsigned int nBnds = 0;
-  unsigned int nDims, nNodes, nFaces, shape_order, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
+  unsigned int nDims, nNodes, nFaces, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
   unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
   unsigned int nGfpts_mpi = 0;
   bool per_bnd_flag = false;

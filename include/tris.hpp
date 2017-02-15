@@ -38,11 +38,8 @@ class Tris: public Elements
     void set_oppRestart(unsigned int order_restart, bool use_shape = false);
     void set_vandermonde_mats();
 
-    mdvector<double> calc_shape(unsigned int shape_order,
-                                const std::vector<double> &loc);
-
-    mdvector<double> calc_d_shape(unsigned int shape_order,
-                                  const std::vector<double> &loc);
+    mdvector<double> calc_shape(const std::vector<double> &loc);
+    mdvector<double> calc_d_shape(const std::vector<double> &loc);
 
     double calc_nodal_basis(unsigned int spt,
                             const std::vector<double> &loc);

@@ -232,8 +232,8 @@ void Elements::set_shape()
       loc[dim] = loc_spts(spt,dim);
 
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    auto shape_val = calc_shape(loc);
+    auto dshape_val = calc_d_shape(loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -250,8 +250,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_fpts(fpt,dim);
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    auto shape_val = calc_shape(loc);
+    auto dshape_val = calc_d_shape(loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -268,8 +268,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_ppts(ppt,dim);
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    auto shape_val = calc_shape(loc);
+    auto dshape_val = calc_d_shape(loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -283,8 +283,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_qpts(qpt,dim);
 
-    auto shape_val = calc_shape(shape_order, loc);
-    auto dshape_val = calc_d_shape(shape_order, loc);
+    auto shape_val = calc_shape(loc);
+    auto dshape_val = calc_d_shape(loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -380,8 +380,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       {
         int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
         int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
-        /* Check if on ghost edge */
-        if (gfpt != -1 and slot == 0)
+        if (slot == 0)
         {
           faces->coord(gfpt, dim) = coord_fpts(fpt,ele,dim);
         }
@@ -666,10 +665,6 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       int gfpt = geo->fpt2gfptBT[etype](fpt,e);
-
-      /* Check if flux point is on ghost edge */
-      if (gfpt == -1)
-        continue;
 
       unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,e);
 
@@ -1095,10 +1090,6 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
           for (unsigned int fpt = 0; fpt < nFpts; fpt++)
           {
             int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
-
-            /* Check if flux point is on ghost edge */
-            if (gfpt == -1)
-              continue;
 
             unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
             double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
@@ -3156,9 +3147,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
       {
         int gfpt = geo->fpt2gfpt(fpt,ele);
 
-        /* Check if on ghost edge */
-        if (gfpt != -1)
-          faces->coord(gfpt, dim) = coord_fpts(fpt,ele,dim);
+        faces->coord(gfpt, dim) = coord_fpts(fpt,ele,dim);
       }
     }
   }
@@ -3280,11 +3269,6 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
       int gfpt = geo->fpt2gfpt(fpt,ele);
-
-      /* Check if flux point is on ghost edge */
-      if (gfpt == -1)
-        continue;
-
       unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
 
       if (slot != 0)
@@ -3382,8 +3366,8 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
   while (norm > tol && iter < iterMax)
   {
-    shape = calc_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
-    dshape = calc_d_shape(shape_order, std::vector<double>{rst[0], rst[1], rst[2]});
+    shape = calc_shape(std::vector<double>{rst[0], rst[1], rst[2]});
+    dshape = calc_d_shape(std::vector<double>{rst[0], rst[1], rst[2]});
 
     point dx = pos;
     grad.fill(0);

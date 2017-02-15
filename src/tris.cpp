@@ -44,14 +44,13 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
   etype = TRI;
   this->geo = geo;
   this->input = input;  
-  this->shape_order = geo->shape_orderBT[TRI];  
   this->nEles = geo->nElesBT[TRI];  
   this->nQpts = 45; // Note: Fixing quadrature points to Williams-Shunn 45 point rule
 
   /* Generic triangular geometry */
   nDims = 2;
   nFaces = 3;
-  nNodes = (shape_order+1) * (shape_order+2) / 2;
+  nNodes = geo->nNodesPerEleBT[TRI];
   
   /* If order argument is not provided, use order in input file */
   if (order == -1)
@@ -541,12 +540,13 @@ void Tris::transform_dFdU()
 #endif
 }
 
-mdvector<double> Tris::calc_shape(unsigned int shape_order, 
-                                   const std::vector<double> &loc)
+mdvector<double> Tris::calc_shape(const std::vector<double> &loc)
 {
   std::vector<std::vector<unsigned int>> gmsh_nodes(3);
   gmsh_nodes[1] =  {0, 1, 2};
   gmsh_nodes[2] =  {0, 3, 1, 5, 4, 2};
+
+  unsigned int shape_order = tri_nodes_to_order(nNodes);
 
   if (shape_order > 2)
     ThrowException("Triangle with supplied shape_order unsupported!");
@@ -606,15 +606,16 @@ mdvector<double> Tris::calc_shape(unsigned int shape_order,
 
 }
 
-mdvector<double> Tris::calc_d_shape(unsigned int shape_order,
-                                     const std::vector<double> &loc)
+mdvector<double> Tris::calc_d_shape(const std::vector<double> &loc)
 {
   std::vector<std::vector<unsigned int>> gmsh_nodes(3);
   gmsh_nodes[1] =  {0, 1, 2};
   gmsh_nodes[2] =  {0, 3, 1, 5, 4, 2};
 
+  unsigned int shape_order = tri_nodes_to_order(nNodes);
+
   if (shape_order > 2)
-    ThrowException("Only linear triangles supported right now!");
+    ThrowException("Triangle with supplied shape_order unsupported!");
 
   mdvector<double> dshape_val({nNodes, 2}, 0.0);
   double xi = loc[0];

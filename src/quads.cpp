@@ -45,17 +45,13 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   etype = QUAD;
   this->geo = geo;
   this->input = input;  
-  this->shape_order = geo->shape_orderBT[QUAD];  
   this->nEles = geo->nElesBT[QUAD];  
   this->nQpts = input->nQpts1D * input->nQpts1D;
 
   /* Generic quadrilateral geometry */
   nDims = 2;
   nFaces = 4;
-  if (!input->serendipity)
-    nNodes = (shape_order+1)*(shape_order+1); // Lagrange Elements
-  else
-    nNodes = 4*(shape_order); // Serendipity Elements
+  nNodes = geo->nNodesPerEleBT[QUAD];
   
   //geo->nFacesPerEle = 4;
   //geo->nNodesPerFace = 2;
@@ -556,116 +552,71 @@ void Quads::transform_dFdU()
 #endif
 }
 
-mdvector<double> Quads::calc_shape(unsigned int shape_order, 
-                                   const std::vector<double> &loc)
+mdvector<double> Quads::calc_shape(const std::vector<double> &loc)
 {
   mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
   double eta = loc[1];
 
-  /* 8-node Serendipity Element */
-  if (shape_order == 2 and input->serendipity)
+  int nSide = sqrt(nNodes);
+
+  if (nSide*nSide != nNodes)
   {
-    shape_val(0) = -0.25*(1.-xi)*(1.-eta)*(1.+eta+xi);
-    shape_val(1) = -0.25*(1.+xi)*(1.-eta)*(1.+eta-xi);
-    shape_val(2) = -0.25*(1.+xi)*(1.+eta)*(1.-eta-xi);
-    shape_val(3) = -0.25*(1.-xi)*(1.+eta)*(1.-eta+xi);
-    shape_val(4) = 0.5*(1.-xi)*(1.+xi)*(1.-eta);
-    shape_val(5) = 0.5*(1.+xi)*(1.+eta)*(1.-eta);
-    shape_val(6) = 0.5*(1.-xi)*(1.+xi)*(1.+eta);
-    shape_val(7) = 0.5*(1.-xi)*(1.+eta)*(1.-eta);
+    std::cout << "nNodes = " << nNodes << std::endl;
+    ThrowException("For Lagrange quad of order N, must have (N+1)^2 shape points.");
   }
 
-  /* Lagrange Elements */
-  else
+  std::vector<double> xlist(nSide);
+  double dxi = 2./(nSide-1);
+
+  for (int i=0; i<nSide; i++)
+    xlist[i] = -1. + i*dxi;
+
+  auto ijk2gmsh = structured_to_gmsh_quad(nNodes);
+
+  int pt = 0;
+  for (int j = 0; j < nSide; j++)
   {
-    int nSide = sqrt(nNodes);
-
-    if (nSide*nSide != nNodes)
+    for (int i = 0; i < nSide; i++)
     {
-      std::cout << "nNodes = " << nNodes << std::endl;
-      ThrowException("For Lagrange quad of order N, must have (N+1)^2 shape points.");
-    }
-
-    std::vector<double> xlist(nSide);
-    double dxi = 2./(nSide-1);
-
-    for (int i=0; i<nSide; i++)
-      xlist[i] = -1. + i*dxi;
-
-    auto ijk2gmsh = structured_to_gmsh_quad(nNodes);
-
-    int pt = 0;
-    for (int j = 0; j < nSide; j++)
-    {
-      for (int i = 0; i < nSide; i++)
-      {
-        shape_val(ijk2gmsh[pt]) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, j);
-        pt++;
-      }
+      shape_val(ijk2gmsh[pt]) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, j);
+      pt++;
     }
   }
 
   return shape_val;
 }
 
-mdvector<double> Quads::calc_d_shape(unsigned int shape_order,
-                                     const std::vector<double> &loc)
+mdvector<double> Quads::calc_d_shape(const std::vector<double> &loc)
 {
   mdvector<double> dshape_val({nNodes, nDims}, 0.0);
   double xi = loc[0];
   double eta = loc[1];
 
-  /* 8-node Serendipity Element */
-  if (shape_order == 2 and input->serendipity)
-  {
-      dshape_val(0, 0) = -0.25*(-1.+eta)*(2.*xi+eta);
-      dshape_val(1, 0) = 0.25*(-1.+eta)*(eta - 2.*xi);
-      dshape_val(2, 0) = 0.25*(1.+eta)*(2.*xi+eta);
-      dshape_val(3, 0) = -0.25*(1.+eta)*(eta-2.*xi);
-      dshape_val(4, 0) = xi*(-1.+eta);
-      dshape_val(5, 0) = -0.5*(1+eta)*(-1.+eta);
-      dshape_val(6, 0) = -xi*(1.+eta);
-      dshape_val(7, 0) = 0.5*(1+eta)*(-1.+eta);
+  int nSide = sqrt(nNodes);
 
-      dshape_val(0, 1) = -0.25*(-1.+xi)*(2.*eta+xi);
-      dshape_val(1, 1) = 0.25*(1.+xi)*(2.*eta - xi);
-      dshape_val(2, 1) = 0.25*(1.+xi)*(2.*eta+xi);
-      dshape_val(3, 1) = -0.25*(-1.+xi)*(2.*eta-xi);
-      dshape_val(4, 1) = 0.5*(1.+xi)*(-1.+xi);
-      dshape_val(5, 1) = -eta*(1.+xi);
-      dshape_val(6, 1) = -0.5*(1.+xi)*(-1.+xi);
-      dshape_val(7, 1) = eta*(-1.+xi);
+  if (nSide*nSide != nNodes)
+  {
+    std::cout << "nNodes = " << nNodes << std::endl;
+    ThrowException("For Lagrange quad of order N, must have (N+1)^2 shape points.");
   }
 
-  /* Lagrange Elements */
-  else
+  std::vector<double> xlist(nSide);
+  double dxi = 2./(nSide-1);
+
+  for (int i=0; i<nSide; i++)
+    xlist[i] = -1. + i*dxi;
+
+  auto ijk2gmsh = structured_to_gmsh_quad(nNodes);
+
+  int pt = 0;
+  for (int j = 0; j < nSide; j++)
   {
-    int nSide = sqrt(nNodes);
-
-    if (nSide*nSide != nNodes)
+    for (int i = 0; i < nSide; i++)
     {
-      std::cout << "nNodes = " << nNodes << std::endl;
-      ThrowException("For Lagrange quad of order N, must have (N+1)^2 shape points.");
-    }
-
-    std::vector<double> xlist(nSide);
-    double dxi = 2./(nSide-1);
-
-    for (int i=0; i<nSide; i++)
-      xlist[i] = -1. + i*dxi;
-
-    auto ijk2gmsh = structured_to_gmsh_quad(nNodes);
-
-    int pt = 0;
-    for (int j = 0; j < nSide; j++)
-    {
-      for (int i = 0; i < nSide; i++)
-      {
-        dshape_val(ijk2gmsh[pt], 0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j);
-        dshape_val(ijk2gmsh[pt], 1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j);
-        pt++;
-      }
+      dshape_val(ijk2gmsh[pt], 0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j);
+      dshape_val(ijk2gmsh[pt], 1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j);
+      pt++;
     }
   }
 

@@ -611,7 +611,7 @@ std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
 {
   std::vector<int> gmsh_to_ijk(nNodes,0);
 
-  /* Lagrange Elements (or linear serendipity) */
+  /* Lagrange Elements */
   if (nNodes != 8)
   {
     int nNodes1D = sqrt(nNodes);
@@ -651,14 +651,6 @@ std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
     {
       gmsh_to_ijk[nNodes - 1] = nNodes1D/2 + nNodes1D * (nNodes1D/2);
     }
-  }
-
-  /* 8-node Serendipity Element */
-  else
-  {
-    gmsh_to_ijk[0] = 0; gmsh_to_ijk[1] = 2;  gmsh_to_ijk[2] = 7;
-    gmsh_to_ijk[3] = 5; gmsh_to_ijk[4] = 1;  gmsh_to_ijk[5] = 3;
-    gmsh_to_ijk[6] = 4; gmsh_to_ijk[7] = 6;
   }
 
   return gmsh_to_ijk;
@@ -945,4 +937,9 @@ std::vector<uint> get_int_list(uint N, uint start)
     list[i] = start + i;
 
   return list;
+}
+
+unsigned int tri_nodes_to_order(unsigned int nNodes)
+{
+  return (-3 + std::sqrt(1 + 8 * nNodes))/2;
 }

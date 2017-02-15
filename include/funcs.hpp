@@ -42,6 +42,8 @@ double compute_source_term(double x, double y, double z, double t, unsigned int 
 double get_cfl_limit_adv(int order);
 double get_cfl_limit_diff(int order, double beta);
 
+unsigned int tri_nodes_to_order(unsigned int nNodes);
+
 /* Blocked gemm operation using OpenMP */
 #ifdef _OMP
 void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA, 

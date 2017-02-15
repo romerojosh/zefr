@@ -53,7 +53,7 @@ class Elements
     ELE_TYPE etype;
 
     /* Geometric Parameters */
-    unsigned int order, shape_order;
+    unsigned int order;
     unsigned int nEles, nDims, nVars;
     unsigned int nSpts, nFpts, nSpts1D, nPpts, nQpts, nFptsPerFace;
     unsigned int nFaces, nNodes;
@@ -174,10 +174,8 @@ class Elements
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
     virtual void set_oppRestart(unsigned int order_restart, bool use_shape = false) = 0;
     virtual void set_vandermonde_mats() = 0;
-    virtual mdvector<double> calc_shape(unsigned int shape_order,
-                             const std::vector<double> &loc) = 0;
-    virtual mdvector<double> calc_d_shape(unsigned int shape_order,
-                             const std::vector<double> &loc) = 0;
+    virtual mdvector<double> calc_shape(const std::vector<double> &loc) = 0;
+    virtual mdvector<double> calc_d_shape(const std::vector<double> &loc) = 0;
 
     virtual double calc_nodal_basis(unsigned int spt,
                    const std::vector<double> &loc) = 0;
