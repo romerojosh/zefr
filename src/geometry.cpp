@@ -2126,16 +2126,27 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   }
 
   // Figure out # of dimensions
+  geo.nEles = 0;
+  ELE_TYPE etype;
   for (auto &name : dsNames)
   {
     std::string qcon = "spt_quad_p" + std::to_string(input->rank);
     std::string tcon = "spt_tri_p" + std::to_string(input->rank);
     std::string hcon = "spt_hex_p" + std::to_string(input->rank);
-    /// TODO: add support for reading triangles, tets, etc.
-    /// (nEles += _, read into tmp array, duplicate node 2 like with Gmsh)
-    if (name.find(qcon) == std::string::npos &&
-        name.find(hcon) == std::string::npos)
+    
+    if (name.find(qcon) != std::string::npos)
+      etype = QUAD;
+    else if(name.find(hcon) != std::string::npos)
+      etype = HEX;
+    else if (name.find(tcon) != std::string::npos)
+    {
+      ThrowException("Triangles from PyFR format not currently supported!");
+      etype = TRI;
+    }
+    else
       continue;
+
+    geo.ele_set.insert(etype); // Add to discovered element dtypes
 
     auto DS = file.openDataSet(name);
     auto ds = DS.getSpace();
@@ -2147,9 +2158,15 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       ThrowException("Cannot read element nodes from PyFR mesh file - wrong data type.");
 
     geo.nDims = dims[2];
-    geo.nEles = dims[1];
     geo.nNodesPerEle = dims[0];
+
+    if (geo.nEles > 0)
+      ThrowException("Mixed element grids from PyFR format not currently supported!");
+
+    geo.nEles += dims[1]; 
     geo.nNodes = geo.nEles * geo.nNodesPerEle;
+    geo.nElesBT[etype] = dims[1];
+    geo.nNodesPerEleBT[etype] = dims[0];
 
     mdvector<double> tmp_nodes({dims[2],dims[1],dims[0]}); // NOTE: We use col-major, HDF5 uses row-major
 
@@ -2158,6 +2175,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     /// TODO: change Gmsh reading / geo setup so this isn't needed
     geo.ele_nodes.assign({geo.nNodesPerEle, geo.nEles, geo.nDims});
     geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
+    geo.ele2nodesBT[etype].assign({geo.nNodesPerEle, geo.nEles});
+
     mdvector<double> temp_coords({geo.nDims, geo.nNodes});
 
     auto ndmap = (geo.nDims == 2) ? gmsh_to_structured_quad(geo.nNodesPerEle)
@@ -2165,9 +2184,9 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     // Re-order nodes to Zefr format
     int gnd = 0;
-    for (int ele = 0; ele < geo.nEles; ele++)
+    for (int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {
-      for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+      for (int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
       {
         for (int d = 0; d < geo.nDims; d++)
         {
@@ -2175,6 +2194,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
           geo.ele_nodes(nd, ele, d) = tmp_nodes(d, ele, ndmap[nd]);
         }
         geo.ele2nodes(nd, ele) = gnd;
+        geo.ele2nodesBT[etype](nd, ele) = gnd;
         gnd++;
       }
     }
@@ -2219,6 +2239,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       for (int nd = 0; nd < geo.nNodesPerEle; nd++)
       {
         geo.ele2nodes(nd, ele) = nodemap[geo.ele2nodes(nd, ele)];
+        geo.ele2nodesBT[etype](nd, ele) = nodemap[geo.ele2nodesBT[etype](nd, ele)];
       }
     }
 
@@ -2385,6 +2406,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
   geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
   geo.nNodesPerFace = (geo.nDims == 3) ? 4 : 2;
+  geo.nFacesPerEleBT[etype] = (geo.nDims == 3) ? 6 : 4;
+  geo.nNodesPerFaceBT[etype] = (geo.nDims == 3) ? 4 : 2;
 
 #ifdef _BUILD_LIB
   set_face_nodes(geo);
@@ -2476,6 +2499,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   if (geo.nDims != 2 && geo.nDims != 3)
     ThrowException("Improper value for nDims - should be 2 or 3.");
 
+  ELE_TYPE etype = (geo.nDims == 2) ? QUAD : HEX;
+
   unsigned int nFptsPerFace = (order + 1);
   unsigned int nFpts1D = (order + 1);
   if (geo.nDims == 3)
@@ -2486,7 +2511,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     nVars = geo.nDims + 2;
 
   geo.nFptsPerFace = nFptsPerFace;
-  geo.nNodesPerFace = (geo.nDims == 2) ? 2 : 4;
 
   /* Determine number of interior global flux points */
   geo.nGfpts_int = geo.nIntFaces * nFptsPerFace;
@@ -2520,6 +2544,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   geo.fpt2face.assign(geo.nGfpts, -1);
   geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
   geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+  geo.fpt2gfptBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+  geo.fpt2gfpt_slotBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
 
   // --- Handy map to grab the nodes making up each face ---
   std::map<int,mdvector<int>> ct2fv;
@@ -2538,28 +2564,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     ct2fv[QUAD](i,1) = (i==3) ? 0 : i+1;
   }
 
-  int etype = (geo.nDims == 2) ? QUAD : HEX;
-
-  /* Based on rotation, couple flux points */
-  mdvector<int> ROT({5, nFptsPerFace});
-  for (uint i = 0; i < nFpts1D; i++)
-  {
-    if (geo.nDims == 3)
-    {
-      for (uint j = 0; j < nFpts1D; j++)
-      {
-        ROT(0, i + j*nFpts1D) = i*nFpts1D + j;
-        ROT(1, i + j*nFpts1D) = nFpts1D - i + j*nFpts1D - 1;
-        ROT(2, i + j*nFpts1D) = nFptsPerFace - i * nFpts1D - j - 1;
-        ROT(3, i + j*nFpts1D) = nFptsPerFace - (j+1) * nFpts1D + i;
-      }
-    }
-    else
-    {
-      ROT(4, i) = nFptsPerFace - i - 1;
-    }
-  }
-
   // Counter for total global flux points so far
   unsigned int gfpt = 0;
 
@@ -2571,58 +2575,20 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     int eL = faceL.ic;
     int eR = faceR.ic;
 
-    // Determine relative rotation using ordered faces-vertex lists
-    unsigned int rot = 0;
-    if (geo.nDims == 3)
-    {
-      point fc1, fc2;
-      for (int n = 0; n < geo.nNodesPerFace; n++)
-      {
-        int nd1 = ct2fv[HEX](faceL.loc_f, n);
-        int nd2 = ct2fv[HEX](faceR.loc_f, n);
-        for (int d = 0; d < geo.nDims; d++)
-        {
-          fc1[d] += geo.ele_nodes(nd1, eL, d) / geo.nNodesPerFace;
-          fc2[d] += geo.ele_nodes(nd2, eR, d) / geo.nNodesPerFace;
-        }
-      }
-
-      Vec3 dx = fc2 - fc1; // To account for displacement of periodic faces
-
-      // Find relative rotation ('rot tag')
-      int nd1 = ct2fv[HEX](faceL.loc_f, 0);
-      int nd2 = ct2fv[HEX](faceR.loc_f, 0);
-      point pt1, pt2;
-      for (int d = 0; d < geo.nDims; d++)
-      {
-        pt1[d] = geo.ele_nodes(nd1, eL, d);
-        pt2[d] = geo.ele_nodes(nd2, eR, d) - dx[d];
-      }
-
-      while (point(pt2-pt1).norm() > 1e-9 && rot < 4)
-      {
-        rot++;
-
-        nd2 = ct2fv[HEX](faceR.loc_f, rot);
-        for (int d = 0; d < geo.nDims; d++)
-          pt2[d] = geo.ele_nodes(nd2, eR, d) - dx[d];
-      }
-
-      if (rot == 4)
-        ThrowException("Error determining relative rotation of interior faces.");
-    }
-    else
-    {
-      rot = 4;
-    }
-
     // Setup global flux point IDs within left/right eles
     for (int fpt = 0; fpt < nFptsPerFace; fpt++)
     {
       geo.fpt2gfpt(faceL.loc_f*nFptsPerFace + fpt, eL) = gfpt;
-      geo.fpt2gfpt(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = gfpt;
+      geo.fpt2gfpt(faceR.loc_f*nFptsPerFace + nFptsPerFace - fpt - 1, eR) = gfpt;
       geo.fpt2gfpt_slot(faceL.loc_f*nFptsPerFace + fpt, eL) = 0;
-      geo.fpt2gfpt_slot(faceR.loc_f*nFptsPerFace + ROT(rot,fpt), eR) = 1;
+      geo.fpt2gfpt_slot(faceR.loc_f*nFptsPerFace + nFptsPerFace - fpt - 1, eR) = 1;
+
+      geo.fpt2gfptBT[etype](faceL.loc_f*nFptsPerFace + fpt, eL) = gfpt;
+      geo.fpt2gfptBT[etype](faceR.loc_f*nFptsPerFace + nFptsPerFace - fpt - 1, eR) = gfpt;
+      geo.fpt2gfpt_slotBT[etype](faceL.loc_f*nFptsPerFace + fpt, eL) = 0;
+      geo.fpt2gfpt_slotBT[etype](faceR.loc_f*nFptsPerFace + nFptsPerFace - fpt - 1, eR) = 1;
+
+
       geo.face2fpts(fpt, ff) = gfpt;
       geo.fpt2face[gfpt] = ff;
       gfpt++;
@@ -2652,6 +2618,10 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
       {
         geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
         geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+        geo.fpt2gfptBT[etype](n*nFptsPerFace + fpt, ele) = gfpt;
+        geo.fpt2gfpt_slotBT[etype](n*nFptsPerFace + fpt, ele) = 0;
+
+
         geo.gfpt2bnd(gfpt_bnd) = geo.bnd_ids[bnd];
         geo.face2fpts(fpt, fid) = gfpt;
         geo.fpt2face[gfpt] = fid;
@@ -2740,7 +2710,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
               face_pt(d,ff+nFaces) += geo.ele_nodes(ct2fv[etype](f,n),ic,d) / geo.nNodesPerFace;
         }
 
-        MPI_Send(face_pt.data(), 2*nFaces*geo.nDims, MPI_DOUBLE, p2, 0, geo.myComm);
       }
 
       // Setup MPI flux points
@@ -2753,6 +2722,10 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         {
           geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
           geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+
+          geo.fpt2gfptBT[etype](n*nFptsPerFace + fpt, ele) = gfpt;
+          geo.fpt2gfpt_slotBT[etype](n*nFptsPerFace + fpt, ele) = 0;
+
           geo.fpt_buffer_map[p2].push_back(gfpt);
           geo.face2fpts(fpt, mpiFace) = gfpt;
           geo.fpt2face[gfpt] = mpiFace;
@@ -2762,7 +2735,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         MPI_Status status;
         MPI_Send(&mpiFace, 1, MPI_INT, p2, 0, geo.myComm);
         MPI_Recv(&geo.faceID_R[mface], 1, MPI_INT, p2, 0, geo.myComm, &status);
-        //MPI_Recv(&geo.mpiRotR[mpiff], 1, MPI_INT, recvRank, 0, geo.myComm, &status);
         geo.mpiFaces[mface] = mpiFace;
         geo.procR[mface] = p2;
         mpiFace++;
@@ -2771,51 +2743,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     }
     else // 'right' side of MPI boundary
     {
-      if (geo.nDims == 3)
-      {
-        // Receive face nodes from 'left' rank
-        MPI_Status status;
-        MPI_Recv(face_pt.data(), 2*nFaces*geo.nDims, MPI_DOUBLE, p2, 0, geo.myComm, &status);
-
-        // Determine rotation tag for each face
-        for (int ff = 0; ff < nFaces; ff++)
-        {
-          auto face = geo.mpi_conn[p2][ff];
-          int ic = face.ic;
-
-          point fc1 = point(&face_pt(0, ff+nFaces));
-          point fc2;
-          for (int n = 0; n < geo.nNodesPerFace; n++)
-          {
-            int nd = ct2fv[HEX](face.loc_f, n);
-            for (int d = 0; d < geo.nDims; d++)
-              fc2[d] += geo.ele_nodes(nd, ic, d) / geo.nNodesPerFace;
-          }
-
-          Vec3 dx = fc2 - fc1; // To account for possible displacement of periodic boundaries
-
-          int nd = ct2fv[HEX](face.loc_f, 0);
-
-          point pt1 = point(&face_pt(0, ff));
-          point pt2;
-          for (int d = 0; d < geo.nDims; d++)
-            pt2[d] = geo.ele_nodes(nd, ic, d) - dx[d];
-
-          while (point(pt2-pt1).norm() > 1e-9)
-          {
-            rot_tag[ff]++;
-
-            nd = ct2fv[HEX](face.loc_f, rot_tag[ff]);
-            for (int d = 0; d < geo.nDims; d++)
-              pt2[d] = geo.ele_nodes(nd, ic, d) - dx[d];
-          }
-        }
-      }
-      else
-      {
-        rot_tag.assign(nFaces,4);
-      }
-
       // Setup MPI flux points
       std::vector<int> fpts(nFptsPerFace);
       for (int ff = 0; ff < nFaces; ff++)
@@ -2827,6 +2754,9 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         {
           geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
           geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
+          geo.fpt2gfptBT[etype](n*nFptsPerFace + fpt, ele) = gfpt;
+          geo.fpt2gfpt_slotBT[etype](n*nFptsPerFace + fpt, ele) = 0;
+
           geo.face2fpts(fpt, mpiFace) = gfpt;
           geo.fpt2face[gfpt] = mpiFace;
           fpts[fpt] = gfpt;
@@ -2835,13 +2765,12 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 
         for (int fpt = 0; fpt < nFptsPerFace; fpt++)
         {
-          geo.fpt_buffer_map[p2].push_back(fpts[ROT(rot_tag[ff],fpt)]);
+          geo.fpt_buffer_map[p2].push_back(fpts[nFptsPerFace - fpt - 1]);
         }
 
         MPI_Status status;
         MPI_Recv(&geo.faceID_R[mface], 1, MPI_INT, p2, 0, geo.myComm, &status);
         MPI_Send(&mpiFace, 1, MPI_INT, p2, 0, geo.myComm);
-        //MPI_Send(&rot_tag[mface], 1, MPI_INT, recvRank, 0, geo.myComm);
         geo.mpiFaces[mface] = mpiFace;
         geo.procR[mface] = p2;
         mpiFace++;
@@ -2852,27 +2781,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 
   if (mface != geo.nMpiFaces)
     ThrowException("Unused MPI Faces exist within PyFR mesh!");
-
-  MPI_Barrier(geo.myComm);
-
-  /* Create MPI Derived type for sends/receives */
-  for (auto &entry : geo.fpt_buffer_map)
-  {
-    unsigned int sendRank = entry.first;
-    auto fpts = entry.second;
-    std::vector<int> block_len(nVars * fpts.size(), 1);
-    std::vector<int> disp(nVars * fpts.size(), 0);
-
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      for (unsigned int i = 0; i < fpts.size(); i++)
-        disp[i + var * fpts.size()] = fpts(i) + var * geo.nGfpts;
-    }
-
-    MPI_Type_indexed(nVars * fpts.size(), block_len.data(), disp.data(), MPI_DOUBLE, &geo.mpi_types[sendRank]);
-
-    MPI_Type_commit(&geo.mpi_types[sendRank]);
-  }
 
   MPI_Barrier(geo.myComm);
 #endif
