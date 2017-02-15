@@ -2403,8 +2403,13 @@ void FRSolver::compute_SER_dt()
 
 void FRSolver::write_solution_pyfr(const std::string &_prefix)
 {
+  if (elesObjs.size() > 1)
+    ThrowException("PyFR write not supported for mixed element grids.");
+
+  auto e = elesObjs[0];
+
 #ifdef _GPU
-  eles->U_spts = eles->U_spts_d;
+    e->U_spts = e->U_spts_d;
 #endif
 
   std::string prefix = _prefix;
@@ -2487,67 +2492,9 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   std::string stats = ss.str();
 
-  int nEles = eles->nEles;
-  int nVars = eles->nVars;
-  int nSpts = eles->nSpts;
-
-#ifdef _USE_H5_PARALLEL
-  FileCreatPropList h5_mpi_plist = H5Pcreate(H5P_FILE_ACCESS);
-  MPI_Info info;
-  MPI_Info_create(&info);
-  H5Pset_fapl_mpio(h5_mpi_plist, geo.myComm, info);
-  MPI_Barrier(MPI_COMM_WORLD);
-  H5File file(filename, H5F_ACC_TRUNC, h5_mpi_plist);
-
-  std::vector<int> n_eles_p(input->nRanks);
-  MPI_Allgather(&nEles, 1, MPI_INT, n_eles_p.data(), 1, MPI_INT, geo.myComm);
-
-  /* --- Write Data to File --- */
-
-  for (int p = 0; p < input->nRanks; p++)
-  {
-    nEles = n_eles_p[p];
-
-    hsize_t dims[3] = {nSpts, nVars, nEles}; /// NOTE: We are col-major, HDF5 is row-major
-
-    DataSpace dspaceU(3, dims);
-    std::string solname = "soln_";
-    solname += (geo.nDims == 2) ? "quad" : "hex";
-    solname += "_p" + std::to_string(p);
-    DataSet dsetU = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
-
-    if (p == input->rank)
-    {
-      mdvector<double> u_tmp({nEles, nVars, nSpts});
-      for (int ele = 0; ele < nEles; ele++)
-        for (int var = 0; var < nVars; var++)
-          for (int spt = 0; spt < nSpts; spt++)
-            u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
-
-      dsetU.write(u_tmp.data(), PredType::NATIVE_DOUBLE, dspaceU);
-    }
-
-    dsetU.close();
-  }
-
-  DataSet dset = file.createDataSet("config", string_type, dspace);
-  if (input->rank == 0)
-    dset.write(config, string_type, dspace);
-  dset.close();
-
-  dset = file.createDataSet("stats", string_type, dspace);
-  if (input->rank == 0)
-    dset.write(stats, string_type, dspace);
-  dset.close();
-
-  // Write mesh ID
-  dset = file.createDataSet("mesh_uuid", string_type, dspace);
-  if (input->rank == 0)
-    dset.write(geo.mesh_uuid, string_type, dspace);
-  dset.close();
-
-  dspace.close();
-#else
+  int nEles = e->nEles;
+  int nVars = e->nVars;
+  int nSpts = e->nSpts;
 
 #ifdef _MPI
   // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
@@ -2563,7 +2510,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       {
         for (int ele = 0; ele < nEles; ele++)
         {
-          data_p[0][ind] = eles->U_spts(spt,ele,var);
+          data_p[0][ind] = e->U_spts(spt,ele,var);
           ind++;
         }
       }
@@ -2608,7 +2555,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
         for (int ele = 0; ele < nEles; ele++)
           for (int var = 0; var < nVars; var++)
             for (int spt = 0; spt < nSpts; spt++)
-              u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+              u_tmp(ele,var,spt) = e->U_spts(spt,ele,var);
 
         MPI_Send(u_tmp.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
 
@@ -2675,7 +2622,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   for (int ele = 0; ele < nEles; ele++)
     for (int var = 0; var < nVars; var++)
       for (int spt = 0; spt < nSpts; spt++)
-        u_tmp(ele,var,spt) = eles->U_spts(spt,ele,var);
+        u_tmp(ele,var,spt) = e->U_spts(spt,ele,var);
 
   hsize_t dims[3] = {nSpts, nVars, nEles}; /// NOTE: We are col-major, HDF5 is row-major
 
@@ -2705,13 +2652,17 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
   dset.write(u_tmp.data(), PredType::NATIVE_DOUBLE, dspaceU);
   dset.close();
-#endif // no MPI
+#endif 
 
-#endif // no USE_H5_PARALLEL
 }
 
 void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 {
+  if (elesObjs.size() > 1)
+    ThrowException("PyFR restart not supported for mixed element grids.");
+
+  auto e = elesObjs[0];
+
   std::string filename = restart_file;
 
   if (input->restart_type > 0) // append .pvtu / .vtu to case name
@@ -2791,8 +2742,8 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
   hid_t string_type = H5Tcopy (H5T_C_S1);
   H5Tset_size (string_type, H5T_VARIABLE);
 
-  int nEles = eles->nEles;
-  int nVars = eles->nVars;
+  int nEles = e->nEles;
+  int nVars = e->nVars;
 
   if (dims[2] != nEles || dims[1] != nVars)
     ThrowException("Size of solution data set does not match that from mesh.");
@@ -2820,13 +2771,13 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   dset.close();
 
-  if (nSpts == eles->nSpts)
+  if (nSpts == e->nSpts)
   {
-    eles->U_spts.assign({nSpts,nEles,nVars});
+    e->U_spts.assign({nSpts,nEles,nVars});
     for (int ele = 0; ele < nEles; ele++)
       for (int var = 0; var < nVars; var++)
         for (int spt = 0; spt < nSpts; spt++)
-          eles->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
+          e->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
   }
   else
   {
@@ -2841,22 +2792,22 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
           U_restart(spt,ele,var) = u_tmp(ele,var,spt);
 
     // Setup extrapolation operator from restart points
-    eles->set_oppRestart(restartOrder);
+    e->set_oppRestart(restartOrder);
 
 
     // Extrapolate values from restart points to solution points
-    auto &A = eles->oppRestart(0, 0);
+    auto &A = e->oppRestart(0, 0);
     auto &B = U_restart(0, 0, 0);
-    auto &C = eles->U_spts(0, 0, 0);
+    auto &C = e->U_spts(0, 0, 0);
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts,
-        eles->nEles * eles->nVars, nSpts, 1.0, &A, eles->oppRestart.ldim(), &B,
-        U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
+        e->nEles * e->nVars, nSpts, 1.0, &A, e->oppRestart.ldim(), &B,
+        U_restart.ldim(), 0.0, &C, e->U_spts.ldim());
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, eles->nSpts,
-        eles->nEles * eles->nVars, nSpts, 1.0, &A, eles->oppRestart.ldim(), &B,
-        U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
+        e->nEles * e->nVars, nSpts, 1.0, &A, e->oppRestart.ldim(), &B,
+        U_restart.ldim(), 0.0, &C, e->U_spts.ldim());
 #endif
   }
 
