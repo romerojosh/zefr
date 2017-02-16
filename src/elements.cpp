@@ -777,7 +777,12 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 #endif
 
 #ifdef _GPU
+  cudaDeviceSynchronize();
+  check_error();
+
   device_copy(dFn_fpts_d, Fcomm_d, Fcomm_d.size());
+cudaDeviceSynchronize();
+  check_error();
 
   extrapolate_Fn_wrapper(oppE_d, F_spts_d, tempF_fpts_d, dFn_fpts_d,
       faces->norm_d, faces->dA_d, geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nSpts,
@@ -2565,6 +2570,7 @@ void Elements::poly_squeeze_ppts()
 
 void Elements::move(std::shared_ptr<Faces> faces)
 {
+  if (input->gridID > 0) return; /// DEBUGGING
 #ifdef _CPU
   if (input->motion_type == RIGID_BODY)
   {
@@ -3123,7 +3129,8 @@ void Elements::unblank_u_to_device(int *cellIDs, int nCells, double *data)
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
     unblankIDs_d.assign({nCells}, cellIDs, 3);
 
-  unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,nCells,nSpts,nVars,3);
+  unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,geo->iblank_cell_d,
+      nCells,nSpts,nVars,3);
 
   check_error();
 }

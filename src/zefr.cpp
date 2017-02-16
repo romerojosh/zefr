@@ -601,6 +601,7 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
   }
   else
   {
+    ThrowException("Don't use this version!!");
     // Original version
     if (gradFlag == 0)
       solver->faces->fringe_u_to_device(fringeIDs, nFringe);
@@ -630,11 +631,13 @@ void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, 
 }
 
 void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
+                               void (*point_connect)(void),
                                void (*dataUpdate_send)(int, int),
                                void (*dataUpdate_recv)(int, int))
 {
   tg_preprocess = preprocess;
   tg_process_connectivity = connect;
+  tg_point_connectivity = point_connect;
   overset_interp_send = dataUpdate_send;
   overset_interp_recv = dataUpdate_recv;
 }

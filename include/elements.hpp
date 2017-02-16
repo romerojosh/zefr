@@ -80,6 +80,8 @@ class Elements
     mdvector<double> dF_spts, dUr_spts;
     mdvector<double> oppD0, oppE_Fn;
     mdvector<double> dFn_fpts, tempF_fpts;
+    mdvector<double> U_unblank; /// DEBUGGING ?
+    mdvector<int> unblankIDs; /// DEBUGGING ?
 
     mdvector<double> inv_jaco_spts_init;
 

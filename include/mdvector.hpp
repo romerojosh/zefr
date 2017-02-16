@@ -277,10 +277,15 @@ void mdvector<T>::resize(std::vector<unsigned int> dims)
 
   for (unsigned int i = 0; i < nDims; i++)
   {
-    strides[i] = dims[i];
+    if (i > 0)
+    {
+      strides[i-1] = 1;
+      for (unsigned int j = 0; j < i; j++)
+        strides[i-1] *= dims[j];
+    }
 
     size_ *= dims[i];
-    max_size_ *= strides[i];
+    max_size_ *= dims[i];
 
     this->dims[i] = dims[i];
   }

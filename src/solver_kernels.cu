@@ -786,7 +786,11 @@ void get_rk_error(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
     return;
 
   if (overset && iblank[ele] != 1)
+  {
+    for (unsigned int var = 0; var < nVars; var ++)
+      rk_err(spt, ele, var) = 0.0;
       return;
+  }
 
   for (unsigned int var = 0; var < nVars; var ++)
   {
@@ -1678,6 +1682,9 @@ void unpack_fringe_u(mdvector_gpu<double> U_fringe,
   double val = U_fringe(var,fpt,face);
   U(gfpt, var, side) = val; //fpt, face, var); /// TODO: look into further
   U_ldg(gfpt, var, side) = val;
+
+  /// DEBUGGING
+//  if (var == 0 && fpt == 0 && abs(val-1.)>1e-1) printf("fpt, face, val: %d %d/%d %f\n",fpt,face,nFringe,val);
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
@@ -1687,7 +1694,7 @@ void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
 {
   int threads = 192;
   int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
-
+//if (nFringe!=U_fringe.get_dim(2)) printf("nFringeFaces = %d, Ufringe.dim2 = %d\n",nFringe,U_fringe.get_dim(2)); /// DEBUGGING
   if (stream == -1)
   {
     unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, U_ldg, fringe_fpts,
@@ -1774,10 +1781,22 @@ void unpack_unblank_u(mdvector_gpu<double> U_unblank,
   const unsigned int ele = cellIDs(ic);
 
   U(spt, ele, var) = U_unblank(var,spt,ic);
+  //if (ele == 203 && var == 0) printf("UNPACK UNBLANK: ele 203, spt %d, %f\n",spt,U(spt,ele,var)); /// DEBUGGING
+}
+
+__global__
+void update_unblank_iblank(mdvector_gpu<int> iblank_cell, mdvector_gpu<int> cellIDs, int nCells)
+{
+  unsigned int ic = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (ic >= nCells)
+    return;
+
+  iblank_cell(cellIDs(ic)) = 1;
 }
 
 void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
-    mdvector_gpu<double>& U, mdvector_gpu<int> &cellIDs,
+    mdvector_gpu<double>& U, mdvector_gpu<int> &cellIDs, mdvector_gpu<int> &iblank_cell,
     unsigned int nCells, unsigned int nSpts, unsigned int nVars, int stream)
 {
   int threads = 192;
@@ -1786,11 +1805,17 @@ void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
   if (stream == -1)
   {
     unpack_unblank_u<<<blocks, threads>>>(U_unblank, U, cellIDs, nCells, nSpts, nVars);
+
+    blocks = (nCells + threads - 1) / threads;
+    update_unblank_iblank<<<blocks,threads>>>(iblank_cell, cellIDs, nCells);
   }
   else
   {
     unpack_unblank_u<<<blocks, threads, 0, stream_handles[stream]>>>(U_unblank, U,
         cellIDs, nCells, nSpts, nVars);
+
+    blocks = (nCells + threads - 1) / threads;
+    update_unblank_iblank<<<blocks, threads, 0, stream_handles[stream]>>>(iblank_cell, cellIDs, nCells);
   }
 
   check_error();

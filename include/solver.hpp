@@ -195,7 +195,7 @@ class FRSolver
     Zefr *ZEFR;
 #endif
 
-    void move(double time);
+    void move(double time, bool update_iblank = true);
     void rigid_body_update(unsigned int stage);
 };
 

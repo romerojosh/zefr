@@ -157,6 +157,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   {
     geo.Rmat.assign({3,3});
     geo.x_cg.assign({3,3});
+    geo.vel_cg.assign({3});
   }
 
   return geo;

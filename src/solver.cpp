@@ -206,6 +206,15 @@ void FRSolver::restart_solution(void)
     }
 
     move(flow_time);
+
+#ifdef _BUILD_LIB
+    if (input->overset)
+    {
+      if (input->motion_type != RIGID_BODY)
+        ZEFR->tg_preprocess();
+      ZEFR->tg_process_connectivity();
+    }
+#endif
   }
 }
 
@@ -272,7 +281,6 @@ void FRSolver::setup_update()
       for (int j = 0; j < i-1; j++)
         rk_c(i) += rk_beta(j);
     }
-
     expa = input->pi_alpha / 4.; // 4 := order of time-stepping scheme
     expb = input->pi_beta / 4.;
     prev_err = 1.;
@@ -482,7 +490,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
           U_restart.ldim(), 0.0, &C, eles->U_spts.ldim());
 #endif
 
-      /* Read grid velocity */
+      /* Read grid velocity NOTE: if any additional fields exist after,
+       * remove 'if input->motion' or else read will occur in wrong location */
       if (input->motion && has_gv)
       {
         U_restart.assign({nRpts, eles->nEles, 3});
@@ -998,6 +1007,24 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     eles->compute_divF_fpts(stage, startEle, endEle);
   }
 
+//  if (current_iter >= 1557 && input->rank == 2) /// DEBUGGING
+//  {
+//    eles->divF_spts = eles->divF_spts_d;
+//    for (int ele = 0; ele < eles->nEles; ele++)
+//    {
+//      if (geo.iblank_cell(ele) != NORMAL) continue;
+//      if (std::abs(eles->divF_spts(0,ele,0,stage)) > 1e-8)
+//      {
+//        printf("Ele %d: rho divF(%d) = %f\n",ele,stage,eles->divF_spts(0,ele,0,stage));
+//      }
+//    }
+////    printf("Ele 236: divF_spts(%d) = ",stage);
+////    for (int spt = 0; spt < 8; spt++)
+////    {
+////      printf("%f ",eles->divF_spts(spt,236,0,stage));
+////    }
+////    printf("\n");
+//  }
   /* Add source term (if required) */
   if (input->source)
     add_source(stage, startEle, endEle);
@@ -1890,6 +1917,53 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   // Update grid to end of time step (if not already done so)
   if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
     move(flow_time);
+
+#ifdef _BUILD_LIB
+  if (input->overset && input->motion)
+  {
+    if (input->motion_type != RIGID_BODY)
+      ZEFR->tg_preprocess();
+
+    ZEFR->tg_process_connectivity();
+
+    int do_unblank = 0;
+    for (int i = 0; i < geo.nEles; i++)
+    {
+      if (geo.iblank_cell(i) == -1)
+      {
+        do_unblank = 1;
+        break;
+      }
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, &do_unblank, 1, MPI_INT, MPI_MAX, worldComm);
+
+    if (do_unblank)
+    {
+      ZEFR->overset_interp_send(faces->nVars, 0);
+      ZEFR->overset_interp_recv(faces->nVars, 0);
+    }
+
+#ifdef _GPU
+    ZEFR->update_iblank_gpu();
+#endif
+
+//    if (current_iter >= 1557) /// DEBUGGING
+//    {
+//      printf("At end of update() before iter %d\n",current_iter);
+//      if (input->rank==2)
+//      {
+//        printf("Blanked elements for rank 3:");
+//        for (int i = 0; i < geo.nEles; i++)
+//        {
+//          if (geo.iblank_cell(i) != 1)
+//            printf("(%d,%d) ",i,geo.iblank_cell(i));
+//        }
+//        printf("\n");
+//      }
+//    }
+  }
+#endif
 }
 
 
@@ -1919,6 +1993,8 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   for (unsigned int stage = 0; stage < nSteps; stage++)
   {
     flow_time = prev_time + rk_alpha(stage) * dt(0);
+
+    move(flow_time, false);
 
     compute_residual(stage);
 
@@ -1999,7 +2075,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
 #endif
 
     // Update grid to position of next time step
-    move(flow_time);
+//    move(flow_time);
   }
 
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
@@ -2007,6 +2083,8 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
   {
     if (nStages > 1)
       flow_time = prev_time + rk_alpha(nStages-2) * dt(0);
+
+    move(flow_time, false);
 
     compute_residual(nStages-1);
 #ifdef _CPU
@@ -2102,6 +2180,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   {
     for (uint ele = 0; ele < eles->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell[ic] != NORMAL) continue;
       for (uint spt = 0; spt < eles->nSpts; spt++)
       {
         double err = std::abs(rk_err(spt,ele,n)) /
@@ -2147,7 +2226,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
 
     if (input->motion_type == RIGID_BODY)
     {
-      eles->nodes = nodes_ini;
+//      eles->nodes = nodes_ini;
       geo.vel_cg = v_ini;
       geo.x_cg = x_ini;
       geo.q = q_ini;
@@ -2159,7 +2238,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
 
     if (input->motion_type == RIGID_BODY)
     {
-      device_copy(eles->nodes_d, nodes_ini_d, nodes_ini_d.max_size());
+//      device_copy(eles->nodes_d, nodes_ini_d, nodes_ini_d.max_size());
       device_copy(geo.x_cg_d, x_ini_d, x_ini_d.max_size());
       device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
 //      device_copy(geo.q_d, q_ini_d, q_ini_d.max_size());
@@ -2191,7 +2270,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   if (input->motion_type == RIGID_BODY)
   {
-    nodes_ini = eles->nodes; nodes_til = eles->nodes;
+//    nodes_ini = eles->nodes; nodes_til = eles->nodes;
   }
 #endif
 
@@ -2205,13 +2284,13 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
 
   if (input->motion_type == RIGID_BODY)
   {
-    device_copy(nodes_ini_d, eles->nodes_d, eles->nodes_d.max_size());
-    device_copy(nodes_til_d, eles->nodes_d, eles->nodes_d.max_size());
-    device_copy(x_ini_d, geo.x_cg_d, geo.x_cg_d.max_size());
-    device_copy(x_til_d, geo.x_cg_d, geo.x_cg_d.max_size());
-    device_copy(v_ini_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
-    device_copy(v_til_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
-//    device_copy(q_ini_d, geo.q_d, geo.q_d.max_size());
+//    device_copy(nodes_ini_d, eles->nodes_d, eles->nodes_d.max_size());
+//    device_copy(nodes_til_d, eles->nodes_d, eles->nodes_d.max_size());
+//    device_copy(x_ini_d, geo.x_cg_d, geo.x_cg_d.max_size());
+//    device_copy(x_til_d, geo.x_cg_d, geo.x_cg_d.max_size());
+//    device_copy(v_ini_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
+//    device_copy(v_til_d, geo.vel_cg_d, geo.vel_cg_d.max_size());
+////    device_copy(q_ini_d, geo.q_d, geo.q_d.max_size());
 //    device_copy(q_til_d, geo.q_d, geo.q_d.max_size());
 //    device_copy(qdot_ini_d, geo.qdot_d, geo.qdot_d.max_size());
 //    device_copy(qdot_til_d, geo.qdot_d, geo.qdot_d.max_size());
@@ -2234,7 +2313,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     PUSH_NVTX_RANGE("ONE_STAGE",6);
     flow_time = prev_time + rk_c(stage) * dt(0);
 
-    move(flow_time); // Set grid to current evaluation time
+    move(flow_time, false); // Set grid to current evaluation time
 
     compute_residual(0);
 
@@ -2704,7 +2783,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   if (input->motion)
   {
-    if (input->motion_type == RIGID_BODY)
+    if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
     {
       ss << "[moving-grid]" << std::endl;
 
@@ -2718,15 +2797,18 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
         ss << " " << std::scientific << std::setprecision(16) << geo.vel_cg(d);
       ss << std::endl;
 
-      ss << "rot-q =";
-      for (int d = 0; d < 4; d++)
-        ss << " " << std::scientific << std::setprecision(16) << geo.q(d);
-      ss << std::endl;
+      if (input->motion_type == RIGID_BODY)
+      {
+        ss << "rot-q =";
+        for (int d = 0; d < 4; d++)
+          ss << " " << std::scientific << std::setprecision(16) << geo.q(d);
+        ss << std::endl;
 
-      ss << "omega =";
-      for (int d = 0; d < 3; d++)
-        ss << " " << std::scientific << std::setprecision(16) << geo.omega(d);
-      ss << std::endl;
+        ss << "omega =";
+        for (int d = 0; d < 3; d++)
+          ss << " " << std::scientific << std::setprecision(16) << geo.omega(d);
+        ss << std::endl;
+      }
 
       ss << std::endl;
     }
@@ -3289,7 +3371,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   if (input->motion)
   {
-    if (input->motion_type == RIGID_BODY)
+    if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
     {
       f << "<!-- X_CG ";
       for (int d = 0; d < 3; d++)
@@ -3301,15 +3383,18 @@ void FRSolver::write_solution(const std::string &_prefix)
         f << std::scientific << std::setprecision(16) << geo.vel_cg(d) << " ";
       f << " -->" << std::endl;
 
-      f << "<!-- ROT-Q ";
-      for (int d = 0; d < 4; d++)
-        f << std::scientific << std::setprecision(16) << geo.q(d) << " ";
-      f << " -->" << std::endl;
+      if (input->motion_type == RIGID_BODY)
+      {
+        f << "<!-- ROT-Q ";
+        for (int d = 0; d < 4; d++)
+          f << std::scientific << std::setprecision(16) << geo.q(d) << " ";
+        f << " -->" << std::endl;
 
-      f << "<!-- OMEGA ";
-      for (int d = 0; d < 3; d++)
-        f << std::scientific << std::setprecision(16) << geo.omega(d) << " ";
-      f << " -->" << std::endl;
+        f << "<!-- OMEGA ";
+        for (int d = 0; d < 3; d++)
+          f << std::scientific << std::setprecision(16) << geo.omega(d) << " ";
+        f << " -->" << std::endl;
+      }
     }
 
     eles->update_plot_point_coords();
@@ -4700,8 +4785,14 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         else if (input->res_type == 2)
           res[n] += eles->divF_spts(spt,ele,n,0) * eles->divF_spts(spt,ele,n,0)
                   / (eles->jaco_det_spts(spt, ele) * eles->jaco_det_spts(spt, ele));
+
+        if (std::isnan(res[n]))
+        {
+          std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << std::endl;
+          ThrowException("NaN in residual");
+        }
       }
-      nEles++;
+      if (n == 0) nEles++;
     }
   }
 
@@ -5443,7 +5534,7 @@ void FRSolver::filter_solution()
   }
 }
 
-void FRSolver::move(double time)
+void FRSolver::move(double time, bool update_iblank)
 {
   if (!input->motion) return;
   if (time == grid_time) return; // Already set
@@ -5469,26 +5560,44 @@ void FRSolver::move(double time)
   {
     if (input->motion_type == CIRCULAR_TRANS)
     {
-      if (input->gridID == 0)
+      geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
+      geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
+      if (geo.nDims == 3)
+        geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
+
+      if (input->gridID == 1)
       {
-        geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
-        geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
-        if (geo.nDims == 3)
-          geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
+        // Update Tioga's offset vector for iblank setting
+        ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+        // Reset back to zero so we don't modify this grid
+        geo.x_cg.assign({3},0.0);
       }
       else
-        geo.x_cg.assign({3},0.0);
-
-      ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+      {
+        double tmp[3] = {0.0};
+        ZEFR->tg_update_transform(geo.Rmat.data(), tmp, geo.nDims);
+      }
     }
 
+    geo.coord_nodes = geo.coord_nodes_d;
+    faces->coord = faces->coord_d;
+    eles->coord_spts = eles->coord_spts_d;
+
     PUSH_NVTX_RANGE("tg_conn", 5);
-    if (input->motion_type != RIGID_BODY)
-      ZEFR->tg_preprocess();
-    ZEFR->tg_process_connectivity();
-#ifdef _GPU
-    ZEFR->update_iblank_gpu();
-#endif
+
+//    if (update_iblank)
+//    {
+//      if (input->motion_type != RIGID_BODY)
+//        ZEFR->tg_preprocess();
+
+//      ZEFR->tg_process_connectivity();
+//#ifdef _GPU
+//    ZEFR->update_iblank_gpu();
+//#endif
+//    }
+//    else
+      ZEFR->tg_point_connectivity();
+
     POP_NVTX_RANGE;
   }
 #endif

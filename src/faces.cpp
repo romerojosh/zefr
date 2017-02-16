@@ -2084,8 +2084,9 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
     rus_bias_d, LDG_bias_d,  dA_d, Vg_d, input->AdvDiff_D, input->gamma, input->rus_k, input->mu, input->prandtl, 
     input->rt, input->c_sth, input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, nVars, nDims, input->equation, 
     input->fconv_type, input->fvisc_type, startFpt, endFpt, input->viscous, input->motion, input->overset, geo->iblank_fpts_d.data());
-#endif
 
+    check_error();
+#endif
 }
 
 
@@ -3261,7 +3262,7 @@ void Faces::recv_U_data()
   {
     int recvRank = entry.first;
     auto &fpts = entry.second;
-    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());
+    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());    
   }
 
   /* Halt main compute stream until U is unpacked */
@@ -3555,6 +3556,21 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 
   U_fringe_d.assign({nVars, geo->nFptsPerFace, nFringe}, data, 3);
 
+//  if (input->iter >= 106 && input->gridID == 0) /// DEBUGGING
+//  {
+//    U_fringe.assign({nVars,geo->nFptsPerFace,nFringe}); /// DEBUGGING
+//    U_fringe = U_fringe_d;
+
+//    for (int face = 0; face < nFringe; face++)
+//    {
+//      for (int fpt = 0; fpt < 4; fpt++)
+//      {
+//        if (U_fringe(0,fpt,face) < .99 || U_fringe(1,fpt,face) < .99)
+//          printf("%d,%d: FRINGE (%d,%d) %f %f\n",input->gridID,input->rank,face,fpt,U_fringe(0,fpt,face),U_fringe(1,fpt,face));
+//      }
+//    }
+//  }
+
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
   {
     fringe_fpts.resize({geo->nFptsPerFace, nFringe});
@@ -3572,6 +3588,9 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
         fringe_side(fpt,face) = side;
       }
     }
+
+    fringe_fpts_d.set_size(fringe_fpts);
+    fringe_side_d.set_size(fringe_side);
 
     fringe_fpts_d = fringe_fpts;
     fringe_side_d = fringe_side;

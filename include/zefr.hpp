@@ -127,7 +127,7 @@ public:
   /// TODO: Reconsider organization
   void set_dataUpdate_callback(void (*dataUpdate)(int, double*, int));
 
-  void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
+  void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void), void (*point_connect)(void),
                            void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int));
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
@@ -177,6 +177,9 @@ private:
 
   //! Callback function to TIOGA to process connectivity
   void (*tg_process_connectivity) (void);
+
+  //! Callback function to TIOGA to process only point connectivity (don't update blanking)
+  void (*tg_point_connectivity) (void);
 
   //! Callback to set a new rotation matrix & offset for TIOGA's ADT class
   void (*tg_update_transform)(double* Rmat, double* offset, int ndim);
