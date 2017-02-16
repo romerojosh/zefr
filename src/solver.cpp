@@ -596,79 +596,6 @@ void FRSolver::solver_data_to_device()
 
     if (input->dt_scheme == "MCGS")
     {
-      e->deltaU_d = e->deltaU;
-      e->RHS_d = e->RHS;
-      e->LHS_d = e->LHSs[0];
-
-      if (input->inv_mode)
-      {
-        e->LHSInv_d = e->LHSInvs[0];
-      }
-
-      e->LU_pivots_d = e->LU_pivots;
-      e->LU_info_d = e->LU_info;
-
-      /* For cublas batched LU: Setup and transfer array of GPU pointers to 
-       * LHS matrices and RHS vectors */
-      unsigned int N = e->nSpts * e->nVars;
-      for (unsigned int ele = 0; ele < e->nEles; ele++)
-      {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-
-        e->RHS_ptrs(ele) = e->RHS_d.data() + ele * N;
-
-        if (input->inv_mode)
-        {
-          e->deltaU_ptrs(ele) = e->deltaU_d.data() + ele * N;
-        }
-      }
-
-      if (!input->stream_mode)
-      {
-        unsigned int nElesMax = ceil(geo.nEles / (double) input->n_LHS_blocks);
-        for (unsigned int ele = 0; ele < nElesMax; ele++)
-        {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-
-          e->LHS_ptrs(ele) = e->LHS_d.data() + ele * (N * N);
-        }
-          
-        if (input->inv_mode)
-        {
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
-          {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-
-            e->LHSInv_ptrs(ele) = e->LHSInv_d.data() + ele * (N * N);
-          }
-        }
-      }
-      else
-      {
-        unsigned int nElesMax = *std::max_element(geo.ele_color_nEles.begin(), geo.ele_color_nEles.end());
-        for (unsigned int ele = 0; ele < nElesMax; ele++)
-        {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-
-          e->LHS_ptrs(ele) = e->LHS_d.data() + ele * (N * N);
-          if (input->inv_mode)
-            e->LHSInv_ptrs(ele) = e->LHSInv_d.data() + ele * (N * N);
-        }
-      }
-
-      e->LHS_ptrs_d = e->LHS_ptrs;
-      e->RHS_ptrs_d = e->RHS_ptrs;
-
-      if (input->inv_mode)
-      {
-        e->LHSInv_ptrs_d = e->LHSInv_ptrs;
-        e->deltaU_ptrs_d = e->deltaU_ptrs;
-      }
-
-      /* Implicit flux derivative data structures (element local) */
-      e->dFdU_spts_d = e->dFdU_spts;
-      e->dFcdU_fpts_d = e->dFcdU_fpts;
-
     }
 
     //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
@@ -720,9 +647,6 @@ void FRSolver::solver_data_to_device()
 
   if (input->dt_scheme == "MCGS")
   {
-    /* Implicit flux derivative data structures (faces) */
-    faces->dFdUconv_d = faces->dFdUconv;
-    faces->dFcdU_d = faces->dFcdU;
   }
 
   if (input->motion)
