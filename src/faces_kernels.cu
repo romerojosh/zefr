@@ -291,8 +291,7 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
     const mdvector_gpu<double> V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, const mdvector_gpu<double> V_wall, mdvector_gpu<double> Vg,
     const mdvector_gpu<double> norm_fs, const mdvector_gpu<double> norm,
-    const mdvector_gpu<char> gfpt2bnd, const mdvector_gpu<unsigned int> per_fpt_list,
-    mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias, bool motion = false)
+    const mdvector_gpu<char> gfpt2bnd, mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias, bool motion = false)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -785,7 +784,7 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, unsigne
     mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_tot_fs, 
     double P_tot_fs, double T_wall, mdvector_gpu<double> &V_wall, mdvector_gpu<double> &Vg,
     mdvector_gpu<double> &norm_fs,  mdvector_gpu<double> &norm, mdvector_gpu<char> &gfpt2bnd,
-    mdvector_gpu<unsigned int> &per_fpt_list, mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias, unsigned int equation,
+    mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias, unsigned int equation,
     bool motion)
 {
   if (nGfpts_bnd == 0) return;
@@ -797,28 +796,28 @@ void apply_bcs_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, unsigne
   {
     if (nDims == 2)
       apply_bcs<1, 2, AdvDiff><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, rus_bias, LDG_bias, motion);
     else
       apply_bcs<1, 3, AdvDiff><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, rus_bias, LDG_bias, motion);
   }
   else if (equation == Burgers)
   {
     if (nDims == 2)
       apply_bcs<1, 2, Burgers><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, rus_bias, LDG_bias, motion);
     else
       apply_bcs<1, 3, Burgers><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, rus_bias, LDG_bias, motion);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       apply_bcs<4, 2, EulerNS><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, rus_bias, LDG_bias, motion);
     else
       apply_bcs<5, 3, EulerNS><<<blocks, threads>>>(U, U_ldg, nFpts, nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, 
-          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, per_fpt_list, rus_bias, LDG_bias, motion);
+          gamma, R_ref,T_tot_fs, P_tot_fs, T_wall, V_wall, Vg, norm_fs, norm, gfpt2bnd, rus_bias, LDG_bias, motion);
   }
 }
 
@@ -826,7 +825,7 @@ template<unsigned int nVars, unsigned int nDims>
 __global__
 void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<double> norm_gfpt,
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    mdvector_gpu<char> gfpt2bnd, mdvector_gpu<unsigned int> per_fpt_list)
+    mdvector_gpu<char> gfpt2bnd)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
 
@@ -1026,8 +1025,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
 
 void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvector_gpu<double> &norm, 
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
-    unsigned int nDims, mdvector_gpu<char> &gfpt2bnd, mdvector_gpu<unsigned int> &per_fpt_list,
-    unsigned int equation)
+    unsigned int nDims, mdvector_gpu<char> &gfpt2bnd, unsigned int equation)
 {
   if (nGfpts_bnd == 0) return;
 
@@ -1038,19 +1036,19 @@ void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvecto
   {
     if (nDims == 2)
       apply_bcs_dU<1, 2><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
-          gfpt2bnd, per_fpt_list);
+          gfpt2bnd);
     else
       apply_bcs_dU<1, 3><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
-          gfpt2bnd, per_fpt_list);
+          gfpt2bnd);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       apply_bcs_dU<4, 2><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
-          gfpt2bnd, per_fpt_list);
+          gfpt2bnd);
     else
       apply_bcs_dU<5, 3><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
-          gfpt2bnd, per_fpt_list);
+          gfpt2bnd);
   }
 }
 

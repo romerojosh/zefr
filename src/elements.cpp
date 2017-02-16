@@ -305,8 +305,6 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   coord_qpts.assign({nQpts, nEles, nDims});
   nodes.assign({nNodes, nEles, nDims});
 
-  std::cout << etype  << " " << nEles << std::endl;
-
   /* Setup positions of all element's shape nodes in one array */
   if (input->meshfile.find(".pyfr") != std::string::npos)
     nodes = geo->ele_nodes; /// TODO: setup for Gmsh grids as well
@@ -1091,8 +1089,8 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
           {
             int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
 
-            unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
-            double fac = (slot == 1) ? -1 : 0; // factor to negate normal if "right" element (slot = 1)
+            unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
+            double fac = (slot == 1) ? -1 : 1; // factor to negate normal if "right" element (slot = 1)
             dFn_fpts(fpt,ele,var) -= tempF_fpts(fpt,ele) * fac * faces->norm(gfpt,dim) * faces->dA(gfpt);
           }
         }
@@ -1125,7 +1123,7 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
   device_copy(dFn_fpts_d, Fcomm_d, Fcomm_d.size());
 
   extrapolate_Fn_wrapper(oppE_d, F_spts_d, tempF_fpts_d, dFn_fpts_d,
-      faces->norm_d, faces->dA_d, geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nSpts,
+      faces->norm_d, faces->dA_d, geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nSpts,
       nFpts, nEles, nDims, nVars, input->motion);
 
   check_error();
@@ -1629,6 +1627,38 @@ void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsi
 #endif
 }
 
+void Elements::add_source(unsigned int stage, double flow_time, unsigned int startEle, unsigned int endEle)
+{
+#ifdef _CPU
+#pragma omp parallel for collapse(2)
+  for (unsigned int n = 0; n < nVars; n++)
+  {
+    for (unsigned int ele = startEle; ele < endEle; ele++)
+    {
+      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
+      for (unsigned int spt = 0; spt < nSpts; spt++)
+      {
+          double x = coord_spts(spt, ele, 0);
+          double y = coord_spts(spt, ele, 1);
+          double z = 0;
+          if (nDims == 3)
+            z = coord_spts(spt, ele, 2);
+
+          divF_spts(spt, ele, n, stage) += compute_source_term(x, y, z, flow_time, n, input) * 
+            jaco_det_spts(spt, ele);
+      }
+    }
+  }
+
+#endif
+
+#ifdef _GPU
+  add_source_wrapper(divF_spts_d, jaco_det_spts_d, coord_spts_d, nSpts, nEles,
+      nVars, nDims, input->equation, flow_time, stage, startEle, endEle);
+  check_error();
+#endif
+}
+
 void Elements::compute_dU_spts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim)
 {
 #ifdef _CPU
@@ -1814,18 +1844,6 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
           }
         }
       }
-
-      /*
-      if (ele == 0)
-      {
-        std::cout << "dU" << std::endl;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          std::cout << dU[0][dim] << " ";
-        }
-        std::cout << std::endl;
-      }
-      */
 
       /* Compute fluxes */
       if (equation == AdvDiff)
@@ -3074,18 +3092,18 @@ void Elements::move(std::shared_ptr<Faces> faces)
 #ifdef _GPU
   update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
       shape_fpts_d, coord_spts_d, coord_fpts_d, faces->coord_d,
-      geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
+      geo->ele2nodesBT_d[etype], geo->fpt2gfptBT_d[etype], nSpts, nFpts, nNodes, nEles, nDims);
 
   update_coords_wrapper(grid_vel_nodes_d, geo->grid_vel_nodes_d, shape_spts_d,
       shape_fpts_d, grid_vel_spts_d, grid_vel_fpts_d, faces->Vg_d,
-      geo->ele2nodes_d, geo->fpt2gfpt_d, nSpts, nFpts, nNodes, nEles, nDims);
+      geo->ele2nodesBT_d[etype], geo->fpt2gfptBT_d[etype], nSpts, nFpts, nNodes, nEles, nDims);
 
   calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
       inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
       nFpts, nNodes, nEles, nDims);
 
   calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
-      geo->fpt2gfpt_d, geo->fpt2gfpt_slot_d, nFpts, nEles, nDims);
+      geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nFpts, nEles, nDims);
 
   if (input->CFL == 2)
     update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
@@ -3105,7 +3123,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodesBT[etype](node,ele));
 
   int ms = nSpts;
   int mf = nFpts;
@@ -3145,7 +3163,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
     {
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        int gfpt = geo->fpt2gfpt(fpt,ele);
+        int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
 
         faces->coord(gfpt, dim) = coord_fpts(fpt,ele,dim);
       }
@@ -3192,7 +3210,7 @@ void Elements::update_plot_point_coords(void)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodes(node,ele));
+        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodesBT[etype](node,ele));
 #endif
 
   int mp = nPpts;
@@ -3231,7 +3249,7 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(dim, geo->ele2nodes(node,ele));
+        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(dim, geo->ele2nodesBT[etype](node,ele));
 
   int ms = nSpts;
   int mf = nFpts;
@@ -3268,8 +3286,8 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      int gfpt = geo->fpt2gfpt(fpt,ele);
-      unsigned int slot = geo->fpt2gfpt_slot(fpt,ele);
+      int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
+      unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
 
       if (slot != 0)
         continue;
@@ -3309,7 +3327,7 @@ std::vector<double> Elements::getBoundingBox(int ele)
 
   for (unsigned int node = 0; node < nNodes; node++)
   {
-    unsigned int nd = geo->ele2nodes(node, ele);
+    unsigned int nd = geo->ele2nodesBT[etype](node, ele);
     for (int dim = 0; dim < nDims; dim++)
     {
       double pos = geo->coord_nodes(dim,nd);
@@ -3373,7 +3391,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
     grad.fill(0);
     for (int node = 0; node < nNodes; node++)
     {
-      int nd = geo->ele2nodes(node, ele);
+      int nd = geo->ele2nodesBT[etype](node, ele);
       for (int i = 0; i < nDims; i++)
       {
         for (int j = 0; j < nDims; j++)

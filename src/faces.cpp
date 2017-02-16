@@ -39,6 +39,7 @@ Faces::Faces(GeoStruct *geo, InputStruct *input, _mpi_comm comm_in)
   this->geo = geo;
   nFpts = geo->nGfpts;
   myComm = comm_in;
+
 }
 
 void Faces::setup(unsigned int nDims, unsigned int nVars)
@@ -142,44 +143,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   sreqs.resize(geo->fpt_buffer_map.size());
   rreqs.resize(geo->fpt_buffer_map.size());
-
-  /* ---- For buffer-style MPI sends/recvs ---- */
-  /*buffUR.resize(geo->nMpiFaces);
-  buffUL.resize(geo->nMpiFaces);
-  for (unsigned int i = 0; i < geo->nMpiFaces; i++)
-  {
-    buffUR[i].assign({geo->nFptsPerFace, nVars},0.0);  // Recv buffer per MPI face
-    buffUL[i].assign({geo->nFptsPerFace, nVars},0.0);  // Send buffer per MPI face
-  }
-  //sstatuses.resize(geo->nMpiFaces); // for big buffer w/o derived type
-  //rstatuses.resize(geo->nMpiFaces);
-  //sends.resize(geo->nMpiFaces); // for per-face buffers
-  //recvs.resize(geo->nMpiFaces);
-  sends.resize(2*geo->nMpiFaces);
-
-  /// TODO: Could be useful somewhere else
-  unsigned int nFpts1D = input->order + 1;
-  unsigned int nFptsFace = geo->nFptsPerFace;
-
-  for (unsigned int j = 0; j < nFpts1D; j++)
-    for (unsigned int i = 0; i < nFpts1D; i++)
-      rot_permute[0].push_back(i * nFpts1D + j);
-
-  for (unsigned int j = 0; j < nFpts1D; j++)
-    for (unsigned int i = 0; i < nFpts1D; i++)
-      rot_permute[1].push_back(nFpts1D - i + j * nFpts1D - 1);
-
-  for (unsigned int j = 0; j < nFpts1D; j++)
-    for (unsigned int i = 0; i < nFpts1D; i++)
-      rot_permute[2].push_back(nFptsFace - i * nFpts1D - j - 1);
-
-  for (unsigned int j = 0; j < nFpts1D; j++)
-    for (unsigned int i = 0; i < nFpts1D; i++)
-      rot_permute[3].push_back(nFptsFace - (j+1) * nFpts1D + i);
-
-  // For 2D
-  for (unsigned int i = 0; i < nFptsFace; i++)
-    rot_permute[4].push_back(nFptsFace - i - 1);*/
 #endif
 
 }
@@ -721,7 +684,7 @@ void Faces::apply_bcs()
 #ifdef _GPU
   apply_bcs_wrapper(U_d, U_ldg_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
       input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
-      Vg_d, input->norm_fs_d, norm_d, geo->gfpt2bnd_d, geo->per_fpt_list_d, rus_bias_d, LDG_bias_d, input->equation, input->motion);
+      Vg_d, input->norm_fs_d, norm_d, geo->gfpt2bnd_d, rus_bias_d, LDG_bias_d, input->equation, input->motion);
 
   check_error();
 #endif
@@ -927,7 +890,7 @@ void Faces::apply_bcs_dU()
 
 #ifdef _GPU
   apply_bcs_dU_wrapper(dU_d, U_d, norm_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, 
-      nDims, geo->gfpt2bnd_d, geo->per_fpt_list_d, input->equation);
+      nDims, geo->gfpt2bnd_d, input->equation);
 
   check_error();
 #endif

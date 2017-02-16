@@ -277,9 +277,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     f >> val >> val;
     if (geo.nDims == 2)
     {
-      geo.nFacesPerEle = 4; geo.nNodesPerFace = 2;
-      geo.nCornerNodes = 4; //TODO: corner nodes necessary?
-
+      geo.nNodesPerFace = 2;
       geo.nFacesPerEleBT[QUAD] = 4; geo.nNodesPerFaceBT[QUAD] = 2; geo.nCornerNodesBT[QUAD] = 4;
       geo.nFacesPerEleBT[TRI] = 3; geo.nNodesPerFaceBT[TRI] = 2; geo.nCornerNodesBT[TRI] = 3;
 
@@ -290,14 +288,12 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.ele_set.insert(TRI);
           geo.nEles++; 
           geo.nElesBT[TRI]++;
-          geo.nNodesPerEle = 3; 
           geo.nNodesPerEleBT[TRI] = 3; break;
 
         case 3:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.nNodesPerEle = 4; 
           geo.nNodesPerEleBT[QUAD] = 4; break;
 
         /* Biquadratic quad/tri */
@@ -305,14 +301,12 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.ele_set.insert(TRI);
           geo.nEles++; 
           geo.nElesBT[TRI]++;
-          geo.nNodesPerEle = 6; 
           geo.nNodesPerEleBT[TRI] = 6; break;
 
         case 10:
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.nNodesPerEle = 9;
           geo.nNodesPerEleBT[QUAD] = 9; break;
 
         /* Bicubic quad */
@@ -320,7 +314,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.nNodesPerEle = 16; 
           geo.nNodesPerEleBT[QUAD] = 16; break;
 
         /* Biquartic quad */
@@ -328,7 +321,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.nNodesPerEle = 25; 
           geo.nNodesPerEleBT[QUAD] = 25; break;
 
         /* Biquintic quad */
@@ -336,7 +328,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.ele_set.insert(QUAD);
           geo.nEles++; 
           geo.nElesBT[QUAD]++;
-          geo.nNodesPerEle = 36; 
           geo.nNodesPerEleBT[QUAD] = 36; break;
 
         case 1:
@@ -352,9 +343,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     }
     else if (geo.nDims == 3)
     {
-      geo.nFacesPerEle = 6; geo.nNodesPerFace = 4;
-      geo.nCornerNodes = 8;
-
       geo.nFacesPerEleBT[HEX] = 6; geo.nNodesPerFaceBT[HEX] = 4; geo.nCornerNodesBT[HEX] = 8;
       geo.nFacesPerEleBT[TET] = 4; geo.nNodesPerFaceBT[TET] = 3; geo.nCornerNodesBT[TET] = 4;
 
@@ -364,7 +352,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 5:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.nNodesPerEle = 8;
           geo.nElesBT[HEX]++;
           geo.nNodesPerEleBT[HEX] = 8; break;
 
@@ -373,7 +360,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.nElesBT[HEX]++;
-          geo.nNodesPerEle = 27;
           geo.nNodesPerEleBT[HEX] = 27;
           break;
 
@@ -381,7 +367,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 92:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.nNodesPerEle = 64;
           geo.nElesBT[HEX]++;
           geo.nNodesPerEleBT[HEX] = 64;
           break;
@@ -390,7 +375,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 93:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.nNodesPerEle = 125;
           geo.nElesBT[HEX]++;
           geo.nNodesPerEleBT[HEX] = 125;
           break;
@@ -399,8 +383,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 94:
           geo.ele_set.insert(HEX);
           geo.nEles++;
-          geo.nNodesPerEle = 216;
           geo.nElesBT[HEX]++;
+          geo.nNodesPerEleBT[HEX] = 216;
           break;
 
         case 2:
@@ -420,10 +404,17 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     std::getline(f,line);
   }
 
+  // TODO: Generalize faces for 3D mixed grids
+  if (geo.ele_set.count(HEX))
+    geo.nNodesPerFace = 4;
+  else if (geo.ele_set.count(TET))
+    geo.nNodesPerFace = 3;
+  
+
+
   f.seekg(pos);
 
   /* Allocate memory for element connectivity */
-  geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
   for (auto etype : geo.ele_set) 
   {
     geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype]});
@@ -464,7 +455,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[TRI]; nd++)
           {
             f >> geo.ele2nodesBT[TRI](nd,ele);
-            geo.ele2nodes(nd,ele) = geo.ele2nodesBT[TRI](nd,ele);
           }
           geo.nElesBT[TRI]++; break;
         }
@@ -480,7 +470,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[QUAD]; nd++)
           {
             f >> geo.ele2nodesBT[QUAD](nd,ele);
-            geo.ele2nodes(nd,ele) = geo.ele2nodesBT[QUAD](nd, ele);
           }
           geo.nElesBT[QUAD]++; 
           break;
@@ -516,7 +505,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[HEX]; nd++)
           {
             f >> geo.ele2nodesBT[HEX](nd,ele);
-            geo.ele2nodes(nd,ele) = geo.ele2nodesBT[HEX](nd,ele);
           }
           geo.nElesBT[HEX]++; break;
         }
@@ -531,15 +519,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     std::getline(f,line); 
   }
 
-  /* Correct node values to be 0-indexed */
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-  {
-    for (unsigned int n = 0; n < geo.nNodesPerEle; n++)
-    {
-      geo.ele2nodes(n,ele)--;
-    }
-  }
-  
   /* Correct node values to be 0-indexed. Also assign global eleIDs. */
   unsigned int eleID = 0;
   geo.eleType.assign({geo.nEles});
@@ -569,7 +548,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 {
   if (geo.nDims == 2)
   {
-    std::vector<unsigned int> face(geo.nNodesPerFace, 0);
+    std::vector<unsigned int> face(2, 0);
     for (unsigned int n = 0; n < (geo.nEles + geo.nBnds); n++)
     {
       unsigned int vint, ele_type, bnd_id, nTags;
@@ -677,50 +656,6 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
 void set_face_nodes(GeoStruct &geo)
 {
   /* Define node indices for faces */
-  geo.face_nodes.assign({geo.nFacesPerEle, geo.nNodesPerFace}, 0);
-
-  if (geo.nDims == 2)
-  {
-    /* Face 0: Bottom */
-    geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
-
-    /* Face 1: Right */
-    geo.face_nodes(1, 0) = 1; geo.face_nodes(1, 1) = 2;
-
-    /* Face 2: Top */
-    geo.face_nodes(2, 0) = 2; geo.face_nodes(2, 1) = 3;
-
-    /* Face 3: Left */
-    geo.face_nodes(3, 0) = 3; geo.face_nodes(3, 1) = 0;
-
-  }
-  else if (geo.nDims == 3)
-  {
-    /* Face 0: Bottom */
-    geo.face_nodes(0, 0) = 0; geo.face_nodes(0, 1) = 1;
-    geo.face_nodes(0, 2) = 2; geo.face_nodes(0, 3) = 3;
-
-    /* Face 1: Top */
-    geo.face_nodes(1, 0) = 5; geo.face_nodes(1, 1) = 4;
-    geo.face_nodes(1, 2) = 7; geo.face_nodes(1, 3) = 6;
-
-    /* Face 2: Left */
-    geo.face_nodes(2, 0) = 0; geo.face_nodes(2, 1) = 3;
-    geo.face_nodes(2, 2) = 7; geo.face_nodes(2, 3) = 4;
-
-    /* Face 3: Right */
-    geo.face_nodes(3, 0) = 2; geo.face_nodes(3, 1) = 1;
-    geo.face_nodes(3, 2) = 5; geo.face_nodes(3, 3) = 6;
-
-    /* Face 4: Front */
-    geo.face_nodes(4, 0) = 1; geo.face_nodes(4, 1) = 0;
-    geo.face_nodes(4, 2) = 4; geo.face_nodes(4, 3) = 5;
-
-    /* Face 5: Back */
-    geo.face_nodes(5, 0) = 3; geo.face_nodes(5, 1) = 2;
-    geo.face_nodes(5, 2) = 6; geo.face_nodes(5, 3) = 7;
-  }
-
   for (auto etype : geo.ele_set)
   {
     geo.face_nodesBT[etype].resize(geo.nFacesPerEleBT[etype]);
@@ -1041,11 +976,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       }
     }
   }
-  std::cout << "geo.nGfpts_int " << geo.nGfpts_int << std::endl;
-  std::cout << "geo.nGfpts_bnd " << geo.nGfpts_bnd << std::endl;
-  std::cout << "geo.nGfpts_mpi " << geo.nGfpts_mpi << std::endl;
-  std::cout << "geo.nBnds " << geo.nBnds << std::endl;
-  std::cout << "unique_faces size: " << unique_faces.size() << std::endl;
 
   /* Initialize global flux point indicies (to place boundary fpts at end of global fpt data structure) */
   unsigned int gfpt = 0; unsigned int gfpt_bnd = geo.nGfpts_int;
@@ -1089,7 +1019,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   /* Begin loop through faces */
   for (auto etype : geo.ele_set)
   {
-    std::vector<unsigned int> face(geo.nNodesPerFace, 0);
+    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
     ele2fptsBT[etype].resize(geo.nElesBT[etype]);
     ele2fpts_slotBT[etype].resize(geo.nElesBT[etype]);
 
@@ -1108,8 +1038,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
         }
 
-        auto face_ordered = face;
-
         std::sort(face.begin(), face.end());
 
         /* Check if face has been encountered previously */
@@ -1127,7 +1055,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           geo.face2eles(0, geo.nFaces) = geo.eleID[etype](ele);
 #ifdef _BUILD_LIB
           for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
-            geo.face2nodes(j, geo.nFaces) = geo.ele2nodes(geo.face_nodesBT[etype](n, j), geo.eleID[etype](ele));
+            geo.face2nodes(j, geo.nFaces) = geo.ele2nodesBT[etype](geo.face_nodesBT[etype](n, j), geo.eleID[etype](ele));
 #endif
 
           /* Check if face is on boundary */
@@ -1202,7 +1130,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           }
 
           face_fpts[face] = fpts;
-          geo.face2ordered[face] = face_ordered;
 
           for (unsigned int i = 0; i < nFptsPerFace; i++)
           {
@@ -1496,61 +1423,61 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
 
 void shuffle_data_by_color(GeoStruct &geo)
 {
-  /* Reorganize required geometry data by color */
-  std::vector<std::vector<unsigned int>> color2eles(geo.nColors);
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-  {
-    color2eles[geo.ele_color(ele) - 1].push_back(ele);
-  }
-
-  /* TODO: Consider an in-place permutation to save memory */
-  auto ele2nodes_temp = geo.ele2nodes;
-  auto fpt2gfpt_temp = geo.fpt2gfpt;
-  auto fpt2gfpt_slot_temp = geo.fpt2gfpt_slot;
-
-  unsigned int ele1 = 0;
-  for (unsigned int color = 1; color <= geo.nColors; color++)
-  {
-    for (unsigned int i = 0; i < color2eles[color - 1].size(); i++)
-    {
-      unsigned int ele2 = color2eles[color - 1][i];
-
-      for (unsigned int node = 0; node < geo.nNodesPerEle; node++)
-      {
-        geo.ele2nodes(node, ele1) = ele2nodes_temp(node, ele2);
-      }
-
-      for (unsigned int fpt = 0; fpt < geo.nFptsPerFace * geo.nFacesPerEle; fpt++) 
-      {
-        geo.fpt2gfpt(fpt, ele1) = fpt2gfpt_temp(fpt, ele2);
-        geo.fpt2gfpt_slot(fpt, ele1) = fpt2gfpt_slot_temp(fpt, ele2);
-      }
-
-      geo.ele_color(ele1) = color;
-
-      ele1++;
-    }
-  }
-
-  /* Setup element color ranges */
-  geo.ele_color_nEles.assign(geo.nColors, 0);
-  geo.ele_color_range.assign(geo.nColors + 1, 0);
-
-  geo.ele_color_range[1] = color2eles[0].size(); 
-  geo.ele_color_nEles[0] = color2eles[0].size(); 
-  for (unsigned int color = 2; color <= geo.nColors; color++)
-  {
-    geo.ele_color_range[color] = geo.ele_color_range[color - 1] + color2eles[color-1].size(); 
-    geo.ele_color_nEles[color - 1] = geo.ele_color_range[color] - geo.ele_color_range[color-1];
-  }
-
-  /* Print out color distribution */
-  std::cout << "color distribution: ";
-  for (unsigned int color = 1; color <= geo.nColors; color++)
-  {
-    std::cout<< geo.ele_color_nEles[color - 1] << " ";
-  }
-  std::cout << std::endl;
+//  /* Reorganize required geometry data by color */
+//  std::vector<std::vector<unsigned int>> color2eles(geo.nColors);
+//  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    color2eles[geo.ele_color(ele) - 1].push_back(ele);
+//  }
+//
+//  /* TODO: Consider an in-place permutation to save memory */
+//  auto ele2nodes_temp = geo.ele2nodes;
+//  auto fpt2gfpt_temp = geo.fpt2gfpt;
+//  auto fpt2gfpt_slot_temp = geo.fpt2gfpt_slot;
+//
+//  unsigned int ele1 = 0;
+//  for (unsigned int color = 1; color <= geo.nColors; color++)
+//  {
+//    for (unsigned int i = 0; i < color2eles[color - 1].size(); i++)
+//    {
+//      unsigned int ele2 = color2eles[color - 1][i];
+//
+//      for (unsigned int node = 0; node < geo.nNodesPerEle; node++)
+//      {
+//        geo.ele2nodes(node, ele1) = ele2nodes_temp(node, ele2);
+//      }
+//
+//      for (unsigned int fpt = 0; fpt < geo.nFptsPerFace * geo.nFacesPerEle; fpt++) 
+//      {
+//        geo.fpt2gfpt(fpt, ele1) = fpt2gfpt_temp(fpt, ele2);
+//        geo.fpt2gfpt_slot(fpt, ele1) = fpt2gfpt_slot_temp(fpt, ele2);
+//      }
+//
+//      geo.ele_color(ele1) = color;
+//
+//      ele1++;
+//    }
+//  }
+//
+//  /* Setup element color ranges */
+//  geo.ele_color_nEles.assign(geo.nColors, 0);
+//  geo.ele_color_range.assign(geo.nColors + 1, 0);
+//
+//  geo.ele_color_range[1] = color2eles[0].size(); 
+//  geo.ele_color_nEles[0] = color2eles[0].size(); 
+//  for (unsigned int color = 2; color <= geo.nColors; color++)
+//  {
+//    geo.ele_color_range[color] = geo.ele_color_range[color - 1] + color2eles[color-1].size(); 
+//    geo.ele_color_nEles[color - 1] = geo.ele_color_range[color] - geo.ele_color_range[color-1];
+//  }
+//
+//  /* Print out color distribution */
+//  std::cout << "color distribution: ";
+//  for (unsigned int color = 1; color <= geo.nColors; color++)
+//  {
+//    std::cout<< geo.ele_color_nEles[color - 1] << " ";
+//  }
+//  std::cout << std::endl;
 }
 
 #ifdef _MPI
@@ -1693,7 +1620,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], (unsigned int) myElesBT[etype].size()}, 0);
     geo.eleID[etype].assign({(unsigned int) myElesBT[etype].size()}, 0);
 
-    std::cout << " etype: " << etype << " myEles.size: " << myElesBT[etype].size() << std::endl;
     for (unsigned int ele = 0; ele < myElesBT[etype].size(); ele++)
     {
       for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
@@ -2158,29 +2084,27 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       ThrowException("Cannot read element nodes from PyFR mesh file - wrong data type.");
 
     geo.nDims = dims[2];
-    geo.nNodesPerEle = dims[0];
 
     if (geo.nEles > 0)
       ThrowException("Mixed element grids from PyFR format not currently supported!");
 
     geo.nEles += dims[1]; 
-    geo.nNodes = geo.nEles * geo.nNodesPerEle;
-    geo.nElesBT[etype] = dims[1];
     geo.nNodesPerEleBT[etype] = dims[0];
+    geo.nNodes = geo.nEles * geo.nNodesPerEleBT[etype];
+    geo.nElesBT[etype] = dims[1];
 
     mdvector<double> tmp_nodes({dims[2],dims[1],dims[0]}); // NOTE: We use col-major, HDF5 uses row-major
 
     DS.read(tmp_nodes.data(), PredType::NATIVE_DOUBLE);
 
     /// TODO: change Gmsh reading / geo setup so this isn't needed
-    geo.ele_nodes.assign({geo.nNodesPerEle, geo.nEles, geo.nDims});
-    geo.ele2nodes.assign({geo.nNodesPerEle, geo.nEles});
-    geo.ele2nodesBT[etype].assign({geo.nNodesPerEle, geo.nEles});
+    geo.ele_nodes.assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype], geo.nDims});
+    geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype]});
 
     mdvector<double> temp_coords({geo.nDims, geo.nNodes});
 
-    auto ndmap = (geo.nDims == 2) ? gmsh_to_structured_quad(geo.nNodesPerEle)
-                                  : gmsh_to_structured_hex(geo.nNodesPerEle);
+    auto ndmap = (geo.nDims == 2) ? gmsh_to_structured_quad(geo.nNodesPerEleBT[etype])
+                                  : gmsh_to_structured_hex(geo.nNodesPerEleBT[etype]);
 
     // Re-order nodes to Zefr format
     int gnd = 0;
@@ -2193,7 +2117,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
           temp_coords(d, gnd)   = tmp_nodes(d, ele, ndmap[nd]);
           geo.ele_nodes(nd, ele, d) = tmp_nodes(d, ele, ndmap[nd]);
         }
-        geo.ele2nodes(nd, ele) = gnd;
         geo.ele2nodesBT[etype](nd, ele) = gnd;
         gnd++;
       }
@@ -2236,9 +2159,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     for (int ele = 0; ele < geo.nEles; ele++)
     {
-      for (int nd = 0; nd < geo.nNodesPerEle; nd++)
+      for (int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
       {
-        geo.ele2nodes(nd, ele) = nodemap[geo.ele2nodes(nd, ele)];
         geo.ele2nodesBT[etype](nd, ele) = nodemap[geo.ele2nodesBT[etype](nd, ele)];
       }
     }
@@ -2403,20 +2325,18 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 #endif
 
   // Finish setting up ele-to-face / face-to-ele connectivity
-
-  geo.nFacesPerEle = (geo.nDims == 3) ? 6 : 4;
-  geo.nNodesPerFace = (geo.nDims == 3) ? 4 : 2;
   geo.nFacesPerEleBT[etype] = (geo.nDims == 3) ? 6 : 4;
   geo.nNodesPerFaceBT[etype] = (geo.nDims == 3) ? 4 : 2;
+  geo.nNodesPerFace = (geo.nDims == 3) ? 4 : 2;
 
 #ifdef _BUILD_LIB
   set_face_nodes(geo);
 #endif
 
-  geo.ele2face.assign({geo.nFacesPerEle, geo.nEles});
+  geo.ele2face.assign({geo.nFacesPerEleBT[etype], geo.nEles});
   geo.face2eles.assign({2, geo.nFaces}, -1);
 #ifdef _BUILD_LIB
-    geo.face2nodes.assign({geo.nNodesPerFace,geo.nFaces},-1);
+    geo.face2nodes.assign({geo.nNodesPerFaceBT[etype], geo.nFaces}, -1);
 #endif
   for (int f = 0; f < geo.nIntFaces; f++)
   {
@@ -2430,8 +2350,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.face2eles(1, f) = f2.ic;
 #ifdef _BUILD_LIB
     // Connectivity only used in conjunction with TIOGA
-    for (int j = 0; j < geo.nNodesPerFace; j++)
-      geo.face2nodes(j,f) = geo.ele2nodes(geo.face_nodes(f1.loc_f, j), f1.ic);
+    for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
+      geo.face2nodes(j,f) = geo.ele2nodesBT[etype](geo.face_nodesBT[etype][f1.loc_f][j], f1.ic);
 #endif
   }
 
@@ -2445,8 +2365,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       geo.face2eles(0, fid) = f.ic;
 #ifdef _BUILD_LIB
       // Connectivity only used in conjunction with TIOGA
-      for (int j = 0; j < geo.nNodesPerFace; j++)
-        geo.face2nodes(j,fid) = geo.ele2nodes(geo.face_nodes(f.loc_f, j), f.ic);
+      for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
+        geo.face2nodes(j,fid) = geo.ele2nodesBT[etype](geo.face_nodesBT[etype][f.loc_f][j], f.ic);
 #endif
       fid++;
     }
@@ -2467,14 +2387,14 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   if (input->dt_scheme == "MCGS")
   {
     // Setup ele_adj
-    geo.ele_adj.assign({geo.nFacesPerEle,geo.nEles},-1);
+    geo.ele_adj.assign({geo.nFacesPerEleBT[etype], geo.nEles},-1);
     for (int ff = 0; ff < geo.nFaces; ff++)
     {
       int ic1 = geo.face2eles(0,ff);
       int ic2 = geo.face2eles(1,ff);
       if (ic2 >= 0)
       {
-        for (int n = 0; n < geo.nFacesPerEle; n++)
+        for (int n = 0; n < geo.nFacesPerEleBT[etype]; n++)
         {
           if (geo.ele2face(n,ic1) == ff)
             geo.ele_adj(n,ic1) = ic2;
@@ -2542,10 +2462,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 
   geo.face2fpts.assign({nFptsPerFace, geo.nFaces}, -1);
   geo.fpt2face.assign(geo.nGfpts, -1);
-  geo.fpt2gfpt.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-  geo.fpt2gfpt_slot.assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-  geo.fpt2gfptBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
-  geo.fpt2gfpt_slotBT[etype].assign({geo.nFacesPerEle * nFptsPerFace, geo.nEles});
+  geo.fpt2gfptBT[etype].assign({geo.nFacesPerEleBT[etype] * nFptsPerFace, geo.nElesBT[etype]});
+  geo.fpt2gfpt_slotBT[etype].assign({geo.nFacesPerEleBT[etype] * nFptsPerFace, geo.nElesBT[etype]});
 
   // --- Handy map to grab the nodes making up each face ---
   std::map<int,mdvector<int>> ct2fv;
@@ -2578,11 +2496,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     // Setup global flux point IDs within left/right eles
     for (int fpt = 0; fpt < nFptsPerFace; fpt++)
     {
-      geo.fpt2gfpt(faceL.loc_f*nFptsPerFace + fpt, eL) = gfpt;
-      geo.fpt2gfpt(faceR.loc_f*nFptsPerFace + nFptsPerFace - fpt - 1, eR) = gfpt;
-      geo.fpt2gfpt_slot(faceL.loc_f*nFptsPerFace + fpt, eL) = 0;
-      geo.fpt2gfpt_slot(faceR.loc_f*nFptsPerFace + nFptsPerFace - fpt - 1, eR) = 1;
-
       geo.fpt2gfptBT[etype](faceL.loc_f*nFptsPerFace + fpt, eL) = gfpt;
       geo.fpt2gfptBT[etype](faceR.loc_f*nFptsPerFace + nFptsPerFace - fpt - 1, eR) = gfpt;
       geo.fpt2gfpt_slotBT[etype](faceL.loc_f*nFptsPerFace + fpt, eL) = 0;
@@ -2616,11 +2529,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
       // Setup the flux points for the face
       for (int fpt = 0; fpt < nFptsPerFace; fpt++)
       {
-        geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
-        geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
         geo.fpt2gfptBT[etype](n*nFptsPerFace + fpt, ele) = gfpt;
         geo.fpt2gfpt_slotBT[etype](n*nFptsPerFace + fpt, ele) = 0;
-
 
         geo.gfpt2bnd(gfpt_bnd) = geo.bnd_ids[bnd];
         geo.face2fpts(fpt, fid) = gfpt;
@@ -2635,8 +2545,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         int bcType = geo.bnd_ids[bnd];
         if (bcType == OVERSET)
         {
-          for (int j = 0; j < geo.nNodesPerFace; j++)
-            overPts.insert(geo.ele2nodes(ct2fv[eType](n, j), ele));
+          for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
+            overPts.insert(geo.ele2nodesBT[etype](ct2fv[eType](n, j), ele));
 
           geo.overFaceList.push_back(fid);
         }
@@ -2650,8 +2560,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
                  bcType == ADIABATIC_NOSLIP_MOVING_P ||
                  bcType == SYMMETRY_G || bcType == SYMMETRY_P)
         {
-          for (int j = 0; j < geo.nNodesPerFace; j++)
-            wallPts.insert(geo.ele2nodes(ct2fv[eType](n, j), ele));
+          for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
+            wallPts.insert(geo.ele2nodesBT[etype](ct2fv[eType](n, j), ele));
         }
       }
 
@@ -2705,9 +2615,9 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
           }
 
           // Centroid of face
-          for (int n = 0; n < geo.nNodesPerFace; n++)
+          for (int n = 0; n < geo.nNodesPerFaceBT[etype]; n++)
             for (int d = 0; d < geo.nDims; d++)
-              face_pt(d,ff+nFaces) += geo.ele_nodes(ct2fv[etype](f,n),ic,d) / geo.nNodesPerFace;
+              face_pt(d,ff+nFaces) += geo.ele_nodes(ct2fv[etype](f,n),ic,d) / geo.nNodesPerFaceBT[etype];
         }
 
       }
@@ -2720,9 +2630,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         int n = face.loc_f;
         for (int fpt = 0; fpt < nFptsPerFace; fpt++)
         {
-          geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
-          geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
-
           geo.fpt2gfptBT[etype](n*nFptsPerFace + fpt, ele) = gfpt;
           geo.fpt2gfpt_slotBT[etype](n*nFptsPerFace + fpt, ele) = 0;
 
@@ -2752,8 +2659,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         int n = face.loc_f;
         for (int fpt = 0; fpt < nFptsPerFace; fpt++)
         {
-          geo.fpt2gfpt(n*nFptsPerFace + fpt, ele) = gfpt;
-          geo.fpt2gfpt_slot(n*nFptsPerFace + fpt, ele) = 0;
           geo.fpt2gfptBT[etype](n*nFptsPerFace + fpt, ele) = gfpt;
           geo.fpt2gfpt_slotBT[etype](n*nFptsPerFace + fpt, ele) = 0;
 

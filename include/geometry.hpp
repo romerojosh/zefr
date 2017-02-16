@@ -63,34 +63,27 @@ struct GeoStruct
   std::map<ELE_TYPE, unsigned int> nCornerNodesBT;
   std::map<ELE_TYPE, unsigned int> nFptsPerFaceBT;
   std::map<ELE_TYPE, mdvector<int>> ele2nodesBT;
-  //std::map<ELE_TYPE, mdvector<unsigned int>> face_nodesBT;
   std::map<ELE_TYPE, std::vector<std::vector<unsigned int>>> face_nodesBT;
-  std::map<ELE_TYPE, mdvector<int>> fpt2gfptBT, fpt2gfpt_slotBT;
+  std::map<ELE_TYPE, mdvector<int>> fpt2gfptBT;
+  std::map<ELE_TYPE, mdvector<char>> fpt2gfpt_slotBT;
 
 
   unsigned int nEles = 0; 
   unsigned int nBnds = 0;
-  unsigned int nDims, nNodes, nFaces, nFacesPerEle, nNodesPerEle, nNodesPerFace, nFptsPerFace;
-  unsigned int nCornerNodes, nGfpts, nGfpts_int, nGfpts_bnd;
+  unsigned int nDims, nNodes, nFaces, nFptsPerFace, nNodesPerFace;
+  unsigned int nGfpts, nGfpts_int, nGfpts_bnd;
   unsigned int nGfpts_mpi = 0;
   bool per_bnd_flag = false;
 
   /* Connectivity Data */
-  mdvector<int> ele2nodes, ele2face, face2nodes, face2eles, face2eles_idx;
-  std::map<ELE_TYPE, mdvector<int>> ele2faceBT;
+  mdvector<int> ele2face, face2nodes, face2eles, face2eles_idx;
 
   std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
   std::vector<unsigned int> ele_color_range, ele_color_nEles;
-  mdvector<unsigned int> per_fpt_list;
   mdvector<char> gfpt2bnd;
-  std::map<std::vector<unsigned int>, int> bnd_faces, per_bnd_rot;
-  std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs, face2ordered;
-  std::unordered_map<unsigned int, unsigned int> per_fpt_pairs, per_node_pairs;
-  mdvector<unsigned int> ppt_connect;
-  mdvector<int> fpt2gfpt;
-  mdvector<char> fpt2gfpt_slot;
+  std::map<std::vector<unsigned int>, int> bnd_faces;
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs;
   mdvector<double> ele_nodes, coord_nodes;
-  mdvector<unsigned int> face_nodes;
   mdvector<int> ele_adj;
 
   mdvector<double> grid_vel_nodes, coords_init;
@@ -123,20 +116,17 @@ struct GeoStruct
   std::vector<std::vector<unsigned int>> per_mpi_faces;
   std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
   std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
-  std::map<unsigned int, MPI_Datatype> mpi_types;
 
   unsigned int nMpiFaces;
   std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<int> fpt2gfpt_d;
-    std::map<ELE_TYPE, mdvector_gpu<int>> fpt2gfptBT_d, fpt2gfpt_slotBT_d;
-    mdvector_gpu<char> fpt2gfpt_slot_d;
-    mdvector_gpu<unsigned int> per_fpt_list_d;
+    std::map<ELE_TYPE, mdvector_gpu<int>> fpt2gfptBT_d;
+    std::map<ELE_TYPE, mdvector_gpu<int>> ele2nodesBT_d;
+    std::map<ELE_TYPE, mdvector_gpu<char>> fpt2gfpt_slotBT_d;
     mdvector_gpu<char> gfpt2bnd_d;
     mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
-    mdvector_gpu<int> ele2nodes_d;
 #ifdef _MPI
   std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif

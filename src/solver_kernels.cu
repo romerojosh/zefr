@@ -843,7 +843,7 @@ double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
 template <unsigned int nDims>
 __global__
 void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> waveSp_gfpts, const mdvector_gpu<double> diffCo_gfpts,
-    const mdvector_gpu<double> dA, const mdvector_gpu<int> fpt2gfpt, const mdvector_gpu<int> fpt2gfpt_slot, const mdvector_gpu<double> weights_fpts,
+    const mdvector_gpu<double> dA, const mdvector_gpu<int> fpt2gfpt, const mdvector_gpu<char> fpt2gfpt_slot, const mdvector_gpu<double> weights_fpts,
     const mdvector_gpu<double> vol, const mdvector_gpu<double> h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, int CFL_type,
     unsigned int nFpts, unsigned int nEles, bool overset = false, const int* iblank = NULL)
 {
@@ -914,7 +914,7 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
 }
 
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, mdvector_gpu<double> &diffCo_gfpts,
-    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<int> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
+    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
     mdvector_gpu<double> &h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, unsigned int dt_type, unsigned int CFL_type,
     unsigned int nFpts, unsigned int nEles, unsigned int nDims, _mpi_comm comm_in, bool overset,
     int* iblank)

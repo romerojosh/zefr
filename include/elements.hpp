@@ -207,6 +207,7 @@ class Elements
     void compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
     void compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void add_source(unsigned int stage, double flow_time, unsigned int startEle, unsigned int endEle);
 
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void compute_F(unsigned int startEle, unsigned int endEle);

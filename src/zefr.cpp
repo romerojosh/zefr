@@ -362,7 +362,7 @@ void Zefr::do_n_steps(int n)
 
 void Zefr::extrapolate_u(void)
 {
-  solver->eles->extrapolate_U(0, solver->eles->nEles);
+  solver->elesObjs[0]->extrapolate_U(0, solver->elesObjs[0]->nEles);
 }
 
 void Zefr::write_residual(void)
@@ -404,6 +404,7 @@ void Zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank
                               int*& overNodes, int& nCellTypes, int &nvert_cell,
                               int &nCells_type, int*& c2v)
 {
+  auto etype = elesObjs[0]->etype;
   btag = myGrid;
   nnodes = geo->nNodes;
   xyz = geo->coord_nodes.data();
@@ -413,9 +414,9 @@ void Zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank
   wallNodes = geo->wallNodes.data();
   overNodes = geo->overNodes.data();
   nCellTypes = 1;
-  nvert_cell = geo->nNodesPerEle;
+  nvert_cell = geo->nNodesPerEleBT[etype];
   nCells_type = geo->nEles;
-  c2v = (int *)&geo->ele2nodes(0,0);
+  c2v = (int *)&geo->ele2nodesBT[etype](0,0);
 }
 
 void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
@@ -424,8 +425,10 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
                               int &nOver, int*& overFaces, int &nMpiFaces, int*& mpiFaces, int*& procR,
                               int*& faceIdR)
 {
+  auto etype = elesObjs[0]->etype;
+
   nFaceTypes = 1;
-  nvert_face = geo->nNodesPerFace;
+  nvert_face = geo->nNodesPerFaceBT[etype];
   nFaces_type = geo->nFaces;
   f2v = (int *)geo->face2nodes.data();
   f2c = geo->face2eles.data();
@@ -442,17 +445,17 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
 
 double Zefr::get_u_spt(int ele, int spt, int var)
 {
-  return solver->eles->U_spts(spt, ele, var);
+  return solver->elesObjs[0]->U_spts(spt, ele, var);
 }
 
 double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
 {
-  return solver->eles->dU_spts(spt, ele, var, dim);
+  return solver->elesObjs[0]->dU_spts(spt, ele, var, dim);
 }
 
 double *Zefr::get_u_spts(void)
 {
-  return solver->eles->U_spts.data();
+  return solver->elesObjs[0]->U_spts.data();
 }
 
 double *Zefr::get_u_fpts(void)
@@ -462,7 +465,7 @@ double *Zefr::get_u_fpts(void)
 
 void Zefr::get_nodes_per_cell(int &nNodes)
 {
-  nNodes = (int)solver->eles->nSpts;
+  nNodes = (int)solver->elesObjs[0]->nSpts;
 }
 
 void Zefr::get_nodes_per_face(int& nNodes)
@@ -472,7 +475,7 @@ void Zefr::get_nodes_per_face(int& nNodes)
 
 void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 {
-  nNodes = (int)solver->eles->nSpts;
+  nNodes = (int)solver->elesObjs[0]->nSpts;
 
   for (int spt = 0; spt < nNodes; spt++)
     for (int dim = 0; dim < geo->nDims; dim++)
@@ -491,7 +494,7 @@ void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
-  passFlag = solver->eles->getRefLoc(cellID,xyz,rst);
+  passFlag = solver->elesObjs[0]->getRefLoc(cellID,xyz,rst);
 }
 
 void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
@@ -499,7 +502,7 @@ void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
 {
   /* NOTE: inode is not used, and cellID is irrelevant when all cells are
    * identical (tensor-product, one polynomial order) */
-  solver->eles->get_interp_weights(rst,weights,nweights,buffsize);
+  solver->elesObjs[0]->get_interp_weights(rst,weights,nweights,buffsize);
 }
 
 double& Zefr::get_u_fpt(int faceID, int fpt, int var)
@@ -531,9 +534,9 @@ void Zefr::donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
 {
 #ifdef _GPU
   if (gradFlag == 0)
-    solver->eles->donor_u_from_device(donorIDs, nDonors);
+    solver->elesObjs[0]->donor_u_from_device(donorIDs, nDonors);
   else
-    solver->eles->donor_grad_from_device(donorIDs, nDonors);
+    solver->elesObjs[0]->donor_grad_from_device(donorIDs, nDonors);
 
   check_error();
 #endif
