@@ -2365,7 +2365,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     f << "<PPointData>" << std::endl;
 
     std::vector<std::string> var;
-    if (input->equation == AdvDiff || input->equation == Burgers)
+    if (input->equation == AdvDiff)
     {
       var = {"u"};
     }
@@ -2482,7 +2482,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<PointData>" << std::endl;
 
   std::vector<std::string> var;
-  if (input->equation == AdvDiff || input->equation == Burgers)
+  if (input->equation == AdvDiff)
   {
     var = {"u"};
   }
@@ -3049,7 +3049,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
 
     f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
     f << "<PPointData>" << std::endl;
-    if (input->equation == AdvDiff || input->equation == Burgers)
+    if (input->equation == AdvDiff)
     {
       f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
       f << std::endl;
@@ -3285,7 +3285,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
   /* Write solution information */
   f << "<PointData>" << std::endl;
 
-  if (input->equation == AdvDiff || input->equation == Burgers)
+  if (input->equation == AdvDiff)
   {
     f << "<DataArray type=\"Float32\" Name=\"u\" ";
     f << "format=\"ascii\">"<< std::endl;
@@ -3517,7 +3517,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 
       f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
       f << "<PPointData>" << std::endl;
-      if (input->equation == AdvDiff || input->equation == Burgers)
+      if (input->equation == AdvDiff)
       {
         f << "<PDataArray type=\"Float32\" Name=\"u\" format=\"ascii\"/>";
         f << std::endl;
@@ -3748,7 +3748,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     /* Write solution information */
     f << "<PointData>" << std::endl;
 
-    if (input->equation == AdvDiff || input->equation == Burgers)
+    if (input->equation == AdvDiff)
     {
       f << "<DataArray type=\"Float32\" Name=\"u\" ";
       f << "format=\"ascii\">"<< std::endl;

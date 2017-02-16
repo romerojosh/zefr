@@ -59,8 +59,6 @@ class Quads: public Elements
     void setup_PMG(int pro_order, int res_order);
     void setup_ppt_connectivity();
 
-    /* Routines for implicit method */
-    void transform_dFdU();
     double calc_d_nodal_basis_fr(unsigned int spt, const std::vector<double>& loc, unsigned int dim);
 
 };

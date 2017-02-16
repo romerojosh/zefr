@@ -25,7 +25,7 @@ __device__
 double compute_source_term_dev(double x, double y, double z, double t, unsigned int var, unsigned int nDims, unsigned int equation)
 {
   double val = 0.;
-  if (equation == AdvDiff || equation == Burgers)
+  if (equation == AdvDiff)
   {
     if (nDims == 2)
     {

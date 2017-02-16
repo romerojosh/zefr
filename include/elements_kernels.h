@@ -35,46 +35,6 @@ void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int startEle, 
     unsigned int endEle, unsigned int dim);
 
-/* Element flux derivative kernel wrappers (Implicit Method) */
-void compute_dFdUconv_spts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
-    mdvector_gpu<double> &AdvDiff_A);
-
-void compute_dFdUconv_spts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
-    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles, 
-    unsigned int nDims);
-
-void compute_dFdUconv_spts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv_spts, 
-    mdvector_gpu<double> &U_spts, unsigned int nSpts, unsigned int nEles,
-    unsigned int nDims, double gamma);
-
-void add_scaled_oppD_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
-    mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
-    unsigned int nDims, unsigned int startEle, unsigned int endEle);
-
-void add_scaled_oppDiv_wrapper(mdvector_gpu<double> &LHS_tempSF, mdvector_gpu<double> &oppDiv_fpts, 
-    mdvector_gpu<double> &C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nEles);
-
-void add_scaled_oppDiv_times_oppE_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, mdvector_gpu<double> oppE,
-    mdvector_gpu<double> C, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nEles, unsigned int startEle, unsigned int endEle);
-
-void finalize_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
-    unsigned int dt_type, unsigned int startEle, unsigned int endEle);
-
-/* Element transformation kernel wrappers (Implicit Method) */
-void transform_dFdU_quad_wrapper(mdvector_gpu<double> &dFdU_spts, 
-    mdvector_gpu<double> &jaco_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int nDims,
-    unsigned int equation);
-
-void transform_dFdU_hexa_wrapper(mdvector_gpu<double> &dFdU_spts, 
-    mdvector_gpu<double> &inv_jaco_spts, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int nDims,
-    unsigned int equation);
-
 void transform_gradF_quad_wrapper(mdvector_gpu<double> &divF_spts,
     mdvector_gpu<double> &dF_spts, mdvector_gpu<double> &jaco_spts,
     mdvector_gpu<double> &grid_vel_spts, mdvector_gpu<double> &dU_spts,

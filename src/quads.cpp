@@ -75,7 +75,7 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
   nFpts = nSpts1D * nFaces;
   nPpts = nSpts;
   
-  if (input->equation == AdvDiff || input->equation == Burgers)
+  if (input->equation == AdvDiff)
   {
     nVars = 1;
   }
@@ -517,39 +517,6 @@ void Quads::setup_ppt_connectivity()
     for (unsigned int node = 0; node < 4; node ++)
       nd[node] += nSubelements1D + 1;
   }
-}
-
-void Quads::transform_dFdU()
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(3)
-  for (unsigned int nj = 0; nj < nVars; nj++)
-  {
-    for (unsigned int ni = 0; ni < nVars; ni++)
-    {
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          double dFdUtemp = dFdU_spts(spt, ele, ni, nj, 0);
-
-          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * jaco_spts(spt, ele, 1, 1) -
-                                           dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(spt, ele, 0, 1);
-          dFdU_spts(spt, ele, ni, nj, 1) = dFdU_spts(spt, ele, ni, nj, 1) * jaco_spts(spt, ele, 0, 0) -
-                                           dFdUtemp * jaco_spts(spt, ele, 1, 0);
-        }
-      }
-    }
-  }
-#endif
-
-#ifdef _GPU
-  transform_dFdU_quad_wrapper(dFdU_spts_d, jaco_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation);
-  check_error();
-#endif
 }
 
 mdvector<double> Quads::calc_shape(const std::vector<double> &loc)

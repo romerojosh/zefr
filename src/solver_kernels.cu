@@ -365,78 +365,66 @@ void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, co
   cublasDgemvBatched_custom<<<blocks, threads>>>(M, N, alpha, Aarray, lda, xarray, incx, beta, yarray, incy, batchCount);
 }
 
-template <unsigned int nVars>
+template<unsigned int nVars, unsigned int nDims>
 __global__
-void dFcdU_from_faces(mdvector_gpu<double> dFcdU_gfpts, mdvector_gpu<double> dFcdU_fpts, mdvector_gpu<int> fpt2gfpt, 
-    mdvector_gpu<char> fpt2gfpt_slot, mdvector_gpu<char> gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    unsigned int nEles, unsigned int nFpts)
+void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int equation, 
+    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle,
+    bool overset = false, const int* iblank = NULL)
 {
-  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
 
-  if (fpt >= nFpts || ele >= nEles)
+  if (spt >= nSpts || ele >= endEle)
     return;
 
-  int gfpt = fpt2gfpt(fpt,ele);
+  if (overset)
+    if (iblank[ele] != 1)
+      return;
 
-  int slot = fpt2gfpt_slot(fpt,ele);
-  int notslot = 1;
-  if (slot == 1)
+  double x = coord_spts(spt, ele, 0);
+  double y = coord_spts(spt, ele, 1);
+  double z = 0;
+  if (nDims == 3)
+    z = coord_spts(spt, ele, 2);
+
+  double jaco_det = jaco_det_spts(spt, ele);
+
+  for (unsigned int n = 0; n < nVars; n++)
   {
-    notslot = 0;
+    divF_spts(spt, ele, n, stage) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
   }
+}
 
-  /* Add dFcdU on non-periodic boundaries */
-  if (gfpt >= (int)nGfpts_int && gfpt < (int)(nGfpts_int + nGfpts_bnd))
+void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle, bool overset,
+    int* iblank)
+{
+  unsigned int threads = 128;
+  unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
+
+  if (nDims == 2)
   {
-    unsigned int bnd_id = gfpt2bnd(gfpt - nGfpts_int);
-    if (bnd_id != PERIODIC)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++) 
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++) 
-        {
-          dFcdU_fpts(fpt, ele, ni, nj, 0) = dFcdU_gfpts(gfpt, ni, nj, slot, slot) + 
-                                            dFcdU_gfpts(gfpt, ni, nj, notslot, slot);
-        }
-      }
-    }
+    if (equation == AdvDiff)
+      add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage, startEle, endEle);
+    else
+      add_source<4, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage, startEle, endEle, overset, iblank);
   }
   else
   {
-    for (unsigned int nj = 0; nj < nVars; nj++) 
-    {
-      for (unsigned int ni = 0; ni < nVars; ni++) 
-      {
-        dFcdU_fpts(fpt, ele, ni, nj, 0) = dFcdU_gfpts(gfpt, ni, nj, slot, slot);
-        dFcdU_fpts(fpt, ele, ni, nj, 1) = dFcdU_gfpts(gfpt, ni, nj, notslot, slot);
-      }
-    }
-  }
-}
-
-void dFcdU_from_faces_wrapper(mdvector_gpu<double> &dFcdU_gfpts, mdvector_gpu<double> &dFcdU_fpts, 
-    mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<char> &gfpt2bnd, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    unsigned int nVars, unsigned int nEles, unsigned int nFpts, unsigned int nDims, unsigned int equation)
-{
-  unsigned int threads = 128;
-  unsigned int blocks = ((nFpts * nEles) + threads - 1)/ threads;
-
-  if (equation == AdvDiff || equation == Burgers)
-  {
-    dFcdU_from_faces<1><<<blocks, threads>>>(dFcdU_gfpts, dFcdU_fpts, fpt2gfpt, fpt2gfpt_slot, gfpt2bnd,
-        nGfpts_int, nGfpts_bnd, nEles, nFpts);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      dFcdU_from_faces<4><<<blocks, threads>>>(dFcdU_gfpts, dFcdU_fpts, fpt2gfpt, fpt2gfpt_slot, gfpt2bnd,
-          nGfpts_int, nGfpts_bnd, nEles, nFpts);
+    if (equation == AdvDiff)
+      add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage, startEle, endEle);
     else
-      dFcdU_from_faces<5><<<blocks, threads>>>(dFcdU_gfpts, dFcdU_fpts, fpt2gfpt, fpt2gfpt_slot, gfpt2bnd,
-          nGfpts_int, nGfpts_bnd, nEles, nFpts);
+      add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+          flow_time, stage, startEle, endEle, overset, iblank);
   }
 }
+
+
 
 template <unsigned int nVars>
 __global__
@@ -498,7 +486,7 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
   unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff || equation == Burgers)
+  if (equation == AdvDiff)
   {
       RK_update<1><<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, overset, iblank);
@@ -576,7 +564,7 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
   unsigned int threads = 128;
   unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
 
-  if (equation == AdvDiff || equation == Burgers)
+  if (equation == AdvDiff)
   {
       RK_update_source<1><<<blocks, threads>>>(U_spts, U_ini, divF, source, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, stage, nStages, last_stage, overset, iblank);
@@ -951,64 +939,6 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
   }
 }
 
-template<unsigned int nVars, unsigned int nDims>
-__global__
-void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> coord_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int equation, 
-    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle,
-    bool overset = false, const int* iblank = NULL)
-{
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
-
-  if (spt >= nSpts || ele >= endEle)
-    return;
-
-  if (overset)
-    if (iblank[ele] != 1)
-      return;
-
-  double x = coord_spts(spt, ele, 0);
-  double y = coord_spts(spt, ele, 1);
-  double z = 0;
-  if (nDims == 3)
-    z = coord_spts(spt, ele, 2);
-
-  double jaco_det = jaco_det_spts(spt, ele);
-
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    divF_spts(spt, ele, n, stage) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
-  }
-}
-
-void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
-    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle, bool overset,
-    int* iblank)
-{
-  unsigned int threads = 128;
-  unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
-
-  if (nDims == 2)
-  {
-    if (equation == AdvDiff || equation == Burgers)
-      add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle);
-    else
-      add_source<4, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle, overset, iblank);
-  }
-  else
-  {
-    if (equation == AdvDiff || equation == Burgers)
-      add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle);
-    else
-      add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle, overset, iblank);
-  }
-}
 
 __global__
 void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 

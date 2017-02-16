@@ -234,10 +234,6 @@ class Elements
 #ifdef _GPU
     void compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEle, unsigned int endEle, unsigned int color = 1);
 #endif
-    void compute_dFdUconv();
-    void compute_dFdUvisc();
-    void compute_dFddUvisc();
-    virtual void transform_dFdU() = 0;
 
     /* Polynomial squeeze methods */
     void compute_Uavg();

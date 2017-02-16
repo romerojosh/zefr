@@ -22,19 +22,6 @@
 
 #include "mdvector_gpu.h"
 
-/* Face flux derivative kernel wrappers (Implicit Method) */
-void compute_dFdUconv_fpts_AdvDiff_wrapper(mdvector_gpu<double> &dFdUconv, 
-    unsigned int nFpts, unsigned int nDims, mdvector_gpu<double> &AdvDiff_A, 
-    unsigned int startFpt, unsigned int endFpt);
-
-void compute_dFdUconv_fpts_Burgers_wrapper(mdvector_gpu<double> &dFdUconv, 
-    mdview_gpu<double> &U, unsigned int nFpts, unsigned int nDims,
-    unsigned int startFpt, unsigned int endFpt);
-
-void compute_dFdUconv_fpts_EulerNS_wrapper(mdvector_gpu<double> &dFdUconv, 
-    mdview_gpu<double> &U,unsigned int nFpts, unsigned int nDims, double gamma,
-    unsigned int startFpt, unsigned int endFpt);
-
 /* Face boundary conditions kernel wrappers */
 void apply_bcs_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, unsigned int nFpts, unsigned int nGfpts_int, 
     unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, double rho_fs, 
@@ -78,9 +65,6 @@ void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv
     mdvector_gpu<char> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
 
-/* Face transformation kernel wrappers (Implicit Method) */
-void transform_dFcdU_faces_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dA, 
-    unsigned int nFpts, unsigned int nVars);
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe, mdview_gpu<double> &U,
     mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,

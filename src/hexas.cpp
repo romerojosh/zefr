@@ -70,7 +70,7 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   nFpts = (nSpts1D * nSpts1D) * nFaces;
   nPpts = nSpts;
   
-  if (input->equation == AdvDiff || input->equation == Burgers)
+  if (input->equation == AdvDiff)
   {
     nVars = 1;
   }
@@ -645,47 +645,6 @@ void Hexas::setup_ppt_connectivity()
     for (unsigned int node = 0; node < 8; node ++)
       nd[node] += (nSubelements1D + 1);
   }
-}
-
-void Hexas::transform_dFdU()
-{
-#ifdef _CPU
-#pragma omp parallel for collapse(4)
-  for (unsigned int nj = 0; nj < nVars; nj++)
-  {
-    for (unsigned int ni = 0; ni < nVars; ni++)
-    {
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        for (unsigned int spt = 0; spt < nSpts; spt++)
-        {
-          double dFdUtemp0 = dFdU_spts(spt, ele, ni, nj, 0);
-          double dFdUtemp1 = dFdU_spts(spt, ele, ni, nj, 1);
-
-          dFdU_spts(spt, ele, ni, nj, 0) = dFdU_spts(spt, ele, ni, nj, 0) * inv_jaco_spts(spt, ele, 0, 0) +
-                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(spt, ele, 0, 1) +
-                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(spt, ele, 0, 2);
-
-          dFdU_spts(spt, ele, ni, nj, 1) = dFdUtemp0 * inv_jaco_spts(spt, ele, 1, 0) +
-                                           dFdU_spts(spt, ele, ni, nj, 1) * inv_jaco_spts(spt, ele, 1, 1) +
-                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(spt, ele, 1, 2);
-                                    
-          dFdU_spts(spt, ele, ni, nj, 2) = dFdUtemp0 * inv_jaco_spts(spt, ele, 2, 0) +
-                                           dFdUtemp1 * inv_jaco_spts(spt, ele, 2, 1) +
-                                           dFdU_spts(spt, ele, ni, nj, 2) * inv_jaco_spts(spt, ele, 2, 2);
-        }
-      }
-    }
-  }
-
-#endif
-
-#ifdef _GPU
-  transform_dFdU_hexa_wrapper(dFdU_spts_d, inv_jaco_spts_d, nSpts, nEles, nVars,
-      nDims, input->equation);
-  check_error();
-
-#endif
 }
 
 mdvector<double> Hexas::calc_shape(const std::vector<double> &loc)
