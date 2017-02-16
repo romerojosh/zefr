@@ -190,6 +190,7 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
     }
 
     case CHAR: /* Characteristic (from PyFR) */
+    case CHAR_P: /* Characteristic (prescribed) */
     {
       /* Compute wall normal velocities */
       double VnL = 0.0; double VnR = 0.0;
@@ -266,6 +267,12 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       {
         U(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
         U_ldg(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
+      }
+
+      /* Set Char (prescribed) */
+      if (bnd_id == CHAR_P)
+      {
+        rus_bias(fpt) = 1;
       }
 
       /* Set LDG bias */
@@ -900,6 +907,7 @@ void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvecto
     }
 
     case CHAR: /* Characteristic (from PyFR) */
+    case CHAR_P: /* Characteristic (prescribed) */
     {
 
       /* Compute wall normal velocities */
@@ -1960,7 +1968,7 @@ template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, 
     mdvector_gpu<double> dFcdU, mdvector_gpu<double> P, mdvector_gpu<double> norm_gfpts, 
-    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<char> LDG_bias,
+    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<char> rus_bias,
     double gamma, double rus_k, unsigned int startFpt, unsigned int endFpt)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -2003,7 +2011,7 @@ void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv,
     }
   }
 
-  if (LDG_bias(fpt) == 2)
+  if (rus_bias(fpt) == 2) /* Central */
   {
     for (unsigned int nj = 0; nj < nVars; nj++)
     {
@@ -2018,7 +2026,7 @@ void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv,
     }
     return;
   }
-  else if (LDG_bias(fpt) != 0)
+  else if (rus_bias(fpt) == 1) /* Set flux state */
   {
     for (unsigned int nj = 0; nj < nVars; nj++)
     {
@@ -2156,7 +2164,7 @@ void rusanov_dFcdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv,
 
 void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
     mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<char> &LDG_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
+    mdvector_gpu<char> &rus_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt)
 {
   unsigned int threads = 128;
@@ -2166,19 +2174,19 @@ void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv
   {
     if (nDims == 2)
       rusanov_dFcdU<1, 2, AdvDiff><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
-          waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
+          waveSp, rus_bias, gamma, rus_k, startFpt, endFpt);
     else
       rusanov_dFcdU<1, 3, AdvDiff><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
-          waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
+          waveSp, rus_bias, gamma, rus_k, startFpt, endFpt);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       rusanov_dFcdU<4, 2, EulerNS><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
-          waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
+          waveSp, rus_bias, gamma, rus_k, startFpt, endFpt);
     else
       rusanov_dFcdU<5, 3, EulerNS><<<blocks, threads>>>(U, dFdUconv, dFcdU, P, norm, 
-          waveSp, LDG_bias, gamma, rus_k, startFpt, endFpt);
+          waveSp, rus_bias, gamma, rus_k, startFpt, endFpt);
   }
 }
 

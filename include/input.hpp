@@ -79,6 +79,7 @@ enum meshType {
 enum BC_TYPE {
   NONE = 0,
   PERIODIC,
+  CHAR_P,
   CHAR,
   SUP_IN,
   SUP_OUT,
