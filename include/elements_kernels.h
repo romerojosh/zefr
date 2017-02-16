@@ -28,12 +28,11 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
     mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
     unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
-    bool grad_via_div, unsigned int startEle, unsigned int endEle, bool overset = false, int* iblank = NULL,
+    bool grad_via_div, bool overset = false, int* iblank = NULL,
     bool motion = false);
 
 void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& inv_jaco_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int startEle, 
-    unsigned int endEle, unsigned int dim);
+    unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim);
 
 void transform_gradF_quad_wrapper(mdvector_gpu<double> &divF_spts,
     mdvector_gpu<double> &dF_spts, mdvector_gpu<double> &jaco_spts,

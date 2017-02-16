@@ -197,27 +197,27 @@ class Elements
     virtual void setup_ppt_connectivity() = 0;
     void initialize_U();
 
-    void extrapolate_U(unsigned int startEle, unsigned int endEle);
-    void extrapolate_dU(unsigned int startEle, unsigned int endEle);
-    void compute_dU(unsigned int startEle, unsigned int endEle);
-    void compute_dU_spts(unsigned int startEle, unsigned int endEle);
-    void compute_dU_fpts(unsigned int startEle, unsigned int endEle);
-    void compute_dU_spts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim);
-    void compute_dU_fpts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim);
-    void compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle);
-    void compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
-    void compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle);
-    void add_source(unsigned int stage, double flow_time, unsigned int startEle, unsigned int endEle);
+    void extrapolate_U();
+    void extrapolate_dU();
+    void compute_dU();
+    void compute_dU_spts();
+    void compute_dU_fpts();
+    void compute_dU_spts_via_divF(unsigned int dim);
+    void compute_dU_fpts_via_divF(unsigned int dim);
+    void compute_divF(unsigned int stage);
+    void compute_divF_spts(unsigned int stage);
+    void compute_divF_fpts(unsigned int stage);
+    void add_source(unsigned int stage, double flow_time);
 
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
-    void compute_F(unsigned int startEle, unsigned int endEle);
+    void compute_F();
 
-    void compute_F(unsigned int startEle, unsigned int endEle);
+    void compute_F();
 
     template<unsigned int nVars, unsigned int nDims>
-    void compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim);
+    void compute_unit_advF(unsigned int dim);
 
-    void compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim);
+    void compute_unit_advF(unsigned int dim);
 
     //! Calculate geometric transforms
     void calc_transforms(std::shared_ptr<Faces> faces);
@@ -258,15 +258,15 @@ class Elements
     void move(std::shared_ptr<Faces> faces);
     void update_point_coords(std::shared_ptr<Faces> faces);
     void update_grid_velocities(std::shared_ptr<Faces> faces);
-    void compute_gradF_spts(unsigned int startEle, unsigned int endEle);
-    void transform_gradF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
-    void compute_dU0(unsigned int startEle, unsigned int endEle);
+    void compute_gradF_spts();
+    void transform_gradF_spts(unsigned int stage);
+    void compute_dU0();
 
     //! Extrapolated discontinuous normal flux to get delta-Fn at fpts
-    void extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::shared_ptr<Faces> faces);
+    void extrapolate_Fn(std::shared_ptr<Faces> faces);
 
     //! 'Standard' (non-DFR) correction procedure
-    void correct_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle);
+    void correct_divF_spts(unsigned int stage);
     void get_grid_velocity_ppts(void);
     void update_plot_point_coords();
 };

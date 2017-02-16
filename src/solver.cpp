@@ -783,18 +783,11 @@ void FRSolver::solver_data_to_device()
 void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 {
   unsigned int startFpt = 0; unsigned int endFpt = geo.nGfpts;
-  unsigned int startEle = 0;
 
 #ifdef _MPI
   endFpt = geo.nGfpts_int + geo.nGfpts_bnd;
   unsigned int startFptMpi = endFpt;
 #endif
-
-  /* If using coloring, modify range to extrapolate data from previously updated colors */
-  //if (color && geo.nColors > 1)
-  //{
-  //  startEle = geo.ele_color_range[prev_color - 1]; endEle = geo.ele_color_range[prev_color];
-  //}
 
 #ifdef _BUILD_LIB
   if (input->overset)
@@ -806,7 +799,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   /* Extrapolate solution to flux points */
   for (auto e : elesObjs)
-    e->extrapolate_U(startEle, e->nEles);
+    e->extrapolate_U();
 
 
   /* If "squeeze" stabilization enabled, apply  it */
@@ -819,12 +812,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     }
   }
 
-  /* For coloring, modify range to sweep through current color */
-  //if (color && geo.nColors > 1)
-  //{
-  //  startEle = geo.ele_color_range[color - 1]; endEle = geo.ele_color_range[color];
-  //}
-
 #ifdef _MPI
   /* Commence sending U data to other processes */
   faces->send_U_data();
@@ -833,48 +820,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
 
-  /* If running inviscid, use this scheduling. */
-  if(!input->viscous)
-  {
-    for (auto e : elesObjs)
-    {
-      /* Compute flux at solution points */
-      e->compute_F(startEle, e->nEles);
-
-      /* Transform solution point fluxes from physical to reference space */
-      if (input->motion)
-      {
-        e->compute_gradF_spts(startEle, e->nEles);
-        e->compute_dU0(startEle, e->nEles);
-      }
-    }
-
-    /* Compute parent space common flux at non-MPI flux points */
-    faces->compute_common_F(startFpt, endFpt);
-
-    /* Compute solution point contribution to divergence of flux */
-    if (input->motion)
-    {
-      for (auto e: elesObjs)
-        e->transform_gradF_spts(stage, startEle, e->nEles);
-    }
-    else
-    {
-      for (auto e: elesObjs)
-        e->compute_divF_spts(stage, startEle, e->nEles);
-    }
-
-#ifdef _MPI
-    /* Receive U data */
-    faces->recv_U_data();
-
-    /* Complete computation on remaning flux points. */
-    faces->compute_common_F(startFptMpi, geo.nGfpts);
-#endif
-  }
-
-  /* If running viscous, use this scheduling */
-  else
+  if (input->viscous)
   {
     // EXPERIMENTAL gradient computation from divergence
     if (input->grad_via_div)
@@ -890,19 +836,20 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
-      for (auto e : elesObjs)
+      for (unsigned int dim = 0; dim < geo.nDims; dim++)
       {
-        for (unsigned int dim = 0; dim < e->nDims; dim++)
+        // Compute unit advection flux at solution points with wavespeed along dim
+        for (auto e : elesObjs)
+          e->compute_unit_advF(dim); 
+
+        // Convert common U to common normal advection flux
+        faces->common_U_to_F(startFpt, geo.nGfpts, dim);
+
+        // Compute physical gradient (times jacobian determinant) along via divergence of F
+        for (auto e : elesObjs)
         {
-          // Compute unit advection flux at solution points with wavespeed along dim
-          e->compute_unit_advF(startEle, e->nEles, dim); 
-
-          // Convert common U to common normal advection flux
-          faces->common_U_to_F(startFpt, geo.nGfpts, dim);
-
-          // Compute physical gradient (times jacobian determinant) along via divergence of F
-          e->compute_dU_spts_via_divF(startEle, e->nEles, dim);
-          e->compute_dU_fpts_via_divF(startEle, e->nEles, dim);
+          e->compute_dU_spts_via_divF(dim);
+          e->compute_dU_fpts_via_divF(dim);
         }
       }
     }
@@ -913,7 +860,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
       /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
       for (auto e : elesObjs)
-        e->compute_dU_spts(startEle, e->nEles);
+        e->compute_dU_spts();
 
 #ifdef _MPI
       /* Receieve U data */
@@ -925,24 +872,27 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
       /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
       for (auto e : elesObjs)
-        e->compute_dU_fpts(startEle, e->nEles);
+        e->compute_dU_fpts();
 
-      /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
-      if (input->motion)
-      {
-        for (auto e : elesObjs)
-          e->compute_dU0(startEle, e->nEles);
-      }
     }
+  }
 
+  /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
+  if (input->motion)
+  {
     for (auto e : elesObjs)
-    {
-      /* Compute flux at solution points */
-      e->compute_F(startEle, e->nEles);
+      e->compute_dU0();
+  }
 
-      /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
-      e->extrapolate_dU(startEle, e->nEles);
-    }
+  /* Compute flux at solution points */
+  for (auto e : elesObjs)
+    e->compute_F();
+
+  if (input->viscous)
+  {
+    /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
+    for (auto e : elesObjs)
+      e->extrapolate_dU();
 
 #ifdef _MPI
     /* Commence sending gradient data to other processes */
@@ -960,57 +910,64 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
+  }
+  
+  if (input->motion)
+  {
+    /* Use Liang-Miyaji Chain-Rule form to compute divF */
+    for (auto e : elesObjs)
+      e->compute_gradF_spts();
 
-    
-    if (input->motion)
-    {
-      /* Use Liang-Miyaji Chain-Rule form to compute divF */
-      for (auto e : elesObjs)
-        e->compute_gradF_spts(startEle, e->nEles);
+    for (auto e : elesObjs)
+      e->transform_gradF_spts(stage);
+  }
+  else
+  {
+    /* Compute solution point contribution to divergence of flux */
+    for (auto e : elesObjs)
+      e->compute_divF_spts(stage);
+  }
 
-      for (auto e : elesObjs)
-        e->transform_gradF_spts(stage, startEle, e->nEles);
-    }
-    else
-    {
-      /* Compute solution point contribution to divergence of flux */
-      for (auto e : elesObjs)
-        e->compute_divF_spts(stage, startEle, e->nEles);
-    }
-
-    /* Compute common interface flux at non-MPI flux points */
-    faces->compute_common_F(startFpt, endFpt);
+  /* Compute common interface flux at non-MPI flux points */
+  faces->compute_common_F(startFpt, endFpt);
 
 #ifdef _MPI
+  if (!input->viscous)
+  {
+    /* Receive solution data */
+    faces->recv_U_data();
+  }
+  else
+  {
     /* Receive gradient data */
     faces->recv_dU_data();
-
-    /* Complete computation of fluxes */
-    faces->compute_common_F(startFptMpi, geo.nGfpts);
-#endif
   }
+
+  /* Complete computation of fluxes */
+  faces->compute_common_F(startFptMpi, geo.nGfpts);
+#endif
 
   if (input->motion) // and input->gridID == 0)
   {
     /* Add standard FR correction to flux divergence (requires extrapolation) */
     for (auto e : elesObjs)
     {
-      e->extrapolate_Fn(startEle, e->nEles, faces);
-      e->correct_divF_spts(stage, startEle, e->nEles);
+      e->extrapolate_Fn(faces);
+      e->correct_divF_spts(stage);
     }
   }
   else
   {
     /* Compute flux point contribution to divergence of flux */
     for (auto e : elesObjs)
-      e->compute_divF_fpts(stage, startEle, e->nEles);
+      e->compute_divF_fpts(stage);
   }
 
   /* Add source term (if required) */
   if (input->source)
   {
     for (auto e : elesObjs)
-      e->add_source(stage, flow_time, startEle, e->nEles);
+      e->add_source(stage, flow_time);
   }
 
 }

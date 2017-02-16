@@ -986,35 +986,29 @@ void Elements::setup_filter()
 
 }
 
-void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
+void Elements::extrapolate_U()
 {
 #ifdef _CPU
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto &A = oppE(0,0);
-    auto &B = U_spts(0, startEle, var);
-    auto &C = U_fpts(0, startEle, var);
+  auto &A = oppE(0,0);
+  auto &B = U_spts(0, 0, 0);
+  auto &C = U_fpts(0, 0, 0);
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-          nSpts, 1.0, &A, oppE.ldim(), &B, U_spts.ldim(), 0.0, &C, U_fpts.ldim());
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+        nSpts, 1.0, &A, oppE.ldim(), &B, U_spts.ldim(), 0.0, &C, U_fpts.ldim());
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-          nSpts, 1.0, &A, oppE.ldim(), &B, U_spts.ldim(), 0.0, &C, U_fpts.ldim());
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+        nSpts, 1.0, &A, oppE.ldim(), &B, U_spts.ldim(), 0.0, &C, U_fpts.ldim());
 #endif
-  }
 
 #endif
 
 #ifdef _GPU
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto *A = oppE_d.data();
-    auto *B = U_spts_d.data() + startEle * U_spts_d.ldim() + var * (U_spts_d.ldim() * nEles);
-    auto *C = U_fpts_d.data() + startEle * U_fpts_d.ldim() + var * (U_fpts_d.ldim() * nEles);
-    cublasDGEMM_wrapper(nFpts, endEle - startEle, nSpts, 1.0,
-        A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim());
-  }
+  auto *A = oppE_d.data();
+  auto *B = U_spts_d.data();
+  auto *C = U_fpts_d.data();
+  cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0,
+      A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim());
 
   event_record(0, 0); // record event for MPI comms
 
@@ -1023,25 +1017,22 @@ void Elements::extrapolate_U(unsigned int startEle, unsigned int endEle)
 
 }
 
-void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
+void Elements::extrapolate_dU()
 {
 #ifdef _CPU
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      auto &A = oppE(0,0);
-      auto &B = dU_spts(0, startEle, var, dim);
-      auto &C = dU_fpts(0, startEle, var, dim);
+    auto &A = oppE(0,0);
+    auto &B = dU_spts(0, 0, 0, dim);
+    auto &C = dU_fpts(0, 0, 0, dim);
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
-          endEle - startEle, nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, 
+        nEles * nVars, nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
-          nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+        nSpts, 1.0, &A, oppE.ldim(), &B, dU_spts.ldim(), 0.0, &C, dU_fpts.ldim());
 #endif
-    }
   }
 #endif
 
@@ -1049,8 +1040,8 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     auto *A = oppE_d.get_ptr(0,0);
-    auto *B = dU_spts_d.get_ptr(0, startEle, 0, dim);
-    auto *C = dU_fpts_d.get_ptr(0, startEle, 0, dim);
+    auto *B = dU_spts_d.get_ptr(0, 0, 0, dim);
+    auto *C = dU_fpts_d.get_ptr(0, 0, 0, dim);
 
     cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0, A, oppE_d.ldim(), 
         B, dU_spts_d.ldim(), 0.0, C, dU_fpts_d.ldim());
@@ -1061,7 +1052,7 @@ void Elements::extrapolate_dU(unsigned int startEle, unsigned int endEle)
 #endif
 }
 
-void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::shared_ptr<Faces> faces)
+void Elements::extrapolate_Fn(std::shared_ptr<Faces> faces)
 {
 #ifdef _CPU
   dFn_fpts = Fcomm;
@@ -1073,14 +1064,14 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
       for (unsigned int var = 0; var < nVars; var++)
       {
         auto &A = oppE(0, 0);
-        auto &B = F_spts(0, startEle, var, dim);
-        auto &C = tempF_fpts(0, startEle);
+        auto &B = F_spts(0, 0, var, dim);
+        auto &C = tempF_fpts(0, 0);
 
   #ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
   #else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), 0.0, &C, tempF_fpts.ldim());
   #endif
         for (unsigned int ele = 0; ele < nEles; ele++)
@@ -1104,14 +1095,14 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
       for (unsigned int var = 0; var < nVars; var++)
       {
         auto &A = oppE_Fn(0, 0, dim);
-        auto &B = F_spts(0, startEle, var, dim);
-        auto &C = dFn_fpts(0, startEle, var);
+        auto &B = F_spts(0, 0, var, dim);
+        auto &C = dFn_fpts(0, 0, var);
 
   #ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, dFn_fpts.ldim());
   #else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, endEle - startEle,
+        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles,
             nSpts, 1.0, &A, oppE.ldim(), &B, F_spts.ldim(), -1.0, &C, dFn_fpts.ldim());
   #endif
       }
@@ -1130,49 +1121,25 @@ void Elements::extrapolate_Fn(unsigned int startEle, unsigned int endEle, std::s
 #endif
 }
 
-void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
+void Elements::compute_dU_spts()
 {
 #ifdef _CPU
   /* Compute contribution to derivative from solution at solution points */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int var = 0; var < nVars; var++)
-      {
         auto &A = oppD(0, 0, dim);
-        auto &B = U_spts(0, startEle, var);
-        auto &C = dU_spts(0, startEle, var, dim);
+        auto &B = U_spts(0, 0, 0);
+        auto &C = dU_spts(0, 0, 0, dim);
 
 #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+            nEles * nVars, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
             0.0, &C, dU_spts.ldim());
 #else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
+            nEles * nVars, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
             0.0, &C, dU_spts.ldim());
 #endif
-      }
-    }
-
-    /* Compute contribution to derivative from common solution at flux points */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        auto &A = oppD_fpts(0, 0, dim);
-        auto &B = Ucomm(0, startEle, var);
-        auto &C = dU_spts(0, startEle, var, dim);
-
-#ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
-            1.0, &C, dU_spts.ldim());
-#else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
-            1.0, &C, dU_spts.ldim());
-#endif
-      }
     }
 
 #endif
@@ -1181,61 +1148,8 @@ void Elements::compute_dU(unsigned int startEle, unsigned int endEle)
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     auto *A = oppD_d.get_ptr(0, 0, dim);
-    auto *B = U_spts_d.get_ptr(0, startEle, 0);
-    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
-
-    /* Compute contribution to derivative from solution at solution points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0, A, oppD_d.ldim(), 
-        B, U_spts_d.ldim(), 0.0, C, dU_spts_d.ldim());
-
-    check_error();
-
-    A = oppD_fpts_d.get_ptr(0, 0, dim);
-    B = Ucomm_d.get_ptr(0, startEle, 0);
-    C = dU_spts_d.get_ptr(0, startEle, 0, dim);
-
-    /* Compute contribution to derivative from common solution at flux points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0, A, oppD_fpts_d.ldim(),
-        B, Ucomm_d.ldim(), 1.0, C , dU_spts_d.ldim());
-
-    check_error();
-  }
-#endif
-
-}
-
-void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-  /* Compute contribution to derivative from solution at solution points */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        auto &A = oppD(0, 0, dim);
-        auto &B = U_spts(0, startEle, var);
-        auto &C = dU_spts(0, startEle, var, dim);
-
-#ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
-            0.0, &C, dU_spts.ldim());
-#else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(), 
-            0.0, &C, dU_spts.ldim());
-#endif
-      }
-    }
-
-#endif
-
-#ifdef _GPU
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    auto *A = oppD_d.get_ptr(0, 0, dim);
-    auto *B = U_spts_d.get_ptr(0, startEle, 0);
-    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+    auto *B = U_spts_d.get_ptr(0, 0, 0);
+    auto *C = dU_spts_d.get_ptr(0, 0, 0, dim);
 
     /* Compute contribution to derivative from solution at solution points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0, A, oppD_d.ldim(), 
@@ -1247,28 +1161,25 @@ void Elements::compute_dU_spts(unsigned int startEle, unsigned int endEle)
 
 }
 
-void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
+void Elements::compute_dU_fpts()
 {
 #ifdef _CPU
     /* Compute contribution to derivative from common solution at flux points */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        auto &A = oppD_fpts(0, 0, dim);
-        auto &B = Ucomm(0, startEle, var);
-        auto &C = dU_spts(0, startEle, var, dim);
+      auto &A = oppD_fpts(0, 0, dim);
+      auto &B = Ucomm(0, 0, 0);
+      auto &C = dU_spts(0, 0, 0, dim);
 
 #ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
-            1.0, &C, dU_spts.ldim());
+      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+          1.0, &C, dU_spts.ldim());
 #else
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-            endEle - startEle, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
-            1.0, &C, dU_spts.ldim());
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+          nEles * nVars, nFpts, 1.0, &A, oppD_fpts.ldim(), &B, Ucomm.ldim(), 
+          1.0, &C, dU_spts.ldim());
 #endif
-      }
     }
 
 #endif
@@ -1277,8 +1188,8 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     auto *A = oppD_fpts_d.get_ptr(0, 0, dim);
-    auto *B = Ucomm_d.get_ptr(0, startEle, 0);
-    auto *C = dU_spts_d.get_ptr(0, startEle, 0, dim);
+    auto *B = Ucomm_d.get_ptr(0, 0, 0);
+    auto *C = dU_spts_d.get_ptr(0, 0, 0, dim);
 
     /* Compute contribution to derivative from common solution at flux points */
     cublasDGEMM_wrapper(nSpts, nEles * nVars, nFpts, 1.0,
@@ -1290,7 +1201,77 @@ void Elements::compute_dU_fpts(unsigned int startEle, unsigned int endEle)
 
 }
 
-void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
+void Elements::compute_divF_spts(unsigned int stage)
+{
+#ifdef _CPU
+  /* Compute contribution to divergence from flux at solution points */
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    double fac = (dim == 0) ? 0.0 : 1.0;
+
+    auto &A = oppD(0, 0, dim);
+    auto &B = F_spts(0, 0, 0, dim);
+    auto &C = divF_spts(0, 0, 0, stage);
+
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+        nEles * nVars, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+          nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+#endif
+  }
+#endif
+
+#ifdef _GPU
+  for (unsigned int dim = 0; dim < nDims; dim++)
+  {
+    double fac = (dim == 0) ? 0.0 : 1.0;
+
+    auto *A = oppD_d.get_ptr(0, 0, dim);
+    auto *B = F_spts_d.get_ptr(0, 0, 0, dim);
+    auto *C = divF_spts_d.get_ptr(0, 0, 0, stage);
+
+    /* Compute contribution to derivative from solution at solution points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
+        A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
+  }
+  check_error();
+#endif
+}
+
+void Elements::compute_divF_fpts(unsigned int stage)
+{
+#ifdef _CPU
+  /* Compute contribution to divergence from common flux at flux points */
+  auto &A = oppDiv_fpts(0, 0);
+  auto &B = Fcomm(0, 0, 0);
+  auto &C = divF_spts(0, 0, 0, stage);
+
+#ifdef _OMP
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+      nEles * nVars, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+#else
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+      nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+#endif
+#endif
+
+#ifdef _GPU
+  /* Compute contribution to derivative from common solution at flux points */
+  auto *A = oppDiv_fpts_d.get_ptr(0, 0);
+  auto *B = Fcomm_d.get_ptr(0, 0, 0);
+  auto *C = divF_spts_d.get_ptr(0, 0, 0, stage);
+
+  cublasDGEMM_wrapper(nSpts, nEles * nVars,  nFpts, 1.0,
+      A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
+
+  check_error();
+#endif
+}
+
+void Elements::compute_dU0()
 {
   /* If running a viscous simulation, use dU that was already computed
    * NOTE: the point is to keep a copy of dU wrt reference domain coords */
@@ -1315,16 +1296,16 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
     for (unsigned int var = 0; var < nVars; var++)
     {
       auto &A = oppD0(0, 0, dim);
-      auto &B = U_spts(0, startEle, var);
-      auto &C = dUr_spts(0, startEle, var, dim);
+      auto &B = U_spts(0, 0, var);
+      auto &C = dUr_spts(0, 0, var, dim);
 
 #ifdef _OMP
       omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
-                        endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(),
+                        nEles, nSpts, 1.0, &A, oppD.ldim(), &B, U_spts.ldim(),
                         0.0, &C, dU_spts.ldim());
 #else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
-                  endEle - startEle, nSpts, 1.0, &A, oppD0.ldim(), &B, U_spts.ldim(),
+                  nEles, nSpts, 1.0, &A, oppD0.ldim(), &B, U_spts.ldim(),
                   0.0, &C, dUr_spts.ldim());
 #endif
     }
@@ -1337,10 +1318,10 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
     for (unsigned int var = 0; var < nVars; var++)
     {
       auto *A = oppD0_d.get_ptr(0, 0, dim);
-      auto *B = U_spts_d.get_ptr(0, startEle, var);
-      auto *C = dUr_spts_d.get_ptr(0, startEle, var, dim);
+      auto *B = U_spts_d.get_ptr(0, 0, var);
+      auto *C = dUr_spts_d.get_ptr(0, 0, var, dim);
 
-      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0, A, oppD0_d.ldim(), B,
+      cublasDGEMM_wrapper(nSpts, nEles, nSpts, 1.0, A, oppD0_d.ldim(), B,
           U_spts_d.ldim(), 0.0, C, dUr_spts_d.ldim());
     }
   }
@@ -1348,85 +1329,10 @@ void Elements::compute_dU0(unsigned int startEle, unsigned int endEle)
 #endif
 }
 
-void Elements::compute_divF(unsigned int stage, unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-  /* Compute contribution to divergence from flux at solution points */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    double fac = (dim == 0) ? 0.0 : 1.0;
-
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      auto &A = oppD(0, 0, dim);
-      auto &B = F_spts(0, startEle, var, dim);
-      auto &C = divF_spts(0, startEle, var, stage);
-
-
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
-#else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-            nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
-#endif
-    }
-  }
-
-  /* Compute contribution to divergence from common flux at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto &A = oppDiv_fpts(0, 0);
-    auto &B = Fcomm(0, startEle, var);
-    auto &C = divF_spts(0, startEle, var, stage);
-
-#ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-        endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
-#else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
-#endif
-  }
-#endif
-
-#ifdef _GPU
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    double fac = (dim == 0) ? 0.0 : 1.0;
-
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      auto *A = oppD_d.get_ptr(0, 0, dim);
-      auto *B = F_spts_d.get_ptr(0, startEle, var, dim);
-      auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
-
-      /* Compute contribution to derivative from solution at solution points */
-      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
-          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim());
-    }
-  }
-
-  /* Compute contribution to derivative from common solution at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
-    auto *B = Fcomm_d.get_ptr(0, startEle, var);
-    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
-
-
-    cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
-        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim());
-  }
-
-  check_error();
-#endif
-}
-
-void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
+void Elements::compute_gradF_spts()
 {
   int m = nSpts;
-  int n = endEle - startEle;
+  int n = nEles;
   int k = nSpts;
 
 #ifdef _CPU
@@ -1438,8 +1344,8 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
       for (unsigned int var = 0; var < nVars; var++)
       {
         auto &A = oppD0(0, 0, dim2);
-        auto &B = F_spts(0, startEle, var, dim1);
-        auto &C = dF_spts(0, startEle, var, dim1, dim2);
+        auto &B = F_spts(0, 0, var, dim1);
+        auto &C = dF_spts(0, 0, var, dim1, dim2);
 
 #ifdef _OMP
         omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
@@ -1462,8 +1368,8 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
       for (unsigned int var = 0; var < nVars; var++)
       {
         auto *A = oppD0_d.get_ptr(0, 0, dim2);
-        auto *B = F_spts_d.get_ptr(0, startEle, var, dim1);
-        auto *C = dF_spts_d.get_ptr(0, startEle, var, dim1, dim2);
+        auto *B = F_spts_d.get_ptr(0, 0, var, dim1);
+        auto *C = dF_spts_d.get_ptr(0, 0, var, dim1, dim2);
 
         /* Compute contribution to derivative from solution at solution points */
         cublasDGEMM_wrapper(m, n, k, 1.0, A, oppD0_d.ldim(), B, F_spts_d.ldim(),
@@ -1475,7 +1381,7 @@ void Elements::compute_gradF_spts(unsigned int startEle, unsigned int endEle)
 #endif
 }
 
-void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
+void Elements::transform_gradF_spts(unsigned int stage)
 {
 #ifdef _CPU
   if (nDims == 2)
@@ -1483,7 +1389,7 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
 #pragma omp parallel for collapse(2)
     for (uint spt = 0; spt < nSpts; spt++)
     {
-      for (uint e = startEle; e < endEle; e++)
+      for (uint e = 0; e < nEles; e++)
       {
         double A = grid_vel_spts(spt,e,1)*jaco_spts(spt,e,0,1) - grid_vel_spts(spt,e,0)*jaco_spts(spt,e,1,1);
         double B = grid_vel_spts(spt,e,0)*jaco_spts(spt,e,1,0) - grid_vel_spts(spt,e,1)*jaco_spts(spt,e,0,0);
@@ -1500,7 +1406,7 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
 #pragma omp parallel for collapse(2)
     for (uint spt = 0; spt < nSpts; spt++)
     {
-      for (uint e = startEle; e < endEle; e++)
+      for (uint e = 0; e < nEles; e++)
       {
         for (uint k = 0; k < nVars; k++)
           divF_spts(spt,e,k,stage) = 0;
@@ -1545,95 +1451,14 @@ void Elements::transform_gradF_spts(unsigned int stage, unsigned int startEle, u
 #endif
 }
 
-void Elements::compute_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-  /* Compute contribution to divergence from flux at solution points */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    double fac = (dim == 0) ? 0.0 : 1.0;
 
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      auto &A = oppD(0, 0, dim);
-      auto &B = F_spts(0, startEle, var, dim);
-      auto &C = divF_spts(0, startEle, var, stage);
-
-
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
-#else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-            nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
-#endif
-    }
-  }
-#endif
-
-#ifdef _GPU
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    double fac = (dim == 0) ? 0.0 : 1.0;
-
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      auto *A = oppD_d.get_ptr(0, 0, dim);
-      auto *B = F_spts_d.get_ptr(0, startEle, var, dim);
-      auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
-
-      /* Compute contribution to derivative from solution at solution points */
-      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
-          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
-    }
-  }
-  check_error();
-#endif
-}
-
-void Elements::compute_divF_fpts(unsigned int stage, unsigned int startEle, unsigned int endEle)
-{
-#ifdef _CPU
-  /* Compute contribution to divergence from common flux at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto &A = oppDiv_fpts(0, 0);
-    auto &B = Fcomm(0, startEle, var);
-    auto &C = divF_spts(0, startEle, var, stage);
-
-#ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-        endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
-#else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
-#endif
-  }
-#endif
-
-#ifdef _GPU
-  /* Compute contribution to derivative from common solution at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
-    auto *B = Fcomm_d.get_ptr(0, startEle, var);
-    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
-
-    cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
-        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
-  }
-
-  check_error();
-#endif
-}
-
-void Elements::add_source(unsigned int stage, double flow_time, unsigned int startEle, unsigned int endEle)
+void Elements::add_source(unsigned int stage, double flow_time)
 {
 #ifdef _CPU
 #pragma omp parallel for collapse(2)
   for (unsigned int n = 0; n < nVars; n++)
   {
-    for (unsigned int ele = startEle; ele < endEle; ele++)
+    for (unsigned int ele = 0; ele < 0; ele++)
     {
       if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
       for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -1654,12 +1479,12 @@ void Elements::add_source(unsigned int stage, double flow_time, unsigned int sta
 
 #ifdef _GPU
   add_source_wrapper(divF_spts_d, jaco_det_spts_d, coord_spts_d, nSpts, nEles,
-      nVars, nDims, input->equation, flow_time, stage, startEle, endEle);
+      nVars, nDims, input->equation, flow_time, stage);
   check_error();
 #endif
 }
 
-void Elements::compute_dU_spts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+void Elements::compute_dU_spts_via_divF(unsigned int dim)
 {
 #ifdef _CPU
   /* Compute contribution to divergence from flux at solution points */
@@ -1667,21 +1492,18 @@ void Elements::compute_dU_spts_via_divF(unsigned int startEle, unsigned int endE
   {
     double fac = (dim1 == 0) ? 0.0 : 1.0;
 
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      auto &A = oppD(0, 0, dim1);
-      auto &B = F_spts(0, startEle, var, dim1);
-      auto &C = dU_spts(0, startEle, var, dim);
+    auto &A = oppD(0, 0, dim1);
+    auto &B = F_spts(0, 0, 0, dim1);
+    auto &C = dU_spts(0, 0, 0, dim);
 
 
 #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-          endEle - startEle, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+        nEles * nVars, nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
 #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-            nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, dU_spts.ldim());
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+          nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, dU_spts.ldim());
 #endif
-    }
   }
 #endif
 
@@ -1690,103 +1512,88 @@ void Elements::compute_dU_spts_via_divF(unsigned int startEle, unsigned int endE
   {
     double fac = (dim1 == 0) ? 0.0 : 1.0;
 
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      auto *A = oppD_d.get_ptr(0, 0, dim1);
-      auto *B = F_spts_d.get_ptr(0, startEle, var, dim1);
-      auto *C = dU_spts_d.get_ptr(0, startEle, var, dim);
+    auto *A = oppD_d.get_ptr(0, 0, dim1);
+    auto *B = F_spts_d.get_ptr(0, 0, 0, dim1);
+    auto *C = dU_spts_d.get_ptr(0, 0, 0, dim);
 
-      /* Compute contribution to derivative from solution at solution points */
-      cublasDGEMM_wrapper(nSpts, endEle - startEle, nSpts, 1.0,
-          A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, dU_spts_d.ldim(), 0);
-    }
+    /* Compute contribution to derivative from solution at solution points */
+    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
+        A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, dU_spts_d.ldim(), 0);
   }
   check_error();
 #endif
 }
 
-void Elements::compute_dU_fpts_via_divF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+void Elements::compute_dU_fpts_via_divF(unsigned int dim)
 {
 #ifdef _CPU
   /* Compute contribution to divergence from common flux at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto &A = oppDiv_fpts(0, 0);
-    auto &B = Fcomm(0, startEle, var);
-    auto &C = dU_spts(0, startEle, var, dim);
+  auto &A = oppDiv_fpts(0, 0);
+  auto &B = Fcomm(0, 0, 0);
+  auto &C = dU_spts(0, 0, 0, dim);
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
-        endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, 
+      nEles * nVars, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, dU_spts.ldim());
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+      nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, dU_spts.ldim());
 #endif
-  }
 #endif
 
 #ifdef _GPU
   /* Compute contribution to derivative from common solution at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto *A = oppDiv_fpts_d.get_ptr(0, 0);
-    auto *B = Fcomm_d.get_ptr(0, startEle, var);
-    auto *C = dU_spts_d.get_ptr(0, startEle, var, dim);
+  auto *A = oppDiv_fpts_d.get_ptr(0, 0);
+  auto *B = Fcomm_d.get_ptr(0, 0, 0);
+  auto *C = dU_spts_d.get_ptr(0, 0, 0, dim);
 
-    cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
-        A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, dU_spts_d.ldim(), 0);
-  }
+  cublasDGEMM_wrapper(nSpts, nEles * nVars,  nFpts, 1.0,
+      A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, dU_spts_d.ldim(), 0);
 
   check_error();
 #endif
 
 }
 
-void Elements::correct_divF_spts(unsigned int stage, unsigned int startEle, unsigned int endEle)
+void Elements::correct_divF_spts(unsigned int stage)
 {
 #ifdef _CPU
-  /* Compute contribution to divergence from common flux at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto &A = oppDiv_fpts(0, 0); // Identical to FR-DG correction operator
-    auto &B = dFn_fpts(0, startEle, var);
-    auto &C = divF_spts(0, startEle, var, stage);
+/* Compute contribution to divergence from common flux at flux points */
+  auto &A = oppDiv_fpts(0, 0); // Identical to FR-DG correction operator
+  auto &B = dFn_fpts(0, 0, 0);
+  auto &C = divF_spts(0, 0, 0, stage);
 
 #ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
-        endEle - startEle, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, dFn_fpts.ldim(), 1.0, &C, divF_spts.ldim());
+  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts,
+      nEles * nVars, nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, dFn_fpts.ldim(), 1.0, &C, divF_spts.ldim());
 #else
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, endEle - startEle,
-        nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, dFn_fpts.ldim(), 1.0, &C, divF_spts.ldim());
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+      nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, dFn_fpts.ldim(), 1.0, &C, divF_spts.ldim());
 #endif
-  }
 #endif
 
 #ifdef _GPU
   /* Compute contribution to derivative from common solution at flux points */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    auto *A = oppDiv_fpts_d.get_ptr(0, 0); // Identical to FR-DG correction operator
-    auto *B = dFn_fpts_d.get_ptr(0, startEle, var);
-    auto *C = divF_spts_d.get_ptr(0, startEle, var, stage);
+  auto *A = oppDiv_fpts_d.get_ptr(0, 0); // Identical to FR-DG correction operator
+  auto *B = dFn_fpts_d.get_ptr(0, 0, 0);
+  auto *C = divF_spts_d.get_ptr(0, 0, 0, stage);
 
-    cublasDGEMM_wrapper(nSpts, endEle - startEle,  nFpts, 1.0,
-        A, oppDiv_fpts_d.ldim(), B, dFn_fpts_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
-  }
+  cublasDGEMM_wrapper(nSpts, nEles * nVars,  nFpts, 1.0,
+      A, oppDiv_fpts_d.ldim(), B, dFn_fpts_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
 
   check_error();
 #endif
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
-void Elements::compute_F(unsigned int startEle, unsigned int endEle)
+void Elements::compute_F()
 {
   double U[nVars];
   double F[nVars][nDims];
   double tdU[nVars][nDims];
   double inv_jaco[nDims][nDims];
 
-  for (unsigned int ele = startEle; ele < endEle; ele++)
+  for (unsigned int ele = 0; ele < nEles; ele++)
   {
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
@@ -1905,41 +1712,41 @@ void Elements::compute_F(unsigned int startEle, unsigned int endEle)
 
 }
 
-void Elements::compute_F(unsigned int startEle, unsigned int endEle)
+void Elements::compute_F()
 {
 #ifdef _CPU
   if (input->equation == AdvDiff)
   {
     if (nDims == 2)
-      compute_F<1, 2, AdvDiff>(startEle, endEle);
+      compute_F<1, 2, AdvDiff>();
     else if (nDims == 3)
-      compute_F<1, 3, AdvDiff>(startEle, endEle);
+      compute_F<1, 3, AdvDiff>();
   }
   else if (input->equation == EulerNS)
   {
     if (nDims == 2)
-      compute_F<4, 2, EulerNS>(startEle, endEle);
+      compute_F<4, 2, EulerNS>();
     else if (nDims == 3)
-      compute_F<5, 3, EulerNS>(startEle, endEle);
+      compute_F<5, 3, EulerNS>();
   }
 #endif
 
 #ifdef _GPU
   compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
       input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
-      input->fix_vis, input->viscous, input->grad_via_div, startEle, endEle, input->overset, geo->iblank_cell_d.data(), input->motion);
+      input->fix_vis, input->viscous, input->grad_via_div, input->overset, geo->iblank_cell_d.data(), input->motion);
 
   check_error();
 #endif
 }
 
 template<unsigned int nVars, unsigned int nDims>
-void Elements::compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+void Elements::compute_unit_advF(unsigned int dim)
 {
   double U[nVars];
   double inv_jaco[nDims];
 
-  for (unsigned int ele = startEle; ele < endEle; ele++)
+  for (unsigned int ele = 0; ele < nEles; ele++)
   {
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
@@ -1968,28 +1775,27 @@ void Elements::compute_unit_advF(unsigned int startEle, unsigned int endEle, uns
 
 }
 
-void Elements::compute_unit_advF(unsigned int startEle, unsigned int endEle, unsigned int dim)
+void Elements::compute_unit_advF(unsigned int dim)
 {
 #ifdef _CPU
   if (input->equation == AdvDiff)
   {
     if (nDims == 2)
-      compute_unit_advF<1, 2>(startEle, endEle, dim);
+      compute_unit_advF<1, 2>(dim);
     else if (nDims == 3)
-      compute_unit_advF<1, 3>(startEle, endEle, dim);
+      compute_unit_advF<1, 3>(dim);
   }
   else if (input->equation == EulerNS)
   {
     if (nDims == 2)
-      compute_unit_advF<4, 2>(startEle, endEle, dim);
+      compute_unit_advF<4, 2>(dim);
     else if (nDims == 3)
-      compute_unit_advF<5, 3>(startEle, endEle, dim);
+      compute_unit_advF<5, 3>(dim);
   }
 #endif
 
 #ifdef _GPU
-  compute_unit_advF_wrapper(F_spts_d, U_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, 
-      startEle, endEle, dim);
+  compute_unit_advF_wrapper(F_spts_d, U_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, dim);
 
   check_error();
 #endif

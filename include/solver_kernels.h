@@ -102,8 +102,7 @@ void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, co
 /* Wrappers for custom kernels */
 void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
-    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle,
-    bool overset = false, int* iblank = NULL);
+    double flow_time, unsigned int stage, bool overset = false, int* iblank = NULL);
 
 void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
     mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 

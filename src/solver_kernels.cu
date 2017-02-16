@@ -369,13 +369,12 @@ template<unsigned int nVars, unsigned int nDims>
 __global__
 void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int equation, 
-    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle,
-    bool overset = false, const int* iblank = NULL)
+    double flow_time, unsigned int stage, bool overset = false, const int* iblank = NULL)
 {
   const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
-  if (spt >= nSpts || ele >= endEle)
+  if (spt >= nSpts || ele >= nEles)
     return;
 
   if (overset)
@@ -398,29 +397,28 @@ void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_
 
 void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
-    double flow_time, unsigned int stage, unsigned int startEle, unsigned int endEle, bool overset,
-    int* iblank)
+    double flow_time, unsigned int stage, bool overset, int* iblank)
 {
   unsigned int threads = 128;
-  unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
+  unsigned int blocks = (nSpts * nEles + threads - 1)/ threads;
 
   if (nDims == 2)
   {
     if (equation == AdvDiff)
       add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle);
+          flow_time, stage);
     else
       add_source<4, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle, overset, iblank);
+          flow_time, stage, overset, iblank);
   }
   else
   {
     if (equation == AdvDiff)
       add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle);
+          flow_time, stage);
     else
       add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
-          flow_time, stage, startEle, endEle, overset, iblank);
+          flow_time, stage, overset, iblank);
   }
 }
 
