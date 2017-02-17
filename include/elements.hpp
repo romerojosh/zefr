@@ -107,9 +107,9 @@ class Elements
     std::vector<mdvector<double>> LHSs, LHSInvs;
 
     mdvector<double> Cvisc0, CviscN, CdFddU0;
-    mdvector<double> CtempSS, CtempFS, CtempFS2;
+    mdvector<double> CtempSS, CtempFS, CtempFSv, CtempFSv2;
     mdvector<double> CtempSF;
-    mdvector<double> CtempFSN, CtempFSN2;
+    mdvector<double> CtempFSN, CtempFSN2, CtempFSNv, CtempFSNv2;
 
     _mpi_comm myComm;
 

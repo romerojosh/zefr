@@ -1270,15 +1270,18 @@ void FRSolver::initialize_U()
       eles->LU_info.assign({eles->nSpts * eles->nVars * nElesMax});
     }
 
-    eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+    eles->Cvisc0.assign({eles->nSpts, eles->nSpts, eles->nVars, eles->nVars, eles->nDims});
     eles->CviscN.assign({eles->nSpts, eles->nSpts, eles->nDims, eles->nFaces});
-    eles->CdFddU0.assign({eles->nSpts, eles->nSpts, eles->nDims});
+    eles->CdFddU0.assign({eles->nSpts, eles->nSpts, eles->nVars, eles->nVars, eles->nDims});
     eles->CtempSS.assign({eles->nSpts, eles->nSpts});
     eles->CtempFS.assign({eles->nFpts, eles->nSpts});
-    eles->CtempFS2.assign({eles->nFpts, eles->nSpts});
+    eles->CtempFSv.assign({eles->nFpts, eles->nSpts, eles->nVars, eles->nVars});
+    eles->CtempFSv2.assign({eles->nFpts, eles->nSpts, eles->nVars, eles->nVars});
     eles->CtempSF.assign({eles->nSpts, eles->nFpts});
     eles->CtempFSN.assign({eles->nSpts1D, eles->nSpts});
     eles->CtempFSN2.assign({eles->nSpts1D, eles->nSpts});
+    eles->CtempFSNv.assign({eles->nSpts1D, eles->nSpts, eles->nVars, eles->nVars});
+    eles->CtempFSNv2.assign({eles->nSpts1D, eles->nSpts, eles->nVars, eles->nVars});
 
     eles->deltaU.assign({eles->nSpts, eles->nVars, eles->nEles});
     eles->RHS.assign({eles->nSpts, eles->nVars, eles->nEles});
