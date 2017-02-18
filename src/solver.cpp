@@ -1921,28 +1921,7 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 #ifdef _BUILD_LIB
   if (input->overset && input->motion)
   {
-    if (input->motion_type != RIGID_BODY)
-      ZEFR->tg_preprocess();
-
-    ZEFR->tg_process_connectivity();
-
-    int do_unblank = 0;
-    for (int i = 0; i < geo.nEles; i++)
-    {
-      if (geo.iblank_cell(i) == -1)
-      {
-        do_unblank = 1;
-        break;
-      }
-    }
-
-    MPI_Allreduce(MPI_IN_PLACE, &do_unblank, 1, MPI_INT, MPI_MAX, worldComm);
-
-    if (do_unblank)
-    {
-      ZEFR->overset_interp_send(faces->nVars, 0);
-      ZEFR->overset_interp_recv(faces->nVars, 0);
-    }
+    ZEFR->tg_set_iter_iblanks(dt(0), eles->nVars);
 
 #ifdef _GPU
     ZEFR->update_iblank_gpu();
@@ -1995,7 +1974,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     flow_time = prev_time + rk_alpha(stage) * dt(0);
 
     move(flow_time, false);
-
+    ZEFR->tg_point_connectivity(); /// DEBUGGING - figure out where to put this
     compute_residual(stage);
 
     /* If in first stage, compute stable timestep */
@@ -2085,6 +2064,7 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
       flow_time = prev_time + rk_alpha(nStages-2) * dt(0);
 
     move(flow_time, false);
+    ZEFR->tg_point_connectivity(); /// DEBUGGING - figure out where to put this
 
     compute_residual(nStages-1);
 #ifdef _CPU
@@ -2314,6 +2294,7 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     flow_time = prev_time + rk_c(stage) * dt(0);
 
     move(flow_time, false); // Set grid to current evaluation time
+    ZEFR->tg_point_connectivity(); /// DEBUGGING - figure out where to put this
 
     compute_residual(0);
 
@@ -5596,7 +5577,7 @@ void FRSolver::move(double time, bool update_iblank)
 //#endif
 //    }
 //    else
-      ZEFR->tg_point_connectivity();
+//      ZEFR->tg_point_connectivity();
 
     POP_NVTX_RANGE;
   }

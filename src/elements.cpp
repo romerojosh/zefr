@@ -68,8 +68,6 @@ void Elements::set_shape()
 
   if (input->motion)
   {
-    geo->grid_vel_nodes.assign({nDims, geo->nNodes}, 0.0);
-
     grid_vel_nodes.assign({nNodes, nEles, nDims}, 0.);
     grid_vel_spts.assign({nSpts, nEles, nDims}, 0.);
     grid_vel_fpts.assign({nFpts, nEles, nDims}, 0.);
@@ -2570,7 +2568,6 @@ void Elements::poly_squeeze_ppts()
 
 void Elements::move(std::shared_ptr<Faces> faces)
 {
-  if (input->gridID > 0) return; /// DEBUGGING
 #ifdef _CPU
   if (input->motion_type == RIGID_BODY)
   {

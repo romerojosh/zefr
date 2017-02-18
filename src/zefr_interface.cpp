@@ -130,9 +130,8 @@ ExtraGeo get_extra_geo_data(void)
   ExtraGeo geo;
 
   ZEFR->get_extra_geo_data(geo.nFaceTypes,geo.nvert_face,geo.nFaces_type,
-                           geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,
-                           geo.iblank_cell,geo.nOverFaces,geo.overFaces,
-                           geo.nMpiFaces,geo.mpiFaces,geo.procR,geo.mpiFidR);
+      geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,geo.iblank_cell,geo.nOverFaces,
+      geo.overFaces,geo.nMpiFaces,geo.mpiFaces,geo.procR,geo.mpiFidR,geo.grid_vel);
 
   return geo;
 }

@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
    * accomodate both multi-stage RK time stepping + viscous cases with gradient
    * data interpolation.  Likewise with moving grids and connectivity update */
   z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
-      tioga_do_point_connectivity, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
+      tioga_do_point_connectivity, tioga_set_iter_iblanks, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
 
   z->setup_solver();
 
@@ -114,6 +114,9 @@ int main(int argc, char *argv[])
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
       cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt,
       cbs.get_q_spts, cbs.get_dq_spts);
+
+  if (inp.motion)
+    tioga_register_moving_grid_data(geoAB.grid_vel);
 
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())

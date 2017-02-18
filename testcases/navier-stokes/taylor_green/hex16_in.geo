@@ -1,13 +1,13 @@
 // Gmsh project created on Wed Jul  1 14:24:32 2015
 pi = 4*Atan(1);
-L = .25;
+L = .4;
 xmin = -L*pi;  xmax = L*pi;
 ymin = -L*pi;  ymax = L*pi;
 zmin = -L*pi;  zmax = L*pi;
 
-nx = 8;
-ny = 8;
-nz = 8;
+nx = 10;
+ny = 10;
+nz = 10;
 
 Point(0) = {xmin,ymin,zmin};
 Point(1) = {xmax,ymin,zmin};

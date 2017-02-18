@@ -432,7 +432,7 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
                               int& nFaces_type, int*& f2v, int*& f2c, int*& c2f,
                               int*& iblank_face, int*& iblank_cell,
                               int &nOver, int*& overFaces, int &nMpiFaces, int*& mpiFaces, int*& procR,
-                              int*& faceIdR)
+                              int*& faceIdR, double*& grid_vel)
 {
   nFaceTypes = 1;
   nvert_face = geo->nNodesPerFace;
@@ -448,6 +448,7 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
   mpiFaces = geo->mpiFaces.data();
   procR = geo->procR.data();
   faceIdR = geo->faceID_R.data();
+  grid_vel = geo->grid_vel_nodes.data();
 }
 
 double Zefr::get_u_spt(int ele, int spt, int var)
@@ -631,13 +632,14 @@ void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, 
 }
 
 void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
-                               void (*point_connect)(void),
+                               void (*point_connect)(void), void (*iter_iblanks)(double, int),
                                void (*dataUpdate_send)(int, int),
                                void (*dataUpdate_recv)(int, int))
 {
   tg_preprocess = preprocess;
   tg_process_connectivity = connect;
   tg_point_connectivity = point_connect;
+  tg_set_iter_iblanks = iter_iblanks;
   overset_interp_send = dataUpdate_send;
   overset_interp_recv = dataUpdate_recv;
 }

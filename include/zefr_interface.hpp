@@ -54,6 +54,7 @@ struct ExtraGeo
   int *mpiFaces;    //! List of MPI face ID's on this rank
   int *procR;       //! Opposite rank for each MPI face
   int *mpiFidR;     //! Face ID of MPI face on opposite rank
+  double *grid_vel; //! Grid velocity at mesh nodes
 };
 
 struct CallbackFuncs

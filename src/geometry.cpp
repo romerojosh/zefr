@@ -103,6 +103,11 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.iblank_face.assign(geo.nFaces, NORMAL);
   }
 
+  if (input->motion)
+  {
+    geo.grid_vel_nodes.assign({geo.nDims, geo.nNodes}, 0.0); /// TODO: pinned for _GPU?
+  }
+
   if ( nDims == 3 && (input->motion_type == RIGID_BODY) )
   {
     geo.q.assign({4});
