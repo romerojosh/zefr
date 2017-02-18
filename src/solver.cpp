@@ -1355,8 +1355,9 @@ void FRSolver::initialize_U()
           {
             double x = eles->coord_spts(spt, ele, 0);
             double y = eles->coord_spts(spt, ele, 1);
+            double z = (eles->nDims == 2) ? 0.0 : eles->coord_spts(spt, ele, 2);
 
-            eles->U_spts(spt, ele, n) = compute_U_init(x, y, 0, n, input);
+            eles->U_spts(spt, ele, n) = compute_U_init(x, y, z, n, input);
           }
         }
       }
