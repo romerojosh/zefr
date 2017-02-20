@@ -17,6 +17,8 @@
  * along with ZEFR.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <csignal>
+
 #include "zefr_interface.hpp"
 
 Zefr *ZEFR = NULL;
@@ -24,11 +26,19 @@ Zefr *ZEFR = NULL;
 namespace zefr {
 
 #ifdef _MPI
-void initialize(MPI_Comm comm_in, char *inputFile, int nGrids, int gridID)
+void initialize(MPI_Comm comm_in, char *inputFile, int nGrids, int gridID, MPI_Comm world_comm)
 {
-  if (!ZEFR) ZEFR = new Zefr(comm_in, nGrids, gridID);
+  if (!ZEFR) ZEFR = new Zefr(comm_in, nGrids, gridID, world_comm);
 
   ZEFR->read_input(inputFile);
+
+  auto input = ZEFR->get_input();
+
+  if (input.catch_signals)
+  {
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+  }
 }
 #else
 void initialize(char *input_file)
@@ -90,14 +100,29 @@ double& get_grad_fpt(int face, int fpt, int dim, int var)
   return ZEFR->get_grad_fpt(face,fpt,dim,var);
 }
 
-double* get_q_spts(void)
+double* get_q_spts(int &ele_stride, int &spt_stride, int &var_stride)
 {
-  return ZEFR->get_u_spts();
+  return ZEFR->get_u_spts(ele_stride, spt_stride, var_stride);
+}
+
+double* get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+{
+  return ZEFR->get_du_spts(ele_stride, spt_stride, var_stride, dim_stride);
+}
+
+double* get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
+{
+  return ZEFR->get_u_spts_d(ele_stride, spt_stride, var_stride);
+}
+
+double* get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+{
+  return ZEFR->get_du_spts_d(ele_stride, spt_stride, var_stride, dim_stride);
 }
 
 double* get_q_fpts(void)
 {
-  return ZEFR->get_u_fpts();
+//  return ZEFR->get_u_fpts();
 }
 
 ExtraGeo get_extra_geo_data(void)
@@ -105,9 +130,8 @@ ExtraGeo get_extra_geo_data(void)
   ExtraGeo geo;
 
   ZEFR->get_extra_geo_data(geo.nFaceTypes,geo.nvert_face,geo.nFaces_type,
-                           geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,
-                           geo.iblank_cell,geo.nOverFaces,geo.overFaces,
-                           geo.nMpiFaces,geo.mpiFaces,geo.procR,geo.mpiFidR);
+      geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,geo.iblank_cell,geo.nOverFaces,
+      geo.overFaces,geo.nMpiFaces,geo.mpiFaces,geo.procR,geo.mpiFidR,geo.grid_vel);
 
   return geo;
 }
@@ -127,10 +151,16 @@ CallbackFuncs get_callback_funcs(void)
   call.get_grad_spt = get_grad_spt;
   call.get_q_fpt = get_q_fpt;
   call.get_grad_fpt = get_grad_fpt;
+  call.get_q_spts = get_q_spts;
+  call.get_dq_spts = get_dq_spts;
 
   /* GPU-specific functions */
   call.donor_data_from_device = donor_data_from_device;
   call.fringe_data_to_device = fringe_data_to_device;
+  call.unblank_data_to_device = unblank_data_to_device;
+  /// TODO: replace ^ with these:
+  call.get_q_spts_d = get_q_spts_d;
+  call.get_dq_spts_d = get_dq_spts_d;
 
   return call;
 }
@@ -183,11 +213,33 @@ void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
 #endif
 }
 
-void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag)
+void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
 {
 #ifdef _GPU
-  ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag);
+  ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag, data);
 #endif
+}
+
+void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
+{
+#ifdef _GPU
+  ZEFR->unblank_data_to_device(fringeIDs, nFringe, gradFlag, data);
+#endif
+}
+
+void signal_handler(int signum)
+{
+  if (signum == SIGINT)
+    std::cout << "Received signal SIGINT - dumping solution to file" << std::endl;
+  else if (signum == SIGTERM)
+    std::cout << "Received signal SIGTERM - dumping solution to file and quitting" << std::endl;
+  else
+    exit(signum);
+
+  ZEFR->write_solution();
+
+  if (signum == SIGTERM)
+    exit(signum);
 }
 
 } /* namespace zefr */

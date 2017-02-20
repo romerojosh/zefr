@@ -37,6 +37,12 @@ extern "C" {
 #include "input.hpp"
 #include "funcs.hpp"
 
+//! Storing Gmsh to structured-IJK index mappings to avoid re-computing
+static std::map<int, std::vector<int>> gmsh_maps_hex;
+static std::map<int, std::vector<int>> gmsh_maps_quad;
+static std::map<int, std::vector<int>> ijk_maps_quad;
+static std::map<int, std::vector<int>> ijk_maps_hex;
+
 double compute_U_init(double x, double y, double z, unsigned int var, const InputStruct *input)
 {
    
@@ -204,7 +210,8 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
              std::sin(M_PI * (y - input->AdvDiff_A(1) * t))*
              std::sin(M_PI * (z - input->AdvDiff_A(2) * t));
       
-      //val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
+//      val =  std::sin(2 * M_PI * x) + std::sin(2 * M_PI * y) + std::sin(2 * M_PI * z);
+//      val =  std::sin(.2 * M_PI * x) * std::sin(.2 * M_PI * y) * std::sin(.2 * M_PI * z);
     }
   }
   else if (input->equation == EulerNS)
@@ -520,6 +527,37 @@ void omp_blocked_dgemm(CBLAS_ORDER mode, CBLAS_TRANSPOSE transA,
 //  return os;
 //}
 
+// See Eigen's 'determinant.h' from 2014-9-18,
+// https://bitbucket.org/eigen/eigen file Eigen/src/LU/determinant.h,
+double det_3x3_part(const double* mat, int a, int b, int c)
+{
+  return mat[a] * (mat[3+b] * mat[6+c] - mat[3+c] * mat[6+b]);
+}
+
+double det_4x4_part(const double* mat, int j, int k, int m, int n)
+{
+  return (mat[j*4] * mat[k*4+1] - mat[k*4] * mat[j*4+1])
+      * (mat[m*4+2] * mat[n*4+3] - mat[n*4+2] * mat[m*4+3]);
+}
+
+double det_2x2(const double* mat)
+{
+  return mat[0]*mat[3] - mat[1]*mat[2];
+}
+
+double det_3x3(const double* mat)
+{
+  return det_3x3_part(mat,0,1,2) - det_3x3_part(mat,1,0,2)
+      + det_3x3_part(mat,2,0,1);
+}
+
+double det_4x4(const double* mat)
+{
+  return det_4x4_part(mat,0,1,2,3) - det_4x4_part(mat,0,2,1,3)
+      + det_4x4_part(mat,0,3,1,2) + det_4x4_part(mat,1,2,0,3)
+      - det_4x4_part(mat,1,3,0,2) + det_4x4_part(mat,2,3,0,1);
+}
+
 mdvector<double> adjoint(const mdvector<double> &mat)
 {
   auto dims = mat.shape();
@@ -560,6 +598,93 @@ mdvector<double> adjoint(const mdvector<double> &mat)
   return adj;
 }
 
+
+//! In-place adjoint function
+void adjoint(const mdvector<double> &mat, mdvector<double> &adj)
+{
+  auto dims = mat.shape();
+
+  if (dims[0] != dims[1])
+    ThrowException("Adjoint only meaningful for square matrices.");
+
+  adj.resize({dims[0],dims[1]});
+
+  int signRow = -1;
+  mdvector<double> Minor({dims[0]-1,dims[1]-1});
+  for (int row = 0; row < dims[0]; row++)
+  {
+    signRow *= -1;
+    int sign = -1*signRow;
+    for (int col = 0; col < dims[1]; col++)
+    {
+      sign *= -1;
+      // Setup the minor matrix (expanding along row, col)
+      int i0 = 0;
+      for (int i = 0; i < dims[0]; i++)
+      {
+        if (i == row) continue;
+        int j0 = 0;
+        for (int j = 0; j < dims[1]; j++)
+        {
+          if (j == col) continue;
+          Minor(i0,j0) = mat(i,j);
+          j0++;
+        }
+        i0++;
+      }
+      // Recall: adjoint is TRANSPOSE of cofactor matrix
+      adj(col,row) = sign*determinant(Minor);
+    }
+  }
+}
+
+void adjoint_3x3(double *mat, double *adj)
+{
+  double a11 = mat[0], a12 = mat[1], a13 = mat[2];
+  double a21 = mat[3], a22 = mat[4], a23 = mat[5];
+  double a31 = mat[6], a32 = mat[7], a33 = mat[8];
+
+  adj[0] = a22*a33 - a23*a32;
+  adj[1] = a13*a32 - a12*a33;
+  adj[2] = a12*a23 - a13*a22;
+
+  adj[3] = a23*a31 - a21*a33;
+  adj[4] = a11*a33 - a13*a31;
+  adj[5] = a13*a21 - a11*a23;
+
+  adj[6] = a21*a32 - a22*a31;
+  adj[7] = a12*a31 - a11*a32;
+  adj[8] = a11*a22 - a12*a21;
+}
+
+void adjoint_4x4(double *mat, double *adj)
+{
+  double a11 = mat[0],  a12 = mat[1],  a13 = mat[2],  a14 = mat[3];
+  double a21 = mat[4],  a22 = mat[5],  a23 = mat[6],  a24 = mat[7];
+  double a31 = mat[8],  a32 = mat[9],  a33 = mat[10], a34 = mat[11];
+  double a41 = mat[12], a42 = mat[13], a43 = mat[14], a44 = mat[15];
+
+  adj[0] = -a24*a33*a42 + a23*a34*a42 + a24*a32*a43 - a22*a34*a43 - a23*a32*a44 + a22*a33*a44;
+  adj[1] =  a14*a33*a42 - a13*a34*a42 - a14*a32*a43 + a12*a34*a43 + a13*a32*a44 - a12*a33*a44;
+  adj[2] = -a14*a23*a42 + a13*a24*a42 + a14*a22*a43 - a12*a24*a43 - a13*a22*a44 + a12*a23*a44;
+  adj[3] =  a14*a23*a32 - a13*a24*a32 - a14*a22*a33 + a12*a24*a33 + a13*a22*a34 - a12*a23*a34;
+
+  adj[4] =  a24*a33*a41 - a23*a34*a41 - a24*a31*a43 + a21*a34*a43 + a23*a31*a44 - a21*a33*a44;
+  adj[5] = -a14*a33*a41 + a13*a34*a41 + a14*a31*a43 - a11*a34*a43 - a13*a31*a44 + a11*a33*a44;
+  adj[6] =  a14*a23*a41 - a13*a24*a41 - a14*a21*a43 + a11*a24*a43 + a13*a21*a44 - a11*a23*a44;
+  adj[7] = -a14*a23*a31 + a13*a24*a31 + a14*a21*a33 - a11*a24*a33 - a13*a21*a34 + a11*a23*a34;
+
+  adj[8] = -a24*a32*a41 + a22*a34*a41 + a24*a31*a42 - a21*a34*a42 - a22*a31*a44 + a21*a32*a44;
+  adj[9] =  a14*a32*a41 - a12*a34*a41 - a14*a31*a42 + a11*a34*a42 + a12*a31*a44 - a11*a32*a44;
+  adj[10]= -a14*a22*a41 + a12*a24*a41 + a14*a21*a42 - a11*a24*a42 - a12*a21*a44 + a11*a22*a44;
+  adj[11]=  a14*a22*a31 - a12*a24*a31 - a14*a21*a32 + a11*a24*a32 + a12*a21*a34 - a11*a22*a34;
+
+  adj[12]=  a23*a32*a41 - a22*a33*a41 - a23*a31*a42 + a21*a33*a42 + a22*a31*a43 - a21*a32*a43;
+  adj[13]= -a13*a32*a41 + a12*a33*a41 + a13*a31*a42 - a11*a33*a42 - a12*a31*a43 + a11*a32*a43;
+  adj[14]=  a13*a22*a41 - a12*a23*a41 - a13*a21*a42 + a11*a23*a42 + a12*a21*a43 - a11*a22*a43;
+  adj[15]= -a13*a22*a31 + a12*a23*a31 + a13*a21*a32 - a11*a23*a32 - a12*a21*a33 + a11*a22*a33;
+}
+
 double determinant(const mdvector<double> &mat)
 {
   auto dims = mat.shape();
@@ -569,8 +694,16 @@ double determinant(const mdvector<double> &mat)
 
   if (dims[0] == 1)
     return mat(0,0);
-  else if (dims[0] == 2) // Base case
-    return mat(0,0)*mat(1,1) - mat(0,1)*mat(1,0);
+
+  else if (dims[0] == 2)
+    return mat(0,0)*mat(1,1) - mat(1,0)*mat(0,1);
+
+  else if (dims[0] == 3)
+    return det_3x3(mat.data());
+
+  else if (dims[0] == 4)
+    return det_4x4(mat.data());
+
   else
   {
     // Use minor-matrix recursion
@@ -603,9 +736,16 @@ mdvector<double> getRotationMatrix(double axis[3], double angle)
 {
   Vec3 Axis = Vec3(axis[0],axis[1],axis[2]);
   double mag = Axis.norm();
-  double ax = Axis.x /= mag;
-  double ay = Axis.y /= mag;
-  double az = Axis.z /= mag;
+  double ax = Axis.x; ax /= mag;
+  double ay = Axis.y; ay /= mag;
+  double az = Axis.z; az /= mag;
+
+  if (mag > 1e-8)
+  {
+    ax /= mag;
+    ay /= mag;
+    az /= mag;
+  }
 
   mdvector<double> mat({3,3}, 0);
 
@@ -624,8 +764,52 @@ mdvector<double> getRotationMatrix(double axis[3], double angle)
   return mat;
 }
 
+mdvector<double> getRotationMatrix(const Quat &q)
+{
+  Vec3 Axis = Vec3(q[1],q[2],q[3]);
+  double mag = Axis.norm();
+  double ax = Axis.x;
+  double ay = Axis.y;
+  double az = Axis.z;
+
+  if (mag > 1e-8)
+  {
+    ax /= mag;
+    ay /= mag;
+    az /= mag;
+  }
+
+  mdvector<double> mat({3,3}, 0);
+
+  double angle = 2*acos(q[0]/q.norm()); // Must have unit quaternion
+  double s = sin(angle);
+  double c = cos(angle);
+  double c1 = 1.-c;
+
+  double axyc = ax*ay*c1;
+  double axzc = ax*az*c1;
+  double ayzc = ay*az*c1;
+
+  mat(0,0) = c + ax*ax*c1;  mat(0,1) = axyc - az*s;  mat(0,2) = axzc + ay*s;
+  mat(1,0) = axyc + az*s;   mat(1,1) = c + ay*ay*c1; mat(1,2) = ayzc - ax*s;
+  mat(2,0) = axzc - ay*s;   mat(2,1) = ayzc + ax*s;  mat(2,2) = c + az*az*c1;
+
+  return mat;
+}
+
+mdvector<double> identityMatrix(unsigned int N)
+{
+  mdvector<double> mat({N,N}, 0.0);
+  for (unsigned int i = 0; i < N; i++)
+    mat(i,i) = 1;
+  return mat;
+}
+
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
 {
+  if (ijk_maps_quad.count(nNodes))
+    return ijk_maps_quad[nNodes];
+
   std::vector<int> gmsh_to_ijk(nNodes,0);
 
   /* Lagrange Elements */
@@ -670,25 +854,48 @@ std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
     }
   }
 
+  ijk_maps_quad[nNodes] = gmsh_to_ijk;
+
   return gmsh_to_ijk;
 }
 
 std::vector<int> structured_to_gmsh_quad(unsigned int nNodes)
 {
-  auto gmsh2ijk = gmsh_to_structured_quad(nNodes);
+  if (gmsh_maps_quad.count(nNodes))
+  {
+    return gmsh_maps_quad[nNodes];
+  }
+  else
+  {
+    auto gmsh2ijk = gmsh_to_structured_quad(nNodes);
 
-  return reverse_map(gmsh2ijk);
+    gmsh_maps_quad[nNodes] = reverse_map(gmsh2ijk);
+
+    return gmsh_maps_quad[nNodes];
+  }
 }
 
 std::vector<int> structured_to_gmsh_hex(unsigned int nNodes)
 {
-  auto gmsh2ijk = gmsh_to_structured_hex(nNodes);
+  if (gmsh_maps_hex.count(nNodes))
+  {
+    return gmsh_maps_hex[nNodes];
+  }
+  else
+  {
+    auto gmsh2ijk = gmsh_to_structured_hex(nNodes);
 
-  return reverse_map(gmsh2ijk);
+    gmsh_maps_hex[nNodes] = reverse_map(gmsh2ijk);
+
+    return gmsh_maps_hex[nNodes];
+  }
 }
 
 std::vector<int> gmsh_to_structured_hex(unsigned int nNodes)
 {
+  if (ijk_maps_hex.count(nNodes))
+    return ijk_maps_hex[nNodes];
+
   std::vector<int> gmsh_to_ijk(nNodes,0);
 
   int nSide = cbrt(nNodes);
@@ -926,6 +1133,8 @@ std::vector<int> gmsh_to_structured_hex(unsigned int nNodes)
     gmsh_to_ijk[nNodes-1] = nSide/2 + nSide * (nSide/2 + nSide * (nSide/2));
   }
 
+  ijk_maps_hex[nNodes] = gmsh_to_ijk;
+
   return gmsh_to_ijk;
 }
 
@@ -959,4 +1168,94 @@ std::vector<uint> get_int_list(uint N, uint start)
 unsigned int tri_nodes_to_order(unsigned int nNodes)
 {
   return (-3 + std::sqrt(1 + 8 * nNodes))/2;
+}
+
+mdvector<double> quat_mul(const mdvector<double> &p, const mdvector<double> &q)
+{
+  // Assuming real part is last value [ i, j, k, real ]
+  mdvector<double> z({4}, 0.0);
+
+  z(0) = p(3)*q(3) - p(0)*q(0) - p(1)*q(1) - p(2)*q(1);
+  z(1) = p(3)*q(0) + p(0)*q(3) + p(1)*q(2) - p(2)*q(1);
+  z(2) = p(3)*q(1) - p(0)*q(2) + p(1)*q(3) + p(2)*q(0);
+  z(3) = p(3)*q(2) + p(0)*q(1) - p(1)*q(0) + p(2)*q(3);
+
+  return z;
+}
+
+Quat Quat::conj(void)
+{
+  Quat p;
+  p[0] = q[0];
+
+  for (unsigned i = 1; i < 4; i++)
+    p[i] = -q[i];
+
+  return p;
+}
+
+Quat Quat::operator+(const Quat &p)
+{
+  Quat z;
+  for (unsigned i = 0; i < 4; i++)
+    z[i] = q[i] + p[i];
+  return z;
+}
+
+Quat Quat::operator-(const Quat &p)
+{
+  Quat z;
+  for (unsigned i = 0; i < 4; i++)
+    z[i] = q[i] + p[i];
+  return z;
+}
+
+void Quat::operator+=(const Quat &p)
+{
+  for (unsigned i = 0; i < 4; i++)
+    q[i] += p[i];
+}
+
+void Quat::operator-=(const Quat &p)
+{
+  for (unsigned i = 0; i < 4; i++)
+    q[i] -= p[i];
+}
+
+Quat Quat::cross(const Quat& p)
+{
+  // Vector op - Assuming we are ignoring the real component of the quaternion
+  Quat z;
+  z[1] = q[2]*p[3] - q[3]*p[2];
+  z[2] = q[3]*p[1] - q[1]*p[3];
+  z[3] = q[1]*p[2] - q[2]*p[1];
+  return z;
+}
+
+Quat Quat::operator*(const Quat &p)
+{
+  Quat z;
+  z[0] = q[0]*p[0] - q[1]*p[1] - q[2]*p[2] - q[3]*p[3];
+  z[1] = q[0]*p[1] + q[1]*p[0] + q[2]*p[3] - q[3]*p[2];
+  z[2] = q[0]*p[2] + q[2]*p[0] + q[3]*p[1] - q[1]*p[3];
+  z[3] = q[0]*p[3] + q[3]*p[0] + q[1]*p[2] - q[2]*p[1];
+  return z;
+}
+
+Quat Quat::operator*(const std::array<double,3> &p)
+{
+  Quat z;
+  z[0] = -q[1]*p[1] - q[2]*p[2] - q[3]*p[3];
+  z[1] = q[0]*p[1] + q[2]*p[3] - q[3]*p[2];
+  z[2] = q[0]*p[2] + q[3]*p[1] - q[1]*p[3];
+  z[3] = q[0]*p[3] + q[1]*p[2] - q[2]*p[1];
+  return z;
+}
+
+Quat operator*(double a, const Quat &b)
+{
+  Quat c;
+  for (unsigned int i = 0; i < 4; i++)
+    c[i] = a*b[i];
+  return c;
 }

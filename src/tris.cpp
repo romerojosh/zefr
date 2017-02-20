@@ -509,6 +509,22 @@ void Tris::setup_ppt_connectivity()
 
 mdvector<double> Tris::calc_shape(const std::vector<double> &loc)
 {
+  mdvector<double> shape_val({nNodes}, 0.0);
+  calc_shape(shape_val, loc.data());
+
+  return shape_val;
+}
+
+mdvector<double> Tris::calc_shape(const double* loc)
+{
+  mdvector<double> shape_val({nNodes}, 0.0);
+  calc_shape(shape_val, loc);
+
+  return shape_val;
+}
+
+void Tris::calc_shape(mdvector<double> &shape_val, const double* loc)
+{
   std::vector<std::vector<unsigned int>> gmsh_nodes(3);
   gmsh_nodes[1] =  {0, 1, 2};
   gmsh_nodes[2] =  {0, 3, 1, 5, 4, 2};
@@ -518,7 +534,6 @@ mdvector<double> Tris::calc_shape(const std::vector<double> &loc)
   if (shape_order > 2)
     ThrowException("Triangle with supplied shape_order unsupported!");
 
-  mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
   double eta = loc[1];
 
@@ -568,12 +583,25 @@ mdvector<double> Tris::calc_shape(const std::vector<double> &loc)
 
     shape_val(gmsh_nodes[shape_order][nd]) = val;
   }
-
-  return shape_val;
-
 }
 
 mdvector<double> Tris::calc_d_shape(const std::vector<double> &loc)
+{
+  mdvector<double> dshape_val({nNodes, nDims}, 0);
+  calc_d_shape(dshape_val,loc.data());
+
+  return dshape_val;
+}
+
+mdvector<double> Tris::calc_d_shape(const double* loc)
+{
+  mdvector<double> dshape_val({nNodes, nDims}, 0);
+  calc_d_shape(dshape_val,loc);
+
+  return dshape_val;
+}
+
+void Tris::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
 {
   std::vector<std::vector<unsigned int>> gmsh_nodes(3);
   gmsh_nodes[1] =  {0, 1, 2};
@@ -584,7 +612,6 @@ mdvector<double> Tris::calc_d_shape(const std::vector<double> &loc)
   if (shape_order > 2)
     ThrowException("Triangle with supplied shape_order unsupported!");
 
-  mdvector<double> dshape_val({nNodes, 2}, 0.0);
   double xi = loc[0];
   double eta = loc[1];
 
@@ -637,8 +664,6 @@ mdvector<double> Tris::calc_d_shape(const std::vector<double> &loc)
       dshape_val(gmsh_nodes[shape_order][nd], dim) = val;
     }
   }
-
-  return dshape_val;
 }
 
 void Tris::modify_sensor()

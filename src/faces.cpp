@@ -781,10 +781,6 @@ void Faces::apply_bcs_dU()
         //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
         //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm(fpt, 1)) + rho_dy * U(fpt, 3, 1) / rho; 
       }
-      else if (bnd_id == OVERSET)
-      {
-        // Do nothing...? [need to treat same as internal]
-      }
       else
       {
         /* Compute energy gradient */
@@ -881,6 +877,10 @@ void Faces::apply_bcs_dU()
         //dU(fpt, 4, 2, 1) = (dT_dz - dT_dn * norm(fpt, 2)) + rho_dz * U(fpt, 4, 1) / rho; 
       }
 
+    }
+    else if (bnd_id == OVERSET)
+    {
+      // Do nothing...? [need to treat same as internal]
     }
     else /* Otherwise, right state gradient equals left state gradient */
     {
@@ -2020,8 +2020,9 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
     rus_bias_d, LDG_bias_d,  dA_d, Vg_d, input->AdvDiff_D, input->gamma, input->rus_k, input->mu, input->prandtl, 
     input->rt, input->c_sth, input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, nVars, nDims, input->equation, 
     input->fconv_type, input->fvisc_type, startFpt, endFpt, input->viscous, input->motion, input->overset, geo->iblank_fpts_d.data());
-#endif
 
+    check_error();
+#endif
 }
 
 void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
@@ -2569,6 +2570,7 @@ void Faces::send_U_data()
 
 void Faces::recv_U_data()
 {
+  PUSH_NVTX_RANGE("MPI", 0);
 #ifdef _GPU
   int ridx = 0;
   /* Stage non-blocking receives */
@@ -2598,10 +2600,11 @@ void Faces::recv_U_data()
 
   /* Wait for comms to finish */
   input->waitTimer.startTimer();
-  PUSH_NVTX_RANGE("MPI", 0)
+  MPI_Pcontrol(1, "recv_U_data");
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
-  POP_NVTX_RANGE
+  MPI_Pcontrol(-1, "recv_U_data");
+  POP_NVTX_RANGE;
   input->waitTimer.stopTimer();
 
 #ifdef  _CPU
@@ -2636,7 +2639,7 @@ void Faces::recv_U_data()
   {
     int recvRank = entry.first;
     auto &fpts = entry.second;
-    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());
+    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());    
   }
 
   /* Halt main compute stream until U is unpacked */
@@ -2740,8 +2743,10 @@ void Faces::recv_dU_data()
 
   PUSH_NVTX_RANGE("MPI", 0)
   /* Wait for comms to finish */
+  MPI_Pcontrol(1, "recv_dU_data");
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Pcontrol(-1, "recv_dU_data");
   POP_NVTX_RANGE
 
   /* Unpack buffer */
@@ -2848,9 +2853,9 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 {
   if (nFringe == 0) return;
 
-  U_fringe.assign({geo->nFptsPerFace, nFringe, nVars});
-  fringe_fpts.assign({geo->nFptsPerFace, nFringe}, 0);
-  fringe_side.assign({geo->nFptsPerFace, nFringe}, 0);
+  U_fringe.resize({geo->nFptsPerFace, nFringe, nVars});
+  fringe_fpts.resize({geo->nFptsPerFace, nFringe});
+  fringe_side.resize({geo->nFptsPerFace, nFringe});
   for (int face = 0; face < nFringe; face++)
   {
     unsigned int side = 0;
@@ -2882,8 +2887,8 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
   fringe_fpts_d = fringe_fpts;
   fringe_side_d = fringe_side;
 
-  unpack_fringe_u_wrapper(U_fringe_d,U_d,fringe_fpts_d,fringe_side_d,nFringe,
-      geo->nFptsPerFace,nVars);
+  unpack_fringe_u_wrapper(U_fringe_d,U_d,U_ldg_d,fringe_fpts_d,fringe_side_d,nFringe,
+      geo->nFptsPerFace,nVars,3);
 
   check_error();
 }
@@ -2895,7 +2900,7 @@ void Faces::fringe_grad_to_device(int nFringe)
 
   if (nFringe == 0) return;
 
-  dU_fringe.assign({geo->nFptsPerFace, nFringe, nVars, nDims});
+  dU_fringe.resize({geo->nFptsPerFace, nFringe, nVars, nDims});
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
@@ -2916,7 +2921,60 @@ void Faces::fringe_grad_to_device(int nFringe)
   dU_fringe_d = dU_fringe;
 
   unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
-      nFringe,geo->nFptsPerFace,nVars,nDims);
+      nFringe,geo->nFptsPerFace,nVars,nDims,3);
+
+  check_error();
+}
+
+
+void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
+{
+  if (nFringe == 0) return;
+
+  U_fringe_d.assign({nVars, geo->nFptsPerFace, nFringe}, data, 3);
+
+  if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
+  {
+    fringe_fpts.resize({geo->nFptsPerFace, nFringe});
+    fringe_side.resize({geo->nFptsPerFace, nFringe});
+    for (int face = 0; face < nFringe; face++)
+    {
+      unsigned int side = 0;
+      int ic1 = geo->face2eles(0,fringeIDs[face]);
+      if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
+        side = 1;
+
+      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+      {
+        fringe_fpts(fpt,face) = geo->face2fpts(fpt, fringeIDs[face]);
+        fringe_side(fpt,face) = side;
+      }
+    }
+
+    fringe_fpts_d.set_size(fringe_fpts);
+    fringe_side_d.set_size(fringe_side);
+
+    fringe_fpts_d = fringe_fpts;
+    fringe_side_d = fringe_side;
+  }
+
+  unpack_fringe_u_wrapper(U_fringe_d,U_d,U_ldg_d,fringe_fpts_d,fringe_side_d,nFringe,
+      geo->nFptsPerFace,nVars,3);
+
+  check_error();
+}
+
+void Faces::fringe_grad_to_device(int nFringe, double *data)
+{
+  /* NOTE: Expecting that fringe_u_to_device has already been called for the
+   * same set of fringe faces */
+
+  if (nFringe == 0) return;
+
+  dU_fringe_d.assign({nVars, nDims, geo->nFptsPerFace, nFringe}, data, 3);
+
+  unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
+      nFringe,geo->nFptsPerFace,nVars,nDims,3);
 
   check_error();
 }

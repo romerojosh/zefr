@@ -32,7 +32,8 @@ SOURCES += \
     src/filter_kernels.cu \
     src/zefr_interface.cpp \
     swig_bin/testZefr.cpp \
-    src/filter.cpp
+    src/filter.cpp \
+    src/tris.cpp
 
 HEADERS += \
     include/elements_kernels.h \
@@ -57,7 +58,8 @@ HEADERS += \
     include/zefr_interface.hpp \
     include/inputstruct.hpp \
     include/filter_kernels.h \
-    include/flux.hpp
+    include/flux.hpp \
+    include/tris.hpp
 
 DISTFILES += \
     swig_bin/zefr.i \

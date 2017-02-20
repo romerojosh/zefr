@@ -1,0 +1,97 @@
+# Geometry:
+nDims    3
+meshfile sphere_hex.msh
+
+# Boundary Conditions
+mesh_bound  fluid  fluid
+mesh_bound  sphere  wall_slip_g
+mesh_bound  char  char
+
+# Solver:
+order    2
+equation EulerNS    (AdvDiff, EulerNS)
+viscous  0
+motion   1
+spt_type Legendre
+serendipity 0
+
+# Timestepping:
+n_steps   2000
+dt_scheme LSRK      (Euler, RK44, RKj, RK54, LSRK)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+dt	      5e-4
+CFL	      0.8
+
+# Restarting:
+restart       0
+restart_type  1
+restart_case  sphere_eul/sphere_eul
+restart_iter  1000
+
+# Multigrid:
+p_multi 0
+smooth_steps 1
+rel_fac 1.00
+mg_levels 2 0
+mg_steps  2 5
+
+# Reporting:
+# Note: You can suppress output by setting freq to zero. 
+output_prefix sphere_eul
+write_freq    100
+report_freq   10
+res_type      1
+force_freq    0
+error_freq    0
+nQpts1D       10
+
+# =====================================================
+# Moving-Grid Parameters
+# =====================================================
+motion_type  10
+
+# ---- Rigid Body (6 DOF) Parameters ----
+# Mass & moments of inertia
+mass  1
+Ixx  1
+Iyy  1
+Izz  1
+Ixy  .0
+Iyz  .0
+# Initial translation velocity
+vx0  0
+vy0  0
+vz0  0
+# Initial angular velocity
+wx0  0
+wy0  .6283185 (period = 10s)
+wz0  0
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.0
+ldg_tau    1.0
+
+# Equation Specific Parameters:
+ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+
+# Euler/Navier-Stokes
+T_gas 291.15
+gamma 1.4
+R     286.9
+mu    1.827E-5
+prandtl 0.72
+S       120
+
+# Euler specific
+rho_fs 1.4
+u_fs 0.3
+v_fs 0.0
+w_fs 0.0
+P_fs 1.0
+
+# Navier-Stokes Specific
+disable_nondim  true  (true/false : run with physical vs. non-dimensionalized quantities)
+

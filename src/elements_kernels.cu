@@ -81,7 +81,7 @@ double determinant(double* mat, unsigned int M)
 }
 
 __device__
-void adjoint(double *mat, double *adj, int M)
+void device_adjoint(double *mat, double *adj, int M)
 {
   unsigned int N = M;
 
@@ -117,6 +117,35 @@ void adjoint(double *mat, double *adj, int M)
   delete[] Minor;
 }
 
+__device__
+void device_adjoint_4x4(double *mat, double *adj)
+{
+  double a11 = mat[0],  a12 = mat[1],  a13 = mat[2],  a14 = mat[3];
+  double a21 = mat[4],  a22 = mat[5],  a23 = mat[6],  a24 = mat[7];
+  double a31 = mat[8],  a32 = mat[9],  a33 = mat[10], a34 = mat[11];
+  double a41 = mat[12], a42 = mat[13], a43 = mat[14], a44 = mat[15];
+
+  adj[0] = -a24*a33*a42 + a23*a34*a42 + a24*a32*a43 - a22*a34*a43 - a23*a32*a44 + a22*a33*a44;
+  adj[1] =  a14*a33*a42 - a13*a34*a42 - a14*a32*a43 + a12*a34*a43 + a13*a32*a44 - a12*a33*a44;
+  adj[2] = -a14*a23*a42 + a13*a24*a42 + a14*a22*a43 - a12*a24*a43 - a13*a22*a44 + a12*a23*a44;
+  adj[3] =  a14*a23*a32 - a13*a24*a32 - a14*a22*a33 + a12*a24*a33 + a13*a22*a34 - a12*a23*a34;
+
+  adj[4] =  a24*a33*a41 - a23*a34*a41 - a24*a31*a43 + a21*a34*a43 + a23*a31*a44 - a21*a33*a44;
+  adj[5] = -a14*a33*a41 + a13*a34*a41 + a14*a31*a43 - a11*a34*a43 - a13*a31*a44 + a11*a33*a44;
+  adj[6] =  a14*a23*a41 - a13*a24*a41 - a14*a21*a43 + a11*a24*a43 + a13*a21*a44 - a11*a23*a44;
+  adj[7] = -a14*a23*a31 + a13*a24*a31 + a14*a21*a33 - a11*a24*a33 - a13*a21*a34 + a11*a23*a34;
+
+  adj[8] = -a24*a32*a41 + a22*a34*a41 + a24*a31*a42 - a21*a34*a42 - a22*a31*a44 + a21*a32*a44;
+  adj[9] =  a14*a32*a41 - a12*a34*a41 - a14*a31*a42 + a11*a34*a42 + a12*a31*a44 - a11*a32*a44;
+  adj[10]= -a14*a22*a41 + a12*a24*a41 + a14*a21*a42 - a11*a24*a42 - a12*a21*a44 + a11*a22*a44;
+  adj[11]=  a14*a22*a31 - a12*a24*a31 - a14*a21*a32 + a11*a24*a32 + a12*a21*a34 - a11*a22*a34;
+
+  adj[12]=  a23*a32*a41 - a22*a33*a41 - a23*a31*a42 + a21*a33*a42 + a22*a31*a43 - a21*a32*a43;
+  adj[13]= -a13*a32*a41 + a12*a33*a41 + a13*a31*a42 - a11*a33*a42 - a12*a31*a43 + a11*a32*a43;
+  adj[14]=  a13*a22*a41 - a12*a23*a41 - a13*a21*a42 + a11*a23*a42 + a12*a21*a43 - a11*a22*a43;
+  adj[15]= -a13*a22*a31 + a12*a23*a31 + a13*a21*a32 - a11*a23*a32 - a12*a21*a33 + a11*a22*a33;
+}
+
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void compute_F(mdvector_gpu<double> F_spts, 
@@ -133,8 +162,7 @@ void compute_F(mdvector_gpu<double> F_spts,
   if (spt >= nSpts || ele >= nEles) 
     return;
 
-  if (overset)
-    if (iblank[ele] != 1)
+  if (overset && iblank[ele] != 1)
       return;
 
   double U[nVars];
@@ -414,45 +442,45 @@ void transform_gradF_hexa(mdvector_gpu<double> divF_spts,
     return;
 
   /* Get metric terms */
-  double jaco[16], S[16];
-  jaco[4*0+0] = jaco_spts(spt, ele, 0, 0);
-  jaco[4*0+1] = jaco_spts(spt, ele, 0, 1);
-  jaco[4*0+2] = jaco_spts(spt, ele, 0, 2);
-  jaco[4*1+0] = jaco_spts(spt, ele, 1, 0);
-  jaco[4*1+1] = jaco_spts(spt, ele, 1, 1);
-  jaco[4*1+2] = jaco_spts(spt, ele, 1, 2);
-  jaco[4*2+0] = jaco_spts(spt, ele, 2, 0);
-  jaco[4*2+1] = jaco_spts(spt, ele, 2, 1);
-  jaco[4*2+2] = jaco_spts(spt, ele, 2, 2);
-  jaco[4*3+0] = 0.;
-  jaco[4*3+1] = 0.;
-  jaco[4*3+2] = 0.;
+  double S[16];
 
-  jaco[4*0+3] = grid_vel_spts(spt, ele, 0);
-  jaco[4*1+3] = grid_vel_spts(spt, ele, 1);
-  jaco[4*2+3] = grid_vel_spts(spt, ele, 2);
-  jaco[4*3+3] = 1;
-//  double jaco[4][4], S[4][4];
-//  jaco[0][0] = jaco_spts(spt, ele, 0, 0);
-//  jaco[0][1] = jaco_spts(spt, ele, 0, 1);
-//  jaco[0][2] = jaco_spts(spt, ele, 0, 2);
-//  jaco[1][0] = jaco_spts(spt, ele, 1, 0);
-//  jaco[1][1] = jaco_spts(spt, ele, 1, 1);
-//  jaco[1][2] = jaco_spts(spt, ele, 1, 2);
-//  jaco[2][0] = jaco_spts(spt, ele, 2, 0);
-//  jaco[2][1] = jaco_spts(spt, ele, 2, 1);
-//  jaco[2][2] = jaco_spts(spt, ele, 2, 2);
-//  jaco[3][0] = 0.;
-//  jaco[3][1] = 0.;
-//  jaco[3][2] = 0.;
+  double a11 = jaco_spts(spt, ele, 0, 0);
+  double a12 = jaco_spts(spt, ele, 0, 1);
+  double a13 = jaco_spts(spt, ele, 0, 2);
 
-//  jaco[4*0+3] = grid_vel_spts(spt, ele, 0);
-//  jaco[4*1+3] = grid_vel_spts(spt, ele, 1);
-//  jaco[4*2+3] = grid_vel_spts(spt, ele, 2);
-//  jaco[4*3+3] = 1;
+  double a21 = jaco_spts(spt, ele, 1, 0);
+  double a22 = jaco_spts(spt, ele, 1, 1);
+  double a23 = jaco_spts(spt, ele, 1, 2);
 
-  adjoint(jaco, S, 4);
-//  double det = jaco
+  double a31 = jaco_spts(spt, ele, 2, 0);
+  double a32 = jaco_spts(spt, ele, 2, 1);
+  double a33 = jaco_spts(spt, ele, 2, 2);
+
+  double a14 = grid_vel_spts(spt, ele, 0);
+  double a24 = grid_vel_spts(spt, ele, 1);
+  double a34 = grid_vel_spts(spt, ele, 2);
+
+  // a41 = a42 = a43 = 0, a44 = 1
+
+  S[0] = -a23*a32 + a22*a33;
+  S[1] =  a13*a32 - a12*a33;
+  S[2] = -a13*a22 + a12*a23;
+  S[3] =  a14*a23*a32 - a13*a24*a32 - a14*a22*a33 + a12*a24*a33 + a13*a22*a34 - a12*a23*a34;
+
+  S[4] =  a23*a31 - a21*a33;
+  S[5] = -a13*a31 + a11*a33;
+  S[6] =  a13*a21 - a11*a23;
+  S[7] = -a14*a23*a31 + a13*a24*a31 + a14*a21*a33 - a11*a24*a33 - a13*a21*a34 + a11*a23*a34;
+
+  S[8]  = -a22*a31 + a21*a32;
+  S[9]  =  a12*a31 - a11*a32;
+  S[10] = -a12*a21 + a11*a22;
+  S[11] =  a14*a22*a31 - a12*a24*a31 - a14*a21*a32 + a11*a24*a32 + a12*a21*a34 - a11*a22*a34;
+
+  S[12] =  0.;
+  S[13] =  0.;
+  S[14] =  0.;
+  S[15] = -a13*a22*a31 + a12*a23*a31 + a13*a21*a32 - a11*a23*a32 - a12*a21*a33 + a11*a22*a33;
 
   for (unsigned int n = 0; n < nVars; n++)
     divF_spts(spt, ele, n, stage) = 0;
@@ -747,6 +775,7 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
       nEles, nVars, nDims);
 }
 
+//! Copy node positions from GeoStruct's array to ele's array
 __global__
 void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
     mdvector_gpu<int> ele2node, unsigned int nEles, unsigned int nNodes)
@@ -761,6 +790,7 @@ void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
   nodes(node, ele, dim) = g_nodes(dim, ele2node(node, ele));
 }
 
+//! Copy fpt positions from ele's array to face's array
 __global__
 void copy_coords_face(mdvector_gpu<double> coord, mdvector_gpu<double> e_coord,
     mdvector_gpu<int> fpt2gfpt, unsigned int nEles, unsigned int nFpts)
@@ -809,6 +839,20 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
   dim3 blocksF((nEles * nFpts + threads - 1) / threads, nDims);
 
   copy_coords_face<<<blocksF,threads>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
+}
+
+template<unsigned int nDims>
+__global__
+void add_cg_offset(mdvector_gpu<double> nodes, mdvector_gpu<double> x_cg, unsigned int nNodes)
+{
+  int node = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (node >= nNodes)
+    return;
+
+  for (unsigned int i = node; i < nNodes; i += gridDim.x * blockDim.x)
+    for (unsigned int d = 0; d < nDims; d++)
+      nodes(d,i) += x_cg(d);
 }
 
 template<unsigned int nDims>
@@ -949,6 +993,61 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
     inverse_transform_hexa<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
         NULL,nEles,nFpts);
   }
+
+  check_error();
+}
+
+void update_transforms_rigid_wrapper(mdvector_gpu<double> &jaco_spts_init, mdvector_gpu<double> &inv_jaco_spts_init,
+    mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &norm_init,
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims, bool need_inv)
+{
+  for (unsigned int d = 0; d < nDims; d++)
+  {
+    // Apply rotation matrix to body-frame jacobian
+    double *B = Rmat.data();
+    double *A = jaco_spts_init.data() + d * nSpts*nEles*nDims;
+    double *C = jaco_spts.data() + d * nSpts*nEles*nDims;
+
+    cublasDGEMM_transB_wrapper(nEles*nSpts, nDims, nDims, 1.0, A, nEles*nSpts, B, nDims, 0.0, C, nEles*nSpts);
+  }
+
+  if (need_inv)
+  {
+    int threads = 128;
+    int blocks = (nSpts * nEles + threads - 1) / threads;
+
+    inverse_transform_hexa<<<blocks,threads>>>(jaco_spts,inv_jaco_spts,NULL,nEles,nSpts);
+  }
+
+  // Apply rotation matrix to body-frame normals
+  double* A = norm_init.data();
+  double* B = Rmat.data();
+  double* C = norm.data();
+
+  cublasDGEMM_transB_wrapper(nFpts, nDims, nDims, 1.0, A, norm_init.ldim(), B, Rmat.ldim(), 0.0, C, norm.ldim());
+
+  check_error();
+}
+
+void update_nodes_rigid_wrapper(mdvector_gpu<double> &nodes_init, mdvector_gpu<double> &nodes,
+    mdvector_gpu<double> &Rmat, mdvector_gpu<double> &x_cg, unsigned int nNodes, unsigned int nDims)
+{
+  // Apply rotation matrix to body-frame nodes
+  double *A = Rmat.data();
+  double *B = nodes_init.data();
+  double *C = nodes.data();
+
+  cublasDGEMM_wrapper(nDims, nNodes, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
+
+  // Add in translation of body's CG
+  int threads = 128;
+  int blocks = min((nNodes + threads - 1) / threads, MAX_GRID_DIM);
+
+  if (nDims == 3)
+    add_cg_offset<3><<<blocks,threads>>>(nodes, x_cg, nNodes);
+  else
+    add_cg_offset<2><<<blocks,threads>>>(nodes, x_cg, nNodes);
 }
 
 __global__
@@ -1004,50 +1103,72 @@ void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
 
   calc_normals<<<blocks,threads>>>(norm,dA,inv_jaco,tnorm,fpt2gfpt,fpt2slot,
       nFpts,nEles,nDims);
+
+  check_error();
 }
 
+template <unsigned int nVars>
 __global__
 void pack_donor_u(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_donors,
-    int* donorIDs, int nDonors, unsigned int nSpts, unsigned int nVars)
+    int* donorIDs, int nDonors, unsigned int nSpts)
 {
-  const unsigned int var = blockIdx.y;
-  //const unsigned int spt  = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  //const unsigned int donor= (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
-  const unsigned int spt  = threadIdx.x;
-  const unsigned int donor= blockIdx.x;
+  const unsigned int spt   = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int donor = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+//  const unsigned int spt  = threadIdx.x;
+//  const unsigned int donor= blockIdx.x;
 
   if (spt >= nSpts || donor >= nDonors)
     return;
 
   const unsigned int ele = donorIDs[donor];
-  U_donors(spt, donor, var) = U_spts(spt, ele, var);
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    U_donors(spt, donor, var) = U_spts(spt, ele, var);
+  }
 }
 
 void pack_donor_u_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars)
 {
-  int threads = nSpts;
-  dim3 blocks(nDonors, nVars);
+  int threads = 192;
+  int blocks = (nSpts * nDonors + threads - 1) / threads;
 
-  pack_donor_u<<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts, nVars);
+  switch (nVars)
+  {
+    case 1:
+      pack_donor_u<1><<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+      break;
+
+    case 4:
+      pack_donor_u<4><<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+      break;
+
+    case 5:
+      pack_donor_u<5><<<blocks, threads>>>(U_spts, U_donors, donorIDs, nDonors, nSpts);
+      break;
+  }
 }
 
+template <unsigned int nVars>
 __global__
 void pack_donor_grad(mdvector_gpu<double> dU_spts,
     mdvector_gpu<double> dU_donors, int* donorIDs, int nDonors,
-    unsigned int nSpts, unsigned int nVars)
+    unsigned int nSpts)
 {
-  const unsigned int var = blockIdx.y % nVars;
-  const unsigned int dim = blockIdx.y / nVars;
+  const unsigned int dim = blockIdx.y;
   const unsigned int spt   = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
   const unsigned int donor = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
-  if (spt >= nSpts || donor >= nDonors)
+  if (spt >= nSpts || donor >= nDonors || dim >= 3)
     return;
 
   const unsigned int ele = donorIDs[donor];
-  dU_donors(spt, donor, var, dim) = dU_spts(spt, ele, var, dim);
+
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    dU_donors(spt, donor, var, dim) = dU_spts(spt, ele, var, dim);
+  }
 }
 
 void pack_donor_grad_wrapper(mdvector_gpu<double> &dU_spts,
@@ -1056,8 +1177,23 @@ void pack_donor_grad_wrapper(mdvector_gpu<double> &dU_spts,
 {
   int threads = 128;
   int nblock_x = (nDonors * nSpts + threads - 1) / threads;
-  dim3 blocks( nblock_x, nVars*nDims);
+  dim3 blocks(nblock_x, nDims);
 
-  pack_donor_grad<<<blocks, threads>>>(dU_spts, dU_donors, donorIDs, nDonors,
-      nSpts, nVars);
+  switch (nVars)
+  {
+    case 1:
+      pack_donor_grad<1><<<blocks, threads>>>(dU_spts, dU_donors, donorIDs,
+                                              nDonors, nSpts);
+      break;
+
+    case 4:
+      pack_donor_grad<4><<<blocks, threads>>>(dU_spts, dU_donors, donorIDs,
+                                              nDonors, nSpts);
+      break;
+
+    case 5:
+      pack_donor_grad<5><<<blocks, threads>>>(dU_spts, dU_donors, donorIDs,
+                                              nDonors, nSpts);
+      break;
+  }
 }

@@ -41,6 +41,12 @@ class Hexas: public Elements
     mdvector<double> calc_shape(const std::vector<double> &loc);
     mdvector<double> calc_d_shape(const std::vector<double> &loc);
 
+    mdvector<double> calc_shape(const double* loc);
+    mdvector<double> calc_d_shape(const double* loc);
+
+    void calc_shape(mdvector<double> &shape_val, const double* loc);
+    void calc_d_shape(mdvector<double> &dshape_val, const double* loc);
+
     double calc_nodal_basis(unsigned int spt, const std::vector<double> &loc);
     double calc_nodal_basis(unsigned int spt, double *loc);
     double calc_d_nodal_basis_spts(unsigned int spt,

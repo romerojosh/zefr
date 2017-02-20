@@ -81,6 +81,17 @@ class Elements
     mdvector<double> oppD0, oppE_Fn;
     mdvector<double> dFn_fpts, tempF_fpts;
 
+    mdvector<double> inv_jaco_spts_init;
+
+    /* Performance hacks for Hexas::calc_shape and calc_d_shape, and others */
+    unsigned int nNdSide;
+    std::vector<double> xlist;
+    std::vector<double> lag_i, lag_j, lag_k;
+    std::vector<double> dlag_i, dlag_j, dlag_k;
+    std::vector<int> ijk2gmsh;
+    mdvector<double> tmp_coords, tmp_shape, tmp_dshape, tmp_grad, tmp_ginv;
+    mdvector<double> tmp_S;
+
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv_fpts;
     mdvector<double> oppE_ppts, oppE_qpts, oppRestart;
@@ -119,6 +130,9 @@ class Elements
     _mpi_comm myComm;
 
     mdvector<double> U_donors, dU_donors;
+    int nDonors = 0;
+    int *donorIDs_d = NULL;
+    std::vector<int> donorIDs;
 
     /* Output data structures */
     mdvector<unsigned int> ppt_connect;
@@ -146,6 +160,8 @@ class Elements
     mdvector_gpu<double> oppD0_d, oppE_Fn_d;
     mdvector_gpu<double> dFn_fpts_d, tempF_fpts_d;
 
+    mdvector_gpu<double> jaco_spts_init_d, inv_jaco_spts_init_d;
+
     /* Multigrid operators */
     mdvector_gpu<double> oppPro_d, oppRes_d;
 
@@ -163,6 +179,8 @@ class Elements
     mdvector_gpu<double> RHS_d;
 
     mdvector_gpu<double> U_donors_d, dU_donors_d;
+    mdvector_gpu<double> U_unblank_d;
+    mdvector_gpu<int> unblankIDs_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);
@@ -172,10 +190,18 @@ class Elements
 
     virtual void set_locs() = 0;
     virtual void set_normals(std::shared_ptr<Faces> faces) = 0;
+
     virtual void set_oppRestart(unsigned int order_restart, bool use_shape = false) = 0;
     virtual void set_vandermonde_mats() = 0;
+
     virtual mdvector<double> calc_shape(const std::vector<double> &loc) = 0;
     virtual mdvector<double> calc_d_shape(const std::vector<double> &loc) = 0;
+
+    virtual mdvector<double> calc_shape(const double* loc) = 0;
+    virtual mdvector<double> calc_d_shape(const double* loc) = 0;
+
+    virtual void calc_shape(mdvector<double> &shape_val, const double* loc) = 0;
+    virtual void calc_d_shape(mdvector<double> &dshape_val, const double* loc) = 0;
 
     virtual double calc_nodal_basis(unsigned int spt,
                    const std::vector<double> &loc) = 0;
@@ -249,10 +275,13 @@ class Elements
     void get_interp_weights(double* rst, double* weights, int& nweights, int buffSize);
 
     std::vector<double> getBoundingBox(int ele);
+    void getBoundingBox(int ele, double bbox[6]);
 
 #ifdef _GPU
-    void donor_u_from_device(int* donorIDs, int nDonors);
-    void donor_grad_from_device(int* donorIDs, int nDonors);
+    void donor_u_from_device(int* donorIDs_in, int nDonors_in);
+    void donor_grad_from_device(int* donorIDs_in, int nDonors_in);
+
+    void unblank_u_to_device(int *cellIDs, int nCells, double* data);
 #endif
 
     void move(std::shared_ptr<Faces> faces);

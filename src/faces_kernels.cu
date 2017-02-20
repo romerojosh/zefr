@@ -749,6 +749,10 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
     }
 
   }
+  else if (bnd_id == OVERSET)
+  {
+    // Do nothing (handled similarly to MPI)
+  }
   else
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1704,7 +1708,6 @@ void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars],
     double aR = std::sqrt(gamma * P / UR[0]);
     PR = P;
 
-
     /* Compute speed of sound */
     //double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / UL[0]));
     //double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / UR[0]));
@@ -1919,7 +1922,6 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     if (fvisc_type == LDG)
       LDG_flux<nVars, nDims, equation>(UL, UR, dUL, dUR, Fc, norm, AdvDiff_D, diffCo(fpt), gamma, 
           prandtl, mu, rt, c_sth, fix_vis, LDG_bias(fpt), beta, tau);
-         
   }
 
   /* Write common flux to global memory */
@@ -1961,7 +1963,8 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
       compute_common_F<5, 3, EulerNS><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
         mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
   }
-
+cudaDeviceSynchronize();
+  check_error();
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>

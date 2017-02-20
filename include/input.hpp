@@ -31,8 +31,10 @@
 
 #ifdef _MPI // This is kinda hacky, but it works and keeps things simple
 #define _mpi_comm MPI_Comm
+#define DEFAULT_COMM MPI_COMM_WORLD
 #else
 #define _mpi_comm int
+#define DEFAULT_COMM 0
 #endif
 
 extern double pi;
@@ -102,6 +104,16 @@ enum BC_TYPE {
   SYMMETRY_G,
   WALL_CLOSURE,
   OVERSET_CLOSURE
+};
+
+enum MOTION_TYPE {
+  STATIC = 0,
+  TEST1 = 1,
+  TEST2 = 2,
+  TEST3 = 3,
+  CIRCULAR_TRANS = 4,
+  RADIAL_VIBE = 5,
+  RIGID_BODY = 10
 };
 
 extern std::map<std::string,int> bcStr2Num;

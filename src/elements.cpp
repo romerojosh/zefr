@@ -121,8 +121,6 @@ void Elements::set_shape()
 
   if (input->motion)
   {
-    geo->grid_vel_nodes.assign({nDims, geo->nNodes}, 0.0);
-
     grid_vel_nodes.assign({nNodes, nEles, nDims}, 0.);
     grid_vel_spts.assign({nSpts, nEles, nDims}, 0.);
     grid_vel_fpts.assign({nFpts, nEles, nDims}, 0.);
@@ -140,7 +138,9 @@ void Elements::set_shape()
   jaco_det_qpts.assign({nQpts, nEles});
   vol.assign({nEles});
 
-  std::vector<double> loc(nDims,0.0);
+  double loc[3] = {0., 0., 0.};
+  mdvector<double> shape_val({nNodes});
+  mdvector<double> dshape_val({nNodes,nDims});
 
   /* Shape functions and derivatives at solution points */
   for (unsigned int spt = 0; spt < nSpts; spt++)
@@ -149,8 +149,8 @@ void Elements::set_shape()
       loc[dim] = loc_spts(spt,dim);
 
 
-    auto shape_val = calc_shape(loc);
-    auto dshape_val = calc_d_shape(loc);
+    calc_shape(shape_val, loc);
+    calc_d_shape(dshape_val, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -167,8 +167,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_fpts(fpt,dim);
 
-    auto shape_val = calc_shape(loc);
-    auto dshape_val = calc_d_shape(loc);
+    calc_shape(shape_val, loc);
+    calc_d_shape(dshape_val, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -185,8 +185,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_ppts(ppt,dim);
 
-    auto shape_val = calc_shape(loc);
-    auto dshape_val = calc_d_shape(loc);
+    calc_shape(shape_val, loc);
+    calc_d_shape(dshape_val, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -200,8 +200,8 @@ void Elements::set_shape()
     for (unsigned int dim = 0; dim < nDims; dim++)
       loc[dim] = loc_qpts(qpt,dim);
 
-    auto shape_val = calc_shape(loc);
-    auto dshape_val = calc_d_shape(loc);
+    calc_shape(shape_val, loc);
+    calc_d_shape(dshape_val, loc);
 
     for (unsigned int node = 0; node < nNodes; node++)
     {
@@ -224,14 +224,18 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
   /* Setup positions of all element's shape nodes in one array */
   if (input->meshfile.find(".pyfr") != std::string::npos)
+  {
     nodes = geo->ele_nodes; /// TODO: setup for Gmsh grids as well
+  }
   else
+  {
     for (unsigned int dim = 0; dim < nDims; dim++)
       for (unsigned int ele = 0; ele < nEles; ele++)
         for (unsigned int node = 0; node < nNodes; node++)
         {
           nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodesBT[etype](node,ele));
         }
+  }
 
   int ms = nSpts;
   int mf = nFpts;
@@ -1028,7 +1032,12 @@ void Elements::extrapolate_Fn(std::shared_ptr<Faces> faces)
 #endif
 
 #ifdef _GPU
+  cudaDeviceSynchronize();
+  check_error();
+
   device_copy(dFn_fpts_d, Fcomm_d, Fcomm_d.size());
+cudaDeviceSynchronize();
+  check_error();
 
   extrapolate_Fn_wrapper(oppE_d, F_spts_d, tempF_fpts_d, dFn_fpts_d,
       faces->norm_d, faces->dA_d, geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nSpts,
@@ -1336,16 +1345,19 @@ void Elements::transform_gradF_spts(unsigned int stage)
             Jacobian(i,j) = jaco_spts(spt,e,i,j);
           Jacobian(i,nDims) = grid_vel_spts(spt,e,i);
         }
-        auto S = adjoint(Jacobian);
+
+        if (tmp_S.size() != 16)
+          tmp_S.resize({4,4});
+        adjoint_4x4(Jacobian.data(), tmp_S.data());
 
         for (uint dim1 = 0; dim1 < nDims; dim1++)
           for (uint dim2 = 0; dim2 < nDims; dim2++)
             for (uint k = 0; k < nVars; k++)
-              divF_spts(spt,e,k,stage) += dF_spts(spt,e,k,dim1,dim2)*S(dim2,dim1);
+              divF_spts(spt,e,k,stage) += dF_spts(spt,e,k,dim1,dim2)*tmp_S(dim2,dim1);
 
         for (uint dim = 0; dim < nDims; dim++)
           for (uint k = 0; k < nVars; k++)
-            divF_spts(spt,e,k,stage) += dUr_spts(spt,e,k,dim)*S(dim,nDims);
+            divF_spts(spt,e,k,stage) += dUr_spts(spt,e,k,dim)*tmp_S(dim,nDims);
       }
     }
   }
@@ -2321,13 +2333,60 @@ void Elements::poly_squeeze_ppts()
 void Elements::move(std::shared_ptr<Faces> faces)
 {
 #ifdef _CPU
+  if (input->motion_type == RIGID_BODY)
+  {
+    // Update grid position based on rigid-body motion: CG offset + rotation
+    for (unsigned int i = 0; i < geo->nNodes; i++)
+      for (unsigned int d = 0; d < nDims; d++)
+        geo->coord_nodes(d,i) = geo->x_cg(d);
+
+    auto &A = geo->Rmat(0,0);
+    auto &B = geo->coords_init(0,0);
+    auto &C = geo->coord_nodes(0,0);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
+                      1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
+                1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
+#endif
+
+    // Update grid velocity based on 'spin' matrix (omega cross r)
+    for (unsigned int i = 0; i < geo->nNodes; i++)
+      for (unsigned int d = 0; d < nDims; d++)
+        geo->grid_vel_nodes(d,i) = geo->vel_cg(d);
+
+    auto &Av = geo->Wmat(0,0);
+    auto &Bv = geo->coords_init(0,0);
+    auto &Cv = geo->grid_vel_nodes(0,0);
+
+#ifdef _OMP
+    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
+                      1.0, &Av, nDims, &Bv, nDims, 1.0, &Cv, nDims);
+#else
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
+                1.0, &Av, nDims, &Bv, nDims, 1.0, &Cv, nDims);
+#endif
+  }
+
   update_point_coords(faces);
   update_grid_velocities(faces);
-  if (input->motion_type != 4) // don't do for rigid motion
-    calc_transforms(faces);
+  if (input->motion_type != CIRCULAR_TRANS) // don't do for rigid translation
+    calc_transforms(faces);  /// TODO: copy over GPU algo for rigid-body (to save cost)
 #endif
 
 #ifdef _GPU
+  if (input->motion_type == RIGID_BODY)
+  {
+    // Positions
+    update_nodes_rigid_wrapper(geo->coords_init_d, geo->coord_nodes_d, geo->Rmat_d,
+        geo->x_cg_d, geo->nNodes, geo->nDims);
+
+    update_nodes_rigid_wrapper(geo->coords_init_d, geo->grid_vel_nodes_d, geo->Wmat_d,
+        geo->vel_cg_d, geo->nNodes, geo->nDims);
+  }
+
   update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
       shape_fpts_d, coord_spts_d, coord_fpts_d, faces->coord_d,
       geo->ele2nodesBT_d[etype], geo->fpt2gfptBT_d[etype], nSpts, nFpts, nNodes, nEles, nDims);
@@ -2336,17 +2395,27 @@ void Elements::move(std::shared_ptr<Faces> faces)
       shape_fpts_d, grid_vel_spts_d, grid_vel_fpts_d, faces->Vg_d,
       geo->ele2nodesBT_d[etype], geo->fpt2gfptBT_d[etype], nSpts, nFpts, nNodes, nEles, nDims);
 
-  calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
-      inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
-      nFpts, nNodes, nEles, nDims);
+  if (input->motion_type == RIGID_BODY)
+  {
+    /// TODO: kernels that take in 'body-coords' transforms and applies rotation matrix
+    /* At times 1 and 2, jaco_1 = R_1 * jaco_0;  jaco_2 = R_2 * jaco_0
+     * So to update from 1 to 2, jaco_2 = R_2 * R_1^inv * jaco_1
+     * Where R is the matrix form of the body's roation quaternion */
+    update_transforms_rigid_wrapper(jaco_spts_init_d, inv_jaco_spts_init_d, jaco_spts_d, inv_jaco_spts_d,
+        faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims, input->viscous);
+  }
+  else
+  {
+    calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
+                            inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
+                            nFpts, nNodes, nEles, nDims);
 
-  calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
-      geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nFpts, nEles, nDims);
+    calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
+                         geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nFpts, nEles, nDims);
 
-  if (input->CFL == 2)
-    update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
-
-  check_error();
+    if (input->CFL_type == 2)
+      update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+  }
 #endif
 }
 
@@ -2442,13 +2511,7 @@ void Elements::update_plot_point_coords(void)
 {
 #ifdef _GPU
   // Copy back, since updated only on GPU
-  geo->coord_nodes = geo->coord_nodes_d;
-
-#pragma omp parallel for collapse(3)
-  for (uint node = 0; node < nNodes; node++)
-    for (uint ele = 0; ele < nEles; ele++)
-      for (uint dim = 0; dim < nDims; dim++)
-        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodesBT[etype](node,ele));
+  nodes = nodes_d;
 #endif
 
   int mp = nPpts;
@@ -2583,23 +2646,47 @@ std::vector<double> Elements::getBoundingBox(int ele)
   return bbox;
 }
 
+void Elements::getBoundingBox(int ele, double bbox[6])
+{
+  for (unsigned int i = 0; i < 3; i++)
+  {
+    bbox[i]   =  INFINITY;
+    bbox[i+3] = -INFINITY;
+  }
+
+  for (unsigned int node = 0; node < nNodes; node++)
+  {
+    unsigned int nd = geo->ele2nodesBT[etype](node, ele);
+    for (int dim = 0; dim < nDims; dim++)
+    {
+      double pos = geo->coord_nodes(dim,nd);
+      bbox[dim]   = std::min(bbox[dim],  pos);
+      bbox[dim+3] = std::max(bbox[dim+3],pos);
+    }
+  }
+
+  if (nDims == 2)
+  {
+    bbox[2] = 0;
+    bbox[5] = 0;
+  }
+}
+
 bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 {
-  // First, do a quick check to see if the point is even close to being in the element
-  point pos = point(xyz);
-
   double xmin, ymin, zmin;
   double xmax, ymax, zmax;
   xmin = ymin = zmin =  1e15;
   xmax = ymax = zmax = -1e15;
   double eps = 1e-10;
 
-  auto box = getBoundingBox(ele);
+  double box[6];
+  getBoundingBox(ele,box);
   xmin = box[0];  ymin = box[1];  zmin = box[2];
   xmax = box[3];  ymax = box[4];  zmax = box[5];
 
-  if (pos.x < xmin-eps || pos.y < ymin-eps || pos.z < zmin-eps ||
-      pos.x > xmax+eps || pos.y > ymax+eps || pos.z > zmax+eps) {
+  if (xyz[0] < xmin-eps || xyz[1] < ymin-eps || xyz[2] < zmin-eps ||
+      xyz[0] > xmax+eps || xyz[1] > ymax+eps || xyz[2] > zmax+eps) {
     // Point does not lie within cell - return an obviously bad ref position
     rst[0] = 99.; rst[1] = 99.; rst[2] = 99.;
     return false;
@@ -2611,58 +2698,78 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
   double tol = 1e-12*h;
 
-  mdvector<double> shape({nNodes});
-  mdvector<double> dshape({nNodes,nDims});
-  mdvector<double> grad({nDims,nDims});
+  if (tmp_shape.size() != nNodes)
+  {
+    tmp_shape.resize({nNodes});
+    tmp_dshape.resize({nNodes, nDims});
+    tmp_grad.resize({nDims, nDims});
+    tmp_ginv.resize({nDims, nDims});
+    tmp_coords.resize({nDims, nNodes});
+  }
 
   int iter = 0;
   int iterMax = 20;
   double norm = 1;
-  rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
+  double norm_prev = 2;
 
-  while (norm > tol && iter < iterMax)
+  bool restart_rst = true;
+  for (int i = 0; i < 3; i++)
   {
-    shape = calc_shape(std::vector<double>{rst[0], rst[1], rst[2]});
-    dshape = calc_d_shape(std::vector<double>{rst[0], rst[1], rst[2]});
-
-    point dx = pos;
-    grad.fill(0);
-    for (int node = 0; node < nNodes; node++)
+    if (std::abs(rst[i]) > 1.)
     {
-      int nd = geo->ele2nodesBT[etype](node, ele);
-      for (int i = 0; i < nDims; i++)
-      {
-        for (int j = 0; j < nDims; j++)
-        {
-          grad(i,j) += geo->coord_nodes(i,nd)*dshape(node,j);
-        }
-        dx[i] -= shape(node)*geo->coord_nodes(i,nd);
-      }
-    }
-
-    double detJ = determinant(grad);
-
-    auto ginv = adjoint(grad);
-
-    point delta = {0,0,0};
-    for (int i=0; i<nDims; i++)
-      for (int j=0; j<nDims; j++)
-        delta[i] += ginv(i,j)*dx[j]/detJ;
-
-    norm = 0;
-    for (int i = 0; i < nDims; i++) {
-      norm += dx[i]*dx[i];
-      rst[i] += delta[i];
-      rst[i] = std::max(std::min(rst[i],1.),-1.);
-    }
-
-    iter++;
-    if (iter == iterMax) {
-      return false;
+      restart_rst = false;
+      break;
     }
   }
 
-  return true;
+  if (!restart_rst)
+  {
+    rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
+  }
+
+  for (int nd = 0; nd < nNodes; nd++)
+    for (int d = 0; d < 3; d++)
+      tmp_coords(d,nd) = geo->coord_nodes(d, geo->ele2nodesBT[etype](nd, ele));
+
+  while (norm > tol && iter < iterMax)
+  {
+    calc_shape(tmp_shape, rst);
+    calc_d_shape(tmp_dshape, rst);
+
+    point dx(xyz[0],xyz[1],xyz[2]);
+
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nDims, nNodes,
+        1.0, tmp_coords.data(), nDims, tmp_dshape.data(), nNodes, 0.0, tmp_grad.data(), nDims);
+
+    for (int node = 0; node < nNodes; node++)
+      for (int i = 0; i < 3; i++)
+        dx[i] -= tmp_shape(node)*tmp_coords(i,node);
+
+    double detJ = det_3x3(tmp_grad.data());
+
+    adjoint_3x3(tmp_grad.data(),tmp_ginv.data());
+
+    double delta[3] = {0,0,0};
+    for (int i = 0; i < 3; i++)
+      for (int j = 0; j < 3; j++)
+        delta[i] += tmp_ginv(i,j)*dx[j]/detJ;
+
+    norm = dx.norm();
+    for (int i = 0; i < 3; i++)
+      rst[i] = std::max(std::min(rst[i]+delta[i],1.),-1.);
+
+    if (iter > 1 && norm > .99*norm_prev) // If it's clear we're not converging
+      break;
+
+    norm_prev = norm;
+
+    iter++;
+  }
+
+  if (norm <= tol)
+    return true;
+  else
+    return false;
 }
 
 void Elements::get_interp_weights(double* rst, double* weights, int& nweights, int buffSize)
@@ -2675,18 +2782,53 @@ void Elements::get_interp_weights(double* rst, double* weights, int& nweights, i
 }
 
 #ifdef _GPU
-void Elements::donor_u_from_device(int* donorIDs, int nDonors)
+void Elements::donor_u_from_device(int* donorIDs_in, int nDonors_in)
 {
-  if (nDonors == 0) return;
+  if (nDonors_in == 0) return;
 
-  U_donors.assign({nSpts,nDonors,nVars},0,0);
-  U_donors_d.set_size(U_donors);
+  if (nDonors != nDonors_in)
+  {
+    if (nDonors > 0)
+      free_device_data(donorIDs_d);
 
-  int* donorIDs_d;
-  allocate_device_data(donorIDs_d, nDonors);
-  copy_to_device(donorIDs_d, donorIDs, nDonors);
+    nDonors = nDonors_in;
+
+    U_donors.resize({nSpts,nDonors,nVars});
+    U_donors_d.set_size(U_donors);
+
+    if (input->viscous)
+    {
+      dU_donors.resize({nSpts,nDonors,nVars,nDims});
+      dU_donors_d.set_size(dU_donors);
+      dU_donors = dU_donors_d;
+    }
+
+    donorIDs.assign(donorIDs_in, donorIDs_in+nDonors);
+    allocate_device_data(donorIDs_d, nDonors);
+    copy_to_device(donorIDs_d, donorIDs_in, nDonors);
+  }
+  else
+  {
+    bool sameIDs = true;
+    for (int i = 0; i < nDonors; i++)
+    {
+      if (donorIDs[i] != donorIDs_in[i])
+      {
+        sameIDs = false;
+        break;
+      }
+    }
+
+    if (!sameIDs)
+    {
+      donorIDs.assign(donorIDs_in, donorIDs_in+nDonors);
+      copy_to_device(donorIDs_d, donorIDs_in, nDonors_in);
+    }
+  }
 
   pack_donor_u_wrapper(U_spts_d,U_donors_d,donorIDs_d,nDonors,nSpts,nVars);
+
+  check_error();
 
   U_donors = U_donors_d;
 
@@ -2701,24 +2843,18 @@ void Elements::donor_u_from_device(int* donorIDs, int nDonors)
       }
     }
   }
-
-  free_device_data(donorIDs_d);
-
-  check_error();
 }
 
-void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
+void Elements::donor_grad_from_device(int* donorIDs_in, int nDonors_in)
 {
-  if (nDonors == 0) return;
+  if (nDonors_in == 0) return;
 
-  dU_donors.assign({nSpts,nDonors,nVars,nDims},0,0);
-  dU_donors_d.set_size(dU_donors);
+  if (nDonors_in != nDonors)
+    ThrowException("Invalid nDonors/nDonors_in - should have been set up in donor_u_from_device!");
 
-  int* donorIDs_d;
-  allocate_device_data(donorIDs_d, nDonors);
-  copy_to_device(donorIDs_d, donorIDs, nDonors);
+  pack_donor_grad_wrapper(dU_spts_d,dU_donors_d,donorIDs_d,nDonors_in,nSpts,nVars,nDims);
 
-  pack_donor_grad_wrapper(dU_spts_d,dU_donors_d,donorIDs_d,nDonors,nSpts,nVars,nDims);
+  check_error();
 
   dU_donors = dU_donors_d;
 
@@ -2736,9 +2872,20 @@ void Elements::donor_grad_from_device(int* donorIDs, int nDonors)
       }
     }
   }
+}
 
-  free_device_data(donorIDs_d);
+void Elements::unblank_u_to_device(int *cellIDs, int nCells, double *data)
+{
+  if (nCells == 0) return;
+
+  U_unblank_d.assign({nVars, nSpts, nCells}, data, 3);
+
+  if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
+    unblankIDs_d.assign({nCells}, cellIDs, 3);
+
+  unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,nCells,nSpts,nVars);
 
   check_error();
 }
+
 #endif

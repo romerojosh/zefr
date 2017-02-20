@@ -80,6 +80,9 @@ class mdvector
     //! Setup operator
     void assign(std::vector<unsigned int> dims, T value = T(), bool pinned = false);
 
+    //! Setup operator (set size if needed, w/o initializing data)
+    void resize(std::vector<unsigned int> dims);
+
     //! Push back operator (for compatibility)
     void push_back(T value); 
 
@@ -108,6 +111,8 @@ class mdvector
 
     //! Method to return starting data pointer
     T* data();
+
+    const T* data() const;
     
     //! Method to return max element
     T max_val() const;
@@ -263,6 +268,40 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pinned)
 }
 
 template <typename T>
+void mdvector<T>::resize(std::vector<unsigned int> dims)
+{
+  nDims = (int)dims.size();
+
+  size_ = 1;
+  max_size_ = 1;
+
+  for (unsigned int i = 0; i < nDims; i++)
+  {
+    if (i > 0)
+    {
+      strides[i-1] = 1;
+      for (unsigned int j = 0; j < i; j++)
+        strides[i-1] *= dims[j];
+    }
+
+    size_ *= dims[i];
+    max_size_ *= dims[i];
+
+    this->dims[i] = dims[i];
+  }
+
+  if (this->pinned)
+  {
+    ThrowException("Should not be calling mat.resize() on pinned memory. Something's wrong!");
+  }
+  else if (max_size_ != values.size())
+  {
+    values.resize(max_size_);
+    values_ptr = values.data();
+  }
+}
+
+template <typename T>
 void mdvector<T>::fill(T value)
 {
   if (!pinned)
@@ -325,6 +364,15 @@ unsigned int mdvector<T>::ldim() const
 
 template <typename T>
 T* mdvector<T>::data(void)
+{
+  if (!pinned)
+    return values.data();
+  else
+    return values_ptr;
+}
+
+template <typename T>
+const T* mdvector<T>::data(void) const
 {
   if (!pinned)
     return values.data();

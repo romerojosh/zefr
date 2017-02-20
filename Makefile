@@ -15,8 +15,6 @@ CUFLAGS = -std=c++11 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
-DEBUG_FLAGS = -g -O0
-
 RELEASE_FLAGS = -Ofast
 
 ifeq ($(strip $(WARNINGS)),YES)
@@ -27,8 +25,8 @@ else
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CXXFLAGS += -g -O3 #-D_NVTX
-	CUFLAGS += -g -O3 #-D_NVTX
+	CXXFLAGS += -g -O3 -D_NVTX
+	CUFLAGS += -g -O3 -D_NVTX
 else 
 ifeq ($(strip $(DEBUG_LEVEL)),2)
 	CXXFLAGS += -g -O0 #-D_NVTX
@@ -68,14 +66,14 @@ ifeq ($(strip $(MPI)),YES)
 	INCS += -I$(strip $(METIS_INC_DIR))/ -I$(strip $(MPI_INC_DIR))/
 	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
 ifneq ($(MPI_LIB_DIR),)
-	LIBS += -L$(MPI_LIB_DIR)/ -lmpi_cxx -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
+	LIBS += -L$(MPI_LIB_DIR)/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
 endif
 
 # Setting HDF5 flags
 ifneq ($(strip $(HDF5)),NO)
 	INCS += -I$(strip $(HDF5_INC_DIR))/
-	LIBS += -L$(strip $(HDF5_LIB_DIR))/ -lhdf5 -lhdf5_cpp
+	LIBS += -L$(strip $(HDF5_LIB_DIR))/ -lhdf5 -lhdf5_cpp -Wl,-rpath=$(strip $(HDF5_LIB_DIR))/
 endif
 
 # Setting Architecture flags
@@ -154,7 +152,7 @@ lib: $(SOBJS)
 test: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test: lib
 	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -L$(TIOGA_LIB_DIR)/ -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) -o $(SWIGDIR)/testZefr
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr -L$(TIOGA_LIB_DIR)/ -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) $(LIBS)
 
 # Compile the testZefr wrapper program using static linking
 .PHONY: test_static
@@ -162,7 +160,6 @@ test_static: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
 test_static: static
 	cp $(BINDIR)/libzefr.a $(SWIGDIR)/lib/
 	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp $(SWIGDIR)/lib/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a -o $(SWIGDIR)/testZefr $(LIBS)
-
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h

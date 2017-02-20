@@ -89,6 +89,7 @@ InputStruct read_input_file(std::string inputfile)
 
   read_param(f, "viscous", input.viscous);
   read_param(f, "grad_via_div", input.grad_via_div, false);
+  read_param(f, "disable_nondim", input.disable_nondim, false);
   read_param(f, "source", input.source, false);
   read_param(f, "squeeze", input.squeeze, false);
   read_param(f, "s_factor", input.s_factor, 0.0);
@@ -137,6 +138,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "n_LHS_blocks", input.n_LHS_blocks, (unsigned int) 1);
   read_param(f, "LU_pivot", input.LU_pivot, false);
 
+  read_param(f, "catch_signals", input.catch_signals, false);
   read_param(f, "output_prefix", input.output_prefix);
   read_param(f, "write_paraview", input.write_paraview, (short)1);
   read_param(f, "write_pyfr", input.write_pyfr, (short)0);
@@ -233,13 +235,61 @@ InputStruct read_input_file(std::string inputfile)
   if (input.motion)
   {
     read_param(f, "motion_type", input.motion_type);
-    if (input.motion_type == 4)
+    if (input.motion_type == CIRCULAR_TRANS)
     {
       read_param(f, "moveAx", input.moveAx);
       read_param(f, "moveAy", input.moveAy);
       read_param(f, "moveFx", input.moveFx);
       read_param(f, "moveFy", input.moveFy);
+      if (input.nDims == 3)
+      {
+        read_param(f, "moveAz", input.moveAz, 0.0);
+        read_param(f, "moveFz", input.moveFz, 0.0);
+      }
     }
+    else if (input.motion_type == RIGID_BODY)
+    {
+      if (input.nDims != 3)
+        ThrowException("Rigid-Body motion implemented in 3D only");
+
+      // Acceleration due to gravity [NOTE: assumed along -z axis]
+      read_param(f, "g", input.g, 0.);
+
+      // Do fully dynamic 6DOF simulation by computing forces & moments on body
+      read_param(f, "full_6dof", input.full_6dof, false);
+
+      // Initial translational velocity
+      read_param(f, "vx0", input.v0[0], 0.);
+      read_param(f, "vy0", input.v0[1], 0.);
+      read_param(f, "vz0", input.v0[2], 0.);
+
+      // Initial angular velocity
+      read_param(f, "wx0", input.w0[0], 0.);
+      read_param(f, "wy0", input.w0[1], 0.);
+      read_param(f, "wz0", input.w0[2], 0.);
+
+      // Mass of moving body
+      read_param(f, "mass", input.mass);
+
+      // Diagonal components of inertia tensor [in initial 'world' coordinates]
+      read_param(f, "Ixx", input.Imat[0]);
+      read_param(f, "Iyy", input.Imat[4]);
+      read_param(f, "Izz", input.Imat[8]);
+
+      // Off-diagonal components
+      read_param(f, "Ixy", input.Imat[1], 0.);
+      read_param(f, "Ixz", input.Imat[2], 0.);
+      read_param(f, "Iyz", input.Imat[5], 0.);
+
+      // Apply symmetry
+      input.Imat[3] = input.Imat[1];
+      input.Imat[6] = input.Imat[2];
+      input.Imat[7] = input.Imat[5];
+    }
+  }
+  else
+  {
+    input.motion_type = 0;
   }
 
   f.close();
@@ -274,6 +324,22 @@ void apply_nondim(InputStruct &input)
 
   input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
   input.P_fs = input.rho_fs * input.R * input.T_fs;
+  input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
+  input.c_sth = input.S / input.T_gas;
+
+  if (input.disable_nondim)
+  {
+    input.R_ref = input.R;
+    input.T_tot_fs = input.T_fs * (1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs);
+    input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs,
+                                           input.gamma / (input.gamma - 1.0));
+
+    double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
+    for (unsigned int n = 0; n < input.nDims; n++)
+      input.V_wall(n) = V_wall_mag * input.norm_wall(n) / V_fs_mag;
+
+    return;
+  }
 
   /* -- Set reference quantities for nondimensionalization --
    * Note that we are setting rho_ref s.t. we get a 'normalized' density of 2.
@@ -284,8 +350,6 @@ void apply_nondim(InputStruct &input)
   input.P_ref = input.rho_fs * V_fs_mag * V_fs_mag;
   input.mu_ref = input.rho_fs * V_fs_mag * input.L_fs;
   input.R_ref = input.R * input.T_fs / (V_fs_mag * V_fs_mag);
-  input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
-  input.c_sth = input.S / input.T_gas;
 
   /* Nondimensionalize freestream quantities */
   input.mu = input.mu/input.mu_ref;

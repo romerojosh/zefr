@@ -53,6 +53,9 @@ struct MotionVars
 
 void initialize_cuda();
 
+cudaEvent_t get_event_handle(int event);
+cudaStream_t get_stream_handle(int stream);
+
 /* Wrappers for alloc/free GPU memory */
 template<typename T>
 void allocate_device_data(T* &device_data, unsigned int size);
@@ -72,7 +75,8 @@ void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val = 0.);
 
 void sync_stream(unsigned int stream);
 void event_record(unsigned int event, unsigned int stream);
-void stream_wait_event(unsigned int event, unsigned int stream);
+void stream_wait_event(unsigned int stream, unsigned int event);
+void event_record_wait_pair(unsigned int event, unsigned int stream_rec, unsigned int stream_wait);
 
 /* Wrapper for cublas DGEMM */
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
@@ -80,6 +84,10 @@ void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* 
 
 // cublasDGEMM with transposed 'A'
 void cublasDGEMM_transA_wrapper(int M, int N, int K, const double alpha, const double* A,
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream = 0);
+
+// cublasDGEMM with transposed 'B'
+void cublasDGEMM_transB_wrapper(int M, int N, int K, const double alpha, const double* A,
     int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream = 0);
 
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
@@ -174,9 +182,27 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
     int* iblank = NULL);
 #endif
 
+void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,3> &tot_moment,
+    mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double> &P_fpts, mdvector_gpu<double> &coord, mdvector_gpu<double>& x_cg,
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<char> &fpt2bnd,
+    mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
+    double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace);
+
 void move_grid_wrapper(mdvector_gpu<double> &coords,
     mdvector_gpu<double>& coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,
     int gridID = 0);
+
+void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe, mdview_gpu<double> &U, mdview_gpu<double> &U_ldg,
+    mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars, int stream = -1);
+
+void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe, mdview_gpu<double> &dU,
+    mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims, int stream = -1);
+
+void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
+    mdvector_gpu<double> &U, mdvector_gpu<int> &cellIDs, unsigned int nCells,
+    unsigned int nSpts, unsigned int nVars, int stream = -1);
 
 #endif /* solver_kernels_h */

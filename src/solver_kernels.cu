@@ -43,10 +43,12 @@
 
 static const unsigned int MAX_GRID_DIM = 65535;
 
+#define N_EVENTS 6
+
 /* Create handles for default (0) and concurrent (1-16) streams */
 static std::vector<cublasHandle_t> cublas_handles(17);
 static std::vector<cudaStream_t> stream_handles(17);
-static std::vector<cudaEvent_t> event_handles(2);
+static std::vector<cudaEvent_t> event_handles(N_EVENTS);
 
 void initialize_cuda()
 {
@@ -62,8 +64,18 @@ void initialize_cuda()
     cublasSetStream(cublas_handles[i], stream_handles[i]);
   }
 
-  cudaEventCreateWithFlags(&event_handles[0], cudaEventDisableTiming);
-  cudaEventCreateWithFlags(&event_handles[1], cudaEventDisableTiming);
+  for (int i = 0; i < N_EVENTS; i++)
+    cudaEventCreateWithFlags(&event_handles[i], cudaEventDisableTiming);
+}
+
+cudaEvent_t get_event_handle(int event)
+{
+  return event_handles[event];
+}
+
+cudaStream_t get_stream_handle(int stream)
+{
+  return stream_handles[stream];
 }
 
 template <typename T>
@@ -151,6 +163,12 @@ void event_record(unsigned int event, unsigned int stream)
 void stream_wait_event(unsigned int stream, unsigned int event)
 {
   cudaStreamWaitEvent(stream_handles[stream], event_handles[event], 0);
+}
+
+void event_record_wait_pair(unsigned int event, unsigned int stream_rec, unsigned int stream_wait)
+{
+  cudaEventRecord(event_handles[event], stream_handles[stream_rec]);
+  cudaStreamWaitEvent(stream_handles[stream_wait], event_handles[event], 0);
 }
 
 __global__
@@ -246,6 +264,12 @@ void cublasDGEMM_transA_wrapper(int M, int N, int K, const double alpha, const d
     int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream)
 {
   cublasDgemm(cublas_handles[stream], CUBLAS_OP_T, CUBLAS_OP_N, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
+}
+
+void cublasDGEMM_transB_wrapper(int M, int N, int K, const double alpha, const double* A,
+    int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream)
+{
+  cublasDgemm(cublas_handles[stream], CUBLAS_OP_N, CUBLAS_OP_T, M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 void cublasDgemmBatched_wrapper(int M, int N, int K, const double alpha, const double** Aarray,
@@ -437,8 +461,7 @@ void RK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
   if (spt >= nSpts || ele >= nEles)
     return;
 
-  if (overset)
-    if (iblank[ele] != 1)
+  if (overset && iblank[ele] != 1)
       return;
 
   double dt;
@@ -471,7 +494,6 @@ void RK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
 
     for (unsigned int var = 0; var < nVars; var++)
       U_spts(spt,ele,var) += sum[var];
-
   }
 }
 
@@ -589,11 +611,10 @@ void LSRK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
   const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
-  if (spt >= nSpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
-  if (overset)
-    if (iblank[ele] != 1)
+  if (overset && iblank[ele] != 1)
       return;
 
   double fac = dt / jaco_det_spts(spt,ele);
@@ -750,7 +771,11 @@ void get_rk_error(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
     return;
 
   if (overset && iblank[ele] != 1)
+  {
+    for (unsigned int var = 0; var < nVars; var ++)
+      rk_err(spt, ele, var) = 0.0;
       return;
+  }
 
   for (unsigned int var = 0; var < nVars; var ++)
   {
@@ -1069,8 +1094,7 @@ void unpack_U(const mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fp
 
   unsigned int gfpt = fpts(i);
 
-  if (overset)
-    if (iblank[gfpt] != 1)
+  if (overset && iblank[gfpt] != 1)
       return;
 
   U(gfpt, var, 1) = U_rbuffs(i, var);
@@ -1178,6 +1202,247 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 #endif
 
 __global__
+void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<double> P, mdvector_gpu<double> coord,
+    mdvector_gpu<double> x_cg, mdvector_gpu<double> norm, mdvector_gpu<double> dA, mdvector_gpu<char> fpt2bnd,
+    mdvector_gpu<double> weights, mdvector_gpu<double> force, mdvector_gpu<double> moment,
+    double gamma, double rt, double c_sth, double mu_in, bool viscous, bool fix_vis, int nDims, int start_fpt,
+    int nFaces, int nFptsPerFace)
+{
+  const unsigned int face = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (face >= nFaces)
+    return;
+
+  const unsigned int face_start = face * nFptsPerFace + start_fpt;
+  const unsigned int bnd_start = face * nFptsPerFace;
+
+  const int c1[3] = {1,2,0}; // For cross-products
+  const int c2[3] = {2,0,1};
+
+  double taun[3];
+  double tot_force[3] = {0,0,0};
+  double tot_moment[3] = {0,0,0};
+
+  unsigned int bnd_id = fpt2bnd(bnd_start);
+
+  switch (bnd_id)
+  {
+    // All wall boundary conditions
+    case SLIP_WALL_G:
+    case SLIP_WALL_P:
+    case ISOTHERMAL_NOSLIP_G:
+    case ISOTHERMAL_NOSLIP_P:
+    case ISOTHERMAL_NOSLIP_MOVING_G:
+    case ISOTHERMAL_NOSLIP_MOVING_P:
+    case ADIABATIC_NOSLIP_G:
+    case ADIABATIC_NOSLIP_P:
+    case ADIABATIC_NOSLIP_MOVING_G:
+    case ADIABATIC_NOSLIP_MOVING_P:
+    {
+      for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+      {
+        double tmp_force[3] = {0,0,0};
+        int gfpt = face_start + fpt;
+//        int lfpt = bnd_start + fpt;
+
+        /* Get pressure */
+        double PL = P(gfpt, 0);
+
+        /* Sum inviscid force contributions */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          tmp_force[dim] = weights(fpt) * PL * norm(gfpt, dim, 0) * dA(gfpt);
+
+        if (viscous)
+        {
+          if (nDims == 2)
+          {
+            /* Setting variables for convenience */
+            /* States */
+            double rho = U(gfpt, 0, 0);
+            double momx = U(gfpt, 1, 0);
+            double momy = U(gfpt, 2, 0);
+            double e = U(gfpt, 3, 0);
+
+            double u = momx / rho;
+            double v = momy / rho;
+            double e_int = e / rho - 0.5 * (u*u + v*v);
+
+            /* Gradients */
+            double rho_dx = dU(gfpt, 0, 0, 0);
+            double momx_dx = dU(gfpt, 1, 0, 0);
+            double momy_dx = dU(gfpt, 2, 0, 0);
+
+            double rho_dy = dU(gfpt, 0, 1, 0);
+            double momx_dy = dU(gfpt, 1, 1, 0);
+            double momy_dy = dU(gfpt, 2, 1, 0);
+
+            /* Set viscosity */
+            double mu;
+            if (fix_vis)
+            {
+              mu = mu_in;
+            }
+            /* If desired, use Sutherland's law */
+            else
+            {
+              double rt_ratio = (gamma - 1.0) * e_int / (rt);
+              mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+            }
+
+            double du_dx = (momx_dx - rho_dx * u) / rho;
+            double du_dy = (momx_dy - rho_dy * u) / rho;
+
+            double dv_dx = (momy_dx - rho_dx * v) / rho;
+            double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+            double diag = (du_dx + dv_dy) / 3.0;
+
+            double tauxx = 2.0 * mu * (du_dx - diag);
+            double tauxy = mu * (du_dy + dv_dx);
+            double tauyy = 2.0 * mu * (dv_dy - diag);
+
+            /* Get viscous normal stress */
+            taun[0] = tauxx * norm(gfpt, 0, 0) + tauxy * norm(gfpt, 1, 0);
+            taun[1] = tauxy * norm(gfpt, 0, 0) + tauyy * norm(gfpt, 1, 0);
+
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(gfpt);
+          }
+          else if (nDims == 3)
+          {
+            /* Setting variables for convenience */
+            /* States */
+            double rho = U(gfpt, 0, 0);
+            double momx = U(gfpt, 1, 0);
+            double momy = U(gfpt, 2, 0);
+            double momz = U(gfpt, 3, 0);
+            double e = U(gfpt, 4, 0);
+
+            double u = momx / rho;
+            double v = momy / rho;
+            double w = momz / rho;
+            double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
+
+            /* Gradients */
+            double rho_dx = dU(gfpt, 0, 0, 0);
+            double momx_dx = dU(gfpt, 1, 0, 0);
+            double momy_dx = dU(gfpt, 2, 0, 0);
+            double momz_dx = dU(gfpt, 3, 0, 0);
+
+            double rho_dy = dU(gfpt, 0, 1, 0);
+            double momx_dy = dU(gfpt, 1, 1, 0);
+            double momy_dy = dU(gfpt, 2, 1, 0);
+            double momz_dy = dU(gfpt, 3, 1, 0);
+
+            double rho_dz = dU(gfpt, 0, 2, 0);
+            double momx_dz = dU(gfpt, 1, 2, 0);
+            double momy_dz = dU(gfpt, 2, 2, 0);
+            double momz_dz = dU(gfpt, 3, 2, 0);
+
+            /* Set viscosity */
+            double mu;
+            if (fix_vis)
+            {
+              mu = mu_in;
+            }
+            /* If desired, use Sutherland's law */
+            else
+            {
+              double rt_ratio = (gamma - 1.0) * e_int / (rt);
+              mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+            }
+
+            double du_dx = (momx_dx - rho_dx * u) / rho;
+            double du_dy = (momx_dy - rho_dy * u) / rho;
+            double du_dz = (momx_dz - rho_dz * u) / rho;
+
+            double dv_dx = (momy_dx - rho_dx * v) / rho;
+            double dv_dy = (momy_dy - rho_dy * v) / rho;
+            double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+            double dw_dx = (momz_dx - rho_dx * w) / rho;
+            double dw_dy = (momz_dy - rho_dy * w) / rho;
+            double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+            double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+
+            double tauxx = 2.0 * mu * (du_dx - diag);
+            double tauyy = 2.0 * mu * (dv_dy - diag);
+            double tauzz = 2.0 * mu * (dw_dz - diag);
+            double tauxy = mu * (du_dy + dv_dx);
+            double tauxz = mu * (du_dz + dw_dx);
+            double tauyz = mu * (dv_dz + dw_dy);
+
+            /* Get viscous normal stress */
+            taun[0] = tauxx * norm(gfpt, 0, 0) + tauxy * norm(gfpt, 1, 0) + tauxz * norm(gfpt, 2, 0);
+            taun[1] = tauxy * norm(gfpt, 0, 0) + tauyy * norm(gfpt, 1, 0) + tauyz * norm(gfpt, 2, 0);
+            taun[3] = tauxz * norm(gfpt, 0, 0) + tauyz * norm(gfpt, 1, 0) + tauzz * norm(gfpt, 2, 0);
+
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(gfpt);
+          }
+        }
+
+        // Add fpt's contribution to total force and moment
+        for (unsigned int d = 0; d < nDims; d++)
+          tot_force[d] += tmp_force[d];
+
+        if (nDims == 3)
+        {
+          for (unsigned int d = 0; d < nDims; d++)
+            tot_moment[d] += (coord(gfpt,c1[d])-x_cg(c1[d])) * tmp_force[c2[d]] - (coord(gfpt,c2[d])-x_cg(c2[d])) * tmp_force[c1[d]];
+        }
+        else
+        {
+          // Only a 'z' component in 2D
+          tot_moment[2] += (coord(gfpt,0)-x_cg(0)) * tmp_force[1] - (coord(gfpt,1)-x_cg(1)) * tmp_force[0];
+        }
+      }
+
+      // Write final sum for face to global memory
+      for (int d = 0; d < nDims; d++)
+      {
+        force(face,d) = tot_force[d];
+        moment(face,d) = tot_moment[d];
+      }
+
+      break;
+    }
+
+    default:
+      // Not a wall boundary - ignore
+      break;
+  }
+}
+
+void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,3> &tot_moment,
+    mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double>& P_fpts, mdvector_gpu<double> &coord,
+    mdvector_gpu<double> &x_cg, mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<char> &fpt2bnd,
+    mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
+    double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims,
+    int start_fpt, int nFaces, int nFptsPerFace)
+{
+  int threads = 192;
+  int blocks = (nFaces + threads - 1) / threads;
+
+  if (nVars < 4) // Only applicable to Euler / Navier-Stokes
+    return;
+
+  compute_moments<<<blocks, threads>>>(U_fpts,dU_fpts,P_fpts,coord,x_cg,norm,dA,fpt2bnd,weights_fpts,
+      force_face,moment_face,gamma,rt,c_sth,mu,viscous,fix_vis,nDims,start_fpt,nFaces,nFptsPerFace);
+
+  for (int d = 0; d < nDims; d++)
+  {
+    thrust::device_ptr<double> f_ptr = thrust::device_pointer_cast(force_face.data()+d*nFaces);
+    thrust::device_ptr<double> m_ptr = thrust::device_pointer_cast(moment_face.data()+d*nFaces);
+    tot_force[d] = thrust::reduce(f_ptr, f_ptr+nFaces, 0.);
+    tot_moment[d] = thrust::reduce(m_ptr, m_ptr+nFaces, 0.);
+  }
+
+  check_error();
+}
+
+__global__
 void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvector_gpu<double> Vg,
     MotionVars *params, unsigned int nNodes, unsigned int nDims, int motion_type, double time, int gridID = 0)
 {
@@ -1188,7 +1453,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
 
   switch (motion_type)
   {
-    case 1:
+    case TEST1:
     {
       double t0 = 10;
       double Atx = 2;
@@ -1203,7 +1468,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
       break;
     }
-    case 2:
+    case TEST2:
     {
       double t0 = 10.*sqrt(5.);
       double DX = 5;
@@ -1234,7 +1499,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       }
       break;
     }
-    case 3:
+    case TEST3:
     {
       if (gridID==0)
       {
@@ -1248,7 +1513,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       }
       break;
     }
-    case 4:
+    case CIRCULAR_TRANS:
     {
       /// Rigid oscillation in a circle
       if (gridID == 0)
@@ -1261,10 +1526,18 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
         coords(1,node) = coords_0(1,node) + Ay*(1-cos(2.*PI*fy*time));
         Vg(0,node) = 2.*PI*fx*Ax*cos(2.*PI*fx*time);
         Vg(1,node) = 2.*PI*fy*Ay*sin(2.*PI*fy*time);
+
+        if (nDims == 3)
+        {
+          double Az = params->moveAz;
+          double fz = params->moveFz;
+          coords(2,node) = coords_0(2,node) - Az*sin(2.*PI*fz*time);
+          Vg(2,node) = -2.*PI*fz*Az*cos(2.*PI*fz*time);
+        }
       }
       break;
     }
-    case 5:
+    case RADIAL_VIBE:
     {
       /// Radial Expansion / Contraction
       if (gridID == 0) {
@@ -1295,4 +1568,143 @@ void move_grid_wrapper(mdvector_gpu<double> &coords,
   int blocks = (nNodes + threads - 1) / threads;
   move_grid<<<blocks, threads>>>(coords, coords_0, Vg, params, nNodes, nDims,
       motion_type, time, gridID);
+}
+
+
+__global__
+void unpack_fringe_u(mdvector_gpu<double> U_fringe,
+    mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdvector_gpu<unsigned int> fringe_fpts,
+    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars)
+{
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int fpt = (tot_ind / nVars) % nFpts;
+  const unsigned int face = tot_ind / (nFpts * nVars);
+
+  if (face >= nFringe)
+    return;
+
+  const unsigned int gfpt = fringe_fpts(fpt, face);
+  const unsigned int side = fringe_side(fpt, face);
+
+  double val = U_fringe(var,fpt,face);
+  U(gfpt, var, side) = val; //fpt, face, var); /// TODO: look into further
+  U_ldg(gfpt, var, side) = val;
+}
+
+void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
+    mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe, unsigned int nFpts,
+    unsigned int nVars, int stream)
+{
+  int threads = 192;
+  int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+  {
+    unpack_fringe_u<<<blocks, threads>>>(U_fringe, U, U_ldg, fringe_fpts,
+        fringe_side, nFringe, nFpts, nVars);
+  }
+  else
+  {
+    unpack_fringe_u<<<blocks, threads, 0, stream_handles[stream]>>>(U_fringe, U,
+        U_ldg, fringe_fpts, fringe_side, nFringe, nFpts, nVars);
+  }
+
+  check_error();
+}
+
+template <unsigned nDims>
+__global__
+void unpack_fringe_grad(mdvector_gpu<double> dU_fringe,
+    mdview_gpu<double> dU, mdvector_gpu<unsigned int> fringe_fpts,
+    mdvector_gpu<unsigned int> fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars)
+{
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int fpt = (tot_ind / nVars) % nFpts;
+  const unsigned int face = tot_ind / (nFpts * nVars);
+
+  if (fpt >= nFpts || face >= nFringe || var >= nVars)
+    return;
+
+  const unsigned int gfpt = fringe_fpts(fpt, face);
+  const unsigned int side = fringe_side(fpt, face);
+
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face);
+}
+
+void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
+    mdview_gpu<double> &dU, mdvector_gpu<unsigned int> &fringe_fpts,
+    mdvector_gpu<unsigned int> &fringe_side, unsigned int nFringe,
+    unsigned int nFpts, unsigned int nVars, unsigned int nDims, int stream)
+{
+  int threads  = 192;
+  int blocks = (nFringe * nFpts * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+  {
+    if (nDims == 2)
+      unpack_fringe_grad<2><<<blocks, threads>>>(dU_fringe, dU, fringe_fpts,
+                                                 fringe_side, nFringe, nFpts, nVars);
+
+    else if (nDims == 3)
+      unpack_fringe_grad<3><<<blocks, threads>>>(dU_fringe, dU, fringe_fpts,
+                                                 fringe_side, nFringe, nFpts, nVars);
+  }
+  else
+  {
+    if (nDims == 2)
+      unpack_fringe_grad<2><<<blocks, threads, 0, stream_handles[stream]>>>
+          (dU_fringe, dU, fringe_fpts, fringe_side, nFringe, nFpts, nVars);
+
+    else if (nDims == 3)
+      unpack_fringe_grad<3><<<blocks, threads, 0, stream_handles[stream]>>>
+          (dU_fringe, dU, fringe_fpts, fringe_side, nFringe, nFpts, nVars);
+  }
+
+  check_error();
+}
+
+
+
+__global__
+void unpack_unblank_u(mdvector_gpu<double> U_unblank,
+    mdvector_gpu<double> U, mdvector_gpu<int> cellIDs,
+    unsigned int nCells, unsigned int nSpts, unsigned int nVars)
+{
+  const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int var = tot_ind % nVars;
+  const unsigned int spt = (tot_ind / nVars) % nSpts;
+  const unsigned int ic = tot_ind / (nSpts * nVars);
+
+  if (ic >= nCells)
+    return;
+
+  const unsigned int ele = cellIDs(ic);
+
+  U(spt, ele, var) = U_unblank(var,spt,ic);
+}
+
+void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
+    mdvector_gpu<double>& U, mdvector_gpu<int> &cellIDs, unsigned int nCells,
+    unsigned int nSpts, unsigned int nVars, int stream)
+{
+  int threads = 192;
+  int blocks = (nCells * nSpts * nVars + threads - 1) / threads;
+
+  if (stream == -1)
+  {
+    unpack_unblank_u<<<blocks, threads>>>(U_unblank, U, cellIDs, nCells, nSpts, nVars);
+  }
+  else
+  {
+    unpack_unblank_u<<<blocks, threads, 0, stream_handles[stream]>>>(U_unblank, U,
+        cellIDs, nCells, nSpts, nVars);
+  }
+
+  check_error();
 }
