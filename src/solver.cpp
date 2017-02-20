@@ -208,12 +208,17 @@ void FRSolver::restart_solution(void)
     move(flow_time);
 
 #ifdef _BUILD_LIB
-    if (input->overset)
-    {
-      if (input->motion_type != RIGID_BODY)
-        ZEFR->tg_preprocess();
-      ZEFR->tg_process_connectivity();
-    }
+    ZEFR->tg_set_iter_iblanks(input->dt, eles->nVars);
+
+#ifdef _GPU
+    ZEFR->update_iblank_gpu();
+#endif
+//    if (input->overset)
+//    {
+//      if (input->motion_type != RIGID_BODY)
+//        ZEFR->tg_preprocess();
+//      ZEFR->tg_process_connectivity();
+//    }
 #endif
   }
 }
@@ -1007,24 +1012,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     eles->compute_divF_fpts(stage, startEle, endEle);
   }
 
-//  if (current_iter >= 1557 && input->rank == 2) /// DEBUGGING
-//  {
-//    eles->divF_spts = eles->divF_spts_d;
-//    for (int ele = 0; ele < eles->nEles; ele++)
-//    {
-//      if (geo.iblank_cell(ele) != NORMAL) continue;
-//      if (std::abs(eles->divF_spts(0,ele,0,stage)) > 1e-8)
-//      {
-//        printf("Ele %d: rho divF(%d) = %f\n",ele,stage,eles->divF_spts(0,ele,0,stage));
-//      }
-//    }
-////    printf("Ele 236: divF_spts(%d) = ",stage);
-////    for (int spt = 0; spt < 8; spt++)
-////    {
-////      printf("%f ",eles->divF_spts(spt,236,0,stage));
-////    }
-////    printf("\n");
-//  }
   /* Add source term (if required) */
   if (input->source)
     add_source(stage, startEle, endEle);
@@ -1899,6 +1886,21 @@ void FRSolver::update(const mdvector_gpu<double> &source)
 {
   prev_time = flow_time;
 
+  // Update grid to start of time step (if not already done so at previous step)
+  if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
+    move(flow_time);
+
+#ifdef _BUILD_LIB
+  if (input->overset && input->motion)
+  {
+    ZEFR->tg_set_iter_iblanks(dt(0), eles->nVars);
+
+#ifdef _GPU
+    ZEFR->update_iblank_gpu();
+#endif
+  }
+#endif
+
   if (input->dt_scheme == "LSRK")
   {
     step_adaptive_LSRK(source);
@@ -1914,35 +1916,20 @@ void FRSolver::update(const mdvector_gpu<double> &source)
   flow_time = prev_time + dt(0);
   current_iter++;
 
-  // Update grid to end of time step (if not already done so)
-  if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
-    move(flow_time);
+//  // Update grid to end of time step (if not already done so)
+//  if (input->dt_scheme != "MCGS" && (nStages == 1 || (nStages > 1 && rk_alpha(nStages-2) != 1)))
+//    move(flow_time);
 
-#ifdef _BUILD_LIB
-  if (input->overset && input->motion)
-  {
-    ZEFR->tg_set_iter_iblanks(dt(0), eles->nVars);
+//#ifdef _BUILD_LIB
+//  if (input->overset && input->motion)
+//  {
+//    ZEFR->tg_set_iter_iblanks(dt(0), eles->nVars);
 
-#ifdef _GPU
-    ZEFR->update_iblank_gpu();
-#endif
-
-//    if (current_iter >= 1557) /// DEBUGGING
-//    {
-//      printf("At end of update() before iter %d\n",current_iter);
-//      if (input->rank==2)
-//      {
-//        printf("Blanked elements for rank 3:");
-//        for (int i = 0; i < geo.nEles; i++)
-//        {
-//          if (geo.iblank_cell(i) != 1)
-//            printf("(%d,%d) ",i,geo.iblank_cell(i));
-//        }
-//        printf("\n");
-//      }
-//    }
-  }
-#endif
+//#ifdef _GPU
+//    ZEFR->update_iblank_gpu();
+//#endif
+//  }
+//#endif
 }
 
 
@@ -1974,7 +1961,11 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     flow_time = prev_time + rk_alpha(stage) * dt(0);
 
     move(flow_time, false);
-    ZEFR->tg_point_connectivity(); /// DEBUGGING - figure out where to put this
+
+#ifdef _BUILD_LIB
+    if (input->overset) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+#endif
+
     compute_residual(stage);
 
     /* If in first stage, compute stable timestep */
@@ -2052,9 +2043,6 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
     }
     check_error();
 #endif
-
-    // Update grid to position of next time step
-//    move(flow_time);
   }
 
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
@@ -2064,7 +2052,10 @@ void FRSolver::step_RK(const mdvector_gpu<double> &source)
       flow_time = prev_time + rk_alpha(nStages-2) * dt(0);
 
     move(flow_time, false);
-    ZEFR->tg_point_connectivity(); /// DEBUGGING - figure out where to put this
+
+#ifdef _BUILD_LIB
+    if (input->overset) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+#endif
 
     compute_residual(nStages-1);
 #ifdef _CPU
@@ -2294,7 +2285,10 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     flow_time = prev_time + rk_c(stage) * dt(0);
 
     move(flow_time, false); // Set grid to current evaluation time
-    ZEFR->tg_point_connectivity(); /// DEBUGGING - figure out where to put this
+
+#ifdef _BUILD_LIB
+    if (input->overset) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+#endif
 
     compute_residual(0);
 
@@ -2373,10 +2367,6 @@ void FRSolver::step_LSRK(const mdvector_gpu<double> &source)
     }
     check_error();
 #endif
-
-    // Update grid to position of next time step
-//    rigid_body_update(stage);
-//    move(flow_time);
     POP_NVTX_RANGE;
   }
 
@@ -5561,6 +5551,7 @@ void FRSolver::move(double time, bool update_iblank)
     }
 
     geo.coord_nodes = geo.coord_nodes_d;
+    geo.grid_vel_nodes = geo.grid_vel_nodes_d;
     faces->coord = faces->coord_d;
     eles->coord_spts = eles->coord_spts_d;
 

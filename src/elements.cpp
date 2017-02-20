@@ -3126,8 +3126,7 @@ void Elements::unblank_u_to_device(int *cellIDs, int nCells, double *data)
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
     unblankIDs_d.assign({nCells}, cellIDs, 3);
 
-  unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,geo->iblank_cell_d,
-      nCells,nSpts,nVars,3);
+  unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,nCells,nSpts,nVars);
 
   check_error();
 }

@@ -189,14 +189,17 @@ void mdvector_gpu<T>::assign(std::vector<unsigned> dims, T* vec, int stream)
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
 
-    for (int i = 1; i < nDims; i++)
+    for (unsigned int i = 0; i < nDims; i++)
     {
-      strides_h[i-1] = 1;
-      for (unsigned int j = 0; j < i; j++)
-        strides_h[i-1] *= dims[j];
-    }
+      if (i > 0)
+      {
+        strides_h[i-1] = 1;
+        for (unsigned int j = 0; j < i; j++)
+          strides_h[i-1] *= dims[j];
+      }
 
-    std::copy(dims.data(), dims.data()+dims.size(), dim_h);
+      dim_h[i] = dims[i];
+    }
 
     allocated = true;
   }

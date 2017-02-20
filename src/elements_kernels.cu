@@ -163,8 +163,7 @@ void compute_F(mdvector_gpu<double> F_spts,
   if (spt >= nSpts || ele >= endEle)
     return;
 
-  if (overset)
-    if (iblank[ele] != 1)
+  if (overset && iblank[ele] != 1)
       return;
 
   double U[nVars];

@@ -3556,21 +3556,6 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 
   U_fringe_d.assign({nVars, geo->nFptsPerFace, nFringe}, data, 3);
 
-//  if (input->iter >= 106 && input->gridID == 0) /// DEBUGGING
-//  {
-//    U_fringe.assign({nVars,geo->nFptsPerFace,nFringe}); /// DEBUGGING
-//    U_fringe = U_fringe_d;
-
-//    for (int face = 0; face < nFringe; face++)
-//    {
-//      for (int fpt = 0; fpt < 4; fpt++)
-//      {
-//        if (U_fringe(0,fpt,face) < .99 || U_fringe(1,fpt,face) < .99)
-//          printf("%d,%d: FRINGE (%d,%d) %f %f\n",input->gridID,input->rank,face,fpt,U_fringe(0,fpt,face),U_fringe(1,fpt,face));
-//      }
-//    }
-//  }
-
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
   {
     fringe_fpts.resize({geo->nFptsPerFace, nFringe});

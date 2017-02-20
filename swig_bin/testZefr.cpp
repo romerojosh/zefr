@@ -135,12 +135,12 @@ int main(int argc, char *argv[])
   }
   tg_time.stopTimer();
 
+  if (inp.restart)
+    z->restart_solution();
+
   // setup cell/face iblank data for use on GPU
   if (nGrids > 1 && zefr::use_gpus())
     z->update_iblank_gpu();
-
-  if (inp.restart)
-    z->restart_solution();
 
   // Output initial solution and grid
   if (!inp.restart)
