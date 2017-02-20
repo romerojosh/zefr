@@ -982,8 +982,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       PUSH_NVTX_RANGE("overset_grad_recv", 2);
       ZEFR->overset_interp_recv(faces->nVars, 1);
       // Wait for updated data on GPU before moving on to common_F
+#ifdef _GPU
       event_record(2, 3);
       stream_wait_event(0, 2);
+#endif
       POP_NVTX_RANGE;
     }
 #endif
@@ -2151,7 +2153,7 @@ void FRSolver::step_adaptive_LSRK(const mdvector_gpu<double> &source)
   {
     for (uint ele = 0; ele < eles->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell[ic] != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (uint spt = 0; spt < eles->nSpts; spt++)
       {
         double err = std::abs(rk_err(spt,ele,n)) /
@@ -5550,27 +5552,12 @@ void FRSolver::move(double time, bool update_iblank)
       }
     }
 
+#ifdef _GPU
     geo.coord_nodes = geo.coord_nodes_d;
     geo.grid_vel_nodes = geo.grid_vel_nodes_d;
     faces->coord = faces->coord_d;
     eles->coord_spts = eles->coord_spts_d;
-
-    PUSH_NVTX_RANGE("tg_conn", 5);
-
-//    if (update_iblank)
-//    {
-//      if (input->motion_type != RIGID_BODY)
-//        ZEFR->tg_preprocess();
-
-//      ZEFR->tg_process_connectivity();
-//#ifdef _GPU
-//    ZEFR->update_iblank_gpu();
-//#endif
-//    }
-//    else
-//      ZEFR->tg_point_connectivity();
-
-    POP_NVTX_RANGE;
+#endif
   }
 #endif
 
