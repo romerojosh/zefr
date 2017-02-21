@@ -748,48 +748,52 @@ void FRSolver::solver_data_to_device()
         if (input->viscous)
           e->inv_jaco_spts_init_d = e->inv_jaco_spts;
         e->jaco_spts_init_d = e->jaco_spts;
-        faces->norm_init_d = faces->norm;
-
-        nodes_ini_d = eles->nodes;
-        nodes_til_d = eles->nodes;
-        geo.x_cg_d = geo.x_cg;
-        x_ini_d = geo.x_cg;
-        x_til_d = geo.x_cg;
-        geo.vel_cg_d = geo.vel_cg;
-        v_ini_d = geo.vel_cg;
-        v_til_d = geo.vel_cg;
-        geo.q_d = geo.q;
-        q_ini_d = geo.q;
-        q_til_d = geo.q;
-        geo.qdot_d = geo.qdot;
-        qdot_ini_d = geo.qdot;
-        qdot_til_d = geo.qdot;
-
-        if (input->motion_type == RIGID_BODY)
-        {
-          if (geo.nBndFaces != 0)
-          {
-            force_d.set_size({geo.nBndFaces, geo.nDims});
-            moment_d.set_size({geo.nBndFaces, geo.nDims});
-            device_fill(force_d, force_d.max_size(), 0.);
-            device_fill(moment_d, moment_d.max_size(), 0.);
-          }
-        }
       }
+    }
+  }
 
-      /* Moving-grid parameters for convenience / ease of future additions
-         * (add to input.hpp, then also here) */
-      motion_vars = new MotionVars[1];
+  if (input->motion)
+  {
+    /* Moving-grid parameters for convenience / ease of future additions
+     * (add to input.hpp, then also here) */
+    motion_vars = new MotionVars[1];
 
-      motion_vars->moveAx = input->moveAx;
-      motion_vars->moveAy = input->moveAy;
-      motion_vars->moveAz = input->moveAz;
-      motion_vars->moveFx = input->moveFx;
-      motion_vars->moveFy = input->moveFy;
-      motion_vars->moveFz = input->moveFz;
+    motion_vars->moveAx = input->moveAx;
+    motion_vars->moveAy = input->moveAy;
+    motion_vars->moveAz = input->moveAz;
+    motion_vars->moveFx = input->moveFx;
+    motion_vars->moveFy = input->moveFy;
+    motion_vars->moveFz = input->moveFz;
 
-      allocate_device_data(motion_vars_d, 1);
-      copy_to_device(motion_vars_d, motion_vars, 1);
+    allocate_device_data(motion_vars_d, 1);
+    copy_to_device(motion_vars_d, motion_vars, 1);
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      faces->norm_init_d = faces->norm;
+
+      nodes_ini_d = eles->nodes;
+      nodes_til_d = eles->nodes;
+      geo.x_cg_d = geo.x_cg;
+      x_ini_d = geo.x_cg;
+      x_til_d = geo.x_cg;
+      geo.vel_cg_d = geo.vel_cg;
+      v_ini_d = geo.vel_cg;
+      v_til_d = geo.vel_cg;
+      geo.q_d = geo.q;
+      q_ini_d = geo.q;
+      q_til_d = geo.q;
+      geo.qdot_d = geo.qdot;
+      qdot_ini_d = geo.qdot;
+      qdot_til_d = geo.qdot;
+
+      if (geo.nBndFaces != 0)
+      {
+        force_d.set_size({geo.nBndFaces, geo.nDims});
+        moment_d.set_size({geo.nBndFaces, geo.nDims});
+        device_fill(force_d, force_d.max_size(), 0.);
+        device_fill(moment_d, moment_d.max_size(), 0.);
+      }
     }
   }
 
@@ -1348,7 +1352,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 
 #ifdef _GPU
-  if (nStages > 1)
+  if (input->nStages > 1)
   {
     for (auto e : elesObjs)
       device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
@@ -1468,21 +1472,21 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 
     compute_residual(input->nStages-1);
 
-#ifdef _CPU
     if (input->nStages > 1)
     {
+#ifdef _CPU
       for (auto e : elesObjs)
         e->U_spts = e->U_ini;
+#endif
+#ifdef _GPU
+      for (auto e : elesObjs)
+        device_copy(e->U_spts_d, e->U_ini_d, e->U_spts_d.max_size());
+#endif
     }
     else if (input->dt_type != 0)
     {
       compute_element_dt();
     }
-#endif
-#ifdef _GPU
-    for (auto e : elesObjs)
-      device_copy(e->U_spts_d, e->U_ini_d, e->U_spts_d.max_size());
-#endif
 
 #ifdef _CPU
     for (auto e : elesObjs)
@@ -5047,7 +5051,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   // ---- Update x, v, q, qdot ----
 
-  if (stage < nStages - 1)
+  if (stage < input->nStages - 1)
   {
     double ai = rk_alpha(stage);
     for (unsigned int d = 0; d < eles->nDims; d++)

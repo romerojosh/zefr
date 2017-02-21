@@ -771,8 +771,9 @@ void Elements::initialize_U()
           {
             double x = coord_spts(spt, ele, 0);
             double y = coord_spts(spt, ele, 1);
+            double z = (nDims == 3) ? coord_spts(spt, ele, 2) : 0.0;
 
-            U_spts(spt, ele, n) = compute_U_init(x, y, 0, n, input);
+            U_spts(spt, ele, n) = compute_U_init(x, y, z, n, input);
           }
         }
       }
@@ -1032,12 +1033,7 @@ void Elements::extrapolate_Fn(std::shared_ptr<Faces> faces)
 #endif
 
 #ifdef _GPU
-  cudaDeviceSynchronize();
-  check_error();
-
   device_copy(dFn_fpts_d, Fcomm_d, Fcomm_d.size());
-cudaDeviceSynchronize();
-  check_error();
 
   extrapolate_Fn_wrapper(oppE_d, F_spts_d, tempF_fpts_d, dFn_fpts_d,
       faces->norm_d, faces->dA_d, geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nSpts,

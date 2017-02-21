@@ -72,7 +72,6 @@ class FRSolver
     double prev_time = 0.;
     double restart_time = 0.;
     double grid_time = 0.;
-    unsigned int nStages;
     double CFL_ratio = 1;
     mdvector<double> rk_alpha, rk_beta, rk_bhat, rk_c;
     Filter filt;
