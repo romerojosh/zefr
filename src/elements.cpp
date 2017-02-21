@@ -707,32 +707,15 @@ void Elements::initialize_U()
     }
     else if (input->ic_type == 1)
     {
-      if (input->nDims == 2)
+      for (unsigned int ele = 0; ele < nEles; ele++)
       {
-        for (unsigned int ele = 0; ele < nEles; ele++)
+        for (unsigned int spt = 0; spt < nSpts; spt++)
         {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            double x = coord_spts(spt, ele, 0);
-            double y = coord_spts(spt, ele, 1);
+          double x = coord_spts(spt, ele, 0);
+          double y = coord_spts(spt, ele, 1);
+          double z = (nDims == 2) ? 0.0 : coord_spts(spt, ele, 2);
 
-            U_spts(spt, ele, 0) = compute_U_init(x, y, 0, 0, input);
-          }
-        }
-      }
-      else if (input->nDims == 3)
-      {
-        for (unsigned int ele = 0; ele < nEles; ele++)
-        {
-          for (unsigned int spt = 0; spt < nSpts; spt++)
-          {
-            double x = coord_spts(spt, ele, 0);
-            double y = coord_spts(spt, ele, 1);
-            double z = coord_spts(spt, ele, 2);
-
-            U_spts(spt, ele, 0) = compute_U_init(x, y, z, 0, input);
-
-          }
+          U_spts(spt, ele, 0) = compute_U_init(x, y, z, 0, input);
         }
       }
     }
@@ -774,8 +757,9 @@ void Elements::initialize_U()
           {
             double x = coord_spts(spt, ele, 0);
             double y = coord_spts(spt, ele, 1);
+            double z = (nDims == 2) ? 0.0 : coord_spts(spt, ele, 2);
 
-            U_spts(spt, ele, n) = compute_U_init(x, y, 0, n, input);
+            U_spts(spt, ele, n) = compute_U_init(x, y, z, n, input);
           }
         }
       }
