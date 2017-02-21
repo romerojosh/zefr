@@ -75,6 +75,9 @@ struct GeoStruct
   unsigned int nGfpts_mpi = 0;
   bool per_bnd_flag = false;
 
+  unsigned int nNdFaceCurved; /// # of nodes per face, including edge and interior nodes
+  mdvector<int> faceNodesCurved;
+
   /* Connectivity Data */
   mdvector<int> ele2face, face2nodes, face2eles, face2eles_idx;
 

@@ -434,7 +434,7 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
   auto etype = solver->elesObjs[0]->etype;
 
   nFaceTypes = 1;
-  nvert_face = geo->nNodesPerFaceBT[etype];
+  nvert_face = geo->nNdFaceCurved;
   nFaces_type = geo->nFaces;
   f2v = (int *)geo->face2nodes.data();
   f2c = geo->face2eles.data();
