@@ -2412,6 +2412,8 @@ void Elements::move(std::shared_ptr<Faces> faces)
     if (input->CFL_type == 2)
       update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
   }
+
+  check_error();
 #endif
 }
 

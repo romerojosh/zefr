@@ -754,6 +754,10 @@ void FRSolver::solver_data_to_device()
 
   if (input->motion)
   {
+    geo.coord_nodes_d = geo.coord_nodes;
+    geo.coords_init_d = geo.coords_init;
+    geo.grid_vel_nodes_d = geo.grid_vel_nodes;
+
     /* Moving-grid parameters for convenience / ease of future additions
      * (add to input.hpp, then also here) */
     motion_vars = new MotionVars[1];
@@ -822,7 +826,7 @@ void FRSolver::solver_data_to_device()
   if (input->motion)
   {
     faces->Vg_d = faces->Vg;
-    //faces->coord_d = faces->coord;
+    faces->coord_d = faces->coord;
   }
 
   /* -- Additional data -- */
@@ -837,27 +841,6 @@ void FRSolver::solver_data_to_device()
 
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
-
-  if (input->motion)
-  {
-    geo.coord_nodes_d = geo.coord_nodes;
-    geo.coords_init_d = geo.coords_init;
-    geo.grid_vel_nodes_d = geo.grid_vel_nodes;
-
-    /* Moving-grid parameters for convenience / ease of future additions
-     * (add to input.hpp, then also here) */
-    motion_vars = new MotionVars[1];
-
-    motion_vars->moveAx = input->moveAx;
-    motion_vars->moveAy = input->moveAy;
-    motion_vars->moveAz = input->moveAz;
-    motion_vars->moveFx = input->moveFx;
-    motion_vars->moveFy = input->moveFy;
-    motion_vars->moveFz = input->moveFz;
-
-    allocate_device_data(motion_vars_d, 1);
-    copy_to_device(motion_vars_d, motion_vars, 1);
-  }
 
 #ifdef _MPI
   /* MPI data */
@@ -2679,7 +2662,8 @@ void FRSolver::write_solution(const std::string &_prefix)
     for (auto e : elesObjs)
     {
       for (int ele = 0; ele < e->nEles; ele++)
-        if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBT[e->etype]--;
+        if (geo.iblank_cell(ele) != NORMAL) nElesBT[e->etype]--;
+//      if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBT[e->etype]--;
     }
   }
 

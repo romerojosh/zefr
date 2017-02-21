@@ -97,10 +97,11 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "n_steps", input.n_steps);
   read_param(f, "res_tol", input.res_tol, 1e-18);
   read_param(f, "dt_scheme", input.dt_scheme);
-  read_param(f, "dt_type", input.dt_type);
   read_param(f, "dt", input.dt);
-  read_param(f, "CFL", input.CFL);
+  read_param(f, "dt_type", input.dt_type);
   read_param(f, "CFL_type", input.CFL_type, (unsigned int) 1);
+  if (input.dt_type != 0)
+    read_param(f, "CFL", input.CFL);
 
   read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
   read_param(f, "CFL_max", input.CFL_max, 1.0);

@@ -110,6 +110,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
 
   if (input->motion)
   {
+    geo.coords_init = geo.coord_nodes;
     geo.grid_vel_nodes.assign({geo.nDims, geo.nNodes}, 0.0); /// TODO: pinned for _GPU?
   }
 
@@ -191,9 +192,6 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   /* Load node coordinate data */
   read_node_coords(f, geo);
 
-  if (input->motion)
-    geo.coords_init = geo.coord_nodes;
-
   /* Load element connectivity data */
   read_element_connectivity(f, geo, input);
   read_boundary_faces(f, geo);
@@ -201,7 +199,6 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   set_ele_adjacency(geo);
 
   f.close();
-
 }
 
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
@@ -1733,8 +1730,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
     idx++;
   }
-
-  if (input->motion) geo.coords_init = geo.coord_nodes;
 
   /* Renumber connectivity data using partition local indexing (via geo.node_map_g2p)*/
   for (auto etype : geo.ele_set)

@@ -98,6 +98,10 @@ ifeq ($(strip $(SM)),KEPLER)
   CUFLAGS += -arch=sm_35
 endif
 
+ifeq ($(strip $(SM)),GEFORCE)
+  CUFLAGS += -arch=sm_30
+endif
+
 endif
 endif
 

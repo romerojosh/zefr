@@ -839,6 +839,8 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
   dim3 blocksF((nEles * nFpts + threads - 1) / threads, nDims);
 
   copy_coords_face<<<blocksF,threads>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
+
+  check_error();
 }
 
 template<unsigned int nDims>
@@ -1048,6 +1050,8 @@ void update_nodes_rigid_wrapper(mdvector_gpu<double> &nodes_init, mdvector_gpu<d
     add_cg_offset<3><<<blocks,threads>>>(nodes, x_cg, nNodes);
   else
     add_cg_offset<2><<<blocks,threads>>>(nodes, x_cg, nNodes);
+
+  check_error();
 }
 
 __global__
