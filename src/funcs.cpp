@@ -958,5 +958,25 @@ std::vector<uint> get_int_list(uint N, uint start)
 
 unsigned int tri_nodes_to_order(unsigned int nNodes)
 {
-  return (-3 + std::sqrt(1 + 8 * nNodes))/2;
+  int P = 0;
+  while (P < 20)
+  {
+    if ((P+1) * (P+2)/2 == nNodes)
+      return P;
+    P++;
+  }
+
+  ThrowException("Can't figure out triangle shape order!");
+}
+
+unsigned int tet_nodes_to_order(unsigned int nNodes)
+{
+  int P = 0;
+  while (P < 20)
+  {
+    if ((P+1) * (P+2) * (P+3)/6 == nNodes)
+      return P;
+    P++;
+  }
+  ThrowException("Can't figure out tetrahedra shape order!");
 }

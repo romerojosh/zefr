@@ -81,5 +81,10 @@ double dDubiner2D(unsigned int P, double xi, double eta, double dim, unsigned in
 double RTMonomial2D(unsigned int P, double xi, double eta, unsigned int dim, unsigned int mode);
 double divRTMonomial2D(unsigned int P, double xi, double eta, unsigned int mode);
 
+double Dubiner3D(unsigned int P, double xi, double eta, double zeta, unsigned int mode);
+double dDubiner3D(unsigned int P, double xi, double eta, double zeta, double dim, unsigned int mode);
+double RTMonomial3D(unsigned int P, double xi, double eta, double zeta, unsigned int dim, unsigned int mode);
+double divRTMonomial3D(unsigned int P, double xi, double eta, double zeta, unsigned int mode);
+
 
 #endif /* polynomials_hpp */

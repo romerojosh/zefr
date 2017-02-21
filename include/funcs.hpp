@@ -43,6 +43,7 @@ double get_cfl_limit_adv(int order);
 double get_cfl_limit_diff(int order, double beta);
 
 unsigned int tri_nodes_to_order(unsigned int nNodes);
+unsigned int tet_nodes_to_order(unsigned int nNodes);
 
 /* Blocked gemm operation using OpenMP */
 #ifdef _OMP

@@ -41,6 +41,7 @@ extern "C" {
 #include "quads.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
+#include "tets.hpp"
 #include "tris.hpp"
 #include "solver.hpp"
 
@@ -121,6 +122,8 @@ void FRSolver::setup(_mpi_comm comm_in)
     }
     else if (etype == HEX)
        elesObjs.push_back(std::make_shared<Hexas>(&geo, input, order));
+    else if (etype == TET)
+       elesObjs.push_back(std::make_shared<Tets>(&geo, input, order));
     
   }
 
@@ -244,6 +247,7 @@ void FRSolver::orient_fpts()
   for (unsigned int f = 0; f < geo.nGfpts_int/geo.nFptsPerFace; f++)
   {
     unsigned int shift = f * geo.nFptsPerFace;
+
     fuzzysort_ind(fpt_coords_L, idxL.data() + shift, geo.nFptsPerFace, geo.nDims);
     fuzzysort_ind(fpt_coords_R, idxR.data() + shift, geo.nFptsPerFace, geo.nDims);
   }
@@ -254,10 +258,16 @@ void FRSolver::orient_fpts()
   for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
     idxR[fpt] = idxR_copy[idxsort[fpt]];
 
+  /* Invert the mapping */
+  idxR_copy = idxR;
+  for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
+    idxR[idxR_copy[fpt]] = fpt;
+
 
   /* Reindex right face flux points */
   for (auto e : elesObjs)
   {
+    auto fpt2gfptBT_copy = geo.fpt2gfptBT[e->etype];
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
@@ -266,7 +276,7 @@ void FRSolver::orient_fpts()
 
         if (slot == 1)
         {
-          int gfpt_old = geo.fpt2gfptBT[e->etype](fpt,ele);
+          int gfpt_old = fpt2gfptBT_copy(fpt, ele);
           geo.fpt2gfptBT[e->etype](fpt, ele) = idxR[gfpt_old];
         }
       }
@@ -724,6 +734,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Extrapolate solution to flux points */
   for (auto e : elesObjs)
     e->extrapolate_U();
+
 
 
   /* If "squeeze" stabilization enabled, apply  it */
@@ -2612,6 +2623,8 @@ void FRSolver::write_solution(const std::string &_prefix)
           binary_write(f, (char) 9);
         else if (e->etype == TRI)
           binary_write(f, (char) 5);
+        else if (e->etype == TET)
+          binary_write(f, (char) 10);
         else if (e->etype == HEX)
           binary_write(f, (char) 12);
       }

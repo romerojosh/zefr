@@ -348,12 +348,26 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
 
       switch(val)
       {
+        /* Linear Tet */
+        case 4:
+          geo.ele_set.insert(TET);
+          geo.nEles++;
+          geo.nElesBT[TET]++;
+          geo.nNodesPerEleBT[TET] = 4; break;
+
         /* Trilinear Hex */
         case 5:
           geo.ele_set.insert(HEX);
           geo.nEles++;
           geo.nElesBT[HEX]++;
           geo.nNodesPerEleBT[HEX] = 8; break;
+
+        /* Quadratic Tet */
+        case 11:
+          geo.ele_set.insert(TET);
+          geo.nEles++;
+          geo.nElesBT[TET]++;
+          geo.nNodesPerEleBT[TET] = 10; break;
 
         /* Triquadratic Hex */
         case 12:
@@ -493,6 +507,18 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         case 37: // Quartic quad
         case 38: // Quintic quad
           break;
+
+        /* Process tetrahedral elements */
+        case 4:  /* Linear Tet */
+        case 11:  /* Quadratic Tet */
+        {
+          unsigned int ele = geo.nElesBT[TET];
+          for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[TET]; nd++)
+          {
+            f >> geo.ele2nodesBT[TET](nd,ele);
+          }
+          geo.nElesBT[TET]++; break;
+        }
 
         /* Process hexahedral elements */
         case 5: /* 8-node Hexahedral */
@@ -706,6 +732,21 @@ void set_face_nodes(GeoStruct &geo)
       /* Face 5: Back */
       geo.face_nodesBT[etype][5] = {3, 2, 6, 7};
     }
+    else if (etype == TET)
+    {
+      /* Face 0: Rear (xi-eta plane) */
+      geo.face_nodesBT[etype][0] = {0, 1, 2};
+
+      /* Face 1: Angled */
+      geo.face_nodesBT[etype][1] = {1, 2, 3};
+
+      /* Face 2: Left (eta-zeta plane) */
+      geo.face_nodesBT[etype][2] = {0, 3, 2};
+
+      /* Face 3: Bottom (xi-zeta plane) */
+      geo.face_nodesBT[etype][3] = {0, 3, 1};
+
+    }
   }
 }
 
@@ -903,9 +944,13 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     ThrowException("Improper value for nDims - should be 2 or 3.");
 
   unsigned int nFptsPerFace = (order + 1);
-  unsigned int nFpts1D = (order + 1);
   if (geo.nDims == 3)
-    nFptsPerFace *= (order + 1);
+  {
+    if (geo.ele_set.count(HEX))
+      nFptsPerFace *= (order + 1);
+    else if (geo.ele_set.count(TET))
+      nFptsPerFace = (order + 2) * (order + 3) / 2;
+  }
 
   unsigned int nVars = 1;
   if (input->equation == EulerNS)
@@ -2422,7 +2467,6 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   ELE_TYPE etype = (geo.nDims == 2) ? QUAD : HEX;
 
   unsigned int nFptsPerFace = (order + 1);
-  unsigned int nFpts1D = (order + 1);
   if (geo.nDims == 3)
     nFptsPerFace *= (order + 1);
 

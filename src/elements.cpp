@@ -696,7 +696,14 @@ void Elements::initialize_U()
   {
     if (input->ic_type == 0)
     {
-      // Do nothing for now
+      // Set to zero
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          U_spts(spt, ele, 0) = 0.0;
+        }
+      }
     }
     else if (input->ic_type == 1)
     {

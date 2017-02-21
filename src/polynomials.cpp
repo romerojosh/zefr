@@ -357,6 +357,252 @@ double divRTMonomial2D(unsigned int P, double xi, double eta, unsigned int mode)
   return 0.0;
 }
 
+double Dubiner3D(unsigned int P, double xi, double eta, double zeta, unsigned int mode)
+{
+  double val;
+  int nModes = (P + 1) * (P + 2) * (P + 3) / 6;
+  if (mode >= nModes) 
+    ThrowException("ERROR: mode value is too high for given P!")
+
+  double abc[3];
+  abc[0] = (eta + zeta == 0) ? (-1) : -2.0 * (1.0 + xi) / (eta + zeta) - 1.0;
+  abc[1] = (zeta == 1) ? (-1) : 2.0 * (1.0 + eta) / (1.0 - zeta) - 1.0;
+  abc[2] = zeta;
+
+  unsigned int m = 0;
+  for (unsigned int l = 0; l <= P; l++)
+  {
+    for (unsigned int n = 0; n <= l; n++)
+    {
+      for (unsigned int k = 0; k <= n; k++)
+      {
+        unsigned int j  = n - k;
+        unsigned int i  = l - j - k;
+
+        if (m == mode)
+        {
+          double j0 = Jacobi(abc[0], 0, 0, i);
+          double j1 = Jacobi(abc[1], 2*i + 1, 0, j);
+          double j2 = Jacobi(abc[2], 2*i + 2*j + 2, 0, k);
+          val =  2.0 * std::sqrt(2) * j0 * j1 * j2 * std::pow(1 - abc[1], i) * std::pow(1 - abc[2], i+j);
+        }
+
+        m++;
+      }
+    }
+  } 
+
+  return val;
+}
+
+double dDubiner3D(unsigned int P, double xi, double eta, double zeta, double dim, unsigned int mode)
+{
+  int nModes = (P + 1) * (P + 2) * (P + 3) / 6;
+  if (mode >= nModes) 
+    ThrowException("ERROR: mode value is too high for given P!")
+
+  double abc[3];
+  abc[0] = (eta + zeta == 0) ? (-1) : -2.0 * (1.0 + xi) / (eta + zeta) - 1.0;
+  abc[1] = (zeta == 1) ? (-1) : 2.0 * (1.0 + eta) / (1.0 - zeta) - 1.0;
+  abc[2] = zeta;
+
+  unsigned int m = 0;
+  for (unsigned int l = 0; l <= P; l++)
+  {
+    for (unsigned int n = 0; n <= l; n++)
+    {
+      for (unsigned int k = 0; k <= n; k++)
+      {
+        unsigned int j  = n - k;
+        unsigned int i  = l - j - k;
+
+        if (m == mode)
+        {
+          double j0 = Jacobi(abc[0], 0, 0, i);
+          double j1 = Jacobi(abc[1], 2*i + 1, 0, j);
+          double j2 = Jacobi(abc[2], 2*i + 2*j + 2, 0, k);
+          double dj0 = dJacobi(abc[0], 0, 0, i);
+          double dj1 = dJacobi(abc[1], 2*i + 1, 0, j);
+          double dj2 = dJacobi(abc[2], 2*i + 2*j + 2, 0, k);
+
+          double dxi = dj0 * j1 * j2;
+          if (i > 0)
+            dxi *= std::pow(0.5 * (1 - abc[1]), i - 1);
+          if (i+j > 0)
+            dxi *= std::pow(0.5 * (1 - abc[2]), i + j - 1);
+
+          if (dim == 0)
+            return(dxi * std::pow(2, 2*i + j + 1.5));
+
+          double deta = (0.5 * (1 + abc[0])) * dxi;
+          double tmp = dj1 * std::pow(0.5 * (1-abc[1]), i);
+
+          if (i > 0)
+            tmp -= 0.5 * i * j1 * std::pow(0.5 * (1-abc[1]), i - 1);
+          if (i+j > 0) 
+            tmp *= std::pow(0.5 * (1 - abc[2]), i + j - 1);
+
+          tmp *= j0 * j2;
+          deta += tmp;
+
+          if (dim == 1)
+            return(deta * std::pow(2, 2*i + j + 1.5));
+
+          double dzeta = 0.5 * (1 + abc[0]) * dxi + 0.5 * (1 + abc[1]) * tmp;
+          tmp = dj2 * std::pow(0.5 * (1 - abc[2]), i + j);
+
+          if (i+j > 0)
+            tmp -= 0.5 * (i+j) * (j2 * std::pow(0.5 * (1 - abc[2]), i + j - 1));
+
+          tmp *= j0 * j1 * std::pow(0.5 * (1 - abc[1]), i);
+          dzeta += tmp;
+
+          if (dim == 2)
+            return (dzeta * std::pow(2, 2*i + j + 1.5));
+
+        }
+
+        m++;
+      }
+    }
+  } 
+}
+
+double RTMonomial3D(unsigned int P, double xi, double eta, double zeta, unsigned int dim, unsigned int mode)
+{
+  double val;
+  unsigned int nP3Modes = (P+1)*(P+2)*(P+3) / 2; // number of regular monomial modes 
+
+  if (mode < nP3Modes)
+  {
+    /* Regular monomial mode */
+    unsigned int idx = mode / 3;
+    unsigned int slot = mode % 3; //which dimension mode is nonzero
+
+    unsigned int n = 0;
+    for (unsigned int k = 0; k <= P; k++)
+    {
+      for (unsigned int j = 0; j <= P; j++)
+      {
+        for (unsigned int i = 0; i <= P; i++)
+        {
+          if (i+j+k <= P)
+          {
+            if (n == idx)
+            {
+              val =  (dim == slot) ? std::pow(xi, i) * std::pow(eta, j) * std::pow(zeta, k): 0.0;
+              return val;
+            }
+            n++;
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    /* RT mode */
+    unsigned int idx = mode - nP3Modes;
+
+    unsigned int n = 0;
+    for (unsigned int k = 0; k <= P; k++)
+    {
+      for (unsigned int j = 0; j <= P; j++)
+      {
+        for (unsigned int i = 0; i <= P; i++)
+        {
+          if (i+j+k == P)
+          {
+            if (n == idx)
+            {
+              if (dim == 0)
+                val = std::pow(xi, i+1) * std::pow(eta, j) * std::pow(zeta, k);
+              else if (dim == 1)
+                val = std::pow(xi, i) * std::pow(eta, j+1) * std::pow(zeta, k);
+              else if (dim == 2)
+                val = std::pow(xi, i) * std::pow(eta, j) * std::pow(zeta, k+1);
+
+              return val;
+            }
+            n++;
+          }
+        }
+      }
+    }
+  }
+
+  return 0.0;
+}
+
+double divRTMonomial3D(unsigned int P, double xi, double eta, double zeta, unsigned int mode)
+{
+  double val;
+  unsigned int nP3Modes = (P+1)*(P+2)*(P+3)/2; // number of regular monomial modes
+
+  if (mode < nP3Modes)
+  {
+    /* Regular monomial mode */
+    unsigned int idx = mode / 3;
+    unsigned int slot = mode % 3; //which dimension mode is nonzero
+
+    unsigned int n = 0;
+    for (unsigned int k = 0; k <= P; k++)
+    {
+      for (unsigned int j = 0; j <= P; j++)
+      {
+        for (unsigned int i = 0; i <= P; i++)
+        {
+          if (i+j+k <= P)
+          {
+            if (n == idx)
+            {
+              if (slot == 0)
+                val = i * std::pow(xi, i-1) * std::pow(eta, j) * std::pow(zeta, k);
+              else if (slot == 1)
+                val = std::pow(xi, i) * j * std::pow(eta, j-1) * std::pow(zeta, k);
+              else if (slot == 2)
+                val = std::pow(xi, i) * std::pow(eta, j) * k * std::pow(zeta, k-1);
+
+              return val;
+            }
+            n++;
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    /* RT mode */
+    unsigned int idx = mode - nP3Modes;
+
+    unsigned int n = 0;
+    for (unsigned int k = 0; k <= P; k++)
+    {
+      for (unsigned int j = 0; j <= P; j++)
+      {
+        for (unsigned int i = 0; i <= P; i++)
+        {
+          if (i+j+k == P)
+          {
+            if (n == idx)
+            {
+              val =  (i+1) * std::pow(xi, i) * std::pow(eta, j) * std::pow(zeta, k) + 
+                     std::pow(xi, i) * (j+1) * std::pow(eta, j) * std::pow(zeta, k) +
+                     std::pow(xi, i) * std::pow(eta, j) * (k+1) * std::pow(zeta, k);
+
+              return val;
+            }
+            n++;
+          }
+        }
+      }
+    }
+  }
+
+  return 0.0;
+}
+
 double Legendre2D(unsigned int P, double xi, double eta, unsigned int mode)
 {
   double val;

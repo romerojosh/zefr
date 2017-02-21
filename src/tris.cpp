@@ -147,14 +147,11 @@ void Tris::set_locs()
   unsigned int ppt = 0;
   for (unsigned int i = 0; i < nPpts1D; i++)
   {
-    for (unsigned int j = 0; j < nPpts1D; j++)
+    for (unsigned int j = 0; j < nPpts1D - i; j++)
     {
-      if (j <= nPpts1D - i - 1)
-      {
-        loc_ppts(ppt,0) = loc_ppts_1D[j];
-        loc_ppts(ppt,1) = loc_ppts_1D[i];
-        ppt++;
-      }
+      loc_ppts(ppt,0) = loc_ppts_1D[j];
+      loc_ppts(ppt,1) = loc_ppts_1D[i];
+      ppt++;
     }
   }
 
@@ -239,8 +236,6 @@ void Tris::set_vandermonde_mats()
     }
   }
 
-  vandRT.calc_LU();
-
   inv_vandRT.assign({2*nSpts + nFpts, 2*nSpts * nFpts}); 
   
   mdvector<double>eye2({2*nSpts + nFpts, 2*nSpts + nFpts}, 0); 
@@ -261,14 +256,11 @@ void Tris::set_oppRestart(unsigned int order_restart, bool use_shape)
   unsigned int rpt = 0;
   for (unsigned int i = 0; i < nRpts1D; i++)
   {
-    for (unsigned int j = 0; j < nRpts1D; j++)
+    for (unsigned int j = 0; j < nRpts1D - i; j++)
     {
-      if (j <= nRpts1D - i - 1)
-      {
-        loc_rpts(rpt,0) = loc_rpts_1D[j];
-        loc_rpts(rpt,1) = loc_rpts_1D[i];
-        rpt++;
-      }
+      loc_rpts(rpt,0) = loc_rpts_1D[j];
+      loc_rpts(rpt,1) = loc_rpts_1D[i];
+      rpt++;
     }
   }
 
@@ -529,14 +521,11 @@ mdvector<double> Tris::calc_shape(const std::vector<double> &loc)
   unsigned int pt = 0;
   for (unsigned int i = 0; i < nPts1D; i++)
   {
-    for (unsigned int j = 0; j < nPts1D; j++)
+    for (unsigned int j = 0; j < nPts1D - i; j++)
     {
-      if (j <= nPts1D - i - 1)
-      {
-        loc_pts(pt,0) = loc_pts_1D[j];
-        loc_pts(pt,1) = loc_pts_1D[i];
-        pt++;
-      }
+      loc_pts(pt,0) = loc_pts_1D[j];
+      loc_pts(pt,1) = loc_pts_1D[i];
+      pt++;
     }
   }
 
@@ -595,14 +584,11 @@ mdvector<double> Tris::calc_d_shape(const std::vector<double> &loc)
   unsigned int pt = 0;
   for (unsigned int i = 0; i < nPts1D; i++)
   {
-    for (unsigned int j = 0; j < nPts1D; j++)
+    for (unsigned int j = 0; j < nPts1D - i; j++)
     {
-      if (j <= nPts1D - i - 1)
-      {
-        loc_pts(pt,0) = loc_pts_1D[j];
-        loc_pts(pt,1) = loc_pts_1D[i];
-        pt++;
-      }
+      loc_pts(pt,0) = loc_pts_1D[j];
+      loc_pts(pt,1) = loc_pts_1D[i];
+      pt++;
     }
   }
 

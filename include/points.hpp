@@ -55,5 +55,7 @@ mdvector<double> WS_Tri_pts(unsigned int P);
 mdvector<double> WS_Tri_weights(unsigned int P);
 mdvector<double> RW_Tri_pts(unsigned int P);
 mdvector<double> symm_pts_tri(std::vector<double> a3, std::vector<double> a21, std::vector<double> a111, std::vector<double> b111);
+mdvector<double> WS_Tet_pts(unsigned int P);
+mdvector<double> WS_Tet_weights(unsigned int P);
 
 #endif /* points_hpp */
