@@ -191,6 +191,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "S", input.S, 120.0);
 
   read_param(f, "rho_fs", input.rho_fs, 1.0);
+  read_param(f, "v_mag_fs", input.v_fs, 1.0);
   input.V_fs.assign({3});
   read_param(f, "u_fs", input.V_fs(0), 0.2);
   read_param(f, "v_fs", input.V_fs(1), 0.0);
@@ -311,6 +312,33 @@ InputStruct read_input_file(std::string inputfile)
 
 void apply_nondim(InputStruct &input)
 {
+  if (input.disable_nondim) 
+  { 
+    /* Run with dimensional quantities from input file:
+     * ++ Re, Ma, rho, V, L, p, gamma specified
+     * ++ Remaining parameters calculated for consistency */
+    input.R = 1.;  // Free parameter (only R*T important to us)
+    input.mu = input.rho_fs * input.v_fs * input.L_fs  / input.Re_fs; // Re -> mu
+    input.T_fs = input.P_fs / (input.rho_fs * input.R); // Ideal gas law -> T
+
+    input.R_ref = input.R;
+
+    input.T_tot_fs = input.T_fs * (1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs);
+    input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs,
+        input.gamma / (input.gamma - 1.0));
+
+    for (unsigned int dim = 0; dim < input.nDims; dim++)
+      input.V_fs(dim) = input.v_fs * input.norm_fs(dim);
+
+    double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
+    for (unsigned int n = 0; n < input.nDims; n++)
+      input.V_wall(n) = V_wall_mag * input.norm_wall(n) / input.v_fs;
+    
+    /// TODO: update Sutherland's Law, or disable it here
+
+    return;
+  }
+
   /* Compute dimensional freestream quantities */
   double V_fs_mag = input.mach_fs * std::sqrt(input.gamma * input.R * input.T_fs);
   for (unsigned int dim = 0; dim < input.nDims; dim++)
@@ -327,20 +355,6 @@ void apply_nondim(InputStruct &input)
   input.P_fs = input.rho_fs * input.R * input.T_fs;
   input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
   input.c_sth = input.S / input.T_gas;
-
-  if (input.disable_nondim)
-  {
-    input.R_ref = input.R;
-    input.T_tot_fs = input.T_fs * (1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs);
-    input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5*(input.gamma - 1.0)*input.mach_fs*input.mach_fs,
-                                           input.gamma / (input.gamma - 1.0));
-
-    double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
-    for (unsigned int n = 0; n < input.nDims; n++)
-      input.V_wall(n) = V_wall_mag * input.norm_wall(n) / V_fs_mag;
-
-    return;
-  }
 
   /* -- Set reference quantities for nondimensionalization --
    * Note that we are setting rho_ref s.t. we get a 'normalized' density of 2.
