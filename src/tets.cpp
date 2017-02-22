@@ -613,7 +613,7 @@ void Tets::setup_ppt_connectivity()
   }
 }
 
-mdvector<double> Tets::calc_shape(const std::vector<double> &loc)
+void Tets::calc_shape(mdvector<double> &shape_val, const double* loc)
 {
   std::vector<std::vector<unsigned int>> gmsh_nodes(3);
   gmsh_nodes[1] =  {0, 1, 2, 3};
@@ -623,8 +623,6 @@ mdvector<double> Tets::calc_shape(const std::vector<double> &loc)
 
   if (shape_order > 2)
     ThrowException("Tetrahedra with supplied shape_order unsupported!");
-
-  mdvector<double> shape_val({nNodes}, 0.0);
 
   /* Setup shape node locations */
   auto loc_pts_1D = Shape_pts(shape_order); unsigned int nPts1D = loc_pts_1D.size();
@@ -673,12 +671,9 @@ mdvector<double> Tets::calc_shape(const std::vector<double> &loc)
 
     shape_val(gmsh_nodes[shape_order][nd]) = val;
   }
-
-  return shape_val;
-
 }
 
-mdvector<double> Tets::calc_d_shape(const std::vector<double> &loc)
+void Tets::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
 {
   std::vector<std::vector<unsigned int>> gmsh_nodes(3);
   gmsh_nodes[1] =  {0, 1, 2, 3};
@@ -688,8 +683,6 @@ mdvector<double> Tets::calc_d_shape(const std::vector<double> &loc)
 
   if (shape_order > 2)
     ThrowException("Tetrahedra with supplied shape_order unsupported!");
-
-  mdvector<double> dshape_val({nNodes, 3}, 0.0);
 
   /* Setup shape node locations */
   auto loc_pts_1D = Shape_pts(shape_order); unsigned int nPts1D = loc_pts_1D.size();
@@ -741,8 +734,6 @@ mdvector<double> Tets::calc_d_shape(const std::vector<double> &loc)
       dshape_val(gmsh_nodes[shape_order][nd], dim) = val;
     }
   }
-
-  return dshape_val;
 }
 
 void Tets::modify_sensor()

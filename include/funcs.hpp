@@ -21,6 +21,7 @@
 #define funcs_hpp
 
 #include <cmath>
+#include <array>
 
 extern "C" {
 #include "cblas.h"
@@ -28,6 +29,56 @@ extern "C" {
 
 #include "input.hpp"
 #include "mdvector.hpp"
+
+//! Quaternion object [q0 + q1 i + q2 j + q3 k]
+struct Quat
+{
+private:
+  double q[4] = {0,0,0,0};
+
+public:
+  Quat(void) {}
+
+  Quat(double a, double b, double c, double d)
+  {
+    q[0] = a; q[1] = b; q[2] = c; q[3] = d;
+  }
+
+  void operator=(const Quat &p)
+  {
+    q[0] = p[0]; q[1] = p[1]; q[2] = p[2]; q[3] = p[3];
+  }
+
+  double& operator[](unsigned i) { return q[i]; }
+  double  operator[](unsigned i) const { return q[i]; }
+
+  Quat operator*(const Quat &p);
+  Quat operator*(const std::array<double,3> &p);
+
+  Quat operator+(const Quat &p);
+  Quat operator-(const Quat &p);
+
+  void operator+=(const Quat &p);
+  void operator-=(const Quat &p);
+
+  Quat cross(const Quat &p);
+
+  Quat conj(void);
+
+  double norm(void) const
+  {
+    return std::sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+  }
+
+  void normalize(void)
+  {
+    double N = this->norm();
+    for (unsigned i = 0; i < 4; i++)
+      q[i] /= N;
+  }
+};
+
+Quat operator*(double a, const Quat &b);
 
 /* Computes solution at specified time and location */
 double compute_U_init(double x, double y, double z, unsigned int var, const InputStruct *input);
@@ -109,11 +160,24 @@ unsigned int step(const T& val)
 
 //std::ostream& operator<<(std::ostream &os, const point &pt);
 
+double det_2x2(const double* mat);
+double det_3x3(const double* mat);
+double det_4x4(const double* mat);
+
 mdvector<double> adjoint(const mdvector<double> &mat);
+
+//! In-place matrix adjoint
+void adjoint(const mdvector<double> &mat, mdvector<double> &adj);
+
+void adjoint_3x3(double *mat, double *adj);
+void adjoint_4x4(double *mat, double *adj);
 
 double determinant(const mdvector<double> &mat);
 
 mdvector<double> getRotationMatrix(double axis[3], double angle);
+mdvector<double> getRotationMatrix(const Quat &q);
+
+mdvector<double> identityMatrix(unsigned int N);
 
 template<typename T>
 int findFirst(const std::vector<T>& vec, T val)

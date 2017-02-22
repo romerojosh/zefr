@@ -54,6 +54,7 @@ struct ExtraGeo
   int *mpiFaces;    //! List of MPI face ID's on this rank
   int *procR;       //! Opposite rank for each MPI face
   int *mpiFidR;     //! Face ID of MPI face on opposite rank
+  double *grid_vel; //! Grid velocity at mesh nodes
 };
 
 struct CallbackFuncs
@@ -69,18 +70,23 @@ struct CallbackFuncs
                      double* weights, double* rst, int* buffsize);
   void (*convert_to_modal)(int *cellID, int *nSpts, double *q_in, int *npts,
                            int *index_out, double *q_out);
+  double* (*get_q_spts)(int &ele_stride, int &spt_stride, int &var_stride);
+  double* (*get_dq_spts)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+  double* (*get_q_spts_d)(int &ele_stride, int &spt_stride, int &var_stride);
+  double* (*get_dq_spts_d)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
   double (*get_q_spt)(int cellID, int spt, int var);
   double (*get_grad_spt)(int cellID, int spt, int dim, int var);
   double& (*get_q_fpt)(int faceID, int fpt, int var);
   double& (*get_grad_fpt)(int faceID, int fpt, int dim, int var);
   void (*donor_data_from_device)(int* donorIDs, int nDonors, int gradFlag);
-  void (*fringe_data_to_device)(int* fringeIDs, int nFringe, int gradFlag);
+  void (*fringe_data_to_device)(int* fringeIDs, int nFringe, int gradFlag, double *data);
+  void (*unblank_data_to_device)(int* cellIDs, int nCells, int gradFlag, double *data);
 };
 
 namespace zefr {
 
 #ifdef _MPI
-void initialize(MPI_Comm comm_in, char* inputFile, int nGrids=1, int gridID=0);
+void initialize(MPI_Comm comm_in, char* inputFile, int nGrids=1, int gridID=0, MPI_Comm world_comm = MPI_COMM_WORLD);
 #else
 void initialize(char* input_file);
 #endif
@@ -112,7 +118,10 @@ CallbackFuncs get_callback_funcs(void);
 
 double get_q_spt(int ele, int spt, int var);
 double get_grad_spt(int ele, int spt, int dim, int var);
-double *get_q_spts(void);
+double *get_q_spts(int &ele_stride, int &spt_stride, int &var_stride);
+double *get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+double *get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride);
+double *get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
 double *get_q_fpts(void);
 
 /* ==== Callback Function Wrappers ==== */
@@ -135,7 +144,11 @@ double& get_grad_fpt(int face, int fpt, int dim, int var);
 void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
 
 //! For runs using GPUs - copy updated fringe data to device
-void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag);
+void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
+
+void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
+
+void signal_handler(int signum);
 
 } /* namespace zefr */
 #endif /* _zefr_interface_hpp */

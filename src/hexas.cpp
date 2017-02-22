@@ -50,7 +50,13 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, int order)
   /* Generic hexahedral geometry */
   nDims = 3;
   nFaces = 6;
+
   nNodes = geo->nNodesPerEleBT[HEX];
+
+  nNdSide = cbrt(nNodes);
+
+  if (nNdSide*nNdSide*nNdSide != nNodes)
+    ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
 
   /* If order argument is not provided, use order in input file */
   if (order == -1)
@@ -105,7 +111,7 @@ void Hexas::set_locs()
   // Will need extrapolation operation in 1D otherwise
   auto weights_spts_1D = Gauss_Legendre_weights(nSpts1D); 
 
-  // For integration of quantities over faces
+  // For integration of quantities over faces [NOTE: can be used as 1D OR 2D array]
   weights_fpts.assign({nSpts1D,nSpts1D});
   for (unsigned int fpt1 = 0; fpt1 < nSpts1D; fpt1++)
     for (unsigned int fpt2 = 0; fpt2 < nSpts1D; fpt2++)
@@ -647,89 +653,91 @@ void Hexas::setup_ppt_connectivity()
   }
 }
 
-mdvector<double> Hexas::calc_shape(const std::vector<double> &loc)
+void Hexas::calc_shape(mdvector<double> &shape_val, const double* loc)
 {
-  mdvector<double> shape_val({nNodes}, 0.0);
-  double xi = loc[0]; 
-  double eta = loc[1];
-  double mu = loc[2];
-
-  unsigned int i = 0;
-  unsigned int j = 0;
-  unsigned int k = 0;
-
-  int nSide = cbrt(nNodes);
-
-  if (nSide*nSide*nSide != nNodes)
-  {
-    std::cout << "nNodes = " << nNodes << std::endl;
-    ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
-  }
-
-  std::vector<double> xlist(nSide);
-  double dxi = 2./(nSide-1);
-
-  for (int i=0; i<nSide; i++)
-    xlist[i] = -1. + i*dxi;
-
-  auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
-
-  int pt = 0;
-  for (int k = 0; k < nSide; k++)
-  {
-    for (int j = 0; j < nSide; j++)
-    {
-      for (int i = 0; i < nSide; i++)
-      {
-        shape_val(ijk2gmsh[pt]) = Lagrange(xlist, xi, i) * Lagrange(xlist, eta, j) * Lagrange(xlist, mu, k);
-        pt++;
-      }
-    }
-  }
-
-  return shape_val;
-}
-
-mdvector<double> Hexas::calc_d_shape(const std::vector<double> &loc)
-{
-  mdvector<double> dshape_val({nNodes, nDims}, 0);
   double xi = loc[0];
   double eta = loc[1];
   double mu = loc[2];
 
-  unsigned int i = 0;
-  unsigned int j = 0;
-  unsigned int k = 0;
-
-  int nSide = cbrt(nNodes);
-
-  if (nSide*nSide*nSide != nNodes)
-    ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
-
-  std::vector<double> xlist(nSide);
-  double dxi = 2./(nSide-1);
-
-  for (int i=0; i<nSide; i++)
-    xlist[i] = -1. + i*dxi;
-
-  auto ijk2gmsh = structured_to_gmsh_hex(nNodes);
-
-  int pt = 0;
-  for (int k = 0; k < nSide; k++)
+  if (xlist.size() != nNdSide)
   {
-    for (int j = 0; j < nSide; j++)
-    {
-      for (int i = 0; i < nSide; i++)
-      {
-        dshape_val(ijk2gmsh[pt],0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
-        dshape_val(ijk2gmsh[pt],1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j) *  Lagrange(xlist, mu, k);
-        dshape_val(ijk2gmsh[pt],2) =  Lagrange(xlist, xi, i) *  Lagrange(xlist, eta, j) * dLagrange(xlist, mu, k);
-        pt++;
-      }
-    }
+    xlist.resize(nNdSide);
+    double dxi = 2./(nNdSide-1);
+
+    for (int i=0; i<nNdSide; i++)
+      xlist[i] = -1. + i*dxi;
   }
 
-  return dshape_val;
+  if (ijk2gmsh.size() != nNodes)
+    ijk2gmsh = structured_to_gmsh_hex(nNodes);
+
+  // Pre-compute Lagrange function values to avoid redundant calculations
+  if (lag_i.size() != nNdSide)
+  {
+    lag_i.resize(nNdSide); lag_j.resize(nNdSide); lag_k.resize(nNdSide);
+  }
+
+#pragma omp parallel for
+  for (int i = 0; i < nNdSide; i++)
+  {
+    lag_i[i] = Lagrange(xlist,  xi, i);
+    lag_j[i] = Lagrange(xlist, eta, i);
+    lag_k[i] = Lagrange(xlist,  mu, i);
+  }
+
+  int pt = 0;
+  for (int k = 0; k < nNdSide; k++)
+    for (int j = 0; j < nNdSide; j++)
+      for (int i = 0; i < nNdSide; i++)
+      {
+        shape_val(ijk2gmsh[pt]) = lag_i[i] * lag_j[j] * lag_k[k];
+        pt++;
+      }
+}
+
+void Hexas::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
+{
+  double xi = loc[0];
+  double eta = loc[1];
+  double mu = loc[2];
+
+  if (xlist.size() != nNdSide)
+  {
+    xlist.resize(nNdSide);
+    double dxi = 2./(nNdSide-1);
+
+    for (int i=0; i<nNdSide; i++)
+      xlist[i] = -1. + i*dxi;
+  }
+
+  if (ijk2gmsh.size() != nNodes)
+    ijk2gmsh = structured_to_gmsh_hex(nNodes);
+
+  // Pre-compute Lagrange function values to save redundant calculations
+  if (dlag_i.size() != nNdSide)
+  {
+    lag_i.resize(nNdSide);   lag_j.resize(nNdSide);  lag_k.resize(nNdSide);
+    dlag_i.resize(nNdSide); dlag_j.resize(nNdSide); dlag_k.resize(nNdSide);
+  }
+
+#pragma omp parallel for
+  for (int i = 0; i < nNdSide; i++)
+  {
+    lag_i[i] = Lagrange(xlist,  xi, i);  dlag_i[i] = dLagrange(xlist,  xi, i);
+    lag_j[i] = Lagrange(xlist, eta, i);  dlag_j[i] = dLagrange(xlist, eta, i);
+    lag_k[i] = Lagrange(xlist,  mu, i);  dlag_k[i] = dLagrange(xlist,  mu, i);
+  }
+
+  int pt = 0;
+  for (int k = 0; k < nNdSide; k++)
+    for (int j = 0; j < nNdSide; j++)
+      for (int i = 0; i < nNdSide; i++)
+      {
+        dshape_val(ijk2gmsh[pt],0) = dlag_i[i] *  lag_j[j] *  lag_k[k];
+        dshape_val(ijk2gmsh[pt],1) =  lag_i[i] * dlag_j[j] *  lag_k[k];
+        dshape_val(ijk2gmsh[pt],2) =  lag_i[i] *  lag_j[j] * dlag_k[k];
+        pt++;
+      }
 }
 
 void Hexas::modify_sensor(){ /* Do nothing */ }

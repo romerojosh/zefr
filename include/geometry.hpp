@@ -75,6 +75,9 @@ struct GeoStruct
   unsigned int nGfpts_mpi = 0;
   bool per_bnd_flag = false;
 
+  unsigned int nNdFaceCurved; /// # of nodes per face, including edge and interior nodes
+  mdvector<int> faceNodesCurved;
+
   /* Connectivity Data */
   mdvector<int> ele2face, face2nodes, face2eles, face2eles_idx;
 
@@ -135,6 +138,20 @@ struct GeoStruct
   /* --- Motion-Related Variables --- */
   mdvector<double> vel_nodes;  //! Grid velocity at all mesh nodes
 
+  double mass;
+  mdvector<double> Imat; //! Inertia tensor in global coords
+  mdvector<double> Jmat; //! Inertia tensor in body coords
+  mdvector<double> Jinv; //! Inverse of inertia tensor in body coords
+  mdvector<double> x_cg, vel_cg; //! Position and linear velocity of body frame
+  mdvector<double> dx_cg;
+  mdvector<double> q, qdot; //! Rotation quaternion of body frame (and derivative)
+  mdvector<double> Rmat;    //! Matrix form of rotation quaternion
+  mdvector<double> Wmat;    //! Matrix form of omega cross-product
+  mdvector<double> dRmat;   //! Combination of current and previous rotation to update from previous time step
+  mdvector<double> omega;   //! Angular velocity of body in body-frame coordinates
+  std::array<double,3> omega_res;
+  mdvector<double> qdot_res, q_res; //! Residual for rotation quaternion update eqns.
+
   /* --- Overset-Related Variables --- */
 
   InputStruct *input;
@@ -160,6 +177,9 @@ struct GeoStruct
 #ifdef _GPU
   mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
   mdvector<int> iblank_fpts;
+
+  mdvector_gpu<double> x_cg_d, vel_cg_d, q_d, qdot_d, Rmat_d, omega_d;
+  mdvector_gpu<double> dx_cg_d, dRmat_d, Wmat_d;
 #endif
 
   unsigned int nGrids;  //! Number of distinct overset grids

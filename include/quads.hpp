@@ -38,8 +38,8 @@ class Quads: public Elements
     void set_oppRestart(unsigned int order_restart, bool use_shape = false);
     void set_vandermonde_mats();
 
-    mdvector<double> calc_shape(const std::vector<double> &loc);
-    mdvector<double> calc_d_shape(const std::vector<double> &loc);
+    void calc_shape(mdvector<double> &shape_val, const double* loc);
+    void calc_d_shape(mdvector<double> &dshap_val, const double* loc);
 
     double calc_nodal_basis(unsigned int spt,
                             const std::vector<double> &loc);

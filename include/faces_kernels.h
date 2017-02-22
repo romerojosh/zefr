@@ -66,12 +66,4 @@ void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv
     unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
 
 
-void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe, mdview_gpu<double> &U,
-    mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,
-    unsigned int nFpts, unsigned int nVars);
-
-void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe, mdview_gpu<double> &dU,
-    mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,
-    unsigned int nFpts, unsigned int nVars, unsigned int nDims);
-
 #endif /* faces_kernels_h */

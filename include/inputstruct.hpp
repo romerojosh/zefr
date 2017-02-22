@@ -109,7 +109,7 @@ struct InputStruct
   unsigned int equation, dt_type, CFL_type, ic_type, nDims, nQpts1D, n_steps, order, adapt_CFL;
   unsigned int report_freq, write_freq, force_freq, res_type, error_freq, test_case, err_field, FMG_vcycles;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
-  bool viscous, p_multi, restart, fix_vis, squeeze, source, grad_via_div;
+  bool viscous, p_multi, restart, fix_vis, squeeze, source, grad_via_div, disable_nondim;
   std::vector<unsigned int> mg_levels, mg_steps;
   unsigned int fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau;
@@ -138,9 +138,10 @@ struct InputStruct
   short write_paraview, write_pyfr, plot_surfaces, plot_overset, write_LHS;
   unsigned int restart_iter, restart_type;
   std::string restart_case;
+  bool catch_signals = false;
 
   /* --- Overset / Moving-Grid Variables --- */
-  bool motion, overset, use_lgp;
+  bool motion, overset, use_lgp, full_6dof;
   unsigned int gridID = 0;
   unsigned int oversetMethod, nGrids, quad_order, motion_type;
   std::vector<std::string> oversetGrids;
@@ -151,6 +152,12 @@ struct InputStruct
   double rot_axis[3];
   double rot_angle;
   double xc[3], dxc[3], vc[3], dvc[3];
+
+  double g;       //! Gravitational acceleration (default to 0 / no gravity)
+  double v0[3];   //! Initial grid translational velocity
+  double w0[3];   //! Initial grid angular velocity
+  double mass;    //! Mass of moving body of interest
+  double Imat[9]; //! Inertia tensor of input geometry of interest
 
   /* --- Additional Mesh Variables --- */
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's

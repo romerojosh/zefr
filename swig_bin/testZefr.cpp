@@ -2,6 +2,7 @@
 #include "tiogaInterface.h"
 
 #include "mpi.h"
+#include <valgrind/callgrind.h>
 
 int main(int argc, char *argv[])
 {
@@ -18,9 +19,10 @@ int main(int argc, char *argv[])
   gridID = rank>0;
 
   /* Basic sphere test case */
-  nGrids = 2;
-  if (rank <= 1) gridID = 0;
-  if (rank > 1) gridID = 1;
+  //nGrids = 2;
+  //gridID = (rank >= size / nGrids);
+  //if (rank <= 1) gridID = 0;
+  //if (rank > 1) gridID = 1;
 
 //  nGrids = 1;
 //  gridID = 0;
@@ -67,20 +69,33 @@ int main(int argc, char *argv[])
   }
 
   Zefr *z = zefr::get_zefr_object();
+  InputStruct &inp = z->get_input();
+
+  // Setup the TIOGA connectivity object
+  tioga_init_(MPI_COMM_WORLD);
+
+  if (nGrids > 1) inp.overset = 1;
+
+  if (inp.motion && (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS))
+    z->set_rigid_body_callbacks(tioga_set_transform);
+
+  /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
+   * accomodate both multi-stage RK time stepping + viscous cases with gradient
+   * data interpolation.  Likewise with moving grids and connectivity update */
+  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
+      tioga_do_point_connectivity, tioga_set_iter_iblanks, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
+
   z->setup_solver();
 
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
   CallbackFuncs cbs = zefr::get_callback_funcs();
-  InputStruct &inp = z->get_input();
-
-  if (nGrids > 1) inp.overset = 1;
 
   Timer tg_time;
   tg_time.startTimer();
 
-  // Setup the TIOGA connectivity object
-  tioga_init_(MPI_COMM_WORLD);
+  if (rank == 0)
+    std::cout << "Setting TIOGA callback functions..." << std::endl;
 
   tioga_registergrid_data_(geo.btag, geo.nnodes, geo.xyz, geo.iblank,
       geo.nwall, geo.nover, geo.wallNodes, geo.overNodes,
@@ -97,19 +112,21 @@ int main(int argc, char *argv[])
       cbs.donor_inclusion_test, cbs.donor_frac, cbs.convert_to_modal);
 
   tioga_set_ab_callback_(cbs.get_nodes_per_face, cbs.get_face_nodes,
-      cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt);
+      cbs.get_q_spt, cbs.get_q_fpt, cbs.get_grad_spt, cbs.get_grad_fpt,
+      cbs.get_q_spts, cbs.get_dq_spts);
+
+  if (inp.motion)
+    tioga_register_moving_grid_data(geoAB.grid_vel);
 
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())
   {
-    tioga_set_ab_callback_gpu_(cbs.donor_data_from_device, 
-      cbs.fringe_data_to_device);
+    tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,  cbs.fringe_data_to_device,
+        cbs.unblank_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d);
+#ifdef _GPU
+    tioga_set_stream_handle(z->get_tg_stream_handle(), z->get_tg_event_handle());
+#endif
   }
-
-  /* NOTE: tioga_dataUpdate is now being called from within ZEFR, in order to
-   * accomodate both multi-stage RK time stepping + viscous cases with gradient
-   * data interpolation.  Likewise with moving grids and connectivity update */
-  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_, tioga_dataupdate_ab);
 
   if (nGrids > 1)
   {
@@ -118,12 +135,16 @@ int main(int argc, char *argv[])
   }
   tg_time.stopTimer();
 
+  if (inp.restart)
+    z->restart_solution();
+
   // setup cell/face iblank data for use on GPU
   if (nGrids > 1 && zefr::use_gpus())
     z->update_iblank_gpu();
 
   // Output initial solution and grid
-  z->write_solution();
+  if (!inp.restart)
+    z->write_solution();
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -132,16 +153,18 @@ int main(int argc, char *argv[])
   Timer tgTime("TIOGA Interp Time: ");
   inp.waitTimer.setPrefix("ZEFR MPI Time: ");
 
-  for (int iter = 1; iter <= inp.n_steps; iter++)
+  CALLGRIND_START_INSTRUMENTATION;
+
+  for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
     runTime.startTimer();
     z->do_step();
     runTime.stopTimer();
 
-    if (iter%inp.report_freq == 0 or iter == 1 or iter == inp.n_steps)
+    if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
       z->write_residual();
 
-    if (iter%inp.write_freq == 0 or iter == 0 or iter == inp.n_steps)
+    if (inp.write_freq > 0 and (iter%inp.write_freq == 0 or iter == inp.n_steps))
       z->write_solution();
 
     if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
@@ -151,7 +174,9 @@ int main(int argc, char *argv[])
       z->write_error();
   }
 
-  z->write_solution();
+  CALLGRIND_STOP_INSTRUMENTATION;
+
+//  z->write_solution();
 
   std::cout << "Preprocessing/Connectivity Time: ";
   tg_time.showTime(2);

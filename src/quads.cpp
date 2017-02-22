@@ -519,9 +519,8 @@ void Quads::setup_ppt_connectivity()
   }
 }
 
-mdvector<double> Quads::calc_shape(const std::vector<double> &loc)
+void Quads::calc_shape(mdvector<double> &shape_val, const double* loc)
 {
-  mdvector<double> shape_val({nNodes}, 0.0);
   double xi = loc[0]; 
   double eta = loc[1];
 
@@ -550,13 +549,10 @@ mdvector<double> Quads::calc_shape(const std::vector<double> &loc)
       pt++;
     }
   }
-
-  return shape_val;
 }
 
-mdvector<double> Quads::calc_d_shape(const std::vector<double> &loc)
+void Quads::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
 {
-  mdvector<double> dshape_val({nNodes, nDims}, 0.0);
   double xi = loc[0];
   double eta = loc[1];
 
@@ -586,8 +582,6 @@ mdvector<double> Quads::calc_d_shape(const std::vector<double> &loc)
       pt++;
     }
   }
-
-  return dshape_val;
 }
 
 void Quads::modify_sensor(){ /* Do nothing */ }
