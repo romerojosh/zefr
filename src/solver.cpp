@@ -619,15 +619,9 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
         auto &B = U_restart[e->etype](0, 0, 0);
         auto &C = e->U_spts(0, 0, 0);
 
-#ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, 
-            e->nEles * e->nVars, nRpts, 1.0, &A, e->oppRestart.ldim(), &B, 
-            U_restart[e->etype].ldim(), 0.0, &C, e->U_spts.ldim());
-#else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, 
             e->nEles * e->nVars, nRpts, 1.0, &A, e->oppRestart.ldim(), &B, 
             U_restart[e->etype].ldim(), 0.0, &C, e->U_spts.ldim());
-#endif
       }
 
       /* Read grid velocity NOTE: if any additional fields exist after,
@@ -657,13 +651,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
           auto &B = U_restart[e->etype](0, 0, 0);
           auto &C = e->grid_vel_spts(0, 0, 0);
 
-#ifdef _OMP
-          omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                            1.0, &A, m, &B, k, 0.0, &C, m);
-#else
           cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
                       1.0, &A, m, &B, k, 0.0, &C, m);
-#endif
         }
       }
     }
@@ -1384,7 +1373,6 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
     {
       if (!sourceBT.count(e->etype))
       {
-#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < e->nVars; n++)
           for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
@@ -1406,7 +1394,6 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
       }
       else
       {
-#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < e->nVars; n++)
           for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
@@ -1489,7 +1476,6 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
       {
         if (!sourceBT.count(e->etype))
         {
-#pragma omp parallel for collapse(2)
           for (unsigned int n = 0; n < e->nVars; n++)
             for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
@@ -1509,7 +1495,6 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
         }
         else
         {
-#pragma omp parallel for collapse(2)
           for (unsigned int n = 0; n < e->nVars; n++)
             for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
@@ -1746,7 +1731,6 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       // Update solution registers
       if (stage < input->nStages - 1)
       {
-#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < e->nVars; n++)
         {
           for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -1765,7 +1749,6 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       }
       else
       {
-#pragma omp parallel for collapse(2)
         for (unsigned int n = 0; n < e->nVars; n++)
         {
           for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -1841,7 +1824,6 @@ void FRSolver::compute_element_dt()
   {
     for (auto e : elesObjs)
     {
-#pragma omp parallel for
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       { 
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
@@ -1994,7 +1976,6 @@ void FRSolver::compute_SER_dt()
       }
       else if (input->dt_type == 2)
       {
-#pragma omp parallel for
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
           e->dt(ele) *= SER_omg;
@@ -2444,15 +2425,9 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     auto &B = U_restart(0, 0, 0);
     auto &C = e->U_spts(0, 0, 0);
 
-#ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
-        e->nEles * e->nVars, nSpts, 1.0, &A, e->oppRestart.ldim(), &B,
-        U_restart.ldim(), 0.0, &C, e->U_spts.ldim());
-#else
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
         e->nEles * e->nVars, nSpts, 1.0, &A, e->oppRestart.ldim(), &B,
         U_restart.ldim(), 0.0, &C, e->U_spts.ldim());
-#endif
   }
 
   // Process the config / stats string
@@ -2799,15 +2774,9 @@ void FRSolver::write_solution(const std::string &_prefix)
     auto &B = e->U_spts(0, 0, 0);
     auto &C = e->U_ppts(0, 0, 0);
 
-#ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
         e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B, 
         e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
-#else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
-          e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B, 
-          e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
-#endif
 
     /* Apply squeezing if needed */
     if (input->squeeze)
@@ -3696,15 +3665,9 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   auto &B = e->U_spts(0, 0, 0);
   auto &C = e->U_ppts(0, 0, 0);
 
-#ifdef _OMP
-  omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts,
-                    e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B,
-                    e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
-#else
   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts,
               e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B,
               e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
-#endif
 
   /* Apply squeezing if needed */
   if (input->squeeze)
@@ -4400,15 +4363,9 @@ void FRSolver::report_error(std::ofstream &f)
     auto &B = e->U_spts(0, 0, 0);
     auto &C = e->U_qpts(0, 0, 0);
 
-#ifdef _OMP
-    omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts, 
-        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_qpts.ldim(), &B, 
-        e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
-#else
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts, 
         e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B, 
         e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
-#endif
 
     /* Extrapolate derivatives to quadrature points */
     if (input->viscous)
@@ -4419,22 +4376,16 @@ void FRSolver::report_error(std::ofstream &f)
         auto &B = e->dU_spts(0, 0, 0, dim);
         auto &C = e->dU_qpts(0, 0, 0, dim);
 
-#ifdef _OMP
-        omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts,
-                          e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B,
-                          e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
-#else
         cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts,
                     e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B,
                     e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
-#endif
 
       }
     }
 
     unsigned int n = input->err_field;
     std::vector<double> dU_true(geo.nDims, 0.0), dU_error(geo.nDims, 0.0);
-#pragma omp for 
+
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;

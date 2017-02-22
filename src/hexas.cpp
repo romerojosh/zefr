@@ -677,7 +677,6 @@ void Hexas::calc_shape(mdvector<double> &shape_val, const double* loc)
     lag_i.resize(nNdSide); lag_j.resize(nNdSide); lag_k.resize(nNdSide);
   }
 
-#pragma omp parallel for
   for (int i = 0; i < nNdSide; i++)
   {
     lag_i[i] = Lagrange(xlist,  xi, i);
@@ -720,7 +719,6 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
     dlag_i.resize(nNdSide); dlag_j.resize(nNdSide); dlag_k.resize(nNdSide);
   }
 
-#pragma omp parallel for
   for (int i = 0; i < nNdSide; i++)
   {
     lag_i[i] = Lagrange(xlist,  xi, i);  dlag_i[i] = dLagrange(xlist,  xi, i);

@@ -141,11 +141,10 @@ void Filter::apply_sensor()
       for (unsigned int var = 0; var < e->nVars; var++)
       {
         // Find element maximum and minimum
-#pragma omp parallel for 
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
-        double uMax = U_ini[e->etype](0,ele,var), uMin = U_ini[e->etype](0,ele,var);
-#pragma omp parallel for reduction(max:uMax) reduction(min:uMin)
+          double uMax = U_ini[e->etype](0,ele,var), uMin = U_ini[e->etype](0,ele,var);
+
           for (unsigned int spt = 0; spt < e->nSpts; spt++)
           {
             uMax = std::max(uMax, U_ini[e->etype](spt,ele,var));
@@ -154,7 +153,6 @@ void Filter::apply_sensor()
           
           if (uMax - uMin > normalTol)
           {
-#pragma omp parallel for 
             for (unsigned int spt = 0; spt < e->nSpts; spt++)
               U_ini[e->etype](spt,ele,var) = (U_ini[e->etype](spt,ele,var) - uMin) / (uMax - uMin);
           }
@@ -172,15 +170,9 @@ void Filter::apply_sensor()
       auto &B = U_ini[e->etype](0, 0, var);
       auto &C = KS[e->etype](0, 0, var);
 
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-        e->nDims * nSptsKS, e->nEles, e->nSpts, 1.0, &A, e->nDims * nSptsKS,
-        &B, e->nSpts, 0.0, &C, e->nDims * nSptsKS);
-#else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
         e->nDims * nSptsKS, e->nEles, e->nSpts, 1.0, &A, e->nDims * nSptsKS,
         &B, e->nSpts, 0.0, &C, e->nDims * nSptsKS);
-#endif
     }
 
     // Apply non-linear enhancement and store sensor values
@@ -189,11 +181,9 @@ void Filter::apply_sensor()
     for (unsigned int var = 0; var < e->nVars; var++)
     {
 
-#pragma omp parallel for
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
         double sen = 0.0;
-#pragma omp parallel for reduction(max:sen)
         for (unsigned int row = 0; row < e->nDims*nSptsKS; row++)
         {
           KS[e->etype](row, ele, var) = pow(1.0/epsilon, Q/2.0) * pow(abs(KS[e->etype](row, ele, var)), Q);
@@ -247,22 +237,15 @@ void Filter::apply_expfilter()
     auto &B = e->U_spts(0, 0, 0);
     auto &C = U_filt[e->etype](0, 0, 0);
 
-    #ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, e->nEles * e->nVars,
-        e->nSpts, 1.0, &A, e->nSpts, &B, e->nSpts, 0.0, &C, e->nSpts);
-    #else
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, e->nEles * e->nVars,
-        e->nSpts, 1.0, &A, e->nSpts, &B, e->nSpts, 0.0, &C, e->nSpts);
-    #endif
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, e->nEles * e->nVars,
+      e->nSpts, 1.0, &A, e->nSpts, &B, e->nSpts, 0.0, &C, e->nSpts);
 
     // Copy back to e->U_Spts only when sensor is greater than threshold
-    #pragma omp parallel for
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       // Check for sensor value
       if (sensor[e->etype](ele) < threshJ[e->etype]) continue;
 
-      #pragma omp parallel for collapse(2)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
           e->U_spts(spt,ele,var) = U_filt[e->etype](spt,ele,var);

@@ -146,7 +146,6 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 #ifdef _CPU
     for (auto e : grids[n]->elesObjs)
     {
-#pragma omp parallel for collapse(2)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
@@ -185,7 +184,6 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 #ifdef _CPU
       for (auto e : grids[n]->elesObjs)
       {
-#pragma omp parallel for collapse(2)
         for (unsigned int var = 0; var < e->nVars; var++)
           for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
@@ -232,7 +230,6 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
 #ifdef _CPU
     for (auto e : grids[n]->elesObjs)
     {
-#pragma omp parallel for collapse(2)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
@@ -368,30 +365,18 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
       auto &B = ef->U_spts(0, 0, 0);
       auto &C = ec->U_spts(0, 0, 0);
 
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
-          ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
-          ef->oppRes.ldim(), &B, ef->U_spts.ldim(), 0.0, &C, ec->U_spts.ldim());
-#else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
           ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
           ef->oppRes.ldim(), &B, ef->U_spts.ldim(), 0.0, &C, ec->U_spts.ldim());
-#endif
 
       
       auto &B2 = ef->divF_spts(0, 0, 0, 0);
       auto &C2 = ec->divF_spts(0, 0, 0, 0);
 
       /* Restrict residual */
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
-          ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
-          ef->oppRes.ldim(), &B2, ef->divF_spts.ldim(), 0.0, &C2, ec->divF_spts.ldim());
-#else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
           ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
           ef->oppRes.ldim(), &B2, ef->divF_spts.ldim(), 0.0, &C2, ec->divF_spts.ldim());
-#endif
     }
   }
 
@@ -433,15 +418,9 @@ void PMGrid::prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector<double>> 
       auto &C = ef->U_spts(0, 0, 0);
 
       /* Prolong error */
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
-          ec->nEles * ec->nVars, ec->nSpts, input->rel_fac, 
-          &A, ec->oppPro.ldim(), &B, correctionBT[ec->etype].ldim(), 1.0, &C, ef->U_spts.ldim());
-#else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
           ec->nEles * ec->nVars, ec->nSpts, input->rel_fac, 
           &A, ec->oppPro.ldim(), &B, correctionBT[ec->etype].ldim(), 1.0, &C, ef->U_spts.ldim());
-#endif
     }
   }
 }
@@ -478,15 +457,9 @@ void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
       auto &C = ef->U_spts(0, 0, 0);
 
       /* Prolong error */
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
-          ec->nEles * ec->nVars, ec->nSpts, 1.0, 
-          &A, ec->oppPro.ldim(), &B, ec->U_spts.ldim(), 0.0, &C, ef->U_spts.ldim());
-#else
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
           ec->nEles * ec->nVars, ec->nSpts, 1.0, 
           &A, ec->oppPro.ldim(), &B, ec->U_spts.ldim(), 0.0, &C, ef->U_spts.ldim());
-#endif
     }
   }
 #endif
@@ -512,7 +485,6 @@ void PMGrid::compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector<dou
   /* Copy restricted fine grid residual to source term */
   for (auto e : grid.elesObjs)
   {
-#pragma omp parallel for collapse(2)
     for (unsigned int n = 0; n < e->nVars; n++)
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
@@ -529,7 +501,6 @@ void PMGrid::compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector<dou
   /* Subtract to generate source term */
   for (auto e : grid.elesObjs)
   {
-#pragma omp parallel for collapse(3)
     for (unsigned int n = 0; n < e->nVars; n++)
       for (unsigned int ele = 0; ele < e->nEles; ele++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)

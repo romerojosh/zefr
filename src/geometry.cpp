@@ -2710,7 +2710,7 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       double Aty = 2;
       double DX = 5;/// 0.5 * input->periodicDX; /// TODO
       double DY = 5;/// 0.5 * input->periodicDY; /// TODO
-#pragma omp parallel for
+
       for (int node = 0; node < nNodes; node++)
       {
         /// Taken from Kui, AIAA-2010-5031-661
@@ -2733,7 +2733,6 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       double Atz = 4;
       if (geo.nDims == 2)
       {
-#pragma omp parallel for
         for (uint node = 0; node < nNodes; node++)
         {
           /// Taken from Liang-Miyaji
@@ -2746,7 +2745,6 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       }
       else
       {
-#pragma omp parallel for
         for (uint node = 0; node < nNodes; node++)
         {
           /// Taken from Liang-Miyaji
@@ -2768,7 +2766,6 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
         /// Liangi-Miyaji with easily-modifiable domain width
         double t0 = 10.*sqrt(5.);
         double width = 5.;
-#pragma omp parallel for
         for (uint node = 0; node < nNodes; node++)
         {
           geo.coord_nodes(0,node) = geo.coords_init(0,node) + sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*sin(4*pi*time/t0);
@@ -2792,7 +2789,6 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
         double Az = input->moveAz;
         double fz = input->moveFz;
 
-#pragma omp parallel for
         for (uint node = 0; node < nNodes ; node++)
         {
           geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
@@ -2814,7 +2810,6 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       if (geo.gridID == 0) {
         double Ar = 0;///input->moveAr; /// TODO
         double Fr = 0;///input->moveFr; /// TODO
-#pragma omp parallel for
         for (uint node = 0; node < nNodes ; node++)
         {
           double r = 1;///rv0(node,0) + Ar*(1. - cos(2.*pi*Fr*time)); /// TODO
@@ -2848,13 +2843,9 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       auto &A = rotMat(0,0);
       auto &B = geo.coords_init(0,0);
       auto &C = geo.coord_nodes(0,0);
-#ifdef _OMP
-      omp_blocked_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                        1.0, &A, k, &B, k, 0.0, &C, m);
-#else
+
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
                   1.0, &A, k, &B, k, 0.0, &C, m);
-#endif
 
       // Translation Component
       for (int i = 0; i < nNodes; i++)
