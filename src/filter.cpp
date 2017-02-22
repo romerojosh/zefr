@@ -77,9 +77,6 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
 
 void Filter::setup_threshold()
 {
-  // Normalization tolerance
-  double normalTol = 0.1;
-  
   // Local arrays
   mdvector<double> u_canon, KS_canon, KS_step, KS_ramp;
 
@@ -106,10 +103,12 @@ void Filter::setup_threshold()
       e->nSpts1D, 2, e->nSpts1D, 1.0, &A, e->oppS_1D.ldim(), &B, u_canon.ldim(), 0.0, &C, KS_canon.ldim());
     
     // Apply non-linear enhancement
+    double epsilon = std::log(e->order)/e->order;
+    double Q = input->nonlin_exp;
     for (unsigned int spt = 0; spt < e->nSpts1D; spt++)
     {
-      KS_step(spt) = e->order * (KS_canon(spt, 0) * KS_canon(spt, 0));
-      KS_ramp(spt) = e->order * (KS_canon(spt, 1) * KS_canon(spt, 1));
+      KS_step(spt) = pow(1.0/epsilon, Q/2.0) * pow(abs(KS_canon(spt, 0)), Q);
+      KS_ramp(spt) = pow(1.0/epsilon, Q/2.0) * pow(abs(KS_canon(spt, 1)), Q);
     }
     
     // Calculate threshold

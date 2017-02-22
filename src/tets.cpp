@@ -738,49 +738,54 @@ void Tets::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
 
 void Tets::modify_sensor()
 {
-//  /* Obtain locations of "collapsed" quad solution points */
-//  unsigned int nNodesQuad = 4;
-//  mdvector<double> nodes({nDims, nNodesQuad}); 
-//  nodes(0, 0) = -1.0; nodes(1, 0) = -1.0; 
-//  nodes(0, 1) = 1.0; nodes(1, 1) = -1.0; 
-//  nodes(0, 2) = -1.0; nodes(1, 2) = 1.0; 
-//  nodes(0, 3) = -1.0; nodes(1, 3) = 1.0; 
-//
-//  int nSpts2D = nSpts1D * nSpts1D;
-//  mdvector<double> loc_spts_quad({nSpts2D, nDims}, 0);
-//
-//  for (unsigned int spt = 0; spt < nSpts2D; spt++)
-//  {
-//    for (unsigned int nd = 0; nd < nNodesQuad; nd++)
-//    {
-//      int i = nd % 2; int j = nd / 2;
-//      for (unsigned int dim = 0; dim < nDims; dim++)
-//      {
-//        loc_spts_quad(spt, dim) += nodes(dim, nd) * Lagrange({-1, 1}, loc_spts_1D[spt % nSpts1D], i) * 
-//                                                    Lagrange({-1, 1}, loc_spts_1D[spt / nSpts1D], j);
-//      }
-//    }
-//  }
-//
-//  /* Setup spt to collapsed spt extrapolation operator (oppEc) */
-//  std::vector<double> loc(nDims, 0.0);
-//  mdvector<double> oppEc({nSpts2D, nSpts});
-//  for (unsigned int spt = 0; spt < nSpts; spt++)
-//  {
-//    for (unsigned int spt_q = 0; spt_q < nSpts2D; spt_q++)
-//    {
-//      for (unsigned int dim = 0; dim < nDims; dim++)
-//        loc[dim] = loc_spts_quad(spt_q , dim);
-//
-//      oppEc(spt_q, spt) = calc_nodal_basis(spt, loc);
-//    }
-//  }
-//
-//  /* Multiply oppS by oppEc to get modified operator */
-//  auto temp = oppS;
-//  oppS.assign({nSpts2D * nDims, nSpts});
-//
-//  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts2D * nDims, nSpts, nSpts2D,
-//      1.0, temp.data(), temp.ldim(), oppEc.data(), oppEc.ldim(), 0.0, oppS.data(), oppS.ldim());
-//
+  /* Obtain locations of "collapsed" hex solution points */
+  unsigned int nNodesHex = 8;
+  mdvector<double> nodes({nDims, nNodesHex}); 
+  nodes(0, 0) = -1.0; nodes(1, 0) = -1.0;  nodes(2, 0) = -1.0; 
+  nodes(0, 1) = 1.0;  nodes(1, 1) = -1.0;  nodes(2, 1) = -1.0;
+  nodes(0, 2) = -1.0; nodes(1, 2) = 1.0;   nodes(2, 2) = -1.0;
+  nodes(0, 3) = -1.0; nodes(1, 3) = 1.0;   nodes(2, 3) = -1.0;
+  nodes(0, 4) = -1.0; nodes(1, 4) = -1.0;  nodes(2, 4) = 1.0; 
+  nodes(0, 5) = -1.0; nodes(1, 5) = -1.0;  nodes(2, 5) = 1.0;
+  nodes(0, 6) = -1.0; nodes(1, 6) = -1.0;  nodes(2, 6) = 1.0;
+  nodes(0, 7) = -1.0; nodes(1, 7) = -1.0;  nodes(2, 7) = 1.0;
+
+  int nSpts3D = nSpts1D * nSpts1D * nSpts1D;
+  mdvector<double> loc_spts_hex({nSpts3D, nDims}, 0);
+
+  for (unsigned int spt = 0; spt < nSpts3D; spt++)
+  {
+    for (unsigned int nd = 0; nd < nNodesHex; nd++)
+    {
+      int i = nd % 2; int j = (nd / 2) % 2; int k = nd / 4;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        loc_spts_hex(spt, dim) += nodes(dim, nd) * Lagrange({-1, 1}, loc_spts_1D[spt % nSpts1D], i) * 
+                                                    Lagrange({-1, 1}, loc_spts_1D[(spt / nSpts1D) % nSpts1D], j) *
+                                                    Lagrange({-1, 1}, loc_spts_1D[spt / (nSpts1D *nSpts1D)], k);
+      }
+    }
+  }
+
+  /* Setup spt to collapsed spt extrapolation operator (oppEc) */
+  std::vector<double> loc(nDims, 0.0);
+  mdvector<double> oppEc({nSpts3D, nSpts});
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    for (unsigned int spt_q = 0; spt_q < nSpts3D; spt_q++)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        loc[dim] = loc_spts_hex(spt_q , dim);
+
+      oppEc(spt_q, spt) = calc_nodal_basis(spt, loc);
+    }
+  }
+
+  /* Multiply oppS by oppEc to get modified operator */
+  auto temp = oppS;
+  oppS.assign({nSpts3D * nDims, nSpts});
+
+  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts3D * nDims, nSpts, nSpts3D,
+      1.0, temp.data(), temp.ldim(), oppEc.data(), oppEc.ldim(), 0.0, oppS.data(), oppS.ldim());
+
 } 
