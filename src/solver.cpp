@@ -4094,7 +4094,7 @@ void FRSolver::report_error(std::ofstream &f)
     }
 
     unsigned int n = input->err_field;
-    std::vector<double> dU_true(2, 0.0), dU_error(2, 0.0);
+    std::vector<double> dU_true(geo.nDims, 0.0), dU_error(geo.nDims, 0.0);
 #pragma omp for 
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
@@ -4103,64 +4103,40 @@ void FRSolver::report_error(std::ofstream &f)
       {
         double U_true = 0.0;
 
-        if (e->nDims == 2)
-        {
-          /* Compute true solution and derivatives */
-          if (input->test_case == 3) // Isentropic Bump
-          {
-            U_true = input->P_fs / std::pow(input->rho_fs, input->gamma);
-          }
-          else 
-          {
-            U_true = compute_U_true(e->coord_qpts(qpt,ele,0), e->coord_qpts(qpt,ele,1), 0, 
-                flow_time, n, input);
-          }
+        double x = e->coord_qpts(qpt, ele, 0);
+        double y = e->coord_qpts(qpt, ele, 1);
+        double z = (geo.nDims == 2) ? 0.0 : e->coord_qpts(qpt, ele, 2);
 
-          if (input->viscous)
-          {
-            dU_true[0] = compute_dU_true(e->coord_qpts(qpt,ele,0), e->coord_qpts(qpt,ele,1), 0,
-                                         flow_time, n, 0, input);
-            dU_true[1] = compute_dU_true(e->coord_qpts(qpt,ele,0), e->coord_qpts(qpt,ele,1), 0,
-                                         flow_time, n, 1, input);
-          }
+        /* Compute true solution and derivatives */
+        U_true = compute_U_true(x, y, z, flow_time, n, input);
 
-        }
-        else if (e->nDims == 3)
+        if (input->viscous)
         {
-          ThrowException("Under construction!");
+          for (unsigned int dim = 0; dim < geo.nDims; dim++)
+            dU_true[dim] = compute_dU_true(x, y, z, flow_time, n, dim, input);
         }
 
         /* Compute errors */
         double U_error;
-        if (input->test_case == 3) // Isentropic bump
+        U_error = U_true - e->U_qpts(qpt, ele, n);
+        if (input->viscous)
         {
-          double momF = 0.0;
-          for (unsigned int dim = 0; dim < e->nDims; dim ++)
-          {
-            momF += e->U_qpts(qpt, ele, dim + 1) * e->U_qpts(qpt, ele, dim + 1);
-          }
+          for (unsigned int dim = 0; dim < geo.nDims; dim++)
+            dU_error[dim] = dU_true[dim] - e->dU_qpts(qpt, ele, n, dim); 
+        }
+        vol = 1;
 
-          momF /= e->U_qpts(qpt, ele, 0);
-
-          double P = (input->gamma - 1.0) * (e->U_qpts(qpt, ele, 3) - 0.5 * momF);
-
-          U_error = (U_true - P/std::pow(e->U_qpts(qpt, ele, 0), input->gamma)) / U_true;
-          vol += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele); 
+        l2_error[0] += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele) * U_error * U_error; 
+        if (geo.nDims == 2)
+        {
+          l2_error[1] += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele) * (U_error * U_error +
+              dU_error[0] * dU_error[0] + dU_error[1] * dU_error[1]); 
         }
         else
         {
-          U_error = U_true - e->U_qpts(qpt, ele, n);
-          if (input->viscous)
-          {
-            dU_error[0] = dU_true[0] - e->dU_qpts(qpt, ele, n, 0); 
-            dU_error[1] = dU_true[1] - e->dU_qpts(qpt, ele, n, 1);
-          }
-          vol = 1;
+          l2_error[1] += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele) * (U_error * U_error +
+              dU_error[0] * dU_error[0] + dU_error[1] * dU_error[1] + dU_error[2] * dU_error[2]); 
         }
-
-        l2_error[0] += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele) * U_error * U_error; 
-        l2_error[1] += e->weights_qpts(qpt) * e->jaco_det_qpts(qpt, ele) * (U_error * U_error +
-            dU_error[0] * dU_error[0] + dU_error[1] * dU_error[1]); 
       }
     }
   }

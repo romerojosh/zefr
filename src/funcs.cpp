@@ -35,7 +35,6 @@ extern "C" {
 
 #include "funcs.hpp"
 #include "input.hpp"
-#include "funcs.hpp"
 
 double compute_U_init(double x, double y, double z, unsigned int var, const InputStruct *input)
 {
@@ -156,16 +155,35 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
       double rho_avg = 4.*(P * std::sqrt(Pr*(Pr*Vw*Vw+8*cp*Tw))*std::log((std::sqrt(Pr*(Pr*Vw*Vw+8*cp*Tw))+Pr*Vw)/
             (std::sqrt(Pr*(Pr*Vw*Vw+8*cp*Tw))-Pr*Vw))*gamma)/(Pr*Vw*(Pr*Vw*Vw+8*cp*Tw)*(gamma-1));
 
-      switch (var)
+      if (input->nDims == 2)
       {
-        case 0:
-          val = rho_avg; break;
-        case 1:
-          val = rho_avg * Vw; break;
-        case 2:
-          val = 0.0; break;
-        case 3:
-          val = P / (gamma - 1) + 0.5 * rho_avg * Vw * Vw; break;
+        switch (var)
+        {
+          case 0:
+            val = rho_avg; break;
+          case 1:
+            val = rho_avg * Vw; break;
+          case 2:
+            val = 0.0; break;
+          case 3:
+            val = P / (gamma - 1) + 0.5 * rho_avg * Vw * Vw; break;
+        }
+      }
+      else
+      {
+        switch (var)
+        {
+          case 0:
+            val = rho_avg; break;
+          case 1:
+            val = rho_avg * Vw; break;
+          case 2:
+            val = 0.0; break;
+          case 3:
+            val = 0.0; break;
+          case 4:
+            val = P / (gamma - 1) + 0.5 * rho_avg * Vw * Vw; break;
+        }
       }
 
     }
@@ -268,17 +286,37 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
 
         double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
 
-        switch (var)
+        if (input->nDims == 2)
         {
-          case 0:
-            val = rho; break;
-          case 1:
-            val = rho * (Vw*y); break;
-          case 2:
-            val = 0.0; break;
-          case 3:
-            val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
-                                           2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
+          switch (var)
+          {
+            case 0:
+              val = rho; break;
+            case 1:
+              val = rho * (Vw*y); break;
+            case 2:
+              val = 0.0; break;
+            case 3:
+              val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
+                                             2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
+          }
+        }
+        else
+        {
+          switch (var)
+          {
+            case 0:
+              val = rho; break;
+            case 1:
+              val = rho * (Vw*y); break;
+            case 2:
+              val = 0.0; break;
+            case 3:
+              val =  0.0; break;
+            case 4:
+              val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
+                                             2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
+          }
         }
       }
       else if (input->test_case == 4)
@@ -323,12 +361,12 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
     }
     else if (input->nDims == 3)
     {
-      ThrowException("Under construction!");
+      val = 0.0; // implement
     }
   }
   else
   {
-    ThrowException("Under construction!");
+    val = 0.0; // implement
   }
 
   return val;
