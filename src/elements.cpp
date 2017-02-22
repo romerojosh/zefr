@@ -2154,40 +2154,6 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
             }
           }
 
-          /* Add contribution from solution boundary condition to Cvisc0 */
-          for (unsigned int face = 0; face < nFaces; face++)
-          {
-            /* Neighbor element */
-            int eleN = geo->ele_adj(face, ele);
-            if (eleN == -1)
-            {
-              CtempFSN.fill(0);
-              for (unsigned int j = 0; j < nSpts; j++)
-              {
-                for (unsigned int i = 0; i < nSpts1D; i++)
-                {
-                  unsigned int ind = face * nSpts1D + i;
-                  CtempFSN(i, j) = dUcdU_fpts(ind, ele, ni, nj, 1) * oppE(ind, j);
-                }
-              }
-
-              for (unsigned int dim = 0; dim < nDims; dim++)
-              {
-                for (unsigned int j = 0; j < nSpts; j++)
-                {
-                  for (unsigned int i = 0; i < nSpts; i++)
-                  {
-                    for (unsigned int k = 0; k < nSpts1D; k++)
-                    {
-                      unsigned int ind = face * nSpts1D + k;
-                      Cvisc0(i, j, ni, nj, dim) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
-                    }
-                  }
-                }
-              }
-            }
-          }
-
           /* Transform center viscous supplementary matrices (2D) */
           for (unsigned int j = 0; j < nSpts; j++)
           {
@@ -2404,40 +2370,6 @@ void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEl
                     for (unsigned int k = 0; k < nFpts; k++)
                     {
                       Cvisc0(i, j, ni, nj, dim) += oppD_fpts(i, k, dim) * CtempFS(k, j);
-                    }
-                  }
-                }
-              }
-
-              /* Add contribution from solution boundary condition to Cvisc0 */
-              for (unsigned int face2 = 0; face2 < nFaces; face2++)
-              {
-                /* Neighbor element */
-                int eleN = geo->ele_adj(face2, ele);
-                if (eleN == -1)
-                {
-                  CtempFSN.fill(0);
-                  for (unsigned int j = 0; j < nSpts; j++)
-                  {
-                    for (unsigned int i = 0; i < nSpts1D; i++)
-                    {
-                      unsigned int ind = face2 * nSpts1D + i;
-                      CtempFSN(i, j) = dUcdU_fpts(ind, ele, ni, nj, 1) * oppE(ind, j);
-                    }
-                  }
-
-                  for (unsigned int dim = 0; dim < nDims; dim++)
-                  {
-                    for (unsigned int j = 0; j < nSpts; j++)
-                    {
-                      for (unsigned int i = 0; i < nSpts; i++)
-                      {
-                        for (unsigned int k = 0; k < nSpts1D; k++)
-                        {
-                          unsigned int ind = face2 * nSpts1D + k;
-                          Cvisc0(i, j, ni, nj, dim) += oppD_fpts(i, ind, dim) * CtempFSN(k, j);
-                        }
-                      }
                     }
                   }
                 }

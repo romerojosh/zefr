@@ -21,6 +21,7 @@
 
 #include "faces.hpp"
 #include "flux.hpp"
+#include "funcs.hpp"
 #include "geometry.hpp"
 #include "input.hpp"
 
@@ -78,7 +79,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
     /* Temp strutures for inviscid boundary conditions */
     dFdURconv.assign({nVars, nVars, nDims});
-    dURdUL.assign({nVars, nVars});
+    dURdUL.assign({nFpts, nVars, nVars});
 
     if(input->viscous)
     {
@@ -1063,64 +1064,6 @@ void Faces::apply_bcs_dFdU()
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
-    /* Copy right state values */
-    if (bnd_id != PERIODIC && bnd_id != SUP_IN)
-    {
-      /* Copy right state dFdUconv */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dFdURconv(ni, nj, dim) = dFdUconv(fpt, ni, nj, dim, 1);
-          }
-        }
-      }
-
-      if (input->viscous)
-      {
-        /* Copy right state dUcdU */
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dUcdUR(ni, nj) = dUcdU(fpt, ni, nj, 1);
-          }
-        }
-
-        /* Copy right state dFdUvisc */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int nj = 0; nj < nVars; nj++)
-          {
-            for (unsigned int ni = 0; ni < nVars; ni++)
-            {
-              dFdURvisc(ni, nj, dim) = dFdUvisc(fpt, ni, nj, dim, 1);
-            }
-          }
-        }
-
-        /* Copy right state dFddUvisc */
-        if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
-        {
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            for (unsigned int dimi = 0; dimi < nDims; dimi++)
-            {
-              for (unsigned int nj = 0; nj < nVars; nj++)
-              {
-                for (unsigned int ni = 0; ni < nVars; ni++)
-                {
-                  dFddURvisc(ni, nj, dimi, dimj) = dFddUvisc(fpt, ni, nj, dimi, dimj, 1);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
     /* Apply specified boundary condition */
     switch(bnd_id)
     {
@@ -1159,25 +1102,25 @@ void Faces::apply_bcs_dFdU()
         double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
 
         /* Compute dURdUL */
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = -0.5 * (uL*uL + vL*vL);
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 1, 0) = 0;
+        dURdUL(fpt, 2, 0) = 0;
+        dURdUL(fpt, 3, 0) = -0.5 * (uL*uL + vL*vL);
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 1;
-        dURdUL(2, 1) = 0;
-        dURdUL(3, 1) = uL;
+        dURdUL(fpt, 0, 1) = 0;
+        dURdUL(fpt, 1, 1) = 1;
+        dURdUL(fpt, 2, 1) = 0;
+        dURdUL(fpt, 3, 1) = uL;
 
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = 0;
-        dURdUL(2, 2) = 1;
-        dURdUL(3, 2) = vL;
+        dURdUL(fpt, 0, 2) = 0;
+        dURdUL(fpt, 1, 2) = 0;
+        dURdUL(fpt, 2, 2) = 1;
+        dURdUL(fpt, 3, 2) = vL;
 
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 0;
+        dURdUL(fpt, 0, 3) = 0;
+        dURdUL(fpt, 1, 3) = 0;
+        dURdUL(fpt, 2, 3) = 0;
+        dURdUL(fpt, 3, 3) = 0;
 
         break;
       }
@@ -1254,25 +1197,25 @@ void Faces::apply_bcs_dFdU()
             double c2 = uR * nx + vR * ny + cstar / gam;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * b1;
-            dURdUL(1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-            dURdUL(2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-            dURdUL(3, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
+            dURdUL(fpt, 0, 0) = a1 * b1;
+            dURdUL(fpt, 1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+            dURdUL(fpt, 2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+            dURdUL(fpt, 3, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
 
-            dURdUL(0, 1) = a1 * b2;
-            dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-            dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-            dURdUL(3, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
+            dURdUL(fpt, 0, 1) = a1 * b2;
+            dURdUL(fpt, 1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+            dURdUL(fpt, 2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+            dURdUL(fpt, 3, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
 
-            dURdUL(0, 2) = a1 * b3;
-            dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-            dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-            dURdUL(3, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
+            dURdUL(fpt, 0, 2) = a1 * b3;
+            dURdUL(fpt, 1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+            dURdUL(fpt, 2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+            dURdUL(fpt, 3, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
 
-            dURdUL(0, 3) = 0.5 * rhoR * b4;
-            dURdUL(1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
-            dURdUL(2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
-            dURdUL(3, 3) = 0.5 * rhoR * (b4 * c1 + a2 * c2);
+            dURdUL(fpt, 0, 3) = 0.5 * rhoR * b4;
+            dURdUL(fpt, 1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
+            dURdUL(fpt, 2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
+            dURdUL(fpt, 3, 3) = 0.5 * rhoR * (b4 * c1 + a2 * c2);
           }
 
           else  /* Case 2: Outflow */
@@ -1307,25 +1250,25 @@ void Faces::apply_bcs_dFdU()
             double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * e1;
-            dURdUL(1, 0) = a1 * e1 * c4 + rhoR * c1;
-            dURdUL(2, 0) = a1 * e1 * d4 + rhoR * d1;
-            dURdUL(3, 0) = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
+            dURdUL(fpt, 0, 0) = a1 * e1;
+            dURdUL(fpt, 1, 0) = a1 * e1 * c4 + rhoR * c1;
+            dURdUL(fpt, 2, 0) = a1 * e1 * d4 + rhoR * d1;
+            dURdUL(fpt, 3, 0) = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
 
-            dURdUL(0, 1) = a1 * e2;
-            dURdUL(1, 1) = a1 * e2 * c4 + rhoR * c2;
-            dURdUL(2, 1) = a1 * e2 * d4 + rhoR * d2;
-            dURdUL(3, 1) = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
+            dURdUL(fpt, 0, 1) = a1 * e2;
+            dURdUL(fpt, 1, 1) = a1 * e2 * c4 + rhoR * c2;
+            dURdUL(fpt, 2, 1) = a1 * e2 * d4 + rhoR * d2;
+            dURdUL(fpt, 3, 1) = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
 
-            dURdUL(0, 2) = a1 * e3;
-            dURdUL(1, 2) = a1 * e3 * c4 + rhoR * c3;
-            dURdUL(2, 2) = a1 * e3 * d4 + rhoR * d3;
-            dURdUL(3, 2) = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
+            dURdUL(fpt, 0, 2) = a1 * e3;
+            dURdUL(fpt, 1, 2) = a1 * e3 * c4 + rhoR * c3;
+            dURdUL(fpt, 2, 2) = a1 * e3 * d4 + rhoR * d3;
+            dURdUL(fpt, 3, 2) = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
 
-            dURdUL(0, 3) = a1 * e4;
-            dURdUL(1, 3) = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
-            dURdUL(2, 3) = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
-            dURdUL(3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
+            dURdUL(fpt, 0, 3) = a1 * e4;
+            dURdUL(fpt, 1, 3) = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
+            dURdUL(fpt, 2, 3) = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
+            dURdUL(fpt, 3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
           }
         }
 
@@ -1363,35 +1306,35 @@ void Faces::apply_bcs_dFdU()
             double c2 = uR * nx + vR * ny + wR * nz + cstar / gam;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * b1;
-            dURdUL(1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-            dURdUL(2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-            dURdUL(3, 0) = a1 * b1 * wR + 0.5 * rhoR * b1 * nz;
-            dURdUL(4, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
+            dURdUL(fpt, 0, 0) = a1 * b1;
+            dURdUL(fpt, 1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+            dURdUL(fpt, 2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+            dURdUL(fpt, 3, 0) = a1 * b1 * wR + 0.5 * rhoR * b1 * nz;
+            dURdUL(fpt, 4, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
 
-            dURdUL(0, 1) = a1 * b2;
-            dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-            dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-            dURdUL(3, 1) = a1 * b2 * wR + 0.5 * rhoR * b2 * nz;
-            dURdUL(4, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
+            dURdUL(fpt, 0, 1) = a1 * b2;
+            dURdUL(fpt, 1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+            dURdUL(fpt, 2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+            dURdUL(fpt, 3, 1) = a1 * b2 * wR + 0.5 * rhoR * b2 * nz;
+            dURdUL(fpt, 4, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
 
-            dURdUL(0, 2) = a1 * b3;
-            dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-            dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-            dURdUL(3, 2) = a1 * b3 * wR + 0.5 * rhoR * b3 * nz;
-            dURdUL(4, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
+            dURdUL(fpt, 0, 2) = a1 * b3;
+            dURdUL(fpt, 1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+            dURdUL(fpt, 2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+            dURdUL(fpt, 3, 2) = a1 * b3 * wR + 0.5 * rhoR * b3 * nz;
+            dURdUL(fpt, 4, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
 
-            dURdUL(0, 3) = a1 * b4;
-            dURdUL(1, 3) = a1 * b4 * uR + 0.5 * rhoR * b4 * nx;
-            dURdUL(2, 3) = a1 * b4 * vR + 0.5 * rhoR * b4 * ny;
-            dURdUL(3, 3) = a1 * b4 * wR + 0.5 * rhoR * b4 * nz;
-            dURdUL(4, 3) = a1 * b4 * c1 + 0.5 * rhoR * b4 * c2;
+            dURdUL(fpt, 0, 3) = a1 * b4;
+            dURdUL(fpt, 1, 3) = a1 * b4 * uR + 0.5 * rhoR * b4 * nx;
+            dURdUL(fpt, 2, 3) = a1 * b4 * vR + 0.5 * rhoR * b4 * ny;
+            dURdUL(fpt, 3, 3) = a1 * b4 * wR + 0.5 * rhoR * b4 * nz;
+            dURdUL(fpt, 4, 3) = a1 * b4 * c1 + 0.5 * rhoR * b4 * c2;
 
-            dURdUL(0, 4) = 0.5 * rhoR * b5;
-            dURdUL(1, 4) = 0.5 * rhoR * (b5 * uR + a2 * nx);
-            dURdUL(2, 4) = 0.5 * rhoR * (b5 * vR + a2 * ny);
-            dURdUL(3, 4) = 0.5 * rhoR * (b5 * wR + a2 * nz);
-            dURdUL(4, 4) = 0.5 * rhoR * (b5 * c1 + a2 * c2);
+            dURdUL(fpt, 0, 4) = 0.5 * rhoR * b5;
+            dURdUL(fpt, 1, 4) = 0.5 * rhoR * (b5 * uR + a2 * nx);
+            dURdUL(fpt, 2, 4) = 0.5 * rhoR * (b5 * vR + a2 * ny);
+            dURdUL(fpt, 3, 4) = 0.5 * rhoR * (b5 * wR + a2 * nz);
+            dURdUL(fpt, 4, 4) = 0.5 * rhoR * (b5 * c1 + a2 * c2);
           }
 
           else  /* Case 2: Outflow */
@@ -1436,35 +1379,35 @@ void Faces::apply_bcs_dFdU()
             double g1 = 0.5 * a1 * (c5*c5 + d5*d5 + e5*e5) + a5;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * f1;
-            dURdUL(1, 0) = a1 * f1 * c5 + rhoR * c1;
-            dURdUL(2, 0) = a1 * f1 * d5 + rhoR * d1;
-            dURdUL(3, 0) = a1 * f1 * e5 + rhoR * e1;
-            dURdUL(4, 0) = rhoR * (c1*c5 + d1*d5 + e1*e5) + f1 * g1 + a6 * b1;
+            dURdUL(fpt, 0, 0) = a1 * f1;
+            dURdUL(fpt, 1, 0) = a1 * f1 * c5 + rhoR * c1;
+            dURdUL(fpt, 2, 0) = a1 * f1 * d5 + rhoR * d1;
+            dURdUL(fpt, 3, 0) = a1 * f1 * e5 + rhoR * e1;
+            dURdUL(fpt, 4, 0) = rhoR * (c1*c5 + d1*d5 + e1*e5) + f1 * g1 + a6 * b1;
 
-            dURdUL(0, 1) = a1 * f2;
-            dURdUL(1, 1) = a1 * f2 * c5 + rhoR * c2;
-            dURdUL(2, 1) = a1 * f2 * d5 + rhoR * d2;
-            dURdUL(3, 1) = a1 * f2 * e5 + rhoR * e2;
-            dURdUL(4, 1) = rhoR * (c2*c5 + d2*d5 + e2*e5) + f2 * g1 + a6 * b2;
+            dURdUL(fpt, 0, 1) = a1 * f2;
+            dURdUL(fpt, 1, 1) = a1 * f2 * c5 + rhoR * c2;
+            dURdUL(fpt, 2, 1) = a1 * f2 * d5 + rhoR * d2;
+            dURdUL(fpt, 3, 1) = a1 * f2 * e5 + rhoR * e2;
+            dURdUL(fpt, 4, 1) = rhoR * (c2*c5 + d2*d5 + e2*e5) + f2 * g1 + a6 * b2;
 
-            dURdUL(0, 2) = a1 * f3;
-            dURdUL(1, 2) = a1 * f3 * c5 + rhoR * c3;
-            dURdUL(2, 2) = a1 * f3 * d5 + rhoR * d3;
-            dURdUL(3, 2) = a1 * f3 * e5 + rhoR * e3;
-            dURdUL(4, 2) = rhoR * (c3*c5 + d3*d5 + e3*e5) + f3 * g1 + a6 * b3;
+            dURdUL(fpt, 0, 2) = a1 * f3;
+            dURdUL(fpt, 1, 2) = a1 * f3 * c5 + rhoR * c3;
+            dURdUL(fpt, 2, 2) = a1 * f3 * d5 + rhoR * d3;
+            dURdUL(fpt, 3, 2) = a1 * f3 * e5 + rhoR * e3;
+            dURdUL(fpt, 4, 2) = rhoR * (c3*c5 + d3*d5 + e3*e5) + f3 * g1 + a6 * b3;
 
-            dURdUL(0, 3) = a1 * f4;
-            dURdUL(1, 3) = a1 * f4 * c5 + rhoR * c4;
-            dURdUL(2, 3) = a1 * f4 * d5 + rhoR * d4;
-            dURdUL(3, 3) = a1 * f4 * e5 + rhoR * e4;
-            dURdUL(4, 3) = rhoR * (c4*c5 + d4*d5 + e4*e5) + f4 * g1 + a6 * b4;
+            dURdUL(fpt, 0, 3) = a1 * f4;
+            dURdUL(fpt, 1, 3) = a1 * f4 * c5 + rhoR * c4;
+            dURdUL(fpt, 2, 3) = a1 * f4 * d5 + rhoR * d4;
+            dURdUL(fpt, 3, 3) = a1 * f4 * e5 + rhoR * e4;
+            dURdUL(fpt, 4, 3) = rhoR * (c4*c5 + d4*d5 + e4*e5) + f4 * g1 + a6 * b4;
 
-            dURdUL(0, 4) = a1 * f5;
-            dURdUL(1, 4) = a1 * f5 * c5 + 0.5 * rhoR * a2 * nx;
-            dURdUL(2, 4) = a1 * f5 * d5 + 0.5 * rhoR * a2 * ny;
-            dURdUL(3, 4) = a1 * f5 * e5 + 0.5 * rhoR * a2 * nz;
-            dURdUL(4, 4) = 0.5 * rhoR * a2 * (c5*nx + d5*ny + e5*nz) + f5 * g1 + a2 * a6;
+            dURdUL(fpt, 0, 4) = a1 * f5;
+            dURdUL(fpt, 1, 4) = a1 * f5 * c5 + 0.5 * rhoR * a2 * nx;
+            dURdUL(fpt, 2, 4) = a1 * f5 * d5 + 0.5 * rhoR * a2 * ny;
+            dURdUL(fpt, 3, 4) = a1 * f5 * e5 + 0.5 * rhoR * a2 * nz;
+            dURdUL(fpt, 4, 4) = 0.5 * rhoR * a2 * (c5*nx + d5*ny + e5*nz) + f5 * g1 + a2 * a6;
           }
         }
 
@@ -1487,25 +1430,25 @@ void Faces::apply_bcs_dFdU()
           double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
 
           /* Compute dURdUL */
-          dURdUL(0, 0) = 1;
-          dURdUL(1, 0) = 0;
-          dURdUL(2, 0) = 0;
-          dURdUL(3, 0) = 0.5 * (uL*uL + vL*vL - uR*uR - vR*vR);
+          dURdUL(fpt, 0, 0) = 1;
+          dURdUL(fpt, 1, 0) = 0;
+          dURdUL(fpt, 2, 0) = 0;
+          dURdUL(fpt, 3, 0) = 0.5 * (uL*uL + vL*vL - uR*uR - vR*vR);
 
-          dURdUL(0, 1) = 0;
-          dURdUL(1, 1) = 1.0-nx*nx;
-          dURdUL(2, 1) = -nx*ny;
-          dURdUL(3, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR;
+          dURdUL(fpt, 0, 1) = 0;
+          dURdUL(fpt, 1, 1) = 1.0-nx*nx;
+          dURdUL(fpt, 2, 1) = -nx*ny;
+          dURdUL(fpt, 3, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR;
 
-          dURdUL(0, 2) = 0;
-          dURdUL(1, 2) = -nx*ny;
-          dURdUL(2, 2) = 1.0-ny*ny;
-          dURdUL(3, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR;
+          dURdUL(fpt, 0, 2) = 0;
+          dURdUL(fpt, 1, 2) = -nx*ny;
+          dURdUL(fpt, 2, 2) = 1.0-ny*ny;
+          dURdUL(fpt, 3, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR;
 
-          dURdUL(0, 3) = 0;
-          dURdUL(1, 3) = 0;
-          dURdUL(2, 3) = 0;
-          dURdUL(3, 3) = 1;
+          dURdUL(fpt, 0, 3) = 0;
+          dURdUL(fpt, 1, 3) = 0;
+          dURdUL(fpt, 2, 3) = 0;
+          dURdUL(fpt, 3, 3) = 1;
         }
 
         else if (nDims == 3)
@@ -1524,35 +1467,35 @@ void Faces::apply_bcs_dFdU()
           double wR = U(fpt, 3, 1) / U(fpt, 0, 1);
 
           /* Compute dURdUL */
-          dURdUL(0, 0) = 1;
-          dURdUL(1, 0) = 0;
-          dURdUL(2, 0) = 0;
-          dURdUL(3, 0) = 0;
-          dURdUL(4, 0) = 0.5 * (uL*uL + vL*vL + wL*wL - uR*uR - vR*vR - wR*wR);
+          dURdUL(fpt, 0, 0) = 1;
+          dURdUL(fpt, 1, 0) = 0;
+          dURdUL(fpt, 2, 0) = 0;
+          dURdUL(fpt, 3, 0) = 0;
+          dURdUL(fpt, 4, 0) = 0.5 * (uL*uL + vL*vL + wL*wL - uR*uR - vR*vR - wR*wR);
 
-          dURdUL(0, 1) = 0;
-          dURdUL(1, 1) = 1.0-nx*nx;
-          dURdUL(2, 1) = -nx*ny;
-          dURdUL(3, 1) = -nx*nz;
-          dURdUL(4, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR - nx*nz*wR;
+          dURdUL(fpt, 0, 1) = 0;
+          dURdUL(fpt, 1, 1) = 1.0-nx*nx;
+          dURdUL(fpt, 2, 1) = -nx*ny;
+          dURdUL(fpt, 3, 1) = -nx*nz;
+          dURdUL(fpt, 4, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR - nx*nz*wR;
 
-          dURdUL(0, 2) = 0;
-          dURdUL(1, 2) = -nx*ny;
-          dURdUL(2, 2) = 1.0-ny*ny;
-          dURdUL(3, 2) = -ny*nz;
-          dURdUL(4, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR - ny*nz*wR;
+          dURdUL(fpt, 0, 2) = 0;
+          dURdUL(fpt, 1, 2) = -nx*ny;
+          dURdUL(fpt, 2, 2) = 1.0-ny*ny;
+          dURdUL(fpt, 3, 2) = -ny*nz;
+          dURdUL(fpt, 4, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR - ny*nz*wR;
 
-          dURdUL(0, 3) = 0;
-          dURdUL(1, 3) = -nx*nz;
-          dURdUL(2, 3) = -ny*nz;
-          dURdUL(3, 3) = 1.0-nz*nz;
-          dURdUL(4, 3) = -wL - nx*nz*uR - ny*nz*vR + (1.0-nz*nz)*wR;
+          dURdUL(fpt, 0, 3) = 0;
+          dURdUL(fpt, 1, 3) = -nx*nz;
+          dURdUL(fpt, 2, 3) = -ny*nz;
+          dURdUL(fpt, 3, 3) = 1.0-nz*nz;
+          dURdUL(fpt, 4, 3) = -wL - nx*nz*uR - ny*nz*vR + (1.0-nz*nz)*wR;
 
-          dURdUL(0, 4) = 0;
-          dURdUL(1, 4) = 0;
-          dURdUL(2, 4) = 0;
-          dURdUL(3, 4) = 0;
-          dURdUL(4, 4) = 1;
+          dURdUL(fpt, 0, 4) = 0;
+          dURdUL(fpt, 1, 4) = 0;
+          dURdUL(fpt, 2, 4) = 0;
+          dURdUL(fpt, 3, 4) = 0;
+          dURdUL(fpt, 4, 4) = 1;
         }
 
         break;
@@ -1569,25 +1512,25 @@ void Faces::apply_bcs_dFdU()
         double nx = norm(fpt, 0);
         double ny = norm(fpt, 1);
 
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = 0;
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 1, 0) = 0;
+        dURdUL(fpt, 2, 0) = 0;
+        dURdUL(fpt, 3, 0) = 0;
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 1.0 - 2.0 * nx * nx;
-        dURdUL(2, 1) = -2.0 * nx * ny;
-        dURdUL(3, 1) = 0;
+        dURdUL(fpt, 0, 1) = 0;
+        dURdUL(fpt, 1, 1) = 1.0 - 2.0 * nx * nx;
+        dURdUL(fpt, 2, 1) = -2.0 * nx * ny;
+        dURdUL(fpt, 3, 1) = 0;
 
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = -2.0 * nx * ny;
-        dURdUL(2, 2) = 1.0 - 2.0 * ny * ny;
-        dURdUL(3, 2) = 0;
+        dURdUL(fpt, 0, 2) = 0;
+        dURdUL(fpt, 1, 2) = -2.0 * nx * ny;
+        dURdUL(fpt, 2, 2) = 1.0 - 2.0 * ny * ny;
+        dURdUL(fpt, 3, 2) = 0;
 
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 1;
+        dURdUL(fpt, 0, 3) = 0;
+        dURdUL(fpt, 1, 3) = 0;
+        dURdUL(fpt, 2, 3) = 0;
+        dURdUL(fpt, 3, 3) = 1;
 
         break;
       }
@@ -1608,46 +1551,46 @@ void Faces::apply_bcs_dFdU()
         double a1 = (input->gamma-1.0) / (input->R_ref * input->T_wall);
         double a2 = 0.5 * (uL*uL + vL*vL);
 
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0);
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 1, 0) = 0;
+        dURdUL(fpt, 2, 0) = 0;
+        dURdUL(fpt, 3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0);
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 0;
-        dURdUL(2, 1) = 0;
-        dURdUL(3, 1) = 0;
+        dURdUL(fpt, 0, 1) = 0;
+        dURdUL(fpt, 1, 1) = 0;
+        dURdUL(fpt, 2, 1) = 0;
+        dURdUL(fpt, 3, 1) = 0;
 
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = 0;
-        dURdUL(2, 2) = 0;
-        dURdUL(3, 2) = 0;
+        dURdUL(fpt, 0, 2) = 0;
+        dURdUL(fpt, 1, 2) = 0;
+        dURdUL(fpt, 2, 2) = 0;
+        dURdUL(fpt, 3, 2) = 0;
 
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 0;
+        dURdUL(fpt, 0, 3) = 0;
+        dURdUL(fpt, 1, 3) = 0;
+        dURdUL(fpt, 2, 3) = 0;
+        dURdUL(fpt, 3, 3) = 0;
 
         /*
-        dURdUL(0, 0) = a1 * a2;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = a2;
+        dURdUL(fpt, 0, 0) = a1 * a2;
+        dURdUL(fpt, 1, 0) = 0;
+        dURdUL(fpt, 2, 0) = 0;
+        dURdUL(fpt, 3, 0) = a2;
 
-        dURdUL(0, 1) = -a1 * uL;
-        dURdUL(1, 1) = 0;
-        dURdUL(2, 1) = 0;
-        dURdUL(3, 1) = -uL;
+        dURdUL(fpt, 0, 1) = -a1 * uL;
+        dURdUL(fpt, 1, 1) = 0;
+        dURdUL(fpt, 2, 1) = 0;
+        dURdUL(fpt, 3, 1) = -uL;
 
-        dURdUL(0, 2) = -a1 * vL;
-        dURdUL(1, 2) = 0;
-        dURdUL(2, 2) = 0;
-        dURdUL(3, 2) = -vL;
+        dURdUL(fpt, 0, 2) = -a1 * vL;
+        dURdUL(fpt, 1, 2) = 0;
+        dURdUL(fpt, 2, 2) = 0;
+        dURdUL(fpt, 3, 2) = -vL;
 
-        dURdUL(0, 3) = a1;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 1;
+        dURdUL(fpt, 0, 3) = a1;
+        dURdUL(fpt, 1, 3) = 0;
+        dURdUL(fpt, 2, 3) = 0;
+        dURdUL(fpt, 3, 3) = 1;
         */
 
         break;
@@ -1679,46 +1622,46 @@ void Faces::apply_bcs_dFdU()
         double a2 = 0.5 * (uL*uL + vL*vL);
         double a3 = 1.0 + 0.5 * a1 * (uR*uR + vR*vR);
 
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = uR;
-        dURdUL(2, 0) = vR;
-        dURdUL(3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0) + 0.5 * (uR*uR + vR*vR);
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 1, 0) = uR;
+        dURdUL(fpt, 2, 0) = vR;
+        dURdUL(fpt, 3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0) + 0.5 * (uR*uR + vR*vR);
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 0;
-        dURdUL(2, 1) = 0;
-        dURdUL(3, 1) = 0;
+        dURdUL(fpt, 0, 1) = 0;
+        dURdUL(fpt, 1, 1) = 0;
+        dURdUL(fpt, 2, 1) = 0;
+        dURdUL(fpt, 3, 1) = 0;
 
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = 0;
-        dURdUL(2, 2) = 0;
-        dURdUL(3, 2) = 0;
+        dURdUL(fpt, 0, 2) = 0;
+        dURdUL(fpt, 1, 2) = 0;
+        dURdUL(fpt, 2, 2) = 0;
+        dURdUL(fpt, 3, 2) = 0;
 
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 0;
+        dURdUL(fpt, 0, 3) = 0;
+        dURdUL(fpt, 1, 3) = 0;
+        dURdUL(fpt, 2, 3) = 0;
+        dURdUL(fpt, 3, 3) = 0;
 
         /*
-        dURdUL(0, 0) = a1 * a2;
-        dURdUL(1, 0) = a1 * a2 * uR;
-        dURdUL(2, 0) = a1 * a2 * vR;
-        dURdUL(3, 0) = a2 * a3;
+        dURdUL(fpt, 0, 0) = a1 * a2;
+        dURdUL(fpt, 1, 0) = a1 * a2 * uR;
+        dURdUL(fpt, 2, 0) = a1 * a2 * vR;
+        dURdUL(fpt, 3, 0) = a2 * a3;
 
-        dURdUL(0, 1) = -a1 * uL;
-        dURdUL(1, 1) = -a1 * uL * uR;
-        dURdUL(2, 1) = -a1 * uL * vR;
-        dURdUL(3, 1) = -uL * a3;
+        dURdUL(fpt, 0, 1) = -a1 * uL;
+        dURdUL(fpt, 1, 1) = -a1 * uL * uR;
+        dURdUL(fpt, 2, 1) = -a1 * uL * vR;
+        dURdUL(fpt, 3, 1) = -uL * a3;
 
-        dURdUL(0, 2) = -a1 * vL;
-        dURdUL(1, 2) = -a1 * vL * uR;
-        dURdUL(2, 2) = -a1 * vL * vR;
-        dURdUL(3, 2) = -vL * a3;
+        dURdUL(fpt, 0, 2) = -a1 * vL;
+        dURdUL(fpt, 1, 2) = -a1 * vL * uR;
+        dURdUL(fpt, 2, 2) = -a1 * vL * vR;
+        dURdUL(fpt, 3, 2) = -vL * a3;
 
-        dURdUL(0, 3) = a1;
-        dURdUL(1, 3) = a1 * uR;
-        dURdUL(2, 3) = a1 * vR;
-        dURdUL(3, 3) = a3;
+        dURdUL(fpt, 0, 3) = a1;
+        dURdUL(fpt, 1, 3) = a1 * uR;
+        dURdUL(fpt, 2, 3) = a1 * vR;
+        dURdUL(fpt, 3, 3) = a3;
         */
 
         break;
@@ -1747,25 +1690,25 @@ void Faces::apply_bcs_dFdU()
         double eL = U(fpt, 3, 0);
 
         /* Compute dURdUL */
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = 0.5 * (uL*uL + vL*vL);
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 1, 0) = 0;
+        dURdUL(fpt, 2, 0) = 0;
+        dURdUL(fpt, 3, 0) = 0.5 * (uL*uL + vL*vL);
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 0;
-        dURdUL(2, 1) = 0;
-        dURdUL(3, 1) = -uL;
+        dURdUL(fpt, 0, 1) = 0;
+        dURdUL(fpt, 1, 1) = 0;
+        dURdUL(fpt, 2, 1) = 0;
+        dURdUL(fpt, 3, 1) = -uL;
 
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = 0;
-        dURdUL(2, 2) = 0;
-        dURdUL(3, 2) = -vL;
+        dURdUL(fpt, 0, 2) = 0;
+        dURdUL(fpt, 1, 2) = 0;
+        dURdUL(fpt, 2, 2) = 0;
+        dURdUL(fpt, 3, 2) = -vL;
 
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 1;
+        dURdUL(fpt, 0, 3) = 0;
+        dURdUL(fpt, 1, 3) = 0;
+        dURdUL(fpt, 2, 3) = 0;
+        dURdUL(fpt, 3, 3) = 1;
 
         if (input->viscous)
         {
@@ -1879,87 +1822,6 @@ void Faces::apply_bcs_dFdU()
       {
         ThrowException("Boundary condition not implemented for implicit method");
         break;
-      }
-    }
-
-    /* Compute new right state values */
-    if (bnd_id != PERIODIC && bnd_id != SUP_IN)
-    {
-      /* Compute dFdULconv for right state */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int j = 0; j < nVars; j++)
-        {
-          for (unsigned int i = 0; i < nVars; i++)
-          {
-            double val = 0;
-            for (unsigned int k = 0; k < nVars; k++)
-            {
-              val += dFdURconv(i, k, dim) * dURdUL(k, j);
-            }
-            dFdUconv(fpt, i, j, dim, 1) = val;
-          }
-        }
-      }
-
-      if (input->viscous)
-      {
-        /* Compute dUcdUL for right state */
-        for (unsigned int j = 0; j < nVars; j++)
-        {
-          for (unsigned int i = 0; i < nVars; i++)
-          {
-            double val = 0;
-            for (unsigned int k = 0; k < nVars; k++)
-            {
-              val += dUcdUR(i, k) * dURdUL(k, j);
-            }
-            dUcdU(fpt, i, j, 1) = val;
-          }
-        }
-
-        /* Compute dFdULvisc for right state */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              double val = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                val += dFdURvisc(i, k, dim) * dURdUL(k, j);
-              }
-              dFdUvisc(fpt, i, j, dim, 1) = val;
-            }
-          }
-        }
-
-        /* Compute dFddULvisc for right state */
-        if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
-        {
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            for (unsigned int dimi = 0; dimi < nDims; dimi++)
-            {
-              for (unsigned int j = 0; j < nVars; j++)
-              {
-                for (unsigned int i = 0; i < nVars; i++)
-                {
-                  double val = 0;
-                  for (unsigned int dimk = 0; dimk < nDims; dimk++)
-                  {
-                    for (unsigned int k = 0; k < nVars; k++)
-                    {
-                      val += dFddURvisc(i, k, dimi, dimk) * ddURddUL(k, j, dimk, dimj);
-                    }
-                  }
-                  dFddUvisc(fpt, i, j, dimi, dimj, 1) = val;
-                }
-              }
-            }
-          }
-        }
       }
     }
   }
@@ -2956,16 +2818,8 @@ void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            if (ni == nj)
-            {
-              dUcdU(fpt, ni, nj, 0) = 0;
-              dUcdU(fpt, ni, nj, 1) = 1;
-            }
-            else
-            {
-              dUcdU(fpt, ni, nj, 0) = 0;
-              dUcdU(fpt, ni, nj, 1) = 0;
-            }
+            dUcdU(fpt, ni, nj, 0) = dURdUL(fpt, ni, nj);
+            dUcdU(fpt, ni, nj, 1) = dURdUL(fpt, ni, nj);
           }
         }
       }
@@ -3027,11 +2881,16 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int ni = 0; ni < nVars; ni++)
         {
-          dFcdU(fpt, ni, nj, 0, 0) = 0;
-          dFcdU(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj);
+          double val = 0;
+          for (unsigned int nk = 0; nk < nVars; nk++)
+          {
+            val += dFndUR_temp(fpt, ni, nk) * dURdUL(fpt, nk, nj);
+          }
+          dFcdU(fpt, ni, nj, 0, 0) = val;
+          dFcdU(fpt, ni, nj, 1, 0) = val;
 
-          dFcdU(fpt, ni, nj, 0, 1) = 0;
-          dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj);
+          dFcdU(fpt, ni, nj, 0, 1) = val;
+          dFcdU(fpt, ni, nj, 1, 1) = val;
         }
       }
       continue;
@@ -3073,20 +2932,6 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
     }
     else if (input->equation == EulerNS)
     {
-      // TODO: May be able to remove once pressure is stored
-      for (unsigned int slot = 0; slot < 2; slot ++)
-      {
-        double momF = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim ++)
-        {
-          momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
-        }
-
-        momF /= U(fpt, 0, slot);
-
-        P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, nDims + 1, slot) - 0.5 * momF);
-      }
-
       /* Compute speed of sound */
       double aL = std::sqrt(std::abs(input->gamma * P(fpt, 0) / WL[0]));
       double aR = std::sqrt(std::abs(input->gamma * P(fpt, 1) / WR[0]));
@@ -3211,20 +3056,6 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
         beta = -beta;
     }
 
-    /* Get numerical diffusion coefficient */
-    // TODO: This can be removed when NK implemented on CPU
-    if (input->equation == AdvDiff || input->equation == Burgers)
-    {
-      diffCo(fpt) = input->AdvDiff_D;
-    }
-    else if (input->equation == EulerNS)
-    {
-      // TODO: Add or store mu from Sutherland's law
-      double diffCoL = std::max(input->mu / U(fpt, 0, 0), input->gamma * input->mu / (input->prandtl * U(fpt, 0, 0)));
-      double diffCoR = std::max(input->mu / U(fpt, 0, 1), input->gamma * input->mu / (input->prandtl * U(fpt, 0, 1)));
-      diffCo(fpt) = std::max(diffCoL, diffCoR);
-    }
-
     /* Get interface-normal dFdU components (from L to R) */
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -3299,34 +3130,41 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
     else
     {
       /* Compute common dFdU */
+      for (unsigned int nj = 0; nj < nVars; nj++)
+      {
+        for (unsigned int ni = 0; ni < nVars; ni++)
+        {
+          double val = 0;
+          for (unsigned int nk = 0; nk < nVars; nk++)
+          {
+            val += dFndUR_temp(fpt, ni, nk) * dURdUL(fpt, nk, nj);
+          }
+          dFcdU_temp(fpt, ni, nj, 0) = val;
+          dFcdU_temp(fpt, ni, nj, 1) = val;
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            if (ni == nj)
+            {
+              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim)) * norm(fpt, dim);
+              dFcdU_temp(fpt, ni, nj, 1) += (tau * norm(fpt, dim)) * norm(fpt, dim);
+            }
+            dFcdU_temp(fpt, ni, nj, 0) -= (tau * norm(fpt, dim)) * dURdUL(fpt, ni, nj) * norm(fpt, dim);
+            dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim)) * dURdUL(fpt, ni, nj) * norm(fpt, dim);
+          }
+        }
+      }
+
+      /* Compute common dFddU */
+      // TODO: Add dependency on ddURddUL for Adiabatic BC
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
         for (unsigned int nj = 0; nj < nVars; nj++)
         {
           for (unsigned int ni = 0; ni < nVars; ni++)
           {
-            dFcdU_temp(fpt, ni, nj, 1) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim);
-
-            if (ni == nj)
-            {
-              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim)) * norm(fpt, dim);
-              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim)) * norm(fpt, dim);
-            }
-          }
-        }
-      }
-
-      /* Compute common dFddU */
-      for (unsigned int dimj = 0; dimj < nDims; dimj++)
-      {
-        for (unsigned int dimi = 0; dimi < nDims; dimi++)
-        {
-          for (unsigned int nj = 0; nj < nVars; nj++)
-          {
-            for (unsigned int ni = 0; ni < nVars; ni++)
-            {
-              dFcddU_temp(fpt, ni, nj, dimj, 1) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi);
-            }
+            dFcddU_temp(fpt, ni, nj, dim, 0) = dFnddUR_temp(fpt, ni, nj, dim);
+            dFcddU_temp(fpt, ni, nj, dim, 1) = dFnddUR_temp(fpt, ni, nj, dim);
           }
         }
       }

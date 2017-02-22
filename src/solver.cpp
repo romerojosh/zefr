@@ -823,6 +823,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 void FRSolver::compute_LHS()
 {
+  /* Apply boundary conditions for flux derivative data */
+  faces->apply_bcs_dFdU();
+
   /* Compute derivative of convective flux with respect to state variables 
    * at solution and flux points */
   eles->compute_dFdUconv();
@@ -844,9 +847,6 @@ void FRSolver::compute_LHS()
     eles->compute_dFddUvisc();
     faces->compute_dFddUvisc(0, geo.nGfpts);
   }
-
-  /* Apply boundary conditions for flux derivative data */
-  faces->apply_bcs_dFdU();
 
   /* Compute normal flux derivative data at flux points */
   faces->compute_dFcdU(0, geo.nGfpts);
@@ -1551,18 +1551,6 @@ void FRSolver::dFcdU_from_faces()
             notslot = 0;
           }
 
-          /* Combine dFcdU on non-periodic boundaries */
-          // TODO: might need to move this to faces
-          if (gfpt >= (int)geo.nGfpts_int && gfpt < (int)(geo.nGfpts_int + geo.nGfpts_bnd))
-          {
-            unsigned int bnd_id = geo.gfpt2bnd(gfpt - geo.nGfpts_int);
-            if (bnd_id != PERIODIC)
-            {
-              eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot) + 
-                                                      faces->dFcdU(gfpt, ni, nj, notslot, slot);
-              continue;
-            }
-          }
           eles->dFcdU_fpts(fpt, ele, ni, nj, 0) = faces->dFcdU(gfpt, ni, nj, slot, slot);
           eles->dFcdU_fpts(fpt, ele, ni, nj, 1) = faces->dFcdU(gfpt, ni, nj, notslot, slot);
         }
@@ -1595,22 +1583,6 @@ void FRSolver::dFcdU_from_faces()
 
             eles->dUcdU_fpts(fpt, ele, ni, nj, 0) = faces->dUcdU(gfpt, ni, nj, slot);
             eles->dUcdU_fpts(fpt, ele, ni, nj, 1) = faces->dUcdU(gfpt, ni, nj, notslot);
-
-            /* Combine dFcddU on non-periodic boundaries */
-            // TODO: might need to move this to faces
-            if (gfpt >= (int)geo.nGfpts_int && gfpt < (int)(geo.nGfpts_int + geo.nGfpts_bnd))
-            {
-              unsigned int bnd_id = geo.gfpt2bnd(gfpt - geo.nGfpts_int);
-              if (bnd_id != PERIODIC)
-              {
-                for (unsigned int dim = 0; dim < eles->nDims; dim++)
-                {
-                  eles->dFcddU_fpts(fpt, ele, ni, nj, dim, 0) = faces->dFcddU(gfpt, ni, nj, dim, slot, slot) +
-                                                                faces->dFcddU(gfpt, ni, nj, dim, notslot, slot);
-                }
-                continue;
-              }
-            }
 
             for (unsigned int dim = 0; dim < eles->nDims; dim++)
             {
