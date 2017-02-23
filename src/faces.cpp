@@ -66,40 +66,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
   {
-    /* Index Map Notes:
-     * Common Value Slots:  Sloti:  dFdUL, dFdUR  Slotj:  L, R
-     * dFddUvisc:           nDimsi: Fx, Fy        nDimsj: dUdx, dUdy
-     * ddURddUL:            nDimsi: dURdx, dURdy  nDimsj: dULdx, dULdy
-     */
-    dFdUconv.assign({nFpts, nVars, nVars, nDims, 2});
-
-    dFcdU.assign({nFpts, nVars, nVars, 2, 2});
-    dFndUL_temp.assign({nFpts, nVars, nVars});
-    dFndUR_temp.assign({nFpts, nVars, nVars});
-
-    /* Temp strutures for inviscid boundary conditions */
-    dFdURconv.assign({nVars, nVars, nDims});
-    dURdUL.assign({nVars, nVars});
-
-    if(input->viscous)
-    {
-      dFdUvisc.assign({nFpts, nVars, nVars, nDims, 2});
-      dFddUvisc.assign({nFpts, nVars, nVars, nDims, nDims, 2}); 
-      dUcdU.assign({nFpts, nVars, nVars, 2});
-      dFcddU.assign({nFpts, nVars, nVars, nDims, 2, 2});
-      dFnddUL_temp.assign({nFpts, nVars, nVars, nDims});
-      dFnddUR_temp.assign({nFpts, nVars, nVars, nDims});
-
-      // TODO: May be able to remove these
-      dFcdU_temp.assign({nFpts, nVars, nVars, 2});
-      dFcddU_temp.assign({nFpts, nVars, nVars, nDims, 2});
-
-      /* Temp strutures for viscous boundary conditions */
-      dUcdUR.assign({nVars, nVars});
-      dFdURvisc.assign({nVars, nVars, nDims});
-      dFddURvisc.assign({nVars, nVars, nDims, nDims});
-      ddURddUL.assign({nVars, nVars, nDims, nDims});
-    }
   }
 
   /* If running Euler/NS, allocate memory for pressure */

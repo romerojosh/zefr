@@ -22,7 +22,7 @@
 
 /*! mdvector.hpp 
  * \brief Template class for multidimensional vector implementation. 
- * Currently uses column-major formatting.
+ * Currently uses row-major formatting.
  *
  * \author Josh Romero, Stanford University
  *
@@ -218,20 +218,18 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pinned)
   max_size_ = 1;
 
 
-  for (unsigned int i = 0; i < nDims; i++)
+  for (int i = 0; i < nDims; i++)
   {
-    if (i > 0)
-    {
-      strides[i-1] = 1;
-      for (unsigned int j = 0; j < i; j++)
-        strides[i-1] *= dims[j];
-    }
+    strides[i] = 1;
+    for (unsigned int j = i+1; j < nDims; j++)
+      strides[i] *= dims[j];
 
     size_ *= dims[i];
     max_size_ *= dims[i];
 
     this->dims[i] = dims[i];
   }
+
 
 #ifdef _GPU
   this->pinned = pinned;
@@ -263,14 +261,12 @@ void mdvector<T>::resize(std::vector<unsigned int> dims)
   size_ = 1;
   max_size_ = 1;
 
-  for (unsigned int i = 0; i < nDims; i++)
+
+  for (int i = 0; i < nDims; i++)
   {
-    if (i > 0)
-    {
-      strides[i-1] = 1;
-      for (unsigned int j = 0; j < i; j++)
-        strides[i-1] *= dims[j];
-    }
+    strides[i] = 1;
+    for (unsigned int j = i+1; j < nDims; j++)
+      strides[i] *= dims[j];
 
     size_ *= dims[i];
     max_size_ *= dims[i];
@@ -439,78 +435,78 @@ T mdvector<T>::operator() (unsigned int idx0) const
 }
 
 template <typename T>
-T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) 
+T& mdvector<T>::operator() (unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 2);
   return values_ptr[idx1 * strides[0] + idx0];
 }
 
 template <typename T>
-T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1) const
+T mdvector<T>::operator() (unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 2);
   return values_ptr[idx1 * strides[0] + idx0];
 }
 
 template <typename T>
-T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
+T& mdvector<T>::operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 3);
-  return values_ptr[idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values_ptr[idx2 * strides[0] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
-T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
+T mdvector<T>::operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 3);
-  return values_ptr[idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values_ptr[idx2 * strides[0] + idx1 * strides[1] + idx0];
 }
 template <typename T>
-T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-    unsigned int idx3) 
+T& mdvector<T>::operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
+    unsigned int idx0) 
 {
   //assert(ndims == 4);
-  return values_ptr[idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values_ptr[idx3 * strides[0] + idx2 * strides[1] + idx1 * strides[2] + idx0];
 }
 
 template <typename T>
-T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-    unsigned int idx3) const
+T mdvector<T>::operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
+    unsigned int idx0) const
 {
   //assert(ndims == 4);
-  return values_ptr[idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values_ptr[idx3 * strides[0] + idx2 * strides[1] + idx1 * strides[2] + idx0];
 }
 
 template <typename T>
-T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-    unsigned int idx3, unsigned int idx4) 
+T& mdvector<T>::operator() (unsigned int idx4, unsigned int idx3, unsigned int idx2, 
+    unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 5);
-  return values[idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values[idx4 * strides[0] + idx3 * strides[1] + idx2 * strides[2] + idx1 * strides[3] + idx0];
 }
 
 template <typename T>
-T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-    unsigned int idx3, unsigned int idx4) const
+T mdvector<T>::operator() (unsigned int idx4, unsigned int idx3, unsigned int idx2, 
+    unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 5);
-  return values[idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values[idx4 * strides[0] + idx3 * strides[1] + idx2 * strides[2] + idx1 * strides[3] + idx0];
 }
 
 template <typename T>
-T& mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-    unsigned int idx3, unsigned int idx4, unsigned int idx5) 
+T& mdvector<T>::operator() (unsigned int idx5, unsigned int idx4, unsigned int idx3, 
+    unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 6);
-  return values[idx5 * strides[4] + idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values[idx5 * strides[0] + idx4 * strides[1] + idx3 * strides[2] + idx2 * strides[3] + idx1 * strides[4] + idx0];
 }
 
 template <typename T>
-T mdvector<T>::operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-    unsigned int idx3, unsigned int idx4, unsigned int idx5) const
+T mdvector<T>::operator() (unsigned int idx5, unsigned int idx4, unsigned int idx3, 
+    unsigned int idx2, unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 6);
-  return values[idx5 * strides[4] + idx4 * strides[3] + idx3 * strides[2] + idx2 * strides[1] + idx1 * strides[0] + idx0];
+  return values[idx5 * strides[0] + idx4 * strides[1] + idx3 * strides[2] + idx2 * strides[3] + idx1 * strides[4] + idx0];
 }
 
 template <typename T>

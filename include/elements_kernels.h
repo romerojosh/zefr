@@ -34,25 +34,6 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
 void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& inv_jaco_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim);
 
-void transform_gradF_quad_wrapper(mdvector_gpu<double> &divF_spts,
-    mdvector_gpu<double> &dF_spts, mdvector_gpu<double> &jaco_spts,
-    mdvector_gpu<double> &grid_vel_spts, mdvector_gpu<double> &dU_spts,
-    unsigned int nSpts, unsigned int nEles, unsigned int stage,
-    unsigned int equation, bool overset = false, int* iblank = NULL);
-
-void transform_gradF_hexa_wrapper(mdvector_gpu<double> &divF_spts,
-    mdvector_gpu<double> &dF_spts, mdvector_gpu<double> &jaco_spts,
-    mdvector_gpu<double> &grid_vel_spts, mdvector_gpu<double> &dU_spts,
-    unsigned int nSpts, unsigned int nEles, unsigned int stage,
-    unsigned int equation, bool overset = false, int* iblank = NULL);
-
-void extrapolate_Fn_wrapper(mdvector_gpu<double>& oppE,
-    mdvector_gpu<double>& F_spts, mdvector_gpu<double>& tempF_fpts,
-    mdvector_gpu<double>& dFn_fpts, mdvector_gpu<double>& norm,
-    mdvector_gpu<double>& dA, mdvector_gpu<int>& fpt2gfpt,
-    mdvector_gpu<char>& fpt2slot, unsigned int nSpts, unsigned int nFpts,
-    unsigned int nEles, unsigned int nDims, unsigned int nVars, bool motion);
-
 /* Additional wrappers */
 void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 
     mdvector_gpu<double> &Uavg, mdvector_gpu<double> &jaco_det_spts, 

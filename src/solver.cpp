@@ -278,9 +278,9 @@ void FRSolver::orient_fpts()
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
         {
           if (slot == 0)
-            fpt_coords_L(dim, gfpt) = e->coord_fpts(fpt, ele, dim);
+            fpt_coords_L(dim, gfpt) = e->coord_fpts(fpt, dim, ele);
           else
-            fpt_coords_R(dim, gfpt) = e->coord_fpts(fpt, ele, dim);
+            fpt_coords_R(dim, gfpt) = e->coord_fpts(fpt, dim, ele);
         }
       }
     }
@@ -672,7 +672,6 @@ void FRSolver::solver_data_to_device()
   {
     e->oppE_d = e->oppE;
     e->oppD_d = e->oppD;
-    e->oppD0_d = e->oppD0;
     e->oppD_fpts_d = e->oppD_fpts;
     e->oppDiv_fpts_d = e->oppDiv_fpts;
 
@@ -971,13 +970,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   }
 
-  /* Copy un-transformed dU to dUr for later use (L-M chain rule) */
-  if (input->motion)
-  {
-    for (auto e : elesObjs)
-      e->compute_dU0();
-  }
-
   /* Compute flux at solution points */
   for (auto e : elesObjs)
     e->compute_F();
@@ -1015,21 +1007,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 #endif
   }
 
-  if (input->motion)
-  {
-    /* Use Liang-Miyaji Chain-Rule form to compute divF */
-    for (auto e : elesObjs)
-      e->compute_gradF_spts();
-
-    for (auto e : elesObjs)
-      e->transform_gradF_spts(stage);
-  }
-  else
-  {
-    /* Compute solution point contribution to divergence of flux */
-    for (auto e : elesObjs)
-      e->compute_divF_spts(stage);
-  }
+  /* Compute solution point contribution to divergence of flux */
+  for (auto e : elesObjs)
+    e->compute_divF_spts(stage);
 
   /* Unpack gradient data from other grid(s) */
 #ifdef _BUILD_LIB
@@ -1062,21 +1042,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   faces->compute_common_F(startFptMpi, geo.nGfpts);
 #endif
 
-  if (input->motion) // and input->gridID == 0)
-  {
-    /* Add standard FR correction to flux divergence (requires extrapolation) */
-    for (auto e : elesObjs)
-    {
-      e->extrapolate_Fn(faces);
-      e->correct_divF_spts(stage);
-    }
-  }
-  else
-  {
-    /* Compute flux point contribution to divergence of flux */
-    for (auto e : elesObjs)
-      e->compute_divF_fpts(stage);
-  }
+  /* Compute flux point contribution to divergence of flux */
+  for (auto e : elesObjs)
+    e->compute_divF_fpts(stage);
 
   /* Add source term (if required) */
   if (input->source)
@@ -2774,9 +2742,9 @@ void FRSolver::write_solution(const std::string &_prefix)
     auto &B = e->U_spts(0, 0, 0);
     auto &C = e->U_ppts(0, 0, 0);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
-        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B, 
-        e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
+        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B, 
+        e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
 
     /* Apply squeezing if needed */
     if (input->squeeze)
@@ -2810,7 +2778,7 @@ void FRSolver::write_solution(const std::string &_prefix)
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
-          binary_write(f, e->U_ppts(ppt, ele, n));
+          binary_write(f, e->U_ppts(ppt, n, ele));
         }
       }
     }
@@ -2854,12 +2822,12 @@ void FRSolver::write_solution(const std::string &_prefix)
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
       {
-        binary_write(f, (float) e->coord_ppts(ppt, ele, 0));
-        binary_write(f, (float) e->coord_ppts(ppt, ele, 1));
+        binary_write(f, (float) e->coord_ppts(ppt, 0, ele));
+        binary_write(f, (float) e->coord_ppts(ppt, 1, ele));
         if (geo.nDims == 2)
           binary_write(f, fzero);
         else
-          binary_write(f, (float) e->coord_ppts(ppt, ele, 2));
+          binary_write(f, (float) e->coord_ppts(ppt, 2, ele));
       }
     }
   }
@@ -3048,8 +3016,8 @@ void FRSolver::write_color()
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
-          f << e->coord_ppts(ppt, ele, 0) << " ";
-          f << e->coord_ppts(ppt, ele, 1) << " ";
+          f << e->coord_ppts(ppt, 0, ele) << " ";
+          f << e->coord_ppts(ppt, 1, ele) << " ";
           f << 0.0 << std::endl;
         }
       }
@@ -3061,9 +3029,9 @@ void FRSolver::write_color()
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
-          f << e->coord_ppts(ppt, ele, 0) << " ";
-          f << e->coord_ppts(ppt, ele, 1) << " ";
-          f << e->coord_ppts(ppt, ele, 2) << std::endl;
+          f << e->coord_ppts(ppt, 0, ele) << " ";
+          f << e->coord_ppts(ppt, 1, ele) << " ";
+          f << e->coord_ppts(ppt, 2, ele) << std::endl;
         }
       }
     }
@@ -3380,8 +3348,8 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       for (int pt = 0; pt < nPtsFace; pt++)
       {
         int ppt = index_map(ind,pt);
-        f << e->coord_ppts(ppt, ele, 0) << " ";
-        f << e->coord_ppts(ppt, ele, 1) << " ";
+        f << e->coord_ppts(ppt, 0, ele) << " ";
+        f << e->coord_ppts(ppt, 1, ele) << " ";
         f << 0.0 << std::endl;
       }
     }
@@ -3395,9 +3363,9 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       for (int pt = 0; pt < nPtsFace; pt++)
       {
         int ppt = index_map(ind,pt);
-        f << e->coord_ppts(ppt, ele, 0) << " ";
-        f << e->coord_ppts(ppt, ele, 1) << " ";
-        f << e->coord_ppts(ppt, ele, 2) << std::endl;
+        f << e->coord_ppts(ppt, 0, ele) << " ";
+        f << e->coord_ppts(ppt, 1, ele) << " ";
+        f << e->coord_ppts(ppt, 2, ele) << std::endl;
       }
     }
   }
@@ -3837,8 +3805,8 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         for (int pt = 0; pt < nPtsFace; pt++)
         {
           int ppt = index_map(ind,pt);
-          f << e->coord_ppts(ppt, ele, 0) << " ";
-          f << e->coord_ppts(ppt, ele, 1) << " ";
+          f << e->coord_ppts(ppt, 0, ele) << " ";
+          f << e->coord_ppts(ppt, 1, ele) << " ";
           f << 0.0 << std::endl;
         }
       }
@@ -3852,9 +3820,9 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         for (int pt = 0; pt < nPtsFace; pt++)
         {
           int ppt = index_map(ind,pt);
-          f << e->coord_ppts(ppt, ele, 0) << " ";
-          f << e->coord_ppts(ppt, ele, 1) << " ";
-          f << e->coord_ppts(ppt, ele, 2) << std::endl;
+          f << e->coord_ppts(ppt, 0, ele) << " ";
+          f << e->coord_ppts(ppt, 1, ele) << " ";
+          f << e->coord_ppts(ppt, 2, ele) << std::endl;
         }
       }
     }
@@ -4393,9 +4361,9 @@ void FRSolver::report_error(std::ofstream &f)
       {
         double U_true = 0.0;
 
-        double x = e->coord_qpts(qpt, ele, 0);
-        double y = e->coord_qpts(qpt, ele, 1);
-        double z = (geo.nDims == 2) ? 0.0 : e->coord_qpts(qpt, ele, 2);
+        double x = e->coord_qpts(qpt, 0, ele);
+        double y = e->coord_qpts(qpt, 1, ele);
+        double z = (geo.nDims == 2) ? 0.0 : e->coord_qpts(qpt, 2, ele);
 
         /* Compute true solution and derivatives */
         U_true = compute_U_true(x, y, z, flow_time, n, input);

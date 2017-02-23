@@ -405,11 +405,11 @@ void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_
     if (iblank[ele] != 1)
       return;
 
-  double x = coord_spts(spt, ele, 0);
-  double y = coord_spts(spt, ele, 1);
+  double x = coord_spts(spt, 0, ele);
+  double y = coord_spts(spt, 1, ele);
   double z = 0;
   if (nDims == 3)
-    z = coord_spts(spt, ele, 2);
+    z = coord_spts(spt, 2, ele);
 
   double jaco_det = jaco_det_spts(spt, ele);
 

@@ -78,7 +78,6 @@ class Elements
     /* Moving-Grid related structures */
     mdvector<double> grid_vel_nodes, grid_vel_spts, grid_vel_fpts, grid_vel_ppts;
     mdvector<double> dF_spts, dUr_spts;
-    mdvector<double> oppD0, oppE_Fn;
     mdvector<double> dFn_fpts, tempF_fpts;
 
     mdvector<double> inv_jaco_spts_init;
@@ -157,7 +156,6 @@ class Elements
     mdvector_gpu<double> nodes_d, shape_spts_d, shape_fpts_d, dshape_spts_d, dshape_fpts_d;
     mdvector_gpu<double> tnorm_d;
     mdvector_gpu<double> dF_spts_d, dUr_spts_d;
-    mdvector_gpu<double> oppD0_d, oppE_Fn_d;
     mdvector_gpu<double> dFn_fpts_d, tempF_fpts_d;
 
     mdvector_gpu<double> jaco_spts_init_d, inv_jaco_spts_init_d;
@@ -281,15 +279,7 @@ class Elements
     void move(std::shared_ptr<Faces> faces);
     void update_point_coords(std::shared_ptr<Faces> faces);
     void update_grid_velocities(std::shared_ptr<Faces> faces);
-    void compute_gradF_spts();
-    void transform_gradF_spts(unsigned int stage);
-    void compute_dU0();
 
-    //! Extrapolated discontinuous normal flux to get delta-Fn at fpts
-    void extrapolate_Fn(std::shared_ptr<Faces> faces);
-
-    //! 'Standard' (non-DFR) correction procedure
-    void correct_divF_spts(unsigned int stage);
     void get_grid_velocity_ppts(void);
     void update_plot_point_coords();
 };
