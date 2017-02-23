@@ -914,7 +914,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
 //  {
 //    std::cout << "gfpt : " << fpt << " ";
-//    std::cout << faces->U(0, 0, fpt)  << " " << faces->U(1, 0, fpt);
+//    std::cout << faces->U_ldg(0, 0, fpt)  << " " << faces->U_ldg(1, 0, fpt);
 //    std::cout << std::endl;
 //  }
 
@@ -961,6 +961,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
       for (auto e : elesObjs)
         e->compute_dU_spts();
+      
+//  std::cout << "dU_SPTS (ele)" << std::endl;
+//  for (int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    std::cout << "ele : " << ele << " ";
+//    for (int spt = 0; spt < eles->nSpts; spt++)
+//    {
+//      std::cout << eles->dU_spts(0, spt, 0, ele)  << " " << eles->dU_spts(1, spt, 0, ele) << " " ;
+//    }
+//    std::cout << std::endl;
+//  }
 
 #ifdef _BUILD_LIB
       if (input->overset)
@@ -969,6 +980,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
       /* Compute common interface solution and convective flux at non-MPI flux points */
       faces->compute_common_U(startFpt, endFpt);
+//  std::cout << "UCOMM (faces)" << std::endl;
+//  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
+//  {
+//    std::cout << "gfpt : " << fpt << " ";
+//    std::cout << faces->Ucomm(0, 0, fpt)  << " " << faces->Ucomm(1, 0, fpt);
+//    std::cout << std::endl;
+//  }
 
 #ifdef _MPI
       /* Receieve U data */
@@ -981,6 +999,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
       for (auto e : elesObjs)
         e->compute_dU_fpts();
+      
+//  std::cout << "dU_SPTS (ele)" << std::endl;
+//  for (int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    std::cout << "ele : " << ele << " ";
+//    for (int spt = 0; spt < eles->nSpts; spt++)
+//    {
+//      std::cout << eles->dU_spts(0, spt, 0, ele)  << " " << eles->dU_spts(1, spt, 0, ele) << " " ;
+//    }
+//    std::cout << std::endl;
+//  }
     }
 
 #if defined(_GPU) && defined(_BUILD_LIB)
@@ -1005,6 +1034,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //    std::cout << std::endl;
 //  }
 
+
   if (input->viscous)
   {
     /* Interpolate gradient data to/from other grid(s) */
@@ -1016,6 +1046,24 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
     for (auto e : elesObjs)
       e->extrapolate_dU();
+//  std::cout << "U_FPTS (ele)" << std::endl;
+//  for (int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    std::cout << "ele : " << ele << " ";
+//    for (int fpt = 0; fpt < eles->nFpts; fpt++)
+//    {
+//      std::cout << eles->dU_fpts(0,fpt, 0, ele)  << " " << eles->dU_fpts(1, fpt, 0, ele) << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+//      
+//  std::cout << "dU_FPTS (faces)" << std::endl;
+//  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
+//  {
+//    std::cout << "gfpt : " << fpt << " ";
+//    std::cout << faces->dU(0, 0, 0, fpt)  << " " << faces->dU(1, 0, 0, fpt) << std::endl;
+//    std::cout << faces->dU(0, 1, 0, fpt)  << " " << faces->dU(1, 1, 0, fpt) << std::endl;
+//  }
 
 #if defined(_GPU) && defined(_BUILD_LIB)
     if (input->overset)
@@ -1029,6 +1077,15 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
+   
+//  std::cout << "dU_FPTS (faces)" << std::endl;
+//  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
+//  {
+//    std::cout << "gfpt : " << fpt << " ";
+//    std::cout << faces->dU(0, 0, 0, fpt)  << " " << faces->dU(1, 0, 0, fpt) << std::endl;
+//    std::cout << faces->dU(0, 1, 0, fpt)  << " " << faces->dU(1, 1, 0, fpt) << std::endl;
+//  }
+
   }
   else
   {
@@ -1220,12 +1277,12 @@ void FRSolver::setup_views()
         {
           dU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dU_fpts(0, fpt, 0, ele);
           dU_strides(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts.get_stride(1);
-          dU_strides(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts.get_stride(2);
+          dU_strides(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts.get_stride(0);
 
 #ifdef _GPU
           dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_ptr(0, fpt, 0, ele);
           dU_strides_d(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts_d.get_stride(1);
-          dU_strides_d(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts_d.get_stride(2);
+          dU_strides_d(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts_d.get_stride(0);
 #endif
          
         }
@@ -1269,12 +1326,12 @@ void FRSolver::setup_views()
       if (input->viscous)
       {
         dU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dU_bnd(0, 0, i);
-        dU_strides(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd.get_stride(0);
-        dU_strides(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd.get_stride(1);
+        dU_strides(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd.get_stride(1);
+        dU_strides(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd.get_stride(0);
 #ifdef _GPU
         dU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_ptr(0, 0, i);
-        dU_strides_d(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd_d.get_stride(0);
-        dU_strides_d(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd_d.get_stride(1);
+        dU_strides_d(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd_d.get_stride(1);
+        dU_strides_d(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd_d.get_stride(0);
 #endif
       }
     }

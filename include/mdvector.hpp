@@ -606,15 +606,15 @@ class mdview
     T& operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
         unsigned int idx0) 
     {
-      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 1) * 
-          idx1 + strides(idx0 + base_stride * idx3, 0) * idx2);
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
+          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
     }
 
     T operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
         unsigned int idx0) const
     {
-      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 1) * 
-          idx1 + strides(idx0 + base_stride * idx3, 0) * idx2);
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
+          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
     }
 
 };

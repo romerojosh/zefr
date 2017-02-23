@@ -55,8 +55,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* If viscous, allocate arrays used for LDG flux */
   if(input->viscous)
   {
-    dU_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars, nDims});
-    Ucomm_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars});
+    dU_bnd.assign({nDims, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+    Ucomm_bnd.assign({nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
   }
 
   /* Initialize Riemann/LDG bias variables to zero */
@@ -680,31 +680,31 @@ void Faces::apply_bcs_dU()
       /* Extrapolate density gradient */
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        dU(fpt, 0, dim, 1) = dU(fpt, 0, dim, 0);
+        dU(1, dim, 0, fpt) = dU(0, dim, 0, fpt);
       }
 
       if (nDims == 2)
       {
         /* Compute energy gradient */
         /* Get left states and velocity gradients*/
-        double rho = U(fpt, 0, 0);
-        double momx = U(fpt, 1, 0);
-        double momy = U(fpt, 2, 0);
-        double E = U(fpt, 3, 0);
+        double rho = U(0, 0, fpt);
+        double momx = U(0, 1, fpt);
+        double momy = U(0, 2, fpt);
+        double E = U(0, 3, fpt);
 
         double u = momx / rho;
         double v = momy / rho;
 
 
-        double rho_dx = dU(fpt, 0, 0, 0);
-        double momx_dx = dU(fpt, 1, 0, 0);
-        double momy_dx = dU(fpt, 2, 0, 0);
-        double E_dx = dU(fpt, 3, 0, 0);
+        double rho_dx = dU(0, 0, 0, fpt);
+        double momx_dx = dU(0, 0, 1, fpt);
+        double momy_dx = dU(0, 0, 2, fpt);
+        double E_dx = dU(0, 0, 3, fpt);
         
-        double rho_dy = dU(fpt, 0, 1, 0);
-        double momx_dy = dU(fpt, 1, 1, 0);
-        double momy_dy = dU(fpt, 2, 1, 0);
-        double E_dy = dU(fpt, 3, 1, 0);
+        double rho_dy = dU(0, 1, 0, fpt);
+        double momx_dy = dU(0, 1, 1, fpt);
+        double momy_dy = dU(0, 1, 2, fpt);
+        double E_dy = dU(0, 1, 3, fpt);
 
         double du_dx = (momx_dx - rho_dx * u) / rho;
         double du_dy = (momx_dy - rho_dy * u) / rho;
@@ -713,10 +713,10 @@ void Faces::apply_bcs_dU()
         double dv_dy = (momy_dy - rho_dy * v) / rho;
 
         /* Option 1: Extrapolate momentum gradients */
-        dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
-        dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
-        dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
-        dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
+        dU(1, 0, 1, fpt) = dU(0, 0, 1, fpt);
+        dU(1, 1, 1, fpt) = dU(0, 1, 1, fpt);
+        dU(1, 0, 2, fpt) = dU(0, 0, 2, fpt);
+        dU(1, 1, 2, fpt) = dU(0, 1, 2, fpt);
 
         /* Option 2: Enforce constraint on tangential velocity gradient */
         //double du_dn = du_dx * norm(fpt, 0) + du_dy * norm(fpt, 1);
@@ -735,11 +735,11 @@ void Faces::apply_bcs_dU()
         double dT_dy = E_dy - rho_dy * E/rho - rho * (u * du_dy + v * dv_dy);
 
         /* Compute wall normal temperature gradient */
-        double dT_dn = dT_dx * norm(fpt, 0) + dT_dy * norm(fpt, 1);
+        double dT_dn = dT_dx * norm(0, fpt) + dT_dy * norm(1, fpt);
 
         /* Option 1: Simply remove contribution of dT from total energy gradient */
-        dU(fpt, 3, 0, 1) = E_dx - dT_dn * norm(fpt, 0);
-        dU(fpt, 3, 1, 1) = E_dy - dT_dn * norm(fpt, 1);
+        dU(1, 0, 3, fpt) = E_dx - dT_dn * norm(0, fpt);
+        dU(1, 1, 3, fpt) = E_dy - dT_dn * norm(1, fpt);
 
         /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
         //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0)) + rho_dx * U(fpt, 3, 1) / rho; 
@@ -749,34 +749,34 @@ void Faces::apply_bcs_dU()
       {
         /* Compute energy gradient */
         /* Get right states and velocity gradients*/
-        double rho = U(fpt, 0, 0);
-        double momx = U(fpt, 1, 0);
-        double momy = U(fpt, 2, 0);
-        double momz = U(fpt, 3, 0);
-        double E = U(fpt, 4, 0);
+        double rho = U(0, 0, fpt);
+        double momx = U(0, 1, fpt);
+        double momy = U(0, 2, fpt);
+        double momz = U(0, 3, fpt);
+        double E = U(0, 4, fpt);
 
         double u = momx / rho;
         double v = momy / rho;
         double w = momz / rho;
 
         /* Gradients */
-        double rho_dx = dU(fpt, 0, 0, 0);
-        double momx_dx = dU(fpt, 1, 0, 0);
-        double momy_dx = dU(fpt, 2, 0, 0);
-        double momz_dx = dU(fpt, 3, 0, 0);
-        double E_dx = dU(fpt, 4, 0, 0);
+        double rho_dx = dU(0, 0, 0, fpt);
+        double momx_dx = dU(0, 0, 1, fpt);
+        double momy_dx = dU(0, 0, 2, fpt);
+        double momz_dx = dU(0, 0, 3, fpt);
+        double E_dx = dU(0, 0, 4, fpt);
 
-        double rho_dy = dU(fpt, 0, 1, 0);
-        double momx_dy = dU(fpt, 1, 1, 0);
-        double momy_dy = dU(fpt, 2, 1, 0);
-        double momz_dy = dU(fpt, 3, 1, 0);
-        double E_dy = dU(fpt, 4, 1, 0);
+        double rho_dy = dU(0, 1, 0, fpt);
+        double momx_dy = dU(0, 1, 1, fpt);
+        double momy_dy = dU(0, 1, 2, fpt);
+        double momz_dy = dU(0, 1, 3, fpt);
+        double E_dy = dU(0, 1, 4, fpt);
 
-        double rho_dz = dU(fpt, 0, 2, 0);
-        double momx_dz = dU(fpt, 1, 2, 0);
-        double momy_dz = dU(fpt, 2, 2, 0);
-        double momz_dz = dU(fpt, 3, 2, 0);
-        double E_dz = dU(fpt, 4, 2, 0);
+        double rho_dz = dU(0, 2, 0, fpt);
+        double momx_dz = dU(0, 2, 1, fpt);
+        double momy_dz = dU(0, 2, 2, fpt);
+        double momz_dz = dU(0, 2, 3, fpt);
+        double E_dz = dU(0, 2, 4, fpt);
 
         double du_dx = (momx_dx - rho_dx * u) / rho;
         double du_dy = (momx_dy - rho_dy * u) / rho;
@@ -791,17 +791,17 @@ void Faces::apply_bcs_dU()
         double dw_dz = (momz_dz - rho_dz * w) / rho;
 
         /* Option 1: Extrapolate momentum gradients */
-        dU(fpt, 1, 0, 1) = dU(fpt, 1, 0, 0);
-        dU(fpt, 1, 1, 1) = dU(fpt, 1, 1, 0);
-        dU(fpt, 1, 2, 1) = dU(fpt, 1, 2, 0);
+        dU(1, 0, 1, fpt) = dU(0, 0, 1, fpt);
+        dU(1, 1, 1, fpt) = dU(0, 1, 1, fpt);
+        dU(1, 2, 1, fpt) = dU(0, 2, 1, fpt);
 
-        dU(fpt, 2, 0, 1) = dU(fpt, 2, 0, 0);
-        dU(fpt, 2, 1, 1) = dU(fpt, 2, 1, 0);
-        dU(fpt, 2, 2, 1) = dU(fpt, 2, 2, 0);
+        dU(1, 0, 2, fpt) = dU(0, 0, 2, fpt);
+        dU(1, 1, 2, fpt) = dU(0, 1, 2, fpt);
+        dU(1, 2, 2, fpt) = dU(0, 2, 2, fpt);
 
-        dU(fpt, 3, 0, 1) = dU(fpt, 3, 0, 0);
-        dU(fpt, 3, 1, 1) = dU(fpt, 3, 1, 0);
-        dU(fpt, 3, 2, 1) = dU(fpt, 3, 2, 0);
+        dU(1, 0, 3, fpt) = dU(0, 0, 3, fpt);
+        dU(1, 1, 3, fpt) = dU(0, 1, 3, fpt);
+        dU(1, 2, 3, fpt) = dU(0, 2, 3, fpt);
 
         /* Option 2: Enforce constraint on tangential velocity gradient */
         //double du_dn = du_dx * norm(fpt, 0) + du_dy * norm(fpt, 1) + du_dz * norm(fpt, 2);
@@ -828,12 +828,12 @@ void Faces::apply_bcs_dU()
         double dT_dz = E_dz - rho_dz * E/rho - rho * (u * du_dz + v * dv_dz + w * dw_dz);
 
         /* Compute wall normal temperature gradient */
-        double dT_dn = dT_dx * norm(fpt, 0) + dT_dy * norm(fpt, 1) + dT_dz * norm(fpt, 2);
+        double dT_dn = dT_dx * norm(0, fpt) + dT_dy * norm(1, fpt) + dT_dz * norm(2, fpt);
 
         /* Option 1: Simply remove contribution of dT from total energy gradient */
-        dU(fpt, 4, 0, 1) = E_dx - dT_dn * norm(fpt, 0);
-        dU(fpt, 4, 1, 1) = E_dy - dT_dn * norm(fpt, 1);
-        dU(fpt, 4, 2, 1) = E_dz - dT_dn * norm(fpt, 2);
+        dU(1, 0, 4, fpt) = E_dx - dT_dn * norm(0, fpt);
+        dU(1, 1, 4, fpt) = E_dy - dT_dn * norm(1, fpt);
+        dU(1, 2, 4, fpt) = E_dz - dT_dn * norm(2, fpt);
 
         /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
         //dU(fpt, 4, 0, 1) = (dT_dx - dT_dn * norm(fpt, 0)) + rho_dx * U(fpt, 4, 1) / rho; 
@@ -852,7 +852,7 @@ void Faces::apply_bcs_dU()
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
-            dU(fpt, n, dim, 1) = dU(fpt, n, dim, 0);
+            dU(1, dim, n, fpt) = dU(0, dim, n, fpt);
         }
       }
     }
@@ -1736,12 +1736,12 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
       /* Setting sign of beta (from HiFiLES) */
       if (nDims == 2)
       {
-        if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
+        if (norm(0, fpt) + norm(1, fpt) < 0.0)
           beta = -beta;
       }
       else if (nDims == 3)
       {
-        if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
+        if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
           beta = -beta;
       }
 
@@ -1752,10 +1752,10 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
-          double UL = U_ldg(fpt, n, 0); double UR = U_ldg(fpt, n, 1);
+          double UL = U_ldg(0, n, fpt); double UR = U_ldg(1, n, fpt);
 
-           Ucomm(fpt, n, 0) = 0.5*(UL + UR) - beta*(UL - UR);
-           Ucomm(fpt, n, 1) = 0.5*(UL + UR) - beta*(UL - UR);
+           Ucomm(0, n, fpt) = 0.5*(UL + UR) - beta*(UL - UR);
+           Ucomm(1, n, fpt) = 0.5*(UL + UR) - beta*(UL - UR);
         }
       }
       /* If on (non-periodic) boundary, set right state as common (strong) */
@@ -1763,10 +1763,10 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int n = 0; n < nVars; n++)
         {
-          double UR = U_ldg(fpt, n, 1);
+          double UR = U_ldg(1, n, fpt);
 
-          Ucomm(fpt, n, 0) = UR;
-          Ucomm(fpt, n, 1) = UR;
+          Ucomm(0, n, fpt) = UR;
+          Ucomm(1, n, fpt) = UR;
         }
       }
 
@@ -1828,24 +1828,24 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     /* Setting sign of beta (from HiFiLES) */
     if (nDims == 2)
     {
-      if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
+      if (norm(0, fpt) + norm(1, fpt) < 0.0)
         beta = -beta;
     }
     else if (nDims == 3)
     {
-      if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
+      if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
         beta = -beta;
     }
 
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      UL[n] = U_ldg(fpt, n, 0); UR[n] = U_ldg(fpt, n, 1);
+      UL[n] = U_ldg(0, n, fpt); UR[n] = U_ldg(1, n, fpt);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        dUL[n][dim] = dU(fpt, n, dim, 0);
-        dUR[n][dim] = dU(fpt, n, dim, 1);
+        dUL[n][dim] = dU(0, dim, n, fpt);
+        dUR[n][dim] = dU(1, dim, n, fpt);
       }
     }
 
@@ -1881,10 +1881,11 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        FnL[n] += FL[n][dim] * norm(fpt, dim);
-        FnR[n] += FR[n][dim] * norm(fpt, dim);
+        FnL[n] += FL[n][dim] * norm(dim, fpt);
+        FnR[n] += FR[n][dim] * norm(dim, fpt);
       }
     }
+
 
     /* Compute common normal viscous flux and accumulate */
     /* If interior, use central */
@@ -1894,8 +1895,8 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(fpt, dim)* (UL[n]
-              - UR[n]) + beta * norm(fpt, dim)* (FnL[n] - FnR[n]);
+          FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(dim, fpt)* (UL[n]
+              - UR[n]) + beta * norm(dim, fpt)* (FnL[n] - FnR[n]);
         }
       }
     }
@@ -1906,7 +1907,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          FR[n][dim] += tau * norm(fpt, dim)* (UL[n] - UR[n]);
+          FR[n][dim] += tau * norm(dim, fpt)* (UL[n] - UR[n]);
         }
       }
     }
@@ -1915,9 +1916,9 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        double F = FR[n][dim] * norm(fpt, dim);
-        Fcomm(fpt, n, 0) += F * dA(fpt, 0);
-        Fcomm(fpt, n, 1) -= F * dA(fpt, 1);
+        double F = FR[n][dim] * norm(dim, fpt);
+        Fcomm(0, n, fpt) += F * dA(0, fpt);
+        Fcomm(1, n, fpt) -= F * dA(1, fpt);
       }
     }
   }
