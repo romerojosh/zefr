@@ -58,7 +58,7 @@ public:
 #endif
 
   //! Read input file and set basic run parameters
-  void read_input(char *inputfile);
+  void read_input(const char *inputfile);
 
   //! Perform preprocessing and prepare to run case
   void setup_solver(void);
@@ -132,8 +132,8 @@ public:
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
 
 #ifdef _GPU
-  cudaStream_t get_tg_stream_handle(void);
-  cudaEvent_t get_tg_event_handle(void);
+  cudaStream_t* get_tg_stream_handle(void);
+  cudaEvent_t* get_tg_event_handle(void);
 #endif
 
 private:

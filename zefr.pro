@@ -31,7 +31,7 @@ SOURCES += \
     src/solver_kernels.cu \
     src/filter_kernels.cu \
     src/zefr_interface.cpp \
-    swig_bin/testZefr.cpp \
+    src/zefrWrap.cpp \
     src/filter.cpp \
     src/tris.cpp
 
@@ -62,8 +62,7 @@ HEADERS += \
     include/tris.hpp
 
 DISTFILES += \
-    swig_bin/zefr.i \
-    swig_bin/test.py \
-    swig_bin/Makefile \
+    include/zefr.i \
+    bin/zefrWrap.py \
     Makefile
 

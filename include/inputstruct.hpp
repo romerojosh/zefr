@@ -42,6 +42,16 @@
 #include "mdvector_gpu.h"
 #endif
 
+enum MOTION_TYPE {
+  STATIC = 0,
+  TEST1 = 1,
+  TEST2 = 2,
+  TEST3 = 3,
+  CIRCULAR_TRANS = 4,
+  RADIAL_VIBE = 5,
+  RIGID_BODY = 10
+};
+
 class Timer
 {
 private:
@@ -121,7 +131,7 @@ struct InputStruct
   double mach_wall, T_wall, nx_wall, ny_wall, u_wall, v_wall;
   double T_ref, P_ref, rho_ref, mu_ref, time_ref, R_ref, c_sth, rt;
   double exps0, s_factor;
-  unsigned int rank, nRanks;
+  unsigned int rank, nRanks, grank;
   unsigned int filt_on, sen_write, sen_norm, filt_maxLevels;
   unsigned int shockcapture, limiter, filt2on;
   double sen_Jfac, filt_gamma;

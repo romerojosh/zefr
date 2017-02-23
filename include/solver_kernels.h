@@ -53,8 +53,8 @@ struct MotionVars
 
 void initialize_cuda();
 
-cudaEvent_t get_event_handle(int event);
-cudaStream_t get_stream_handle(int stream);
+cudaEvent_t* get_event_handle(int event);
+cudaStream_t* get_stream_handle(int stream);
 
 /* Wrappers for alloc/free GPU memory */
 template<typename T>

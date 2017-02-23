@@ -86,7 +86,7 @@ struct CallbackFuncs
 namespace zefr {
 
 #ifdef _MPI
-void initialize(MPI_Comm comm_in, char* inputFile, int nGrids=1, int gridID=0, MPI_Comm world_comm = MPI_COMM_WORLD);
+void initialize(MPI_Comm comm_in, const char* inputFile, int nGrids=1, int gridID=0, MPI_Comm world_comm = MPI_COMM_WORLD);
 #else
 void initialize(char* input_file);
 #endif

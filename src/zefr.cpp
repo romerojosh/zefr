@@ -262,6 +262,9 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
   MPI_Comm_rank(myComm, &rank);
   MPI_Comm_size(myComm, &nRanks);
 
+  grank = rank;
+  MPI_Comm_rank(worldComm,&grank);
+
 #ifdef _GPU
   int nDevices;
   cudaGetDeviceCount(&nDevices);
@@ -270,9 +273,6 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
   {
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   } 
-
-  grank = rank;
-  MPI_Comm_rank(worldComm,&grank);
 
   char hostname[MPI_MAX_PROCESSOR_NAME];
   int len;
@@ -293,17 +293,25 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
 }
 #endif
 
-void Zefr::read_input(char *inputfile)
+void Zefr::read_input(const char *inputfile)
 {
   if (rank == 0) std::cout << "Reading input file: " << inputfile <<  std::endl;
   input = read_input_file(inputfile);
 
   input.rank = rank;
   input.nRanks = nRanks;
-  if (nGrids > 1) input.overset = true;
+  input.grank = grank;
+
+  if (nGrids > 1)
+    input.overset = 1;
+  else
+    input.overset = 0;
 
   if (input.overset)
   {
+    if (input.oversetGrids.size() != nGrids)
+      ThrowException("Number of overset grids in input file does not match nGrids");
+
     input.meshfile = input.oversetGrids[myGrid];
     input.gridID = myGrid;
   }
@@ -649,12 +657,12 @@ void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* of
 }
 
 #ifdef _GPU
-cudaStream_t Zefr::get_tg_stream_handle(void)
+cudaStream_t* Zefr::get_tg_stream_handle(void)
 {
   return get_stream_handle(3);
 }
 
-cudaEvent_t Zefr::get_tg_event_handle(void)
+cudaEvent_t* Zefr::get_tg_event_handle(void)
 {
   return get_event_handle(2);
 }

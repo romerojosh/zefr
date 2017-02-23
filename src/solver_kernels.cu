@@ -68,14 +68,14 @@ void initialize_cuda()
     cudaEventCreateWithFlags(&event_handles[i], cudaEventDisableTiming);
 }
 
-cudaEvent_t get_event_handle(int event)
+cudaEvent_t* get_event_handle(int event)
 {
-  return event_handles[event];
+  return &event_handles[event];
 }
 
-cudaStream_t get_stream_handle(int stream)
+cudaStream_t* get_stream_handle(int stream)
 {
-  return stream_handles[stream];
+  return &stream_handles[stream];
 }
 
 template <typename T>
