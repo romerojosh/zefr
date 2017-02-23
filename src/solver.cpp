@@ -1649,8 +1649,8 @@ void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>>
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         for (uint spt = 0; spt < e->nSpts; spt++)
         {
-          double err = std::abs(e->rk_err(spt,ele,n)) /
-              (input->atol + input->rtol * std::max( std::abs(e->U_spts(spt,ele,n)), std::abs(e->U_ini(spt,ele,n)) ));
+          double err = std::abs(e->rk_err(spt, n, ele)) /
+              (input->atol + input->rtol * std::max( std::abs(e->U_spts(spt, n, ele)), std::abs(e->U_ini(spt, n, ele)) ));
           max_err = std::max(max_err, err);
         }
       }
@@ -1809,8 +1809,8 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
           if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
           for (unsigned int spt = 0; spt < e->nSpts; spt++)
           {
-            e->rk_err(spt,ele,n) -= (bi - bhi) * e->dt(0) /
-                e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
+            e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
           }
         }
       }
@@ -1825,11 +1825,11 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
             if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
             for (unsigned int spt = 0; spt < e->nSpts; spt++)
             {
-              e->U_spts(spt,ele,n) = e->U_til(spt,ele,n) - ai * e->dt(0) /
-                  e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
+              e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - ai * e->dt(0) /
+                  e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
 
-              e->U_til(spt,ele,n) = e->U_spts(spt,ele,n) - (bi - ai) * e->dt(0) /
-                  e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
+              e->U_til(spt, n, ele) = e->U_spts(spt, n, ele) - (bi - ai) * e->dt(0) /
+                  e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
             }
           }
         }
@@ -1843,8 +1843,8 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
             if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
             for (unsigned int spt = 0; spt < e->nSpts; spt++)
             {
-              e->U_spts(spt,ele,n) = e->U_til(spt,ele,n) - bi * e->dt(0) /
-                  e->jaco_det_spts(spt,ele) * e->divF_spts(spt,ele,n,0);
+              e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - bi * e->dt(0) /
+                  e->jaco_det_spts(spt, ele) * e->divF_spts(0, spt, n, ele);
             }
           }
         }
@@ -1921,7 +1921,7 @@ void FRSolver::compute_element_dt()
           int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
           int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
 
-          int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(gfpt, slot); 
+          int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(slot, gfpt); 
         }
 
         e->dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * e->vol(ele) / int_waveSp;
