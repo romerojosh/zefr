@@ -874,6 +874,18 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->extrapolate_U();
 
+//  std::cout << "U_FPTS (ele)" << std::endl;
+//  for (int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    std::cout << "ele : " << ele << " ";
+//    for (int fpt = 0; fpt < eles->nFpts; fpt++)
+//    {
+//      std::cout << eles->U_fpts(fpt, 0, ele)  << " ";
+//    }
+//    std::cout << std::endl;
+//  }
+
+
 #ifdef _BUILD_LIB
   if (input->overset)
     ZEFR->overset_interp_send(faces->nVars, 0);
@@ -897,6 +909,14 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
+
+//  std::cout << "U_FPTS (faces)" << std::endl;
+//  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
+//  {
+//    std::cout << "gfpt : " << fpt << " ";
+//    std::cout << faces->U(0, 0, fpt)  << " " << faces->U(1, 0, fpt);
+//    std::cout << std::endl;
+//  }
 
   if (input->viscous)
   {
@@ -973,6 +993,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Compute flux at solution points */
   for (auto e : elesObjs)
     e->compute_F();
+  
+//  std::cout << "F_SPTS (ele)" << std::endl;
+//  for (int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    std::cout << "ele : " << ele << " ";
+//    for (int spt = 0; spt < eles->nSpts; spt++)
+//    {
+//      std::cout << eles->F_spts(0, spt, 0, ele)  << " " << eles->F_spts(1, spt, 0, ele) << " " ;
+//    }
+//    std::cout << std::endl;
+//  }
 
   if (input->viscous)
   {
@@ -1011,6 +1042,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->compute_divF_spts(stage);
 
+//  std::cout << "divF_SPTS" << std::endl;
+//  for (int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    std::cout << "ele : " << ele << " ";
+//    for (int spt = 0; spt < eles->nSpts; spt++)
+//    {
+//      std::cout << eles->divF_spts(0, spt, 0, ele) << " ";  
+//    }
+//    std::cout << std::endl;
+//  }
+
   /* Unpack gradient data from other grid(s) */
 #ifdef _BUILD_LIB
   if (input->overset && input->viscous)
@@ -1025,6 +1067,15 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
   /* Compute common interface flux at non-MPI flux points */
   faces->compute_common_F(startFpt, endFpt);
+  
+//  std::cout << "FCOMM (faces)" << std::endl;
+//  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
+//  {
+//    std::cout << "gfpt : " << fpt << " ";
+//    std::cout << faces->Fcomm(0, 0, fpt)  << " " << faces->Fcomm(1, 0, fpt);
+//    std::cout << std::endl;
+//  }
+
 
 #ifdef _MPI
   if (!input->viscous)
@@ -1045,6 +1096,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Compute flux point contribution to divergence of flux */
   for (auto e : elesObjs)
     e->compute_divF_fpts(stage);
+  
+//  std::cout << "divF_SPTS" << std::endl;
+//  for (int ele = 0; ele < geo.nEles; ele++)
+//  {
+//    std::cout << "ele : " << ele << " ";
+//    for (int spt = 0; spt < eles->nSpts; spt++)
+//    {
+//      std::cout << eles->divF_spts(0, spt, 0, ele) << " ";  
+//    }
+//    std::cout << std::endl;
+//  }
 
   /* Add source term (if required) */
   if (input->source)
@@ -1137,37 +1199,36 @@ void FRSolver::setup_views()
         int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
         int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
 
-        U_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, ele, 0);
-        U_ldg_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, ele, 0);
+        U_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, 0, ele);
+        U_ldg_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, 0, ele);
         U_strides(gfpt + slot * geo.nGfpts) = e->U_fpts.get_stride(1);
 
-        Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &e->Fcomm(fpt, ele, 0);
+        Fcomm_base_ptrs(gfpt + slot * geo.nGfpts) = &e->Fcomm(fpt, 0, ele);
 
-        if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &e->Ucomm(fpt, ele, 0);
+        if (input->viscous) Ucomm_base_ptrs(gfpt + slot * geo.nGfpts) = &e->Ucomm(fpt, 0, ele);
 #ifdef _GPU
-        U_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_ptr(fpt, ele, 0);
-        U_ldg_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_ptr(fpt, ele, 0);
+        U_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_ptr(fpt, 0, ele);
+        U_ldg_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_ptr(fpt, 0, ele);
         U_strides_d(gfpt + slot * geo.nGfpts) = e->U_fpts_d.get_stride(1);
 
-        Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->Fcomm_d.get_ptr(fpt, ele, 0);
+        Fcomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->Fcomm_d.get_ptr(fpt, 0, ele);
 
-        if (input->viscous) Ucomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->Ucomm_d.get_ptr(fpt, ele, 0);
+        if (input->viscous) Ucomm_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->Ucomm_d.get_ptr(fpt, 0, ele);
 #endif
 
         if (input->viscous)
         {
-          dU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dU_fpts(fpt, ele, 0, 0);
+          dU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dU_fpts(0, fpt, 0, ele);
           dU_strides(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts.get_stride(1);
           dU_strides(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts.get_stride(2);
 
 #ifdef _GPU
-          dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_ptr(fpt, ele, 0, 0);
+          dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_ptr(0, fpt, 0, ele);
           dU_strides_d(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts_d.get_stride(1);
           dU_strides_d(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts_d.get_stride(2);
 #endif
          
         }
-        
       }
     }
   }
@@ -1178,40 +1239,40 @@ void FRSolver::setup_views()
   {
     for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
     {
-      U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0);
+      U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(0, i);
       
       if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
-        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(i, 0);
+        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(0, i);
       else
-        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(i, 0); // point U_ldg to correct MPI data;
+        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(0, i); // point U_ldg to correct MPI data;
 
       U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(0);
 
-      Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(i, 0);
+      Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(0, i);
 
-      if (input->viscous) Ucomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Ucomm_bnd(i, 0);
+      if (input->viscous) Ucomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Ucomm_bnd(0, i);
 
 #ifdef _GPU
-      U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0);
+      U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(0, i);
       if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
-        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(i, 0);
+        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(0, i);
       else
-        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(i, 0); // point U_ldg to correct MPI data;
+        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(0, i); // point U_ldg to correct MPI data;
 
       U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(0);
 
-      Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(i, 0);
+      Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(0, i);
 
-      if (input->viscous) Ucomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Ucomm_bnd_d.get_ptr(i, 0);
+      if (input->viscous) Ucomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Ucomm_bnd_d.get_ptr(0, i);
 #endif
 
       if (input->viscous)
       {
-        dU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dU_bnd(i, 0, 0);
+        dU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dU_bnd(0, 0, i);
         dU_strides(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd.get_stride(0);
         dU_strides(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd.get_stride(1);
 #ifdef _GPU
-        dU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_ptr(i, 0, 0);
+        dU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_ptr(0, 0, i);
         dU_strides_d(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd_d.get_stride(0);
         dU_strides_d(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd_d.get_stride(1);
 #endif
@@ -1349,13 +1410,13 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
             {
               if (input->dt_type != 2)
               {
-                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(0) /
-                    e->jaco_det_spts(spt, ele) * e->divF_spts(spt, ele, n, stage);
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(stage, spt, n, ele);
               }
               else
               {
-                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(ele) /
-                    e->jaco_det_spts(spt, ele) * e->divF_spts(spt, ele, n, stage);
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(stage, spt, n, ele);
               }
             }
           }
@@ -1370,13 +1431,13 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
             {
               if (input->dt_type != 2)
               {
-                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(0) /
-                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt, ele) * (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
               }
               else
               {
-                e->U_spts(spt, ele, n) = e->U_ini(spt, ele, n) - rk_alpha(stage) * e->dt(ele) /
-                    e->jaco_det_spts(spt,ele) * (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt, ele) * (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
               }
             }
           }
@@ -1451,13 +1512,13 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
               for (unsigned int spt = 0; spt < e->nSpts; spt++)
                 if (input->dt_type != 2)
                 {
-                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt,ele) *
-                      e->divF_spts(spt, ele, n, stage);
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
+                      e->divF_spts(stage, spt, n, ele);
                 }
                 else
                 {
-                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
-                      e->divF_spts(spt, ele, n, stage);
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt, ele) *
+                      e->divF_spts(stage, spt, n, ele);
                 }
             }
         }
@@ -1471,13 +1532,13 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
               {
                 if (input->dt_type != 2)
                 {
-                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt,ele) *
-                      (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
+                      (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
                 }
                 else
                 {
-                  e->U_spts(spt, ele, n) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
-                      (e->divF_spts(spt, ele, n, stage) + sourceBT.at(e->etype)(spt, ele, n));
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
+                      (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
                 }
               }
             }
@@ -4076,15 +4137,15 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
           if (input->res_type == 0)
-            res[n] = std::max(res[n], std::abs(e->divF_spts(spt,ele,n,0)
+            res[n] = std::max(res[n], std::abs(e->divF_spts(0, spt, n, ele)
                                                / e->jaco_det_spts(spt, ele)));
 
           else if (input->res_type == 1)
-            res[n] += std::abs(e->divF_spts(spt,ele,n,0)
+            res[n] += std::abs(e->divF_spts(0, spt, n, ele)
                                / e->jaco_det_spts(spt, ele));
 
           else if (input->res_type == 2)
-            res[n] += e->divF_spts(spt,ele,n,0) * e->divF_spts(spt,ele,n,0)
+            res[n] += e->divF_spts(0, spt, n, ele) * e->divF_spts(0, spt, n, ele)
                 / (e->jaco_det_spts(spt, ele) * e->jaco_det_spts(spt, ele));
 
           if (std::isnan(res[n]))

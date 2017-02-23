@@ -285,7 +285,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
         int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
         if (slot == 0)
         {
-          faces->coord(gfpt, dim) = coord_fpts(fpt,dim,ele);
+          faces->coord(dim, gfpt) = coord_fpts(fpt,dim,ele);
         }
       }
     }
@@ -545,15 +545,15 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
       if (slot == 0)
       {
         for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt, dim) = norm[dim]; 
+          faces->norm(dim, gfpt) = norm[dim]; 
       }
 
       // Store magnitude of face normal (equivalent to face area in finite-volume land)
-        faces->dA(gfpt, slot) = 0;
-        for (uint dim = 0; dim < nDims; dim++)
-          faces->dA(gfpt, slot) += norm[dim]*norm[dim];
+      faces->dA(slot, gfpt) = 0;
+      for (uint dim = 0; dim < nDims; dim++)
+        faces->dA(slot, gfpt) += norm[dim]*norm[dim];
 
-        faces->dA(gfpt, slot) = sqrt(faces->dA(gfpt, slot));
+      faces->dA(slot, gfpt) = sqrt(faces->dA(slot, gfpt));
 
       // Normalize
       // If we have a collapsed edge, the dA will be 0, so just set the normal to 0
@@ -573,7 +573,7 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
       if (slot == 0)
       {
         for (uint dim = 0; dim < nDims; dim++)
-          faces->norm(gfpt,dim) /= faces->dA(gfpt, 0);
+          faces->norm(dim, gfpt) /= faces->dA(0, gfpt);
       }
     }
   }
@@ -846,7 +846,7 @@ void Elements::extrapolate_U()
   auto &B = U_spts(0, 0, 0);
   auto &C = U_fpts(0, 0, 0);
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
         nSpts, 1.0, &A, oppE.ldim(), &B, U_spts.ldim(), 0.0, &C, U_fpts.ldim());
 
 #endif
@@ -855,8 +855,8 @@ void Elements::extrapolate_U()
   auto *A = oppE_d.data();
   auto *B = U_spts_d.data();
   auto *C = U_fpts_d.data();
-  cublasDGEMM_wrapper(nFpts, nEles * nVars, nSpts, 1.0,
-      A, oppE_d.ldim(), B, U_spts_d.ldim(), 0.0, C, U_fpts_d.ldim());
+  cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0,
+      B, U_spts_d.ldim(), A, oppE_d.ldim(), , 0.0, C, U_fpts_d.ldim());
 
   event_record(0, 0); // record event for MPI comms
 
@@ -971,13 +971,13 @@ void Elements::compute_divF_spts(unsigned int stage)
   {
     double fac = (dim == 0) ? 0.0 : 1.0;
 
-    auto &A = oppD(0, 0, dim);
-    auto &B = F_spts(0, 0, 0, dim);
-    auto &C = divF_spts(0, 0, 0, stage);
+    auto &A = oppD(dim, 0, 0);
+    auto &B = F_spts(dim, 0, 0, 0);
+    auto &C = divF_spts(stage, 0, 0, 0);
 
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-          nSpts, 1.0, &A, oppD.ldim(), &B, F_spts.ldim(), fac, &C, divF_spts.ldim());
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+          nSpts, 1.0, &A, nSpts, &B, nEles * nVars, fac, &C, nEles * nVars);
   }
 #endif
 
@@ -986,13 +986,13 @@ void Elements::compute_divF_spts(unsigned int stage)
   {
     double fac = (dim == 0) ? 0.0 : 1.0;
 
-    auto *A = oppD_d.get_ptr(0, 0, dim);
-    auto *B = F_spts_d.get_ptr(0, 0, 0, dim);
-    auto *C = divF_spts_d.get_ptr(0, 0, 0, stage);
+    auto *A = oppD_d.get_ptr(dim, 0, 0);
+    auto *B = F_spts_d.get_ptr(dim, 0, 0, 0);
+    auto *C = divF_spts_d.get_ptr(stage, 0, 0, 0);
 
     /* Compute contribution to derivative from solution at solution points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
-        A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, divF_spts_d.ldim(), 0);
+    cublasDGEMM_wrapper(nEles * nVars, nSpts,  nSpts, 1.0,
+        B, nEles * nVars, A, nSpts, fac, C, nEles * nVars, 0);
   }
   check_error();
 #endif
@@ -1004,20 +1004,20 @@ void Elements::compute_divF_fpts(unsigned int stage)
   /* Compute contribution to divergence from common flux at flux points */
   auto &A = oppDiv_fpts(0, 0);
   auto &B = Fcomm(0, 0, 0);
-  auto &C = divF_spts(0, 0, 0, stage);
+  auto &C = divF_spts(stage, 0, 0, 0);
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-      nFpts, 1.0, &A, oppDiv_fpts.ldim(), &B, Fcomm.ldim(), 1.0, &C, divF_spts.ldim());
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
+      nFpts, 1.0, &A, nFpts, &B, nEles * nVars, 1.0, &C, nEles * nVars);
 #endif
 
 #ifdef _GPU
   /* Compute contribution to derivative from common solution at flux points */
   auto *A = oppDiv_fpts_d.get_ptr(0, 0);
   auto *B = Fcomm_d.get_ptr(0, 0, 0);
-  auto *C = divF_spts_d.get_ptr(0, 0, 0, stage);
+  auto *C = divF_spts_d.get_ptr(stage, 0, 0, 0);
 
-  cublasDGEMM_wrapper(nSpts, nEles * nVars,  nFpts, 1.0,
-      A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, divF_spts_d.ldim(), 0);
+  cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
+      B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars, 0);
 
   check_error();
 #endif
@@ -1026,20 +1026,20 @@ void Elements::compute_divF_fpts(unsigned int stage)
 void Elements::add_source(unsigned int stage, double flow_time)
 {
 #ifdef _CPU
-  for (unsigned int n = 0; n < nVars; n++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    for (unsigned int ele = 0; ele < 0; ele++)
+    for (unsigned int n = 0; n < nVars; n++)
     {
-      if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int ele = 0; ele < 0; ele++)
       {
+        if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
           double x = coord_spts(spt, 0, ele);
           double y = coord_spts(spt, 1, ele);
           double z = 0;
           if (nDims == 3)
             z = coord_spts(spt, 2, ele);
 
-          divF_spts(spt, ele, n, stage) += compute_source_term(x, y, z, flow_time, n, input) * 
+          divF_spts(stage, spt, n, ele) += compute_source_term(x, y, z, flow_time, n, input) * 
             jaco_det_spts(spt, ele);
       }
     }
@@ -1122,21 +1122,21 @@ void Elements::compute_F()
   double tdU[nVars][nDims];
   double inv_jaco[nDims][nDims];
 
-  for (unsigned int ele = 0; ele < nEles; ele++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
+    for (unsigned int ele = 0; ele < nEles; ele++)
     {
 
       /* Get state variables and reference space gradients */
       for (unsigned int var = 0; var < nVars; var++)
       {
-        U[var] = U_spts(spt, ele, var);
+        U[var] = U_spts(spt, var, ele);
 
         if(input->viscous) 
         {
           for(unsigned int dim = 0; dim < nDims; dim++)
           {
-            tdU[var][dim] = dU_spts(spt, ele, var, dim);
+            tdU[var][dim] = dU_spts(dim, spt, var, ele);
           }
         }
       }
@@ -1146,7 +1146,7 @@ void Elements::compute_F()
 
       for (int dim1 = 0; dim1 < nDims; dim1++)
         for (int dim2 = 0; dim2 < nDims; dim2++)
-          inv_jaco[dim1][dim2] = inv_jaco_spts(spt, ele, dim1, dim2);
+          inv_jaco[dim1][dim2] = inv_jaco_spts(dim1, spt, dim2, ele);
 
       double dU[nVars][nDims] = {{0.0}};
 
@@ -1175,7 +1175,7 @@ void Elements::compute_F()
             }
 
             /* Write physical gradient to global memory */
-            dU_spts(spt, ele, var, dim1) = dU[var][dim1];
+            dU_spts(dim1, spt, var, ele) = dU[var][dim1];
 
           }
         }
@@ -1221,7 +1221,7 @@ void Elements::compute_F()
         {
           for(unsigned int dim = 0; dim < nDims; dim++)
           {
-            F_spts(spt, ele, var, dim) = tF[var][dim];
+            F_spts(dim, spt, var, ele) = tF[var][dim];
           }
         }
       }
@@ -1232,7 +1232,7 @@ void Elements::compute_F()
         {
           for(unsigned int dim = 0; dim < nDims; dim++)
           {
-            F_spts(spt, ele, var, dim) = F[var][dim];
+            F_spts(dim, spt, var, ele) = F[var][dim];
           }
         }
       }
@@ -1700,7 +1700,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
       {
         int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
 
-        faces->coord(gfpt, dim) = coord_fpts(fpt,dim,ele);
+        faces->coord(dim,gfpt) = coord_fpts(fpt,dim,ele);
       }
     }
   }

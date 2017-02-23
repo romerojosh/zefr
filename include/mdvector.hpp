@@ -583,38 +583,38 @@ class mdview
       return *(base_ptrs(idx0));
     }
 
-    T& operator() (unsigned int idx0, unsigned int idx1) 
+    T& operator() (unsigned int idx1, unsigned int idx0) 
     {
       return *(base_ptrs(idx0 + base_stride * idx1));
     }
 
-    T operator() (unsigned int idx0, unsigned int idx1) const
+    T operator() (unsigned int idx1, unsigned int idx0) const
     {
       return *(base_ptrs(idx0 + base_stride * idx1));
     }
 
-    T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) 
+    T& operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) 
     {
       return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
     }
 
-    T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2) const
+    T operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) const
     {
       return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
     }
 
-    T& operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-        unsigned int idx3) 
+    T& operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
+        unsigned int idx0) 
     {
-      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
-          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 1) * 
+          idx1 + strides(idx0 + base_stride * idx3, 0) * idx2);
     }
 
-    T operator() (unsigned int idx0, unsigned int idx1, unsigned int idx2, 
-        unsigned int idx3) const
+    T operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
+        unsigned int idx0) const
     {
-      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
-          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 1) * 
+          idx1 + strides(idx0 + base_stride * idx3, 0) * idx2);
     }
 
 };

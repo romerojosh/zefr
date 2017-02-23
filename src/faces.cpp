@@ -48,9 +48,9 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   this->nDims = nDims;
 
   /* Allocate memory for solution structures */
-  U_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars});
-  U_bnd_ldg.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars});
-  Fcomm_bnd.assign({geo->nGfpts_bnd + geo->nGfpts_mpi, nVars});
+  U_bnd.assign({nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+  U_bnd_ldg.assign({nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+  Fcomm_bnd.assign({nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
 
   /* If viscous, allocate arrays used for LDG flux */
   if(input->viscous)
@@ -77,10 +77,10 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     diffCo.assign({nFpts}, 0.0);
 
   /* Allocate memory for geometry structures */
-  coord.assign({nFpts, nDims});
-  norm.assign({nFpts, nDims});
-  dA.assign({nFpts, 2},0.0);
-  jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
+  coord.assign({nDims, nFpts});
+  norm.assign({nDims, nFpts});
+  dA.assign({2, nFpts},0.0);
+  //jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
 
   /* Moving-grid-related structures */
   if (input->motion)
@@ -134,8 +134,8 @@ void Faces::apply_bcs()
         if (input->equation == AdvDiff)
         {
           /* Set boundaries to zero */
-          U(fpt, 0, 1) = 0;
-          U_ldg(fpt, 0, 1) = 0;
+          U(1, 0, fpt) = 0;
+          U_ldg(1, 0, fpt) = 0;
         }
         else
         {
@@ -1616,7 +1616,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      UL[n] = U(fpt, n, 0); UR[n] = U(fpt, n, 1);
+      UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
     }
 
 
@@ -1625,7 +1625,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     if (input->motion)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
-        Vgn += Vg(fpt, dim) * norm(fpt, dim);
+        Vgn += Vg(fpt, dim) * norm(dim, fpt);
     }
 
     /* Get numerical wavespeed */
@@ -1636,7 +1636,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        An += input->AdvDiff_A(dim) * norm(fpt, dim);
+        An += input->AdvDiff_A(dim) * norm(dim, fpt);
         A[dim] = input->AdvDiff_A(dim);
       }
 
@@ -1654,8 +1654,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       compute_Fconv_EulerNS<nVars, nDims>(UR, FR, PR, input->gamma);
 
       /* Store pressures for force computation */
-      P(fpt, 0) = PL;
-      P(fpt, 1) = PR;
+      P(0, fpt) = PL;
+      P(1, fpt) = PR;
 
       /* Compute speed of sound */
       double aL = std::sqrt(input->gamma * PL / UL[0]);
@@ -1665,8 +1665,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       double VnL = 0.0; double VnR = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        VnL += UL[dim+1]/UL[0] * norm(fpt, dim);
-        VnR += UR[dim+1]/UR[0] * norm(fpt, dim);
+        VnL += UL[dim+1]/UL[0] * norm(dim, fpt);
+        VnR += UR[dim+1]/UR[0] * norm(dim, fpt);
       }
 
       eig = std::max(std::abs(VnL) + aL, std::abs(VnR) + aR);
@@ -1681,8 +1681,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        FnL[n] += FL[n][dim] * norm(fpt, dim);
-        FnR[n] += FR[n][dim] * norm(fpt, dim);
+        FnL[n] += FL[n][dim] * norm(dim, fpt);
+        FnR[n] += FR[n][dim] * norm(dim, fpt);
       }
     }
 
@@ -1694,8 +1694,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         double F = (0.5 * (FnR[n]+FnL[n]) - 0.5 * eig * (1.0-input->rus_k) * (UR[n]-UL[n]));
 
         /* Correct for positive parent space sign convention */
-        Fcomm(fpt, n, 0) = F * dA(fpt, 0);
-        Fcomm(fpt, n, 1) = -F * dA(fpt, 1);
+        Fcomm(0, n, fpt) = F * dA(0, fpt);
+        Fcomm(1, n, fpt) = -F * dA(1, fpt);
       }
     }
     else if (rus_bias(fpt) == 2) /* Central */
@@ -1703,8 +1703,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       for (unsigned int n = 0; n < nVars; n++)
       {
         double F = 0.5 * (FnL[n] + FnR[n]);
-        Fcomm(fpt, n, 0) = F * dA(fpt, 0);
-        Fcomm(fpt, n, 1) = -F * dA(fpt, 1);
+        Fcomm(0, n, fpt) = F * dA(0, fpt);
+        Fcomm(1, n, fpt) = -F * dA(1, fpt);
       }
     }
     else if (rus_bias(fpt) == 1)
@@ -1712,8 +1712,8 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       for (unsigned int n = 0; n < nVars; n++) /* Set flux state */
       {
         double F = FnR[n];
-        Fcomm(fpt, n, 0) = F * dA(fpt, 0);
-        Fcomm(fpt, n, 1) = -F * dA(fpt, 1);
+        Fcomm(0, n, fpt) = F * dA(0, fpt);
+        Fcomm(1, n, fpt) = -F * dA(1, fpt);
       }
     }
   }
