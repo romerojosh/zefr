@@ -71,7 +71,7 @@ class FRSolver
     double CFL_ratio = 1;
     mdvector<double> rk_alpha, rk_beta, rk_bhat, rk_c;
     mdvector<double> dt;
-    mdvector<double> U_ini, U_til;
+    mdvector<double> U_ini, U_til, divF, LHS_FDA;
     mdvector<double> rk_err; //! RK Error Estimate
     Filter filt;
 

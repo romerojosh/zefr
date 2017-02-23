@@ -23,6 +23,7 @@
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <queue>
 #include <vector>
@@ -265,6 +266,7 @@ void FRSolver::setup_update()
   }
 
   U_ini.assign({eles->nSpts, eles->nEles, eles->nVars});
+  divF.assign({eles->nSpts, eles->nEles, eles->nVars, nStages});
   dt.assign({eles->nEles},input->dt);
 }
 
@@ -1198,6 +1200,8 @@ void FRSolver::initialize_U()
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
   {
+    LHS_FDA.assign({eles->nSpts, eles->nVars, eles->nSpts, eles->nVars, eles->nEles});
+
     if (!input->inv_mode and input->n_LHS_blocks != 1)
     {
       ThrowException("If inv_mode != 0, n_LHS_blocks must equal 1!");
@@ -2094,7 +2098,9 @@ void FRSolver::step_MCGS(const mdvector_gpu<double> &source)
     int iter = current_iter - restart_iter;
     if (counter == 1 && iter%input->Jfreeze_freq == 0)
     {
+      U_ini = eles->U_spts;
       compute_residual(0);
+      divF = eles->divF_spts;
 
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
@@ -2113,7 +2119,59 @@ void FRSolver::step_MCGS(const mdvector_gpu<double> &source)
 
       /* Compute LHS implicit Jacobian */
       compute_LHS();
+
+      /* HACK: Compute LHS implicit Jacobian using FDA */
+      /*
+      double eps = std::sqrt(std::numeric_limits<double>::epsilon());
+      for (unsigned int var = 0; var < eles->nVars; var++)
+        for (unsigned int ele = 0; ele < eles->nEles; ele++)
+          for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+          {
+            // Add eps to solution and compute divF
+            eles->U_spts = U_ini;
+            eles->U_spts(spt, ele, var) += eps;
+            compute_residual(0);
+
+            // Compute LHS implcit Jacobian
+            for (unsigned int ni = 0; ni < eles->nVars; ni++)
+              for (unsigned int i = 0; i < eles->nSpts; i++)
+                LHS_FDA(i, ni, spt, var, ele) = (eles->divF_spts(i, ele, ni, 0) - divF(i, ele, ni, 0)) / eps;
+          }
+
+      // Add dt term
+      for (unsigned int ele = 0; ele < eles->nEles; ele++)
+        for (unsigned int nj = 0; nj < eles->nVars; nj++)
+          for (unsigned int ni = 0; ni < eles->nVars; ni++)
+            for (unsigned int j = 0; j < eles->nSpts; j++)
+              for (unsigned int i = 0; i < eles->nSpts; i++)
+              {
+                if (input->dt_type != 2)
+                {
+                  LHS_FDA(i, ni, j, nj, ele) = dt(0) * LHS_FDA(i, ni, j, nj, ele) / eles->jaco_det_spts(i, ele);
+                }
+
+                else
+                {
+                  LHS_FDA(i, ni, j, nj, ele) = dt(ele) * LHS_FDA(i, ni, j, nj, ele) / eles->jaco_det_spts(i, ele);
+                }
+
+                if (i == j && ni == nj)
+                {
+                  LHS_FDA(i, ni, j, nj, ele) += 1;
+                }
+              }
+
+      eles->U_spts = U_ini;
+      compute_residual(0);
+
+      std::cout << "Writing LHS" << std::endl;
+      write_LHS(input->output_prefix);
+      std::cout << "Done" << std::endl;
+      eles->LHSs[0] = LHS_FDA;
+      compute_LHS_LU(0, geo.nEles);
+      */
     }
+
     /* If running multigrid, assume solution has been updated externally. Compute res on
        * all elements to update face data */
     else if (input->p_multi and counter == 1)
@@ -4258,6 +4316,8 @@ void FRSolver::write_LHS(const std::string &_prefix)
     if (input->p_multi)
       iter = iter / input->mg_steps[0];
 
+    /* LHSs */
+    {
     std::string prefix = _prefix;
     std::stringstream ss;
     ss << input->output_prefix << "/";
@@ -4276,6 +4336,29 @@ void FRSolver::write_LHS(const std::string &_prefix)
     dspaceU.close();
     dset.close();
     file.close();
+    }
+
+    /* LHS_FDA */
+    {
+    std::string prefix = _prefix;
+    std::stringstream ss;
+    ss << input->output_prefix << "/";
+    ss << prefix << "_LHS_FDA_" << std::setw(9) << std::setfill('0');
+    ss << iter << ".dat";
+
+    H5File file(ss.str(), H5F_ACC_TRUNC);
+    unsigned int N = eles->nSpts * eles->nVars;
+    hsize_t dims[3] = {geo.nEles, N, N};
+    DataSpace dspaceU(3, dims);
+
+    std::string name = "LHS_FDA_" + std::to_string(iter);
+    DataSet dset = file.createDataSet(name, PredType::NATIVE_DOUBLE, dspaceU);
+    dset.write(LHS_FDA.data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+    dspaceU.close();
+    dset.close();
+    file.close();
+    }
   }
 #endif
 }
