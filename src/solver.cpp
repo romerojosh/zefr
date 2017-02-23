@@ -875,6 +875,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->extrapolate_U();
 
+
+//  eles->U_fpts = eles->U_fpts_d;
 //  std::cout << "U_FPTS (ele)" << std::endl;
 //  for (int ele = 0; ele < geo.nEles; ele++)
 //  {
@@ -1023,7 +1025,9 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   /* Compute flux at solution points */
   for (auto e : elesObjs)
     e->compute_F();
-  
+
+//  eles->F_spts = eles->F_spts_d;
+//  
 //  std::cout << "F_SPTS (ele)" << std::endl;
 //  for (int ele = 0; ele < geo.nEles; ele++)
 //  {
@@ -1034,6 +1038,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //    }
 //    std::cout << std::endl;
 //  }
+//
+//  ThrowException("pause");
 
 
   if (input->viscous)
@@ -1100,6 +1106,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->compute_divF_spts(stage);
 
+//  eles->divF_spts = eles->divF_spts_d;
 //  std::cout << "divF_SPTS" << std::endl;
 //  for (int ele = 0; ele < geo.nEles; ele++)
 //  {
@@ -1110,6 +1117,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //    }
 //    std::cout << std::endl;
 //  }
+//  ThrowException("pause");
 
   /* Unpack gradient data from other grid(s) */
 #ifdef _BUILD_LIB
@@ -1155,6 +1163,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->compute_divF_fpts(stage);
   
+//  eles->divF_spts = eles->divF_spts_d;
 //  std::cout << "divF_SPTS" << std::endl;
 //  for (int ele = 0; ele < geo.nEles; ele++)
 //  {
@@ -1165,6 +1174,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //    }
 //    std::cout << std::endl;
 //  }
+//
+//  ThrowException("pause");
 
   /* Add source term (if required) */
   if (input->source)

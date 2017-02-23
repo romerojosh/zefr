@@ -140,19 +140,19 @@ void Faces::apply_bcs()
         else
         {
           /* Set boundaries to freestream values */
-          U(fpt, 0, 1) = input->rho_fs;
-          U_ldg(fpt, 0, 1) = input->rho_fs;
+          U(1, 0, fpt) = input->rho_fs;
+          U_ldg(1, 0, fpt) = input->rho_fs;
 
           double Vsq = 0.0;
           for (unsigned int dim = 0; dim < nDims; dim++)
           {
-            U(fpt, dim+1, 1) = input->rho_fs * input->V_fs(dim);
-            U_ldg(fpt, dim+1, 1) = input->rho_fs * input->V_fs(dim);
+            U(1, dim+1, fpt) = input->rho_fs * input->V_fs(dim);
+            U_ldg(1, fpt, dim+1, fpt) = U(1, dim+1, fpt);
             Vsq += input->V_fs(dim) * input->V_fs(dim);
           }
 
-          U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
-          U_ldg(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
+          U(1, nDims + 1, fpt) = input->P_fs/(input->gamma-1.0) + 0.5*input->rho_fs * Vsq; 
+          U_ldg(1, nDims + 1, fpt) = U(1, nDims + 1, fpt);
         }
 
         break;
@@ -160,128 +160,49 @@ void Faces::apply_bcs()
 
       case SUP_OUT: /* Supersonic Outlet */
       {
-        if (input->viscous)
-          ThrowException("SUP_OUT broken for viscous! Use characteristic or fix it!");
-
         /* Extrapolate boundary values from interior */
         for (unsigned int n = 0; n < nVars; n++)
-          U(fpt, n, 1) = U(fpt, n, 0);
-
+        {
+          U(1, n, fpt) = U(0, n, fpt);
+          U_ldg(1, n, fpt) = U(1, n, fpt);
+        }
         break;
       }
 
       case SUB_IN: /* Subsonic Inlet */
       {
-        if (input->viscous)
-          ThrowException("SUB_IN broken for viscous! Use characteristic or fix it!");
-
-        if (!input->viscous)
-          ThrowException("Subsonic inlet only for viscous flows currently!");
-
-        /* Get states for convenience */
-        double rhoL = U(fpt, 0, 0);
-
-        double Vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VL[dim] = U(fpt, dim+1, 0) / rhoL;
-          Vsq += VL[dim] * VL[dim];
-        }
-
-        double eL = U(fpt, nDims + 1 ,0);
-        double PL = (input->gamma - 1.0) * (eL - 0.5 * rhoL * Vsq);
-
-
-        /* Compute left normal velocity and dot product of normal*/
-        double VnL = 0.0;
-        double alpha = 0.0;
-
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VnL += VL[dim] * norm(fpt, dim);
-          alpha += input->norm_fs(dim) * norm(fpt, dim);
-        }
-
-        /* Compute speed of sound */
-        double cL = std::sqrt(input->gamma * PL / rhoL);
-
-        /* Extrapolate Riemann invariant */
-        double R_plus  = VnL + 2.0 * cL / (input->gamma - 1.0);
-
-        /* Specify total enthalpy */
-        double H_tot = input->gamma * input->R_ref / (input->gamma - 1.0) * input->T_tot_fs;
-
-        /* Compute total speed of sound squared */
-        double c_tot_sq = (input->gamma - 1.0) * (H_tot - (eL + PL) / rhoL + 0.5 * Vsq) + cL * cL;
-
-        /* Coefficients of Quadratic equation */
-        double aa = 1.0 + 0.5 * (input->gamma - 1.0) * alpha * alpha;
-        double bb = -(input->gamma - 1.0) * alpha * R_plus;
-        double cc = 0.5 * (input->gamma - 1.0) * R_plus * R_plus - 2.0 * c_tot_sq / (input->gamma - 1.0);
-
-        /* Solve quadratic for right velocity */
-        double dd = bb * bb  - 4.0 * aa * cc;
-        dd = std::sqrt(std::max(dd, 0.0));  // Max to keep from producing NaN
-        double VR_mag = (dd - bb) / (2.0 * aa);
-        VR_mag = std::max(VR_mag, 0.0);
-        double VR_mag_sq = VR_mag * VR_mag;
-
-        /* Compute right speed of sound and Mach */
-        /* Note: Need to verify what is going on here. */
-        double cR_sq = c_tot_sq - 0.5 * (input->gamma - 1.0) * VR_mag_sq;
-        double Mach_sq = VR_mag_sq / cR_sq;
-        Mach_sq = std::min(Mach_sq, 1.0); // Clamp to Mach = 1
-        VR_mag_sq = Mach_sq * cR_sq;
-        VR_mag = std::sqrt(VR_mag_sq);
-        cR_sq = c_tot_sq - 0.5 * (input->gamma - 1.0) * VR_mag_sq;
-
-        /* Compute right states */
-
-        double TR = cR_sq / (input->gamma * input->R_ref);
-        double PR = input->P_tot_fs * std::pow(TR / input->T_tot_fs, input->gamma/ (input->gamma - 1.0));
-
-        U(fpt, 0, 1) = PR / (input->R_ref * TR);
-
-        Vsq = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          VR[dim] = VR_mag * input->norm_fs(dim);
-          U(fpt, dim+1, 1) = U(fpt, 0, 1) * VR[dim];
-          Vsq += VR[dim] * VR[dim];
-        }
-
-        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1.0) + 0.5 * U(fpt, 0, 1) * Vsq;
+        ThrowException("SUB_IN needs to be reimplemented!");
 
         break;
       }
 
       case SUB_OUT: /* Subsonic Outlet */
       {
-        if (input->viscous)
-          ThrowException("SUB_OUT broken for viscous! Use characteristic or fix it!");
-
         if (!input->viscous)
           ThrowException("Subsonic outlet only for viscous flows currently!");
 
         /* Extrapolate Density */
-        U(fpt, 0, 1) = U(fpt, 0, 0);
+        U(1, 0, fpt) = U(0, 0, fpt);
+        U_ldg(1, 0, fpt) = U(1, 0, fpt);
 
         /* Extrapolate Momentum */
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          U(fpt, dim+1, 1) =  U(fpt, dim+1, 0);
+          U(1, dim+1, fpt) =  U(0, dim+1, fpt);
+          U_ldg(1, dim+1, fpt) =  U(1, dim+1, fpt);
         }
 
         double momF = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+          momF += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
         }
 
-        momF /= U(fpt, 0, 0);
+        momF /= U(0, 0, fpt);
 
         /* Fix pressure */
-        U(fpt, nDims + 1, 1) = input->P_fs/(input->gamma-1.0) + 0.5 * momF; 
+        U(1, nDims + 1, fpt) = input->P_fs/(input->gamma-1.0) + 0.5 * momF; 
+        U_ldg(1, nDims + 1, fpt) = U(1, nDims + 1, fpt);
 
         /* Set LDG bias */
         LDG_bias(fpt) = 1;
@@ -297,23 +218,23 @@ void Faces::apply_bcs()
 
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim);
-          VnR += input->V_fs(dim) * norm(fpt, dim);
+          VnL += U(0, dim+1, fpt) / U(0, 0, fpt) * norm(dim, fpt);
+          VnR += input->V_fs(dim) * norm(dim, fpt);
         }
 
         /* Compute pressure. TODO: Compute pressure once!*/
         double momF = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+          momF += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
         }
 
-        momF /= U(fpt, 0, 0);
+        momF /= U(0, 0, fpt);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+        double PL = (input->gamma - 1.0) * (U(0, nDims + 1, fpt) - 0.5 * momF);
         double PR = input->P_fs;
 
-        double cL = std::sqrt(input->gamma * PL / U(fpt, 0, 0));
+        double cL = std::sqrt(input->gamma * PL / U(0, 0, fpt));
         double cR = std::sqrt(input->gamma * PR / input->rho_fs);
 
         /* Compute Riemann Invariants */
@@ -340,33 +261,33 @@ void Faces::apply_bcs()
           rhoR *= std::pow(input->rho_fs, input->gamma) / PR;
 
           for (unsigned int dim = 0; dim < nDims; dim++)
-            VR[dim] = input->V_fs(dim) + (ustarn - VnR) * norm(fpt, dim);
+            VR[dim] = input->V_fs(dim) + (ustarn - VnR) * norm(dim, fpt);
         }
         else  /* Case 2: Outflow */
         {
-          rhoR *= std::pow(U(fpt, 0, 0), input->gamma) / PL;
+          rhoR *= std::pow(U(0, 0, fpt), input->gamma) / PL;
 
           for (unsigned int dim = 0; dim < nDims; dim++)
-            VR[dim] = U(fpt, dim+1, 0) / U(fpt, 0, 0) + (ustarn - VnL) * norm(fpt, dim);
+            VR[dim] = U(0, dim+1, fpt) / U(0, 0, fpt) + (ustarn - VnL) * norm(dim, fpt);
         }
 
         rhoR = std::pow(rhoR, 1.0 / (input->gamma - 1));
 
-        U(fpt, 0, 1) = rhoR;
-        U_ldg(fpt, 0, 1) = rhoR;
+        U(1, 0, fpt) = rhoR;
+        U_ldg(1, 0, fpt) = rhoR;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          U(fpt, dim + 1, 1) = rhoR * VR[dim];
-          U_ldg(fpt, dim + 1, 1) = rhoR * VR[dim];
+          U(1, dim + 1, fpt) = rhoR * VR[dim];
+          U_ldg(1, dim + 1, fpt) = rhoR * VR[dim];
         }
 
         PR = rhoR / input->gamma * cstar * cstar;
-        U(fpt, nDims + 1, 1) = PR / (input->gamma - 1);
-        U_ldg(fpt, nDims + 1, 1) = PR / (input->gamma - 1);
+        U(1, nDims + 1, fpt) = PR / (input->gamma - 1);
+        U_ldg(1, nDims + 1, fpt) = PR / (input->gamma - 1);
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          U(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
-          U_ldg(fpt, nDims+1, 1) += 0.5 * rhoR * VR[dim] * VR[dim];
+          U(1, nDims+1, fpt) += 0.5 * rhoR * VR[dim] * VR[dim];
+          U_ldg(1, nDims+1, fpt) += 0.5 * rhoR * VR[dim] * VR[dim];
         }
 
         /* Set Char (prescribed) */
@@ -391,35 +312,35 @@ void Faces::apply_bcs()
 
         /* Compute wall normal momentum */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(fpt, dim+1, 0) * norm(fpt, dim);
+          momN += U(0, dim+1, fpt) * norm(dim, fpt);
 
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim);
+            momN -= U(0, 0, fpt) * Vg(fpt, dim) * norm(dim, fpt);
         }
 
-        U(fpt, 0, 1) = U(fpt, 0, 0);
+        U(1, 0, fpt) = U(0, 0, fpt);
 
         /* Set boundary state with cancelled normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - momN * norm(fpt, dim);
+          U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(dim, fpt);
 
         /* Set energy */
         /* Get left-state pressure */
         double momFL = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momFL += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+          momFL += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1 , 0) - 0.5 * momFL / U(fpt, 0, 0));
+        double PL = (input->gamma - 1.0) * (U(0, nDims + 1 , fpt) - 0.5 * momFL / U(0, 0, fpt));
 
         /* Get right-state momentum flux after velocity correction */
         double momFR = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momFR += U(fpt, dim + 1, 1) * U(fpt, dim + 1, 1);
+          momFR += U(1, dim + 1, fpt) * U(1, dim + 1, fpt);
 
         /* Compute energy with extrapolated pressure and new momentum */
-        U(fpt, nDims + 1, 1) = PL / (input->gamma - 1)  + 0.5 * momFR / U(fpt, 0, 1);
+        U(1, nDims + 1, fpt) = PL / (input->gamma - 1)  + 0.5 * momFR / U(1, 0, fpt);
 
         /* Set bias */
         rus_bias(fpt) = 1;
@@ -437,22 +358,22 @@ void Faces::apply_bcs()
 
         /* Compute wall normal momentum */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(fpt, dim+1, 0) * norm(fpt, dim);
+          momN += U(0, dim+1, fpt) * norm(dim, fpt);
 
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(fpt, 0, 0) * Vg(fpt, dim) * norm(fpt, dim);
+            momN -= U(0, 0, fpt) * Vg(fpt, dim) * norm(dim, fpt);
         }
 
-        U(fpt, 0, 1) = U(fpt, 0, 0);
+        U(1, 0, fpt) = U(0, 0, fpt);
 
         /* Set boundary state to reflect normal velocity */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          U(fpt, dim+1, 1) = U(fpt, dim+1, 0) - 2.0 * momN * norm(fpt, dim);
+          U(1, dim+1, fpt) = U(0, dim+1, fpt) - 2.0 * momN * norm(dim, fpt);
 
         /* Set energy */
-        U(fpt, nDims + 1, 1) = U(fpt, nDims + 1, 0);
+        U(1, nDims + 1, fpt) = U(0, nDims + 1, fpt);
 
         break;
       }
@@ -468,28 +389,28 @@ void Faces::apply_bcs()
             VG[dim] = Vg(fpt, dim);
         }
 
-        double rhoL = U(fpt, 0, 0);
+        double rhoL = U(0, 0, fpt);
 
-        U(fpt, 0, 1) = rhoL;
-        U_ldg(fpt, 0, 1) = rhoL;
+        U(1, 0, fpt) = rhoL;
+        U_ldg(1, 0, fpt) = rhoL;
 
         /* Set velocity to zero (or grid wall velocity) */
         double Vsq = 0; double Vsq_grid = 0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          double VL = U(fpt, dim+1, 0) / rhoL;
+          double VL = U(0, dim+1, fpt) / rhoL;
           double V = -VL + 2 * VG[dim];
-          U(fpt, dim+1, 1) = rhoL * V;
+          U(1, dim+1, fpt) = rhoL * V;
           Vsq += V * V;
 
-          U_ldg(fpt, dim+1, 1) =  VG[dim];
+          U_ldg(1, dim+1, fpt) =  VG[dim];
           Vsq_grid += VG[dim] * VG[dim];
         }
           
         double cp_over_gam =  input->R_ref / (input->gamma - 1);
 
-        U(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq) ;
-        U_ldg(fpt, nDims + 1, 1) = rhoL * cp_over_gam * input->T_wall;
+        U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq) ;
+        U_ldg(1, nDims + 1, fpt) = rhoL * cp_over_gam * input->T_wall;
 
         /* Set bias */
         LDG_bias(fpt) = 1;
@@ -513,28 +434,28 @@ void Faces::apply_bcs()
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
 
-        double rhoL = U(fpt, 0, 0);
+        double rhoL = U(0, 0, fpt);
 
-        U(fpt, 0, 1) = rhoL;
-        U_ldg(fpt, 0, 1) = rhoL;
+        U(1, 0, fpt) = rhoL;
+        U_ldg(1, 0, fpt) = rhoL;
 
         /* Set velocity to zero (or wall velocity) */
         double Vsq = 0; double Vsq_wall = 0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          double VL = U(fpt, dim+1, 0) / U(fpt, 0, 0);
+          double VL = U(0, dim+1, fpt) / U(0, 0, fpt);
           double V = -VL + 2*(input->V_wall(dim));
-          U(fpt, dim+1, 1) = rhoL * V;
+          U(1, dim+1, fpt) = rhoL * V;
           Vsq += V * V;
 
-          U_ldg(fpt, dim+1, 1) = rhoL*input->V_wall(dim);
+          U_ldg(1, dim+1, fpt) = rhoL*input->V_wall(dim);
           Vsq_wall += input->V_wall(dim) * input->V_wall(dim);
         }
           
         double cp_over_gam =  input->R_ref / (input->gamma - 1);
 
-        U(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq);
-        U_ldg(fpt, nDims + 1, 1) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq_wall);
+        U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq);
+        U_ldg(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq_wall);
 
         /* Set bias */
         LDG_bias(fpt) = 1;
@@ -564,27 +485,27 @@ void Faces::apply_bcs()
         }
 
         /* Extrapolate density */
-        double rhoL = U(fpt, 0, 0);
-        U(fpt, 0, 1) = rhoL;
-        U_ldg(fpt, 0, 1) = rhoL;
+        double rhoL = U(0, 0, fpt);
+        U(1, 0, fpt) = rhoL;
+        U_ldg(1, 0, fpt) = rhoL;
 
         /* Set right state (common) velocity to zero (or wall velocity) */
         double Vsq = 0.0; double VLsq = 0.0; double Vsq_grid = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          double VL = U(fpt, dim+1, 0) / rhoL; 
+          double VL = U(0, dim+1, fpt) / rhoL; 
           double V = -VL + 2 * VG[dim];
-          U(fpt, dim+1, 1) = rhoL * V;
-          U_ldg(fpt, dim+1, 1) = rhoL * VG[dim];
+          U(1, dim+1, fpt) = rhoL * V;
+          U_ldg(1, dim+1, fpt) = rhoL * VG[dim];
 
           Vsq += V * V;
           VLsq += VL * VL;
           Vsq_grid += VG[dim] * VG[dim];
         }
 
-        double EL = U(fpt, nDims + 1, 0);
-        U(fpt, nDims + 1, 1) = EL + 0.5 * rhoL * (Vsq - VLsq);
-        U_ldg(fpt, nDims + 1, 1) = EL + 0.5 * rhoL * (Vsq_grid - VLsq);
+        double EL = U(0, nDims + 1, fpt);
+        U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
+        U_ldg(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq_grid - VLsq);
 
         /* Set LDG bias */
         LDG_bias(fpt) = 1;
@@ -608,27 +529,27 @@ void Faces::apply_bcs()
           ThrowException("No slip wall boundary only for viscous flows!");
 
         /* Extrapolate density */
-        double rhoL = U(fpt, 0, 0);
-        U(fpt, 0, 1) = rhoL;
-        U_ldg(fpt, 0, 1) = rhoL;
+        double rhoL = U(0, 0, fpt);
+        U(1, 0, fpt) = rhoL;
+        U_ldg(1, 0, fpt) = rhoL;
 
         /* Set right state (common) velocity to zero (or wall velocity) */
         double Vsq = 0.0; double VLsq = 0.0; double Vsq_wall = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          double VL = U(fpt, dim+1, 0) / rhoL; 
+          double VL = U(0, dim+1, fpt) / rhoL; 
           double V = -VL + 2 * input->V_wall(dim);
-          U(fpt, dim+1, 1) = rhoL * V;
-          U_ldg(fpt, dim+1, 1) = rhoL * input->V_wall(dim);
+          U(1, dim+1, fpt) = rhoL * V;
+          U_ldg(1, dim+1, fpt) = rhoL * input->V_wall(dim);
 
           Vsq += V * V;
           VLsq += VL * VL;
           Vsq_wall += input->V_wall(dim) * input->V_wall(dim);
         }
 
-        double EL = U(fpt, nDims + 1, 0);
-        U(fpt, nDims + 1, 1) = EL + 0.5 * rhoL * (Vsq - VLsq);
-        U_ldg(fpt, nDims + 1, 1) = EL - 0.5 * rhoL * (VLsq + Vsq_wall);
+        double EL = U(0, nDims + 1, fpt);
+        U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
+        U_ldg(1, nDims + 1, fpt) = EL - 0.5 * rhoL * (VLsq + Vsq_wall);
 
         /* Set LDG bias */
         LDG_bias(fpt) = 1;

@@ -395,27 +395,29 @@ void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_
     unsigned int nSpts, unsigned int nEles, unsigned int equation, 
     double flow_time, unsigned int stage, bool overset = false, const int* iblank = NULL)
 {
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
-  if (spt >= nSpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
   if (overset)
     if (iblank[ele] != 1)
       return;
 
-  double x = coord_spts(spt, 0, ele);
-  double y = coord_spts(spt, 1, ele);
-  double z = 0;
-  if (nDims == 3)
-    z = coord_spts(spt, 2, ele);
-
-  double jaco_det = jaco_det_spts(spt, ele);
-
-  for (unsigned int n = 0; n < nVars; n++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    divF_spts(spt, ele, n, stage) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
+    double x = coord_spts(spt, 0, ele);
+    double y = coord_spts(spt, 1, ele);
+    double z = 0;
+    if (nDims == 3)
+      z = coord_spts(spt, 2, ele);
+
+    double jaco_det = jaco_det_spts(spt, ele);
+
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      divF_spts(stage, spt, n, ele) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
+    }
   }
 }
 
@@ -424,7 +426,7 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
     double flow_time, unsigned int stage, bool overset, int* iblank)
 {
   unsigned int threads = 128;
-  unsigned int blocks = (nSpts * nEles + threads - 1)/ threads;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
 
   if (nDims == 2)
   {
@@ -455,10 +457,9 @@ void RK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
     const mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int stage, unsigned int nStages, bool last_stage, bool overset = false, const int* iblank = NULL)
 {
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
-  if (spt >= nSpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
   if (overset && iblank[ele] != 1)
@@ -470,30 +471,33 @@ void RK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
   else
     dt = dt_in(ele);
 
-  double fac = dt / jaco_det_spts(spt,ele);
-
-  if (!last_stage)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    double coeff = rk_coeff(stage);
-    for (unsigned int var = 0; var < nVars; var ++)
-      U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff *  
-          fac * divF(spt, ele, var, stage);
-  }
-  else
-  {
-    double sum[nVars] = {0.0};
+    double fac = dt / jaco_det_spts(spt,ele);
 
-    for (unsigned int n = 0; n < nStages; n++)
+    if (!last_stage)
     {
-      double coeff = rk_coeff(n);
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        sum[var] -= coeff * fac * divF(spt, ele, var, n);
-      }
+      double coeff = rk_coeff(stage);
+      for (unsigned int var = 0; var < nVars; var ++)
+        U_spts(spt, var, ele) = U_ini(spt, var, ele) - coeff *  
+            fac * divF(stage, spt, var, ele);
     }
+    else
+    {
+      double sum[nVars] = {0.0};
 
-    for (unsigned int var = 0; var < nVars; var++)
-      U_spts(spt,ele,var) += sum[var];
+      for (unsigned int n = 0; n < nStages; n++)
+      {
+        double coeff = rk_coeff(n);
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          sum[var] -= coeff * fac * divF(n, spt, var, ele);
+        }
+      }
+
+      for (unsigned int var = 0; var < nVars; var++)
+        U_spts(spt, var, ele) += sum[var];
+    }
   }
 }
 
@@ -504,7 +508,7 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
     unsigned int nStages, bool last_stage, bool overset, int* iblank)
 {
   unsigned int threads = 128;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
 
   if (equation == AdvDiff)
   {
@@ -530,10 +534,9 @@ void RK_update_source(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_
     unsigned int nSpts, unsigned int nEles, unsigned int stage, unsigned int nStages, 
     bool last_stage, bool overset = false, int* iblank = NULL)
 {
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
-  if (spt >= nSpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
   if (overset)
@@ -546,31 +549,34 @@ void RK_update_source(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_
   else
     dt = dt_in(ele);
 
-  double fac = dt / jaco_det_spts(spt,ele);
-
-  if (!last_stage)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    double coeff = rk_coeff(stage);
-    for (unsigned int var = 0; var < nVars; var ++)
-      U_spts(spt, ele, var) = U_ini(spt, ele, var) - coeff *  
-          fac * (divF(spt, ele, var, stage) + source(spt, ele, var));
-  }
-  else
-  {
-    double sum[nVars] = {0.0};;
+    double fac = dt / jaco_det_spts(spt,ele);
 
-    for (unsigned int n = 0; n < nStages; n++)
+    if (!last_stage)
     {
-      double coeff = rk_coeff(n);
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        sum[var] -= coeff * fac * (divF(spt, ele, var, n) + source(spt, ele, var));
-      }
+      double coeff = rk_coeff(stage);
+      for (unsigned int var = 0; var < nVars; var ++)
+        U_spts(spt, var, ele) = U_ini(spt, var, ele) - coeff *  
+            fac * (divF(stage, spt, var, ele) + source(spt, var, ele));
     }
+    else
+    {
+      double sum[nVars] = {0.0};;
 
-    for (unsigned int var = 0; var < nVars; var++)
-      U_spts(spt,ele,var) += sum[var];
+      for (unsigned int n = 0; n < nStages; n++)
+      {
+        double coeff = rk_coeff(n);
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          sum[var] -= coeff * fac * (divF(n, spt, var, ele) + source(spt, var, ele));
+        }
+      }
 
+      for (unsigned int var = 0; var < nVars; var++)
+        U_spts(spt, var, ele) += sum[var];
+
+    }
   }
 }
 
@@ -582,7 +588,7 @@ void RK_update_source_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double>
     bool overset, int* iblank)
 {
   unsigned int threads = 128;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
 
   if (equation == AdvDiff)
   {
@@ -608,36 +614,38 @@ void LSRK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
     double bhi, unsigned int nSpts, unsigned int nEles, unsigned int stage,
     unsigned int nStages, bool overset = false, int* iblank = NULL)
 {
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
   if (ele >= nEles)
     return;
 
   if (overset && iblank[ele] != 1)
       return;
-
-  double fac = dt / jaco_det_spts(spt,ele);
-
-  for (unsigned int var = 0; var < nVars; var++)
-    rk_err(spt, ele, var) -= (bi - bhi) * fac * divF(spt, ele, var, 0);
-
-  if (stage < nStages - 1)
+  
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
+    double fac = dt / jaco_det_spts(spt,ele);
+
     for (unsigned int var = 0; var < nVars; var++)
+      rk_err(spt, var, ele) -= (bi - bhi) * fac * divF(0, spt, var, ele);
+
+    if (stage < nStages - 1)
     {
-      U_spts(spt, ele, var) = U_til(spt, ele, var) - ai * fac *
-          divF(spt, ele, var, 0);
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        U_spts(spt, var, ele) = U_til(spt, var, ele) - ai * fac *
+            divF(0, spt, var, ele);
 
-      U_til(spt, ele, var) = U_spts(spt, ele, var) - (bi - ai) * fac *
-          divF(spt, ele, var, 0);
+        U_til(spt, var, ele) = U_spts(spt, var, ele) - (bi - ai) * fac *
+            divF(0, spt, var, ele);
+      }
     }
-  }
-  else
-  {
-    for (unsigned int var = 0; var < nVars; var++)
-      U_spts(spt, ele, var) = U_til(spt, ele, var) - bi * fac *
-          divF(spt, ele, var, 0);
+    else
+    {
+      for (unsigned int var = 0; var < nVars; var++)
+        U_spts(spt, var, ele) = U_til(spt, var, ele) - bi * fac *
+            divF(0, spt, var, ele);
+    }
   }
 }
 
@@ -649,7 +657,7 @@ void LSRK_update_wrapper(mdvector_gpu<double> &U_spts,
     int* iblank)
 {
   unsigned int threads = 128;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
 
   switch (nVars)
   {
@@ -687,37 +695,39 @@ void LSRK_source_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
     unsigned int stage, unsigned int nStages, bool overset = false,
     int* iblank = NULL)
 {
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
-  if (spt >= nSpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
   if (overset && iblank[ele] != 1)
       return;
 
-  double fac = dt / jaco_det_spts(spt,ele);
-
-  for (unsigned int var = 0; var < nVars; var ++)
-    rk_err(spt, ele, var) -= (bi - bhi) * fac *
-        (divF(spt, ele, var, 0) + source(spt, ele, var));
-
-  if (stage != nStages - 1)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
+    double fac = dt / jaco_det_spts(spt,ele);
+
     for (unsigned int var = 0; var < nVars; var ++)
+      rk_err(spt, var, ele) -= (bi - bhi) * fac *
+          (divF(0, spt, var, ele) + source(spt, var, ele));
+
+    if (stage != nStages - 1)
     {
-      U_spts(spt, ele, var) = U_til(spt, ele, var) - ai * fac *
-          (divF(spt, ele, var, 0) + source(spt, ele, var));
+      for (unsigned int var = 0; var < nVars; var ++)
+      {
+        U_spts(spt, var, ele) = U_til(spt, var, ele) - ai * fac *
+            (divF(0, spt, var, ele) + source(spt, var, ele));
 
-      U_til(spt, ele, var) = U_spts(spt, ele, var) - (bi - ai) * fac *
-          (divF(spt, ele, var, 0) + source(spt, ele, var));
+        U_til(spt, var, ele) = U_spts(spt, var, ele) - (bi - ai) * fac *
+            (divF(0, spt, var, ele) + source(spt, var, ele));
+      }
     }
-  }
-  else
-  {
-    for (unsigned int var = 0; var < nVars; var ++)
-      U_spts(spt, ele, var) = U_til(spt, ele, var) - bi * fac *
-          (divF(spt, ele, var, 0) + source(spt, ele, var));
+    else
+    {
+      for (unsigned int var = 0; var < nVars; var ++)
+        U_spts(spt, var, ele) = U_til(spt, var, ele) - bi * fac *
+            (divF(0, spt, var, ele) + source(spt, var, ele));
+    }
   }
 }
 
@@ -729,7 +739,7 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
     unsigned int stage, unsigned int nStages, bool overset, int* iblank)
 {
   unsigned int threads = 128;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
 
   switch (nVars)
   {
@@ -764,24 +774,27 @@ void get_rk_error(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
     mdvector_gpu<double> rk_err, uint nSpts, uint nEles, double atol,
     double rtol, bool overset = false, int* iblank = NULL)
 {
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
-  if (spt >= nSpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
   if (overset && iblank[ele] != 1)
   {
-    for (unsigned int var = 0; var < nVars; var ++)
-      rk_err(spt, ele, var) = 0.0;
-      return;
+    for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int var = 0; var < nVars; var ++)
+        rk_err(spt, var, ele) = 0.0;
+    return;
   }
 
-  for (unsigned int var = 0; var < nVars; var ++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    rk_err(spt, ele, var)  =  abs(rk_err(spt, ele, var));
-    rk_err(spt, ele, var) /= atol + rtol *
-        max( abs(U_spts(spt, ele, var)), abs(U_ini(spt, ele, var)) );
+    for (unsigned int var = 0; var < nVars; var ++)
+    {
+      rk_err(spt, var, ele)  =  abs(rk_err(spt, var, ele));
+      rk_err(spt, var, ele) /= atol + rtol *
+          max( abs(U_spts(spt, var, ele)), abs(U_ini(spt, var, ele)) );
+    }
   }
 }
 
@@ -791,7 +804,7 @@ double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
     bool overset, int* iblank)
 {
   unsigned int threads = 128;
-  unsigned int blocks = ((nSpts * nEles) + threads - 1)/ threads;
+  unsigned int blocks = (nEles + threads - 1)/ threads;
 
   switch (nVars)
   {
@@ -880,7 +893,7 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
       int gfpt = fpt2gfpt(fpt,ele);
       int slot = fpt2gfpt_slot(fpt,ele);
 
-      int_waveSp += weights_fpts(fpt % nFptsPerFace) * waveSp_gfpts(gfpt) * dA(gfpt, slot);
+      int_waveSp += weights_fpts(fpt % nFptsPerFace) * waveSp_gfpts(gfpt) * dA(slot, gfpt);
     }
 
     dt(ele) = 2.0 * CFL * get_cfl_limit_adv_dev(order) * vol(ele) / int_waveSp;

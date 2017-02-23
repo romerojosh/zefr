@@ -864,7 +864,7 @@ void Elements::extrapolate_U()
   auto &C = U_fpts(0, 0, 0);
 
   cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-        nSpts, 1.0, &A, oppE.ldim(), &B, U_spts.ldim(), 0.0, &C, U_fpts.ldim());
+        nSpts, 1.0, &A, nSpts, &B, nEles * nVars, 0.0, &C, nEles * nVars);
 
 #endif
 
@@ -873,7 +873,7 @@ void Elements::extrapolate_U()
   auto *B = U_spts_d.data();
   auto *C = U_fpts_d.data();
   cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0,
-      B, U_spts_d.ldim(), A, oppE_d.ldim(), , 0.0, C, U_fpts_d.ldim());
+      B, nEles * nVars, A, nSpts, 0.0, C, nEles * nVars);
 
   event_record(0, 0); // record event for MPI comms
 
@@ -983,7 +983,7 @@ void Elements::compute_divF_spts(unsigned int stage)
 
 #ifdef _GPU
 
-  auto *A = oppD_d.get_ptr(0, 0, 0);
+  auto *A = oppDiv_d.get_ptr(0, 0, 0);
   auto *B = F_spts_d.get_ptr(0, 0, 0, 0);
   auto *C = divF_spts_d.get_ptr(stage, 0, 0, 0);
 
