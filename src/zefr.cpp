@@ -656,16 +656,22 @@ void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* of
   tg_update_transform = setTransform;
 }
 
-#ifdef _GPU
-cudaStream_t* Zefr::get_tg_stream_handle(void)
+void* Zefr::get_tg_stream_handle(void)
 {
-  return get_stream_handle(3);
+#ifdef _GPU
+  return (void*)get_stream_handle(3);
+#else
+  return NULL;
+#endif
 }
 
-cudaEvent_t* Zefr::get_tg_event_handle(void)
+void* Zefr::get_tg_event_handle(void)
 {
-  return get_event_handle(2);
-}
+#ifdef _GPU
+  return (void*)get_event_handle(2);
+#else
+  return NULL;
 #endif
+}
 
 #endif /* _BUILD_LIB */
