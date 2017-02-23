@@ -971,7 +971,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //    std::cout << "ele : " << ele << " ";
 //    for (int spt = 0; spt < eles->nSpts; spt++)
 //    {
-//      std::cout << eles->dU_spts(0, spt, 0, ele)  << " " << eles->dU_spts(1, spt, 0, ele) << " " ;
+//      std::cout << eles->dU_spts(0, spt, 1, ele)  << " " << eles->dU_spts(1, spt, 1, ele) << " " ;
 //    }
 //    std::cout << std::endl;
 //  }
@@ -987,7 +987,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
 //  {
 //    std::cout << "gfpt : " << fpt << " ";
-//    std::cout << faces->Ucomm(0, 0, fpt)  << " " << faces->Ucomm(1, 0, fpt);
+//    std::cout << faces->Ucomm(0, 1, fpt)  << " " << faces->Ucomm(1, 1, fpt);
 //    std::cout << std::endl;
 //  }
 
@@ -1026,20 +1026,18 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->compute_F();
 
-//  eles->F_spts = eles->F_spts_d;
-//  
+  //eles->F_spts = eles->F_spts_d;
+  
 //  std::cout << "F_SPTS (ele)" << std::endl;
 //  for (int ele = 0; ele < geo.nEles; ele++)
 //  {
 //    std::cout << "ele : " << ele << " ";
 //    for (int spt = 0; spt < eles->nSpts; spt++)
 //    {
-//      std::cout << eles->F_spts(0, spt, 0, ele)  << " " << eles->F_spts(1, spt, 0, ele) << " " ;
+//      std::cout << eles->F_spts(0, spt, 1, ele)  << " " << eles->F_spts(1, spt, 1, ele) << " " ;
 //    }
 //    std::cout << std::endl;
 //  }
-//
-//  ThrowException("pause");
 
 
   if (input->viscous)
@@ -1059,7 +1057,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //    std::cout << "ele : " << ele << " ";
 //    for (int fpt = 0; fpt < eles->nFpts; fpt++)
 //    {
-//      std::cout << eles->dU_fpts(0,fpt, 0, ele)  << " " << eles->dU_fpts(1, fpt, 0, ele) << " ";
+//      std::cout << eles->dU_fpts(0,fpt, 1, ele)  << " " << eles->dU_fpts(1, fpt, 1, ele) << " ";
 //    }
 //    std::cout << std::endl;
 //  }
@@ -1068,8 +1066,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
 //  {
 //    std::cout << "gfpt : " << fpt << " ";
-//    std::cout << faces->dU(0, 0, 0, fpt)  << " " << faces->dU(1, 0, 0, fpt) << std::endl;
-//    std::cout << faces->dU(0, 1, 0, fpt)  << " " << faces->dU(1, 1, 0, fpt) << std::endl;
+//    std::cout << faces->dU(0, 0, 1, fpt)  << " " << faces->dU(1, 0, 1, fpt) << std::endl;
+//    std::cout << faces->dU(0, 1, 1, fpt)  << " " << faces->dU(1, 1, 1, fpt) << std::endl;
 //  }
 
 #if defined(_GPU) && defined(_BUILD_LIB)
@@ -1089,8 +1087,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
 //  {
 //    std::cout << "gfpt : " << fpt << " ";
-//    std::cout << faces->dU(0, 0, 0, fpt)  << " " << faces->dU(1, 0, 0, fpt) << std::endl;
-//    std::cout << faces->dU(0, 1, 0, fpt)  << " " << faces->dU(1, 1, 0, fpt) << std::endl;
+//    std::cout << faces->dU(0, 0, 1, fpt)  << " " << faces->dU(1, 0, 1, fpt) << std::endl;
+//    std::cout << faces->dU(0, 1, 1, fpt)  << " " << faces->dU(1, 1, 1, fpt) << std::endl;
 //  }
 
   }
@@ -1106,18 +1104,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->compute_divF_spts(stage);
 
-//  eles->divF_spts = eles->divF_spts_d;
+  //eles->divF_spts = eles->divF_spts_d;
 //  std::cout << "divF_SPTS" << std::endl;
 //  for (int ele = 0; ele < geo.nEles; ele++)
 //  {
 //    std::cout << "ele : " << ele << " ";
 //    for (int spt = 0; spt < eles->nSpts; spt++)
 //    {
-//      std::cout << eles->divF_spts(0, spt, 0, ele) << " ";  
+//      std::cout << eles->divF_spts(0, spt, 1, ele) << " ";  
 //    }
 //    std::cout << std::endl;
 //  }
-//  ThrowException("pause");
 
   /* Unpack gradient data from other grid(s) */
 #ifdef _BUILD_LIB
@@ -1138,9 +1135,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //  for (int fpt = 0; fpt < geo.nGfpts; fpt++)
 //  {
 //    std::cout << "gfpt : " << fpt << " ";
-//    std::cout << faces->Fcomm(0, 0, fpt)  << " " << faces->Fcomm(1, 0, fpt);
+//    std::cout << faces->Fcomm(0, 1, fpt)  << " " << faces->Fcomm(1, 1, fpt);
 //    std::cout << std::endl;
 //  }
+//  ThrowException("pause");
 
 
 #ifdef _MPI
@@ -1170,7 +1168,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 //    std::cout << "ele : " << ele << " ";
 //    for (int spt = 0; spt < eles->nSpts; spt++)
 //    {
-//      std::cout << eles->divF_spts(0, spt, 0, ele) << " ";  
+//      std::cout << eles->divF_spts(0, spt, 1, ele) << " ";  
 //    }
 //    std::cout << std::endl;
 //  }
@@ -1288,12 +1286,12 @@ void FRSolver::setup_views()
         if (input->viscous)
         {
           dU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dU_fpts(0, fpt, 0, ele);
-          dU_strides(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts.get_stride(1);
+          dU_strides(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts.get_stride(2);
           dU_strides(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts.get_stride(0);
 
 #ifdef _GPU
           dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_ptr(0, fpt, 0, ele);
-          dU_strides_d(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts_d.get_stride(1);
+          dU_strides_d(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts_d.get_stride(2);
           dU_strides_d(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts_d.get_stride(0);
 #endif
          

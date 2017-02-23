@@ -4,7 +4,7 @@ meshfile cyl_quad_ns.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
-mesh_bound  wall_ns_iso_p  wall_ns_adi_p
+mesh_bound  wall_ns_iso_p  wall_ns_iso_p
 mesh_bound  char  char
 
 # Solver:
@@ -14,7 +14,7 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 300000
+n_steps 100
 dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001

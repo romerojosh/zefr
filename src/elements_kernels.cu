@@ -166,12 +166,13 @@ void compute_F(mdvector_gpu<double> F_spts,
 
   double U[nVars];
   double tdU[nVars][nDims];
-  double dU[nVars][nDims] = {{0.0}};
+  double dU[nVars][nDims];
   double F[nVars][nDims];
   double inv_jaco[nDims][nDims];
 
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {
+
     /* Get state variables and reference space gradients */
     for (unsigned int var = 0; var < nVars; var++)
     {
@@ -202,10 +203,9 @@ void compute_F(mdvector_gpu<double> F_spts,
         {
           if (!grad_via_div)
           {
-            for (int dim2 = 0; dim2 < nDims; dim2++)
-            {
+            dU[var][dim1] = (tdU[var][0] * inv_jaco[0][dim1]);
+            for (int dim2 = 1; dim2 < nDims; dim2++)
               dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
-            }
 
             dU[var][dim1] *= inv_jaco_det;
 

@@ -932,7 +932,7 @@ void Elements::compute_dU_spts()
   auto *C = dU_spts_d.get_ptr(0, 0, 0, 0);
 
   /* Compute contribution to derivative from solution at solution points */
-  cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts, 1.0, B, nEles * nVars, 
+  cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nSpts, 1.0, B, nEles * nVars, 
       A, nSpts, 0.0, C, nEles * nVars);
 
   check_error();
@@ -960,7 +960,7 @@ void Elements::compute_dU_fpts()
   auto *C = dU_spts_d.get_ptr(0, 0, 0, 0);
 
   /* Compute contribution to derivative from common solution at flux points */
-  cublasDGEMM_wrapper(nEles * nVars, nSpts, nFpts, 1.0,
+  cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nFpts, 1.0,
       B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
 
   check_error();
