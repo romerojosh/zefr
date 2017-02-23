@@ -673,6 +673,7 @@ void FRSolver::solver_data_to_device()
     e->oppE_d = e->oppE;
     e->oppD_d = e->oppD;
     e->oppD_fpts_d = e->oppD_fpts;
+    e->oppDiv_d = e->oppDiv;
     e->oppDiv_fpts_d = e->oppDiv_fpts;
 
     e->U_ini_d = e->U_ini;
@@ -948,7 +949,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
         // Convert common U to common normal advection flux
         faces->common_U_to_F(startFpt, geo.nGfpts, dim);
 
-        // Compute physical gradient (times jacobian determinant) along via divergence of F
+        // Compute physical gradient (times jacobian determinant) along dim via divergence of F
         for (auto e : elesObjs)
         {
           e->compute_dU_spts_via_divF(dim);

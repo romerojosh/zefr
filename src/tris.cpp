@@ -236,6 +236,8 @@ void Tris::set_vandermonde_mats()
     }
   }
 
+  vandRT.calc_LU();
+
   inv_vandRT.assign({2*nSpts + nFpts, 2*nSpts * nFpts}); 
   
   mdvector<double>eye2({2*nSpts + nFpts, 2*nSpts + nFpts}, 0); 

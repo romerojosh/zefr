@@ -1791,13 +1791,17 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 void Faces::common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned int dim)
 {
 #ifdef _CPU
+  double A[2];
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
+    double n = norm(dim, fpt);
+    A[0] = dA(0, fpt); A[1] = dA(1, fpt);
+
     for (unsigned int var = 0; var < nVars; var++)
     {
-      double F = Ucomm(fpt, var, 0) * norm(fpt, dim);
-      Fcomm(fpt, var, 0) = F * dA(fpt, 0);
-      Fcomm(fpt, var, 1) = -F * dA(fpt, 1);
+      double F = Ucomm(0, var, fpt) * n;
+      Fcomm(0, var, fpt) = F * A[0];
+      Fcomm(1, var, fpt) = -F * A[1];
     }
   }
 #endif
