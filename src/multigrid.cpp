@@ -152,7 +152,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
           if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
           for (unsigned int spt = 0; spt < e->nSpts; spt++)
-            solutionsBT[n][e->etype](spt, ele, var) = e->U_spts(spt, ele, var);
+            solutionsBT[n][e->etype](spt, var, ele) = e->U_spts(spt, var, ele);
         }
     }
 #endif
@@ -190,7 +190,7 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
             if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
             for (unsigned int spt = 0; spt < e->nSpts; spt++)
-              e->divF_spts(spt, ele, var, 0) += sourcesBT[n][e->etype](spt, ele, var);
+              e->divF_spts(0, spt, var, ele) += sourcesBT[n][e->etype](spt, var, ele);
           }
       }
 #endif
@@ -236,8 +236,8 @@ void PMGrid::v_cycle(FRSolver &solver, int level)
           if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
           for (unsigned int spt = 0; spt < e->nSpts; spt++)
-            correctionsBT[n][e->etype](spt, ele, var) = e->U_spts(spt, ele, var) - 
-              solutionsBT[n][e->etype](spt, ele, var);
+            correctionsBT[n][e->etype](spt, var, ele) = e->U_spts(spt, var, ele) - 
+              solutionsBT[n][e->etype](spt, var, ele);
         }
     }
 #endif
@@ -365,18 +365,18 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
       auto &B = ef->U_spts(0, 0, 0);
       auto &C = ec->U_spts(0, 0, 0);
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
           ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
-          ef->oppRes.ldim(), &B, ef->U_spts.ldim(), 0.0, &C, ec->U_spts.ldim());
+          ef->nSpts, &B, ef->nEles * ef->nVars, 0.0, &C, ef->nEles * ef->nVars);
 
       
       auto &B2 = ef->divF_spts(0, 0, 0, 0);
       auto &C2 = ec->divF_spts(0, 0, 0, 0);
 
       /* Restrict residual */
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ec->nSpts, 
           ef->nEles * ef->nVars, ef->nSpts, 1.0, &A, 
-          ef->oppRes.ldim(), &B2, ef->divF_spts.ldim(), 0.0, &C2, ec->divF_spts.ldim());
+          ef->nSpts, &B2, ef->nEles * ef->nVars, 0.0, &C2, ef->nEles * ef->nVars);
     }
   }
 
@@ -389,17 +389,22 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
     {
       if (ef->etype != ec->etype) continue;
 
+      auto *A = ef->oppRes_d.data();
+      auto *B = ef->U_spts_d.data();
+      auto *C = ec->U_spts_d.data();
+
       /* Restrict solution */
-      cublasDGEMM_wrapper(ec->nSpts, ef->nEles * ef->nVars, 
-          ef->nSpts, 1.0, ef->oppRes_d.data(), ec->nSpts, 
-          ef->U_spts_d.data(), ef->nSpts, 0.0, ec->U_spts_d.data(), 
-          ec->nSpts);
+      cublasDGEMM_wrapper(ef->nEles * ef->nVars, ec->nSpts,
+          ef->nSpts, 1.0, B, ef->nEles * ef->nVars, A, ef->nSpts, 0.0, C, 
+          ef->nEles * ef->nVars);
+
+      auto *B2 = ef->divF_spts_d.data();
+      auto *C2 = ec->divF_spts_d.data();
 
       /* Restrict residual */
-      cublasDGEMM_wrapper(ec->nSpts, ef->nEles * ef->nVars, 
-          ef->nSpts, 1.0, ef->oppRes_d.data(), ec->nSpts, 
-          ef->divF_spts_d.data(), ef->nSpts, 0.0, 
-          ec->divF_spts_d.data(), ec->nSpts);
+      cublasDGEMM_wrapper(ef->nEles * ef->nVars, ec->nSpts,
+          ef->nSpts, 1.0, B2, ef->nEles * ef->nVars,  
+          A, ef->nSpts, 0.0, C2, ef->nEles * ef->nVars);
     }
   }
 #endif
@@ -418,9 +423,9 @@ void PMGrid::prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector<double>> 
       auto &C = ef->U_spts(0, 0, 0);
 
       /* Prolong error */
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
           ec->nEles * ec->nVars, ec->nSpts, input->rel_fac, 
-          &A, ec->oppPro.ldim(), &B, correctionBT[ec->etype].ldim(), 1.0, &C, ef->U_spts.ldim());
+          &A, ec->nSpts, &B, ec->nEles * ec->nVars, 1.0, &C, ec->nEles * ec->nVars);
     }
   }
 }
@@ -434,11 +439,13 @@ void PMGrid::prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector_gpu<doubl
     {
       if (ef->etype != ec->etype) continue;
 
+      auto *A = ec->oppPro_d.data();
+      auto *B = correctionBT_d[ec->etype].data();
+      auto *C = ef->U_spts_d.data();
+
       /* Prolong error */
-      cublasDGEMM_wrapper(ef->nSpts, ef->nEles * ef->nVars, 
-          ec->nSpts, input->rel_fac, ec->oppPro_d.data(), ef->nSpts, 
-          correctionBT_d[ec->etype].data(), ec->nSpts, 1.0, ef->U_spts_d.data(),
-          ef->nSpts);
+      cublasDGEMM_wrapper(ec->nEles * ec->nVars, ef->nSpts, ec->nSpts, input->rel_fac, 
+          B, ec->nEles * ec->nVars, A, ec->nSpts, 1.0, C, ec->nEles * ec->nVars);
     }
   }
 }
@@ -457,9 +464,9 @@ void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
       auto &C = ef->U_spts(0, 0, 0);
 
       /* Prolong error */
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ef->nSpts, 
           ec->nEles * ec->nVars, ec->nSpts, 1.0, 
-          &A, ec->oppPro.ldim(), &B, ec->U_spts.ldim(), 0.0, &C, ef->U_spts.ldim());
+          &A, ec->nSpts, &B, ec->nEles * ec->nVars, 0.0, &C, ec->nEles * ec->nVars);
     }
   }
 #endif
@@ -471,10 +478,13 @@ void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
     {
       if (ef->etype != ec->etype) continue;
 
-      cublasDGEMM_wrapper(ef->nSpts, ec->nEles * ec->nVars, 
-          ec->nSpts, 1.0, ec->oppPro_d.data(), ef->nSpts, 
-          ec->U_spts_d.data(), ec->nSpts, 0.0, ef->U_spts_d.data(), 
-          ef->nSpts);
+      auto *A = ec->oppPro_d.data();
+      auto *B = ec->U_spts_d.data();
+      auto *C = ef->U_spts_d.data();
+
+      cublasDGEMM_wrapper(ec->nEles * ec->nVars, ef->nSpts, ec->nSpts, 1.0, 
+          B, ec->nEles * ec->nVars, A, ec->nSpts, 0.0, C, ec->nEles * ec->nVars);
+
     }
   }
 #endif
@@ -491,7 +501,7 @@ void PMGrid::compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector<dou
         if (input->overset && grids[n]->geo.iblank_cell(ele) != NORMAL) continue;
 
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
-          sourceBT[e->etype](spt,ele,n) = e->divF_spts(spt,ele,n,0);
+          sourceBT[e->etype](spt, n, ele) = e->divF_spts(0, spt, n, ele);
       }
   }
 
@@ -504,7 +514,7 @@ void PMGrid::compute_source_term(FRSolver &grid, std::map<ELE_TYPE, mdvector<dou
     for (unsigned int n = 0; n < e->nVars; n++)
       for (unsigned int ele = 0; ele < e->nEles; ele++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
-          sourceBT[e->etype](spt, ele, n) -= e->divF_spts(spt, ele, n, 0);
+          sourceBT[e->etype](spt, n, ele) -= e->divF_spts(0, spt, n, ele);
   }
 
 }

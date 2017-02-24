@@ -2522,9 +2522,9 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     auto &B = U_restart(0, 0, 0);
     auto &C = e->U_spts(0, 0, 0);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
-        e->nEles * e->nVars, nSpts, 1.0, &A, e->oppRestart.ldim(), &B,
-        U_restart.ldim(), 0.0, &C, e->U_spts.ldim());
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
+        e->nEles * e->nVars, nSpts, 1.0, &A, nSpts, &B,
+        e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
   }
 
   // Process the config / stats string

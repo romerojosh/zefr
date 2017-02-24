@@ -421,10 +421,10 @@ void Tris::setup_PMG(int pro_order, int res_order)
     /* Form operator by triple matrix product (u_pro = vand_pro * I * inv_vand * u) */
     mdvector<double> temp({nSpts_pro, nSpts}, 0.0);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts,
-        1.0, eye.data(), eye.ldim(), inv_vand.data(), inv_vand.ldim(), 0.0, temp.data(), temp.ldim());
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts_pro,
-        1.0, vand_pro.data(), vand_pro.ldim(), temp.data(), temp.ldim(), 0.0, oppPro.data(), oppPro.ldim());
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts,
+        1.0, eye.data(), nSpts, inv_vand.data(), nSpts, 0.0, temp.data(), nSpts);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, nSpts, nSpts_pro,
+        1.0, vand_pro.data(), nSpts_pro, temp.data(), nSpts, 0.0, oppPro.data(), nSpts);
 
   }
 
@@ -450,10 +450,10 @@ void Tris::setup_PMG(int pro_order, int res_order)
     /* Form operator by triple matrix product (u_res = vand_res * I * inv_vand * u) */
     mdvector<double> temp({nSpts_res, nSpts}, 0.0);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts,
-        1.0, eye.data(), eye.ldim(), inv_vand.data(), inv_vand.ldim(), 0.0, temp.data(), temp.ldim());
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts_res,
-        1.0, vand_res.data(), vand_res.ldim(), temp.data(), temp.ldim(), 0.0, oppRes.data(), oppRes.ldim());
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts,
+        1.0, eye.data(), nSpts, inv_vand.data(), nSpts, 0.0, temp.data(), nSpts);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts_res, nSpts, nSpts_res,
+        1.0, vand_res.data(), nSpts_res, temp.data(), nSpts, 0.0, oppRes.data(), nSpts);
 
   }
 

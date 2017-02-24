@@ -426,8 +426,8 @@ void Quads::setup_PMG(int pro_order, int res_order)
     {
       mdvector<double> opp({nSpts_pro, (P-1) * (P-1)});
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, (P-1) * (P-1),
-          P * P, 1.0, opps[P].data(), opps[P].ldim(), opps[P-1].data(), opps[P-1].ldim(), 0.0, opp.data(), opp.ldim());
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts_pro, (P-1) * (P-1),
+          P * P, 1.0, opps[P].data(), P * P, opps[P-1].data(), (P-1) * (P-1), 0.0, opp.data(), (P-1) * (P-1));
 
       opps[P-1] = opp;
     }
@@ -470,8 +470,8 @@ void Quads::setup_PMG(int pro_order, int res_order)
     {
       mdvector<double> opp({nSpts_res, (P+3) * (P+3)});
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts_res, (P+3) * (P+3),
-          (P+2) * (P+2), 1.0, opps[P].data(), opps[P].ldim(), opps[P+1].data(), opps[P+1].ldim(), 0.0, opp.data(), opp.ldim());
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts_res, (P+3) * (P+3),
+          (P+2) * (P+2), 1.0, opps[P].data(), (P+2) * (P+2), opps[P+1].data(), (P+3) * (P+3), 0.0, opp.data(), (P+3) * (P+3));
 
       opps[P+1] = opp;
     }
