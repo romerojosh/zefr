@@ -70,7 +70,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
   /* If running Euler/NS, allocate memory for pressure */
   if (input->equation == EulerNS)
-    P.assign({nFpts, 2});
+    P.assign({2, nFpts});
 
   waveSp.assign({nFpts}, 0.0);
   if (input->viscous)

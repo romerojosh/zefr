@@ -3588,7 +3588,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       for (int pt = 0; pt < nPtsFace; pt++)
       {
         int ppt = index_map(ind,pt);
-        f << std::scientific << std::setprecision(16) << e->U_ppts(ppt, ele, 0);
+        f << std::scientific << std::setprecision(16) << e->U_ppts(ppt, 0, ele);
         f  << " ";
       }
       f << std::endl;
@@ -3616,7 +3616,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
         {
           int ppt = index_map(ind,pt);
           f << std::scientific << std::setprecision(16);
-          f << e->U_ppts(ppt, ele, n);
+          f << e->U_ppts(ppt, n, ele);
           f << " ";
         }
 
@@ -3761,9 +3761,9 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   auto &B = e->U_spts(0, 0, 0);
   auto &C = e->U_ppts(0, 0, 0);
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nPpts,
-              e->nEles * e->nVars, e->nSpts, 1.0, &A, e->oppE_ppts.ldim(), &B,
-              e->U_spts.ldim(), 0.0, &C, e->U_ppts.ldim());
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nPpts,
+              e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
+              e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
 
   /* Apply squeezing if needed */
   if (input->squeeze)
@@ -3779,7 +3779,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 
 #ifdef _GPU
   if (input->filt_on && input->sen_write)
-    //filt.sensor = filt.sensor_d;
+    filt.sensor[e->etype] = filt.sensor_d[e->etype];
 #endif
 
   // Write the ParaView file for each Gmsh boundary
@@ -4045,7 +4045,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         for (int pt = 0; pt < nPtsFace; pt++)
         {
           int ppt = index_map(ind,pt);
-          f << std::scientific << std::setprecision(16) << e->U_ppts(ppt, ele, 0);
+          f << std::scientific << std::setprecision(16) << e->U_ppts(ppt, 0, ele);
           f  << " ";
         }
         f << std::endl;
@@ -4073,7 +4073,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
           {
             int ppt = index_map(ind,pt);
             f << std::scientific << std::setprecision(16);
-            f << e->U_ppts(ppt, ele, n);
+            f << e->U_ppts(ppt, n, ele);
             f << " ";
           }
 
@@ -4459,9 +4459,9 @@ void FRSolver::report_error(std::ofstream &f)
     auto &B = e->U_spts(0, 0, 0);
     auto &C = e->U_qpts(0, 0, 0);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts, 
-        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B, 
-        e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nQpts, 
+        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B, 
+        e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
 
     /* Extrapolate derivatives to quadrature points */
     if (input->viscous)
@@ -4469,12 +4469,12 @@ void FRSolver::report_error(std::ofstream &f)
       for (unsigned int dim = 0; dim < e->nDims; dim++)
       {
         auto &A = e->oppE_qpts(0, 0);
-        auto &B = e->dU_spts(0, 0, 0, dim);
-        auto &C = e->dU_qpts(0, 0, 0, dim);
+        auto &B = e->dU_spts(dim, 0, 0, 0);
+        auto &C = e->dU_qpts(dim, 0, 0, 0);
 
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nQpts,
-                    e->nEles * e->nVars, e->nSpts, 1.0, &A, e->U_qpts.ldim(), &B,
-                    e->U_spts.ldim(), 0.0, &C, e->U_qpts.ldim());
+        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nQpts,
+                    e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
+                    e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
 
       }
     }
@@ -4504,11 +4504,11 @@ void FRSolver::report_error(std::ofstream &f)
 
         /* Compute errors */
         double U_error;
-        U_error = U_true - e->U_qpts(qpt, ele, n);
+        U_error = U_true - e->U_qpts(qpt, n, ele);
         if (input->viscous)
         {
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            dU_error[dim] = dU_true[dim] - e->dU_qpts(qpt, ele, n, dim); 
+            dU_error[dim] = dU_true[dim] - e->dU_qpts(dim, qpt, n, ele); 
         }
         vol = 1;
 
@@ -4584,14 +4584,14 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
         || bnd_id == ADIABATIC_NOSLIP_G || bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* On wall boundary */
     {
       /* Get pressure */
-      double PL = faces->P(fpt, 0);
+      double PL = faces->P(0, fpt);
 
       if (write_cp)
       {
         /* Write CP distrubtion to file */
         double CP = (PL - input->P_fs) * fac;
         for(unsigned int dim = 0; dim < geo.nDims; dim++)
-          *cp_file << std::scientific << faces->coord(fpt, dim) << " ";
+          *cp_file << std::scientific << faces->coord(dim, fpt) << " ";
         *cp_file << std::scientific << CP << std::endl;
       }
 
@@ -4600,7 +4600,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
       {
         //TODO: need to fix quadrature weights for mixed element cases!
         force_conv[dim] += elesObjs[0]->weights_fpts(idx) * PL *
-          faces->norm(fpt, dim) * faces->dA(fpt);
+          faces->norm(dim, fpt) * faces->dA(0, fpt);
       }
 
       if (input->viscous)
@@ -4609,23 +4609,23 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
         {
           /* Setting variables for convenience */
           /* States */
-          double rho = faces->U(fpt, 0, 0);
-          double momx = faces->U(fpt, 1, 0);
-          double momy = faces->U(fpt, 2, 0);
-          double e = faces->U(fpt, 3, 0);
+          double rho = faces->U(0, 0, fpt);
+          double momx = faces->U(0, 1, fpt);
+          double momy = faces->U(0, 2, fpt);
+          double e = faces->U(0, 3, fpt);
 
           double u = momx / rho;
           double v = momy / rho;
           double e_int = e / rho - 0.5 * (u*u + v*v);
 
           /* Gradients */
-          double rho_dx = faces->dU(fpt, 0, 0, 0);
-          double momx_dx = faces->dU(fpt, 1, 0, 0);
-          double momy_dx = faces->dU(fpt, 2, 0, 0);
+          double rho_dx = faces->dU(0, 0, 0, fpt);
+          double momx_dx = faces->dU(0, 0, 1, fpt);
+          double momy_dx = faces->dU(0, 0, 2, fpt);
 
-          double rho_dy = faces->dU(fpt, 0, 1, 0);
-          double momx_dy = faces->dU(fpt, 1, 1, 0);
-          double momy_dy = faces->dU(fpt, 2, 1, 0);
+          double rho_dy = faces->dU(0, 1, 0, fpt);
+          double momx_dy = faces->dU(0, 1, 1, fpt);
+          double momy_dy = faces->dU(0, 1, 2, fpt);
 
           /* Set viscosity */
           double mu;
@@ -4654,24 +4654,24 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
-          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
+          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
+          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
             force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
-              faces->dA(fpt);
+              faces->dA(0, fpt);
 
         }
         else if (geo.nDims == 3)
         {
           /* Setting variables for convenience */
           /* States */
-          double rho = faces->U(fpt, 0, 0);
-          double momx = faces->U(fpt, 1, 0);
-          double momy = faces->U(fpt, 2, 0);
-          double momz = faces->U(fpt, 3, 0);
-          double e = faces->U(fpt, 4, 0);
+          double rho = faces->U(0, 0, fpt);
+          double momx = faces->U(0, 1, fpt);
+          double momy = faces->U(0, 2, fpt);
+          double momz = faces->U(0, 3, fpt);
+          double e = faces->U(0, 4, fpt);
 
           double u = momx / rho;
           double v = momy / rho;
@@ -4679,20 +4679,20 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
 
            /* Gradients */
-          double rho_dx = faces->dU(fpt, 0, 0, 0);
-          double momx_dx = faces->dU(fpt, 1, 0, 0);
-          double momy_dx = faces->dU(fpt, 2, 0, 0);
-          double momz_dx = faces->dU(fpt, 3, 0, 0);
+          double rho_dx = faces->dU(0, 0, 0, fpt);
+          double momx_dx = faces->dU(0, 0, 1, fpt);
+          double momy_dx = faces->dU(0, 0, 2, fpt);
+          double momz_dx = faces->dU(0, 0, 3, fpt);
 
-          double rho_dy = faces->dU(fpt, 0, 1, 0);
-          double momx_dy = faces->dU(fpt, 1, 1, 0);
-          double momy_dy = faces->dU(fpt, 2, 1, 0);
-          double momz_dy = faces->dU(fpt, 3, 1, 0);
+          double rho_dy = faces->dU(0, 1, 0, fpt);
+          double momx_dy = faces->dU(0, 1, 1, fpt);
+          double momy_dy = faces->dU(0, 1, 2, fpt);
+          double momz_dy = faces->dU(0, 1, 3, fpt);
 
-          double rho_dz = faces->dU(fpt, 0, 2, 0);
-          double momx_dz = faces->dU(fpt, 1, 2, 0);
-          double momy_dz = faces->dU(fpt, 2, 2, 0);
-          double momz_dz = faces->dU(fpt, 3, 2, 0);
+          double rho_dz = faces->dU(0, 2, 0, fpt);
+          double momx_dz = faces->dU(0, 2, 1, fpt);
+          double momy_dz = faces->dU(0, 2, 2, fpt);
+          double momz_dz = faces->dU(0, 2, 3, fpt);
 
           /* Set viscosity */
           double mu;
@@ -4730,14 +4730,14 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           double tauyz = mu * (dv_dz + dw_dy);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1) + tauxz * faces->norm(fpt, 2);
-          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
-          taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
+          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
+          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
+          taun[3] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
             force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
-              faces->dA(fpt);
+              faces->dA(0, fpt);
         }
 
       }
@@ -4771,13 +4771,13 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
         || bnd_id == ADIABATIC_NOSLIP_G || bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* On wall boundary */
     {
       /* Get pressure */
-      double PL = faces->P(fpt, 0);
+      double PL = faces->P(0, fpt);
 
       /* Sum inviscid force contributions */
       //TODO: need to fix quadrature weights for mixed element cases!
       for (unsigned int dim = 0; dim < geo.nDims; dim++)
         force[dim] = elesObjs[0]->weights_fpts(idx) * PL *
-          faces->norm(fpt, dim) * faces->dA(fpt);
+          faces->norm(dim, fpt) * faces->dA(0, fpt);
 
       if (input->viscous)
       {
@@ -4785,23 +4785,23 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
         {
           /* Setting variables for convenience */
           /* States */
-          double rho = faces->U(fpt, 0, 0);
-          double momx = faces->U(fpt, 1, 0);
-          double momy = faces->U(fpt, 2, 0);
-          double e = faces->U(fpt, 3, 0);
+          double rho = faces->U(0, 0, fpt);
+          double momx = faces->U(0, 1, fpt);
+          double momy = faces->U(0, 2, fpt);
+          double e = faces->U(0, 3, fpt);
 
           double u = momx / rho;
           double v = momy / rho;
           double e_int = e / rho - 0.5 * (u*u + v*v);
 
           /* Gradients */
-          double rho_dx = faces->dU(fpt, 0, 0, 0);
-          double momx_dx = faces->dU(fpt, 1, 0, 0);
-          double momy_dx = faces->dU(fpt, 2, 0, 0);
+          double rho_dx = faces->dU(0, 0, 0, fpt);
+          double momx_dx = faces->dU(0, 0, 1, fpt);
+          double momy_dx = faces->dU(0, 0, 2, fpt);
 
-          double rho_dy = faces->dU(fpt, 0, 1, 0);
-          double momx_dy = faces->dU(fpt, 1, 1, 0);
-          double momy_dy = faces->dU(fpt, 2, 1, 0);
+          double rho_dy = faces->dU(0, 1, 0, fpt);
+          double momx_dy = faces->dU(0, 1, 1, fpt);
+          double momy_dy = faces->dU(0, 1, 2, fpt);
 
           /* Set viscosity */
           double mu;
@@ -4830,22 +4830,22 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           double tauyy = 2.0 * mu * (dv_dy - diag);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1);
-          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1);
+          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
+          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] * faces->dA(fpt);
+            force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] * faces->dA(0, fpt);
         }
         else if (geo.nDims == 3)
         {
           /* Setting variables for convenience */
           /* States */
-          double rho = faces->U(fpt, 0, 0);
-          double momx = faces->U(fpt, 1, 0);
-          double momy = faces->U(fpt, 2, 0);
-          double momz = faces->U(fpt, 3, 0);
-          double e = faces->U(fpt, 4, 0);
+          double rho = faces->U(0, 0, 0);
+          double momx = faces->U(0, 1, 0);
+          double momy = faces->U(0, 2, 0);
+          double momz = faces->U(0, 3, 0);
+          double e = faces->U(0, 4, 0);
 
           double u = momx / rho;
           double v = momy / rho;
@@ -4853,20 +4853,20 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
 
            /* Gradients */
-          double rho_dx = faces->dU(fpt, 0, 0, 0);
-          double momx_dx = faces->dU(fpt, 1, 0, 0);
-          double momy_dx = faces->dU(fpt, 2, 0, 0);
-          double momz_dx = faces->dU(fpt, 3, 0, 0);
+          double rho_dx = faces->dU(0, 0, 0, fpt);
+          double momx_dx = faces->dU(0, 0, 1, fpt);
+          double momy_dx = faces->dU(0, 0, 2, fpt);
+          double momz_dx = faces->dU(0, 0, 3, fpt);
 
-          double rho_dy = faces->dU(fpt, 0, 1, 0);
-          double momx_dy = faces->dU(fpt, 1, 1, 0);
-          double momy_dy = faces->dU(fpt, 2, 1, 0);
-          double momz_dy = faces->dU(fpt, 3, 1, 0);
+          double rho_dy = faces->dU(0, 1, 0, fpt);
+          double momx_dy = faces->dU(0, 1, 1, fpt);
+          double momy_dy = faces->dU(0, 1, 2, fpt);
+          double momz_dy = faces->dU(0, 1, 3, fpt);
 
-          double rho_dz = faces->dU(fpt, 0, 2, 0);
-          double momx_dz = faces->dU(fpt, 1, 2, 0);
-          double momy_dz = faces->dU(fpt, 2, 2, 0);
-          double momz_dz = faces->dU(fpt, 3, 2, 0);
+          double rho_dz = faces->dU(0, 2, 0, fpt);
+          double momx_dz = faces->dU(0, 2, 1, fpt);
+          double momy_dz = faces->dU(0, 2, 2, fpt);
+          double momz_dz = faces->dU(0, 2, 3, fpt);
 
           /* Set viscosity */
           double mu;
@@ -4904,14 +4904,14 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           double tauyz = mu * (dv_dz + dw_dy);
 
           /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(fpt, 0) + tauxy * faces->norm(fpt, 1) + tauxz * faces->norm(fpt, 2);
-          taun[1] = tauxy * faces->norm(fpt, 0) + tauyy * faces->norm(fpt, 1) + tauyz * faces->norm(fpt, 2);
-          taun[3] = tauxz * faces->norm(fpt, 0) + tauyz * faces->norm(fpt, 1) + tauzz * faces->norm(fpt, 2);
+          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
+          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
+          taun[3] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
             force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
-              faces->dA(fpt);
+              faces->dA(0, fpt);
         }
 
       }
@@ -4923,14 +4923,14 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
       if (geo.nDims == 3)
       {
         for (unsigned int d = 0; d < geo.nDims; d++)
-          tot_moment[d] += (faces->coord(fpt,c1[d]) - geo.x_cg(c1[d])) * force[c2[d]]
-              - (faces->coord(fpt,c2[d]) - geo.x_cg(c2[d])) * force[c1[d]];
+          tot_moment[d] += (faces->coord(c1[d], fpt) - geo.x_cg(c1[d])) * force[c2[d]]
+              - (faces->coord(c2[d], fpt) - geo.x_cg(c2[d])) * force[c1[d]];
       }
       else
       {
         // Only a 'z' component in 2D
-        tot_moment[2] += (faces->coord(fpt,0) - geo.x_cg(0)) * force[1]
-            - (faces->coord(fpt,1) - geo.x_cg(1)) * force[0];
+        tot_moment[2] += (faces->coord(0, fpt) - geo.x_cg(0)) * force[1]
+            - (faces->coord(1, fpt) - geo.x_cg(1)) * force[0];
       }
 
       count++;
