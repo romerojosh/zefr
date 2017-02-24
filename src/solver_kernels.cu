@@ -1079,7 +1079,7 @@ void pack_U(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts,
   if (i >= nFpts || var >= nVars)
     return;
 
-  U_sbuffs(i, var) = U(fpts(i), var, 0);
+  U_sbuffs(var, i) = U(0, var, fpts(i));
 }
 
 void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 
@@ -1110,7 +1110,7 @@ void unpack_U(const mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> fp
   if (overset && iblank[gfpt] != 1)
       return;
 
-  U(gfpt, var, 1) = U_rbuffs(i, var);
+  U(1, var, gfpt) = U_rbuffs(var, i);
 }
 
 void unpack_U_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int> &fpts, 
@@ -1139,7 +1139,7 @@ void pack_dU(mdvector_gpu<double> U_sbuffs, mdvector_gpu<unsigned int> fpts,
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    U_sbuffs(i, var, dim) = dU(fpts(i), var, dim, 0);
+    U_sbuffs(dim, var, i) = dU(0, dim, var, fpts(i));
   }
 }
 
@@ -1183,7 +1183,7 @@ void unpack_dU(const mdvector_gpu<double> U_rbuffs, mdvector_gpu<unsigned int> f
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
-    dU(fpts(i), var, dim, 1) = U_rbuffs(i, var, dim);
+    dU(1, dim, var, fpts(i)) = U_rbuffs(dim, var, i);
   }
 }
 

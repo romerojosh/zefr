@@ -97,13 +97,13 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
     if (input->viscous)
     {
-      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, true);
-      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars, nDims}, 0.0, true);
+      U_sbuffs[pairedRank].assign({nDims, nVars, (unsigned int) fpts.size()}, 0.0, true);
+      U_rbuffs[pairedRank].assign({nDims, nVars, (unsigned int) fpts.size()}, 0.0, true);
     }
     else
     {
-      U_sbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, true);
-      U_rbuffs[pairedRank].assign({(unsigned int) fpts.size(), nVars}, 0.0, true);
+      U_sbuffs[pairedRank].assign({nVars, (unsigned int) fpts.size()}, 0.0, true);
+      U_rbuffs[pairedRank].assign({nVars, (unsigned int) fpts.size()}, 0.0, true);
     }
   }
 
@@ -2422,7 +2422,7 @@ void Faces::send_U_data()
     {
       for (unsigned int i = 0; i < fpts.size(); i++)
       {
-        U_sbuffs[sendRank](i, n) = U(fpts(i), n, 0);
+        U_sbuffs[sendRank](n, i) = U(0, n, fpts(i));
       }
     }
 
@@ -2508,7 +2508,7 @@ void Faces::recv_U_data()
         if (input->overset && geo->iblank_face[geo->fpt2face[fpts(i)]] != NORMAL)
           continue;
 
-        U(fpts(i), n, 1) = U_rbuffs[recvRank](i, n);
+        U(1, n, fpts(i)) = U_rbuffs[recvRank](n, i);
       }
     }
   }
@@ -2565,7 +2565,7 @@ void Faces::send_dU_data()
       {
         for (unsigned int i = 0; i < fpts.size(); i++)
         {
-          U_sbuffs[sendRank](i, n, dim) = dU(fpts(i), n, dim, 0);
+          U_sbuffs[sendRank](dim, n, i) = dU(0, dim, n, fpts(i));
         }
       }
     }
@@ -2651,7 +2651,7 @@ void Faces::recv_dU_data()
         {
           if (input->overset && geo->iblank_face[geo->fpt2face[fpts(i)]] != NORMAL)
             continue;
-          dU(fpts(i), n, dim, 1) = U_rbuffs[recvRank](i, n, dim);
+          dU(1, dim, n, fpts(i)) = U_rbuffs[recvRank](dim, n, i);
         }
       }
     }

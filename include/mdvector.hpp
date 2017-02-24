@@ -217,11 +217,12 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pinned)
   size_ = 1;
   max_size_ = 1;
 
+  strides[0] = 1;
 
   for (int i = 0; i < nDims; i++)
   {
     strides[i] = 1;
-    for (unsigned int j = i+1; j < nDims; j++)
+    for (unsigned int j = nDims - i; j < nDims; j++)
       strides[i] *= dims[j];
 
     size_ *= dims[i];
@@ -262,10 +263,12 @@ void mdvector<T>::resize(std::vector<unsigned int> dims)
   max_size_ = 1;
 
 
+  strides[0] = 1;
+
   for (int i = 0; i < nDims; i++)
   {
     strides[i] = 1;
-    for (unsigned int j = i+1; j < nDims; j++)
+    for (unsigned int j = nDims - i; j < nDims; j++)
       strides[i] *= dims[j];
 
     size_ *= dims[i];
@@ -343,7 +346,7 @@ unsigned int mdvector<T>::get_stride(unsigned int dim) const
 template <typename T>
 unsigned int mdvector<T>::ldim() const
 {
-  return strides[0];
+  return strides[nDims - 1];
 }
 
 template <typename T>
@@ -438,35 +441,35 @@ template <typename T>
 T& mdvector<T>::operator() (unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 2);
-  return values_ptr[idx1 * strides[0] + idx0];
+  return values_ptr[idx1 * strides[1] + idx0];
 }
 
 template <typename T>
 T mdvector<T>::operator() (unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 2);
-  return values_ptr[idx1 * strides[0] + idx0];
+  return values_ptr[idx1 * strides[1] + idx0];
 }
 
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 3);
-  return values_ptr[idx2 * strides[0] + idx1 * strides[1] + idx0];
+  return values_ptr[idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
 T mdvector<T>::operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 3);
-  return values_ptr[idx2 * strides[0] + idx1 * strides[1] + idx0];
+  return values_ptr[idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 template <typename T>
 T& mdvector<T>::operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
     unsigned int idx0) 
 {
   //assert(ndims == 4);
-  return values_ptr[idx3 * strides[0] + idx2 * strides[1] + idx1 * strides[2] + idx0];
+  return values_ptr[idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -474,7 +477,7 @@ T mdvector<T>::operator() (unsigned int idx3, unsigned int idx2, unsigned int id
     unsigned int idx0) const
 {
   //assert(ndims == 4);
-  return values_ptr[idx3 * strides[0] + idx2 * strides[1] + idx1 * strides[2] + idx0];
+  return values_ptr[idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -482,7 +485,7 @@ T& mdvector<T>::operator() (unsigned int idx4, unsigned int idx3, unsigned int i
     unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 5);
-  return values[idx4 * strides[0] + idx3 * strides[1] + idx2 * strides[2] + idx1 * strides[3] + idx0];
+  return values[idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -490,7 +493,7 @@ T mdvector<T>::operator() (unsigned int idx4, unsigned int idx3, unsigned int id
     unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 5);
-  return values[idx4 * strides[0] + idx3 * strides[1] + idx2 * strides[2] + idx1 * strides[3] + idx0];
+  return values[idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -498,7 +501,7 @@ T& mdvector<T>::operator() (unsigned int idx5, unsigned int idx4, unsigned int i
     unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
   //assert(ndims == 6);
-  return values[idx5 * strides[0] + idx4 * strides[1] + idx3 * strides[2] + idx2 * strides[3] + idx1 * strides[4] + idx0];
+  return values[idx5 * strides[5] + idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -506,7 +509,7 @@ T mdvector<T>::operator() (unsigned int idx5, unsigned int idx4, unsigned int id
     unsigned int idx2, unsigned int idx1, unsigned int idx0) const
 {
   //assert(ndims == 6);
-  return values[idx5 * strides[0] + idx4 * strides[1] + idx3 * strides[2] + idx2 * strides[3] + idx1 * strides[4] + idx0];
+  return values[idx5 * strides[5] + idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -595,26 +598,26 @@ class mdview
 
     T& operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) 
     {
-      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
+      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2) * idx1);
     }
 
     T operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) const
     {
-      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2, 0) * idx1);
+      return *(base_ptrs(idx0 + base_stride * idx2) + strides(idx0 + base_stride * idx2) * idx1);
     }
 
     T& operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
         unsigned int idx0) 
     {
-      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
-          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(0, idx0 + base_stride * idx3) * 
+          idx1 + strides(1, idx0 + base_stride * idx3) * idx2);
     }
 
     T operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
         unsigned int idx0) const
     {
-      return *(base_ptrs(idx0 + base_stride * idx3) + strides(idx0 + base_stride * idx3, 0) * 
-          idx1 + strides(idx0 + base_stride * idx3, 1) * idx2);
+      return *(base_ptrs(idx0 + base_stride * idx3) + strides(0, idx0 + base_stride * idx3) * 
+          idx1 + strides(1, idx0 + base_stride * idx3) * idx2);
     }
 
 };

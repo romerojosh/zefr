@@ -1234,7 +1234,7 @@ void FRSolver::setup_views()
   {
     Ucomm_base_ptrs.assign({2 * geo.nGfpts});
     dU_base_ptrs.assign({2 * geo.nGfpts});
-    dU_strides.assign({2 * geo.nGfpts, 2});
+    dU_strides.assign({2, 2 * geo.nGfpts});
   }
 #ifdef _GPU
   mdvector<double*> U_base_ptrs_d({2 * geo.nGfpts});
@@ -1249,7 +1249,7 @@ void FRSolver::setup_views()
   {
     Ucomm_base_ptrs_d.assign({2 * geo.nGfpts});
     dU_base_ptrs_d.assign({2 * geo.nGfpts});
-    dU_strides_d.assign({2 * geo.nGfpts, 2});
+    dU_strides_d.assign({2, 2 * geo.nGfpts});
   }
 #endif
 
@@ -1283,13 +1283,13 @@ void FRSolver::setup_views()
         if (input->viscous)
         {
           dU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dU_fpts(0, fpt, 0, ele);
-          dU_strides(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts.get_stride(2);
-          dU_strides(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts.get_stride(0);
+          dU_strides(0, gfpt + slot * geo.nGfpts) = e->dU_fpts.get_stride(1);
+          dU_strides(1, gfpt + slot * geo.nGfpts) = e->dU_fpts.get_stride(3);
 
 #ifdef _GPU
           dU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_ptr(0, fpt, 0, ele);
-          dU_strides_d(gfpt + slot * geo.nGfpts, 0) = e->dU_fpts_d.get_stride(2);
-          dU_strides_d(gfpt + slot * geo.nGfpts, 1) = e->dU_fpts_d.get_stride(0);
+          dU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_stride(1);
+          dU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_stride(3);
 #endif
          
         }
@@ -1301,46 +1301,44 @@ void FRSolver::setup_views()
   unsigned int i = 0;
   for (unsigned int gfpt = geo.nGfpts_int; gfpt < geo.nGfpts; gfpt++)
   {
-    for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
+    U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(0, i);
+    
+    if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
+      U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(0, i);
+    else
+      U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(0, i); // point U_ldg to correct MPI data;
+
+    U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(1);
+
+    Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(0, i);
+
+    if (input->viscous) Ucomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Ucomm_bnd(0, i);
+
+#ifdef _GPU
+    U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(0, i);
+    if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
+      U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(0, i);
+    else
+      U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(0, i); // point U_ldg to correct MPI data;
+
+    U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(1);
+
+    Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(0, i);
+
+    if (input->viscous) Ucomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Ucomm_bnd_d.get_ptr(0, i);
+#endif
+
+    if (input->viscous)
     {
-      U_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(0, i);
-      
-      if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
-        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd_ldg(0, i);
-      else
-        U_ldg_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->U_bnd(0, i); // point U_ldg to correct MPI data;
-
-      U_strides(gfpt + 1 * geo.nGfpts) = faces->U_bnd.get_stride(0);
-
-      Fcomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Fcomm_bnd(0, i);
-
-      if (input->viscous) Ucomm_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->Ucomm_bnd(0, i);
-
+      dU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dU_bnd(0, 0, i);
+      dU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dU_bnd.get_stride(1);
+      dU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dU_bnd.get_stride(2);
 #ifdef _GPU
-      U_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(0, i);
-      if (gfpt < geo.nGfpts_int + geo.nGfpts_bnd)
-        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_ldg_d.get_ptr(0, i);
-      else
-        U_ldg_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_ptr(0, i); // point U_ldg to correct MPI data;
-
-      U_strides_d(gfpt + 1 * geo.nGfpts) = faces->U_bnd_d.get_stride(0);
-
-      Fcomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Fcomm_bnd_d.get_ptr(0, i);
-
-      if (input->viscous) Ucomm_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->Ucomm_bnd_d.get_ptr(0, i);
+      dU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_ptr(0, 0, i);
+      dU_strides_d(0, gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_stride(1);
+      dU_strides_d(1, gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_stride(2);
 #endif
-
-      if (input->viscous)
-      {
-        dU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dU_bnd(0, 0, i);
-        dU_strides(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd.get_stride(1);
-        dU_strides(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd.get_stride(0);
-#ifdef _GPU
-        dU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_ptr(0, 0, i);
-        dU_strides_d(gfpt + 1 * geo.nGfpts, 0) = faces->dU_bnd_d.get_stride(1);
-        dU_strides_d(gfpt + 1 * geo.nGfpts, 1) = faces->dU_bnd_d.get_stride(0);
-#endif
-      }
+    
     }
 
     i++;

@@ -185,14 +185,15 @@ void mdvector_gpu<T>::assign(std::vector<unsigned> dims, T* vec, int stream)
   if(!allocated)
   {
     max_size_ = size_;
-    ldim_ = dims[nDims-1];
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
+
+    strides_h[0] = 1;
 
     for (int i = 0; i < nDims; i++)
     {
       strides_h[i] = 1;
-      for (unsigned int j = i+1; j < nDims; j++)
+      for (unsigned int j = nDims - i; j < nDims; j++)
         strides_h[i] *= dims[j];
 
       size_ *= dims[i];
@@ -200,6 +201,9 @@ void mdvector_gpu<T>::assign(std::vector<unsigned> dims, T* vec, int stream)
 
       dims_h[i] = dims[i];
     }
+
+    ldim_ = strides_h[nDims-1];
+
   }
 
   copy_to_device(strides, strides_h, 6, stream);
@@ -238,14 +242,16 @@ void mdvector_gpu<T>::set_size(std::vector<unsigned int> dims)
   size_ = 1;
   unsigned int new_size = 1;
 
+  strides_h[0] = 1;
+
   for (int i = 0; i < nDims; i++)
   {
     strides_h[i] = 1;
-    for (unsigned int j = i+1; j < nDims; j++)
+    for (unsigned int j = nDims - i; j < nDims; j++)
       strides_h[i] *= dims[j];
 
     size_ *= dims[i];
-    max_size_ *= dims[i];
+    new_size *= dims[i];
 
     dims_h[i] = dims[i];
   }
@@ -257,7 +263,7 @@ void mdvector_gpu<T>::set_size(std::vector<unsigned int> dims)
   {
     size_ = new_size;
     max_size_ = new_size;
-    ldim_ = dims[nDims-1];
+    ldim_ = strides_h[nDims-1];
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
 
@@ -336,28 +342,28 @@ template <typename T>
 __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx1, unsigned int idx0) 
 {
-  return values[idx1 * strides[0] + idx0];
+  return values[idx1 * strides[1] + idx0];
 }
 
 template <typename T>
 __device__ __forceinline__
 T mdvector_gpu<T>::operator() (unsigned int idx1, unsigned int idx0) const
 {
-  return ldg(values + idx1 * strides[0] + idx0);
+  return ldg(values + idx1 * strides[1] + idx0);
 }
 
 template <typename T>
 __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
-  return values[idx2 * strides[0] + idx1 * strides[1] + idx0];
+  return values[idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
 __device__ __forceinline__
 T mdvector_gpu<T>::operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) const
 {
-  return ldg(values + idx2 * strides[0] + idx1 * strides[1] + idx0);
+  return ldg(values + idx2 * strides[2] + idx1 * strides[1] + idx0);
 }
 
 template <typename T>
@@ -365,7 +371,7 @@ __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
     unsigned int idx0) 
 {
-  return values[idx3 * strides[0] + idx2 * strides[1] + idx1 * strides[2] + idx0];
+  return values[idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -373,7 +379,7 @@ __device__ __forceinline__
 T mdvector_gpu<T>::operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
     unsigned int idx0) const
 {
-  return ldg(values + idx3 * strides[0] + idx2 * strides[1] + idx1 * strides[2] + idx0);
+  return ldg(values + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0);
 }
 
 template <typename T>
@@ -381,7 +387,7 @@ __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx4, unsigned int idx3, unsigned int idx2, 
     unsigned int idx1, unsigned int idx0) 
 {
-  return values[idx4 * strides[0] + idx3 * strides[1] + idx2 * strides[2] + idx1 * strides[3] + idx0];
+  return values[idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -389,7 +395,7 @@ __device__ __forceinline__
 T mdvector_gpu<T>::operator() (unsigned int idx4, unsigned int idx3, unsigned int idx2, 
     unsigned int idx1, unsigned int idx0) const
 {
-  return ldg(values + idx4 * strides[0] + idx3 * strides[1] + idx2 * strides[2] + idx1 * strides[3] + idx0);
+  return ldg(values + idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0);
 }
 
 template <typename T>
@@ -397,7 +403,7 @@ __device__ __forceinline__
 T& mdvector_gpu<T>::operator() (unsigned int idx5, unsigned int idx4, unsigned int idx3, 
     unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
-  return values[idx5 * strides[0] + idx4 * strides[1] + idx3 * strides[2] + idx2 * strides[3] + idx1 * strides[4] + idx0];
+  return values[idx5 * strides[5] + idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0];
 }
 
 template <typename T>
@@ -405,7 +411,7 @@ __device__ __forceinline__
 T mdvector_gpu<T>::operator() (unsigned int idx5, unsigned int idx4, unsigned int idx3, 
     unsigned int idx2, unsigned int idx1, unsigned int idx0) const
 {
-  return ldg(values + idx5 * strides[0] + idx4 * strides[1] + idx3 * strides[2] + idx2 * strides[3] + idx1 * strides[4] + idx0);
+  return ldg(values + idx5 * strides[5] + idx4 * strides[4] + idx3 * strides[3] + idx2 * strides[2] + idx1 * strides[1] + idx0);
 }
 
 template <typename T>
@@ -419,14 +425,14 @@ template <typename T>
 __host__ __forceinline__
 T* mdvector_gpu<T>::get_ptr(unsigned int idx1, unsigned int idx0) 
 {
-  return values + idx1 * strides_h[0] + idx0;
+  return values + idx1 * strides_h[1] + idx0;
 }
 
 template <typename T>
 __host__ __forceinline__
 T* mdvector_gpu<T>::get_ptr(unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
-  return values + idx2 * strides_h[0] + idx1 * strides_h[1] + idx0;
+  return values + idx2 * strides_h[2] + idx1 * strides_h[1] + idx0;
 }
 
 template <typename T>
@@ -434,7 +440,7 @@ __host__ __forceinline__
 T* mdvector_gpu<T>::get_ptr(unsigned int idx3, unsigned int idx2, unsigned int idx1, 
     unsigned int idx0) 
 {
-  return values + idx3 * strides_h[0] + idx2 * strides_h[1] + idx1 * strides_h[2] + idx0;
+  return values + idx3 * strides_h[3] + idx2 * strides_h[2] + idx1 * strides_h[1] + idx0;
 }
 
 template <typename T>
@@ -442,7 +448,7 @@ __host__ __forceinline__
 T* mdvector_gpu<T>::get_ptr(unsigned int idx4, unsigned int idx3, unsigned int idx2, 
     unsigned int idx1, unsigned int idx0) 
 {
-  return values + idx4 * strides_h[0] + idx3 * strides_h[1] + idx2 * strides_h[2] + idx1 * strides_h[3] + idx0;
+  return values + idx4 * strides_h[4] + idx3 * strides_h[3] + idx2 * strides_h[2] + idx1 * strides_h[1] + idx0;
 }
 
 template <typename T>
@@ -450,7 +456,7 @@ __host__ __forceinline__
 T* mdvector_gpu<T>::get_ptr(unsigned int idx5, unsigned int idx4, unsigned int idx3, 
     unsigned int idx2, unsigned int idx1, unsigned int idx0) 
 {
-  return values + idx5 * strides_h[0] + idx4 * strides_h[1] + idx3 * strides_h[2] + idx2 * strides_h[3] + idx1 * strides_h[4] + idx0;
+  return values + idx5 * strides_h[5] + idx4 * strides_h[4] + idx3 * strides_h[3] + idx2 * strides_h[2] + idx1 * strides_h[1] + idx0;
 }
 
 /* mdview_gpu class to allow indirect data access from faces */
@@ -512,29 +518,29 @@ class mdview_gpu
     __device__ __forceinline__
     T& operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) 
     {
-      return *(base_ptrs(idx0 + *(base_stride) * idx2) + strides(idx0 + *(base_stride) * idx2, 0) * idx1);
+      return *(base_ptrs(idx0 + *(base_stride) * idx2) + strides(idx0 + *(base_stride) * idx2) * idx1);
     }
 
     __device__ __forceinline__
     T operator() (unsigned int idx2, unsigned int idx1, unsigned int idx0) const
     {
-      return ldg(base_ptrs(idx0 + *(base_stride) * idx2) + strides(idx0 + *(base_stride) * idx2, 0) * idx1);
+      return ldg(base_ptrs(idx0 + *(base_stride) * idx2) + strides(idx0 + *(base_stride) * idx2) * idx1);
     }
 
     __device__ __forceinline__
     T& operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
         unsigned int idx0) 
     {
-      return *(base_ptrs(idx0 + *(base_stride) * idx3) + strides(idx0 + *(base_stride) * idx3, 0) * 
-          idx1 + strides(idx0 + *(base_stride) * idx3, 1) * idx2);
+      return *(base_ptrs(idx0 + *(base_stride) * idx3) + strides(0, idx0 + *(base_stride) * idx3) * 
+          idx1 + strides(1, idx0 + *(base_stride) * idx3) * idx2);
     }
 
     __device__ __forceinline__
     T operator() (unsigned int idx3, unsigned int idx2, unsigned int idx1, 
         unsigned int idx0) const
     {
-      return ldg(base_ptrs(idx0 + *(base_stride) * idx3) + strides(idx0 + *(base_stride) * idx3, 0) * 
-          idx1 + strides(idx0 + *(base_stride) * idx3, 1) * idx2);
+      return ldg(base_ptrs(idx0 + *(base_stride) * idx3) + strides(0, idx0 + *(base_stride) * idx3) * 
+          idx1 + strides(1, idx0 + *(base_stride) * idx3) * idx2);
     }
 
 };
