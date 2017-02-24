@@ -85,7 +85,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   /* Moving-grid-related structures */
   if (input->motion)
   {
-    Vg.assign({nFpts, nDims}, 0.0);
+    Vg.assign({nDims, nFpts}, 0.0);
   }
 
 #ifdef _MPI
@@ -317,7 +317,7 @@ void Faces::apply_bcs()
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(0, 0, fpt) * Vg(fpt, dim) * norm(dim, fpt);
+            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
         }
 
         U(1, 0, fpt) = U(0, 0, fpt);
@@ -363,7 +363,7 @@ void Faces::apply_bcs()
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(0, 0, fpt) * Vg(fpt, dim) * norm(dim, fpt);
+            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
         }
 
         U(1, 0, fpt) = U(0, 0, fpt);
@@ -386,7 +386,7 @@ void Faces::apply_bcs()
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            VG[dim] = Vg(fpt, dim);
+            VG[dim] = Vg(dim, fpt);
         }
 
         double rhoL = U(0, 0, fpt);
@@ -481,7 +481,7 @@ void Faces::apply_bcs()
         if (input->motion)
         {
           for (unsigned int dim = 0; dim < nDims; dim++)
-            VG[dim] = Vg(fpt, dim);
+            VG[dim] = Vg(dim, fpt);
         }
 
         /* Extrapolate density */
@@ -1546,7 +1546,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     if (input->motion)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
-        Vgn += Vg(fpt, dim) * norm(dim, fpt);
+        Vgn += Vg(dim, fpt) * norm(dim, fpt);
     }
 
     /* Get numerical wavespeed */

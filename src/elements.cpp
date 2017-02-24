@@ -92,14 +92,6 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   U_ini.assign({nSpts, nVars, nEles});
   dt.assign({nEles}, input->dt);
 
-  if (input->motion)
-  {
-    dUr_spts.assign({nDims, nSpts, nEles, nVars});
-    dF_spts.assign({nDims, nDims, nSpts, nVars, nEles});
-    dFn_fpts.assign({nFpts, nVars, nEles});
-    tempF_fpts.assign({nFpts, nEles});
-  }
-
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
   {
@@ -1339,10 +1331,10 @@ void Elements::compute_Uavg()
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        sum += weights_spts(spt) * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
+        sum += weights_spts(spt) * jaco_det_spts(spt, ele) * U_spts(spt, n, ele);
       }
 
-      Uavg(ele, n) = sum / vol(ele); 
+      Uavg(n, ele) = sum / vol(ele); 
 
     }
   }
@@ -1370,30 +1362,30 @@ void Elements::poly_squeeze()
       if (U_spts(spt, ele, 0) < 0)
       {
         negRho = true;
-        minRho = std::min(minRho, U_spts(spt, ele, 0));
+        minRho = std::min(minRho, U_spts(spt, 0, ele));
       }
     }
     
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      if (U_fpts(fpt, ele, 0) < 0)
+      if (U_fpts(fpt, 0, ele) < 0)
       {
         negRho = true;
-        minRho = std::min(minRho, U_fpts(fpt, ele, 0));
+        minRho = std::min(minRho, U_fpts(fpt, 0, ele));
       }
     }
 
     /* If negative density found, squeeze density */
     if (negRho)
     {
-      double theta = (Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho); 
+      double theta = (Uavg(0, ele) - tol) / (Uavg(0 , ele) - minRho); 
       //double theta = 1.0;
 
       for (unsigned int spt = 0; spt < nSpts; spt++)
-        U_spts(spt, ele, 0) = theta * U_spts(spt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+        U_spts(spt, 0, ele) = theta * U_spts(spt, 0, ele) + (1.0 - theta) * Uavg(0, ele);
 
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-        U_fpts(fpt, ele, 0) = theta * U_fpts(fpt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+        U_fpts(fpt, 0, ele) = theta * U_fpts(fpt, 0, ele) + (1.0 - theta) * Uavg(0, ele);
       
     }
   }
@@ -1407,14 +1399,14 @@ void Elements::poly_squeeze()
     /* Get minimum tau value */
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
-      double rho = U_spts(spt, ele, 0);
+      double rho = U_spts(spt, 0, ele);
       double momF = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
-        momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
+        momF += U_spts(spt, dim + 1, ele) * U_spts(spt, dim + 1, ele);
 
-      momF /= U_spts(spt, ele, 0);
+      momF /= U_spts(spt, 0, ele);
 
-      double P = (input->gamma - 1.0) * (U_spts(spt, ele, nDims + 1) - 0.5 * momF);
+      double P = (input->gamma - 1.0) * (U_spts(spt, nDims + 1, ele) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -1423,13 +1415,13 @@ void Elements::poly_squeeze()
     
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      double rho = U_fpts(fpt, ele, 0);
+      double rho = U_fpts(fpt, 0, ele);
       double momF = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
-        momF += U_fpts(fpt, ele, dim + 1) * U_fpts(fpt, ele, dim + 1);
+        momF += U_fpts(fpt, dim + 1, ele) * U_fpts(fpt, dim + 1, ele);
 
-      momF /= U_fpts(fpt, ele, 0);
-      double P = (input->gamma - 1.0) * (U_fpts(fpt, ele, nDims + 1) - 0.5 * momF);
+      momF /= U_fpts(fpt, 0, ele);
+      double P = (input->gamma - 1.0) * (U_fpts(fpt, nDims + 1, ele) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -1439,15 +1431,15 @@ void Elements::poly_squeeze()
     /* If minTau is negative, squeeze solution */
     if (minTau < 0)
     {
-      double rho = Uavg(ele, 0);
+      double rho = Uavg(0, ele);
       double Vsq = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        V[dim] = Uavg(ele, dim+1) / rho;
+        V[dim] = Uavg(dim+1, ele) / rho;
         Vsq += V[dim] * V[dim];
       }
 
-      double e = Uavg(ele, nDims + 1);
+      double e = Uavg(nDims + 1, ele);
       double P = (input->gamma - 1.0) * (e - 0.5 * rho * Vsq);
 
       double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
@@ -1459,7 +1451,7 @@ void Elements::poly_squeeze()
       {
         for (unsigned int spt = 0; spt < nSpts; spt++)
         {
-          U_spts(spt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_spts(spt, ele, n);
+          U_spts(spt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_spts(spt, n, ele);
         }
       }
 
@@ -1467,7 +1459,7 @@ void Elements::poly_squeeze()
       {
         for (unsigned int fpt = 0; fpt < nFpts; fpt++)
         {
-          U_fpts(fpt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_fpts(fpt, ele, n);
+          U_fpts(fpt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_fpts(fpt, n, ele);
         }
       }
 
@@ -1492,24 +1484,24 @@ void Elements::poly_squeeze_ppts()
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     bool negRho = false;
-    double minRho = U_ppts(0, ele, 0);
+    double minRho = U_ppts(0, 0, ele);
 
     for (unsigned int ppt = 0; ppt < nPpts; ppt++)
     {
-      if (U_ppts(ppt, ele, 0) < 0)
+      if (U_ppts(ppt, 0, ele) < 0)
       {
         negRho = true;
-        minRho = std::min(minRho, U_ppts(ppt, ele, 0));
+        minRho = std::min(minRho, U_ppts(ppt, 0, ele));
       }
     }
     
     /* If negative density found, squeeze density */
     if (negRho)
     {
-      double theta = std::abs(Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho); 
+      double theta = std::abs(Uavg(0, ele) - tol) / (Uavg(0, ele) - minRho); 
 
       for (unsigned int ppt = 0; ppt < nPpts; ppt++)
-        U_ppts(ppt, ele, 0) = theta * U_ppts(ppt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+        U_ppts(ppt, 0, ele) = theta * U_ppts(ppt, 0, ele) + (1.0 - theta) * Uavg(0, ele);
     }
   }
 
@@ -1521,10 +1513,10 @@ void Elements::poly_squeeze_ppts()
     /* Get minimum tau value */
     for (unsigned int ppt = 0; ppt < nPpts; ppt++)
     {
-      double rho = U_ppts(ppt, ele, 0);
-      double momF = (U_ppts(ppt, ele, 1) * U_ppts(ppt,ele,1) + U_ppts(ppt, ele, 2) * 
-          U_ppts(ppt, ele,2)) / U_ppts(ppt, ele, 0);
-      double P = (input->gamma - 1.0) * (U_ppts(ppt, ele, 3) - 0.5 * momF);
+      double rho = U_ppts(ppt, 0, ele);
+      double momF = (U_ppts(ppt, 1, ele) * U_ppts(ppt, 1, ele) + U_ppts(ppt, 2, ele) * 
+          U_ppts(ppt, 2, ele)) / U_ppts(ppt, 0, ele);
+      double P = (input->gamma - 1.0) * (U_ppts(ppt, 3, ele) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -1533,15 +1525,15 @@ void Elements::poly_squeeze_ppts()
     /* If minTau is negative, squeeze solution */
     if (minTau < 0)
     {
-      double rho = Uavg(ele, 0);
+      double rho = Uavg(0, ele);
       double Vsq = 0.0;
       for (unsigned int dim = 0; dim < nDims; dim++)
       {
-        V[dim] = Uavg(ele, dim+1) / rho;
+        V[dim] = Uavg(dim+1, ele) / rho;
         Vsq += V[dim] * V[dim];
       }
 
-      double e = Uavg(ele, 3);
+      double e = Uavg(3, ele);
       double P = (input->gamma - 1.0) * (e - 0.5 * rho * Vsq);
 
       double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
@@ -1550,7 +1542,7 @@ void Elements::poly_squeeze_ppts()
       {
         for (unsigned int ppt = 0; ppt < nPpts; ppt++)
         {
-          U_ppts(ppt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_ppts(ppt, ele, n);
+          U_ppts(ppt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_ppts(ppt, n, ele);
           //U_ppts(ppt, ele, n) = (1.0 - eps) * Uavg(ele, n) + eps * U_ppts(ppt, ele, n);
         }
       }
@@ -1791,7 +1783,7 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
 
       for (uint dim = 0; dim < nDims; dim++)
       {
-        faces->Vg(gfpt, dim) = grid_vel_fpts(fpt, ele, dim);
+        faces->Vg(dim, gfpt) = grid_vel_fpts(fpt, ele, dim);
       }
     }
   }

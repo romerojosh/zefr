@@ -1403,12 +1403,12 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
         if (nDims == 3)
         {
           for (unsigned int d = 0; d < nDims; d++)
-            tot_moment[d] += (coord(gfpt,c1[d])-x_cg(c1[d])) * tmp_force[c2[d]] - (coord(gfpt,c2[d])-x_cg(c2[d])) * tmp_force[c1[d]];
+            tot_moment[d] += (coord(c1[d], gfpt)-x_cg(c1[d])) * tmp_force[c2[d]] - (coord(c2[d], gfpt)-x_cg(c2[d])) * tmp_force[c1[d]];
         }
         else
         {
           // Only a 'z' component in 2D
-          tot_moment[2] += (coord(gfpt,0)-x_cg(0)) * tmp_force[1] - (coord(gfpt,1)-x_cg(1)) * tmp_force[0];
+          tot_moment[2] += (coord(0,gfpt)-x_cg(0)) * tmp_force[1] - (coord(1,gfpt)-x_cg(1)) * tmp_force[0];
         }
       }
 

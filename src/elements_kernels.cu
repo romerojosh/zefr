@@ -414,10 +414,10 @@ void compute_Uavg(mdvector_gpu<double> U_spts,
 
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
-      sum += weights_spts(spt) * jaco_det_spts(spt, ele) * U_spts(spt, ele, n);
+      sum += weights_spts(spt) * jaco_det_spts(spt, ele) * U_spts(spt, n, ele);
     }
 
-    Uavg(ele, n) = sum / vol(ele); 
+    Uavg(n, ele) = sum / vol(ele); 
 
   }
 
@@ -452,36 +452,36 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   double tol = 1e-10;
 
   bool negRho = false;
-  double minRho = U_spts(0, ele, 0);
+  double minRho = U_spts(0, 0, ele);
 
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    if (U_spts(spt, ele, 0) < 0)
+    if (U_spts(spt, 0, ele) < 0)
     {
       negRho = true;
-      minRho = min(minRho, U_spts(spt, ele, 0));
+      minRho = min(minRho, U_spts(spt, 0, ele));
     }
   }
   
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
-    if (U_fpts(fpt, ele, 0) < 0)
+    if (U_fpts(fpt, 0, ele) < 0)
     {
       negRho = true;
-      minRho = min(minRho, U_fpts(fpt, ele, 0));
+      minRho = min(minRho, U_fpts(fpt, 0, ele));
     }
   }
 
   /* If negative density found, squeeze density */
   if (negRho)
   {
-    double theta = (Uavg(ele, 0) - tol) / (Uavg(ele , 0) - minRho); 
+    double theta = (Uavg(0, ele) - tol) / (Uavg(0, ele) - minRho); 
 
     for (unsigned int spt = 0; spt < nSpts; spt++)
-      U_spts(spt, ele, 0) = theta * U_spts(spt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+      U_spts(spt, 0, ele) = theta * U_spts(spt, 0, ele) + (1.0 - theta) * Uavg(0, ele);
 
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-      U_fpts(fpt, ele, 0) = theta * U_fpts(fpt, ele, 0) + (1.0 - theta) * Uavg(ele, 0);
+      U_fpts(fpt, 0, ele) = theta * U_fpts(fpt, 0, ele) + (1.0 - theta) * Uavg(0, ele);
     
   }
 
@@ -491,13 +491,13 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   /* Get minimum tau value */
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    double rho = U_spts(spt, ele, 0);
+    double rho = U_spts(spt, 0, ele);
     double momF = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
-      momF += U_spts(spt, ele, dim + 1) * U_spts(spt, ele, dim + 1);
+      momF += U_spts(spt, dim + 1, ele) * U_spts(spt, dim + 1, ele);
 
-    momF /= U_spts(spt, ele, 0);
-    double P = (gamma - 1.0) * (U_spts(spt, ele, nDims + 1) - 0.5 * momF);
+    momF /= U_spts(spt, 0, ele);
+    double P = (gamma - 1.0) * (U_spts(spt, nDims + 1, ele) - 0.5 * momF);
 
     double tau = P - exps0 * pow(rho, gamma);
     minTau = min(minTau, tau);
@@ -506,13 +506,13 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
   {
-    double rho = U_fpts(fpt, ele, 0);
+    double rho = U_fpts(fpt, 0, ele);
     double momF = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
-      momF += U_fpts(fpt, ele, dim + 1) * U_fpts(fpt, ele, dim + 1);
+      momF += U_fpts(fpt, dim + 1, ele) * U_fpts(fpt, dim + 1, ele);
 
-    momF /= U_fpts(fpt, ele, 0);
-    double P = (gamma - 1.0) * (U_fpts(fpt, ele, nDims + 1) - 0.5 * momF);
+    momF /= U_fpts(fpt, 0, ele);
+    double P = (gamma - 1.0) * (U_fpts(fpt, nDims + 1, ele) - 0.5 * momF);
 
     double tau = P - exps0 * pow(rho, gamma);
     minTau = min(minTau, tau);
@@ -526,11 +526,11 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
     double Vsq = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      V[dim] = Uavg(ele, dim + 1) / rho;
+      V[dim] = Uavg(dim + 1, ele) / rho;
       Vsq += V[dim] * V[dim];
     }
 
-    double e = Uavg(ele, nDims + 1);
+    double e = Uavg(nDims + 1, ele);
     double P = (gamma - 1.0) * (e - 0.5 * rho * Vsq);
 
     double eps = minTau / (minTau - P + exps0 * pow(rho, gamma));
@@ -542,7 +542,7 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
       {
-        U_spts(spt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_spts(spt, ele, n);
+        U_spts(spt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_spts(spt, n, ele);
       }
     }
 
@@ -550,7 +550,7 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
     {
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        U_fpts(fpt, ele, n) = eps * Uavg(ele, n) + (1.0 - eps) * U_fpts(fpt, ele, n);
+        U_fpts(fpt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_fpts(fpt, n, ele);
       }
     }
   }
@@ -582,7 +582,7 @@ void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
   if (ele >= nEles)
     return;
 
-  nodes(node, ele, dim) = g_nodes(dim, ele2node(node, ele));
+  nodes(node, dim, ele) = g_nodes(dim, ele2node(node, ele));
 }
 
 //! Copy fpt positions from ele's array to face's array
@@ -601,7 +601,7 @@ void copy_coords_face(mdvector_gpu<double> coord, mdvector_gpu<double> e_coord,
 
   if (gfpt < 0) return;
 
-  coord(gfpt, dim) = e_coord(fpt, ele, dim);
+  coord(dim, gfpt) = e_coord(fpt, dim, ele);
 }
 
 void update_coords_wrapper(mdvector_gpu<double> &nodes,
@@ -622,14 +622,14 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
   double *As = shape_spts.data();
   double *Cs = coord_spts.data();
 
-  cublasDGEMM_transA_wrapper(nSpts, nEles * nDims, nNodes, 1.0, As,
-      shape_spts.ldim(), B, nodes.ldim(), 0.0, Cs, coord_spts.ldim());
+  cublasDGEMM_wrapper(nSpts, nEles * nDims, nNodes, 1.0, B,
+      nEles * nDims, As, nNodes, 0.0, Cs, nNodes);
 
   double *Af = shape_fpts.data();
   double *Cf = coord_fpts.data();
 
-  cublasDGEMM_transA_wrapper(nFpts, nEles * nDims, nNodes, 1.0, Af,
-      shape_fpts.ldim(), B, nodes.ldim(), 0.0, Cf, coord_fpts.ldim());
+  cublasDGEMM_wrapper(nFpts, nEles * nDims, nNodes, 1.0, B,
+      nEles * nDims, Af, nNodes, 0.0, Cf, nNodes);
 
   dim3 blocksF((nEles * nFpts + threads - 1) / threads, nDims);
 
@@ -712,11 +712,11 @@ void inverse_transform_quad(mdvector_gpu<double> jaco,
 
   // Determinant of transformation matrix
   if (jaco_det != NULL)
-    jaco_det[pt+nPts*ele] = jaco(pt,ele,0,0)*jaco(pt,ele,1,1)-jaco(pt,ele,0,1)*jaco(pt,ele,1,0);
+    jaco_det[pt+nPts*ele] = jaco(0,pt,0,ele)*jaco(1,pt,1,ele)-jaco(0,pt,1,ele)*jaco(1,pt,0,ele);
 
   // Inverse of transformation matrix (times its determinant)
-  inv_jaco(pt,ele,0,0) = jaco(pt,ele,1,1);  inv_jaco(pt,ele,0,1) =-jaco(pt,ele,0,1);
-  inv_jaco(pt,ele,1,0) =-jaco(pt,ele,1,0);  inv_jaco(pt,ele,1,1) = jaco(pt,ele,0,0);
+  inv_jaco(0,pt,0,ele) = jaco(1,pt,1,ele);  inv_jaco(0,pt,1,ele) =-jaco(1,pt,0,ele);
+  inv_jaco(1,pt,0,ele) =-jaco(0,pt,1,ele);  inv_jaco(1,pt,1,ele) = jaco(0,pt,0,ele);
 }
 
 __global__
@@ -729,18 +729,18 @@ void inverse_transform_hexa(mdvector_gpu<double> jaco,
   if (ele >= nEles)
     return;
 
-  double xr = jaco(pt,ele,0,0);  double xs = jaco(pt,ele,0,1);  double xt = jaco(pt,ele,0,2);
-  double yr = jaco(pt,ele,1,0);  double ys = jaco(pt,ele,1,1);  double yt = jaco(pt,ele,1,2);
-  double zr = jaco(pt,ele,2,0);  double zs = jaco(pt,ele,2,1);  double zt = jaco(pt,ele,2,2);
+  double xr = jaco(0,pt,0,ele);  double xs = jaco(1,pt,0,ele);  double xt = jaco(2,pt,0,ele);
+  double yr = jaco(0,pt,1,ele);  double ys = jaco(1,pt,1,ele);  double yt = jaco(2,pt,1,ele);
+  double zr = jaco(0,pt,2,ele);  double zs = jaco(1,pt,2,ele);  double zt = jaco(2,pt,2,ele);
 
   // Determinant of transformation matrix (not always needed)
   if (jaco_det != NULL)
     jaco_det[pt+nPts*ele] = xr*(ys*zt - yt*zs) - xs*(yr*zt - yt*zr) + xt*(yr*zs - ys*zr);
 
   // Inverse of transformation matrix (times its determinant)
-  inv_jaco(pt,ele,0,0) = ys*zt - yt*zs;  inv_jaco(pt,ele,0,1) = xt*zs - xs*zt;  inv_jaco(pt,ele,0,2) = xs*yt - xt*ys;
-  inv_jaco(pt,ele,1,0) = yt*zr - yr*zt;  inv_jaco(pt,ele,1,1) = xr*zt - xt*zr;  inv_jaco(pt,ele,1,2) = xt*yr - xr*yt;
-  inv_jaco(pt,ele,2,0) = yr*zs - ys*zr;  inv_jaco(pt,ele,2,1) = xs*zr - xr*zs;  inv_jaco(pt,ele,2,2) = xr*ys - xs*yr;
+  inv_jaco(0,pt,0,ele) = ys*zt - yt*zs;  inv_jaco(0,pt,1,ele) = xt*zs - xs*zt;  inv_jaco(0,pt,2,ele) = xs*yt - xt*ys;
+  inv_jaco(1,pt,0,ele) = yt*zr - yr*zt;  inv_jaco(1,pt,1,ele) = xr*zt - xt*zr;  inv_jaco(1,pt,2,ele) = xt*yr - xr*yt;
+  inv_jaco(2,pt,0,ele) = yr*zs - ys*zr;  inv_jaco(2,pt,1,ele) = xs*zr - xr*zs;  inv_jaco(2,pt,2,ele) = xr*ys - xs*yr;
 }
 
 void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &jaco_spts,
@@ -750,23 +750,20 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
     int nSpts, int nFpts, int nNodes, int nEles, int nDims)
 {
   // Calculate forward transform (reference -> physical)
-  int ms = nSpts;
-  int mf = nFpts;
+  int ms = nSpts * nDims;
+  int mf = nFpts * nDims;
   int k = nNodes;
   int n = nEles * nDims;
 
   double* B = nodes.data();
 
-  for (int dim = 0; dim < nDims; dim++)
-  {
-    double *As = dshape_spts.data() + nNodes * nSpts * dim;
-    double *Af = dshape_fpts.data() + nNodes * nFpts * dim;
-    double *Cs = jaco_spts.data() + nSpts * nEles * nDims * dim;
-    double *Cf = jaco_fpts.data() + nFpts * nEles * nDims * dim;
+  double *As = dshape_spts.data();
+  double *Af = dshape_fpts.data();
+  double *Cs = jaco_spts.data();
+  double *Cf = jaco_fpts.data();
 
-    cublasDGEMM_transA_wrapper(ms, n, k, 1.0, As, k, B, k, 0.0, Cs, ms);
-    cublasDGEMM_transA_wrapper(mf, n, k, 1.0, Af, k, B, k, 0.0, Cf, mf);
-  }
+  cublasDGEMM_wrapper(n, ms, k, 1.0, B, n, As, k, 0.0, Cs, n);
+  cublasDGEMM_wrapper(n, mf, k, 1.0, B, n, Af, k, 0.0, Cf, n);
 
   // Calculate inverse transform (physical -> reference) at spts, fpts
   int threads = 128;
@@ -875,17 +872,17 @@ void calc_normals(mdvector_gpu<double> norm, mdvector_gpu<double> dA,
       norm(gfpt,dim1) = 0.0;
       for (int dim2 = 0; dim2 < nDims; dim2++)
       {
-        norm(gfpt,dim1) += inv_jaco(fpt,ele,dim2,dim1) * tnorm(fpt,dim2);
+        norm(dim1, gfpt) += inv_jaco(dim2, fpt, dim1, ele) * tnorm(fpt,dim2);
       }
 
-      DA += norm(gfpt,dim1) * norm(gfpt,dim1);
+      DA += norm(dim1, gfpt) * norm(dim1, gfpt);
     }
 
     DA = sqrt(DA);
 
     for (int dim = 0; dim < nDims; dim++)
     {
-      norm(gfpt,dim) /= DA;
+      norm(dim, gfpt) /= DA;
     }
 
     dA(gfpt) = DA;
@@ -922,7 +919,7 @@ void pack_donor_u(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_donors,
   const unsigned int ele = donorIDs[donor];
   for (unsigned int var = 0; var < nVars; var++)
   {
-    U_donors(spt, donor, var) = U_spts(spt, ele, var);
+    U_donors(spt, donor, var) = U_spts(spt, var, ele);
   }
 }
 
@@ -966,7 +963,7 @@ void pack_donor_grad(mdvector_gpu<double> dU_spts,
 
   for (unsigned int var = 0; var < nVars; var++)
   {
-    dU_donors(spt, donor, var, dim) = dU_spts(spt, ele, var, dim);
+    dU_donors(spt, donor, var, dim) = dU_spts(dim, spt, var, ele);
   }
 }
 

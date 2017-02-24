@@ -560,7 +560,7 @@ void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 
   for (int spt = 0; spt < nNodes; spt++)
     for (int dim = 0; dim < geo->nDims; dim++)
-      xyz[3*spt+dim] = solver->elesObjs[0]->coord_spts(spt, cellID, dim);
+      xyz[3*spt+dim] = solver->elesObjs[0]->coord_spts(spt, dim, cellID);
 }
 
 void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
@@ -570,7 +570,7 @@ void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
   int start_fpt = geo->face2fpts(0, faceID);
   for (int fpt = 0; fpt < nNodes; fpt++)
     for (int dim = 0; dim < geo->nDims; dim++)
-      xyz[3*fpt+dim] = solver->faces->coord(start_fpt + fpt, dim);
+      xyz[3*fpt+dim] = solver->faces->coord(dim, start_fpt + fpt);
 }
 
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)

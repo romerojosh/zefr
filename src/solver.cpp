@@ -736,10 +736,6 @@ void FRSolver::solver_data_to_device()
       e->jaco_fpts_d = e->jaco_fpts;
       e->inv_jaco_fpts_d = e->inv_jaco_fpts;
       e->tnorm_d = e->tnorm;
-      e->dUr_spts_d = e->dUr_spts;
-      e->dF_spts_d = e->dF_spts;
-      e->dFn_fpts_d = e->dFn_fpts;
-      e->tempF_fpts_d = e->tempF_fpts;
       
       geo.ele2nodesBT_d[e->etype] = geo.ele2nodesBT[e->etype];
 

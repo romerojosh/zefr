@@ -224,7 +224,7 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       if (motion)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN -= U(0, 0, fpt) * Vg(fpt, dim) * norm(dim, fpt);
+          momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
       }
 
       U(1, 0, fpt) = U(0, 0, fpt);
@@ -267,7 +267,7 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       if (motion)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN -= U(0, 0, fpt) * Vg(fpt, dim) * norm(dim, fpt);
+          momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
       }
 
       U(1, 0, fpt) = U(0, 0, fpt);
@@ -289,7 +289,7 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       if (motion)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
-          VG[dim] = Vg(fpt, dim);
+          VG[dim] = Vg(dim, fpt);
       }
 
       double rhoL = U(0, 0, fpt);
@@ -372,7 +372,7 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       if (motion)
       {
         for (unsigned int dim = 0; dim < nDims; dim++)
-          VG[dim] = Vg(fpt, dim);
+          VG[dim] = Vg(dim, fpt);
       }
 
       /* Extrapolate density */
@@ -1816,7 +1816,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      Vgn += Vg(fpt, dim) * norm[dim];
+      Vgn += Vg(dim, fpt) * norm[dim];
     }
   }
 
