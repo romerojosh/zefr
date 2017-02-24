@@ -44,40 +44,6 @@
 #ifndef _BUILD_LIB
 int main(int argc, char* argv[])
 {
-
-//  mdvector<int> A({3,3}, 0);
-//  for (int i = 0; i < 3; i++)
-//    for (int j = 0; j < 3; j++)
-//      A(i,j) = i;
-//
-//  std::cout << "size: " << A.size() << std::endl;
-//
-//  std::cout << "strides: ";
-//  for (int i = 0; i < 2; i++)
-//    std::cout << A.get_stride(i) << " ";
-//  std::cout << std::endl;
-//
-//  std::cout << "unrolled values: ";
-//  for (int i = 0; i < A.size(); i++)
-//    std::cout << A(i) << " " ;
-//  std::cout << std::endl;
-//
-//  std::cout << "values: " << std::endl;
-//  for (int i = 0; i < 3; i++)
-//  {
-//    for (int j = 0; j < 3; j++)
-//    {
-//      std::cout << A(i,j) << " ";
-//    }
-//    std::cout << std::endl;
-//  }
-//  std::cout << std::endl;
-
-
-  
-
-
-  
   int rank = 0; int nRanks = 1;
   _mpi_comm comm;
 #ifdef _MPI
