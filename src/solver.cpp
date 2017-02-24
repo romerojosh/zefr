@@ -206,7 +206,8 @@ void FRSolver::restart_solution(void)
   }
 
 #ifdef _GPU
- eles->U_spts_d = eles->U_spts;
+  for (auto e : elesObjs)
+   e->U_spts_d = e->U_spts;
 #endif
   
   // Update grid to current status based on restart file if needed
@@ -586,7 +587,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
           e->set_oppRestart(order_restart, true);
 
         nRpts = e->oppRestart.get_dim(1);
-        U_restart[e->etype].assign({nRpts, e->nEles, e->nVars});
+        U_restart[e->etype].assign({nRpts, e->nVars, e->nEles});
       }
 
       unsigned int temp; 
@@ -597,14 +598,14 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
         {
           nRpts = e->oppRestart.get_dim(1);
 
-          for (unsigned int ele = 0; ele < e->etype; ele++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
             /// TODO: make sure this is setup correctly first [and implement everywhere iblank_cell is used
             if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
 
             for (unsigned int rpt = 0; rpt < nRpts; rpt++)
             {
-              binary_read(f, U_restart[e->etype](rpt, ele, n));
+              binary_read(f, U_restart[e->etype](rpt, n, ele));
             }
           }
         }
@@ -619,9 +620,9 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
         auto &B = U_restart[e->etype](0, 0, 0);
         auto &C = e->U_spts(0, 0, 0);
 
-        cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, 
-            e->nEles * e->nVars, nRpts, 1.0, &A, e->oppRestart.ldim(), &B, 
-            U_restart[e->etype].ldim(), 0.0, &C, e->U_spts.ldim());
+        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nSpts, 
+            e->nEles * e->nVars, nRpts, 1.0, &A, nRpts, &B, 
+            e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
       }
 
       /* Read grid velocity NOTE: if any additional fields exist after,
@@ -630,7 +631,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       {
         for (auto e : elesObjs)
         {
-          U_restart[e->etype].assign({nRpts, e->nEles, 3});
+          U_restart[e->etype].assign({nRpts, 3, e->nEles});
 
           unsigned int temp;
           binary_read(f, temp);
@@ -640,7 +641,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 
             for (unsigned int rpt = 0; rpt < nRpts; rpt++)
               for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
-                binary_read(f, U_restart[e->etype](rpt, ele, n));
+                binary_read(f, U_restart[e->etype](rpt, n, ele));
           }
 
           /* Extrapolate values from restart points to solution points */
@@ -651,8 +652,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
           auto &B = U_restart[e->etype](0, 0, 0);
           auto &C = e->grid_vel_spts(0, 0, 0);
 
-          cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                      1.0, &A, m, &B, k, 0.0, &C, m);
+          cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                      1.0, &A, k, &B, n, 0.0, &C, n);
         }
       }
     }
