@@ -30,18 +30,18 @@ void normalize_data(mdvector_gpu<double> U_spts, double normalTol, unsigned int 
   for (unsigned int var = 0; var < nVars; var++)
   {
     // Find element maximum and minimum
-    double uMax = U_spts(0, ele, var), uMin = U_spts(0, ele, var);
+    double uMax = U_spts(0, var, ele), uMin = U_spts(0, var, ele);
 
     for (unsigned int spt = 1; spt < nSpts; spt++)
     {
-      uMax = max(uMax, U_spts(spt, ele, var));
-      uMin = min(uMin, U_spts(spt, ele, var));
+      uMax = max(uMax, U_spts(spt, var, ele));
+      uMin = min(uMin, U_spts(spt, var, ele));
     }
     
     if (uMax - uMin > normalTol)
     {
       for (unsigned int spt = 0; spt < nSpts; spt++)
-        U_spts(spt,ele,var) = (U_spts(spt,ele,var) - uMin) / (uMax - uMin);
+        U_spts(spt, var, ele) = (U_spts(spt, var, ele) - uMin) / (uMax - uMin);
     }
   }
 }
@@ -71,8 +71,8 @@ void compute_sensor(mdvector_gpu<double> KS, mdvector_gpu<double> sensor,
     double sen = 0.0;
     for (unsigned int row = 0; row < nDims * nSptsKS; row++)
     {
-      KS(row, ele, var) = pow(1.0/epsilon , Q/2.0) * pow(abs(KS(row, ele, var)), Q);
-      sen = max(sen, KS(row, ele, var));
+      KS(row, var, ele) = pow(1.0/epsilon , Q/2.0) * pow(abs(KS(row, var, ele)), Q);
+      sen = max(sen, KS(row, var, ele));
     }
     max_sen = max(max_sen, sen);
   }
@@ -105,7 +105,7 @@ void copy_filtered_solution(mdvector_gpu<double> U_filt, mdvector_gpu<double> U_
 
   for (unsigned int var = 0; var < nVars; var++)
     for (unsigned int spt = 0; spt < nSpts; spt++)
-      U_spts(spt, ele, var) = U_filt(spt, ele, var);
+      U_spts(spt, var, ele) = U_filt(spt, var, ele);
 
 }
 

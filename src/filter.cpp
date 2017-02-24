@@ -53,13 +53,13 @@ void Filter::setup(InputStruct *input, FRSolver &solver)
   for (auto e : solver.elesObjs)
   {
     e->setup_filter();
-    U_ini[e->etype].assign({e->nSpts, e->nEles, e->nVars});
-    U_filt[e->etype].assign({e->nSpts, e->nEles, e->nVars});
+    U_ini[e->etype] = e->U_spts;
+    U_filt[e->etype] = e->U_spts;
     sensor[e->etype].assign({e->nEles});
     sensor_bool[e->etype].assign({e->nEles});
     int nSptsKS = e->nSpts1D * e->nSpts1D;
     if (e->nDims == 3) nSptsKS *= e->nSpts1D;
-    KS[e->etype].assign({e->nDims * nSptsKS, e->nEles, e->nVars});
+    KS[e->etype].assign({e->nDims * nSptsKS, e->nVars, e->nEles});
 
 #ifdef _GPU
     U_ini_d[e->etype] = U_ini[e->etype];
@@ -99,8 +99,8 @@ void Filter::setup_threshold()
     auto &A = e->oppS_1D(0, 0);
     auto &B = u_canon(0, 0);
     auto &C = KS_canon(0, 0);
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-      e->nSpts1D, 2, e->nSpts1D, 1.0, &A, e->oppS_1D.ldim(), &B, u_canon.ldim(), 0.0, &C, KS_canon.ldim());
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+      e->nSpts1D, 2, e->nSpts1D, 1.0, &A, e->nSpts1D, &B, 2, 0.0, &C, 2);
     
     // Apply non-linear enhancement
     double epsilon = std::log(e->order)/e->order;
@@ -143,18 +143,18 @@ void Filter::apply_sensor()
         // Find element maximum and minimum
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
-          double uMax = U_ini[e->etype](0,ele,var), uMin = U_ini[e->etype](0,ele,var);
+          double uMax = U_ini[e->etype](0, var, ele), uMin = U_ini[e->etype](0, var, ele);
 
           for (unsigned int spt = 0; spt < e->nSpts; spt++)
           {
-            uMax = std::max(uMax, U_ini[e->etype](spt,ele,var));
-            uMin = std::min(uMin, U_ini[e->etype](spt,ele,var));
+            uMax = std::max(uMax, U_ini[e->etype](spt, var, ele));
+            uMin = std::min(uMin, U_ini[e->etype](spt,var , ele));
           }
           
           if (uMax - uMin > normalTol)
           {
             for (unsigned int spt = 0; spt < e->nSpts; spt++)
-              U_ini[e->etype](spt,ele,var) = (U_ini[e->etype](spt,ele,var) - uMin) / (uMax - uMin);
+              U_ini[e->etype](spt, var, ele) = (U_ini[e->etype](spt, var, ele) - uMin) / (uMax - uMin);
           }
         }
       }
@@ -164,16 +164,13 @@ void Filter::apply_sensor()
     int nSptsKS = e->nSpts1D * e->nSpts1D;
     if (e->nDims == 3) nSptsKS *= e->nSpts1D;
 
-    for (unsigned int var = 0; var < e->nVars; var++)
-    {
-      auto &A = e->oppS(0,0);
-      auto &B = U_ini[e->etype](0, 0, var);
-      auto &C = KS[e->etype](0, 0, var);
+    auto &A = e->oppS(0,0);
+    auto &B = U_ini[e->etype](0, 0, 0);
+    auto &C = KS[e->etype](0, 0, 0);
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-        e->nDims * nSptsKS, e->nEles, e->nSpts, 1.0, &A, e->nDims * nSptsKS,
-        &B, e->nSpts, 0.0, &C, e->nDims * nSptsKS);
-    }
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+      e->nDims * nSptsKS, e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts,
+      &B, e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
 
     // Apply non-linear enhancement and store sensor values
     double Q = input->nonlin_exp;
@@ -186,8 +183,8 @@ void Filter::apply_sensor()
         double sen = 0.0;
         for (unsigned int row = 0; row < e->nDims*nSptsKS; row++)
         {
-          KS[e->etype](row, ele, var) = pow(1.0/epsilon, Q/2.0) * pow(abs(KS[e->etype](row, ele, var)), Q);
-          sen = std::max(sen, KS[e->etype](row, ele, var));
+          KS[e->etype](row, var, ele) = pow(1.0/epsilon, Q/2.0) * pow(abs(KS[e->etype](row, var, ele)), Q);
+          sen = std::max(sen, KS[e->etype](row, var, ele));
         }
         sensor[e->etype](ele) = std::max(sensor[e->etype](ele), sen);
         sensor_bool[e->etype](ele) = sensor[e->etype](ele) > threshJ[e->etype];
@@ -212,12 +209,13 @@ void Filter::apply_sensor()
     // Calculate KS
     int nSptsKS = e->nSpts1D * e->nSpts1D;
     if (e->nDims == 3) nSptsKS *= e->nSpts1D;
-    for (unsigned int var = 0; var < e->nVars; var++)
-    {
-      cublasDGEMM_wrapper(e->nDims * nSptsKS, e->nEles, e->nSpts, 1.0,
-        e->oppS_d.data(), e->nDims * nSptsKS, U_ini_d[e->etype].data() + var * e->nEles * e->nSpts, e->nSpts, 0.0,
-        KS_d[e->etype].data() + var * e->nEles * e->nDims * nSptsKS, e->nDims * nSptsKS);
-    }
+
+    auto *A = e->oppS_d.data();
+    auto *B = U_ini_d[e->etype].data();
+    auto *C = KS_d[e->etype].data();
+
+    cublasDGEMM_wrapper(e->nEles * e->nVars, e->nDims * nSptsKS, e->nSpts, 1.0, B, e->nEles * e->nVars,
+      A, e->nSpts, 0.0, C, e->nEles * e->nVars);
     
     // Apply non-linear enhancement and store sensor values
     double epsilon = log(e->order)/e->order;
@@ -237,8 +235,8 @@ void Filter::apply_expfilter()
     auto &B = e->U_spts(0, 0, 0);
     auto &C = U_filt[e->etype](0, 0, 0);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, e->nSpts, e->nEles * e->nVars,
-      e->nSpts, 1.0, &A, e->nSpts, &B, e->nSpts, 0.0, &C, e->nSpts);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nSpts, e->nEles * e->nVars,
+      e->nSpts, 1.0, &A, e->nSpts, &B, e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
 
     // Copy back to e->U_Spts only when sensor is greater than threshold
     for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -248,7 +246,7 @@ void Filter::apply_expfilter()
 
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
-          e->U_spts(spt,ele,var) = U_filt[e->etype](spt,ele,var);
+          e->U_spts(spt, var, ele) = U_filt[e->etype](spt, var, ele);
     }
   }
 
@@ -257,8 +255,12 @@ void Filter::apply_expfilter()
 #ifdef _GPU
   for (auto e : solver->elesObjs)
   {
-    cublasDGEMM_wrapper(e->nSpts, e->nEles * e->nVars, e->nSpts, 1.0, e->oppF_d.data(), e->nSpts,
-      e->U_spts_d.data(), e->nSpts, 0.0, U_filt_d[e->etype].data(), e->nSpts);
+    auto *A = e->oppF_d.data();
+    auto *B = e->U_spts_d.data();
+    auto *C = U_filt_d[e->etype].data();
+
+    cublasDGEMM_wrapper(e->nEles * e->nVars, e->nSpts,
+      e->nSpts, 1.0, B, e->nEles * e->nVars, A, e->nSpts, 0.0, C, e->nEles * e->nVars);
 
     // Copy back to e->U_Spts only when sensor is greater than threshold
     copy_filtered_solution_wrapper(U_filt_d[e->etype], e->U_spts_d, sensor_d[e->etype], threshJ[e->etype], e->nSpts, e->nEles, e->nVars);

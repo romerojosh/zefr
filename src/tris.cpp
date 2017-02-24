@@ -666,7 +666,7 @@ void Tris::modify_sensor()
   auto temp = oppS;
   oppS.assign({nSpts2D * nDims, nSpts});
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts2D * nDims, nSpts, nSpts2D,
-      1.0, temp.data(), temp.ldim(), oppEc.data(), oppEc.ldim(), 0.0, oppS.data(), oppS.ldim());
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts2D * nDims, nSpts, nSpts2D,
+      1.0, temp.data(), nSpts2D, oppEc.data(), nSpts, 0.0, oppS.data(), nSpts);
 
 } 

@@ -781,8 +781,8 @@ void Elements::setup_filter()
   auto &A = conc(0, 0);
   auto &B = inv_vand1D(0, 0);
   auto &C = oppS_1D(0, 0);
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-    nSpts1D, nSpts1D, nSpts1D, 1.0, &A, conc.ldim(), &B, inv_vand1D.ldim(), 0.0, &C, oppS_1D.ldim());
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+    nSpts1D, nSpts1D, nSpts1D, 1.0, &A, nSpts1D, &B, nSpts1D, 0.0, &C, nSpts1D);
 
   // Form multidimensional operator
   // Note: This operator is constructed for tensor product elements. Application to tris/tets requires
@@ -845,8 +845,8 @@ void Elements::setup_filter()
       temp(i,j) = sigma * inv_vand(i,j);
   }
 
-  cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nSpts, nSpts, nSpts, 1.0, 
-      vand.data(), vand.ldim(), temp.data(), temp.ldim(), 0.0, oppF.data(), oppF.ldim());
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nSpts, nSpts, 1.0, 
+      vand.data(), nSpts, temp.data(), nSpts, 0.0, oppF.data(), nSpts);
 
 #ifdef _GPU
   /* Copy operators to GPU */
