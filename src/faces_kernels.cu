@@ -1562,15 +1562,15 @@ void common_U_to_F(mdview_gpu<double> Fcomm, mdview_gpu<double> Ucomm, mdvector_
   if (fpt >= endFpt)
     return;
 
-  double norm_dim = norm(fpt, dim);
-  double dAL = dA(fpt, 0);
-  double dAR = dA(fpt, 1);
+  double norm_dim = norm(dim, fpt);
+  double dAL = dA(0, fpt);
+  double dAR = dA(1, fpt);
 
   for (unsigned int var = 0; var < nVars; var++)
   {
-    double F = Ucomm(fpt, var, 0) * norm_dim;
-    Fcomm(fpt, var, 0) = F * dAL;
-    Fcomm(fpt, var, 1) = -F * dAR;
+    double F = Ucomm(0, var, fpt) * norm_dim;
+    Fcomm(0, var, fpt) = F * dAL;
+    Fcomm(1, var, fpt) = -F * dAR;
   }
     
 }

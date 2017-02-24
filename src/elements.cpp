@@ -1063,18 +1063,13 @@ void Elements::compute_dU_spts_via_divF(unsigned int dim)
 #endif
 
 #ifdef _GPU
-  for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-  {
-    double fac = (dim1 == 0) ? 0.0 : 1.0;
+  auto *A = oppDiv_d.get_ptr(0, 0, 0);
+  auto *B = F_spts_d.get_ptr(0, 0, 0, 0);
+  auto *C = dU_spts_d.get_ptr(dim, 0, 0, 0);
 
-    auto *A = oppD_d.get_ptr(0, 0, dim1);
-    auto *B = F_spts_d.get_ptr(0, 0, 0, dim1);
-    auto *C = dU_spts_d.get_ptr(0, 0, 0, dim);
-
-    /* Compute contribution to derivative from solution at solution points */
-    cublasDGEMM_wrapper(nSpts, nEles * nVars, nSpts, 1.0,
-        A, oppD_d.ldim(), B, F_spts_d.ldim(), fac, C, dU_spts_d.ldim(), 0);
-  }
+  /* Compute contribution to derivative from solution at solution points */
+  cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts * nDims, 1.0,
+      B, nEles * nVars, A, nSpts * nDims, 0.0, C, nEles * nVars);
   check_error();
 #endif
 }
@@ -1095,10 +1090,10 @@ void Elements::compute_dU_fpts_via_divF(unsigned int dim)
   /* Compute contribution to derivative from common solution at flux points */
   auto *A = oppDiv_fpts_d.get_ptr(0, 0);
   auto *B = Fcomm_d.get_ptr(0, 0, 0);
-  auto *C = dU_spts_d.get_ptr(0, 0, 0, dim);
+  auto *C = dU_spts_d.get_ptr(dim, 0, 0, 0);
 
-  cublasDGEMM_wrapper(nSpts, nEles * nVars,  nFpts, 1.0,
-      A, oppDiv_fpts_d.ldim(), B, Fcomm_d.ldim(), 1.0, C, dU_spts_d.ldim(), 0);
+  cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
+      B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
 
   check_error();
 #endif

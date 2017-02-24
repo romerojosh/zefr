@@ -1730,6 +1730,8 @@ void Faces::common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned i
 #ifdef _GPU
   common_U_to_F_wrapper(Fcomm_d, Ucomm_d, norm_d, dA_d, nFpts, nVars, nDims, input->equation, startFpt,
       endFpt, dim);
+
+  check_error();
 #endif
 }
 

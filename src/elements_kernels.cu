@@ -319,33 +319,35 @@ void compute_unit_advF(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int dim)
 {
 
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
 
-  if (spt >= nSpts || ele >= nEles)
+  if (ele >= nEles)
     return;
 
   double U[nVars];
   double inv_jaco[nDims];
 
-  /* Get state variables */
-  for (unsigned int var = 0; var < nVars; var++)
+  for (unsigned int spt = 0; spt < nSpts; spt++)
   {
-    U[var] = U_spts(spt, ele, var);
-  }
+    /* Get state variables */
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      U[var] = U_spts(spt, var, ele);
+    }
 
-  /* Get required metric terms */
-  for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-  {
-      inv_jaco[dim1] = inv_jaco_spts(spt, ele, dim1, dim);
-  }
-
-  /* Compute transformed unit advection flux along provided dimension */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
+    /* Get required metric terms */
     for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
     {
-        F_spts(spt, ele, var, dim1) = U[var] * inv_jaco[dim1];
+        inv_jaco[dim1] = inv_jaco_spts(dim1, spt, dim, ele);
+    }
+
+    /* Compute transformed unit advection flux along provided dimension */
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+      {
+          F_spts(dim1, spt, var, ele) = U[var] * inv_jaco[dim1];
+      }
     }
   }
 }
@@ -354,7 +356,7 @@ void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim)
 {
   unsigned int threads = 128;
-  unsigned int blocks = (nSpts * nEles + threads - 1)/threads;
+  unsigned int blocks = (nEles + threads - 1)/threads;
 
   if (equation == AdvDiff)
   {
