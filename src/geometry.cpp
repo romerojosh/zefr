@@ -826,7 +826,6 @@ void set_face_nodes(GeoStruct &geo)
     geo.faceNodesCurved.assign({6, geo.nNdFaceCurved});
     auto ijk2hex = structured_to_gmsh_hex(geo.nNodesPerEleBT[etype]);
     auto ij2quad = structured_to_gmsh_quad(geo.nNdFaceCurved);
-
     int nSide = sqrt(geo.nNdFaceCurved);
 
     /* Face 0: Bottom: -z */
@@ -2089,7 +2088,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     if (etype == HEX)
     {
-      int nSide = cbrt(geo.nNodes);
+      int nSide = cbrt(geo.nNodesPerEleBT[etype]);
       geo.nNdFaceCurved = nSide*nSide;
     }
     else if (etype == QUAD)

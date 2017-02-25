@@ -9,6 +9,11 @@ AR = ar -rvs
 ifeq ($(CU),)
   CU = nvcc
 endif
+ifeq ($(strip $(SWIG_BIN)),)
+	SWIG = swig -c++ -python
+else
+	SWIG = $(SWIG_BIN)/swig -c++ -python
+endif
 
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas #-fstack-protector-all
 CUFLAGS = -std=c++11 --default-stream per-thread
@@ -122,6 +127,11 @@ ifeq ($(strip $(ARCH)),GPU)
 endif
 
 SOBJS = $(OBJS) $(BINDIR)/zefr_interface.o
+SWIG_OBJ = $(BINDIR)/zefr_swig.o
+SWIG_TARGET = $(BINDIR)/_zefr.so
+SWIG_INCS = -I$(strip $(PYTHON_INC_DIR))/ -I$(strip $(MPI4PY_INC_DIR))/
+SWIG_LIBS = 
+WRAP_TARGET = $(BINDIR)/zefrWrap
 
 INCS += -I$(CURDIR)/include
 
@@ -131,12 +141,12 @@ $(TARGET): $(OBJS)
 # Build Zefr as a Python extension module (shared library) using SWIG
 .PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
-swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC
+swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC $(SWIG_INCS)
 swig: INCS += -I$(TIOGA_INC_DIR)/
 swig: CUFLAGS += -Xcompiler -fPIC
-swig: $(SOBJS)
-	@$(MAKE) -C $(SWIGDIR) CXX='$(CXX)' CU='$(CU)' SOBJS='$(SOBJS)' BINDIR='$(BINDIR)' FLAGS='$(FLAGS)' CXXFLAGS='$(CXXFLAGS)' INCS='$(INCS)' LIBS='$(LIBS)' PYTHON_INC_DIR='$(PYTHON_INC_DIR)' MPI4PY_INC_DIR='$(MPI4PY_INC_DIR)' SWIG_BIN='$(SWIG_BIN)'
-
+swig: $(SOBJS) $(SWIG_OBJ)
+	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) $(SWIG_INCS) -shared -o $(SWIG_TARGET) $(SOBJS) $(SWIG_OBJ) $(LIBS) $(SWIG_LIBS)
+	
 # Build Zefr as a static library
 .PHONY: static
 static: FLAGS += -D_BUILD_LIB
@@ -144,26 +154,24 @@ static: $(SOBJS)
 	$(AR) $(BINDIR)/libzefr.a $(SOBJS)
 
 # Build Zefr as a shared library
-.PHONY: lib
-lib: FLAGS += -D_BUILD_LIB
-lib: CXXFLAGS += -fPIC
-lib: CUFLAGS += -Xcompiler -fPIC
-lib: $(SOBJS)
+.PHONY: shared
+shared: FLAGS += -D_BUILD_LIB
+shared: CXXFLAGS += -fPIC
+shared: CUFLAGS += -Xcompiler -fPIC
+shared: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
 
-# Compile the testZefr wrapper program using dynamic linking
-.PHONY: test
-test: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
-test: lib
-	cp $(BINDIR)/libzefr.so $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp -o $(SWIGDIR)/testZefr -L$(TIOGA_LIB_DIR)/ -L$(SWIGDIR)/lib -lzefr -ltioga -Wl,-rpath=$(SWIGDIR)/lib -Wl,-rpath=$(TIOGA_LIB_DIR) $(LIBS)
+# Compile the zefrWrap wrapper program using dynamic linking
+.PHONY: wrap
+wrap: INCS += -I$(TIOGA_INC_DIR)/
+wrap: shared
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp -o $(WRAP_TARGET) -L$(TIOGA_LIB_DIR)/ -L$(BINDIR)/ -lzefr -ltioga -Wl,-rpath=$(BINDIR)/ -Wl,-rpath=$(TIOGA_LIB_DIR)/ $(LIBS)
 
-# Compile the testZefr wrapper program using static linking
-.PHONY: test_static
-test_static: INCS += -I$(SWIGDIR)/ -I$(TIOGA_INC_DIR)/
-test_static: static
-	cp $(BINDIR)/libzefr.a $(SWIGDIR)/lib/
-	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SWIGDIR)/testZefr.cpp $(SWIGDIR)/lib/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a -o $(SWIGDIR)/testZefr $(LIBS)
+# Compile the zefrWrap wrapper program using static linking
+.PHONY: wrap_static
+wrap_static: INCS += -I$(TIOGA_INC_DIR)/
+wrap_static: static
+	$(CXX) $(CXXFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp $(BINDIR)/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a -o $(WRAP_TARGET) $(LIBS)
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
@@ -175,6 +183,12 @@ $(BINDIR)/%.o: src/%.cu include/*.hpp include/*.h
 	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS) -D_NO_TNT
 endif
 
+$(BINDIR)/%_swig.cpp: include/%.i include/*.hpp
+	$(SWIG) $(FLAGS) $(INCS) $(SWIG_INCS) -o $@ $<
+
+$(BINDIR)/%_swig.o: $(BINDIR)/%_swig.cpp
+	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
+
 clean:
-	rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(SWIGDIR)/*.so $(SWIGDIR)/*.o $(SWIGDIR)/zefr.pyc $(SWIGDIR)/zefr.py
+	rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(BINDIR)/*.so $(BINDIR)/zefr.pyc $(BINDIR)/zefr.py
 

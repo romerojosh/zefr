@@ -2721,7 +2721,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "</Points>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (e->nEles * e->nPpts * 3 * sizeof(float));
+    b_offset += (nElesBT[e->etype] * e->nPpts * 3 * sizeof(float));
 
   /* Write cell information */
   f << "<Cells>" << std::endl;
@@ -2729,19 +2729,19 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (e->nEles * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int));
+    b_offset += (nElesBT[e->etype] * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int));
 
   f << "<DataArray type=\"UInt32\" Name=\"offsets\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (e->nEles * e->nSubelements * sizeof(unsigned int));
+    b_offset += (nElesBT[e->etype] * e->nSubelements * sizeof(unsigned int));
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (e->nEles * e->nSubelements * sizeof(char));
+    b_offset += (nElesBT[e->etype] * e->nSubelements * sizeof(char));
   f << "</Cells>" << std::endl;
 
   f << "</Piece>" << std::endl;
@@ -2829,7 +2829,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   /* Write plot point coordinates */
   nBytes = 0;
   for (auto e : elesObjs)
-    nBytes += e->nEles * e->nPpts * 3 * sizeof(float);
+    nBytes += nElesBT[e->etype] * e->nPpts * 3 * sizeof(float);
   binary_write(f, nBytes);
 
   for (auto e : elesObjs)
@@ -2853,7 +2853,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   // Write connectivity
   nBytes = 0;
   for (auto e : elesObjs)
-    nBytes += e->nEles * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int);
+    nBytes += nElesBT[e->etype] * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int);
   binary_write(f, nBytes);
 
   int shift = 0; // To account for blanked elements
@@ -2876,7 +2876,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   // Offsets
   nBytes = 0;
   for (auto e: elesObjs)
-    nBytes += e->nEles * e->nSubelements * sizeof(unsigned int);
+    nBytes += nElesBT[e->etype] * e->nSubelements * sizeof(unsigned int);
 
   binary_write(f, nBytes);
 
@@ -2897,13 +2897,14 @@ void FRSolver::write_solution(const std::string &_prefix)
   // Types
   nBytes = 0;
   for (auto e : elesObjs)
-    nBytes += e->nEles * e->nSubelements * sizeof(char);
+    nBytes += nElesBT[e->etype] * e->nSubelements * sizeof(char);
   binary_write(f, nBytes);
 
   for (auto e : elesObjs)
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
+      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int subele = 0; subele < e->nSubelements; subele++)
       {
         if (e->etype == QUAD)

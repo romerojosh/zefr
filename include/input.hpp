@@ -70,13 +70,6 @@ enum NODE_TYPE {
   BOUNDARY_NODE = 2
 };
 
-/*! Enumeration for mesh (either create cartesian mesh or read from file) */
-enum meshType {
-  READ_MESH   = 0,
-  CREATE_MESH = 1,
-  OVERSET_MESH = 2
-};
-
 /*! Enumeration for all available boundary conditions */
 enum BC_TYPE {
   NONE = 0,
@@ -104,16 +97,6 @@ enum BC_TYPE {
   SYMMETRY_G,
   WALL_CLOSURE,
   OVERSET_CLOSURE
-};
-
-enum MOTION_TYPE {
-  STATIC = 0,
-  TEST1 = 1,
-  TEST2 = 2,
-  TEST3 = 3,
-  CIRCULAR_TRANS = 4,
-  RADIAL_VIBE = 5,
-  RIGID_BODY = 10
 };
 
 extern std::map<std::string,int> bcStr2Num;
