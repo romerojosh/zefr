@@ -26,6 +26,7 @@
 extern "C" {
 #include "cblas.h"
 }
+#include "gimmik.h"
 
 #include "elements.hpp"
 #include "faces.hpp"
@@ -459,6 +460,37 @@ void Elements::setup_FR()
       }
     }
   }
+
+#ifndef _NO_GIMMIK
+  /* Setup operator ids for GiMMiK (ids = 0 by default to disable gimmik) */
+  std::stringstream ss;
+
+  ss << "oppE_P" << order << "_" << nDims << "D_e" << etype;
+  std::string str = ss.str(); ss.str(std::string());
+  oppE_id = hash_str(str.data()); 
+  write_opp(oppE, str, oppE_id, nFpts, nSpts);
+
+  ss << "oppD_P" << order << "_" << nDims << "D_e" << etype;
+  str = ss.str(); ss.str(std::string());
+  oppD_id = hash_str(str.data()); 
+  write_opp(oppD, str, oppD_id, nDims * nSpts, nSpts);
+
+  ss << "oppD_fpts_P" << order << "_" << nDims << "D_e" << etype;
+  str = ss.str(); ss.str(std::string());
+  oppD_fpts_id = hash_str(str.data()); 
+  write_opp(oppD_fpts, str, oppD_fpts_id, nDims * nSpts, nFpts);
+
+  ss << "oppDiv_P" << order << "_" << nDims << "D_e" << etype;
+  str = ss.str(); ss.str(std::string());
+  oppDiv_id = hash_str(str.data()); 
+  write_opp(oppDiv, str, oppDiv_id, nSpts, nSpts * nDims);
+
+  ss << "oppDiv_fpts_P" << order << "_" << nDims << "D_e" << etype;
+  str = ss.str(); ss.str(std::string());
+  oppDiv_fpts_id = hash_str(str.data()); 
+  write_opp(oppDiv_fpts, str, oppDiv_fpts_id, nSpts, nFpts);
+#endif
+
 }
 
 void Elements::setup_aux()
@@ -864,8 +896,10 @@ void Elements::extrapolate_U()
   auto *A = oppE_d.data();
   auto *B = U_spts_d.data();
   auto *C = U_fpts_d.data();
-  cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0,
-      B, nEles * nVars, A, nSpts, 0.0, C, nEles * nVars);
+  //cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0,
+  //    B, nEles * nVars, A, nSpts, 0.0, C, nEles * nVars);
+  gimmik_mm_gpu(nFpts, nEles * nVars, nSpts, 1.0, A, nSpts, B, nEles * nVars, 
+      0.0, C, nEles * nVars, oppE_id);
 
   event_record(0, 0); // record event for MPI comms
 
@@ -895,8 +929,10 @@ void Elements::extrapolate_dU()
     auto *B = dU_spts_d.get_ptr(dim, 0, 0, 0);
     auto *C = dU_fpts_d.get_ptr(dim, 0, 0, 0);
 
-    cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0, B, nEles * nVars,
-        A, nSpts, 0.0, C, nEles * nVars);
+    //cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0, B, nEles * nVars,
+    //    A, nSpts, 0.0, C, nEles * nVars);
+    gimmik_mm_gpu(nFpts, nEles * nVars, nSpts, 1.0, A, nSpts, B, nEles * nVars, 
+        0.0, C, nEles * nVars, oppE_id);
   }
 
   event_record(0, 0); // record event for MPI comms
@@ -924,8 +960,10 @@ void Elements::compute_dU_spts()
   auto *C = dU_spts_d.get_ptr(0, 0, 0, 0);
 
   /* Compute contribution to derivative from solution at solution points */
-  cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nSpts, 1.0, B, nEles * nVars, 
-      A, nSpts, 0.0, C, nEles * nVars);
+  //cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nSpts, 1.0, B, nEles * nVars, 
+  //    A, nSpts, 0.0, C, nEles * nVars);
+  gimmik_mm_gpu(nSpts * nDims, nEles * nVars, nSpts, 1.0, A, nSpts, B, nEles * nVars, 
+      0.0, C, nEles * nVars, oppD_id);
 
   check_error();
 #endif
@@ -952,8 +990,10 @@ void Elements::compute_dU_fpts()
   auto *C = dU_spts_d.get_ptr(0, 0, 0, 0);
 
   /* Compute contribution to derivative from common solution at flux points */
-  cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nFpts, 1.0,
-      B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
+  //cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nFpts, 1.0,
+  //    B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
+  gimmik_mm_gpu(nSpts * nDims, nEles * nVars, nFpts, 1.0, A, nFpts, B, nEles * nVars, 
+      1.0, C, nEles * nVars, oppD_fpts_id);
 
   check_error();
 #endif
@@ -968,7 +1008,6 @@ void Elements::compute_divF_spts(unsigned int stage)
   auto &B = F_spts(0, 0, 0, 0);
   auto &C = divF_spts(stage, 0, 0, 0);
 
-
   cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
         nSpts * nDims, 1.0, &A, nSpts * nDims, &B, nEles * nVars, 0.0, &C, nEles * nVars);
 #endif
@@ -980,8 +1019,10 @@ void Elements::compute_divF_spts(unsigned int stage)
   auto *C = divF_spts_d.get_ptr(stage, 0, 0, 0);
 
   /* Compute contribution to derivative from solution at solution points */
-  cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts * nDims, 1.0,
-      B, nEles * nVars, A, nSpts * nDims, 0.0, C, nEles * nVars, 0);
+  //cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts * nDims, 1.0,
+  //    B, nEles * nVars, A, nSpts * nDims, 0.0, C, nEles * nVars, 0);
+  gimmik_mm_gpu(nSpts, nEles * nVars, nSpts * nDims, 1.0, A, nSpts * nDims, B, nEles * nVars, 
+      0.0, C, nEles * nVars, oppDiv_id);
   check_error();
 #endif
 }
@@ -1004,8 +1045,10 @@ void Elements::compute_divF_fpts(unsigned int stage)
   auto *B = Fcomm_d.get_ptr(0, 0, 0);
   auto *C = divF_spts_d.get_ptr(stage, 0, 0, 0);
 
-  cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
-      B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars, 0);
+  //cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
+  //    B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars, 0);
+  gimmik_mm_gpu(nSpts, nEles * nVars, nFpts, 1.0, A, nFpts, B, nEles * nVars, 
+      1.0, C, nEles * nVars, oppDiv_fpts_id);
 
   check_error();
 #endif
@@ -1060,8 +1103,10 @@ void Elements::compute_dU_spts_via_divF(unsigned int dim)
   auto *C = dU_spts_d.get_ptr(dim, 0, 0, 0);
 
   /* Compute contribution to derivative from solution at solution points */
-  cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts * nDims, 1.0,
-      B, nEles * nVars, A, nSpts * nDims, 0.0, C, nEles * nVars);
+  //cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts * nDims, 1.0,
+  //    B, nEles * nVars, A, nSpts * nDims, 0.0, C, nEles * nVars);
+  gimmik_mm_gpu(nSpts, nEles * nVars, nSpts * nDims, 1.0, A, nSpts * nDims, B, nEles * nVars, 
+      0.0, C, nEles * nVars, oppDiv_id);
   check_error();
 #endif
 }
@@ -1084,8 +1129,10 @@ void Elements::compute_dU_fpts_via_divF(unsigned int dim)
   auto *B = Fcomm_d.get_ptr(0, 0, 0);
   auto *C = dU_spts_d.get_ptr(dim, 0, 0, 0);
 
-  cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
-      B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
+  //cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
+  //    B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
+  gimmik_mm_gpu(nSpts, nEles * nVars, nFpts, 1.0, A, nFpts, B, nEles * nVars, 
+      1.0, C, nEles * nVars, oppDiv_fpts_id);
 
   check_error();
 #endif

@@ -293,4 +293,25 @@ void binary_read(std::istream &f, T &value)
   f.read((char *) &value, sizeof(T));
 }
 
+unsigned long hash_str(const char *str);
+
+template <typename T>
+void write_opp(mdvector<T> op, std::string str, unsigned long id, int m, int n)
+{
+#ifdef _DUMP_OPS
+  std::ofstream f(str + ".txt");
+
+  f << id << std::endl;
+
+  for (int i = 0; i < m; i++)
+  {
+    for (int j = 0; j < n; j++)
+    {
+      f << std::setprecision(16) << op(j + i*n) << " ";
+    }
+    f << std::endl;
+  }
+#endif
+}
+
 #endif /* funcs_hpp */

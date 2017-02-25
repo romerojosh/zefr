@@ -5,6 +5,7 @@ include $(CONFIG)
 endif
 
 CXX = g++
+CC = gcc
 AR = ar -rvs
 ifeq ($(CU),)
   CU = nvcc
@@ -16,11 +17,13 @@ else
 endif
 
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas #-fstack-protector-all
+CCFLAGS = -std=c99 -w
 CUFLAGS = -std=c++11 --default-stream per-thread
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 
 RELEASE_FLAGS = -Ofast
+FLAGS = $(AUX_FLAGS)
 
 ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
@@ -30,13 +33,16 @@ else
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
+	CCFLAGS += -g -O3 -D_NVTX
 	CXXFLAGS += -g -O3 -D_NVTX
 	CUFLAGS += -g -O3 -D_NVTX
 else 
 ifeq ($(strip $(DEBUG_LEVEL)),2)
+	CCFLAGS += -g -O0 #-D_NVTX
 	CXXFLAGS += -g -O0 #-D_NVTX
 	CUFLAGS += -g -O0 #-D_NVTX
 else
+	CCFLAGS += $(RELEASE_FLAGS)
 	CXXFLAGS += $(RELEASE_FLAGS)
 	CUFLAGS += -O3 -use_fast_math
 endif
@@ -96,15 +102,15 @@ ifeq ($(CU),)
 else
 	
 ifeq ($(strip $(SM)),FERMI)
-  CUFLAGS += -arch=sm_20
+  CUFLAGS += -arch=sm_20 -D_FERMI
 endif
 
 ifeq ($(strip $(SM)),KEPLER)
-  CUFLAGS += -arch=sm_35
+  CUFLAGS += -arch=sm_35 -D_KEPLER
 endif
 
 ifeq ($(strip $(SM)),GEFORCE)
-  CUFLAGS += -arch=sm_30
+  CUFLAGS += -arch=sm_30 -D_GEFORCE
 endif
 
 endif
@@ -121,9 +127,10 @@ SWIGDIR = $(CURDIR)/swig_bin
 
 TARGET = zefr
 OBJS = $(BINDIR)/elements.o $(BINDIR)/faces.o $(BINDIR)/funcs.o $(BINDIR)/geometry.o $(BINDIR)/hexas.o $(BINDIR)/input.o $(BINDIR)/multigrid.o $(BINDIR)/points.o $(BINDIR)/polynomials.o $(BINDIR)/quads.o $(BINDIR)/solver.o $(BINDIR)/tets.o $(BINDIR)/tris.o $(BINDIR)/filter.o  $(BINDIR)/zefr.o 
+#$(BINDIR)/gimmik_cpu.o
 
 ifeq ($(strip $(ARCH)),GPU)
-	OBJS += $(BINDIR)/elements_kernels.o $(BINDIR)/faces_kernels.o $(BINDIR)/solver_kernels.o  $(BINDIR)/filter_kernels.o
+	OBJS += $(BINDIR)/elements_kernels.o $(BINDIR)/faces_kernels.o $(BINDIR)/solver_kernels.o  $(BINDIR)/filter_kernels.o $(BINDIR)/gimmik_gpu.o
 endif
 
 SOBJS = $(OBJS) $(BINDIR)/zefr_interface.o
@@ -177,6 +184,10 @@ wrap_static: static
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
 	@mkdir -p bin
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
+
+$(BINDIR)/%.o: src/%.c  include/*.hpp include/*.h
+	@mkdir -p bin
+	$(CC) $(INCS) -c -o $@ $< $(FLAGS) $(CCFLAGS)
 
 ifeq ($(strip $(ARCH)),GPU)
 $(BINDIR)/%.o: src/%.cu include/*.hpp include/*.h

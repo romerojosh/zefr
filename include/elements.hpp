@@ -93,6 +93,7 @@ class Elements
 
     /* Element solution structures */
     mdvector<double> oppE, oppD, oppD_fpts, oppDiv, oppDiv_fpts;
+    unsigned long oppE_id = 0, oppD_id = 0, oppD_fpts_id = 0, oppDiv_id = 0, oppDiv_fpts_id = 0; // IDs for GiMMiK
     mdvector<double> oppE_ppts, oppE_qpts, oppRestart;
     mdvector<double> U_spts, U_fpts, U_ppts, U_qpts, Uavg, U_ini, U_til;
     mdvector<double> F_spts, F_fpts;

@@ -1284,3 +1284,15 @@ Quat operator*(double a, const Quat &b)
     c[i] = a*b[i];
   return c;
 }
+
+/* Simple string hash from web: http://www.cse.yorku.ca/~oz/hash.html */
+unsigned long hash_str(const char *str)
+{
+  unsigned long hash = 5381;
+  int c;
+
+  while (c = *str++)
+    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+  return hash;
+}

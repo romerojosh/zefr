@@ -1498,6 +1498,13 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
 
     if (LDG_bias(fpt) == 0)
     {
+#ifdef _FERMI
+      /* Note: Fermi cards can't seem to handle beta == +-0.5 checks. */
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
+      }
+#else
       /* Get left and/or right state variables */
       if (beta == 0.5)
       {
@@ -1516,13 +1523,14 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
           UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
         }
       }
+#endif
 
-        for (unsigned int n = 0; n < nVars; n++)
-        {
-          double UC = 0.5*(UL[n] + UR[n]) - beta*(UL[n] - UR[n]);
-          Ucomm(0, n, fpt) = UC;
-          Ucomm(1, n, fpt) = UC;
-        }
+      for (unsigned int n = 0; n < nVars; n++)
+      {
+        double UC = 0.5*(UL[n] + UR[n]) - beta*(UL[n] - UR[n]);
+        Ucomm(0, n, fpt) = UC;
+        Ucomm(1, n, fpt) = UC;
+      }
     }
     /* If on boundary, don't use beta */
     else
@@ -1834,6 +1842,16 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
 
     if (LDG_bias_ == 0)
     {
+#ifdef _FERMI
+      /* Note: Fermi cards can't seem to handle beta == +-0.5 checks. */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          dUL[n][dim] = dU(0, dim, n, fpt); dUR[n][dim] = dU(1, dim, n, fpt);
+        }
+      }
+#else
       /* Get left and/or right gradients */
       if (beta == 0.5)
       {
@@ -1857,6 +1875,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
           }
         }
       }
+#endif
     }
     else
     {
