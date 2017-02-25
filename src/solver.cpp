@@ -137,9 +137,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
     e->set_coords(faces);
   }
 
-  /* For 3D cases, need to orient face flux points */
-  if (geo.nDims == 3)
-    orient_fpts();
+  orient_fpts();
 
   /* Complete element setup */
   for (auto e : elesObjs)
@@ -263,8 +261,9 @@ void FRSolver::restart_solution(void)
 
 void FRSolver::orient_fpts()
 {
-  mdvector<double> fpt_coords_L({geo.nDims, geo.nGfpts}), fpt_coords_R({geo.nDims, geo.nGfpts});
-  std::vector<unsigned int> idxL(geo.nGfpts), idxR(geo.nGfpts), idxsort(geo.nGfpts);
+  mdvector<double> fpt_coords_L({geo.nDims, geo.nGfpts_int}), fpt_coords_R({geo.nDims, geo.nGfpts_int});
+  std::vector<double*> fpt_ptr_L(geo.nGfpts_int);
+  std::vector<unsigned int> idxL(geo.nGfpts_int), idxR(geo.nGfpts_int), idxsort(geo.nGfpts_int);
  
   /* Gather all flux point coordinates */
   for (auto e : elesObjs)
@@ -276,6 +275,8 @@ void FRSolver::orient_fpts()
         int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
         int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
 
+        if (gfpt >= geo.nGfpts_int) continue;
+
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
         {
           if (slot == 0)
@@ -283,11 +284,15 @@ void FRSolver::orient_fpts()
           else
             fpt_coords_R(dim, gfpt) = e->coord_fpts(fpt, dim, ele);
         }
+
+        if (slot == 0)
+          fpt_ptr_L[gfpt] = &(e->coord_fpts(fpt, 0, ele));
       }
     }
   }
 
-  for (unsigned int fpt = 0; fpt < geo.nGfpts; fpt++)
+
+  for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
   {
     idxL[fpt] = fpt; idxR[fpt] = fpt; idxsort[fpt] = fpt;
   }
@@ -301,19 +306,27 @@ void FRSolver::orient_fpts()
     fuzzysort_ind(fpt_coords_R, idxR.data() + shift, geo.nFptsPerFace, geo.nDims);
   }
 
-  /* Sort again to make left face indexing contiguous */
-  std::sort(idxsort.begin(), idxsort.end(), [&](unsigned int a, unsigned int b) {return idxL[a] < idxL[b];});
-  auto idxR_copy = idxR;
+  /* Sort again to make left face index access coalesced memory */
+  std::sort(idxsort.begin(), idxsort.end(), [&](unsigned int a, unsigned int b) {return fpt_ptr_L[a] < fpt_ptr_L[b];});
+
+  // TODO: Can probably do this in fewer setups but this works.
+  auto idxL_copy = idxL; auto idxR_copy = idxR;
   for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
+  {
+    idxL[fpt] = idxL_copy[idxsort[fpt]];
     idxR[fpt] = idxR_copy[idxsort[fpt]];
+  }
+
 
   /* Invert the mapping */
-  idxR_copy = idxR;
+  idxL_copy = idxL; idxR_copy = idxR;
   for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
+  {
+    idxL[idxL_copy[fpt]] = fpt;
     idxR[idxR_copy[fpt]] = fpt;
+  }
 
-
-  /* Reindex right face flux points */
+  /* Reindex face flux points */
   for (auto e : elesObjs)
   {
     auto fpt2gfptBT_copy = geo.fpt2gfptBT[e->etype];
@@ -322,14 +335,21 @@ void FRSolver::orient_fpts()
       for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
       {
         int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        int gfpt_old = fpt2gfptBT_copy(fpt, ele);
 
-        if (slot == 1)
+        if (gfpt_old >= geo.nGfpts_int) continue;
+
+        if (slot == 0)
         {
-          int gfpt_old = fpt2gfptBT_copy(fpt, ele);
+          geo.fpt2gfptBT[e->etype](fpt, ele) = idxL[gfpt_old];
+        }
+        else
+        {
           geo.fpt2gfptBT[e->etype](fpt, ele) = idxR[gfpt_old];
         }
       }
     }
+
   }
 
 #ifdef _MPI
