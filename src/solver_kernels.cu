@@ -458,8 +458,9 @@ void RK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
     unsigned int stage, unsigned int nStages, bool last_stage, bool overset = false, const int* iblank = NULL)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
 
-  if (ele >= nEles)
+  if (ele >= nEles || spt >= nSpts)
     return;
 
   if (overset && iblank[ele] != 1)
@@ -471,7 +472,7 @@ void RK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
   else
     dt = dt_in(ele);
 
-  for (unsigned int spt = 0; spt < nSpts; spt++)
+  //for (unsigned int spt = 0; spt < nSpts; spt++)
   {
     double fac = dt / jaco_det_spts(spt,ele);
 
@@ -507,8 +508,10 @@ void RK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini
     unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int stage, 
     unsigned int nStages, bool last_stage, bool overset, int* iblank)
 {
-  unsigned int threads = 128;
-  unsigned int blocks = (nEles + threads - 1)/ threads;
+  //unsigned int threads = 128;
+  //unsigned int blocks = (nEles + threads - 1)/ threads;
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
 
   if (equation == AdvDiff)
   {

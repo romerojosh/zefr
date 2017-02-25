@@ -157,8 +157,9 @@ void compute_F(mdvector_gpu<double> F_spts,
 {
 
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
 
-  if (ele >= nEles) 
+  if (ele >= nEles || spt >= nSpts) 
     return;
 
   if (overset && iblank[ele] != 1)
@@ -169,22 +170,20 @@ void compute_F(mdvector_gpu<double> F_spts,
   double dU[nVars][nDims];
   double F[nVars][nDims];
   double inv_jaco[nDims][nDims];
+  double tF[nVars][nDims];
 
-  for (unsigned int spt = 0; spt < nSpts; spt++)
+  //for (unsigned int spt = 0; spt < nSpts; spt++)
   {
 
     /* Get state variables and reference space gradients */
     for (unsigned int var = 0; var < nVars; var++)
-    {
       U[var] = U_spts(spt, var, ele);
 
-      if(viscous) 
-      {
-        for(unsigned int dim = 0; dim < nDims; dim++)
-        {
+    if (viscous) 
+    {
+      for(unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int var = 0; var < nVars; var++)
           tdU[var][dim] = dU_spts(dim, spt, var, ele);
-        }
-      }
     }
 
     /* Get metric terms */
@@ -243,40 +242,26 @@ void compute_F(mdvector_gpu<double> F_spts,
           rt, c_sth, fix_vis);
     }
 
-    if (!motion)
+    /* Transform flux to reference space */
+    for (unsigned int var = 0; var < nVars; var++)
     {
-      /* Transform flux to reference space */
-      double tF[nVars][nDims] = {{0.0}};;
-
-      for (unsigned int var = 0; var < nVars; var++)
+      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
       {
-        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-        {
-          for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-          {
-            tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
-          }
-        }
-      }
+        tF[var][dim1] = F[var][0] * inv_jaco[dim1][0];
 
-      /* Write out transformed fluxes */
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        for(unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int dim2 = 1; dim2 < nDims; dim2++)
         {
-          F_spts(dim, spt, var, ele) = tF[var][dim];
+          tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
         }
       }
     }
-    else
+
+    /* Write out transformed fluxes */
+    for(unsigned int dim = 0; dim < nDims; dim++)
     {
-      /* Write out physical fluxes */
       for (unsigned int var = 0; var < nVars; var++)
       {
-        for(unsigned int dim = 0; dim < nDims; dim++)
-        {
-          F_spts(dim, spt, var, ele) = F[var][dim];
-        }
+        F_spts(dim, spt, var, ele) = tF[var][dim];
       }
     }
   }
@@ -289,8 +274,10 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
     bool grad_via_div, bool overset, int* iblank, bool motion)
 {
-  unsigned int threads = 128;
-  unsigned int blocks = (nEles + threads - 1)/threads;
+  //unsigned int threads = 128;
+  //unsigned int blocks = (nEles + threads - 1)/threads;
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
 
   if (equation == AdvDiff)
   {

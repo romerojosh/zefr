@@ -1745,6 +1745,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
   double UR[nVars];
   double dUL[nVars][nDims];
   double dUR[nVars][nDims];
+  double Fc[nVars];
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
@@ -1819,34 +1820,19 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     if (LDG_bias(fpt) == 0)
     {
       for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          FR[n][dim] = 0.5*(FL[n][dim] + FR[n][dim]) + tau * norm(dim, fpt)* (UL[n]
-              - UR[n]) + beta * norm(dim, fpt)* (FnL[n] - FnR[n]);
-        }
-      }
+        Fc[n] = 0.5 * (FnL[n] + FnR[n]) + tau * (UL[n] - UR[n]) + beta * (FnL[n] - FnR[n]);
     }
     /* If Neumann boundary, use right state only */
     else
     {
       for (unsigned int n = 0; n < nVars; n++)
-      {
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          FR[n][dim] += tau * norm(dim, fpt)* (UL[n] - UR[n]);
-        }
-      }
+        Fc[n] = FnR[n] + tau * (UL[n] - UR[n]);
     }
 
     for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        double F = FR[n][dim] * norm(dim, fpt);
-        Fcomm(0, n, fpt) += F * dA(0, fpt);
-        Fcomm(1, n, fpt) -= F * dA(1, fpt);
-      }
+      Fcomm(0, n, fpt) += Fc[n] * dA(0, fpt);
+      Fcomm(1, n, fpt) -= Fc[n] * dA(1, fpt);
     }
   }
 }
@@ -1906,7 +1892,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #ifdef _GPU
     compute_common_F_wrapper(U_d, U_ldg_d, dU_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, diffCo_d,
     rus_bias_d, LDG_bias_d,  dA_d, Vg_d, input->AdvDiff_D, input->gamma, input->rus_k, input->mu, input->prandtl, 
-    input->rt, input->c_sth, input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, nVars, nDims, input->equation, 
+    input->rt, input->c_sth, input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, geo->nGfpts_int, nVars, nDims, input->equation, 
     input->fconv_type, input->fvisc_type, startFpt, endFpt, input->viscous, input->motion, input->overset, geo->iblank_fpts_d.data());
 
     check_error();

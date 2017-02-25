@@ -1496,25 +1496,40 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
         beta = -beta;
     }
 
-
-    /* Get left and right state variables */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
-    }
-
     if (LDG_bias(fpt) == 0)
     {
-      for (unsigned int n = 0; n < nVars; n++)
+      /* Get left and/or right state variables */
+      if (beta == 0.5)
       {
-        double UC = 0.5*(UL[n] + UR[n]) - beta*(UL[n] - UR[n]);
-        Ucomm(0, n, fpt) = UC;
-        Ucomm(1, n, fpt) = UC;
+        for (unsigned int n = 0; n < nVars; n++)
+          UR[n] = U(1, n, fpt);
       }
+      else if (beta == -0.5)
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+          UL[n] = U(0, n, fpt);
+      }
+      else
+      {
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
+        }
+      }
+
+        for (unsigned int n = 0; n < nVars; n++)
+        {
+          double UC = 0.5*(UL[n] + UR[n]) - beta*(UL[n] - UR[n]);
+          Ucomm(0, n, fpt) = UC;
+          Ucomm(1, n, fpt) = UC;
+        }
     }
     /* If on boundary, don't use beta */
     else
     {
+      for (unsigned int n = 0; n < nVars; n++)
+        UR[n] = U(1, n, fpt);
+
       for (unsigned int n = 0; n < nVars; n++)
       {
         Ucomm(0, n, fpt) = UR[n];
@@ -1704,18 +1719,6 @@ void LDG_flux(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], doub
   double FL[nVars][nDims] = {{0.0}}; double FR[nVars][nDims] = {{0.0}};
   double FnL[nVars] = {0.0}; double FnR[nVars] = {0.0};
 
-  /* Setting sign of beta (from HiFiLES) */
-  if (nDims == 2)
-  {
-    if (norm[0] + norm[1] < 0.0)
-      beta = -beta;
-  }
-  else if (nDims == 3)
-  {
-    if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
-      beta = -beta;
-  }
-
   /* Get numerical diffusion coefficient */
   if (equation == AdvDiff)
   {
@@ -1746,41 +1749,18 @@ void LDG_flux(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], doub
     }
   }
 
-
   /* Compute common normal viscous flux and accumulate */
   /* If interior, use central */
   if (LDG_bias == 0)
   {
     for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        FR[n][dim] = 0.5 * (FL[n][dim] + FR[n][dim]) + 
-          tau * norm[dim] * (UL[n] - UR[n]) + beta * norm[dim] * (FnL[n] - FnR[n]);
-      }
-    }
+      Fcomm[n] += 0.5 * (FnL[n] + FnR[n]) + tau * (UL[n] - UR[n]) + beta * (FnL[n] - FnR[n]);
   }
   /* If boundary, use right state only */
   else
   {
     for (unsigned int n = 0; n < nVars; n++)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        FR[n][dim] += tau * norm[dim] * (UL[n] - UR[n]);
-      }
-    }
-  }
-
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    double F = 0.0;
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      F += FR[n][dim] * norm[dim];
-    }
-
-    Fcomm[n] += F;
+      Fcomm[n] += FnR[n] + tau * (UL[n] - UR[n]);
   }
 }
 
@@ -1790,7 +1770,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     mdview_gpu<double> Fcomm, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<double> diffCo,
     mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias,  mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double AdvDiff_D, double gamma, double rus_k, 
-    double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, 
+    double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nFpts_int,
     unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, bool viscous, bool motion, bool overset, int* iblank)
 {
 
@@ -1827,32 +1807,71 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
   }
 
   /* Compute convective contribution to common flux */
-  if (fconv_type == Rusanov)
-  {
-    rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, P(0, fpt), P(1, fpt), norm, waveSp_gfpts(fpt),
-        AdvDiff_A.data(), Vgn, gamma, rus_k, rus_bias(fpt));
-  }
+  double PL, PR;
+  rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, PL, PR, norm, waveSp_gfpts(fpt),
+      AdvDiff_A.data(), Vgn, gamma, rus_k, rus_bias(fpt));
+
+  if (fpt >= nFpts_int) P(0, fpt) = PL; // Write out pressure on boundary only
 
   if (viscous)
   {
     /* Compute viscous contribution to common flux */
     double dUL[nVars][nDims];
     double dUR[nVars][nDims];
+    char LDG_bias_ = LDG_bias(fpt);
 
-    /* Get left and right gradients */
-    for (unsigned int n = 0; n < nVars; n++)
+    /* Setting sign of beta (from HiFiLES) */
+    if (nDims == 2)
     {
-      UR[n] = U_ldg(1, n, fpt); // Overwrite right state with "LDG" boundary values
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        dUL[n][dim] = dU(0, dim, n, fpt); dUR[n][dim] = dU(1, dim, n, fpt);
-      }
+      if (norm[0] + norm[1] < 0.0)
+        beta = -beta;
+    }
+    else if (nDims == 3)
+    {
+      if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
+        beta = -beta;
     }
 
-    if (fvisc_type == LDG)
-      LDG_flux<nVars, nDims, equation>(UL, UR, dUL, dUR, Fc, norm, AdvDiff_D, diffCo(fpt), gamma, 
-          prandtl, mu, rt, c_sth, fix_vis, LDG_bias(fpt), beta, tau);
+    if (LDG_bias_ == 0)
+    {
+      /* Get left and/or right gradients */
+      if (beta == 0.5)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int n = 0; n < nVars; n++)
+            dUL[n][dim] = dU(0, dim, n, fpt);
+      }
+      else if (beta == -0.5)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int n = 0; n < nVars; n++)
+            dUR[n][dim] = dU(1, dim, n, fpt);
+      }
+      else
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int n = 0; n < nVars; n++)
+          {
+            dUL[n][dim] = dU(0, dim, n, fpt); dUR[n][dim] = dU(1, dim, n, fpt);
+          }
+        }
+      }
+    }
+    else
+    {
+      /* Get right gradients */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int n = 0; n < nVars; n++)
+          dUR[n][dim] = dU(1, dim, n, fpt);
+ 
+      /* Replace right state with LDG right state */
+      for (unsigned int n = 0; n < nVars; n++)
+        UR[n] = U_ldg(1, n, fpt); 
+    }
+
+    LDG_flux<nVars, nDims, equation>(UL, UR, dUL, dUR, Fc, norm, AdvDiff_D, diffCo(fpt), gamma, 
+        prandtl, mu, rt, c_sth, fix_vis, LDG_bias_, beta, tau);
   }
 
   /* Write common flux to global memory */
@@ -1869,7 +1888,7 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
     mdview_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, mdvector_gpu<double> &diffCo,
     mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double AdvDiff_D, double gamma, double rus_k, 
-    double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nVars, 
+    double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nFpts_int, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, 
     bool viscous, bool motion, bool overset, int* iblank)
 {
@@ -1880,19 +1899,19 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
   {
     if (nDims == 2)
       compute_common_F<1, 2, AdvDiff><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
     else
       compute_common_F<1, 3, AdvDiff><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       compute_common_F<4, 2, EulerNS><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
     else
       compute_common_F<5, 3, EulerNS><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
   }
 }
 
