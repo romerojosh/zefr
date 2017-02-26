@@ -1156,20 +1156,20 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #endif
   geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
   geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
-  geo.face2eles.assign({2, unique_faces.size()}, -1);
+  geo.face2eles.assign({unique_faces.size(), 2}, -1);
   
   if (geo.nDims == 2)
   {
-    geo.ele2face.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
+    geo.ele2face.assign({geo.nEles, geo.nFacesPerEleBT[QUAD]}, -1);
 #ifdef _BUILD_LIB
     geo.face2nodes.assign({geo.nNdFaceCurved, unique_faces.size()}, -1);
 #endif
   }
   else
   {
-    geo.ele2face.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
+    geo.ele2face.assign({geo.nEles, geo.nFacesPerEleBT[HEX]}, -1);
 #ifdef _BUILD_LIB
-    geo.face2nodes.assign({geo.nNdFaceCurved, unique_faces.size()}, -1);
+    geo.face2nodes.assign({unique_faces.size(), geo.nNdFaceCurved}, -1);
 #endif
   }
 
@@ -1211,13 +1211,13 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if(!face_fpts.count(face))
         {
-          geo.ele2face(n, geo.eleID[etype](ele)) = geo.nFaces;
-          geo.face2eles(0, geo.nFaces) = geo.eleID[etype](ele);
+          geo.ele2face(geo.eleID[etype](ele), n) = geo.nFaces;
+          geo.face2eles(geo.nFaces, 0) = geo.eleID[etype](ele);
 #ifdef _BUILD_LIB
           if (etype == HEX)
           {
             for (int j = 0; j < geo.nNdFaceCurved; j++)
-              geo.face2nodes(j, geo.nFaces) = geo.ele2nodesBT[etype](geo.faceNodesCurved(n,j), geo.eleID[etype](ele));
+              geo.face2nodes(geo.nFaces, j) = geo.ele2nodesBT[etype](geo.faceNodesCurved(n,j), geo.eleID[etype](ele));
           }
 #endif
 
@@ -1241,7 +1241,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               if (bcType == OVERSET)
               {
                 for (int j = 0; j < geo.nNdFaceCurved; j++)
-                  overPts.insert(geo.face2nodes(j, geo.nFaces));
+                  overPts.insert(geo.face2nodes(geo.nFaces, j));
                 overFaces.insert(face);
               }
               else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
@@ -1255,7 +1255,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
                        bcType == SYMMETRY_G || bcType == SYMMETRY_P)
               {
                 for (int j = 0; j < geo.nNdFaceCurved; j++)
-                  wallPts.insert(geo.face2nodes(j, geo.nFaces));
+                  wallPts.insert(geo.face2nodes(geo.nFaces, j));
               }
             }
 #endif
@@ -1319,8 +1319,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
         else
         {
           int ff = geo.nodes_to_face[face];
-          geo.ele2face(n, geo.eleID[etype](ele)) = ff;
-          geo.face2eles(1, ff) = geo.eleID[etype](ele);
+          geo.ele2face(geo.eleID[etype](ele), n) = ff;
+          geo.face2eles(ff, 1) = geo.eleID[etype](ele);
 
           auto fpts = face_fpts[face];
           
@@ -2096,15 +2096,16 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       geo.nNdFaceCurved = sqrt(geo.nNodes);
     }
 
-    mdvector<double> tmp_nodes({dims[2],dims[1],dims[0]}); // NOTE: We use col-major, HDF5 uses row-major
+    mdvector<double> tmp_nodes({dims[0],dims[1],dims[2]});
 
     DS.read(tmp_nodes.data(), PredType::NATIVE_DOUBLE);
 
     /// TODO: change Gmsh reading / geo setup so this isn't needed
-    geo.ele_nodes.assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype], geo.nDims});
+    geo.ele_nodes.assign({geo.nNodesPerEleBT[etype], geo.nDims, geo.nElesBT[etype]});
+    //geo.ele2nodesBT[etype].assign({geo.nElesBT[etype], geo.nNodesPerEleBT[etype]});
     geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype]});
 
-    mdvector<double> temp_coords({geo.nDims, geo.nNodes});
+    mdvector<double> temp_coords({geo.nNodes, geo.nDims});
 
     auto ndmap = (geo.nDims == 2) ? gmsh_to_structured_quad(geo.nNodesPerEleBT[etype])
                                   : gmsh_to_structured_hex(geo.nNodesPerEleBT[etype]);
@@ -2117,9 +2118,10 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       {
         for (int d = 0; d < geo.nDims; d++)
         {
-          temp_coords(d, gnd)   = tmp_nodes(d, ele, ndmap[nd]);
-          geo.ele_nodes(nd, ele, d) = tmp_nodes(d, ele, ndmap[nd]);
+          temp_coords(gnd, d)   = tmp_nodes(ndmap[nd], ele, d);
+          geo.ele_nodes(nd, d, ele) = tmp_nodes(ndmap[nd], ele, d);
         }
+        //geo.ele2nodesBT[etype](ele, nd) = gnd;
         geo.ele2nodesBT[etype](nd, ele) = gnd;
         gnd++;
       }
@@ -2127,20 +2129,20 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     /* --- Create 'proper' c2v connectivity (Remove duplicates) --- */
 
-    auto sortind = fuzzysort(temp_coords);
+    auto sortind = fuzzysort_row(temp_coords);
 
     // Setup map to new node listing
     double tol = 1e-10;
     int idx = sortind[0];
     int n_nodes = 0;
-    point pti = point(&temp_coords(0,idx), geo.nDims);
+    point pti = point(&temp_coords(idx,0), geo.nDims);
     std::vector<int> nodemap(geo.nNodes, -1);
     nodemap[idx] = n_nodes;
 
     for (int i = 1; i < geo.nNodes; i++)
     {
       idx = sortind[i];
-      point ptj = point(&temp_coords(0,idx), geo.nDims);
+      point ptj = point(&temp_coords(idx,0), geo.nDims);
       if (point(ptj-pti).norm() > tol)
       {
         // Increment our counters
@@ -2157,13 +2159,14 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     for (int i = 0; i < geo.nNodes; i++)
     {
       for (int d = 0; d < geo.nDims; d++)
-        geo.coord_nodes(d, nodemap[i]) = temp_coords(d, i);
+        geo.coord_nodes(d, nodemap[i]) = temp_coords(i, d);
     }
 
     for (int ele = 0; ele < geo.nEles; ele++)
     {
       for (int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
       {
+        //geo.ele2nodesBT[etype](ele, nd) = nodemap[geo.ele2nodesBT[etype](ele, nd)];
         geo.ele2nodesBT[etype](nd, ele) = nodemap[geo.ele2nodesBT[etype](nd, ele)];
       }
     }
@@ -2205,7 +2208,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     CompType fcon_t = fcon_type; // NOTE: HDF5 segfaults if you try to re-use a CompType in more than one read
 
-    geo.face_list.assign({geo.nIntFaces,2});
+    geo.face_list.assign({2, geo.nIntFaces});
     DS.read(geo.face_list.data(), fcon_t);
 
     break;
@@ -2336,25 +2339,26 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   set_face_nodes(geo);
 #endif
 
-  geo.ele2face.assign({geo.nFacesPerEleBT[etype], geo.nEles});
-  geo.face2eles.assign({2, geo.nFaces}, -1);
+  geo.ele2face.assign({geo.nEles, geo.nFacesPerEleBT[etype]});
+  geo.face2eles.assign({geo.nFaces, 2}, -1);
 #ifdef _BUILD_LIB
-  geo.face2nodes.assign({geo.nNdFaceCurved, geo.nFaces}, -1);
+  geo.face2nodes.assign({geo.nFaces, geo.nNdFaceCurved}, -1);
 #endif
   for (int f = 0; f < geo.nIntFaces; f++)
   {
-    auto &f1 = geo.face_list(f,0);
-    auto &f2 = geo.face_list(f,1);
+    auto &f1 = geo.face_list(0,f);
+    auto &f2 = geo.face_list(1,f);
     f1.loc_f = geo.pyfr2zefr_face[f1.loc_f];
     f2.loc_f = geo.pyfr2zefr_face[f2.loc_f];
-    geo.ele2face(f1.loc_f, f1.ic) = f;
-    geo.ele2face(f2.loc_f, f2.ic) = f;
-    geo.face2eles(0, f) = f1.ic;
-    geo.face2eles(1, f) = f2.ic;
+    geo.ele2face(f1.ic, f1.loc_f) = f;
+    geo.ele2face(f2.ic, f2.loc_f) = f;
+    geo.face2eles(f, 0) = f1.ic;
+    geo.face2eles(f, 1) = f2.ic;
 #ifdef _BUILD_LIB
     // Connectivity only used in conjunction with TIOGA
     for (int j = 0; j < geo.nNdFaceCurved; j++)
-      geo.face2nodes(j,f) = geo.ele2nodesBT[etype](geo.faceNodesCurved(f1.loc_f,j), f1.ic);
+      geo.face2nodes(f,j) = geo.ele2nodesBT[etype](geo.faceNodesCurved(f1.loc_f, j), f1.ic);
+      //geo.face2nodes(f,j) = geo.ele2nodesBT[etype](f1.ic, geo.faceNodesCurved(f1.loc_f, j));
 #endif
   }
 
@@ -2364,12 +2368,12 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     for (int ff = 0; ff < geo.bound_faces[bnd].size(); ff++)
     {
       auto f = geo.bound_faces[bnd][ff];
-      geo.ele2face(f.loc_f, f.ic) = fid;
-      geo.face2eles(0, fid) = f.ic;
+      geo.ele2face(f.ic, f.loc_f) = fid;
+      geo.face2eles(fid, 0) = f.ic;
 #ifdef _BUILD_LIB
       // Connectivity only used in conjunction with TIOGA
       for (int j = 0; j < geo.nNdFaceCurved; j++)
-        geo.face2nodes(j,fid) = geo.ele2nodesBT[etype](geo.faceNodesCurved(f.loc_f,j), f.ic);
+        geo.face2nodes(fid,j) = geo.ele2nodesBT[etype](geo.faceNodesCurved(f.loc_f,j), f.ic);
 #endif
       fid++;
     }
@@ -2381,8 +2385,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     for (int ff = 0; ff < geo.mpi_conn[p].size(); ff++)
     {
       auto f = geo.mpi_conn[p][ff];
-      geo.ele2face(f.loc_f, f.ic) = fid;
-      geo.face2eles(0, fid) = f.ic;
+      geo.ele2face(f.ic, f.loc_f) = fid;
+      geo.face2eles(fid, 0) = f.ic;
       fid++;
     }
   }
@@ -2390,20 +2394,20 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   if (input->dt_scheme == "MCGS")
   {
     // Setup ele_adj
-    geo.ele_adj.assign({geo.nFacesPerEleBT[etype], geo.nEles},-1);
+    geo.ele_adj.assign({geo.nEles, geo.nFacesPerEleBT[etype]},-1);
     for (int ff = 0; ff < geo.nFaces; ff++)
     {
-      int ic1 = geo.face2eles(0,ff);
-      int ic2 = geo.face2eles(1,ff);
+      int ic1 = geo.face2eles(ff,0);
+      int ic2 = geo.face2eles(ff,1);
       if (ic2 >= 0)
       {
         for (int n = 0; n < geo.nFacesPerEleBT[etype]; n++)
         {
-          if (geo.ele2face(n,ic1) == ff)
-            geo.ele_adj(n,ic1) = ic2;
+          if (geo.ele2face(ic1,n) == ff)
+            geo.ele_adj(ic1,n) = ic2;
 
-          if (geo.ele2face(n,ic2) == ff)
-            geo.ele_adj(n,ic2) = ic1;
+          if (geo.ele2face(ic2,n) == ff)
+            geo.ele_adj(ic2,n) = ic1;
         }
       }
     }
@@ -2490,8 +2494,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   // Begin by looping over all internal / periodic faces
   for (int ff = 0; ff < geo.nIntFaces; ff++)
   {
-    auto faceL = geo.face_list(ff,0);
-    auto faceR = geo.face_list(ff,1);
+    auto faceL = geo.face_list(0,ff);
+    auto faceR = geo.face_list(1,ff);
     int eL = faceL.ic;
     int eR = faceR.ic;
 
@@ -2616,14 +2620,14 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
           // 'First' node of face
           for (int d = 0; d < geo.nDims; d++)
           {
-            face_pt(d,ff) = geo.ele_nodes(ct2fv[etype](f,0),ic,d);
+            face_pt(d,ff) = geo.ele_nodes(ct2fv[etype](f,0),d,ic);
             face_pt(d,ff+nFaces) = 0.;
           }
 
           // Centroid of face
           for (int n = 0; n < geo.nNodesPerFaceBT[etype]; n++)
             for (int d = 0; d < geo.nDims; d++)
-              face_pt(d,ff+nFaces) += geo.ele_nodes(ct2fv[etype](f,n),ic,d) / geo.nNodesPerFaceBT[etype];
+              face_pt(d,ff+nFaces) += geo.ele_nodes(ct2fv[etype](f,n),d,ic) / geo.nNodesPerFaceBT[etype];
         }
 
       }

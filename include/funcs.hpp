@@ -279,6 +279,41 @@ std::vector<uint> fuzzysort(const mdvector<T>& mat, uint dim = 0, double tol = 1
   return list;
 }
 
+template<typename T>
+void fuzzysort_ind_row(const mdvector<T> &mat, uint *inds, uint ninds, uint nDims, uint dim = 0, double tol = 1e-6)
+{
+  std::sort(inds, inds + ninds, [&](uint a, uint b) { return mat(a, dim) < mat(b, dim); } );
+
+  uint j, i = 0;
+  uint ix = inds[0];
+  for (j = 1; j < ninds; j++)
+  {
+    uint jx = inds[j];
+    if (mat(jx,dim) - mat(ix,dim) >= tol)
+    {
+      // Sort the duplicated by the next dimension and update 'ind'
+      if (j - i > 1 && dim+1 < nDims)
+        fuzzysort_ind_row(mat,inds+i,j-i,nDims,dim+1,tol);
+      i = j;
+      ix = jx;
+    }
+  }
+
+  // Sort the duplicated by the next dimension and update 'ind'
+  if (i != j && dim+1 < nDims)
+    fuzzysort_ind_row(mat,inds+i,j-i,nDims,dim+1,tol);
+}
+template<typename T>
+std::vector<uint> fuzzysort_row(const mdvector<T>& mat, uint dim = 0, double tol = 1e-8)
+{
+  auto dims = mat.shape();
+  auto list = get_int_list(dims[0]);
+
+  fuzzysort_ind_row(mat, list.data(), list.size(), dims[1], dim, tol);
+
+  return list;
+}
+
 /* Helper function to write raw binary to file */
 template<typename T>
 void binary_write(std::ostream &f, T value)

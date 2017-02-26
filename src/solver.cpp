@@ -2100,28 +2100,11 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
   std::vector<std::vector<double>> data_p(input->nRanks);
   std::vector<std::vector<int>> iblank_p(input->nRanks);
-  if (input->rank == 0)
+  if (input->overset && input->rank == 0)
   {
-    uint ind = 0;
-    data_p[0].resize(nEles * nVars * nSpts);  // Create transposed copy
-    for (int spt = 0; spt < nSpts; spt++)
-    {
-      for (int var = 0; var < nVars; var++)
-      {
-        for (int ele = 0; ele < nEles; ele++)
-        {
-          data_p[0][ind] = e->U_spts(spt,ele,var);
-          ind++;
-        }
-      }
-    }
-
-    if (input->overset)
-    {
-      iblank_p[0].resize(nEles);
-      for (int ele = 0; ele < nEles; ele++)
-        iblank_p[0][ele] = geo.iblank_cell(ele);
-    }
+    iblank_p[0].resize(nEles);
+    for (int ele = 0; ele < nEles; ele++)
+      iblank_p[0][ele] = geo.iblank_cell(ele);
   }
 
   /* --- Gather all the data onto Rank 0 for writing --- */
@@ -2151,13 +2134,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
     {
       if (p == input->rank)
       {
-        mdvector<double> u_tmp({nEles, nVars, nSpts});
-        for (int ele = 0; ele < nEles; ele++)
-          for (int var = 0; var < nVars; var++)
-            for (int spt = 0; spt < nSpts; spt++)
-              u_tmp(ele,var,spt) = e->U_spts(spt,ele,var);
-
-        MPI_Send(u_tmp.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+        MPI_Send(e->U_spts.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
 
         if (input->overset)
         {
@@ -2202,7 +2179,10 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
       std::string solname = sol_prefix + std::to_string(p);
       dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
-      dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+      if (p == 0)
+        dset.write(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
+      else
+        dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
 
       if (input->overset) // Write out iblank tags as DataSet attribute
       {
@@ -2217,14 +2197,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
     }
   }
 #else
-  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
-  mdvector<double> u_tmp({nEles, nVars, nSpts});
-  for (int ele = 0; ele < nEles; ele++)
-    for (int var = 0; var < nVars; var++)
-      for (int spt = 0; spt < nSpts; spt++)
-        u_tmp(ele,var,spt) = e->U_spts(spt,ele,var);
-
-  hsize_t dims[3] = {nSpts, nVars, nEles}; /// NOTE: We are col-major, HDF5 is row-major
+  hsize_t dims[3] = {nSpts, nVars, nEles};
 
   /* --- Write Data to File --- */
 
@@ -2250,7 +2223,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   solname += (geo.nDims == 2) ? "quad" : "hex";
   solname += "_p" + std::to_string(input->rank);
   dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
-  dset.write(u_tmp.data(), PredType::NATIVE_DOUBLE, dspaceU);
+  dset.write(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
   dset.close();
 #endif 
 
@@ -2350,11 +2323,6 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   int nSpts = dims[0];
 
-  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
-  mdvector<double> u_tmp({nEles, nVars, nSpts});
-
-  dset.read(u_tmp.data(), PredType::NATIVE_DOUBLE);
-
   if (input->overset)
   {
     if (dset.attrExists("iblank"))
@@ -2377,15 +2345,10 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     }
   }
 
-  dset.close();
-
   if (nSpts == e->nSpts)
   {
     e->U_spts.assign({nSpts,nEles,nVars});
-    for (int ele = 0; ele < nEles; ele++)
-      for (int var = 0; var < nVars; var++)
-        for (int spt = 0; spt < nSpts; spt++)
-          e->U_spts(spt,ele,var) = u_tmp(ele,var,spt);
+    dset.read(e->U_spts.data(), PredType::NATIVE_DOUBLE);
   }
   else
   {
@@ -2394,10 +2357,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
     // Transpose solution data from PyFR to Zefr layout
     mdvector<double> U_restart({nSpts,nEles,nVars});
-    for (int ele = 0; ele < nEles; ele++)
-      for (int var = 0; var < nVars; var++)
-        for (int spt = 0; spt < nSpts; spt++)
-          U_restart(spt,ele,var) = u_tmp(ele,var,spt);
+    dset.read(U_restart.data(), PredType::NATIVE_DOUBLE);
 
     // Setup extrapolation operator from restart points
     e->set_oppRestart(restartOrder);
@@ -2412,6 +2372,8 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
         e->nEles * e->nVars, nSpts, 1.0, &A, nSpts, &B,
         e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
   }
+
+  dset.close();
 
   // Process the config / stats string
   std::string str, key, tmp;
