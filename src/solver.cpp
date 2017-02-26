@@ -5082,3 +5082,8 @@ void FRSolver::report_gpu_mem_usage()
 #endif
 }
 #endif
+
+double FRSolver::get_current_time(void)
+{
+  return flow_time;
+}

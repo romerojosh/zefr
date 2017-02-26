@@ -157,8 +157,9 @@ int main(int argc, char* argv[])
     solver.report_error(error_file);
 
   auto t1 = std::chrono::high_resolution_clock::now();
+  input.time = solver.get_current_time();
   /* Main iteration loop */
-  for (unsigned int n = input.initIter+1; (n <= input.n_steps) && (solver.res_max > input.res_tol); n++)
+  for (unsigned int n = input.initIter+1; (n <= input.n_steps) && (input.time < input.tfinal) && (solver.res_max > input.res_tol); n++)
   {
     if (!input.p_multi)
     {
@@ -171,6 +172,7 @@ int main(int argc, char* argv[])
     }
     
     input.iter++;
+    input.time = solver.get_current_time();
 
     /* Write output if required */
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
@@ -178,7 +180,7 @@ int main(int argc, char* argv[])
       solver.report_residuals(hist_file, t1);
     }
 
-    if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
+    if (input.write_freq != 0 && (n%input.write_freq == 0 || n == input.n_steps || input.time >= input.tfinal || solver.res_max <= input.res_tol))
     {
       if (input.write_paraview)
         solver.write_solution(input.output_prefix);

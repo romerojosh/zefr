@@ -95,6 +95,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "s_factor", input.s_factor, 0.0);
 
   read_param(f, "n_steps", input.n_steps);
+  read_param(f, "tfinal", input.tfinal, 1e15);
   read_param(f, "res_tol", input.res_tol, 1e-18);
   read_param(f, "dt_scheme", input.dt_scheme);
   read_param(f, "dt", input.dt);
@@ -335,6 +336,9 @@ void apply_nondim(InputStruct &input)
       input.V_wall(n) = V_wall_mag * input.norm_wall(n) / input.v_fs;
     
     /// TODO: update Sutherland's Law, or disable it here
+
+    //printf("Re: %f, Ma: %f, Pr: %f, L: %f, rho: %f, v: %f, p: %f, mu: %.4e\n",
+    //    input.Re_fs,input.mach_fs,input.prandtl,input.L_fs,input.rho_fs,input.v_fs,input.P_fs,input.mu);
 
     return;
   }
