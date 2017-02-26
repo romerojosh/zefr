@@ -169,6 +169,7 @@ class FRSolver
 #ifdef _GPU
     void report_gpu_mem_usage();
 #endif
+    double get_current_time(void);
     void filter_solution();
 
     void compute_forces(std::array<double, 3>& force_conv, std::array<double, 3>& force_visc, std::ofstream* f);
