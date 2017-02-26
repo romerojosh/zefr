@@ -2420,7 +2420,8 @@ void Faces::send_U_data()
 
 #ifdef _GPU
   /* Wait for extrapolate_U to complete in stream 0 */
-  stream_wait_event(1, 0);
+  //stream_wait_event(1, 0);
+  sync_stream(0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
@@ -2517,7 +2518,8 @@ void Faces::recv_U_data()
 
   /* Halt main compute stream until U is unpacked */
   event_record(1, 1);
-  stream_wait_event(0, 1);
+  //stream_wait_event(0, 1);
+  sync_stream(1);
 
   check_error();
 #endif
@@ -2564,7 +2566,8 @@ void Faces::send_dU_data()
 
 #ifdef _GPU
   /* Wait for extrapolate_dU to complete in stream 0 */
-  stream_wait_event(1, 0);
+  //stream_wait_event(1, 0);
+  sync_stream(0);
 
   for (auto &entry : geo->fpt_buffer_map_d)
   {
@@ -2662,7 +2665,8 @@ void Faces::recv_dU_data()
 
   /* Halt main stream until dU is unpacked */
   event_record(1, 1);
-  stream_wait_event(0, 1);
+  //stream_wait_event(0, 1);
+  sync_stream(1);
 
   check_error();
 #endif

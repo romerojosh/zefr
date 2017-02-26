@@ -261,8 +261,8 @@ void FRSolver::restart_solution(void)
 
 void FRSolver::orient_fpts()
 {
-  mdvector<double> fpt_coords_L({geo.nDims, geo.nGfpts_int}), fpt_coords_R({geo.nDims, geo.nGfpts_int});
-  std::vector<double*> fpt_ptr_L(geo.nGfpts_int);
+  mdvector<double> fpt_coords_L({geo.nDims, geo.nGfpts}), fpt_coords_R({geo.nDims, geo.nGfpts});
+  std::vector<double*> fpt_ptr_L(geo.nGfpts);
   std::vector<unsigned int> idxL(geo.nGfpts_int), idxR(geo.nGfpts_int), idxsort(geo.nGfpts_int);
  
   /* Gather all flux point coordinates */
@@ -274,8 +274,6 @@ void FRSolver::orient_fpts()
       {
         int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
         int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
-
-        if (gfpt >= geo.nGfpts_int) continue;
 
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
         {
