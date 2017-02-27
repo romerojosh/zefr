@@ -359,6 +359,78 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       }
     }
   }
+
+#ifdef _BUILD_LIB
+ if (input->overset)
+ {
+   if (etype != HEX) ThrowException("Don't use overset with non-hex grids!");
+
+   /* For curved grids, Figure out which grid elements can be treated as linear */
+   int nCorners = geo->nCornerNodesBT[etype];
+   mdvector<double> shape_ppts_lin({nCorners, nPpts});
+   mdvector<double> coord_ppts_lin({nPpts, nEles, nDims});
+   mdvector<double> corner_nodes({nCorners, nEles, nDims});
+
+   /// HACK - since calc_shape() tied to element-class vars
+   int tmp_nNodes = nNodes;
+   int tmp_nNdSide = nNdSide;
+   nNodes = nCorners;
+   nNdSide = 2;
+
+   double loc[3];
+   mdvector<double> shape_val({nNodes});
+   for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+   {
+     for (unsigned int dim = 0; dim < nDims; dim++)
+       loc[dim] = loc_ppts(ppt,dim);
+
+     calc_shape(shape_val, &loc[0]);
+
+     for (unsigned int node = 0; node < nNodes; node++)
+     {
+       shape_ppts_lin(node, ppt) = shape_val(node);
+     }
+   }
+
+   /* Setup physical coordinates at plot points using only corner nodes*/
+   auto &A = shape_ppts_lin(0,0);
+   auto &B = corner_nodes(0,0,0);
+   auto &C = coord_ppts_lin(0,0,0);
+   int m = nPpts;
+   int k = nNodes;
+   int n = nEles*nDims;
+ #ifdef _OMP
+   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
+               1.0, &A, k, &B, k, 0.0, &C, m);
+ #else
+   cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
+               1.0, &A, k, &B, k, 0.0, &C, m);
+ #endif
+
+   /* Tag all elements whose linearly-extrapolated plot points don't match their
+    * regular plot points */
+   geo->linear_tag.assign({nEles}, 1);
+   for (int d = 0; d < nDims; d++)
+   {
+     for (int ele = 0; ele < nEles; ele++)
+     {
+       if (!geo->linear_tag(ele)) continue;
+
+       for (int ppt = 0; ppt < nPpts; ppt++)
+       {
+         if (std::abs(coord_ppts(ppt,ele,d)-coord_ppts_lin(ppt,ele,d)) > 1e-6)
+         {
+           geo->linear_tag(ele) = 0;
+           break;
+         }
+       }
+     }
+   }
+
+   nNodes = tmp_nNodes;
+   nNdSide = tmp_nNdSide;
+ }
+#endif
 }
 
 void Elements::setup_FR()

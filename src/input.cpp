@@ -337,9 +337,6 @@ void apply_nondim(InputStruct &input)
     
     /// TODO: update Sutherland's Law, or disable it here
 
-    //printf("Re: %f, Ma: %f, Pr: %f, L: %f, rho: %f, v: %f, p: %f, mu: %.4e\n",
-    //    input.Re_fs,input.mach_fs,input.prandtl,input.L_fs,input.rho_fs,input.v_fs,input.P_fs,input.mu);
-
     return;
   }
 

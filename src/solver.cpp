@@ -1337,7 +1337,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
     move(flow_time, false);
 
 #ifdef _BUILD_LIB
-    if (input->overset) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+    if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
 #endif
 
     compute_residual(stage);
@@ -1432,7 +1432,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
     move(flow_time, false);
 
 #ifdef _BUILD_LIB
-    if (input->overset) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+    if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
 #endif
 
     compute_residual(input->nStages-1);
@@ -1578,7 +1578,6 @@ void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>>
     err = std::isnan(err) ? INFINITY : err; // convert NaNs to "large" error
 
     max_err = std::max(max_err, err);
-
   }
 
   for (auto e : elesObjs)
@@ -1684,7 +1683,7 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     move(flow_time, false); // Set grid to current evaluation time
 
 #ifdef _BUILD_LIB
-    if (input->overset) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+    if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
 #endif
 
     compute_residual(0);
