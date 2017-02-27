@@ -137,6 +137,7 @@ struct InputStruct
   double sen_Jfac, filt_gamma;
   double alpha, filtexp, nonlin_exp, filtexp2, alpha2;
   unsigned int iter = 0, initIter = 0;
+  double time, tfinal;
 
   /* --- Adaptive time-stepping --- */
   unsigned int nStages;
