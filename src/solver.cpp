@@ -1295,9 +1295,10 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
       step_MCGS(sourceBT);
     else
       step_RK(sourceBT);
+
+    flow_time = prev_time + elesObjs[0]->dt(0);
   }
 
-  flow_time = prev_time + elesObjs[0]->dt(0);
   current_iter++;
 }
 
