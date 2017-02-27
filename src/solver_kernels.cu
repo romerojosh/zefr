@@ -24,6 +24,9 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/extrema.h>
+#include <thrust/reduce.h>
+#include <thrust/functional.h>
+#include <thrust/execution_policy.h>
 
 #ifdef _MPI
 #include "mpi.h"
@@ -615,7 +618,7 @@ void LSRK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
     return;
 
   if (overset && iblank[ele] != 1)
-      return;
+    return;
 
   double fac = dt / jaco_det_spts(spt,ele);
 
@@ -774,14 +777,14 @@ void get_rk_error(mdvector_gpu<double> U_spts, const mdvector_gpu<double> U_ini,
   {
     for (unsigned int var = 0; var < nVars; var ++)
       rk_err(spt, ele, var) = 0.0;
-      return;
+
+    return;
   }
 
   for (unsigned int var = 0; var < nVars; var ++)
   {
-    rk_err(spt, ele, var)  =  abs(rk_err(spt, ele, var));
-    rk_err(spt, ele, var) /= atol + rtol *
-        max( abs(U_spts(spt, ele, var)), abs(U_ini(spt, ele, var)) );
+    rk_err(spt, ele, var) = abs(rk_err(spt, ele, var)) / ( atol + rtol *
+        max( abs(U_spts(spt, ele, var)), abs(U_ini(spt, ele, var)) ) );
   }
 }
 
@@ -816,17 +819,16 @@ double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
 
   /* Get min dt using thrust (pretty slow) */
   thrust::device_ptr<double> err_ptr = thrust::device_pointer_cast(rk_err.data());
-  thrust::device_ptr<double> max_ptr = thrust::max_element(err_ptr, err_ptr + nEles*nSpts*nVars);
+  double max_err = thrust::reduce(err_ptr, err_ptr + nEles*nSpts*nVars, 0.0, thrust::maximum<double>());
+  double sum = thrust::reduce(err_ptr, err_ptr + nEles*nSpts*nVars, 0.0);
+
+  if (std::isnan(sum)) max_err = 1e15;
 
 #ifdef _MPI
-  double max_err = max_ptr[0];
   MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, comm_in);
-  err_ptr[0] = max_err;
-#else
-  err_ptr[0] = max_ptr[0];
 #endif
 
-  return err_ptr[0];
+  return max_err;
 }
 
 double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
@@ -836,9 +838,6 @@ double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
     double minfac, double maxfac, double sfact, double max_err, double prev_err,
     _mpi_comm comm_in, bool overset, int* iblank)
 {
-  //double max_err = get_rk_error_wrapper(U_spts, U_ini, rk_err, nSpts, nEles,
-  //    nVars, atol, rtol, comm_in, overset, iblank);
-
   // Determine the time step scaling factor and the new time step
   double fac = pow(max_err, -expa) * pow(prev_err, expb);
   fac = std::min(maxfac, std::max(minfac, sfact*fac));

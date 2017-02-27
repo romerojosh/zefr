@@ -335,7 +335,8 @@ void apply_nondim(InputStruct &input)
       input.V_wall(n) = V_wall_mag * input.norm_wall(n) / input.v_fs;
     
     /// TODO: update Sutherland's Law, or disable it here
-
+    printf("Re: %f, Ma: %f, Pr: %f, mu: %f, rho: %f, V: %f, p: %f, L: %f\n",
+        input.Re_fs,input.mach_fs,input.prandtl,input.mu,input.rho_fs,input.v_fs,input.P_fs,input.L_fs);
     return;
   }
 

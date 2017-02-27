@@ -174,6 +174,8 @@ struct GeoStruct
   int nWall, nOver; //! Number of nodes on wall & overset boundaries
   std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists
 
+  mdvector<int> linear_tag; //! Tag for whether an element can be considered linear
+
 #ifdef _GPU
   mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
   mdvector<int> iblank_fpts;
