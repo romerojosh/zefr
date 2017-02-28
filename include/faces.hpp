@@ -122,9 +122,6 @@ class Faces
     MPI_Status status;
     std::vector<mdvector<double>> buffUR, buffUL;
     std::array<std::vector<int>, 5> rot_permute;
-
-    mdvector<double> tmpOversetU; /// TODO: find better way?
-    mdvector<double> tmpOversetdU; /// TODO: find better way?
 #endif
 
 #ifdef _GPU

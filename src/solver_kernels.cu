@@ -1477,11 +1477,11 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       double DX = 5;/// 0.5 * input->periodicDX; /// TODO
       double DY = 5;/// 0.5 * input->periodicDY; /// TODO
       /// Taken from Kui, AIAA-2010-5031-661
-      double x0 = coords_0(0,node); double y0 = coords_0(1,node);
-      coords(0,node) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);
-      coords(1,node) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Aty*PI*time/t0);
-      Vg(0,node) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Atx*PI*time/t0);
-      Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
+      double x0 = coords_0(node,0); double y0 = coords_0(node,1);
+      coords(node,0) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);
+      coords(node,1) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Aty*PI*time/t0);
+      Vg(node,0) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Atx*PI*time/t0);
+      Vg(node,1) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
       break;
     }
     case TEST2:
@@ -1496,22 +1496,22 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       if (nDims == 2)
       {
         /// Taken from Liang-Miyaji
-        double x0 = coords_0(0,node); double y0 = coords_0(1,node);
-        coords(0,node) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);
-        coords(1,node) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Aty*PI*time/t0);
-        Vg(0,node) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Atx*PI*time/t0);
-        Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
+        double x0 = coords_0(node,0); double y0 = coords_0(node,1);
+        coords(node,0) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);
+        coords(node,1) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Aty*PI*time/t0);
+        Vg(node,0) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Atx*PI*time/t0);
+        Vg(node,1) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*cos(Aty*PI*time/t0);
       }
       else
       {
         /// Taken from Liang-Miyaji
-        double x0 = coords_0(0,node); double y0 = coords_0(1,node); double z0 = coords_0(2,node);
-        coords(0,node) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Atx*PI*time/t0);
-        coords(1,node) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Aty*PI*time/t0);
-        coords(2,node) = z0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Atz*PI*time/t0);
-        Vg(0,node) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Atx*PI*time/t0);
-        Vg(1,node) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Aty*PI*time/t0);
-        Vg(2,node) = Atz*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Atz*PI*time/t0);
+        double x0 = coords_0(node,0); double y0 = coords_0(node,1); double z0 = coords_0(node,2);
+        coords(node,0) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Atx*PI*time/t0);
+        coords(node,1) = y0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Aty*PI*time/t0);
+        coords(node,2) = z0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*sin(Atz*PI*time/t0);
+        Vg(node,0) = Atx*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Atx*PI*time/t0);
+        Vg(node,1) = Aty*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Aty*PI*time/t0);
+        Vg(node,2) = Atz*PI/t0*sin(PI*x0/DX)*sin(PI*y0/DY)*sin(PI*z0/DZ)*cos(Atz*PI*time/t0);
       }
       break;
     }
@@ -1522,10 +1522,10 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
         /// Liangi-Miyaji with easily-modifiable domain width
         double t0 = 10.*sqrt(5.);
         double width = 5.;
-        coords(0,node) = coords_0(0,node) + sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*sin(4*PI*time/t0);
-        coords(1,node) = coords_0(1,node) + sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*sin(8*PI*time/t0);
-        Vg(0,node) = 4.*PI/t0*sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*cos(4*PI*time/t0);
-        Vg(1,node) = 8.*PI/t0*sin(PI*coords_0(0,node)/width)*sin(PI*coords_0(1,node)/width)*cos(8*PI*time/t0);
+        coords(node,0) = coords_0(node,0) + sin(PI*coords_0(node,0)/width)*sin(PI*coords_0(node,1)/width)*sin(4*PI*time/t0);
+        coords(node,1) = coords_0(node,1) + sin(PI*coords_0(node,0)/width)*sin(PI*coords_0(node,1)/width)*sin(8*PI*time/t0);
+        Vg(node,0) = 4.*PI/t0*sin(PI*coords_0(node,0)/width)*sin(PI*coords_0(node,1)/width)*cos(4*PI*time/t0);
+        Vg(node,1) = 8.*PI/t0*sin(PI*coords_0(node,0)/width)*sin(PI*coords_0(node,1)/width)*cos(8*PI*time/t0);
       }
       break;
     }
@@ -1538,17 +1538,17 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
         double Ay = params->moveAy; // Amplitude  (m)
         double fx = params->moveFx; // Frequency  (Hz)
         double fy = params->moveFy; // Frequency  (Hz)
-        coords(0,node) = coords_0(0,node) + Ax*sin(2.*PI*fx*time);
-        coords(1,node) = coords_0(1,node) + Ay*(1-cos(2.*PI*fy*time));
-        Vg(0,node) = 2.*PI*fx*Ax*cos(2.*PI*fx*time);
-        Vg(1,node) = 2.*PI*fy*Ay*sin(2.*PI*fy*time);
+        coords(node,0) = coords_0(node,0) + Ax*sin(2.*PI*fx*time);
+        coords(node,1) = coords_0(node,1) + Ay*(1-cos(2.*PI*fy*time));
+        Vg(node,0) = 2.*PI*fx*Ax*cos(2.*PI*fx*time);
+        Vg(node,1) = 2.*PI*fy*Ay*sin(2.*PI*fy*time);
 
         if (nDims == 3)
         {
           double Az = params->moveAz;
           double fz = params->moveFz;
-          coords(2,node) = coords_0(2,node) - Az*sin(2.*PI*fz*time);
-          Vg(2,node) = -2.*PI*fz*Az*cos(2.*PI*fz*time);
+          coords(node,2) = coords_0(node,2) - Az*sin(2.*PI*fz*time);
+          Vg(node,2) = -2.*PI*fz*Az*cos(2.*PI*fz*time);
         }
       }
       break;
@@ -1563,12 +1563,12 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
         double rdot = 2.*PI*Ar*Fr*sin(2.*PI*Fr*time);
         double theta = 1;///rv0(node,1); /// TODO
         double psi = 1;///rv0(node,2); /// TODO
-        coords(0,node) = r*sin(psi)*cos(theta);
-        coords(1,node) = r*sin(psi)*sin(theta);
-        coords(2,node) = r*cos(psi);
-        Vg(0,node) = rdot*sin(psi)*cos(theta);
-        Vg(1,node) = rdot*sin(psi)*sin(theta);
-        Vg(2,node) = rdot*cos(psi);
+        coords(node,0) = r*sin(psi)*cos(theta);
+        coords(node,1) = r*sin(psi)*sin(theta);
+        coords(node,2) = r*cos(psi);
+        Vg(node,0) = rdot*sin(psi)*cos(theta);
+        Vg(node,1) = rdot*sin(psi)*sin(theta);
+        Vg(node,2) = rdot*cos(psi);
       }
       break;
     }

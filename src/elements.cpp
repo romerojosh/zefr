@@ -1678,24 +1678,24 @@ void Elements::move(std::shared_ptr<Faces> faces)
       for (unsigned int d = 0; d < nDims; d++)
         geo->coord_nodes(i,d) = geo->x_cg(d);
 
-    auto &A = geo->Rmat(0,0);
-    auto &B = geo->coords_init(0,0); /// TODO
-    auto &C = geo->coord_nodes(0,0); /// TODO
+    auto &A = geo->coords_init;
+    auto &B = geo->Rmat;  /// TODO: double-check orientation
+    auto &C = geo->coord_nodes;
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
-                1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo->nNodes, nDims, nDims,
+        1.0, A.data(), A.ldim(), B.data(), B.ldim(), 1.0, C.data(), C.ldim());
 
     // Update grid velocity based on 'spin' matrix (omega cross r)
     for (unsigned int i = 0; i < geo->nNodes; i++)
       for (unsigned int d = 0; d < nDims; d++)
         geo->grid_vel_nodes(i,d) = geo->vel_cg(d);
 
-    auto &Av = geo->Wmat(0,0);
-    auto &Bv = geo->coords_init(0,0); /// TODO
-    auto &Cv = geo->grid_vel_nodes(0,0); /// TODO
+    auto &Av = geo->coords_init;
+    auto &Bv = geo->Wmat;  /// TODO: double-check orientation
+    auto &Cv = geo->grid_vel_nodes;
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
-                1.0, &Av, nDims, &Bv, nDims, 1.0, &Cv, nDims);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo->nNodes, nDims, nDims,
+        1.0, Av.data(), A.ldim(), Bv.data(), B.ldim(), 1.0, Cv.data(), Cv.ldim());
   }
 
   update_point_coords(faces);
@@ -1707,7 +1707,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
 #ifdef _GPU
   if (input->motion_type == RIGID_BODY)
   {
-    /// TODO
+    /// TODO: check whether Rmat, Wmat need to be transposed
     // Positions
     update_nodes_rigid_wrapper(geo->coords_init_d, geo->coord_nodes_d, geo->Rmat_d,
         geo->x_cg_d, geo->nNodes, geo->nDims);
@@ -1715,7 +1715,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
     update_nodes_rigid_wrapper(geo->coords_init_d, geo->grid_vel_nodes_d, geo->Wmat_d,
         geo->vel_cg_d, geo->nNodes, geo->nDims);
   }
-/// TODO
+
   update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
       shape_fpts_d, coord_spts_d, coord_fpts_d, faces->coord_d,
       geo->ele2nodesBT_d[etype], geo->fpt2gfptBT_d[etype], nSpts, nFpts, nNodes, nEles, nDims);
@@ -1733,7 +1733,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
     update_transforms_rigid_wrapper(jaco_spts_init_d, inv_jaco_spts_init_d, jaco_spts_d, inv_jaco_spts_d,
         faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims, input->viscous);
   }
-  else
+  else if (input->motion_type != CIRCULAR_TRANS)
   {
     calc_transforms_wrapper(nodes_d, jaco_spts_d, jaco_fpts_d, inv_jaco_spts_d,
                             inv_jaco_fpts_d, jaco_det_spts_d, dshape_spts_d, dshape_fpts_d, nSpts,
@@ -1756,16 +1756,13 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
   // Copy back, since updated only on GPU
   geo->coord_nodes = geo->coord_nodes_d;
 #endif
-
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        nodes(node, ele, dim) = geo->coord_nodes(geo->ele2nodesBT[etype](ele,node),dim);
+        nodes(node, dim, ele) = geo->coord_nodes(geo->ele2nodesBT[etype](ele,node),dim);
 
   int ms = nSpts;
   int mf = nFpts;
-  int mp = nPpts;
-  int mq = nQpts;
   int k = nNodes;
   int n = nEles * nDims;
 
@@ -1863,7 +1860,7 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(dim, geo->ele2nodesBT[etype](ele,node));
+        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(geo->ele2nodesBT[etype](ele,node), dim);
 
   int ms = nSpts;
   int mf = nFpts;
@@ -1876,15 +1873,15 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   auto &As = shape_spts(0,0);
   auto &Cs = grid_vel_spts(0,0,0);
 
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
-              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, n, 0.0, &Cs, n);
 
   /* Interpolate grid velocities to flux points */
   auto &Af = shape_fpts(0,0);
   auto &Cf = grid_vel_fpts(0,0,0);
 
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
-              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, n, 0.0, &Cf, n);
 
   /* Store grid velocity in face class */
   for (unsigned int ele = 0; ele < nEles; ele++)
@@ -1916,8 +1913,8 @@ void Elements::get_grid_velocity_ppts(void)
   auto &B = grid_vel_nodes(0,0,0);
   auto &C = grid_vel_ppts(0,0,0);
 
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
-              1.0, &A, k, &B, k, 0.0, &C, m);
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+              1.0, &A, k, &B, n, 0.0, &C, n);
 }
 
 std::vector<double> Elements::getBoundingBox(int ele)

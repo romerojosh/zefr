@@ -61,8 +61,8 @@ int main(int argc, char* argv[])
     //ThrowException("Not enough GPUs for this run. Allocate more!");
   }
 
-  //cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
-  cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
+  cudaSetDevice(rank%nDevices); /// TODO: use MPI_local_rank % nDevices
+  //cudaSetDevice(rank%4); // Hardcoded for ICME K80 nodes for now.
 #endif
 #else
   comm = 0;

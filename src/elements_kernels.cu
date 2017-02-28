@@ -569,7 +569,7 @@ void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
   if (ele >= nEles)
     return;
 
-  nodes(node, dim, ele) = g_nodes(dim, ele2node(node, ele));
+  nodes(node, dim, ele) = g_nodes(ele2node(ele, node), dim);
 }
 
 //! Copy fpt positions from ele's array to face's array
@@ -604,19 +604,24 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
 
   copy_coords_ele<<<blocksE,threads>>>(nodes, g_nodes, ele2node, nEles, nNodes);
 
-  double *B = nodes.data();
+  int m = nEles * nDims;
+  int k = nNodes;
+  int ns = nSpts;
+  int nf = nFpts;
 
-  double *As = shape_spts.data();
+  double *A = nodes.data();
+
+  double *Bs = shape_spts.data();
   double *Cs = coord_spts.data();
 
-  cublasDGEMM_wrapper(nSpts, nEles * nDims, nNodes, 1.0, B,
-      nEles * nDims, As, nNodes, 0.0, Cs, nNodes);
+  cublasDGEMM_wrapper(m, ns, k, 1.0, A, nodes.ldim(), Bs, shape_spts.ldim(),
+                      0.0, Cs, coord_spts.ldim());
 
-  double *Af = shape_fpts.data();
+  double *Bf = shape_fpts.data();
   double *Cf = coord_fpts.data();
 
-  cublasDGEMM_wrapper(nFpts, nEles * nDims, nNodes, 1.0, B,
-      nEles * nDims, Af, nNodes, 0.0, Cf, nNodes);
+  cublasDGEMM_wrapper(m, nf, k, 1.0, A, nodes.ldim(), Bf, shape_fpts.ldim(),
+                      0.0, Cf, coord_fpts.ldim());
 
   dim3 blocksF((nEles * nFpts + threads - 1) / threads, nDims);
 
@@ -636,7 +641,7 @@ void add_cg_offset(mdvector_gpu<double> nodes, mdvector_gpu<double> x_cg, unsign
 
   for (unsigned int i = node; i < nNodes; i += gridDim.x * blockDim.x)
     for (unsigned int d = 0; d < nDims; d++)
-      nodes(d,i) += x_cg(d);
+      nodes(i,d) += x_cg(d);
 }
 
 template<unsigned int nDims>
@@ -782,16 +787,17 @@ void update_transforms_rigid_wrapper(mdvector_gpu<double> &jaco_spts_init, mdvec
     mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &norm_init,
     mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
     unsigned int nFpts, unsigned int nEles, unsigned int nDims, bool need_inv)
-{
-  for (unsigned int d = 0; d < nDims; d++)
-  {
-    // Apply rotation matrix to body-frame jacobian
-    double *B = Rmat.data();
-    double *A = jaco_spts_init.data() + d * nSpts*nEles*nDims;
-    double *C = jaco_spts.data() + d * nSpts*nEles*nDims;
+{ /// TODO: all of this
+  // Apply rotation matrix to body-frame jacobian
+  int m = nSpts*nDims*nEles;
+  int k = nDims;
+  int n = nDims;
 
-    cublasDGEMM_transB_wrapper(nEles*nSpts, nDims, nDims, 1.0, A, nEles*nSpts, B, nDims, 0.0, C, nEles*nSpts);
-  }
+  double *A = jaco_spts_init.data();
+  double *B = Rmat.data();
+  double *C = jaco_spts.data();
+
+  cublasDGEMM_wrapper(m, n, k, 1.0, A, m, B, k, 0.0, C, m);
 
   if (need_inv)
   {
@@ -802,11 +808,12 @@ void update_transforms_rigid_wrapper(mdvector_gpu<double> &jaco_spts_init, mdvec
   }
 
   // Apply rotation matrix to body-frame normals
-  double* A = norm_init.data();
-  double* B = Rmat.data();
-  double* C = norm.data();
+  A = Rmat.data();
+  B = norm_init.data();
+  C = norm.data();
 
-  cublasDGEMM_transB_wrapper(nFpts, nDims, nDims, 1.0, A, norm_init.ldim(), B, Rmat.ldim(), 0.0, C, norm.ldim());
+  cublasDGEMM_transA_wrapper(nDims, nFpts, nDims, 1.0, A, Rmat.ldim(),
+                             B, norm_init.ldim(), 0.0, C, norm.ldim());
 
   check_error();
 }
