@@ -1,8 +1,8 @@
 # Geometry:
 nDims    3
 overset  true
-meshfile P4/hex16.pyfrm
-overset_grids  hex10_in.pyfrm  P3/hex16.pyfrm
+meshfile P3/hex16.pyfrm
+overset_grids  hex10_in.pyfrm  P3/hex16_out.pyfrm
 #overset_grids  hex10_in.pyfrm  hex16.pyfrm
 
 # Boundary Conditions
@@ -17,7 +17,7 @@ motion   1
 spt_type Legendre
 
 # Timestepping:
-n_steps   6000
+n_steps   5000
 dt_scheme LSRK      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 dt        0.0015
@@ -33,8 +33,8 @@ restart_iter 5000
 safety_factor  .75
 max_factor  2
 min_factor  .2
-err_atol  1e-12
-err_rtol  1e-12
+err_atol  1e-6
+err_rtol  1e-6
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
@@ -45,7 +45,7 @@ write_pyfr     0
 write_paraview 1
 plot_surfaces  0
 plot_overset   0
-report_freq    50
+report_freq    10
 res_type       1
 force_freq     0
 error_freq     0
@@ -66,30 +66,23 @@ moveFz  .1
 fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
-ldg_b      0.0
-ldg_tau    1.0
+ldg_b      0.5
+ldg_tau    0.1
 
 # Equation Specific Parameters:
 ic_type    1     (0 = Uniform, 1 = Functional (defined in funcs.cpp))
 test_case  4     (2 = Couette, 4 = Taylor-Green)
 
 # Euler/Navier-Stokes
-T_gas    291.15
 gamma    1.4
-R        286.9
-mu       1.827E-5
 prandtl  0.72
-S        120
-
-rho_fs  1
-u_fs    0.38
-v_fs    0.0
-w_fs    0.0
-P_fs    .71428571428
 
 # Navier-Stokes specific
+disable_nondim 1
 fix_vis  1
 mach_fs  0.1
 Re_fs    1600
 L_fs     1
-T_fs     300
+rho_fs   1
+P_fs     1.0
+v_mag_fs .118321595661992

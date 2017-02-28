@@ -60,7 +60,12 @@ Volume(1) = {1};
 Transfinite Volume{1};
 Recombine Volume{1};
 
-Physical Surface("periodic") = {1,2,3,4,5,6};
+Physical Surface("periodic_bt_l") = {1};
+Physical Surface("periodic_bt_r") = {2};
+Physical Surface("periodic_lr_l") = {3};
+Physical Surface("periodic_lr_r") = {4};
+Physical Surface("periodic_fb_l") = {5};
+Physical Surface("periodic_fb_r") = {6};
 Physical Volume("FLUID") = {1};
 
 Mesh.ElementOrder = 1;

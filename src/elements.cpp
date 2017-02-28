@@ -114,10 +114,10 @@ void Elements::set_shape()
 
   if (input->motion)
   {
-    grid_vel_nodes.assign({nNodes, nEles, nDims}, 0.);
-    grid_vel_spts.assign({nSpts, nEles, nDims}, 0.);
-    grid_vel_fpts.assign({nFpts, nEles, nDims}, 0.);
-    grid_vel_ppts.assign({nPpts, nEles, nDims}, 0.);
+    grid_vel_nodes.assign({nNodes, nDims, nEles}, 0.);
+    grid_vel_spts.assign({nSpts, nDims, nEles}, 0.);
+    grid_vel_fpts.assign({nFpts, nDims, nEles}, 0.);
+    grid_vel_ppts.assign({nPpts, nDims, nEles}, 0.);
   }
 
   /* Allocate memory for jacobian matrices and determinant */
@@ -369,8 +369,8 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
    /* For curved grids, Figure out which grid elements can be treated as linear */
    int nCorners = geo->nCornerNodesBT[etype];
    mdvector<double> shape_ppts_lin({nCorners, nPpts});
-   mdvector<double> coord_ppts_lin({nPpts, nEles, nDims});
-   mdvector<double> corner_nodes({nCorners, nEles, nDims});
+   mdvector<double> coord_ppts_lin({nPpts, nDim, nEles});
+   mdvector<double> corner_nodes({nCorners, nDims, nEles});
 
    /// HACK - since calc_shape() tied to element-class vars
    int tmp_nNodes = nNodes;
@@ -1213,7 +1213,8 @@ void Elements::compute_F()
   double U[nVars];
   double F[nVars][nDims];
   double tdU[nVars][nDims];
-  double inv_jaco[nDims][nDims];
+
+  double Vg[nDims] = {0.0}; // Only updated on moving grids
 
   for (unsigned int spt = 0; spt < nSpts; spt++)
   {
@@ -1232,6 +1233,13 @@ void Elements::compute_F()
             tdU[var][dim] = dU_spts(dim, spt, var, ele);
           }
         }
+      }
+
+      /* Get grid velocity */
+      if (input->motion)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vg[dim] = grid_vel_spts(spt, dim, ele);
       }
 
       /* Get metric terms */
@@ -1281,14 +1289,14 @@ void Elements::compute_F()
         for(unsigned int dim = 0; dim < nDims; dim++)
           A[dim] = input->AdvDiff_A(dim);
 
-        compute_Fconv_AdvDiff<nVars, nDims>(U, F, A);
+        compute_Fconv_AdvDiff<nVars, nDims>(U, F, A, Vg);
         if(input->viscous) compute_Fvisc_AdvDiff_add<nVars, nDims>(dU, F, input->AdvDiff_D);
 
       }
       else if (equation == EulerNS)
       {
         double P;
-        compute_Fconv_EulerNS<nVars, nDims>(U, F, P, input->gamma);
+        compute_Fconv_EulerNS<nVars, nDims>(U, F, Vg, P, input->gamma);
         if(input->viscous) compute_Fvisc_EulerNS_add<nVars, nDims>(U, dU, F, input->gamma, input->prandtl, input->mu,
             input->rt, input->c_sth, input->fix_vis);
       }
@@ -1354,7 +1362,7 @@ void Elements::compute_F()
 #endif
 
 #ifdef _GPU
-  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d, 
+  compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, grid_vel_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d,
       input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
       input->fix_vis, input->viscous, input->grad_via_div, input->overset, geo->iblank_cell_d.data(), input->motion);
 
@@ -1844,15 +1852,15 @@ void Elements::update_plot_point_coords(void)
   auto &Ap = shape_ppts(0,0);
   auto &Cp = coord_ppts(0,0,0);
 
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mp, n, k,
-              1.0, &Ap, k, &B, k, 0.0, &Cp, mp);
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, mp, n, k,
+              1.0, &Ap, k, &B, n, 0.0, &Cp, n);
 
   /* Setup physical coordinates at quadrature points */
   auto &Aq = shape_qpts(0,0);
   auto &Cq = coord_qpts(0,0,0);
 
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mq, n, k,
-              1.0, &Aq, k, &B, k, 0.0, &Cq, mq);
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, mq, n, k,
+              1.0, &Aq, k, &B, n, 0.0, &Cq, n);
 }
 
 void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
@@ -1860,7 +1868,7 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(geo->ele2nodesBT[etype](ele,node), dim);
+        grid_vel_nodes(node, dim, ele) = geo->grid_vel_nodes(geo->ele2nodesBT[etype](ele,node), dim);
 
   int ms = nSpts;
   int mf = nFpts;
@@ -1896,7 +1904,7 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
 
       for (uint dim = 0; dim < nDims; dim++)
       {
-        faces->Vg(dim, gfpt) = grid_vel_fpts(fpt, ele, dim);
+        faces->Vg(dim, gfpt) = grid_vel_fpts(fpt, dim, ele);
       }
     }
   }

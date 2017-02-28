@@ -2,27 +2,27 @@ template <size_t nVars, size_t nDims>
 #ifdef _GPU
 __device__ __forceinline__
 #endif
-void compute_Fconv_AdvDiff(double U[nVars], double F[nVars][nDims], double A[nDims])
+void compute_Fconv_AdvDiff(double U[nVars], double F[nVars][nDims], double A[nDims], double Vg[nDims])
 {
   for (unsigned int dim = 0; dim < nDims; dim++)
-    F[0][dim] = A[dim] * U[0];
+    F[0][dim] = (A[dim] - Vg[dim]) * U[0];
 }
 
 template <size_t nVars, size_t nDims>
 #ifdef _GPU
 __device__ __forceinline__
 #endif
-void compute_Fconv_Burgers(double U[nVars], double F[nVars][nDims])
+void compute_Fconv_Burgers(double U[nVars], double F[nVars][nDims], double Vg[nDims])
 {
   for (unsigned int dim = 0; dim < nDims; dim++)
-    F[0][dim] = 0.5 * U[0] * U[0];
+    F[0][dim] = 0.5 * U[0] * U[0] - (Vg[dim] * U[0]);
 }
 
 template <size_t nVars, size_t nDims>
 #ifdef _GPU
 __device__ __forceinline__
 #endif
-void compute_Fconv_EulerNS(double U[nVars], double F[nVars][nDims], double &P, double gamma)
+void compute_Fconv_EulerNS(double U[nVars], double F[nVars][nDims], double Vg[nDims], double &P, double gamma)
 {
   if (nDims == 2)
   {
@@ -33,15 +33,15 @@ void compute_Fconv_EulerNS(double U[nVars], double F[nVars][nDims], double &P, d
 
     double H = (U[3] + P) * invrho;
 
-    F[0][0] = U[1];
-    F[1][0] = U[1] * U[1] * invrho + P;
-    F[2][0] = U[1] * U[2] * invrho;
-    F[3][0] = U[1] * H;
+    F[0][0] = -(U[0] * Vg[0]) + U[1];
+    F[1][0] = -(U[1] * Vg[0]) + U[1] * U[1] * invrho + P - U[1]*Vg[0];
+    F[2][0] = -(U[2] * Vg[0]) + U[1] * U[2] * invrho - U[2]*Vg[0];
+    F[3][0] = -(U[3] * Vg[0]) + U[1] * H - U[3]*Vg[0];
 
-    F[0][1] = U[2];
-    F[1][1] = U[2] * U[1] * invrho;
-    F[2][1] = U[2] * U[2] * invrho + P;
-    F[3][1] = U[2] * H;
+    F[0][1] = -(U[0] * Vg[1]) + U[2];
+    F[1][1] = -(U[1] * Vg[1]) + U[2] * U[1] * invrho;
+    F[2][1] = -(U[2] * Vg[1]) + U[2] * U[2] * invrho + P;
+    F[3][1] = -(U[3] * Vg[1]) + U[2] * H;
   }
   else if (nDims == 3)
   {
@@ -52,23 +52,23 @@ void compute_Fconv_EulerNS(double U[nVars], double F[nVars][nDims], double &P, d
 
     double H = (U[4] + P) * invrho; 
 
-    F[0][0] = U[1];
-    F[1][0] = U[1] * U[1] * invrho + P;
-    F[2][0] = U[1] * U[2] * invrho;
-    F[3][0] = U[1] * U[3] * invrho;
-    F[4][0] = U[1] * H;
+    F[0][0] = -(U[0] * Vg[0]) + U[1];
+    F[1][0] = -(U[1] * Vg[0]) + U[1] * U[1] * invrho + P;
+    F[2][0] = -(U[2] * Vg[0]) + U[1] * U[2] * invrho;
+    F[3][0] = -(U[3] * Vg[0]) + U[1] * U[3] * invrho;
+    F[4][0] = -(U[4] * Vg[0]) + U[1] * H;
 
-    F[0][1] = U[2];
-    F[1][1] = U[2] * U[1] * invrho;
-    F[2][1] = U[2] * U[2] * invrho + P;
-    F[3][1] = U[2] * U[3] * invrho;
-    F[4][1] = U[2] * H;
+    F[0][1] = -(U[0] * Vg[1]) + U[2];
+    F[1][1] = -(U[1] * Vg[1]) + U[2] * U[1] * invrho;
+    F[2][1] = -(U[2] * Vg[1]) + U[2] * U[2] * invrho + P;
+    F[3][1] = -(U[3] * Vg[1]) + U[2] * U[3] * invrho;
+    F[4][1] = -(U[4] * Vg[1]) + U[2] * H;
 
-    F[0][2] = U[3];
-    F[1][2] = U[3] * U[1] * invrho;
-    F[2][2] = U[3] * U[2] * invrho;
-    F[3][2] = U[3] * U[3] * invrho + P;
-    F[4][2] = U[3] * H;
+    F[0][2] = -(U[0] * Vg[2]) + U[3];
+    F[1][2] = -(U[1] * Vg[2]) + U[3] * U[1] * invrho;
+    F[2][2] = -(U[2] * Vg[2]) + U[3] * U[2] * invrho;
+    F[3][2] = -(U[3] * Vg[2]) + U[3] * U[3] * invrho + P;
+    F[4][2] = -(U[4] * Vg[2]) + U[3] * H;
   }
 }
 

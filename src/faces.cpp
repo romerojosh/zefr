@@ -1528,7 +1528,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
   double FR[nVars][nDims];
   double UL[nVars];
   double UR[nVars];
-
+  double V[nDims] = {0.0}; // Grid velocity - only updated if moving grid
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
@@ -1546,7 +1546,10 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     if (input->motion)
     {
       for (unsigned int dim = 0; dim < nDims; dim++)
-        Vgn += Vg(dim, fpt) * norm(dim, fpt);
+      {
+        V[dim] = Vg(dim, fpt);
+        Vgn += V[dim] * norm(dim, fpt);
+      }
     }
 
     /* Get numerical wavespeed */
@@ -1564,15 +1567,15 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       eig = std::abs(An);
       waveSp(fpt) = std::abs(An - Vgn);
 
-      compute_Fconv_AdvDiff<nVars, nDims>(UL, FL, A);
-      compute_Fconv_AdvDiff<nVars, nDims>(UR, FR, A);
+      compute_Fconv_AdvDiff<nVars, nDims>(UL, FL, A, V);
+      compute_Fconv_AdvDiff<nVars, nDims>(UR, FR, A, V);
     }
     else if (input->equation == EulerNS)
     {
       double PL, PR;
 
-      compute_Fconv_EulerNS<nVars, nDims>(UL, FL, PL, input->gamma);
-      compute_Fconv_EulerNS<nVars, nDims>(UR, FR, PR, input->gamma);
+      compute_Fconv_EulerNS<nVars, nDims>(UL, FL, V, PL, input->gamma);
+      compute_Fconv_EulerNS<nVars, nDims>(UR, FR, V, PR, input->gamma);
 
       /* Store pressures for force computation */
       P(0, fpt) = PL;

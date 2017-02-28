@@ -1617,7 +1617,7 @@ void common_U_to_F_wrapper(mdview_gpu<double> &Fcomm, mdview_gpu<double> &Ucomm,
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __device__ __forceinline__
-void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars], 
+void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars], double Vg[nDims],
     double &PL, double &PR,  double norm[nDims], double &waveSp, double *AdvDiff_A, 
     double Vgn, double gamma, double rus_k, char rus_bias)
 {
@@ -1641,16 +1641,16 @@ void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars],
 
     eig = std::abs(waveSp);
 
-    compute_Fconv_AdvDiff<nVars, nDims>(UL, FL, A);
-    compute_Fconv_AdvDiff<nVars, nDims>(UR, FR, A);
+    compute_Fconv_AdvDiff<nVars, nDims>(UL, FL, A, Vg);
+    compute_Fconv_AdvDiff<nVars, nDims>(UR, FR, A, Vg);
   }
   else if (equation == EulerNS)
   {
     double P;
-    compute_Fconv_EulerNS<nVars, nDims>(UL, FL, P, gamma);
+    compute_Fconv_EulerNS<nVars, nDims>(UL, FL, Vg, P, gamma);
     double aL = std::sqrt(gamma * P / UL[0]);
     PL = P;
-    compute_Fconv_EulerNS<nVars, nDims>(UR, FR, P, gamma);
+    compute_Fconv_EulerNS<nVars, nDims>(UR, FR, Vg, P, gamma);
     double aR = std::sqrt(gamma * P / UR[0]);
     PR = P;
 
@@ -1785,6 +1785,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
   double UL[nVars]; double UR[nVars];
   double Fc[nVars];
   double norm[nDims];
+  double V[nDims] = {0.0};
   double Vgn = 0.0;
 
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1796,7 +1797,8 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      Vgn += Vg(dim, fpt) * norm[dim];
+      V[dim] = Vg(dim, fpt);
+      Vgn += V[dim] * norm[dim];
     }
   }
 
@@ -1808,7 +1810,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
 
   /* Compute convective contribution to common flux */
   double PL, PR;
-  rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, PL, PR, norm, waveSp_gfpts(fpt),
+  rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, V, PL, PR, norm, waveSp_gfpts(fpt),
       AdvDiff_A.data(), Vgn, gamma, rus_k, rus_bias(fpt));
 
   if (fpt >= nFpts_int) P(0, fpt) = PL; // Write out pressure on boundary only

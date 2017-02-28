@@ -164,10 +164,10 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
         geo.Jinv(i,j) /= det;
   }
 
-  if (input->overset && input->motion_type == CIRCULAR_TRANS)
+  if (input->motion_type == CIRCULAR_TRANS)
   {
     geo.Rmat.assign({3,3});
-    geo.x_cg.assign({3,3});
+    geo.x_cg.assign({3});
     geo.vel_cg.assign({3});
   }
 

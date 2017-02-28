@@ -1,9 +1,10 @@
 # Geometry:
 nDims    3
-meshfile hex16.pyfrm
+meshfile hex16.msh
 
 # Boundary Conditions
 mesh_bound  periodic  periodic
+mesh_bound  fluid  fluid
 
 # Solver:
 order    4
@@ -36,8 +37,8 @@ plot_surfaces  0
 fconv_type Rusanov
 fvisc_type LDG
 rus_k      0.0
-ldg_b      0.0
-ldg_tau    1.0
+ldg_b      0.5
+ldg_tau    0.1
 
 # Equation Specific Parameters:
 ic_type    1     (0 = Uniform, 1 = Functional (defined in funcs.cpp))

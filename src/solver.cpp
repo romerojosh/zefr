@@ -2791,7 +2791,7 @@ void FRSolver::write_solution(const std::string &_prefix)
         for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
           for (unsigned int dim = 0; dim < e->nDims; dim++)
-            binary_write(f, e->grid_vel_ppts(ppt, ele, dim));
+            binary_write(f, e->grid_vel_ppts(ppt, dim, ele));
 
           if (geo.nDims == 2)
             binary_write(f, dzero);
@@ -3519,7 +3519,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
         for (unsigned int dim = 0; dim < e->nDims; dim++)
         {
           f << std::scientific << std::setprecision(16);
-          f << e->grid_vel_ppts(ppt, ele, dim);
+          f << e->grid_vel_ppts(ppt, dim, ele);
           f  << " ";
         }
         if (e->nDims == 2) f << 0.0 << " ";
@@ -3976,7 +3976,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
           for (unsigned int dim = 0; dim < e->nDims; dim++)
           {
             f << std::scientific << std::setprecision(16);
-            f << e->grid_vel_ppts(ppt, ele, dim);
+            f << e->grid_vel_ppts(ppt, dim, ele);
             f  << " ";
           }
           if (e->nDims == 2) f << 0.0 << " ";

@@ -149,8 +149,8 @@ void device_adjoint_4x4(double *mat, double *adj)
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void compute_F(mdvector_gpu<double> F_spts, 
-    const mdvector_gpu<double> U_spts, mdvector_gpu<double> dU_spts, const mdvector_gpu<double> inv_jaco_spts,
-    const mdvector_gpu<double> jaco_det_spts, unsigned int nSpts, unsigned int nEles, 
+    const mdvector_gpu<double> U_spts, mdvector_gpu<double> dU_spts, const mdvector_gpu<double> Vg_spts,
+    const mdvector_gpu<double> inv_jaco_spts, const mdvector_gpu<double> jaco_det_spts, unsigned int nSpts, unsigned int nEles,
     const mdvector_gpu<double> AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous, bool grad_via_div,
     bool overset = false, const int* iblank = NULL, bool motion = false)
@@ -171,6 +171,7 @@ void compute_F(mdvector_gpu<double> F_spts,
   double F[nVars][nDims];
   double inv_jaco[nDims][nDims];
   double tF[nVars][nDims];
+  double Vg[nDims] = {0.0};
 
   //for (unsigned int spt = 0; spt < nSpts; spt++)
   {
@@ -184,6 +185,12 @@ void compute_F(mdvector_gpu<double> F_spts,
       for(unsigned int dim = 0; dim < nDims; dim++)
         for (unsigned int var = 0; var < nVars; var++)
           tdU[var][dim] = dU_spts(dim, spt, var, ele);
+    }
+
+    if (motion)
+    {
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        Vg[dim] = Vg_spts(spt, dim, ele);
     }
 
     /* Get metric terms */
@@ -228,7 +235,7 @@ void compute_F(mdvector_gpu<double> F_spts,
       for(unsigned int dim = 0; dim < nDims; dim++)
         A[dim] = AdvDiff_A(dim);
 
-      compute_Fconv_AdvDiff<nVars, nDims>(U, F, A);
+      compute_Fconv_AdvDiff<nVars, nDims>(U, F, A, Vg);
       if(viscous) 
         compute_Fvisc_AdvDiff_add<nVars, nDims>(dU, F, AdvDiff_D);
 
@@ -236,7 +243,7 @@ void compute_F(mdvector_gpu<double> F_spts,
     else if (equation == EulerNS)
     {
       double P;
-      compute_Fconv_EulerNS<nVars, nDims>(U, F, P, gamma);
+      compute_Fconv_EulerNS<nVars, nDims>(U, F, Vg, P, gamma);
       if(viscous) 
         compute_Fvisc_EulerNS_add<nVars, nDims>(U, dU, F, gamma, prandtl, mu_in,
           rt, c_sth, fix_vis);
@@ -268,8 +275,9 @@ void compute_F(mdvector_gpu<double> F_spts,
 }
 
 void compute_F_wrapper(mdvector_gpu<double> &F_spts, 
-    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts, mdvector_gpu<double> &inv_jaco_spts, 
-    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
+    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts, mdvector_gpu<double> &grid_vel_spts,
+    mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &jaco_det_spts,
+    unsigned int nSpts, unsigned int nEles, unsigned int nDims,
     unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
     bool grad_via_div, bool overset, int* iblank, bool motion)
@@ -282,19 +290,19 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
   if (equation == AdvDiff)
   {
     if (nDims == 2)
-      compute_F<1, 2, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<1, 2, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
     else if (nDims == 3)
-      compute_F<1, 3, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<1, 3, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
-      compute_F<4, 2, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<4, 2, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
     else if (nDims == 3)
-      compute_F<5, 3, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
+      compute_F<5, 3, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
   }
 
@@ -302,7 +310,7 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
 
 template<unsigned int nVars, unsigned int nDims>
 __global__
-void compute_unit_advF(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, mdvector_gpu<double> inv_jaco_spts, 
+void compute_unit_advF(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, mdvector_gpu<double> inv_jaco_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int dim)
 {
 

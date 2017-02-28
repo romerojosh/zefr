@@ -23,9 +23,9 @@
 #include "mdvector_gpu.h"
 
 /* Element flux kernel wrappers */
-void compute_F_wrapper(mdvector_gpu<double> &F_spts, 
-    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts,  mdvector_gpu<double> &inv_jaco_spts,
-    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims, 
+void compute_F_wrapper(mdvector_gpu<double> &F_spts, mdvector_gpu<double> &U_spts,
+    mdvector_gpu<double> &dU_spts, mdvector_gpu<double>& grid_vel_spts,  mdvector_gpu<double> &inv_jaco_spts,
+    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims,
     unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
     bool grad_via_div, bool overset = false, int* iblank = NULL,
