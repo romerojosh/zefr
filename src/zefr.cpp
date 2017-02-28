@@ -463,29 +463,29 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
 
 double Zefr::get_u_spt(int ele, int spt, int var)
 {
-  return solver->elesObjs[0]->U_spts(spt, ele, var);
+  return solver->elesObjs[0]->U_spts(spt, var, ele);
 }
 
 double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
 {
-  return solver->elesObjs[0]->dU_spts(spt, ele, var, dim);
+  return solver->elesObjs[0]->dU_spts(dim, spt, var, ele);
 }
 
 double *Zefr::get_u_spts(int &ele_stride, int &spt_stride, int &var_stride)
 {
-  ele_stride = solver->elesObjs[0]->nSpts;
-  spt_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nSpts;
+  ele_stride = 1;
+  var_stride = solver->elesObjs[0]->nEles;
+  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
 
   return solver->elesObjs[0]->U_spts.data();
 }
 
 double *Zefr::get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
 {
-  ele_stride = solver->elesObjs[0]->nSpts;
-  spt_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nSpts;
-  dim_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nSpts * solver->elesObjs[0]->nVars;
+  ele_stride = 1;
+  var_stride = solver->elesObjs[0]->nEles;
+  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
+  dim_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars * solver->elesObjs[0]->nSpts;
 
   return solver->elesObjs[0]->dU_spts.data();
 }
@@ -494,9 +494,9 @@ double *Zefr::get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int
 double *Zefr::get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
 {
 #ifdef _GPU
-  ele_stride = solver->elesObjs[0]->nSpts;
-  spt_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nSpts;
+  ele_stride = 1;
+  var_stride = solver->elesObjs[0]->nEles;
+  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
 
   return solver->elesObjs[0]->U_spts_d.data();
 #endif
@@ -508,10 +508,10 @@ double *Zefr::get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
 double *Zefr::get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
 {
 #ifdef _GPU
-  ele_stride = solver->elesObjs[0]->nSpts;
-  spt_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nSpts;
-  dim_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nSpts * solver->elesObjs[0]->nVars;
+  ele_stride = 1;
+  var_stride = solver->elesObjs[0]->nEles;
+  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
+  dim_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars * solver->elesObjs[0]->nSpts;
 
   return solver->elesObjs[0]->dU_spts_d.data();
 #endif
@@ -543,10 +543,12 @@ void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 {
   nNodes = (int)geo->nFptsPerFace;
 
-  int start_fpt = geo->face2fpts(0, faceID);
   for (int fpt = 0; fpt < nNodes; fpt++)
+  {
+    int gfpt = geo->face2fpts(fpt, faceID);
     for (int dim = 0; dim < geo->nDims; dim++)
-      xyz[3*fpt+dim] = solver->faces->coord(dim, start_fpt + fpt);
+      xyz[3*fpt+dim] = solver->faces->coord(dim, gfpt); /// TODO: do I need to swap?
+  }
 }
 
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)

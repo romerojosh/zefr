@@ -202,7 +202,7 @@ void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe, mdview_gpu<doub
     unsigned int nFpts, unsigned int nVars, unsigned int nDims, int stream = -1);
 
 void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
-    mdvector_gpu<double> &U, mdvector_gpu<int> &cellIDs, unsigned int nCells,
+    mdvector_gpu<double> &U_spts, mdvector_gpu<int> &cellIDs, unsigned int nCells,
     unsigned int nSpts, unsigned int nVars, int stream = -1);
 
 #endif /* solver_kernels_h */

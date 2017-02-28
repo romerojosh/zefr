@@ -1255,7 +1255,7 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
     case ADIABATIC_NOSLIP_MOVING_G:
     case ADIABATIC_NOSLIP_MOVING_P:
     {
-      for (int fpt = 0; fpt < nFptsPerFace; fpt++)
+      for (int fpt = 0; fpt < nFptsPerFace; fpt++) /// TODO: NO MORE FACE ORDERING?
       {
         double tmp_force[3] = {0,0,0};
         int gfpt = face_start + fpt;
@@ -1266,7 +1266,7 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
 
         /* Sum inviscid force contributions */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          tmp_force[dim] = weights(fpt) * PL * norm(gfpt, dim, 0) * dA(gfpt);
+          tmp_force[dim] = weights(fpt) * PL * norm(dim, gfpt) * dA(0, gfpt);
 
         if (viscous)
         {
@@ -1274,23 +1274,23 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
           {
             /* Setting variables for convenience */
             /* States */
-            double rho = U(gfpt, 0, 0);
-            double momx = U(gfpt, 1, 0);
-            double momy = U(gfpt, 2, 0);
-            double e = U(gfpt, 3, 0);
+            double rho = U(0, 0, gfpt);
+            double momx = U(0, 1, gfpt);
+            double momy = U(0, 2, gfpt);
+            double e = U(0, 3, gfpt);
 
             double u = momx / rho;
             double v = momy / rho;
             double e_int = e / rho - 0.5 * (u*u + v*v);
 
             /* Gradients */
-            double rho_dx = dU(gfpt, 0, 0, 0);
-            double momx_dx = dU(gfpt, 1, 0, 0);
-            double momy_dx = dU(gfpt, 2, 0, 0);
+            double rho_dx = dU(0, 0, 0, gfpt);
+            double momx_dx = dU(0, 0, 1, gfpt);
+            double momy_dx = dU(0, 0, 2, gfpt);
 
-            double rho_dy = dU(gfpt, 0, 1, 0);
-            double momx_dy = dU(gfpt, 1, 1, 0);
-            double momy_dy = dU(gfpt, 2, 1, 0);
+            double rho_dy = dU(0, 1, 0, gfpt);
+            double momx_dy = dU(0, 1, 1, gfpt);
+            double momy_dy = dU(0, 1, 2, gfpt);
 
             /* Set viscosity */
             double mu;
@@ -1318,21 +1318,21 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
             double tauyy = 2.0 * mu * (dv_dy - diag);
 
             /* Get viscous normal stress */
-            taun[0] = tauxx * norm(gfpt, 0, 0) + tauxy * norm(gfpt, 1, 0);
-            taun[1] = tauxy * norm(gfpt, 0, 0) + tauyy * norm(gfpt, 1, 0);
+            taun[0] = tauxx * norm(0, gfpt) + tauxy * norm(1, gfpt);
+            taun[1] = tauxy * norm(0, gfpt) + tauyy * norm(1, gfpt);
 
             for (unsigned int dim = 0; dim < nDims; dim++)
-              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(gfpt);
+              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(0, gfpt);
           }
           else if (nDims == 3)
           {
             /* Setting variables for convenience */
             /* States */
-            double rho = U(gfpt, 0, 0);
-            double momx = U(gfpt, 1, 0);
-            double momy = U(gfpt, 2, 0);
-            double momz = U(gfpt, 3, 0);
-            double e = U(gfpt, 4, 0);
+            double rho = U(0, 0, gfpt);
+            double momx = U(0, 1, gfpt);
+            double momy = U(0, 2, gfpt);
+            double momz = U(0, 3, gfpt);
+            double e = U(0, 4, gfpt);
 
             double u = momx / rho;
             double v = momy / rho;
@@ -1340,20 +1340,20 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
             double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
 
             /* Gradients */
-            double rho_dx = dU(gfpt, 0, 0, 0);
-            double momx_dx = dU(gfpt, 1, 0, 0);
-            double momy_dx = dU(gfpt, 2, 0, 0);
-            double momz_dx = dU(gfpt, 3, 0, 0);
+            double rho_dx = dU(0, 0, 0, gfpt);
+            double momx_dx = dU(0, 0, 1, gfpt);
+            double momy_dx = dU(0, 0, 2, gfpt);
+            double momz_dx = dU(0, 0, 3, gfpt);
 
-            double rho_dy = dU(gfpt, 0, 1, 0);
-            double momx_dy = dU(gfpt, 1, 1, 0);
-            double momy_dy = dU(gfpt, 2, 1, 0);
-            double momz_dy = dU(gfpt, 3, 1, 0);
+            double rho_dy = dU(0, 1, 0, gfpt);
+            double momx_dy = dU(0, 1, 1, gfpt);
+            double momy_dy = dU(0, 1, 2, gfpt);
+            double momz_dy = dU(0, 1, 3, gfpt);
 
-            double rho_dz = dU(gfpt, 0, 2, 0);
-            double momx_dz = dU(gfpt, 1, 2, 0);
-            double momy_dz = dU(gfpt, 2, 2, 0);
-            double momz_dz = dU(gfpt, 3, 2, 0);
+            double rho_dz = dU(0, 2, 0, gfpt);
+            double momx_dz = dU(0, 2, 1, gfpt);
+            double momy_dz = dU(0, 2, 2, gfpt);
+            double momz_dz = dU(0, 2, 3, gfpt);
 
             /* Set viscosity */
             double mu;
@@ -1390,12 +1390,12 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
             double tauyz = mu * (dv_dz + dw_dy);
 
             /* Get viscous normal stress */
-            taun[0] = tauxx * norm(gfpt, 0, 0) + tauxy * norm(gfpt, 1, 0) + tauxz * norm(gfpt, 2, 0);
-            taun[1] = tauxy * norm(gfpt, 0, 0) + tauyy * norm(gfpt, 1, 0) + tauyz * norm(gfpt, 2, 0);
-            taun[3] = tauxz * norm(gfpt, 0, 0) + tauyz * norm(gfpt, 1, 0) + tauzz * norm(gfpt, 2, 0);
+            taun[0] = tauxx * norm(0, gfpt) + tauxy * norm(1, gfpt) + tauxz * norm(2, gfpt);
+            taun[1] = tauxy * norm(0, gfpt) + tauyy * norm(1, gfpt) + tauyz * norm(2, gfpt);
+            taun[3] = tauxz * norm(0, gfpt) + tauyz * norm(1, gfpt) + tauzz * norm(2, gfpt);
 
             for (unsigned int dim = 0; dim < nDims; dim++)
-              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(gfpt);
+              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(0, gfpt);
           }
         }
 
@@ -1604,9 +1604,9 @@ void unpack_fringe_u(mdvector_gpu<double> U_fringe,
   const unsigned int gfpt = fringe_fpts(fpt, face);
   const unsigned int side = fringe_side(fpt, face);
 
-  double val = U_fringe(var,fpt,face);
-  U(gfpt, var, side) = val; //fpt, face, var); /// TODO: look into further
-  U_ldg(gfpt, var, side) = val;
+  double val = U_fringe(face,fpt,var);
+  U(side, var, gfpt) = val; //fpt, face, var); /// TODO: look into further
+  U_ldg(side, var, gfpt) = val;
 }
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe,
@@ -1650,7 +1650,7 @@ void unpack_fringe_grad(mdvector_gpu<double> dU_fringe,
   const unsigned int side = fringe_side(fpt, face);
 
   for (unsigned int dim = 0; dim < nDims; dim++)
-    dU(gfpt, var, dim, side) = dU_fringe(var, dim, fpt, face);
+    dU(side, dim, var, gfpt) = dU_fringe(face, fpt, dim, var);
 }
 
 void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
@@ -1689,7 +1689,7 @@ void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
 
 __global__
 void unpack_unblank_u(mdvector_gpu<double> U_unblank,
-    mdvector_gpu<double> U, mdvector_gpu<int> cellIDs,
+    mdvector_gpu<double> U_spts, mdvector_gpu<int> cellIDs,
     unsigned int nCells, unsigned int nSpts, unsigned int nVars)
 {
   const unsigned int tot_ind = (blockDim.x * blockIdx.x + threadIdx.x);
@@ -1702,11 +1702,11 @@ void unpack_unblank_u(mdvector_gpu<double> U_unblank,
 
   const unsigned int ele = cellIDs(ic);
 
-  U(spt, ele, var) = U_unblank(var,spt,ic);
+  U_spts(spt, var, ele) = U_unblank(var,spt,ic);
 }
 
 void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
-    mdvector_gpu<double>& U, mdvector_gpu<int> &cellIDs, unsigned int nCells,
+    mdvector_gpu<double>& U_spts, mdvector_gpu<int> &cellIDs, unsigned int nCells,
     unsigned int nSpts, unsigned int nVars, int stream)
 {
   int threads = 192;
@@ -1714,11 +1714,11 @@ void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
 
   if (stream == -1)
   {
-    unpack_unblank_u<<<blocks, threads>>>(U_unblank, U, cellIDs, nCells, nSpts, nVars);
+    unpack_unblank_u<<<blocks, threads>>>(U_unblank, U_spts, cellIDs, nCells, nSpts, nVars);
   }
   else
   {
-    unpack_unblank_u<<<blocks, threads, 0, stream_handles[stream]>>>(U_unblank, U,
+    unpack_unblank_u<<<blocks, threads, 0, stream_handles[stream]>>>(U_unblank, U_spts,
         cellIDs, nCells, nSpts, nVars);
   }
 

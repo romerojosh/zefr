@@ -88,7 +88,7 @@ class Elements
     std::vector<double> lag_i, lag_j, lag_k;
     std::vector<double> dlag_i, dlag_j, dlag_k;
     std::vector<int> ijk2gmsh;
-    mdvector<double> tmp_coords, tmp_shape, tmp_dshape, tmp_grad, tmp_ginv;
+    mdvector<double> tmp_coords, tmp_shape, tmp_dshape;
     mdvector<double> tmp_S;
 
     /* Element solution structures */

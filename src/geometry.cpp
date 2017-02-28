@@ -111,7 +111,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   if (input->motion)
   {
     geo.coords_init = geo.coord_nodes;
-    geo.grid_vel_nodes.assign({geo.nDims, geo.nNodes}, 0.0); /// TODO: pinned for _GPU?
+    geo.grid_vel_nodes.assign({geo.nNodes, geo.nDims}, 0.0); /// TODO: pinned for _GPU?
   }
 
   if ( nDims == 3 && (input->motion_type == RIGID_BODY) )
@@ -295,16 +295,16 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo)
   }
 
   f >> geo.nNodes;
-  geo.coord_nodes.assign({geo.nDims, geo.nNodes});
+  geo.coord_nodes.assign({geo.nNodes, geo.nDims});
   for (unsigned int node = 0; node < geo.nNodes; node++)
   {
     unsigned int vint;
     double vdouble;
     f >> vint;
     if (geo.nDims == 2)
-      f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> vdouble;
+      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> vdouble;
     else if (geo.nDims == 3)
-      f >> geo.coord_nodes(0,node) >> geo.coord_nodes(1,node) >> geo.coord_nodes(2,node);
+      f >> geo.coord_nodes(node,0) >> geo.coord_nodes(node,1) >> geo.coord_nodes(node,2);
   }   
 }
 
@@ -502,7 +502,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
   /* Allocate memory for element connectivity */
   for (auto etype : geo.ele_set) 
   {
-    geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype]});
+    geo.ele2nodesBT[etype].assign({geo.nElesBT[etype], geo.nNodesPerEleBT[etype]});
     geo.eleID[etype].assign({geo.nElesBT[etype]});
     geo.nElesBT[etype] = 0; // zero out ele by type count to use for indexing
   }
@@ -539,7 +539,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           unsigned int ele = geo.nElesBT[TRI];
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[TRI]; nd++)
           {
-            f >> geo.ele2nodesBT[TRI](nd,ele);
+            f >> geo.ele2nodesBT[TRI](ele,nd);
           }
           geo.nElesBT[TRI]++; break;
         }
@@ -554,7 +554,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           unsigned int ele = geo.nElesBT[QUAD];
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[QUAD]; nd++)
           {
-            f >> geo.ele2nodesBT[QUAD](nd,ele);
+            f >> geo.ele2nodesBT[QUAD](ele,nd);
           }
           geo.nElesBT[QUAD]++; 
           break;
@@ -585,7 +585,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           unsigned int ele = geo.nElesBT[TET];
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[TET]; nd++)
           {
-            f >> geo.ele2nodesBT[TET](nd,ele);
+            f >> geo.ele2nodesBT[TET](ele,nd);
           }
           geo.nElesBT[TET]++; break;
         }
@@ -600,7 +600,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           unsigned int ele = geo.nElesBT[HEX];
           for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[HEX]; nd++)
           {
-            f >> geo.ele2nodesBT[HEX](nd,ele);
+            f >> geo.ele2nodesBT[HEX](ele,nd);
           }
           geo.nElesBT[HEX]++; break;
         }
@@ -624,7 +624,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     {
       for (unsigned int n = 0; n < geo.nNodesPerEleBT[etype]; n++)
       {
-        geo.ele2nodesBT[etype](n,ele)--;
+        geo.ele2nodesBT[etype](ele,n)--;
       }
       geo.eleID[etype](ele) = eleID;
       geo.eleType(eleID) = etype;
@@ -887,7 +887,7 @@ void set_ele_adjacency(GeoStruct &geo)
 
         for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
         }
 
         /* Sort for consistency */
@@ -912,7 +912,7 @@ void set_ele_adjacency(GeoStruct &geo)
 
         for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
         }
 
         std::sort(face.begin(), face.end());
@@ -956,7 +956,7 @@ void couple_periodic_bnds(GeoStruct &geo)
       /* Get face node coordinates */
       for (unsigned int node = 0; node < nNodesPerFace; node++)
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
-          coords_face1(node, dim) = geo.coord_nodes(dim, face1[node]);
+          coords_face1(node, dim) = geo.coord_nodes(face1[node], dim);
 
       /* Compute centroid location */
       std::vector<double> c1(geo.nDims, 0.0);
@@ -981,7 +981,7 @@ void couple_periodic_bnds(GeoStruct &geo)
         /* Get face node coordinates */
         for (unsigned int node = 0; node < nNodesPerFace; node++)
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            coords_face2(node, dim) = geo.coord_nodes(dim, face2[node]);
+            coords_face2(node, dim) = geo.coord_nodes(face2[node], dim);
 
         /* Compute centroid location */
         std::vector<double> c2(geo.nDims, 0.0);
@@ -1027,17 +1027,17 @@ void couple_periodic_bnds(GeoStruct &geo)
           //std::sort(face1.begin(),face1.end());
           int f1 = geo.nodes_to_face[face1];
           int f2 = geo.nodes_to_face[face2];
-          int ele1 = geo.face2eles(0, f1); 
-          int ele2 = geo.face2eles(0, f2); 
+          int ele1 = geo.face2eles(f1, 0);
+          int ele2 = geo.face2eles(f2, 0);
           for (int n = 0; n < geo.nFacesPerEle; n++)
           {
-            if (geo.ele2face(n, ele1) == f1)
-              geo.ele_adj(n, ele1) = ele2;
+            if (geo.ele2face(ele1, n) == f1)
+              geo.ele_adj(ele1, n) = ele2;
 
-            if (geo.ele2face(n, ele2) == f2)
+            if (geo.ele2face(ele2, n) == f2)
             {
-             geo.ele_adj(n, ele2) = ele1;
-             //geo.ele2face(n, ele2) = f1;
+             geo.ele_adj(ele2, n) = ele1;
+             //geo.ele2face(ele2, n) = f1;
             }
           }
           */
@@ -1102,7 +1102,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
         }
 
         std::sort(face.begin(), face.end());
@@ -1161,17 +1161,15 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   if (geo.nDims == 2)
   {
     geo.ele2face.assign({geo.nEles, geo.nFacesPerEleBT[QUAD]}, -1);
-#ifdef _BUILD_LIB
-    geo.face2nodes.assign({geo.nNdFaceCurved, unique_faces.size()}, -1);
-#endif
   }
   else
   {
     geo.ele2face.assign({geo.nEles, geo.nFacesPerEleBT[HEX]}, -1);
+  }
+
 #ifdef _BUILD_LIB
     geo.face2nodes.assign({unique_faces.size(), geo.nNdFaceCurved}, -1);
 #endif
-  }
 
   std::set<int> overPts, wallPts;
   std::set<std::vector<unsigned int>> overFaces;
@@ -1195,7 +1193,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
         }
 
         std::sort(face.begin(), face.end());
@@ -1217,7 +1215,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           if (etype == HEX)
           {
             for (int j = 0; j < geo.nNdFaceCurved; j++)
-              geo.face2nodes(geo.nFaces, j) = geo.ele2nodesBT[etype](geo.faceNodesCurved(n,j), geo.eleID[etype](ele));
+              geo.face2nodes(geo.nFaces, j) = geo.ele2nodesBT[etype](geo.eleID[etype](ele), geo.faceNodesCurved(n,j));
           }
 #endif
 
@@ -1678,7 +1676,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     {
       for (unsigned int j = 0; j < geo.nCornerNodesBT[etype];  j++)
       {
-        eind[j + n] = geo.ele2nodesBT[etype](j, i);
+        eind[j + n] = geo.ele2nodesBT[etype](i, j);
       } 
 
       n += geo.nCornerNodesBT[etype];
@@ -1730,7 +1728,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
         for (unsigned int i = 0; i < face_nodes.size(); i++)
         {
-          face[i] = geo.ele2nodesBT[etype](face_nodes[i], ele);
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
         }
 
         /* Sort for consistency */
@@ -1774,14 +1772,14 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   for (auto etype : geo.ele_set)
   {
     auto ele2nodes_glob = geo.ele2nodesBT[etype];
-    geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], (unsigned int) myElesBT[etype].size()}, 0);
+    geo.ele2nodesBT[etype].assign({(unsigned int) myElesBT[etype].size(), geo.nNodesPerEleBT[etype]}, 0);
     geo.eleID[etype].assign({(unsigned int) myElesBT[etype].size()}, 0);
 
     for (unsigned int ele = 0; ele < myElesBT[etype].size(); ele++)
     {
       for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
       {
-        geo.ele2nodesBT[etype](nd, ele) = ele2nodes_glob(nd, myElesBT[etype][ele]);
+        geo.ele2nodesBT[etype](ele, nd) = ele2nodes_glob(myElesBT[etype][ele], nd);
       }
       geo.eleID[etype](ele) = eleID;
       geo.eleType(eleID) = etype;
@@ -1808,7 +1806,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     {
       for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
       {
-        uniqueNodes.insert(geo.ele2nodesBT[etype](nd, ele));
+        uniqueNodes.insert(geo.ele2nodesBT[etype](ele, nd));
       }
     }
   }
@@ -1817,7 +1815,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
   /* Reduce node coordinate data to contain only partition local nodes */
   auto coord_nodes_glob = geo.coord_nodes;
-  geo.coord_nodes.assign({geo.nDims, (unsigned int) uniqueNodes.size()}, 0);
+  geo.coord_nodes.assign({(unsigned int) uniqueNodes.size(), geo.nDims}, 0);
   unsigned int idx = 0;
   for (unsigned int nd: uniqueNodes)
   {
@@ -1825,7 +1823,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     geo.node_map_p2g[idx] = nd; /* Map of parition node idx to global node idx */
 
     for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      geo.coord_nodes(dim, idx) = coord_nodes_glob(dim, nd);
+      geo.coord_nodes(idx, dim) = coord_nodes_glob(nd, dim);
 
     idx++;
   }
@@ -1834,7 +1832,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   for (auto etype : geo.ele_set)
     for (unsigned int ele = 0; ele < myElesBT[etype].size(); ele++)
       for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
-        geo.ele2nodesBT[etype](nd, ele) = geo.node_map_g2p[geo.ele2nodesBT[etype](nd, ele)];
+        geo.ele2nodesBT[etype](ele, nd) = geo.node_map_g2p[geo.ele2nodesBT[etype](ele, nd)];
 
   /* Reduce boundary faces data to contain only faces on local partition. Also
    * reindex via geo.node_map_g2p */
@@ -2085,6 +2083,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.nNodesPerEleBT[etype] = dims[0];
     geo.nNodes = geo.nEles * geo.nNodesPerEleBT[etype];
     geo.nElesBT[etype] = dims[1];
+    geo.eleType.assign({geo.nEles}, etype);
 
     if (etype == HEX)
     {
@@ -2102,8 +2101,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     /// TODO: change Gmsh reading / geo setup so this isn't needed
     geo.ele_nodes.assign({geo.nNodesPerEleBT[etype], geo.nDims, geo.nElesBT[etype]});
-    //geo.ele2nodesBT[etype].assign({geo.nElesBT[etype], geo.nNodesPerEleBT[etype]});
-    geo.ele2nodesBT[etype].assign({geo.nNodesPerEleBT[etype], geo.nElesBT[etype]});
+    geo.ele2nodesBT[etype].assign({geo.nElesBT[etype], geo.nNodesPerEleBT[etype]});
 
     mdvector<double> temp_coords({geo.nNodes, geo.nDims});
 
@@ -2121,8 +2119,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
           temp_coords(gnd, d)   = tmp_nodes(ndmap[nd], ele, d);
           geo.ele_nodes(nd, d, ele) = tmp_nodes(ndmap[nd], ele, d);
         }
-        //geo.ele2nodesBT[etype](ele, nd) = gnd;
-        geo.ele2nodesBT[etype](nd, ele) = gnd;
+        geo.ele2nodesBT[etype](ele, nd) = gnd;
         gnd++;
       }
     }
@@ -2155,19 +2152,18 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     n_nodes += 1; // final index -> total #
 
     // Setup geo structures with new node list
-    geo.coord_nodes.assign({geo.nDims, n_nodes});
+    geo.coord_nodes.assign({n_nodes, geo.nDims});
     for (int i = 0; i < geo.nNodes; i++)
     {
       for (int d = 0; d < geo.nDims; d++)
-        geo.coord_nodes(d, nodemap[i]) = temp_coords(i, d);
+        geo.coord_nodes(nodemap[i], d) = temp_coords(i, d);
     }
 
     for (int ele = 0; ele < geo.nEles; ele++)
     {
       for (int nd = 0; nd < geo.nNodesPerEleBT[etype]; nd++)
       {
-        //geo.ele2nodesBT[etype](ele, nd) = nodemap[geo.ele2nodesBT[etype](ele, nd)];
-        geo.ele2nodesBT[etype](nd, ele) = nodemap[geo.ele2nodesBT[etype](nd, ele)];
+        geo.ele2nodesBT[etype](ele, nd) = nodemap[geo.ele2nodesBT[etype](ele, nd)];
       }
     }
 
@@ -2357,8 +2353,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 #ifdef _BUILD_LIB
     // Connectivity only used in conjunction with TIOGA
     for (int j = 0; j < geo.nNdFaceCurved; j++)
-      geo.face2nodes(f,j) = geo.ele2nodesBT[etype](geo.faceNodesCurved(f1.loc_f, j), f1.ic);
-      //geo.face2nodes(f,j) = geo.ele2nodesBT[etype](f1.ic, geo.faceNodesCurved(f1.loc_f, j));
+      geo.face2nodes(f,j) = geo.ele2nodesBT[etype](f1.ic, geo.faceNodesCurved(f1.loc_f, j));
 #endif
   }
 
@@ -2373,7 +2368,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 #ifdef _BUILD_LIB
       // Connectivity only used in conjunction with TIOGA
       for (int j = 0; j < geo.nNdFaceCurved; j++)
-        geo.face2nodes(fid,j) = geo.ele2nodesBT[etype](geo.faceNodesCurved(f.loc_f,j), f.ic);
+        geo.face2nodes(fid,j) = geo.ele2nodesBT[etype](f.ic, geo.faceNodesCurved(f.loc_f,j));
 #endif
       fid++;
     }
@@ -2553,7 +2548,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         if (bcType == OVERSET)
         {
           for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
-            overPts.insert(geo.ele2nodesBT[etype](ct2fv[eType](n, j), ele));
+            overPts.insert(geo.ele2nodesBT[etype](ele, ct2fv[eType](n, j)));
 
           geo.overFaceList.push_back(fid);
         }
@@ -2568,7 +2563,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
                  bcType == SYMMETRY_G || bcType == SYMMETRY_P)
         {
           for (int j = 0; j < geo.nNdFaceCurved; j++)
-            wallPts.insert(geo.ele2nodesBT[etype](geo.faceNodesCurved(n, j), ele));
+            wallPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved(n, j)));
         }
       }
 #endif
@@ -2717,11 +2712,11 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       for (int node = 0; node < nNodes; node++)
       {
         /// Taken from Kui, AIAA-2010-5031-661
-        double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node);
-        geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
-        geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
-        geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
-        geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
+        double x0 = geo.coords_init(node,0); double y0 = geo.coords_init(node,1);
+        geo.coord_nodes(node,0) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
+        geo.coord_nodes(node,1) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
+        geo.grid_vel_nodes(node,0) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
+        geo.grid_vel_nodes(node,1) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
       }
       break;
     }
@@ -2739,11 +2734,11 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
         for (uint node = 0; node < nNodes; node++)
         {
           /// Taken from Liang-Miyaji
-          double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node);
-          geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
-          geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
-          geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
-          geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
+          double x0 = geo.coords_init(node,0); double y0 = geo.coords_init(node,1);
+          geo.coord_nodes(node,0) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Atx*pi*time/t0);
+          geo.coord_nodes(node,1) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(Aty*pi*time/t0);
+          geo.grid_vel_nodes(node,0) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Atx*pi*time/t0);
+          geo.grid_vel_nodes(node,1) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*cos(Aty*pi*time/t0);
         }
       }
       else
@@ -2751,13 +2746,13 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
         for (uint node = 0; node < nNodes; node++)
         {
           /// Taken from Liang-Miyaji
-          double x0 = geo.coords_init(0,node); double y0 = geo.coords_init(1,node); double z0 = geo.coords_init(2,node);
-          geo.coord_nodes(0,node) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atx*pi*time/t0);
-          geo.coord_nodes(1,node) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Aty*pi*time/t0);
-          geo.coord_nodes(2,node) = z0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atz*pi*time/t0);
-          geo.grid_vel_nodes(0,node) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atx*pi*time/t0);
-          geo.grid_vel_nodes(1,node) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Aty*pi*time/t0);
-          geo.grid_vel_nodes(2,node) = Atz*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atz*pi*time/t0);
+          double x0 = geo.coords_init(node,0); double y0 = geo.coords_init(node,1); double z0 = geo.coords_init(node,2);
+          geo.coord_nodes(node,0) = x0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atx*pi*time/t0);
+          geo.coord_nodes(node,1) = y0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Aty*pi*time/t0);
+          geo.coord_nodes(node,2) = z0 + sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*sin(Atz*pi*time/t0);
+          geo.grid_vel_nodes(node,0) = Atx*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atx*pi*time/t0);
+          geo.grid_vel_nodes(node,1) = Aty*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Aty*pi*time/t0);
+          geo.grid_vel_nodes(node,2) = Atz*pi/t0*sin(pi*x0/DX)*sin(pi*y0/DY)*sin(pi*z0/DZ)*cos(Atz*pi*time/t0);
         }
       }
       break;
@@ -2771,10 +2766,10 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
         double width = 5.;
         for (uint node = 0; node < nNodes; node++)
         {
-          geo.coord_nodes(0,node) = geo.coords_init(0,node) + sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*sin(4*pi*time/t0);
-          geo.coord_nodes(1,node) = geo.coords_init(1,node) + sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*sin(8*pi*time/t0);
-          geo.grid_vel_nodes(0,node) = 4.*pi/t0*sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*cos(4*pi*time/t0);
-          geo.grid_vel_nodes(1,node) = 8.*pi/t0*sin(pi*geo.coords_init(0,node)/width)*sin(pi*geo.coords_init(1,node)/width)*cos(8*pi*time/t0);
+          geo.coord_nodes(node,0) = geo.coords_init(node,0) + sin(pi*geo.coords_init(node,0)/width)*sin(pi*geo.coords_init(node,1)/width)*sin(4*pi*time/t0);
+          geo.coord_nodes(node,1) = geo.coords_init(node,1) + sin(pi*geo.coords_init(node,0)/width)*sin(pi*geo.coords_init(node,1)/width)*sin(8*pi*time/t0);
+          geo.grid_vel_nodes(node,0) = 4.*pi/t0*sin(pi*geo.coords_init(node,0)/width)*sin(pi*geo.coords_init(node,1)/width)*cos(4*pi*time/t0);
+          geo.grid_vel_nodes(node,1) = 8.*pi/t0*sin(pi*geo.coords_init(node,0)/width)*sin(pi*geo.coords_init(node,1)/width)*cos(8*pi*time/t0);
         }
       }
       break;
@@ -2794,14 +2789,14 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
 
         for (uint node = 0; node < nNodes ; node++)
         {
-          geo.coord_nodes(0,node) = geo.coords_init(0,node) + Ax*sin(2.*pi*fx*time);
-          geo.coord_nodes(1,node) = geo.coords_init(1,node) + Ay*(1-cos(2.*pi*fy*time));
-          geo.grid_vel_nodes(0,node) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
-          geo.grid_vel_nodes(1,node) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
+          geo.coord_nodes(node,0) = geo.coords_init(node,0) + Ax*sin(2.*pi*fx*time);
+          geo.coord_nodes(node,1) = geo.coords_init(node,1) + Ay*(1-cos(2.*pi*fy*time));
+          geo.grid_vel_nodes(node,0) = 2.*pi*fx*Ax*cos(2.*pi*fx*time);
+          geo.grid_vel_nodes(node,1) = 2.*pi*fy*Ay*sin(2.*pi*fy*time);
           if (geo.nDims == 3)
           {
-            geo.coord_nodes(2,node) = geo.coords_init(2,node) - Az*sin(2.*pi*fz*time);
-            geo.grid_vel_nodes(2,node) = -2.*pi*fz*Az*cos(2.*pi*fz*time);
+            geo.coord_nodes(node,2) = geo.coords_init(node,2) - Az*sin(2.*pi*fz*time);
+            geo.grid_vel_nodes(node,2) = -2.*pi*fz*Az*cos(2.*pi*fz*time);
           }
         }
       }
@@ -2819,12 +2814,12 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
           double rdot = 2.*pi*Ar*Fr*sin(2.*pi*Fr*time);
           double theta = 1;///rv0(node,1); /// TODO
           double psi = 1;///rv0(node,2); /// TODO
-          geo.coord_nodes(0,node) = r*sin(psi)*cos(theta);
-          geo.coord_nodes(1,node) = r*sin(psi)*sin(theta);
-          geo.coord_nodes(2,node) = r*cos(psi);
-          geo.grid_vel_nodes(0,node) = rdot*sin(psi)*cos(theta);
-          geo.grid_vel_nodes(1,node) = rdot*sin(psi)*sin(theta);
-          geo.grid_vel_nodes(2,node) = rdot*cos(psi);
+          geo.coord_nodes(node,0) = r*sin(psi)*cos(theta);
+          geo.coord_nodes(node,1) = r*sin(psi)*sin(theta);
+          geo.coord_nodes(node,2) = r*cos(psi);
+          geo.grid_vel_nodes(node,0) = rdot*sin(psi)*cos(theta);
+          geo.grid_vel_nodes(node,1) = rdot*sin(psi)*sin(theta);
+          geo.grid_vel_nodes(node,2) = rdot*cos(psi);
         }
       }
       break;
@@ -2845,21 +2840,21 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
 
       auto &A = rotMat(0,0);
       auto &B = geo.coords_init(0,0);
-      auto &C = geo.coord_nodes(0,0);
+      auto &C = geo.coord_nodes(0,0); /// TODO
 
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                  1.0, &A, k, &B, k, 0.0, &C, m);
+                  1.0, &A, k, &B, k, 0.0, &C, m); /// TODO
 
       // Translation Component
       for (int i = 0; i < nNodes; i++)
       {
-        geo.coord_nodes(0,i) += input->dxc[0];
-        geo.coord_nodes(1,i) += input->dxc[1];
-        geo.coord_nodes(2,i) += input->dxc[2];
+        geo.coord_nodes(i,0) += input->dxc[0];
+        geo.coord_nodes(i,1) += input->dxc[1];
+        geo.coord_nodes(i,2) += input->dxc[2];
 
-        geo.grid_vel_nodes(0,i) += input->dvc[0];
-        geo.grid_vel_nodes(1,i) += input->dvc[1];
-        geo.grid_vel_nodes(2,i) += input->dvc[2];
+        geo.grid_vel_nodes(i,0) += input->dvc[0];
+        geo.grid_vel_nodes(i,1) += input->dvc[1];
+        geo.grid_vel_nodes(i,2) += input->dvc[2];
       }
     }
   }

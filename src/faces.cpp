@@ -2677,8 +2677,8 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
 {
   /* U : nFpts x nVars x 2 */
   int i = geo->face2fpts(fpt, faceID);
-  int ic1 = geo->face2eles(0,faceID);
-  int ic2 = geo->face2eles(1,faceID);
+  int ic1 = geo->face2eles(faceID,0);
+  int ic2 = geo->face2eles(faceID,1);
 
   int side = -1;
   if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
@@ -2691,16 +2691,16 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
     ThrowException("Face not blanked but both elements are!");
   }
 
-  ind    = std::distance(&U(0,0,0), &U(i,0,side));
-  stride = std::distance(&U(i,0,side), &U(i,1,side));
+  ind    = std::distance(&U(0,0,0), &U(side,i,i));
+  stride = std::distance(&U(side,0,i), &U(side,1,i));
 }
 
 double& Faces::get_u_fpt(int faceID, int fpt, int var)
 {
   /* U : nFpts x nVars x 2 */
   int i = geo->face2fpts(fpt, faceID);
-  int ic1 = geo->face2eles(0,faceID);
-  int ic2 = geo->face2eles(1,faceID);
+  int ic1 = geo->face2eles(faceID,0);
+  int ic2 = geo->face2eles(faceID,1);
 
   unsigned int side = 0;
   if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
@@ -2708,21 +2708,21 @@ double& Faces::get_u_fpt(int faceID, int fpt, int var)
   else if (ic2 < 0)
     ThrowException("get_u_fpt: Invalid face/cell blanking - check your connectivity.");
 
-  return U(i,var,side);
+  return U(side,var,i);
 }
 
 double& Faces::get_grad_fpt(int faceID, int fpt, int var, int dim)
 {
   /* U : nFpts x nVars x 2 */
   int i = geo->face2fpts(fpt, faceID);
-  int ic1 = geo->face2eles(0,faceID);
-  int ic2 = geo->face2eles(1,faceID);
+  int ic1 = geo->face2eles(faceID,0);
+  int ic2 = geo->face2eles(faceID,1);
 
   unsigned int side = 0;
   if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
     side = 1;
 
-  return dU(i,var,dim,side);
+  return dU(side,dim,var,i);
 }
 
 #ifdef _GPU
@@ -2736,7 +2736,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
   for (int face = 0; face < nFringe; face++)
   {
     unsigned int side = 0;
-    int ic1 = geo->face2eles(0,fringeIDs[face]);
+    int ic1 = geo->face2eles(fringeIDs[face],0);
     if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
       side = 1;
 
@@ -2755,7 +2755,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
       {
         unsigned int gfpt = fringe_fpts(fpt,face);
         unsigned int side = fringe_side(fpt,face);
-        U_fringe(fpt,face,var) = U(gfpt,var,side);
+        U_fringe(fpt,face,var) = U(side,var,gfpt);
       }
     }
   }
@@ -2789,7 +2789,7 @@ void Faces::fringe_grad_to_device(int nFringe)
         {
           unsigned int gfpt = fringe_fpts(fpt,face);
           unsigned int side = fringe_side(fpt,face);
-          dU_fringe(fpt,face,var,dim) = dU(gfpt,var,dim,side);
+          dU_fringe(fpt,face,var,dim) = dU(side,dim,var,gfpt);
         }
       }
     }
@@ -2808,7 +2808,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 {
   if (nFringe == 0) return;
 
-  U_fringe_d.assign({nVars, geo->nFptsPerFace, nFringe}, data, 3);
+  U_fringe_d.assign({nFringe, geo->nFptsPerFace, nVars}, data, 3);
 
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
   {
@@ -2817,7 +2817,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
     for (int face = 0; face < nFringe; face++)
     {
       unsigned int side = 0;
-      int ic1 = geo->face2eles(0,fringeIDs[face]);
+      int ic1 = geo->face2eles(fringeIDs[face],0);
       if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
         side = 1;
 
@@ -2848,7 +2848,7 @@ void Faces::fringe_grad_to_device(int nFringe, double *data)
 
   if (nFringe == 0) return;
 
-  dU_fringe_d.assign({nVars, nDims, geo->nFptsPerFace, nFringe}, data, 3);
+  dU_fringe_d.assign({nFringe, geo->nFptsPerFace, nDims, nVars}, data, 3);
 
   unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
       nFringe,geo->nFptsPerFace,nVars,nDims,3);

@@ -226,7 +226,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       for (unsigned int ele = 0; ele < nEles; ele++)
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          nodes(node, dim, ele) = geo->coord_nodes(dim,geo->ele2nodesBT[etype](node,ele));
+          nodes(node, dim, ele) = geo->coord_nodes(geo->ele2nodesBT[etype](ele,node), dim);
         }
   }
 
@@ -276,6 +276,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
       {
         int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
         int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
+
         if (slot == 0)
         {
           faces->coord(dim, gfpt) = coord_fpts(fpt,dim,ele);
@@ -360,7 +361,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
   }
 
-#ifdef _BUILD_LIB
+#ifdef _BUILD_LIB_blah
  if (input->overset)
  {
    if (etype != HEX) ThrowException("Don't use overset with non-hex grids!");
@@ -399,13 +400,8 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
    int m = nPpts;
    int k = nNodes;
    int n = nEles*nDims;
- #ifdef _OMP
-   omp_blocked_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
-               1.0, &A, k, &B, k, 0.0, &C, m);
- #else
    cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, m, n, k,
                1.0, &A, k, &B, k, 0.0, &C, m);
- #endif
 
    /* Tag all elements whose linearly-extrapolated plot points don't match their
     * regular plot points */
@@ -1680,11 +1676,11 @@ void Elements::move(std::shared_ptr<Faces> faces)
     // Update grid position based on rigid-body motion: CG offset + rotation
     for (unsigned int i = 0; i < geo->nNodes; i++)
       for (unsigned int d = 0; d < nDims; d++)
-        geo->coord_nodes(d,i) = geo->x_cg(d);
+        geo->coord_nodes(i,d) = geo->x_cg(d);
 
     auto &A = geo->Rmat(0,0);
-    auto &B = geo->coords_init(0,0);
-    auto &C = geo->coord_nodes(0,0);
+    auto &B = geo->coords_init(0,0); /// TODO
+    auto &C = geo->coord_nodes(0,0); /// TODO
 
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
                 1.0, &A, nDims, &B, nDims, 1.0, &C, nDims);
@@ -1692,11 +1688,11 @@ void Elements::move(std::shared_ptr<Faces> faces)
     // Update grid velocity based on 'spin' matrix (omega cross r)
     for (unsigned int i = 0; i < geo->nNodes; i++)
       for (unsigned int d = 0; d < nDims; d++)
-        geo->grid_vel_nodes(d,i) = geo->vel_cg(d);
+        geo->grid_vel_nodes(i,d) = geo->vel_cg(d);
 
     auto &Av = geo->Wmat(0,0);
-    auto &Bv = geo->coords_init(0,0);
-    auto &Cv = geo->grid_vel_nodes(0,0);
+    auto &Bv = geo->coords_init(0,0); /// TODO
+    auto &Cv = geo->grid_vel_nodes(0,0); /// TODO
 
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, geo->nNodes, nDims,
                 1.0, &Av, nDims, &Bv, nDims, 1.0, &Cv, nDims);
@@ -1711,6 +1707,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
 #ifdef _GPU
   if (input->motion_type == RIGID_BODY)
   {
+    /// TODO
     // Positions
     update_nodes_rigid_wrapper(geo->coords_init_d, geo->coord_nodes_d, geo->Rmat_d,
         geo->x_cg_d, geo->nNodes, geo->nDims);
@@ -1718,7 +1715,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
     update_nodes_rigid_wrapper(geo->coords_init_d, geo->grid_vel_nodes_d, geo->Wmat_d,
         geo->vel_cg_d, geo->nNodes, geo->nDims);
   }
-
+/// TODO
   update_coords_wrapper(nodes_d, geo->coord_nodes_d, shape_spts_d,
       shape_fpts_d, coord_spts_d, coord_fpts_d, faces->coord_d,
       geo->ele2nodesBT_d[etype], geo->fpt2gfptBT_d[etype], nSpts, nFpts, nNodes, nEles, nDims);
@@ -1763,7 +1760,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        nodes(node, ele, dim) = geo->coord_nodes(dim,geo->ele2nodesBT[etype](node,ele));
+        nodes(node, ele, dim) = geo->coord_nodes(geo->ele2nodesBT[etype](ele,node),dim);
 
   int ms = nSpts;
   int mf = nFpts;
@@ -1866,7 +1863,7 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
       for (uint dim = 0; dim < nDims; dim++)
-        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(dim, geo->ele2nodesBT[etype](node,ele));
+        grid_vel_nodes(node, ele, dim) = geo->grid_vel_nodes(dim, geo->ele2nodesBT[etype](ele,node));
 
   int ms = nSpts;
   int mf = nFpts;
@@ -1930,10 +1927,10 @@ std::vector<double> Elements::getBoundingBox(int ele)
 
   for (unsigned int node = 0; node < nNodes; node++)
   {
-    unsigned int nd = geo->ele2nodesBT[etype](node, ele);
+    unsigned int nd = geo->ele2nodesBT[etype](ele, node);
     for (int dim = 0; dim < nDims; dim++)
     {
-      double pos = geo->coord_nodes(dim,nd);
+      double pos = geo->coord_nodes(nd,dim);
       bbox[dim]   = std::min(bbox[dim],  pos);
       bbox[dim+3] = std::max(bbox[dim+3],pos);
     }
@@ -1958,10 +1955,10 @@ void Elements::getBoundingBox(int ele, double bbox[6])
 
   for (unsigned int node = 0; node < nNodes; node++)
   {
-    unsigned int nd = geo->ele2nodesBT[etype](node, ele);
+    unsigned int nd = geo->ele2nodesBT[etype](ele, node);
     for (int dim = 0; dim < nDims; dim++)
     {
-      double pos = geo->coord_nodes(dim,nd);
+      double pos = geo->coord_nodes(nd,dim);
       bbox[dim]   = std::min(bbox[dim],  pos);
       bbox[dim+3] = std::max(bbox[dim+3],pos);
     }
@@ -2004,9 +2001,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
   {
     tmp_shape.resize({nNodes});
     tmp_dshape.resize({nNodes, nDims});
-    tmp_grad.resize({nDims, nDims});
-    tmp_ginv.resize({nDims, nDims});
-    tmp_coords.resize({nDims, nNodes});
+    tmp_coords.resize({nNodes, nDims});
   }
 
   int iter = 0;
@@ -2031,7 +2026,7 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
   for (int nd = 0; nd < nNodes; nd++)
     for (int d = 0; d < 3; d++)
-      tmp_coords(d,nd) = geo->coord_nodes(d, geo->ele2nodesBT[etype](nd, ele));
+      tmp_coords(nd,d) = geo->coord_nodes(geo->ele2nodesBT[etype](ele, nd),d);
 
   while (norm > tol && iter < iterMax)
   {
@@ -2040,21 +2035,25 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
     point dx(xyz[0],xyz[1],xyz[2]);
 
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, nDims, nDims, nNodes,
-        1.0, tmp_coords.data(), nDims, tmp_dshape.data(), nNodes, 0.0, tmp_grad.data(), nDims);
+    double grad[3][3] = {{0.0}};
+    double ginv[3][3] = {{0.0}};
+    for (int nd = 0; nd < nNodes; nd++)
+      for (int i = 0; i < nDims; i++)
+        for (int j = 0; j < nDims; j++)
+          grad[i][j] += tmp_coords(nd,i) * tmp_dshape(nd,j);
 
-    for (int node = 0; node < nNodes; node++)
+    for (int nd = 0; nd < nNodes; nd++)
       for (int i = 0; i < 3; i++)
-        dx[i] -= tmp_shape(node)*tmp_coords(i,node);
+        dx[i] -= tmp_shape(nd)*tmp_coords(nd,i);
 
-    double detJ = det_3x3(tmp_grad.data());
+    double detJ = det_3x3(&grad[0][0]);
 
-    adjoint_3x3(tmp_grad.data(),tmp_ginv.data());
+    adjoint_3x3(&grad[0][0], &ginv[0][0]);
 
     double delta[3] = {0,0,0};
     for (int i = 0; i < 3; i++)
       for (int j = 0; j < 3; j++)
-        delta[i] += tmp_ginv(i,j)*dx[j]/detJ;
+        delta[i] += ginv[i][j]*dx[j]/detJ;
 
     norm = dx.norm();
     for (int i = 0; i < 3; i++)

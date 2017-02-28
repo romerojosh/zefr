@@ -327,6 +327,7 @@ void FRSolver::orient_fpts()
   /* Reindex face flux points */
   for (auto e : elesObjs)
   {
+    auto etype = e->etype;
     auto fpt2gfptBT_copy = geo.fpt2gfptBT[e->etype];
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
@@ -347,7 +348,20 @@ void FRSolver::orient_fpts()
         }
       }
     }
+  }
 
+  auto face2fpts_copy = geo.face2fpts;
+  for (int ff = 0; ff < geo.nFaces; ff++)
+  {
+    for (int fpt = 0; fpt < geo.nFptsPerFace; fpt++)
+    {
+      int gfpt_old = face2fpts_copy(fpt, ff);
+      if (gfpt_old >= geo.nGfpts_int) continue;
+
+      int gfpt_new = idxL[gfpt_old];
+      geo.face2fpts(fpt, ff) = gfpt_new;
+      geo.fpt2face[gfpt_new] = ff;
+    }
   }
 
 #ifdef _MPI
@@ -3280,8 +3294,8 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
   {
     if (geo.iblank_face[ff] == FRINGE)
     {
-      int ic1 = geo.face2eles(0,ff);
-      int ic2 = geo.face2eles(1,ff);
+      int ic1 = geo.face2eles(ff,0);
+      int ic2 = geo.face2eles(ff,1);
       if (geo.iblank_cell(ic1) == NORMAL)
       {
         eleList.push_back(ic1);
@@ -3293,7 +3307,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
 
       for (int i = 0; i < nFacesEle; i++)
       {
-        if (geo.ele2face(i,eleList.back()) == ff)
+        if (geo.ele2face(eleList.back(),i) == ff)
         {
           indList.push_back(i);
           break;
@@ -3741,14 +3755,14 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     for (auto &ff : geo.boundFaces[bnd])
     {
       // Load data from each face on boundary
-      int ele = geo.face2eles(0,ff);
+      int ele = geo.face2eles(ff,0);
 
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
       int j = -1;
       for (int i = 0; i < nFacesEle; i++)
       {
-        if (geo.ele2face(i, ele) == ff)
+        if (geo.ele2face(ele, i) == ff)
         {
           j = i;
           break;
@@ -4808,7 +4822,7 @@ void FRSolver::move(double time, bool update_iblank)
 
 #ifdef _GPU
   if (input->motion_type != RIGID_BODY)
-  {
+  { /// TODO
     move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
                       motion_vars_d, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
     check_error();
