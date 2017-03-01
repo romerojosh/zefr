@@ -33,7 +33,8 @@ SOURCES += \
     src/zefr_interface.cpp \
     src/zefrWrap.cpp \
     src/filter.cpp \
-    src/tris.cpp
+    src/tris.cpp \
+    src/tets.cpp
 
 HEADERS += \
     include/elements_kernels.h \
@@ -59,7 +60,8 @@ HEADERS += \
     include/inputstruct.hpp \
     include/filter_kernels.h \
     include/flux.hpp \
-    include/tris.hpp
+    include/tris.hpp \
+    include/tets.hpp
 
 DISTFILES += \
     include/zefr.i \

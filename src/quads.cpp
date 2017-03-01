@@ -314,6 +314,25 @@ double Quads::calc_nodal_basis(unsigned int spt, double *loc)
   return val;
 }
 
+void Quads::calc_nodal_basis(double *loc, double* basis)
+{
+  if (lag_i.size() < nSpts1D || lag_j.size() < nSpts1D)
+  {
+    lag_i.resize(nSpts1D);
+    lag_j.resize(nSpts1D);
+  }
+
+  for (int spt = 0; spt < nSpts1D; spt++)
+  {
+    lag_i[spt] = Lagrange(loc_spts_1D, spt, loc[0]);
+    lag_j[spt] = Lagrange(loc_spts_1D, spt, loc[1]);
+  }
+
+  for (int j = 0; j < nSpts1D; j++)
+    for (int i = 0; i < nSpts1D; i++)
+      basis[i+nSpts1D*j] = lag_i[i] * lag_j[j];
+}
+
 double Quads::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {

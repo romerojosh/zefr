@@ -2083,8 +2083,8 @@ void Elements::get_interp_weights(double* rst, double* weights, int& nweights, i
   assert(nSpts <= buffSize);
 
   nweights = nSpts;
-  for (unsigned int spt = 0; spt < nSpts; spt++)
-    weights[spt] = this->calc_nodal_basis(spt, rst);
+
+  this->calc_nodal_basis(rst, weights);
 }
 
 #ifdef _GPU

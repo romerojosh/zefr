@@ -409,6 +409,28 @@ double Hexas::calc_nodal_basis(unsigned int spt, double *loc)
   return val;
 }
 
+void Hexas::calc_nodal_basis(double *loc, double* basis)
+{
+  if (lag_i.size() < nSpts1D || lag_j.size() < nSpts1D || lag_k.size() < nSpts1D)
+  {
+    lag_i.resize(nSpts1D);
+    lag_j.resize(nSpts1D);
+    lag_k.resize(nSpts1D);
+  }
+
+  for (int spt = 0; spt < nSpts1D; spt++)
+  {
+    lag_i[spt] = Lagrange(loc_spts_1D, spt, loc[0]);
+    lag_j[spt] = Lagrange(loc_spts_1D, spt, loc[1]);
+    lag_k[spt] = Lagrange(loc_spts_1D, spt, loc[2]);
+  }
+
+  for (int k = 0; k < nSpts1D; k++)
+    for (int j = 0; j < nSpts1D; j++)
+      for (int i = 0; i < nSpts1D; i++)
+        basis[i+nSpts1D*(j+nSpts1D*k)] = lag_i[i] * lag_j[j] * lag_k[k];
+}
+
 double Hexas::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
@@ -674,7 +696,7 @@ void Hexas::calc_shape(mdvector<double> &shape_val, const double* loc)
     ijk2gmsh = structured_to_gmsh_hex(nNodes);
 
   // Pre-compute Lagrange function values to avoid redundant calculations
-  if (lag_i.size() != nNdSide)
+  if (lag_i.size() < nNdSide || lag_j.size() < nNdSide || lag_k.size() < nNdSide)
   {
     lag_i.resize(nNdSide); lag_j.resize(nNdSide); lag_k.resize(nNdSide);
   }
@@ -723,9 +745,12 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
 
   for (int i = 0; i < nNdSide; i++)
   {
-    lag_i[i] = Lagrange(xlist,  xi, i);  dlag_i[i] = dLagrange(xlist,  xi, i);
-    lag_j[i] = Lagrange(xlist, eta, i);  dlag_j[i] = dLagrange(xlist, eta, i);
-    lag_k[i] = Lagrange(xlist,  mu, i);  dlag_k[i] = dLagrange(xlist,  mu, i);
+    lag_i[i] = Lagrange(xlist,  xi, i);
+    lag_j[i] = Lagrange(xlist, eta, i);
+    lag_k[i] = Lagrange(xlist,  mu, i);
+    dlag_i[i] = dLagrange(xlist,  xi, i);
+    dlag_j[i] = dLagrange(xlist, eta, i);
+    dlag_k[i] = dLagrange(xlist,  mu, i);
   }
 
   int pt = 0;

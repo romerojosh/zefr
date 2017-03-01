@@ -44,6 +44,7 @@ class Tris: public Elements
     double calc_nodal_basis(unsigned int spt,
                             const std::vector<double> &loc);
     double calc_nodal_basis(unsigned int spt, double *loc);
+    void calc_nodal_basis(double *loc, double* basis);
     double calc_d_nodal_basis_spts(unsigned int spt,
                                    const std::vector<double> &loc,
                                    unsigned int dim);

@@ -326,6 +326,19 @@ double Tris::calc_nodal_basis(unsigned int spt, double *loc)
   return val;
 }
 
+void Tris::calc_nodal_basis(double *loc, double* basis)
+{
+  // store values locally to avoid re-computing
+  if (lag_i.size() < nSpts)
+    lag_i.resize(nSpts);
+
+  for (unsigned int i = 0; i < nSpts; i++)
+    lag_i[i] = Dubiner2D(order, loc[0], loc[1], i);
+
+  cblas_dgemv(CblasRowMajor,CblasNoTrans,nSpts,nSpts,1.0,inv_vand.data(),nSpts,
+              lag_i.data(),1,0.0,basis,1);
+}
+
 double Tris::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {

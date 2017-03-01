@@ -199,6 +199,7 @@ class Elements
     virtual double calc_nodal_basis(unsigned int spt,
                    const std::vector<double> &loc) = 0;
     virtual double calc_nodal_basis(unsigned int spt, double *loc) = 0;
+    virtual void calc_nodal_basis(double *loc, double* basis) = 0;
     virtual double calc_d_nodal_basis_spts(unsigned int spt,
                    const std::vector<double> &loc, unsigned int dim) = 0;
     virtual double calc_d_nodal_basis_fpts(unsigned int fpt,

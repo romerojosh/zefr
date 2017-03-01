@@ -43,6 +43,7 @@ class Hexas: public Elements
 
     double calc_nodal_basis(unsigned int spt, const std::vector<double> &loc);
     double calc_nodal_basis(unsigned int spt, double *loc);
+    void calc_nodal_basis(double* loc, double* basis);
     double calc_d_nodal_basis_spts(unsigned int spt,
                                    const std::vector<double> &loc,
                                    unsigned int dim);
@@ -59,6 +60,7 @@ class Hexas: public Elements
     void setup_ppt_connectivity();
 
     double calc_d_nodal_basis_fr(unsigned int spt, const std::vector<double>& loc, unsigned int dim);
+
 };
 
 #endif /* hexas_hpp */
