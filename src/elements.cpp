@@ -2184,12 +2184,12 @@ void Elements::unblank_u_to_device(int *cellIDs, int nCells, double *data)
 {
   if (nCells == 0) return;
 
-  U_unblank_d.assign({nVars, nSpts, nCells}, data, 3);
+  U_unblank_d.assign({nCells, nSpts, nVars}, data, 3);
 
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
     unblankIDs_d.assign({nCells}, cellIDs, 3);
 
-  unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,nCells,nSpts,nVars);
+  unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,nCells,nSpts,nVars,3);
 
   check_error();
 }

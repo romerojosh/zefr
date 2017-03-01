@@ -1702,7 +1702,7 @@ void unpack_unblank_u(mdvector_gpu<double> U_unblank,
 
   const unsigned int ele = cellIDs(ic);
 
-  U_spts(spt, var, ele) = U_unblank(var,spt,ic);
+  U_spts(spt, var, ele) = U_unblank(ic,spt,var);
 }
 
 void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,

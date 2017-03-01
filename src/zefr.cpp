@@ -137,7 +137,7 @@ int main(int argc, char* argv[])
   }
 
   /* Write initial solution */
-  if (input.write_freq != 0)
+  if (input.write_freq != 0 && !input.restart)
   {
     if (input.write_paraview)
       solver.write_solution(input.output_prefix);
