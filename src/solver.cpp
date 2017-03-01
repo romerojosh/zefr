@@ -633,7 +633,8 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
           for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
             /// TODO: make sure this is setup correctly first [and implement everywhere iblank_cell is used
-            if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
+            //if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
             for (unsigned int rpt = 0; rpt < nRpts; rpt++)
             {
