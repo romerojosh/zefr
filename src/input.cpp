@@ -152,9 +152,12 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "res_type", input.res_type);
   read_param(f, "force_freq", input.force_freq);
   read_param(f, "error_freq", input.error_freq);
+
   read_param(f, "test_case", input.test_case, (unsigned int) 0);
   read_param(f, "err_field", input.err_field, (unsigned int) 0);
   read_param(f, "nQpts1D", input.nQpts1D);
+  if (input.error_freq == 0 and input.nQpts1D != 0)
+    input.nQpts1D = 0;  // if no error computation, no need for quadrature alloc
 
   read_param(f, "fconv_type", str);
   if (str == "Rusanov")

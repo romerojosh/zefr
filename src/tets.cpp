@@ -47,6 +47,8 @@ Tets::Tets(GeoStruct *geo, InputStruct *input, int order)
   this->nEles = geo->nElesBT[TET];  
   this->nQpts = 84; // Note: Fixing quadrature points to Shunn-Hamm 84 point rule
 
+  if (input->error_freq == 0) this->nQpts = 0; // disable allocation if not needed
+
   /* Generic tetrahedral geometry */
   nDims = 3;
   nFaces = 4;

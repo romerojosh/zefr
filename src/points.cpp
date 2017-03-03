@@ -31,6 +31,8 @@ std::vector<double> Gauss_Legendre_pts(unsigned int P)
 
   switch(P)
   {
+    case 0:
+      break; // do nothing
     case 1:
       zeros = {0.0}; break;
 
@@ -143,6 +145,8 @@ std::vector<double> Gauss_Legendre_weights(unsigned int n)
 
   switch(n)
   {
+    case 0:
+      break; // do nothing
     case 1:
       weights = {2.0}; break;
 

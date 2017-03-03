@@ -746,7 +746,9 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
   }
 
   if (geo.per_bnd_flag)
+  {
     couple_periodic_bnds(geo);
+  }
 }
 
 void set_face_nodes(GeoStruct &geo)
@@ -975,7 +977,8 @@ void couple_periodic_bnds(GeoStruct &geo)
       for(auto &bnd_face2 : geo.bnd_faces)
       {
         auto face2 = bnd_face2.first;
-        if (face2 == face1 || face2.size() != nNodesPerFace)
+        auto bnd_id2 = bnd_face2.second;
+        if (face2 == face1 || face2.size() != nNodesPerFace || bnd_id2 != PERIODIC)
           continue;
 
         /* Get face node coordinates */

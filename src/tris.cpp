@@ -47,6 +47,8 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
   this->nEles = geo->nElesBT[TRI];  
   this->nQpts = 45; // Note: Fixing quadrature points to Williams-Shunn 45 point rule
 
+  if (input->error_freq == 0) this->nQpts = 0; // disable allocation if not needed
+
   /* Generic triangular geometry */
   nDims = 2;
   nFaces = 3;
