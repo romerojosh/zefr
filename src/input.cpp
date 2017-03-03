@@ -150,9 +150,9 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "write_freq", input.write_freq);
   read_param(f, "report_freq", input.report_freq);
   read_param(f, "res_type", input.res_type);
-  read_param(f, "force_freq", input.force_freq);
-  read_param(f, "error_freq", input.error_freq);
-
+  read_param(f, "force_freq", input.force_freq, (unsigned int) 0);
+  read_param(f, "error_freq", input.error_freq, (unsigned int) 0);
+  read_param(f, "turb_stat_freq", input.turb_stat_freq, (unsigned int) 0);
   read_param(f, "test_case", input.test_case, (unsigned int) 0);
   read_param(f, "err_field", input.err_field, (unsigned int) 0);
   read_param(f, "nQpts1D", input.nQpts1D);
@@ -195,7 +195,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "S", input.S, 120.0);
 
   read_param(f, "rho_fs", input.rho_fs, 1.0);
-  read_param(f, "v_mag_fs", input.v_fs, 1.0);
+  read_param(f, "v_mag_fs", input.v_mag_fs, 1.0);
   input.V_fs.assign({3});
   read_param(f, "u_fs", input.V_fs(0), 0.2);
   read_param(f, "v_fs", input.V_fs(1), 0.0);
@@ -322,7 +322,7 @@ void apply_nondim(InputStruct &input)
      * ++ Re, Ma, rho, V, L, p, gamma specified
      * ++ Remaining parameters calculated for consistency */
     input.R = 1.;  // Free parameter (only R*T important to us)
-    input.mu = input.rho_fs * input.v_fs * input.L_fs  / input.Re_fs; // Re -> mu
+    input.mu = input.rho_fs * input.v_mag_fs * input.L_fs  / input.Re_fs; // Re -> mu
     input.T_fs = input.P_fs / (input.rho_fs * input.R); // Ideal gas law -> T
 
     input.R_ref = input.R;
@@ -332,11 +332,11 @@ void apply_nondim(InputStruct &input)
         input.gamma / (input.gamma - 1.0));
 
     for (unsigned int dim = 0; dim < input.nDims; dim++)
-      input.V_fs(dim) = input.v_fs * input.norm_fs(dim);
+      input.V_fs(dim) = input.v_mag_fs * input.norm_fs(dim);
 
     double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
     for (unsigned int n = 0; n < input.nDims; n++)
-      input.V_wall(n) = V_wall_mag * input.norm_wall(n) / input.v_fs;
+      input.V_wall(n) = V_wall_mag * input.norm_wall(n) / input.v_mag_fs;
     
     /// TODO: update Sutherland's Law, or disable it here
 
@@ -389,7 +389,7 @@ void apply_nondim(InputStruct &input)
 
   input.T_wall = input.T_wall / input.T_ref;
 
-  input.v_fs = 1.0;
+  input.v_mag_fs = 1.0;
   input.T_fs = 1.0;
   input.R = input.R_ref; /// TODO: replace all usage of "R_ref"
 }
