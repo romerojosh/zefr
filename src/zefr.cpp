@@ -122,18 +122,21 @@ int main(int argc, char* argv[])
   std::ofstream hist_file;
   std::ofstream force_file;
   std::ofstream error_file;
+  std::ofstream turb_stats_file;
 
   if (input.restart) /* If restarted, append to existing file */
   {
     hist_file.open(input.output_prefix + "/" + input.output_prefix + "_hist.dat", std::ios::app);
     force_file.open(input.output_prefix + "/" + input.output_prefix + "_forces.dat", std::ios::app);
     error_file.open(input.output_prefix + "/" + input.output_prefix + "_error.dat", std::ios::app);
+    turb_stats_file.open(input.output_prefix + "/" + input.output_prefix + "_turb_stats.dat", std::ios::app);
   }
   else
   {
     hist_file.open(input.output_prefix + "/" + input.output_prefix + "_hist.dat");
     force_file.open(input.output_prefix + "/" + input.output_prefix + "_forces.dat");
     error_file.open(input.output_prefix + "/" + input.output_prefix + "_error.dat");
+    turb_stats_file.open(input.output_prefix + "/" + input.output_prefix + "_turb_stats.dat");
   }
 
   /* Write initial solution */
@@ -198,6 +201,11 @@ int main(int argc, char* argv[])
     if (input.error_freq != 0 && (n%input.error_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
     {
       solver.report_error(error_file);
+    }
+
+    if (input.turb_stat_freq != 0 && (n%input.turb_stat_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))
+    {
+      solver.report_turbulent_stats(turb_stats_file);
     }
   }
   auto t2 = std::chrono::high_resolution_clock::now();

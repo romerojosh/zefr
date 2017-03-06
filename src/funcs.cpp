@@ -118,7 +118,7 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
         ThrowException("Taylor-Green Vortex test case for 3D cases only");
 
       double L = input->L_fs;
-      double U0 = input->v_fs;
+      double U0 = input->v_mag_fs;
       double Rho0 = input->rho_fs;
       double P0 = input->P_fs;
 

@@ -4810,6 +4810,112 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
   }
 }
 
+void FRSolver::report_turbulent_stats(std::ofstream &f)
+{
+#ifdef _GPU
+  for (auto e : elesObjs)
+  {
+    e->U_spts = e->U_spts_d;
+    e->dU_spts = e->dU_spts_d;
+  }
+#endif
+
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->mg_steps[0];
+
+  double keng = 0; double enst = 0; double vol = 0;
+
+  for (auto e : elesObjs)
+  {
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      vol += e->vol(ele);
+
+    for (unsigned int spt = 0; spt < e->nSpts; spt++)
+    {
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        /* Setting variables for convenience */
+        /* States */
+        double rho = e->U_spts(spt, 0, ele);
+        double momx = e->U_spts(spt, 1, ele);
+        double momy = e->U_spts(spt, 2, ele);
+        double momz = e->U_spts(spt, 3, ele);
+
+        double u = momx / rho;
+        double v = momy / rho;
+        double w = momz / rho;
+
+         /* Gradients */
+        double rho_dx = e->dU_spts(0, spt, 0, ele);
+        double momx_dx = e->dU_spts(0, spt, 1, ele);
+        double momy_dx = e->dU_spts(0, spt, 2, ele);
+        double momz_dx = e->dU_spts(0, spt, 3, ele);
+
+        double rho_dy = e->dU_spts(1, spt, 0, ele);
+        double momx_dy = e->dU_spts(1, spt, 1, ele);
+        double momy_dy = e->dU_spts(1, spt, 2, ele);
+        double momz_dy = e->dU_spts(1, spt, 3, ele);
+
+        double rho_dz = e->dU_spts(2, spt, 0, ele);
+        double momx_dz = e->dU_spts(2, spt, 1, ele);
+        double momy_dz = e->dU_spts(2, spt, 2, ele);
+        double momz_dz = e->dU_spts(2, spt, 3, ele);
+
+        double du_dx = (momx_dx - rho_dx * u) / rho;
+        double du_dy = (momx_dy - rho_dy * u) / rho;
+        double du_dz = (momx_dz - rho_dz * u) / rho;
+
+        double dv_dx = (momy_dx - rho_dx * v) / rho;
+        double dv_dy = (momy_dy - rho_dy * v) / rho;
+        double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+        double dw_dx = (momz_dx - rho_dx * w) / rho;
+        double dw_dy = (momz_dy - rho_dy * w) / rho;
+        double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+        double elekeng = 0.5 * rho * (u*u + v*v + w*w);
+        double eleenst = 0.5 * rho * ((dw_dy - dv_dz) * (dw_dy - dv_dz) + 
+                                      (du_dz - dw_dx) * (du_dz - dw_dx) + 
+                                      (dv_dx - du_dy) * (dv_dx - du_dy));
+
+        keng += e->jaco_det_spts(spt, ele) * e->weights_spts(spt) * elekeng;
+        enst += e->jaco_det_spts(spt, ele) * e->weights_spts(spt) * eleenst;
+      }
+    }
+  }
+
+#ifdef _MPI
+  if (input->rank == 0)
+  {
+    MPI_Reduce(MPI_IN_PLACE, &vol, 1, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(MPI_IN_PLACE, &keng, 1, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(MPI_IN_PLACE, &enst, 1, MPI_DOUBLE, MPI_SUM, 0, myComm);
+  }
+  else
+  {
+    MPI_Reduce(&vol, &vol, 1, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(&keng, &keng, 1, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(&enst, &enst, 1, MPI_DOUBLE, MPI_SUM, 0, myComm);
+  }
+
+#endif
+
+  if (input->rank == 0)
+  {
+    keng /= vol * input->rho_fs * input->v_mag_fs * input->v_mag_fs;
+    enst /= vol * input->rho_fs * input->v_mag_fs * input->v_mag_fs;
+
+    /* Print to terminal */
+    std::cout << std::scientific <<  "ke: " << keng << " enstrophy: " << enst << std::endl;
+
+    /* Write to file */
+    f << iter << " " << std::scientific << std::setprecision(16) << flow_time << " ";
+    f << keng << " " << enst << std::endl;
+  }
+
+}
+
 void FRSolver::filter_solution()
 {
   if (input->filt_on)

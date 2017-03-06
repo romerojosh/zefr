@@ -746,7 +746,9 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
   }
 
   if (geo.per_bnd_flag)
+  {
     couple_periodic_bnds(geo);
+  }
 }
 
 void set_face_nodes(GeoStruct &geo)
@@ -949,7 +951,7 @@ void couple_periodic_bnds(GeoStruct &geo)
     unsigned int bnd_id = bnd_face.second;
     auto face1 = bnd_face.first;
     unsigned int nNodesPerFace = (unsigned int) face1.size();
-    
+
     /* Check if face is periodic */
     if (bnd_id == PERIODIC)
     {
@@ -975,7 +977,8 @@ void couple_periodic_bnds(GeoStruct &geo)
       for(auto &bnd_face2 : geo.bnd_faces)
       {
         auto face2 = bnd_face2.first;
-        if (face2 == face1 || face2.size() != nNodesPerFace)
+        auto bnd_id2 = bnd_face2.second;
+        if (face2 == face1 || face2.size() != nNodesPerFace || bnd_id2 != PERIODIC)
           continue;
 
         /* Get face node coordinates */
@@ -1747,9 +1750,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
         {
           mpi_faces_glob[face] = face2ranks[face];
           if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC)
-          {
             mpi_faces_glob[geo.per_bnd_pairs[face]] = face2ranks[face];
-          }
         }
       }
     }
@@ -1813,6 +1814,32 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
 
   geo.nNodes = (unsigned int) uniqueNodes.size();
 
+  /* Obtain set of unique faces on this partition. */
+  std::set<std::vector<unsigned int>> uniqueFaces;
+  for (auto etype : geo.ele_set)
+  {
+    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
+
+    for (unsigned int ele = 0; ele < myElesBT[etype].size(); ele++)
+    {
+      for (auto face_nodes : geo.face_nodesBT[etype])
+      {
+        face.assign(face_nodes.size(), 0);
+
+        for (unsigned int i = 0; i < face_nodes.size(); i++)
+        {
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
+        }
+
+        /* Sort for consistency */
+        std::sort(face.begin(), face.end());
+
+        uniqueFaces.insert(face);
+      }
+    }
+  }
+
+
   /* Reduce node coordinate data to contain only partition local nodes */
   auto coord_nodes_glob = geo.coord_nodes;
   geo.coord_nodes.assign({(unsigned int) uniqueNodes.size(), geo.nDims}, 0);
@@ -1848,17 +1875,8 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     std::vector<unsigned int> bnd_face = entry.first;
     int bcType = entry.second;
 
-    /* If all nodes are on this partition, keep face data */
-    bool myFace = true;
-    for (auto nd : bnd_face)
-    {
-      if (!uniqueNodes.count(nd))
-      {
-        myFace = false;
-      }
-    }
 
-    if (myFace)
+    if (uniqueFaces.count(bnd_face))
     {
       /* Renumber nodes and store */
       for (auto &nd : bnd_face)
@@ -1875,17 +1893,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     std::vector<unsigned int> bnd_face = entry.first;
     int bnd_id = entry.second;
 
-    /* If all nodes are on this partition, keep face data */
-    bool myFace = true;
-    for (auto nd : bnd_face)
-    {
-      if (!uniqueNodes.count(nd))
-      {
-        myFace = false;
-      }
-    }
-
-    if (myFace)
+    if (uniqueFaces.count(bnd_face))
     {
       /* Renumber nodes and store */
       for (auto &nd : bnd_face)
@@ -1893,6 +1901,24 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
         nd = geo.node_map_g2p[nd];
       }
       geo.face2bnd[bnd_face] = bnd_id;
+    }
+  }
+
+  /* Reduce MPI face data to contain only MPI faces for local partition. Also
+   * reindex via geo.node_map_g2p. */
+  for (auto entry : mpi_faces_glob)
+  {
+    std::vector<unsigned int> mpi_face = entry.first;
+    auto face_ranks = entry.second;
+
+    if (uniqueFaces.count(mpi_face))
+    {
+      /* Renumber nodes and store */
+      for (auto &nd : mpi_face)
+      {
+        nd = geo.node_map_g2p[nd];
+      }
+      geo.mpi_faces[mpi_face] = face_ranks;
     }
   }
 
@@ -1910,15 +1936,9 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       std::vector<unsigned int> face2 = entry.second;
 
       /* If all nodes are on this partition, keep face data */
-      bool myFace1 = true;
-      for (auto nd : face1)
-        if (!uniqueNodes.count(nd))
-          myFace1 = false;
+      bool myFace1 = uniqueFaces.count(face1);
       
-      bool myFace2 = true;
-      for (auto nd : face2)
-        if (!uniqueNodes.count(nd))
-          myFace2 = false;
+      bool myFace2 = uniqueFaces.count(face2);
 
       /* Renumber nodes */
       for (auto &nd : face1)
@@ -1931,7 +1951,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       {
         geo.per_bnd_pairs[face1] = face2;
       }
-      /* Otherwise, MPI boundary. Store ordered vector of faces to iterate over later */
+      /* Otherwise, possible MPI boundary. Store ordered vector of faces to iterate over later */
       else if (myFace1 and !processed.count(face1))
       {
         geo.per_mpi_faces.push_back(face1);
@@ -1945,33 +1965,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  /* Reduce MPI face data to contain only MPI faces for local partition. Also
-   * reindex via geo.node_map_g2p. */
-  for (auto entry : mpi_faces_glob)
-  {
-    std::vector<unsigned int> mpi_face = entry.first;
-    auto face_ranks = entry.second;
-
-    /* If all nodes are on this partition, keep face data */
-    bool myFace = true;
-    for (auto nd : mpi_face)
-    {
-      if (!uniqueNodes.count(nd))
-      {
-        myFace = false;
-      }
-    }
-
-    if (myFace)
-    {
-      /* Renumber nodes and store */
-      for (auto &nd : mpi_face)
-      {
-        nd = geo.node_map_g2p[nd];
-      }
-      geo.mpi_faces[mpi_face] = face_ranks;
-    }
-  }
   
 
   std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles;
