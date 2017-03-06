@@ -1286,13 +1286,20 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   prev_time = flow_time;
 
   // Update grid to start of time step (if not already done so at previous step)
-  if (input->dt_scheme != "MCGS" && (input->nStages == 1 || (input->nStages > 1 && rk_alpha(input->nStages-2) != 1)))
-    move(flow_time);
+//  if (input->dt_scheme != "MCGS" && (input->nStages == 1 || (input->nStages > 1 && rk_alpha(input->nStages-2) != 1)))
+//    move(flow_time);
+  move(flow_time+elesObjs[0]->dt(0));
+
+  ZEFR->unblank_1();
+
+  move(flow_time);
+
+  ZEFR->unblank_2(eles->nVars);
 
 #ifdef _BUILD_LIB
   if (input->overset && input->motion)
   {
-    ZEFR->tg_set_iter_iblanks(elesObjs[0]->dt(0), eles->nVars);
+//    ZEFR->tg_set_iter_iblanks(elesObjs[0]->dt(0), eles->nVars);
 
 #ifdef _GPU
     ZEFR->update_iblank_gpu();

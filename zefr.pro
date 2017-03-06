@@ -3,7 +3,7 @@ CONFIG += console
 CONFIG -= qt
 
 DEFINES = _MPI
-DEFINES += _CPU
+#DEFINES += _CPU
 DEFINES += _GPU
 DEFINES += _BUILD_LIB
 

@@ -127,6 +127,7 @@ public:
 
   void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
                            void (*point_connect)(void), void (*iter_iblanks)(double, int),
+                           void (*unblank_part_1)(void), void (*unblank_part_2)(int),
                            void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int));
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
@@ -183,6 +184,9 @@ private:
 
   //! Callback to set a new rotation matrix & offset for TIOGA's ADT class
   void (*tg_update_transform)(double* Rmat, double* offset, int ndim);
+
+  void (*unblank_1)(void);
+  void (*unblank_2)(int);
 };
 
 #endif /* _zefr_hpp */

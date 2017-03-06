@@ -645,13 +645,15 @@ void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, 
 
 void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
                                void (*point_connect)(void), void (*iter_iblanks)(double, int),
-                               void (*dataUpdate_send)(int, int),
-                               void (*dataUpdate_recv)(int, int))
+                               void (*unblank_part_1)(void), void (*unblank_part_2)(int),
+                               void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int))
 {
   tg_preprocess = preprocess;
   tg_process_connectivity = connect;
   tg_point_connectivity = point_connect;
   tg_set_iter_iblanks = iter_iblanks;
+  unblank_1 = unblank_part_1;
+  unblank_2 = unblank_part_2;
   overset_interp_send = dataUpdate_send;
   overset_interp_recv = dataUpdate_recv;
 }

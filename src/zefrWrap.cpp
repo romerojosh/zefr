@@ -127,8 +127,8 @@ void initialize_overset(Zefr* z, InputStruct& inp)
   /* NOTE: tioga_dataUpdate is being called from within ZEFR, to accomodate
    * both multi-stage RK time stepping + viscous cases with gradient interp */
   z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
-      tioga_do_point_connectivity, tioga_set_iter_iblanks,
-      tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
+      tioga_do_point_connectivity, tioga_set_iter_iblanks, tioga_unblank_part_1,
+      tioga_unblank_part_2, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
 }
 
 void setup_overset_data(Zefr* z, InputStruct& inp)
