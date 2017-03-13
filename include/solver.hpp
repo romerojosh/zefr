@@ -91,11 +91,6 @@ class FRSolver
     /* Implicit method parameters */
     unsigned int nCounter;
     unsigned int prev_color = 0;
-    double SER_omg = 1;
-    double SER_res[2] = {0};
-#ifndef _NO_TNT
-    std::vector<std::vector<JAMA::LU<double>>> LUptrs;
-#endif
 
 #ifdef _GPU
     mdvector_gpu<double> rk_alpha_d, rk_beta_d;
@@ -177,8 +172,8 @@ class FRSolver
     void compute_moments(std::array<double, 3>& tot_force, std::array<double, 3>& tot_moment);
 
     /* Routines for implicit method */
-    void compute_LHS();
-    void compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsigned int color = 1);
+    void compute_dRdU();
+    void compute_LHS_LU(unsigned int color = 1);
     void compute_RHS(unsigned int color = 1);
 #ifdef _CPU
     void compute_RHS_source(const mdvector<double> &source, unsigned int color = 1);
@@ -189,7 +184,6 @@ class FRSolver
     void compute_deltaU(unsigned int color = 1);
     void compute_U(unsigned int color = 1);
     void dFcdU_from_faces();
-    void compute_SER_dt();
     void write_color();
 
 #ifdef _BUILD_LIB

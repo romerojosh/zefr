@@ -12,16 +12,6 @@ template <size_t nVars, size_t nDims>
 #ifdef _GPU
 __device__ __forceinline__
 #endif
-void compute_Fconv_Burgers(double U[nVars], double F[nVars][nDims], double Vg[nDims])
-{
-  for (unsigned int dim = 0; dim < nDims; dim++)
-    F[0][dim] = 0.5 * U[0] * U[0] - (Vg[dim] * U[0]);
-}
-
-template <size_t nVars, size_t nDims>
-#ifdef _GPU
-__device__ __forceinline__
-#endif
 void compute_Fconv_EulerNS(double U[nVars], double F[nVars][nDims], double Vg[nDims], double &P, double gamma)
 {
   if (nDims == 2)
@@ -209,4 +199,288 @@ void compute_Fvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], double 
       gamma * de_dz);
   }
 
+}
+
+
+template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
+void compute_dFdUconv_AdvDiff(double dFdU[nVars][nVars][nDims], double A[nDims])
+{
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    dFdU[0][0][dim] = A[dim];
+}
+
+template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
+void compute_dFdUconv_EulerNS(double U[nVars], double dFdU[nVars][nVars][nDims], double gamma)
+{
+  if (nDims == 2)
+  {
+    /* Primitive Variables */
+    double invrho = 1.0 / U[0];
+    double u = U[1] * invrho;
+    double v = U[2] * invrho;
+    double e = U[3];
+
+    /* Set convective dFdU values in the x-direction */
+    dFdU[1][0][0] = 0.5 * ((gamma-3.0) * u*u + (gamma-1.0) * v*v);
+    dFdU[2][0][0] = -u * v;
+    dFdU[3][0][0] = -gamma * e * u * invrho + (gamma-1.0) * u * (u*u + v*v);
+
+    dFdU[0][1][0] = 1;
+    dFdU[1][1][0] = (3.0-gamma) * u;
+    dFdU[2][1][0] = v;
+    dFdU[3][1][0] = gamma * e * invrho + 0.5 * (1.0-gamma) * (3.0*u*u + v*v);
+
+    dFdU[1][2][0] = (1.0-gamma) * v;
+    dFdU[2][2][0] = u;
+    dFdU[3][2][0] = (1.0-gamma) * u * v;
+
+    dFdU[1][3][0] = (gamma-1.0);
+    dFdU[3][3][0] = gamma * u;
+
+    /* Set convective dFdU values in the y-direction */
+    dFdU[1][0][1] = -u * v;
+    dFdU[2][0][1] = 0.5 * ((gamma-1.0) * u*u + (gamma-3.0) * v*v);
+    dFdU[3][0][1] = -gamma * e * v * invrho + (gamma-1.0) * v * (u*u + v*v);
+
+    dFdU[1][1][1] = v;
+    dFdU[2][1][1] = (1.0-gamma) * u;
+    dFdU[3][1][1] = (1.0-gamma) * u * v;
+
+    dFdU[0][2][1] = 1;
+    dFdU[1][2][1] = u;
+    dFdU[2][2][1] = (3.0-gamma) * v;
+    dFdU[3][2][1] = gamma * e * invrho + 0.5 * (1.0-gamma) * (u*u + 3.0*v*v);
+
+    dFdU[2][3][1] = (gamma-1.0);
+    dFdU[3][3][1] = gamma * v;
+  }
+  else if (nDims == 3)
+  {
+    /* Primitive Variables */
+    double invrho = 1.0 / U[0];
+    double u = U[1] * invrho;
+    double v = U[2] * invrho;
+    double w = U[3] * invrho;
+    double e = U[4];
+
+    /* Set convective dFdU values in the x-direction */
+    dFdU[1][0][0] = 0.5 * ((gamma-3.0) * u*u + (gamma-1.0) * (v*v + w*w));
+    dFdU[2][0][0] = -u * v;
+    dFdU[3][0][0] = -u * w;
+    dFdU[4][0][0] = -gamma * e * u * invrho + (gamma-1.0) * u * (u*u + v*v + w*w);
+
+    dFdU[0][1][0] = 1;
+    dFdU[1][1][0] = (3.0-gamma) * u;
+    dFdU[2][1][0] = v;
+    dFdU[3][1][0] = w;
+    dFdU[4][1][0] = gamma * e * invrho + 0.5 * (1.0-gamma) * (3.0*u*u + v*v + w*w);
+
+    dFdU[1][2][0] = (1.0-gamma) * v;
+    dFdU[2][2][0] = u;
+    dFdU[4][2][0] = (1.0-gamma) * u * v;
+
+    dFdU[1][3][0] = (1.0-gamma) * w;
+    dFdU[3][3][0] = u;
+    dFdU[4][3][0] = (1.0-gamma) * u * w;
+
+    dFdU[1][4][0] = (gamma-1.0);
+    dFdU[4][4][0] = gamma * u;
+
+    /* Set convective dFdU values in the y-direction */
+    dFdU[1][0][1] = -u * v;
+    dFdU[2][0][1] = 0.5 * ((gamma-1.0) * (u*u + w*w) + (gamma-3.0) * v*v);
+    dFdU[3][0][1] = -v * w;
+    dFdU[4][0][1] = -gamma * e * v * invrho + (gamma-1.0) * v * (u*u + v*v + w*w);
+
+    dFdU[1][1][1] = v;
+    dFdU[2][1][1] = (1.0-gamma) * u;
+    dFdU[4][1][1] = (1.0-gamma) * u * v;
+
+    dFdU[0][2][1] = 1;
+    dFdU[1][2][1] = u;
+    dFdU[2][2][1] = (3.0-gamma) * v;
+    dFdU[3][2][1] = w;
+    dFdU[4][2][1] = gamma * e * invrho + 0.5 * (1.0-gamma) * (u*u + 3.0*v*v + w*w);
+
+    dFdU[2][3][1] = (1.0-gamma) * w;
+    dFdU[3][3][1] = v;
+    dFdU[4][3][1] = (1.0-gamma) * v * w;
+
+    dFdU[2][4][1] = (gamma-1.0);
+    dFdU[4][4][1] = gamma * v;
+
+    /* Set convective dFdU values in the z-direction */
+    dFdU[1][0][2] = -u * w;
+    dFdU[2][0][2] = -v * w;
+    dFdU[3][0][2] = 0.5 * ((gamma-1.0) * (u*u + v*v) + (gamma-3.0) * w*w);
+    dFdU[4][0][2] = -gamma * e * w * invrho + (gamma-1.0) * w * (u*u + v*v + w*w);
+
+    dFdU[1][1][2] = w;
+    dFdU[3][1][2] = (1.0-gamma) * u;
+    dFdU[4][1][2] = (1.0-gamma) * u * w;
+
+    dFdU[2][2][2] = w;
+    dFdU[3][2][2] = (1.0-gamma) * v;
+    dFdU[4][2][2] = (1.0-gamma) * v * w;
+
+    dFdU[0][3][2] = 1;
+    dFdU[1][3][2] = u;
+    dFdU[2][3][2] = v;
+    dFdU[3][3][2] = (3.0-gamma) * w;
+    dFdU[4][3][2] = gamma * e * invrho + 0.5 * (1.0-gamma) * (u*u + v*v + 3.0*w*w);
+
+    dFdU[3][4][2] = (gamma-1.0);
+    dFdU[4][4][2] = gamma * w;
+  }
+}
+
+template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
+void compute_dFddUvisc_AdvDiff(double dFddU[nVars][nVars][nDims][nDims], double D)
+{
+  for (unsigned int dim = 0; dim < nDims; dim++)
+    dFddU[0][0][dim][dim] = -D;
+}
+
+template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
+void compute_dFdUvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], double dFdU[nVars][nVars][nDims], 
+    double gamma, double mu_in)
+{
+  if (nDims == 2)
+  {
+    /* Primitive Variables */
+    double invrho = 1.0 / U[0];
+    double u = U[1] * invrho;
+    double v = U[2] * invrho;
+    double e_int = U[3] * invrho - 0.5 * (u*u + v*v);
+
+    /* Gradients */
+    double rho_dx = dU[0][0];
+    double momx_dx = dU[1][0];
+    double momy_dx = dU[2][0];
+    
+    double rho_dy = dU[0][1];
+    double momx_dy = dU[1][1];
+    double momy_dy = dU[2][1];
+
+    /* Set viscosity */
+    // TODO: Add Sutherland's law and store mu in array
+    double mu = mu_in;
+
+    double du_dx = (momx_dx - rho_dx * u) * invrho;
+    double du_dy = (momx_dy - rho_dy * u) * invrho;
+
+    double dv_dx = (momy_dx - rho_dx * v) * invrho;
+    double dv_dy = (momy_dy - rho_dy * v) * invrho;
+
+    double diag = (du_dx + dv_dy) / 3.0;
+
+    double tauxx = 2.0 * mu * (du_dx - diag);
+    double tauxy = mu * (du_dy + dv_dx);
+    double tauyy = 2.0 * mu * (dv_dy - diag);
+
+    /* Set viscous dFdU values in the x-direction */
+    dFdU[3][0][0] += -(u * tauxx + v * tauxy) * invrho;
+    dFdU[3][1][0] += tauxx * invrho;
+    dFdU[3][2][0] += tauxy * invrho;
+
+    /* Set viscous dFdU values in the y-direction */
+    dFdU[3][0][1] += -(u * tauxy + v * tauyy) *invrho;
+    dFdU[3][1][1] += tauxy * invrho;
+    dFdU[3][2][1] += tauyy * invrho;
+  }
+  else if (nDims == 3)
+  {
+#ifdef _CPU
+    ThrowException("dFdUvisc for 3D EulerNS not implemented yet!");
+#endif
+  }
+}
+
+template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
+void compute_dFddUvisc_EulerNS(double U[nVars], double dFddU[nVars][nVars][nDims][nDims], 
+    double gamma, double prandtl, double mu_in)
+{
+  if (nDims == 2)
+  {
+    /* Primitive Variables */
+    double invrho = 1.0 / U[0];
+    double u = U[1] * invrho;
+    double v = U[2] * invrho;
+    double e = U[3];
+
+    /* Set viscosity */
+    // TODO: Add Sutherland's law and store mu in array
+    double mu = mu_in;
+    double diffCo1 = mu * invrho;
+    double diffCo2 = gamma * mu * invrho / prandtl;
+
+    /* Set viscous dFxddUx values */
+    dFddU[1][0][0][0] = -4.0/3.0 * u * diffCo1;
+    dFddU[2][0][0][0] = -v * diffCo1;
+    dFddU[3][0][0][0] = -(4.0/3.0 * u*u + v*v) * diffCo1 + (u*u + v*v - e*invrho) * diffCo2;
+
+    dFddU[1][1][0][0] = 4.0/3.0 * diffCo1;
+    dFddU[3][1][0][0] = u * (4.0/3.0 * diffCo1 - diffCo2);
+
+    dFddU[2][2][0][0] = diffCo1;
+    dFddU[3][2][0][0] = v * (diffCo1 - diffCo2);
+
+    dFddU[3][3][0][0] = diffCo2;
+
+    /* Set viscous dFyddUx values */
+    dFddU[1][0][1][0] = -v * diffCo1;
+    dFddU[2][0][1][0] = 2.0/3.0 * u * diffCo1;
+    dFddU[3][0][1][0] = -1.0/3.0 * u * v * diffCo1;
+
+    dFddU[2][1][1][0] = -2.0/3.0 * diffCo1;
+    dFddU[3][1][1][0] = -2.0/3.0 * v * diffCo1;
+
+    dFddU[1][2][1][0] = diffCo1;
+    dFddU[3][2][1][0] = u * diffCo1;
+
+    /* Set viscous dFxddUy values */
+    dFddU[1][0][0][1] = 2.0/3.0 * v * diffCo1;
+    dFddU[2][0][0][1] = -u * diffCo1;
+    dFddU[3][0][0][1] = -1.0/3.0 * u * v * diffCo1;
+
+    dFddU[2][1][0][1] = diffCo1;
+    dFddU[3][1][0][1] = v * diffCo1;
+
+    dFddU[1][2][0][1] = -2.0/3.0 * diffCo1;
+    dFddU[3][2][0][1] = -2.0/3.0 * u * diffCo1;
+
+    /* Set viscous dFyddUy values */
+    dFddU[1][0][1][1] = -u * diffCo1;
+    dFddU[2][0][1][1] = -4.0/3.0 * v * diffCo1;
+    dFddU[3][0][1][1] = -(u*u + 4.0/3.0 * v*v) * diffCo1 + (u*u + v*v - e*invrho) * diffCo2;
+
+    dFddU[1][1][1][1] = diffCo1;
+    dFddU[3][1][1][1] = u * (diffCo1 - diffCo2);
+
+    dFddU[2][2][1][1] = 4.0/3.0 * diffCo1;
+    dFddU[3][2][1][1] = v * (4.0/3.0 * diffCo1 - diffCo2);
+
+    dFddU[3][3][1][1] = diffCo2;
+  }
+  else if (nDims == 3)
+  {
+#ifdef _CPU
+    ThrowException("dFddUvisc for 3D EulerNS not implemented yet!");
+#endif
+  }
 }

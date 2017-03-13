@@ -96,9 +96,25 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
   {
-    /* Fill in */
-  }
+    /* Data structures for constructing the implicit Jacobian */
+    dFdU_spts.assign({nEles, nVars, nVars, nDims, nSpts});
+    dFcdU.assign({nEles, nVars, nVars, nFpts});
 
+    if (input->viscous)
+    {
+      dUcdU.assign({2, nFpts, nVars, nVars, nEles});
+
+      /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
+      dFddU_spts.assign({nDims, nDims, nSpts, nVars, nVars, nEles});
+      dFcddU.assign({2, nDims, nFpts, nVars, nVars, nEles});
+    }
+
+    /* Solver data structures */
+    LHS.assign({nEles, nVars, nSpts, nVars, nSpts});
+    RHS.assign({nEles, nVars, nSpts});
+    deltaU.assign({nEles, nVars, nSpts});
+    LUptrs.resize(nEles);
+  }
 }
 
 void Elements::set_shape()
@@ -1432,15 +1448,126 @@ void Elements::compute_unit_advF(unsigned int dim)
 }
 
 
-#ifdef _CPU
-void Elements::compute_localLHS(mdvector<double> &dt, unsigned int startEle, unsigned int endEle, unsigned int color)
-#endif
-#ifdef _GPU
-void Elements::compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEle, unsigned int endEle, unsigned int color)
-#endif
+void Elements::compute_local_dRdU()
 {
+  /* Compute inviscid element local Jacobians */
+  double SF[nSpts][nFpts];
+  for (unsigned int ele = 0; ele < nEles; ele++)
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+      {
+        for (unsigned int spti = 0; spti < nSpts; spti++)
+          for (unsigned int fptj = 0; fptj < nFpts; fptj++)
+            SF[spti][fptj] = oppDiv_fpts(spti, fptj) * dFcdU(ele, vari, varj, fptj);
 
+        for (unsigned int spti = 0; spti < nSpts; spti++)
+          for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+          {
+            double val = 0;
+            for (unsigned int fptk = 0; fptk < nFpts; fptk++)
+              val += SF[spti][fptk] * oppE(fptk, sptj);
+            LHS(ele, vari, spti, varj, sptj) = val;
+          }
+
+        for (unsigned int spti = 0; spti < nSpts; spti++)
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+              LHS(ele, vari, spti, varj, sptj) += oppDiv(spti, dim, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
+      }
 }
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+void Elements::compute_dFdU()
+{
+  double U[nVars];
+  double dU[nVars][nDims];
+  double dFdU[nVars][nVars][nDims] = {0};
+  double dFddU[nVars][nVars][nDims][nDims] = {0};
+
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    for (unsigned int ele = 0; ele < nEles; ele++)
+    {
+      /* Get state variables and physical space gradients */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        U[var] = U_spts(spt, var, ele);
+
+        if(input->viscous) 
+          for(unsigned int dim = 0; dim < nDims; dim++)
+            dU[var][dim] = dU_spts(dim, spt, var, ele);
+      }
+
+      /* Compute flux derivatives */
+      if (equation == AdvDiff)
+      {
+        double A[nDims];
+        for(unsigned int dim = 0; dim < nDims; dim++)
+          A[dim] = input->AdvDiff_A(dim);
+
+        compute_dFdUconv_AdvDiff<nVars, nDims>(dFdU, A);
+        if(input->viscous) compute_dFddUvisc_AdvDiff<nVars, nDims>(dFddU, input->AdvDiff_D);
+      }
+      else if (equation == EulerNS)
+      {
+        compute_dFdUconv_EulerNS<nVars, nDims>(U, dFdU, input->gamma);
+        if(input->viscous)
+        {
+          compute_dFdUvisc_EulerNS_add<nVars, nDims>(U, dU, dFdU, input->gamma, input->mu);
+          compute_dFddUvisc_EulerNS<nVars, nDims>(U, dFddU, input->gamma, input->prandtl, input->mu);
+        }
+      }
+
+      /* Get metric terms */
+      double inv_jaco[nDims][nDims];
+      for (int dim1 = 0; dim1 < nDims; dim1++)
+        for (int dim2 = 0; dim2 < nDims; dim2++)
+          inv_jaco[dim1][dim2] = inv_jaco_spts(dim1, spt, dim2, ele);
+
+      /* Transform flux derivative to reference space */
+      double tdFdU[nVars][nVars][nDims] = {{0.0}};
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+            for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+              tdFdU[vari][varj][dim1] += dFdU[vari][varj][dim2] * inv_jaco[dim1][dim2];
+
+      /* Write out transformed flux derivatives */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            dFdU_spts(ele, vari, varj, dim, spt) = tdFdU[vari][varj][dim];
+
+      if(input->viscous)
+        for (unsigned int vari = 0; vari < nVars; vari++)
+          for (unsigned int varj = 0; varj < nVars; varj++)
+            for (unsigned int dimi = 0; dimi < nDims; dimi++)
+              for (unsigned int dimj = 0; dimj < nDims; dimj++)
+                dFddU_spts(dimi, dimj, spt, vari, varj, ele) = dFddU[vari][varj][dimi][dimj];
+    }
+  }
+}
+
+void Elements::compute_dFdU()
+{
+#ifdef _CPU
+  if (input->equation == AdvDiff)
+  {
+    if (nDims == 2)
+      compute_dFdU<1, 2, AdvDiff>();
+    else if (nDims == 3)
+      compute_dFdU<1, 3, AdvDiff>();
+  }
+  else if (input->equation == EulerNS)
+  {
+    if (nDims == 2)
+      compute_dFdU<4, 2, EulerNS>();
+    else if (nDims == 3)
+      compute_dFdU<5, 3, EulerNS>();
+  }
+#endif
+}
+
 
 void Elements::compute_Uavg()
 {

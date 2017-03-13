@@ -446,17 +446,7 @@ void FRSolver::setup_update()
   }
   else if (input->dt_scheme == "MCGS")
   {
-#ifdef _GPU
-    if (input->viscous)
-    {
-      ThrowException("Viscous MCGS not implemented on GPU");
-    }
-#endif
-
-    // HACK: (nStages = 1) doesn't work, fix later
-    input->nStages = 2;
-    rk_alpha.assign({input->nStages});
-    rk_beta.assign({input->nStages});
+    input->nStages = 1;
 
     /* Forward or Forward/Backward sweep */
     nCounter = geo.nColors;
@@ -464,6 +454,14 @@ void FRSolver::setup_update()
     {
       nCounter *= 2;
     }
+
+#ifdef _GPU
+    if (input->viscous)
+    {
+      ThrowException("Viscous MCGS not implemented on GPU");
+    }
+#endif
+
   }
   else
   {
@@ -1088,16 +1086,49 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 }
 
-void FRSolver::compute_LHS()
+void FRSolver::compute_dRdU()
 {
+  /* Apply boundary conditions for flux Jacobian */
+  faces->apply_bcs_dFdU();
+
+  /* Compute flux Jacobian at solution points */
+  for (auto e : elesObjs)
+    e->compute_dFdU();
+
+  /* Compute common interface flux Jacobian */
+  faces->compute_common_dFdU(0, geo.nGfpts);
+
+  /* Compute block diagonal components of flux divergence Jacobian */
+  for (auto e : elesObjs)
+    e->compute_local_dRdU();
 }
 
-void FRSolver::compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsigned int color)
+void FRSolver::compute_LHS_LU(unsigned int color)
 {
+#ifndef _NO_TNT
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      /* Calculate and store LU object */
+      unsigned int N = e->nSpts * e->nVars;
+      TNT::Array2D<double> A(N, N, &e->LHS(ele, 0, 0, 0, 0));
+      e->LUptrs[ele] = JAMA::LU<double>(A);
+    }
+#endif
 }
 
 void FRSolver::compute_RHS(unsigned int color)
 {
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          if (input->dt_type != 2)
+            e->RHS(ele, var, spt) = -(e->dt(0) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
+          else
+            e->RHS(ele, var, spt) = -(e->dt(ele) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
+        }
 }
 
 #ifdef _CPU
@@ -1114,10 +1145,32 @@ void FRSolver::compute_RHS_source(const mdvector_gpu<double> &source, unsigned i
 
 void FRSolver::compute_deltaU(unsigned int color)
 {
+#ifndef _NO_TNT
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      /* Create Array1D view of RHS */
+      unsigned int N = e->nSpts * e->nVars;
+      TNT::Array1D<double> b(N, &e->RHS(ele, 0, 0));
+
+      /* Solve for deltaU */
+      TNT::Array1D<double> x(N, &e->deltaU(ele, 0, 0));
+      x.inject(e->LUptrs[ele].solve(b));
+
+      if (x.dim() == 0) ThrowException("LU solve failed!");
+    }
+#endif
 }
 
 void FRSolver::compute_U(unsigned int color)
 {
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          e->U_spts(spt, var, ele) += e->deltaU(ele, var, spt);
+        }
 }
 
 void FRSolver::initialize_U()
@@ -1143,6 +1196,7 @@ void FRSolver::setup_views()
     dU_base_ptrs.assign({2 * geo.nGfpts});
     dU_strides.assign({2, 2 * geo.nGfpts});
   }
+
 #ifdef _GPU
   mdvector<double*> U_base_ptrs_d({2 * geo.nGfpts});
   mdvector<double*> U_ldg_base_ptrs_d({2 * geo.nGfpts});
@@ -1159,6 +1213,15 @@ void FRSolver::setup_views()
     dU_strides_d.assign({2, 2 * geo.nGfpts});
   }
 #endif
+
+  /* Setup face views of element data for implicit */
+  mdvector<double*> dFcdU_base_ptrs;
+  mdvector<unsigned int> dFcdU_strides;
+  if (input->dt_scheme == "MCGS")
+  {
+    dFcdU_base_ptrs.assign({2 * geo.nGfpts});
+    dFcdU_strides.assign({2, 2 * geo.nGfpts});
+  }
 
   /* Set pointers for internal faces */
   for (auto e : elesObjs)
@@ -1198,7 +1261,14 @@ void FRSolver::setup_views()
           dU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_stride(1);
           dU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_stride(3);
 #endif
-         
+        }
+
+        /* Set pointers for internal faces for implicit */
+        if (input->dt_scheme == "MCGS")
+        {
+          dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
+          dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
+          dFcdU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(2);
         }
       }
     }
@@ -1248,6 +1318,14 @@ void FRSolver::setup_views()
     
     }
 
+    /* Set pointers for remaining faces for implicit */
+    if (input->dt_scheme == "MCGS")
+    {
+      dFcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcdU_bnd(0, 0, i);
+      dFcdU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(1);
+      dFcdU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(2);
+    }
+
     i++;
   }
 
@@ -1272,6 +1350,11 @@ void FRSolver::setup_views()
   }
 #endif
 
+  /* Create views of element data for implicit */
+  if (input->dt_scheme == "MCGS")
+  {
+    faces->dFcdU.assign(dFcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
+  }
 }
 
 /* Note: Source term in update() is used primarily for multigrid. To add a true source term, define
@@ -1789,12 +1872,65 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 }
 
 #ifdef _CPU
-void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &source)
+void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
-void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source)
+void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
+  // TODO: Add multigrid functionality and coloring
+  /* Compute residual and block diagonal Jacobian on all elements */
+  int iter = current_iter - restart_iter;
+  if (iter % input->Jfreeze_freq == 0)
+  {
+    compute_residual(0);
+
+    /* Compute block diagonal components of residual Jacobian */
+    compute_dRdU();
+
+    // TODO: Revisit this as it is kind of expensive.
+    if (input->dt_type != 0)
+    {
+      compute_element_dt();
+    }
+
+    /* Compute Backward Euler LHS */
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+            for (unsigned int varj = 0; varj < e->nVars; varj++)
+              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+              {
+                if (input->dt_type != 2)
+                  e->LHS(ele, vari, spti, varj, sptj) *= e->dt(0) / e->jaco_det_spts(spti, ele);
+                else
+                  e->LHS(ele, vari, spti, varj, sptj) *= e->dt(ele) / e->jaco_det_spts(spti, ele); 
+
+                if (spti == sptj && vari == varj)
+                  e->LHS(ele, vari, spti, varj, sptj) += 1;
+              }
+
+    /* LU factorization of LHS */
+    compute_LHS_LU();
+    //write_LHS(input->output_prefix);
+  }
+  else
+  {
+    compute_residual(0);
+  }
+
+  /* Prepare RHS vector */
+  if (sourceBT.size() == 0)
+  {
+    compute_RHS();
+  }
+
+  /* Solve system for deltaU */
+  compute_deltaU();
+
+  /* Add deltaU to solution */
+  compute_U();
 }
 
 void FRSolver::compute_element_dt()
@@ -1919,68 +2055,6 @@ void FRSolver::compute_element_dt()
 
   check_error();
 #endif
-}
-
-void FRSolver::compute_SER_dt()
-{
-  /* Compute norm of residual */
-  // TODO: Create norm function to eliminate repetition, add other norms
-  SER_res[1] = SER_res[0];
-  SER_res[0] = 0;
-
-  for (auto e : elesObjs)
-  {
-    for (unsigned int n = 0; n < e->nVars; n++)
-    {
-      for (unsigned int ele =0; ele < e->nEles; ele++)
-      {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-
-        for (unsigned int spt = 0; spt < e->nSpts; spt++)
-        {
-          SER_res[0] += (e->divF_spts(spt, ele, n, 0) / e->jaco_det_spts(spt, ele)) *
-                         (e->divF_spts(spt, ele, n, 0) / e->jaco_det_spts(spt, ele));
-        }
-      }
-    }
-  }
-  SER_res[0] = std::sqrt(SER_res[0]);
-
-  /* Compute SER time step growth */
-  double omg = SER_res[1] / SER_res[0];
-  if (omg != 0)
-  {
-    /* Clipping */
-    if (omg < 0.1)
-      omg = 0.1;
-    else if (omg > 2.0)
-      omg = 2.0;
-
-    /* Relax Growth */
-    if (omg > 1.0)
-      omg = std::sqrt(omg);
-
-    /* Compute new time step */
-    SER_omg *= omg;
-    for (auto e : elesObjs)
-    {
-      if (input->dt_type == 0)
-      {
-        e->dt(0) *= omg;
-      }
-      else if(input->dt_type == 1)
-      {
-        e->dt(0) *= SER_omg;
-      }
-      else if (input->dt_type == 2)
-      {
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-        {
-          e->dt(ele) *= SER_omg;
-        }
-      }
-    }
-  }
 }
 
 void FRSolver::write_solution_pyfr(const std::string &_prefix)
@@ -4025,7 +4099,7 @@ void FRSolver::write_LHS(const std::string &_prefix)
 
     std::string name = "LHS_" + std::to_string(iter);
     DataSet dset = file.createDataSet(name, PredType::NATIVE_DOUBLE, dspaceU);
-    dset.write(e->LHSs[0].data(), PredType::NATIVE_DOUBLE, dspaceU);
+    dset.write(e->LHS.data(), PredType::NATIVE_DOUBLE, dspaceU);
 
     dspaceU.close();
     dset.close();
@@ -4048,12 +4122,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     e->dt = e->dt_d;
   }
 #endif
-
-  // HACK: Change nStages to compute the correct residual
-  if (input->dt_scheme == "MCGS")
-  {
-    input->nStages = 1;
-  }
 
   std::vector<double> res(elesObjs[0]->nVars,0.0);
 
@@ -4094,12 +4162,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   unsigned int nDoF = 0;
   for (auto e : elesObjs)
     nDoF += (e->nSpts * e->nEles);
-
-  // HACK: Change nStages back
-  if (input->dt_scheme == "MCGS")
-  {
-    input->nStages = 2;
-  }
 
 #ifdef _MPI
   MPI_Op oper = MPI_SUM;

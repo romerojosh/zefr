@@ -131,7 +131,6 @@ InputStruct read_input_file(std::string inputfile)
   read_param_vec(f, "mg_levels", input.mg_levels);
   read_param_vec(f, "mg_steps", input.mg_steps);
 
-  read_param(f, "SER", input.SER, false);
   read_param(f, "inv_mode", input.inv_mode, true);
   read_param(f, "stream_mode", input.stream_mode, false);
   read_param(f, "backsweep", input.backsweep, false);

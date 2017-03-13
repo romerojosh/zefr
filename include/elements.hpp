@@ -112,11 +112,11 @@ class Elements
     mdvector<double> LHS, LHSInv;  // Element local matrices for implicit system
     mdvector<int> LU_pivots, LU_info; 
 #ifndef _NO_TNT
-    std::vector<std::vector<JAMA::LU<double>>> LUptrs;
+    std::vector<JAMA::LU<double>> LUptrs;
 #endif
     mdvector<double*> LHS_ptrs, RHS_ptrs, LHSInv_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs, deltaU_ptrs; 
     mdvector<double> dFdU_spts, dFddU_spts;
-    mdvector<double> dFcdU_fpts, dUcdU_fpts, dFcddU_fpts;
+    mdvector<double> dFcdU, dUcdU, dFcddU;
     mdvector<double> deltaU;
     mdvector<double> RHS;
 
@@ -248,12 +248,10 @@ class Elements
          unsigned int nPts, unsigned int nDims);
 
     /* Routines for implicit method */
-#ifdef _CPU
-    void compute_localLHS(mdvector<double> &dt, unsigned int startEle, unsigned int endEle, unsigned int color = 1);
-#endif
-#ifdef _GPU
-    void compute_localLHS(mdvector_gpu<double> &dt_d, unsigned int startEle, unsigned int endEle, unsigned int color = 1);
-#endif
+    void compute_local_dRdU();
+    template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+    void compute_dFdU();
+    void compute_dFdU();
 
     /* Polynomial squeeze methods */
     void compute_Uavg();
