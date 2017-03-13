@@ -444,11 +444,12 @@ void Zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank
   c2v = (int *)&geo->ele2nodesBT[etype](0,0);
 }
 
-void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
-                              int& nFaces_type, int*& f2v, int*& f2c, int*& c2f,
-                              int*& iblank_face, int*& iblank_cell,
-                              int &nOver, int*& overFaces, int &nMpiFaces, int*& mpiFaces, int*& procR,
-                              int*& faceIdR, double*& grid_vel)
+void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face, int& nFaces_type,
+                              int*& f2v, int*& f2c, int*& c2f, int*& iblank_face,
+                              int*& iblank_cell, int &nOver, int*& overFaces,
+                              int &nMpiFaces, int*& mpiFaces, int*& procR,
+                              int*& faceIdR, double*& grid_vel, double*& offset,
+                              double*& Rmat)
 {
   auto etype = solver->elesObjs[0]->etype;
 
@@ -466,7 +467,19 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
   mpiFaces = geo->mpiFaces.data();
   procR = geo->procR.data();
   faceIdR = geo->faceID_R.data();
-  grid_vel = geo->grid_vel_nodes.data();
+
+  if (input.motion)
+  {
+    grid_vel = geo->grid_vel_nodes.data();
+    offset = geo->x_cg.data();
+    Rmat = geo->Rmat.data();
+  }
+  else
+  {
+    grid_vel = NULL;
+    offset = NULL;
+    Rmat = NULL;
+  }
 }
 
 void Zefr::get_gpu_geo_data(double*& coord_nodes, double*& coord_eles,

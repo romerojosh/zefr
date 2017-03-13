@@ -162,7 +162,7 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
                          cbs.get_q_spts, cbs.get_dq_spts);
 
   if (inp.motion)
-    tioga_register_moving_grid_data(geoAB.grid_vel);
+    tioga_register_moving_grid_data(geoAB.grid_vel, geoAB.offset, geoAB.Rmat);
 
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())

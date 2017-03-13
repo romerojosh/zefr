@@ -55,6 +55,8 @@ struct ExtraGeo
   int *procR;       //! Opposite rank for each MPI face
   int *mpiFidR;     //! Face ID of MPI face on opposite rank
   double *grid_vel; //! Grid velocity at mesh nodes
+  double *offset;
+  double *Rmat;
 };
 
 struct GpuGeo

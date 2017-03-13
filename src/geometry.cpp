@@ -169,6 +169,10 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.Rmat.assign({3,3});
     geo.x_cg.assign({3});
     geo.vel_cg.assign({3});
+
+    // Initialize Rmat to identity matrix
+    for (int i = 0; i < 3; i++)
+      geo.Rmat(i,i) = 1;
   }
 
   return geo;
