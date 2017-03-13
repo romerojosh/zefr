@@ -97,6 +97,9 @@ public:
                           int& nMpiFaces, int*& mpiFaces, int*& procR,
                           int*& faceIdR, double*& grid_vel);
 
+  void get_gpu_geo_data(double*& coord_nodes, double*& coord_eles,
+                        int*& iblank_cell, int*& iblank_face);
+
   // Solution-data access functions
   double get_u_spt(int ele, int spt, int var);
   double get_grad_spt(int ele, int spt, int dim, int var);
@@ -121,6 +124,8 @@ public:
   void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
   void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag = 0, double* data = NULL);
   void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
+
+  void get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *xyz);
 
   /// TODO: Reconsider organization
   void set_dataUpdate_callback(void (*dataUpdate)(int, double*, int));

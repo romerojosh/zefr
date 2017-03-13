@@ -994,12 +994,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
         e->compute_dU_fpts();
       
     }
-
-#if defined(_GPU) && defined(_BUILD_LIB)
-    if (input->overset)
-      event_record_wait_pair(3, 0, 3); // Event for completion of corrected gradient
-#endif
-
   }
 
   /* Compute flux at solution points */
@@ -1011,7 +1005,12 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     /* Interpolate gradient data to/from other grid(s) */
 #ifdef _BUILD_LIB
     if (input->overset)
+    {
+#ifdef _GPU
+      event_record_wait_pair(3, 0, 3); // Event for completion of corrected gradient
+#endif
       ZEFR->overset_interp_send(faces->nVars, 1);
+    }
 #endif
 
     /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
@@ -1288,11 +1287,11 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   // Update grid to start of time step (if not already done so at previous step)
 //  if (input->dt_scheme != "MCGS" && (input->nStages == 1 || (input->nStages > 1 && rk_alpha(input->nStages-2) != 1)))
 //    move(flow_time);
-  move(flow_time+elesObjs[0]->dt(0));
+  move(flow_time+elesObjs[0]->dt(0), false);
 
   ZEFR->unblank_1();
 
-  move(flow_time);
+  move(flow_time, true);
 
   ZEFR->unblank_2(eles->nVars);
 
@@ -3300,7 +3299,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
 
   for (unsigned int ff = 0; ff < geo.nFaces; ff++)
   {
-    if (geo.iblank_face[ff] == FRINGE)
+    if (geo.iblank_face(ff) == FRINGE)
     {
       int ic1 = geo.face2eles(ff,0);
       int ic2 = geo.face2eles(ff,1);
@@ -4952,30 +4951,31 @@ void FRSolver::move(double time, bool update_iblank)
   {
     if (input->motion_type == CIRCULAR_TRANS)
     {
-      geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
-      geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
-      if (geo.nDims == 3)
-        geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
+      geo.x_cg.assign({3},0.0);
 
-      if (input->gridID == 1)
+      if (input->gridID == 0)
       {
-        // Update Tioga's offset vector for iblank setting
-        ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
-        // Reset back to zero so we don't modify this grid
-        geo.x_cg.assign({3},0.0);
+        geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
+        geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
+        if (geo.nDims == 3)
+          geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
       }
-      else
-      {
-        double tmp[3] = {0.0};
-        ZEFR->tg_update_transform(geo.Rmat.data(), tmp, geo.nDims);
-      }
+
+      // Update Tioga's offset vector for iblank setting
+      ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
     }
 
 #ifdef _GPU
+//    Timer d2gTime("Geo D2H Time: ");
+//    d2gTime.startTimer();
     geo.coord_nodes = geo.coord_nodes_d;
-    geo.grid_vel_nodes = geo.grid_vel_nodes_d;
+    //geo.grid_vel_nodes = geo.grid_vel_nodes_d;
     faces->coord = faces->coord_d;
-    eles->coord_spts = eles->coord_spts_d;
+
+    if (update_iblank) // Only needed in case of unblanking elements
+      eles->coord_spts = eles->coord_spts_d;
+//    d2gTime.stopTimer();
+//    d2gTime.showTime(5);
 #endif
   }
 #endif

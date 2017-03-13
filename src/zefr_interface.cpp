@@ -136,6 +136,15 @@ ExtraGeo get_extra_geo_data(void)
   return geo;
 }
 
+GpuGeo get_gpu_geo_data(void)
+{
+  GpuGeo geo;
+
+  ZEFR->get_gpu_geo_data(geo.coord_nodes,geo.coord_eles,geo.iblank_cell,geo.iblank_face);
+
+  return geo;
+}
+
 CallbackFuncs get_callback_funcs(void)
 {
   CallbackFuncs call;
@@ -162,6 +171,8 @@ CallbackFuncs get_callback_funcs(void)
   call.get_q_spts_d = get_q_spts_d;
   call.get_dq_spts_d = get_dq_spts_d;
 
+  call.get_face_nodes_gpu = get_face_nodes_gpu;
+
   return call;
 }
 
@@ -185,6 +196,11 @@ void get_receptor_nodes(int* cellID, int* nNodes, double* xyz)
 void get_face_nodes(int* faceID, int* nNodes, double* xyz)
 {
   ZEFR->get_face_nodes(*faceID, *nNodes, xyz);
+}
+
+void get_face_nodes_gpu(int* faceIDs, int nFringe, int* nPtsFace, double* xyz)
+{
+  ZEFR->get_face_nodes_gpu(faceIDs, nFringe, nPtsFace, xyz);
 }
 
 void donor_inclusion_test(int* cellID, double* xyz, int* passFlag, double* rst)

@@ -205,4 +205,7 @@ void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
     mdvector_gpu<double> &U_spts, mdvector_gpu<int> &cellIDs, unsigned int nCells,
     unsigned int nSpts, unsigned int nVars, int stream = -1);
 
+void pack_fringe_coords_wrapper(mdvector_gpu<unsigned int> &fringe_fpts, mdvector_gpu<double> &xyz,
+    mdvector_gpu<double> &coord_fpts, int nFaces, int nFpts, int nDims, int stream = -1);
+
 #endif /* solver_kernels_h */

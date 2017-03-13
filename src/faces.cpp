@@ -122,7 +122,7 @@ void Faces::apply_bcs()
   /* Loop over boundary flux points */
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -590,7 +590,7 @@ void Faces::apply_bcs_dU()
   /* Apply boundaries to solution derivative */
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -796,7 +796,7 @@ void Faces::apply_bcs_dFdU()
   /* Loop over boundary flux points */
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
@@ -1532,7 +1532,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
@@ -1652,7 +1652,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #ifdef _CPU
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+      if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
       double beta = input->ldg_b;
 
@@ -1752,7 +1752,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     double beta = input->ldg_b;
 
@@ -1948,7 +1948,7 @@ void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
   {
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+      if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
       double beta = input->ldg_b;
 
@@ -2023,7 +2023,7 @@ void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     /* Apply central flux at boundaries */
     double k = input->rus_k;
@@ -2218,7 +2218,7 @@ void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     /* Setting sign of beta (from HiFiLES) */
     double beta = input->ldg_b;
@@ -2495,7 +2495,7 @@ void Faces::recv_U_data()
     {
       for (unsigned int i = 0; i < fpts.size(); i++)
       {
-        if (input->overset && geo->iblank_face[geo->fpt2face[fpts(i)]] != NORMAL)
+        if (input->overset && geo->iblank_face(geo->fpt2face[fpts(i)]) != NORMAL)
           continue;
 
         U(1, n, fpts(i)) = U_rbuffs[recvRank](n, i);
@@ -2641,7 +2641,7 @@ void Faces::recv_dU_data()
       {
         for (unsigned int i = 0; i < fpts.size(); i++)
         {
-          if (input->overset && geo->iblank_face[geo->fpt2face[fpts(i)]] != NORMAL)
+          if (input->overset && geo->iblank_face(geo->fpt2face[fpts(i)]) != NORMAL)
             continue;
           dU(1, dim, n, fpts(i)) = U_rbuffs[recvRank](dim, n, i);
         }
@@ -2690,7 +2690,7 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
     side = 0;
   else
   {
-    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face[faceID],ic1,ic2,geo->iblank_cell(ic1),geo->iblank_cell(ic2));
+    printf("face %d: ibf %d | ic1,2: %d,%d, ibc1,2: %d,%d\n",faceID,geo->iblank_face(faceID),ic1,ic2,geo->iblank_cell(ic1),geo->iblank_cell(ic2));
     ThrowException("Face not blanked but both elements are!");
   }
 
@@ -2858,4 +2858,25 @@ void Faces::fringe_grad_to_device(int nFringe, double *data)
 
   check_error();
 }
+
+void Faces::get_face_coords(int* fringeIDs, int nFringe, int* nPtsFace, double* xyz)
+{
+  if (nFringe == 0) return;
+
+  fringeGFpts.resize({nFringe, geo->nFptsPerFace});
+  for (int face = 0; face < nFringe; face++)
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+      fringeGFpts(face,fpt) = geo->face2fpts(fpt, fringeIDs[face]);
+
+  fringeGFpts_d.set_size(fringeGFpts);
+  fringeGFpts_d = fringeGFpts;
+
+  //fringeIDs_d.assign({nFaces}, faceIDs);
+  fringeCoords_d.set_size({nFringe,geo->nFptsPerFace,nDims});
+
+  pack_fringe_coords_wrapper(fringeGFpts_d, fringeCoords_d, coord_d, nFringe, geo->nFptsPerFace, nDims);
+
+  copy_from_device(xyz, fringeCoords_d.data(), fringeCoords_d.size());
+}
+
 #endif

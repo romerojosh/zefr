@@ -164,8 +164,8 @@ struct GeoStruct
   std::vector<int> fpt2face; //! fpt index to face index
   mdvector<int> face2fpts; //! Face index to fpt indices
 
-  std::vector<int> iblank_node, iblank_face; //! iblank values for nodes, cells, faces
-  mdvector<int> iblank_cell;
+  std::vector<int> iblank_node; //! iblank values for nodes, cells, faces
+  mdvector<int> iblank_cell, iblank_face;
 
   std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
   std::set<int> overFaces;  //! Ordered list of all current overset faces
@@ -178,6 +178,7 @@ struct GeoStruct
 
 #ifdef _GPU
   mdvector_gpu<int> iblank_fpts_d, iblank_cell_d;
+  mdvector_gpu<int> iblank_face_d; /// TEMP / DEBUGGING - RETHINK LATER
   mdvector<int> iblank_fpts;
 
   mdvector_gpu<double> x_cg_d, vel_cg_d, q_d, qdot_d, Rmat_d, omega_d;

@@ -57,6 +57,15 @@ struct ExtraGeo
   double *grid_vel; //! Grid velocity at mesh nodes
 };
 
+struct GpuGeo
+{
+  double *coord_nodes; //! x,y,z positions of each node in grid
+  double *coord_eles;  //! x,y,z positions of each node for each element in grid
+  int estride, dstride, nstride; //! Strides for element, node, and dim within coord_eles
+  int *iblank_cell;
+  int *iblank_face;
+};
+
 struct CallbackFuncs
 {
   void (*get_nodes_per_cell)(int* cellID, int* nNodes);
@@ -81,6 +90,7 @@ struct CallbackFuncs
   void (*donor_data_from_device)(int* donorIDs, int nDonors, int gradFlag);
   void (*fringe_data_to_device)(int* fringeIDs, int nFringe, int gradFlag, double *data);
   void (*unblank_data_to_device)(int* cellIDs, int nCells, int gradFlag, double *data);
+  void (*get_face_nodes_gpu)(int* fringeIDs, int nFringe, int* nPtsFace, double* xyz);
 };
 
 namespace zefr {
@@ -112,6 +122,8 @@ BasicGeo get_basic_geo_data(void);
 
 ExtraGeo get_extra_geo_data(void);
 
+GpuGeo get_gpu_geo_data(void);
+
 CallbackFuncs get_callback_funcs(void);
 
 /* ==== Access functions for solution data ==== */
@@ -130,6 +142,7 @@ void get_nodes_per_cell(int* cellID, int* nNodes);
 void get_nodes_per_face(int* faceID, int* nNodes);
 void get_receptor_nodes(int* cellID, int* nNodes, double* xyz);
 void get_face_nodes(int* faceID, int* nNodes, double* xyz);
+void get_face_nodes_gpu(int* faceIDs, int nFringe, int* nPtsFace, double* xyz);
 void donor_inclusion_test(int* cellID, double* xyz, int* passFlag, double* rst);
 void donor_frac(int* cellID, double* xyz, int* nweights, int* inode,
                 double* weights, double* rst, int* buffsize);

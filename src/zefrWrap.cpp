@@ -140,6 +140,7 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
 
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
+  GpuGeo geoGpu = zefr::get_gpu_geo_data();
   CallbackFuncs cbs = zefr::get_callback_funcs();
 
   tioga_registergrid_data_(geo.btag, geo.nnodes, geo.xyz, geo.iblank,
@@ -167,7 +168,11 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
   if (zefr::use_gpus())
   {
     tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,  cbs.fringe_data_to_device,
-                               cbs.unblank_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d);
+                               cbs.unblank_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d,
+                               cbs.get_face_nodes_gpu);
+
+    tioga_set_device_geo_data(geoGpu.coord_nodes,geoGpu.coord_eles,geoGpu.iblank_cell,
+                              geoGpu.iblank_face);
 
     tioga_set_stream_handle(z->get_tg_stream_handle(), z->get_tg_event_handle());
   }

@@ -152,6 +152,10 @@ class Faces
 
     mdvector<double> U_fringe, dU_fringe;
     mdvector<unsigned int> fringe_fpts, fringe_side;
+
+    mdvector_gpu<unsigned int> fringeGFpts_d;
+    mdvector_gpu<double> fringeCoords_d;
+    mdvector<unsigned int> fringeGFpts;
 #endif
 
   public:
@@ -178,6 +182,7 @@ class Faces
     void fringe_u_to_device(int* fringeIDs, int nFringe, double* data);
     void fringe_grad_to_device(int nFringe);
     void fringe_grad_to_device(int nFringe, double* data);
+    void get_face_coords(int* fringeIDs, int nFringe, int* nPtsFace, double* xyz);
 #endif
 };
 

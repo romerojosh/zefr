@@ -293,7 +293,7 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
   //cid = grank%16; // For XStream nodes
   //cid = grank%4; // For ICME K80 nodes
   cid = grank % nDevices; /// TODO: use MPI_local_rank % nDevices
-  //printf("rank %d on grid %d --> CUDA device %d\n",rank,myGrid,cid);
+  //printf("rank %d on grid %d, global rank %d --> CUDA device %d\n",rank,myGrid,grank,cid);
   cudaSetDevice(cid); 
   check_error();
 
@@ -469,6 +469,19 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face,
   grid_vel = geo->grid_vel_nodes.data();
 }
 
+void Zefr::get_gpu_geo_data(double*& coord_nodes, double*& coord_eles,
+    int*& iblank_cell, int*& iblank_face)
+{
+#ifdef _GPU
+  auto etype = solver->elesObjs[0]->etype;
+
+  coord_nodes = geo->coord_nodes_d.data();
+  coord_eles = solver->elesObjs[0]->nodes_d.data();
+  iblank_cell = geo->iblank_cell_d.data();
+  iblank_face = geo->iblank_face_d.data();
+#endif
+}
+
 double Zefr::get_u_spt(int ele, int spt, int var)
 {
   return solver->elesObjs[0]->U_spts(spt, var, ele);
@@ -559,6 +572,13 @@ void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
   }
 }
 
+void Zefr::get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *xyz)
+{
+#ifdef _GPU
+  solver->faces->get_face_coords(faceIDs,nFaces,nPtsFace,xyz);
+#endif
+}
+
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
   passFlag = solver->elesObjs[0]->getRefLoc(cellID,xyz,rst);
@@ -589,11 +609,12 @@ void Zefr::update_iblank_gpu(void)
   for (unsigned int fpt = 0; fpt < geo->nGfpts; fpt++)
   {
     int face = geo->fpt2face[fpt];
-    geo->iblank_fpts(fpt) = geo->iblank_face[face];
+    geo->iblank_fpts(fpt) = geo->iblank_face(face);
   }
   check_error();
   geo->iblank_fpts_d = geo->iblank_fpts;
   geo->iblank_cell_d = geo->iblank_cell;
+  geo->iblank_face_d = geo->iblank_face; /// TEMP / DEBUGGING - RETHINK LATER
 #endif
 }
 
@@ -683,7 +704,7 @@ void* Zefr::get_tg_stream_handle(void)
 void* Zefr::get_tg_event_handle(void)
 {
 #ifdef _GPU
-  return (void*)get_event_handle(2);
+  return (void*)get_event_handle(0);
 #else
   return NULL;
 #endif
