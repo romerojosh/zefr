@@ -1760,3 +1760,161 @@ void pack_fringe_coords_wrapper(mdvector_gpu<unsigned int> &fringe_fpts, mdvecto
 
   check_error();
 }
+
+template<int nDims>
+__global__
+void pack_cell_coords(mdvector_gpu<int> cellIDs, mdvector_gpu<double> xyz,
+    mdvector_gpu<double> coord_spts, int nCells, int nSpts)
+{
+  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (ele >= nCells)
+    return;
+
+  int ic = cellIDs(ele);
+
+  for (unsigned int d = 0; d < nDims; d++)
+    xyz(ele,spt,d) = coord_spts(spt,d,ic);
+}
+
+void pack_cell_coords_wrapper(mdvector_gpu<int> &cellIDs, mdvector_gpu<double> &xyz,
+    mdvector_gpu<double> &coord_spts, int nCells, int nSpts, int nDims, int stream)
+{
+  int threads = 192;
+  int blocks = (nCells * nSpts + threads - 1) / threads;
+
+  if (stream == -1)
+  {
+    if (nDims == 2)
+      pack_cell_coords<2><<<blocks, threads>>>(cellIDs,xyz,coord_spts,nCells,nSpts);
+    else
+      pack_cell_coords<3><<<blocks, threads>>>(cellIDs,xyz,coord_spts,nCells,nSpts);
+  }
+  else
+  {
+    if (nDims == 2)
+      pack_cell_coords<2><<<blocks, threads, 0, stream_handles[stream]>>>(cellIDs,
+          xyz,coord_spts,nCells,nSpts);
+    else
+      pack_cell_coords<3><<<blocks, threads, 0, stream_handles[stream]>>>(cellIDs,
+          xyz,coord_spts,nCells,nSpts);
+  }
+
+  check_error();
+}
+
+/*! Evaluates the Lagrange function corresponding to the specified mode on xiGrid at location xi.
+ *
+ * \param xiGrid The grid of interpolation points. Sorted in domain [-1,1].
+ * \param mode Mode of the Lagrange function. Defined such that function is 1 at xiGrid(mode)
+ * zero at other grid points.
+ * \param xi  Point of evaluation in domain [-1,1].
+ *
+ * \return Value of Lagrange function at xi.
+ */
+__device__ __forceinline__
+double Lagrange_gpu(double* xiGrid, int npts, double xi, int mode)
+{
+  double val = 1.0;
+
+  for (int i = 0; i < mode; i++)
+    val *= (xi - xiGrid[i])/(xiGrid[mode] - xiGrid[i]);
+
+  for (int i = mode + 1; i < npts; i++)
+    val *= (xi - xiGrid[i])/(xiGrid[mode] - xiGrid[i]);
+
+  return val;
+}
+
+template<int nSpts1D>
+__global__
+void get_nodal_basis(double* rst_in, double* weights,
+    double* xiGrid, int nFringe)
+{
+  const int nSpts = nSpts1D*nSpts1D*nSpts1D;
+  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
+  const int ipt = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+
+  if (ipt >= nFringe) return;
+
+  __shared__ double xi[nSpts1D];
+
+  if (threadIdx.x < nSpts1D)
+    xi[threadIdx.x] = xiGrid[threadIdx.x];
+
+  __syncthreads();
+
+  double rst[3];
+  for (int d = 0; d < 3; d++)
+    rst[d] = rst_in[3*ipt+d];
+
+  int ispt = spt % nSpts1D;
+  int jspt = (spt / nSpts1D) % nSpts1D;
+  int kspt = spt / (nSpts1D*nSpts1D);
+  weights[nSpts*ipt+spt] = Lagrange_gpu(xi,nSpts1D,rst[0],ispt) *
+                           Lagrange_gpu(xi,nSpts1D,rst[1],jspt) *
+                           Lagrange_gpu(xi,nSpts1D,rst[2],kspt);
+}
+
+void get_nodal_basis_wrapper(int* cellIDs, double* rst, double* weights,
+    double* xiGrid, int nFringe, int nSpts, int nSpts1D, int stream)
+{
+  int threads = 128;
+  int blocks = (nFringe * nSpts + threads - 1) / threads;
+  int nbShare = nSpts1D*sizeof(double);
+
+  if (stream == -1)
+  {
+    switch (nSpts1D)
+    {
+      case 2:
+        get_nodal_basis<2><<<blocks, threads, nbShare>>>(rst,weights,xiGrid,nFringe);
+        break;
+      case 3:
+        get_nodal_basis<3><<<blocks, threads, nbShare>>>(rst,weights,xiGrid,nFringe);
+        break;
+      case 4:
+        get_nodal_basis<4><<<blocks, threads, nbShare>>>(rst,weights,xiGrid,nFringe);
+        break;
+      case 5:
+        get_nodal_basis<5><<<blocks, threads, nbShare>>>(rst,weights,xiGrid,nFringe);
+        break;
+      case 6:
+        get_nodal_basis<6><<<blocks, threads, nbShare>>>(rst,weights,xiGrid,nFringe);
+        break;
+      default:
+        ThrowException("nSpts1D case not implemented");
+    }
+  }
+  else
+  {
+    switch (nSpts1D)
+    {
+      case 2:
+        get_nodal_basis<2><<<blocks, threads, nbShare, stream_handles[stream]>>>
+            (rst,weights,xiGrid,nFringe);
+        break;
+      case 3:
+        get_nodal_basis<3><<<blocks, threads, nbShare, stream_handles[stream]>>>
+            (rst,weights,xiGrid,nFringe);
+        break;
+      case 4:
+        get_nodal_basis<4><<<blocks, threads, nbShare, stream_handles[stream]>>>
+            (rst,weights,xiGrid,nFringe);
+        break;
+      case 5:
+        get_nodal_basis<5><<<blocks, threads, nbShare, stream_handles[stream]>>>
+            (rst,weights,xiGrid,nFringe);
+        break;
+      case 6:
+        get_nodal_basis<6><<<blocks, threads, nbShare, stream_handles[stream]>>>
+            (rst,weights,xiGrid,nFringe);
+        break;
+      default:
+        ThrowException("nSpts1D case not implemented");
+    }
+  }
+
+  check_error();
+}

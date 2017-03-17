@@ -177,9 +177,12 @@ class Elements
     mdvector_gpu<double> deltaU_d;
     mdvector_gpu<double> RHS_d;
 
+    /* Overset Related */
     mdvector_gpu<double> U_donors_d, dU_donors_d;
     mdvector_gpu<double> U_unblank_d;
     mdvector_gpu<int> unblankIDs_d;
+    mdvector_gpu<double> cellCoords_d;
+    mdvector_gpu<double> loc_spts_1D_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);
@@ -276,6 +279,10 @@ class Elements
     void donor_grad_from_device(int* donorIDs_in, int nDonors_in);
 
     void unblank_u_to_device(int *cellIDs, int nCells, double* data);
+
+    void get_cell_coords(int* cellIDs, int nCells, int* nPtsCell, double* xyz);
+
+    void get_interp_weights_gpu(int* cellIDs, int nFringe, double* rst, double* weights);
 #endif
 
     void move(std::shared_ptr<Faces> faces);

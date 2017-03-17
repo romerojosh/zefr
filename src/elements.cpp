@@ -2088,6 +2088,14 @@ void Elements::get_interp_weights(double* rst, double* weights, int& nweights, i
 }
 
 #ifdef _GPU
+void Elements::get_interp_weights_gpu(int* cellIDs, int nFringe, double* rst, double* weights)
+{
+  if (loc_spts_1D_d.size() != loc_spts_1D.size())
+    loc_spts_1D_d.assign({loc_spts_1D.size()}, loc_spts_1D.data());
+
+  get_nodal_basis_wrapper(cellIDs, rst, weights, loc_spts_1D_d.data(), nFringe, nSpts, nSpts1D, 3);
+}
+
 void Elements::donor_u_from_device(int* donorIDs_in, int nDonors_in)
 {
   if (nDonors_in == 0) return;
@@ -2194,4 +2202,16 @@ void Elements::unblank_u_to_device(int *cellIDs, int nCells, double *data)
   check_error();
 }
 
+void Elements::get_cell_coords(int* cellIDs, int nCells, int* nPtsCell, double* xyz)
+{
+  if (nCells == 0) return;
+
+  unblankIDs_d.assign({nCells}, cellIDs); /// TODO: check this w/ unblanking...
+
+  cellCoords_d.set_size({nCells,nSpts,nDims});
+
+  pack_cell_coords_wrapper(unblankIDs_d, cellCoords_d, coord_spts_d, nCells, nSpts, nDims); /// TODO: async?
+
+  copy_from_device(xyz, cellCoords_d.data(), cellCoords_d.size()); /// TODO: async?
+}
 #endif

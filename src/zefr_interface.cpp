@@ -173,6 +173,10 @@ CallbackFuncs get_callback_funcs(void)
   call.get_dq_spts_d = get_dq_spts_d;
 
   call.get_face_nodes_gpu = get_face_nodes_gpu;
+  call.get_cell_nodes_gpu = get_cell_nodes_gpu;
+
+  call.get_n_weights = get_n_weights;
+  call.donor_frac_gpu = donor_frac_gpu;
 
   return call;
 }
@@ -204,6 +208,11 @@ void get_face_nodes_gpu(int* faceIDs, int nFringe, int* nPtsFace, double* xyz)
   ZEFR->get_face_nodes_gpu(faceIDs, nFringe, nPtsFace, xyz);
 }
 
+void get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double* xyz)
+{
+  ZEFR->get_cell_nodes_gpu(cellIDs, nCells, nPtsCell, xyz);
+}
+
 void donor_inclusion_test(int* cellID, double* xyz, int* passFlag, double* rst)
 {
   ZEFR->donor_inclusion_test(*cellID, xyz, *passFlag, rst);
@@ -213,6 +222,16 @@ void donor_frac(int* cellID, double* xyz, int* nweights, int* inode,
                 double* weights, double* rst, int* buffsize)
 {
   ZEFR->donor_frac(*cellID, *nweights, inode, weights, rst, *buffsize);
+}
+
+int get_n_weights(int cellID)
+{
+  return ZEFR->get_n_weights(cellID);
+}
+
+void donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights)
+{
+  ZEFR->donor_frac_gpu(cellIDs, nFringe, rst, weights);
 }
 
 void convert_to_modal(int* cellID, int* nSpts, double* q_in, int* npts, int* index_out, double* q_out)

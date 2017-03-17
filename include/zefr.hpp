@@ -127,6 +127,10 @@ public:
   void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
 
   void get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *xyz);
+  void get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *xyz);
+
+  int get_n_weights(int cellID);
+  void donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights);
 
   /// TODO: Reconsider organization
   void set_dataUpdate_callback(void (*dataUpdate)(int, double*, int));

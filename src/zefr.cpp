@@ -592,6 +592,13 @@ void Zefr::get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *x
 #endif
 }
 
+void Zefr::get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *xyz)
+{
+#ifdef _GPU
+  solver->elesObjs[0]->get_cell_coords(cellIDs,nCells,nPtsCell,xyz);
+#endif
+}
+
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
   passFlag = solver->elesObjs[0]->getRefLoc(cellID,xyz,rst);
@@ -603,6 +610,22 @@ void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
   /* NOTE: inode is not used, and cellID is irrelevant when all cells are
    * identical (tensor-product, one polynomial order) */
   solver->elesObjs[0]->get_interp_weights(rst,weights,nweights,buffsize);
+}
+
+int Zefr::get_n_weights(int cellID)
+{
+  return (int)solver->elesObjs[0]->nSpts;
+}
+
+void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights)
+{
+#ifdef _GPU
+  if (nFringe == 0) return;
+
+  /* NOTE: inode is not used, and cellID is irrelevant when all cells are
+   * identical (tensor-product, one polynomial order) */
+  solver->elesObjs[0]->get_interp_weights_gpu(cellIDs,nFringe,rst,weights);
+#endif
 }
 
 double& Zefr::get_u_fpt(int faceID, int fpt, int var)

@@ -129,6 +129,12 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
 
     geo.q(0) = 1.;  // Initialize to unit quaternion of no rotation
 
+    for (int d = 0; d < 3; d++)
+    {
+      geo.Rmat(d,d) = 1;
+      geo.dRmat(d,d) = 1;
+    }
+
     // Initial translational & angular velocity
     for (int d = 0; d < 3; d++)
     {

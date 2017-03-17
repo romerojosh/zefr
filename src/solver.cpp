@@ -244,7 +244,15 @@ void FRSolver::restart_solution(void)
 
 #ifdef _BUILD_LIB
       if (input->overset)
-        ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+      {
+        // Need to transpose matrix for TIOGA
+        double Rtmp[3][3];
+        for (int i = 0; i < 3; i++)
+          for (int j = 0 ; j < 3; j++)
+            Rtmp[j][i] = geo.Rmat(i,j);
+
+        ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
+      }
 #endif
     }
 
@@ -820,6 +828,9 @@ void FRSolver::solver_data_to_device()
       qdot_ini_d = geo.qdot;
       qdot_til_d = geo.qdot;
 
+      geo.Rmat_d = geo.Rmat;
+      geo.Wmat_d = geo.Wmat;
+
       if (geo.nBndFaces != 0)
       {
         force_d.set_size({geo.nBndFaces, geo.nDims});
@@ -1289,11 +1300,15 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 //    move(flow_time);
   move(flow_time+elesObjs[0]->dt(0), false);
 
+  PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
   ZEFR->unblank_1();
+  POP_NVTX_RANGE;
 
   move(flow_time, true);
 
+  PUSH_NVTX_RANGE("TG-UNBLANK-2",5);
   ZEFR->unblank_2(eles->nVars);
+  POP_NVTX_RANGE;
 
 #ifdef _BUILD_LIB
   if (input->overset && input->motion)
@@ -1358,7 +1373,9 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
     move(flow_time, false);
 
 #ifdef _BUILD_LIB
+    PUSH_NVTX_RANGE("TG-PT-CONN",3);
     if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+    POP_NVTX_RANGE;
 #endif
 
     compute_residual(stage);
@@ -1453,7 +1470,9 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
     move(flow_time, false);
 
 #ifdef _BUILD_LIB
+    PUSH_NVTX_RANGE("TG-PT-CONN",3);
     if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+    POP_NVTX_RANGE;
 #endif
 
     compute_residual(input->nStages-1);
@@ -1704,7 +1723,9 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     move(flow_time, false); // Set grid to current evaluation time
 
 #ifdef _BUILD_LIB
+    PUSH_NVTX_RANGE("TG-PT-CONN",3);
     if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
+    POP_NVTX_RANGE;
 #endif
 
     compute_residual(0);
@@ -4949,16 +4970,19 @@ void FRSolver::move(double time, bool update_iblank)
   // Update the overset connectivity to the new grid positions
   if (input->overset)
   {
-    if (input->motion_type == CIRCULAR_TRANS)
+    if (input->motion_type == CIRCULAR_TRANS || input->motion_type == RIGID_BODY)
     {
-      geo.x_cg.assign({3},0.0);
-
-      if (input->gridID == 0)
+      if (input->motion_type == CIRCULAR_TRANS)
       {
-        geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
-        geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
-        if (geo.nDims == 3)
-          geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
+        geo.x_cg.assign({3},0.0);
+
+        if (input->gridID == 0)
+        {
+          geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
+          geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
+          if (geo.nDims == 3)
+            geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
+        }
       }
 
       // Update Tioga's offset vector for iblank setting
@@ -4970,10 +4994,10 @@ void FRSolver::move(double time, bool update_iblank)
 //    d2gTime.startTimer();
     geo.coord_nodes = geo.coord_nodes_d;
     //geo.grid_vel_nodes = geo.grid_vel_nodes_d;
-    faces->coord = faces->coord_d;
+    //faces->coord = faces->coord_d;
 
-    if (update_iblank) // Only needed in case of unblanking elements
-      eles->coord_spts = eles->coord_spts_d;
+//    if (update_iblank) // Only needed in case of unblanking elements
+//      eles->coord_spts = eles->coord_spts_d;
 //    d2gTime.stopTimer();
 //    d2gTime.showTime(5);
 #endif
@@ -5105,11 +5129,11 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   // RmatN = Rmat * Rmat_prev^T
   auto Rmat = getRotationMatrix(q);
-  geo.dRmat.fill(0.);
-  for (unsigned int i = 0; i < 3; i++)
-    for (unsigned int j = 0; j < 3; j++)
-      for (unsigned int k = 0; k < 3; k++)
-        geo.dRmat(i,j) += Rmat(i,k) * geo.Rmat(j,k);
+//  geo.dRmat.fill(0.);
+//  for (unsigned int i = 0; i < 3; i++)
+//    for (unsigned int j = 0; j < 3; j++)
+//      for (unsigned int k = 0; k < 3; k++)
+//        geo.dRmat(i,j) += Rmat(i,k) * geo.Rmat(j,k);
   geo.Rmat = Rmat;
 
   // v_g = q * (omega_b cross x_b) * q_conj = Rmat * W_b * x_b = Wmat * x_b
@@ -5138,7 +5162,15 @@ void FRSolver::rigid_body_update(unsigned int stage)
   // Rmat transforms body->global, but is stored column-major here
   // Transpose (accessing as row-major) transforms global->body as TIOGA needs
   if (input->overset)
-    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+  {
+    // Need to transpose matrix for TIOGA
+    double Rtmp[3][3];
+    for (int i = 0; i < 3; i++)
+      for (int j = 0 ; j < 3; j++)
+        Rtmp[j][i] = geo.Rmat(i,j);
+
+    ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
+  }
 #endif
 }
 

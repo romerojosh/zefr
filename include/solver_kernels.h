@@ -208,4 +208,10 @@ void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
 void pack_fringe_coords_wrapper(mdvector_gpu<unsigned int> &fringe_fpts, mdvector_gpu<double> &xyz,
     mdvector_gpu<double> &coord_fpts, int nFaces, int nFpts, int nDims, int stream = -1);
 
+void pack_cell_coords_wrapper(mdvector_gpu<int> &cellIDs, mdvector_gpu<double> &xyz,
+    mdvector_gpu<double> &coord_spts, int nCells, int nSpts, int nDims, int stream = -1);
+
+void get_nodal_basis_wrapper(int* cellIDs, double* rst, double* weights,
+    double* xiGrid, int nFringe, int nSpts, int nSpts1D, int stream = -1);
+
 #endif /* solver_kernels_h */

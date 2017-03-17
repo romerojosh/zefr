@@ -581,22 +581,26 @@ void copy_coords_ele(mdvector_gpu<double> nodes, mdvector_gpu<double> g_nodes,
 }
 
 //! Copy fpt positions from ele's array to face's array
+template<int nDims>
 __global__
 void copy_coords_face(mdvector_gpu<double> coord, mdvector_gpu<double> e_coord,
     mdvector_gpu<int> fpt2gfpt, unsigned int nEles, unsigned int nFpts)
 {
-  int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  int ele =  (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
-  int dim = blockIdx.y;
+  //int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
+  //int ele =  (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
+  int fpt = (blockDim.y * blockIdx.y + threadIdx.y);
+  int ele =  (blockDim.x * blockIdx.x + threadIdx.x);
+//  int dim = blockIdx.y;
 
-  if (ele >= nEles)
+  if (ele >= nEles || fpt >= nFpts)
     return;
 
   int gfpt = fpt2gfpt(fpt,ele);
 
   if (gfpt < 0) return;
 
-  coord(dim, gfpt) = e_coord(fpt, dim, ele);
+  for (int dim = 0; dim < nDims; dim++)
+    coord(dim, gfpt) = e_coord(fpt, dim, ele);
 }
 
 void update_coords_wrapper(mdvector_gpu<double> &nodes,
@@ -631,9 +635,13 @@ void update_coords_wrapper(mdvector_gpu<double> &nodes,
   cublasDGEMM_wrapper(m, nf, k, 1.0, A, nodes.ldim(), Bf, shape_fpts.ldim(),
                       0.0, Cf, coord_fpts.ldim());
 
-  dim3 blocksF((nEles * nFpts + threads - 1) / threads, nDims);
+  dim3 threadsF(32, 4);
+  dim3 blocksF((nEles + threadsF.x - 1) / threadsF.x, (nFpts + threadsF.y - 1) / threadsF.y);
 
-  copy_coords_face<<<blocksF,threads>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
+  if (nDims == 3)
+    copy_coords_face<3><<<blocksF,threadsF>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
+  else
+    copy_coords_face<2><<<blocksF,threadsF>>>(coord_faces, coord_fpts, fpt2gfpt, nEles, nFpts);
 
   check_error();
 }
@@ -834,10 +842,10 @@ void update_nodes_rigid_wrapper(mdvector_gpu<double> &nodes_init, mdvector_gpu<d
   double *B = nodes_init.data();
   double *C = nodes.data();
 
-  cublasDGEMM_wrapper(nDims, nNodes, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
+  cublasDGEMM_transA_wrapper(nDims, nNodes, nDims, 1.0, A, nDims, B, nDims, 0.0, C, nDims);
 
   // Add in translation of body's CG
-  int threads = 128;
+  int threads = 192;
   int blocks = min((nNodes + threads - 1) / threads, MAX_GRID_DIM);
 
   if (nDims == 3)

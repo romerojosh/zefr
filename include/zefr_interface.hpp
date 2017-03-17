@@ -93,6 +93,9 @@ struct CallbackFuncs
   void (*fringe_data_to_device)(int* fringeIDs, int nFringe, int gradFlag, double *data);
   void (*unblank_data_to_device)(int* cellIDs, int nCells, int gradFlag, double *data);
   void (*get_face_nodes_gpu)(int* fringeIDs, int nFringe, int* nPtsFace, double* xyz);
+  void (*get_cell_nodes_gpu)(int* cellIDs, int nCells, int* nPtsCell, double* xyz);
+  int (*get_n_weights)(int cellID);
+  void (*donor_frac_gpu)(int* cellIDs, int nFringe, double* rst, double* weights);
 };
 
 namespace zefr {
@@ -145,6 +148,7 @@ void get_nodes_per_face(int* faceID, int* nNodes);
 void get_receptor_nodes(int* cellID, int* nNodes, double* xyz);
 void get_face_nodes(int* faceID, int* nNodes, double* xyz);
 void get_face_nodes_gpu(int* faceIDs, int nFringe, int* nPtsFace, double* xyz);
+void get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double* xyz);
 void donor_inclusion_test(int* cellID, double* xyz, int* passFlag, double* rst);
 void donor_frac(int* cellID, double* xyz, int* nweights, int* inode,
                 double* weights, double* rst, int* buffsize);
@@ -162,6 +166,9 @@ void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
 void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
 
 void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
+
+int get_n_weights(int cellID);
+void donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights);
 
 void signal_handler(int signum);
 
