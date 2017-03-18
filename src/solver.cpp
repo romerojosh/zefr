@@ -2168,8 +2168,8 @@ void FRSolver::step_MCGS(const mdvector_gpu<double> &source)
       write_LHS(input->output_prefix);
       std::cout << "Done" << std::endl;
       eles->LHSs[0] = LHS_FDA;
-      compute_LHS_LU(0, geo.nEles);
       */
+      compute_LHS_LU(0, geo.nEles);
     }
 
     /* If running multigrid, assume solution has been updated externally. Compute res on

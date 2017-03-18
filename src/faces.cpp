@@ -2508,52 +2508,6 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
         {
           if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
 
-          /* Setting variables for convenience */
-          /* States */
-          double rho = U(fpt, 0, slot);
-          double momx = U(fpt, 1, slot);
-          double momy = U(fpt, 2, slot);
-          double e = U(fpt, 3, slot);
-
-          double u = momx / rho;
-          double v = momy / rho;
-          double e_int = e / rho - 0.5 * (u*u + v*v);
-
-          /* Gradients */
-          double rho_dx = dU(fpt, 0, 0, slot);
-          double momx_dx = dU(fpt, 1, 0, slot);
-          double momy_dx = dU(fpt, 2, 0, slot);
-          
-          double rho_dy = dU(fpt, 0, 1, slot);
-          double momx_dy = dU(fpt, 1, 1, slot);
-          double momy_dy = dU(fpt, 2, 1, slot);
-
-          /* Set viscosity */
-          // TODO: Store mu in array
-          double mu;
-          if (input->fix_vis)
-          {
-            mu = input->mu;
-          }
-          /* If desired, use Sutherland's law */
-          else
-          {
-            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio + input->c_sth);
-          }
-
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-
-          double dv_dx = (momy_dx - rho_dx * v) / rho;
-          double dv_dy = (momy_dy - rho_dy * v) / rho;
-
-          double diag = (du_dx + dv_dy) / 3.0;
-
-          double tauxx = 2.0 * mu * (du_dx - diag);
-          double tauxy = mu * (du_dy + dv_dx);
-          double tauyy = 2.0 * mu * (dv_dy - diag);
-
           /* Set viscous dFdU values to zero */
           // TODO: Can be removed if initialized to zero
           for (unsigned int dim = 0; dim < nDims; dim++)
@@ -2567,17 +2521,66 @@ void Faces::compute_dFdUvisc(unsigned int startFpt, unsigned int endFpt)
             }
           }
 
+          /* Setting variables for convenience */
+          /* States */
+          double rho = U(fpt, 0, slot);
+          double momx = U(fpt, 1, slot);
+          double momy = U(fpt, 2, slot);
+          double e = U(fpt, 3, slot);
+
+          double u = momx / rho;
+          double v = momy / rho;
+
+          /* Gradients */
+          double rho_dx = dU(fpt, 0, 0, slot);
+          double momx_dx = dU(fpt, 1, 0, slot);
+          double momy_dx = dU(fpt, 2, 0, slot);
+          double e_dx = dU(fpt, 3, 0, slot);
+          
+          double rho_dy = dU(fpt, 0, 1, slot);
+          double momx_dy = dU(fpt, 1, 1, slot);
+          double momy_dy = dU(fpt, 2, 1, slot);
+          double e_dy = dU(fpt, 3, 1, slot);
+
+          // TODO: Add or store mu from Sutherland's law
+          double diffCo1 = input->mu / rho;
+          double diffCo2 = input->gamma * input->mu / (input->prandtl * rho);
+
           /* Set viscous dFdU values in the x-direction */
-          dFdUvisc(fpt, 3, 0, 0, slot) = -(u * tauxx + v * tauxy) / rho;
-          dFdUvisc(fpt, 3, 1, 0, slot) = tauxx / rho;
-          dFdUvisc(fpt, 3, 2, 0, slot) = tauxy / rho;
-          dFdUvisc(fpt, 3, 3, 0, slot) = 0;
+          dFdUvisc(fpt, 1, 0, 0, slot) -= (2.0/3.0) * (4.0*u*rho_dx - 2.0*(v*rho_dy + momx_dx) + momy_dy) / rho * diffCo1;
+          dFdUvisc(fpt, 2, 0, 0, slot) -= (2.0*(v*rho_dx + u*rho_dy) - (momx_dy + momy_dx)) / rho * diffCo1;
+          dFdUvisc(fpt, 3, 0, 0, slot) -= (1.0/3.0) * (3.0*(4.0*u*u + 3.0*v*v)*rho_dx + 3.0*u*v*rho_dy - 4.0*u*(2.0*momx_dx - momy_dy) - 6.0*v*(momx_dy + momy_dx)) / rho * diffCo1 +
+                                                      (-e_dx + (2.0*e/rho - 3.0*(u*u + v*v))*rho_dx + 2.0*(u*momx_dx + v*momy_dx)) / rho * diffCo2;
+
+          dFdUvisc(fpt, 1, 1, 0, slot) -= -(4.0/3.0) * rho_dx / rho * diffCo1;
+          dFdUvisc(fpt, 2, 1, 0, slot) -= -rho_dy / rho * diffCo1;
+          dFdUvisc(fpt, 3, 1, 0, slot) -= -(1.0/3.0) * (8.0*u*rho_dx + v*rho_dy - 4.0*momx_dx + 2.0*momy_dy) / rho * diffCo1 +
+                                                       (2.0*u*rho_dx - momx_dx) / rho * diffCo2;
+
+          dFdUvisc(fpt, 1, 2, 0, slot) -= (2.0/3.0) * rho_dy / rho * diffCo1;
+          dFdUvisc(fpt, 2, 2, 0, slot) -= -rho_dx / rho * diffCo1;
+          dFdUvisc(fpt, 3, 2, 0, slot) -= -(1.0/3.0) * (6.0*v*rho_dx + u*rho_dy - 3.0*(momx_dy + momy_dx)) / rho * diffCo1 +
+                                                       (2.0*v*rho_dx - momy_dx) / rho * diffCo2;
+
+          dFdUvisc(fpt, 3, 3, 0, slot) -= -rho_dx / rho * diffCo2;
 
           /* Set viscous dFdU values in the y-direction */
-          dFdUvisc(fpt, 3, 0, 1, slot) = -(u * tauxy + v * tauyy) / rho;
-          dFdUvisc(fpt, 3, 1, 1, slot) = tauxy / rho;
-          dFdUvisc(fpt, 3, 2, 1, slot) = tauyy / rho;
-          dFdUvisc(fpt, 3, 3, 1, slot) = 0;
+          dFdUvisc(fpt, 1, 0, 1, slot) -= (2.0*(v*rho_dx + u*rho_dy) - (momx_dy + momy_dx)) / rho * diffCo1;
+          dFdUvisc(fpt, 2, 0, 1, slot) -= (2.0/3.0) * (4.0*v*rho_dy - 2.0*(u*rho_dx + momy_dy) + momx_dx) / rho * diffCo1;
+          dFdUvisc(fpt, 3, 0, 1, slot) -= (1.0/3.0) * (3.0*(3.0*u*u + 4.0*v*v)*rho_dy + 3.0*u*v*rho_dx - 6.0*u*(momx_dy + momy_dx) - 4.0*v*(-momx_dx + 2.0*momy_dy)) / rho * diffCo1 +
+                                                      (-e_dy + (2.0*e/rho - 3.0*(u*u + v*v))*rho_dy + 2.0*(u*momx_dy + v*momy_dy)) / rho * diffCo2;
+
+          dFdUvisc(fpt, 1, 1, 1, slot) -= -rho_dy / rho * diffCo1;
+          dFdUvisc(fpt, 2, 1, 1, slot) -= (2.0/3.0) * rho_dx / rho * diffCo1;
+          dFdUvisc(fpt, 3, 1, 1, slot) -= -(1.0/3.0) * (v*rho_dx + 6.0*u*rho_dy - 3.0*(momx_dy + momy_dx)) / rho * diffCo1 +
+                                                       (2.0*u*rho_dy - momx_dy) / rho * diffCo2;
+
+          dFdUvisc(fpt, 1, 2, 1, slot) -= -rho_dx / rho * diffCo1;
+          dFdUvisc(fpt, 2, 2, 1, slot) -= -(4.0/3.0) * rho_dy / rho * diffCo1;
+          dFdUvisc(fpt, 3, 2, 1, slot) -= -(1.0/3.0) * (u*rho_dx + 8.0*v*rho_dy + 2.0*momx_dx - 4.0*momy_dy) / rho * diffCo1 +
+                                                       (2.0*v*rho_dy - momy_dy) / rho * diffCo2;
+
+          dFdUvisc(fpt, 3, 3, 1, slot) -= -rho_dy / rho * diffCo2;
         }
       }
     }
@@ -2637,40 +2640,40 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
 
           /* Set viscous dFxdUx values */
           dFddUvisc(fpt, 0, 0, 0, 0, slot) = 0;
-          dFddUvisc(fpt, 1, 0, 0, 0, slot) = -4.0/3.0 * u * diffCo1;
-          dFddUvisc(fpt, 2, 0, 0, 0, slot) = -v * diffCo1;
-          dFddUvisc(fpt, 3, 0, 0, 0, slot) = -(4.0/3.0 * u*u + v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+          dFddUvisc(fpt, 1, 0, 0, 0, slot) = 4.0/3.0 * u * diffCo1;
+          dFddUvisc(fpt, 2, 0, 0, 0, slot) = v * diffCo1;
+          dFddUvisc(fpt, 3, 0, 0, 0, slot) = (4.0/3.0 * u*u + v*v) * diffCo1 - (u*u + v*v - e/rho) * diffCo2;
 
           dFddUvisc(fpt, 0, 1, 0, 0, slot) = 0;
-          dFddUvisc(fpt, 1, 1, 0, 0, slot) = 4.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 1, 1, 0, 0, slot) = -4.0/3.0 * diffCo1;
           dFddUvisc(fpt, 2, 1, 0, 0, slot) = 0;
-          dFddUvisc(fpt, 3, 1, 0, 0, slot) = u * (4.0/3.0 * diffCo1 - diffCo2);
+          dFddUvisc(fpt, 3, 1, 0, 0, slot) = -u * (4.0/3.0 * diffCo1 - diffCo2);
 
           dFddUvisc(fpt, 0, 2, 0, 0, slot) = 0;
           dFddUvisc(fpt, 1, 2, 0, 0, slot) = 0;
-          dFddUvisc(fpt, 2, 2, 0, 0, slot) = diffCo1;
-          dFddUvisc(fpt, 3, 2, 0, 0, slot) = v * (diffCo1 - diffCo2);
+          dFddUvisc(fpt, 2, 2, 0, 0, slot) = -diffCo1;
+          dFddUvisc(fpt, 3, 2, 0, 0, slot) = -v * (diffCo1 - diffCo2);
 
           dFddUvisc(fpt, 0, 3, 0, 0, slot) = 0;
           dFddUvisc(fpt, 1, 3, 0, 0, slot) = 0;
           dFddUvisc(fpt, 2, 3, 0, 0, slot) = 0;
-          dFddUvisc(fpt, 3, 3, 0, 0, slot) = diffCo2;
+          dFddUvisc(fpt, 3, 3, 0, 0, slot) = -diffCo2;
 
           /* Set viscous dFydUx values */
           dFddUvisc(fpt, 0, 0, 1, 0, slot) = 0;
-          dFddUvisc(fpt, 1, 0, 1, 0, slot) = -v * diffCo1;
-          dFddUvisc(fpt, 2, 0, 1, 0, slot) = 2.0/3.0 * u * diffCo1;
-          dFddUvisc(fpt, 3, 0, 1, 0, slot) = -1.0/3.0 * u * v * diffCo1;
+          dFddUvisc(fpt, 1, 0, 1, 0, slot) = v * diffCo1;
+          dFddUvisc(fpt, 2, 0, 1, 0, slot) = -2.0/3.0 * u * diffCo1;
+          dFddUvisc(fpt, 3, 0, 1, 0, slot) = 1.0/3.0 * u * v * diffCo1;
 
           dFddUvisc(fpt, 0, 1, 1, 0, slot) = 0;
           dFddUvisc(fpt, 1, 1, 1, 0, slot) = 0;
-          dFddUvisc(fpt, 2, 1, 1, 0, slot) = -2.0/3.0 * diffCo1;
-          dFddUvisc(fpt, 3, 1, 1, 0, slot) = -2.0/3.0 * v * diffCo1;
+          dFddUvisc(fpt, 2, 1, 1, 0, slot) = 2.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 3, 1, 1, 0, slot) = 2.0/3.0 * v * diffCo1;
 
           dFddUvisc(fpt, 0, 2, 1, 0, slot) = 0;
-          dFddUvisc(fpt, 1, 2, 1, 0, slot) = diffCo1;
+          dFddUvisc(fpt, 1, 2, 1, 0, slot) = -diffCo1;
           dFddUvisc(fpt, 2, 2, 1, 0, slot) = 0;
-          dFddUvisc(fpt, 3, 2, 1, 0, slot) = u * diffCo1;
+          dFddUvisc(fpt, 3, 2, 1, 0, slot) = -u * diffCo1;
 
           dFddUvisc(fpt, 0, 3, 1, 0, slot) = 0;
           dFddUvisc(fpt, 1, 3, 1, 0, slot) = 0;
@@ -2679,19 +2682,19 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
 
           /* Set viscous dFxdUy values */
           dFddUvisc(fpt, 0, 0, 0, 1, slot) = 0;
-          dFddUvisc(fpt, 1, 0, 0, 1, slot) = 2.0/3.0 * v * diffCo1;
-          dFddUvisc(fpt, 2, 0, 0, 1, slot) = -u * diffCo1;
-          dFddUvisc(fpt, 3, 0, 0, 1, slot) = -1.0/3.0 * u * v * diffCo1;
+          dFddUvisc(fpt, 1, 0, 0, 1, slot) = -2.0/3.0 * v * diffCo1;
+          dFddUvisc(fpt, 2, 0, 0, 1, slot) = u * diffCo1;
+          dFddUvisc(fpt, 3, 0, 0, 1, slot) = 1.0/3.0 * u * v * diffCo1;
 
           dFddUvisc(fpt, 0, 1, 0, 1, slot) = 0;
           dFddUvisc(fpt, 1, 1, 0, 1, slot) = 0;
-          dFddUvisc(fpt, 2, 1, 0, 1, slot) = diffCo1;
-          dFddUvisc(fpt, 3, 1, 0, 1, slot) = v * diffCo1;
+          dFddUvisc(fpt, 2, 1, 0, 1, slot) = -diffCo1;
+          dFddUvisc(fpt, 3, 1, 0, 1, slot) = -v * diffCo1;
 
           dFddUvisc(fpt, 0, 2, 0, 1, slot) = 0;
-          dFddUvisc(fpt, 1, 2, 0, 1, slot) = -2.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 1, 2, 0, 1, slot) = 2.0/3.0 * diffCo1;
           dFddUvisc(fpt, 2, 2, 0, 1, slot) = 0;
-          dFddUvisc(fpt, 3, 2, 0, 1, slot) = -2.0/3.0 * u * diffCo1;
+          dFddUvisc(fpt, 3, 2, 0, 1, slot) = 2.0/3.0 * u * diffCo1;
 
           dFddUvisc(fpt, 0, 3, 0, 1, slot) = 0;
           dFddUvisc(fpt, 1, 3, 0, 1, slot) = 0;
@@ -2700,24 +2703,24 @@ void Faces::compute_dFddUvisc(unsigned int startFpt, unsigned int endFpt)
 
           /* Set viscous dFydUy values */
           dFddUvisc(fpt, 0, 0, 1, 1, slot) = 0;
-          dFddUvisc(fpt, 1, 0, 1, 1, slot) = -u * diffCo1;
-          dFddUvisc(fpt, 2, 0, 1, 1, slot) = -4.0/3.0 * v * diffCo1;
-          dFddUvisc(fpt, 3, 0, 1, 1, slot) = -(u*u + 4.0/3.0 * v*v) * diffCo1 + (u*u + v*v - e/rho) * diffCo2;
+          dFddUvisc(fpt, 1, 0, 1, 1, slot) = u * diffCo1;
+          dFddUvisc(fpt, 2, 0, 1, 1, slot) = 4.0/3.0 * v * diffCo1;
+          dFddUvisc(fpt, 3, 0, 1, 1, slot) = (u*u + 4.0/3.0 * v*v) * diffCo1 - (u*u + v*v - e/rho) * diffCo2;
 
           dFddUvisc(fpt, 0, 1, 1, 1, slot) = 0;
-          dFddUvisc(fpt, 1, 1, 1, 1, slot) = diffCo1;
+          dFddUvisc(fpt, 1, 1, 1, 1, slot) = -diffCo1;
           dFddUvisc(fpt, 2, 1, 1, 1, slot) = 0;
-          dFddUvisc(fpt, 3, 1, 1, 1, slot) = u * (diffCo1 - diffCo2);
+          dFddUvisc(fpt, 3, 1, 1, 1, slot) = -u * (diffCo1 - diffCo2);
 
           dFddUvisc(fpt, 0, 2, 1, 1, slot) = 0;
           dFddUvisc(fpt, 1, 2, 1, 1, slot) = 0;
-          dFddUvisc(fpt, 2, 2, 1, 1, slot) = 4.0/3.0 * diffCo1;
-          dFddUvisc(fpt, 3, 2, 1, 1, slot) = v * (4.0/3.0 * diffCo1 - diffCo2);
+          dFddUvisc(fpt, 2, 2, 1, 1, slot) = -4.0/3.0 * diffCo1;
+          dFddUvisc(fpt, 3, 2, 1, 1, slot) = -v * (4.0/3.0 * diffCo1 - diffCo2);
 
           dFddUvisc(fpt, 0, 3, 1, 1, slot) = 0;
           dFddUvisc(fpt, 1, 3, 1, 1, slot) = 0;
           dFddUvisc(fpt, 2, 3, 1, 1, slot) = 0;
-          dFddUvisc(fpt, 3, 3, 1, 1, slot) = diffCo2;
+          dFddUvisc(fpt, 3, 3, 1, 1, slot) = -diffCo2;
         }
       }
     }

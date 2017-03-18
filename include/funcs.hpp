@@ -80,6 +80,19 @@ void dgmm(int m, int n, double alpha, T* A, int lda, T* x, int incx, double beta
   }
 }
 
+/* Diagonal general matrix multiplication (C = alpha * diag(x) * A + beta * C) */
+template <typename T>
+void dgmm2(int m, int n, double alpha, T* x, int incx, T* A, int lda, double beta, T* C, int ldc)
+{
+  for (unsigned int j = 0; j < n; j++)
+  {
+    for (unsigned int i = 0; i < m; i++)
+    {
+      C[ldc*j + i] = alpha * x[i + incx] * A[lda*j + i] + beta * C[ldc*j + i];
+    }
+  }
+}
+
 /* General matrix multiplication (C = alpha * A * B + beta * C) */
 template <typename T>
 void gemm(int m, int n, int p, double alpha, T* A, int lda, T* B, int ldb, double beta, T* C, int ldc)
