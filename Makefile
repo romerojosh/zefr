@@ -157,6 +157,7 @@ swig: $(SOBJS) $(SWIG_OBJ)
 # Build Zefr as a static library
 .PHONY: static
 static: FLAGS += -D_BUILD_LIB
+static: CXXFLAGS += -fPIC
 static: $(SOBJS)
 	$(AR) $(BINDIR)/libzefr.a $(SOBJS)
 

@@ -245,13 +245,14 @@ void FRSolver::restart_solution(void)
 #ifdef _BUILD_LIB
       if (input->overset)
       {
-        // Need to transpose matrix for TIOGA
-        double Rtmp[3][3];
-        for (int i = 0; i < 3; i++)
-          for (int j = 0 ; j < 3; j++)
-            Rtmp[j][i] = geo.Rmat(i,j);
+        // Need to transpose matrix for TIOGA?
+//        double Rtmp[3][3];
+//        for (int i = 0; i < 3; i++)
+//          for (int j = 0 ; j < 3; j++)
+//            Rtmp[j][i] = geo.Rmat(i,j);
 
-        ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
+//        ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
+        ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
       }
 #endif
     }
@@ -763,10 +764,14 @@ void FRSolver::solver_data_to_device()
       e->jaco_spts_d = e->jaco_spts;
     }
 
+    if (input->overset || input->motion)
+    {
+      e->nodes_d = e->nodes;
+      e->coord_fpts_d = e->coord_fpts; /// TODO: use...
+    }
+
     if (input->motion)
     {
-      e->coord_fpts_d = e->coord_fpts;
-      e->nodes_d = e->nodes;
       e->grid_vel_nodes_d = e->grid_vel_nodes;
       e->grid_vel_spts_d = e->grid_vel_spts;
       e->grid_vel_fpts_d = e->grid_vel_fpts;
@@ -789,9 +794,13 @@ void FRSolver::solver_data_to_device()
     }
   }
 
-  if (input->motion)
+  if (input->overset || input->motion)
   {
     geo.coord_nodes_d = geo.coord_nodes;
+  }
+
+  if (input->motion)
+  {
     geo.coords_init_d = geo.coords_init;
     geo.grid_vel_nodes_d = geo.grid_vel_nodes;
 
@@ -866,8 +875,10 @@ void FRSolver::solver_data_to_device()
   if (input->motion)
   {
     faces->Vg_d = faces->Vg;
-    faces->coord_d = faces->coord;
   }
+
+  if (input->overset || input->motion)
+    faces->coord_d = faces->coord;
 
   /* -- Additional data -- */
   /* Geometry */
@@ -1296,29 +1307,27 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   prev_time = flow_time;
 
   // Update grid to start of time step (if not already done so at previous step)
-//  if (input->dt_scheme != "MCGS" && (input->nStages == 1 || (input->nStages > 1 && rk_alpha(input->nStages-2) != 1)))
-//    move(flow_time);
-  move(flow_time+elesObjs[0]->dt(0), false);
-
-  PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
-  ZEFR->unblank_1();
-  POP_NVTX_RANGE;
-
-  move(flow_time, true);
-
-  PUSH_NVTX_RANGE("TG-UNBLANK-2",5);
-  ZEFR->unblank_2(eles->nVars);
-  POP_NVTX_RANGE;
-
 #ifdef _BUILD_LIB
   if (input->overset && input->motion)
   {
-//    ZEFR->tg_set_iter_iblanks(elesObjs[0]->dt(0), eles->nVars);
+    move(flow_time+elesObjs[0]->dt(0), false);
+
+    PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
+    ZEFR->unblank_1();
+    POP_NVTX_RANGE;
+
+    move(flow_time, true);
+
+    PUSH_NVTX_RANGE("TG-UNBLANK-2",5);
+    ZEFR->unblank_2(eles->nVars);
+    POP_NVTX_RANGE;
 
 #ifdef _GPU
     ZEFR->update_iblank_gpu();
 #endif
   }
+#else
+  move(flow_time);
 #endif
 
   if (input->dt_scheme == "LSRK")
@@ -4970,7 +4979,7 @@ void FRSolver::move(double time, bool update_iblank)
   // Update the overset connectivity to the new grid positions
   if (input->overset)
   {
-    if (input->motion_type == CIRCULAR_TRANS || input->motion_type == RIGID_BODY)
+    if (input->motion_type == CIRCULAR_TRANS)// || input->motion_type == RIGID_BODY)
     {
       if (input->motion_type == CIRCULAR_TRANS)
       {
@@ -5164,12 +5173,13 @@ void FRSolver::rigid_body_update(unsigned int stage)
   if (input->overset)
   {
     // Need to transpose matrix for TIOGA
-    double Rtmp[3][3];
-    for (int i = 0; i < 3; i++)
-      for (int j = 0 ; j < 3; j++)
-        Rtmp[j][i] = geo.Rmat(i,j);
+//    double Rtmp[3][3];
+//    for (int i = 0; i < 3; i++)
+//      for (int j = 0 ; j < 3; j++)
+//        Rtmp[j][i] = geo.Rmat(i,j);
 
-    ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
+//    ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
+    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
   }
 #endif
 }

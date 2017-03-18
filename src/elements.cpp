@@ -1738,7 +1738,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
     /* At times 1 and 2, jaco_1 = R_1 * jaco_0;  jaco_2 = R_2 * jaco_0
      * So to update from 1 to 2, jaco_2 = R_2 * R_1^inv * jaco_1
      * Where R is the matrix form of the body's roation quaternion */
-    update_transforms_rigid_wrapper(jaco_spts_init_d, inv_jaco_spts_init_d, jaco_spts_d, inv_jaco_spts_d,
+    update_transforms_rigid_wrapper(jaco_spts_init_d, jaco_spts_d, inv_jaco_spts_d,
         faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims, input->viscous);
   }
   else if (input->motion_type != CIRCULAR_TRANS)

@@ -121,7 +121,7 @@ void initialize_overset(Zefr* z, InputStruct& inp)
 
   inp.overset = 1;
 
-  if (inp.motion && (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS))
+  if (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS)
     z->set_rigid_body_callbacks(tioga_set_transform);
 
   /* NOTE: tioga_dataUpdate is being called from within ZEFR, to accomodate

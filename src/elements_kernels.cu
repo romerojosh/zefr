@@ -799,37 +799,96 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
   check_error();
 }
 
-void update_transforms_rigid_wrapper(mdvector_gpu<double> &jaco_spts_init, mdvector_gpu<double> &inv_jaco_spts_init,
+template<unsigned int nDims>
+__global__
+void update_transform_rmat(mdvector_gpu<double> jaco_init, mdvector_gpu<double> jaco,
+    mdvector_gpu<double> Rmat, unsigned int nEles, unsigned int nSpts)
+{
+  const int ele = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
+  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
+
+  if (spt >= nSpts) return;
+
+  double J[nDims][nDims] = {{0.0}};
+  double R[nDims][nDims];
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      R[i][j] = Rmat(i,j);
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      for (int k = 0; k < nDims; k++)
+        J[i][j] += R[j][k] * jaco_init(i,spt,k,ele);
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      jaco(i,spt,j,ele) = J[i][j];
+}
+
+template<unsigned int nDims>
+__global__
+void update_inv_transform_rmat(mdvector_gpu<double> jaco_init, mdvector_gpu<double> jaco,
+    mdvector_gpu<double> inv_jaco, mdvector_gpu<double> Rmat, unsigned int nEles,
+    unsigned int nSpts)
+{
+  const int ele = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
+  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
+
+  if (spt >= nSpts) return;
+
+  double J[nDims][nDims] = {{0.0}};
+  double R[nDims][nDims];
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      R[i][j] = Rmat(i,j);
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      for (int k = 0; k < nDims; k++)
+        J[i][j] += R[j][k] * jaco_init(i,spt,k,ele);
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      jaco(i,spt,j,ele) = J[i][j];
+
+  double xr = J[0][0];  double xs = J[1][0];  double xt = J[2][0];
+  double yr = J[0][1];  double ys = J[1][1];  double yt = J[2][1];
+  double zr = J[0][2];  double zs = J[1][2];  double zt = J[2][2];
+
+  // Inverse of transformation matrix (times its determinant)
+  inv_jaco(0,spt,0,ele) = ys*zt - yt*zs;  inv_jaco(0,spt,1,ele) = xt*zs - xs*zt;  inv_jaco(0,spt,2,ele) = xs*yt - xt*ys;
+  inv_jaco(1,spt,0,ele) = yt*zr - yr*zt;  inv_jaco(1,spt,1,ele) = xr*zt - xt*zr;  inv_jaco(1,spt,2,ele) = xt*yr - xr*yt;
+  inv_jaco(2,spt,0,ele) = yr*zs - ys*zr;  inv_jaco(2,spt,1,ele) = xs*zr - xr*zs;  inv_jaco(2,spt,2,ele) = xr*ys - xs*yr;
+}
+
+void update_transforms_rigid_wrapper(mdvector_gpu<double> &jaco_spts_init,
     mdvector_gpu<double> &jaco_spts, mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &norm_init,
     mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
     unsigned int nFpts, unsigned int nEles, unsigned int nDims, bool need_inv)
-{ /// TODO: all of this
+{
+  /* WARNING: Hex elements only right now! */
+
   // Apply rotation matrix to body-frame jacobian
-  int m = nSpts*nDims*nEles;
-  int k = nDims;
-  int n = nDims;
-
-  double *A = jaco_spts_init.data();
-  double *B = Rmat.data();
-  double *C = jaco_spts.data();
-
-  cublasDGEMM_wrapper(m, n, k, 1.0, A, m, B, k, 0.0, C, m);
-
+  int threads = 128;
+  int blocks = (nSpts*nEles + threads - 1) / threads;
   if (need_inv)
   {
-    int threads = 128;
-    int blocks = (nSpts * nEles + threads - 1) / threads;
-
-    inverse_transform_hexa<<<blocks,threads>>>(jaco_spts,inv_jaco_spts,NULL,nEles,nSpts);
+    update_inv_transform_rmat<3><<<blocks,threads>>>(jaco_spts_init,jaco_spts,inv_jaco_spts,Rmat,nEles,nSpts);
+  }
+  else
+  {
+    update_transform_rmat<3><<<blocks,threads>>>(jaco_spts_init,jaco_spts,Rmat,nEles,nSpts);
   }
 
   // Apply rotation matrix to body-frame normals
-  A = Rmat.data();
-  B = norm_init.data();
-  C = norm.data();
+  double* A = norm_init.data();
+  double* B = Rmat.data();
+  double* C = norm.data();
 
-  cublasDGEMM_transA_wrapper(nDims, nFpts, nDims, 1.0, A, Rmat.ldim(),
-                             B, norm_init.ldim(), 0.0, C, norm.ldim());
+  cublasDGEMM_wrapper(nFpts, nDims, nDims, 1.0, A, norm_init.ldim(),
+      B, Rmat.ldim(), 0.0, C, norm.ldim());
 
   check_error();
 }
@@ -879,7 +938,7 @@ void calc_normals(mdvector_gpu<double> norm, mdvector_gpu<double> dA,
   {
     for (int dim1 = 0; dim1 < nDims; dim1++)
     {
-      norm(gfpt,dim1) = 0.0;
+      norm(dim1,gfpt) = 0.0;
       for (int dim2 = 0; dim2 < nDims; dim2++)
       {
         norm(dim1, gfpt) += inv_jaco(dim2, fpt, dim1, ele) * tnorm(fpt,dim2);
