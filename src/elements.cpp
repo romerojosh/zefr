@@ -1513,7 +1513,7 @@ void Elements::compute_dFdU()
         compute_dFdUconv_EulerNS<nVars, nDims>(U, dFdU, input->gamma);
         if(input->viscous)
         {
-          compute_dFdUvisc_EulerNS_add<nVars, nDims>(U, dU, dFdU, input->gamma, input->mu);
+          compute_dFdUvisc_EulerNS_add<nVars, nDims>(U, dU, dFdU, input->gamma, input->prandtl, input->mu);
           compute_dFddUvisc_EulerNS<nVars, nDims>(U, dFddU, input->gamma, input->prandtl, input->mu);
         }
       }

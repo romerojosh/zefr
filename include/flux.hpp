@@ -355,7 +355,7 @@ template <size_t nVars, size_t nDims>
 __device__ __forceinline__
 #endif
 void compute_dFdUvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], double dFdU[nVars][nVars][nDims], 
-    double gamma, double mu_in)
+    double gamma, double prandtl, double mu_in)
 {
   if (nDims == 2)
   {
@@ -363,42 +363,59 @@ void compute_dFdUvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], doub
     double invrho = 1.0 / U[0];
     double u = U[1] * invrho;
     double v = U[2] * invrho;
-    double e_int = U[3] * invrho - 0.5 * (u*u + v*v);
+    double e = U[3];
 
     /* Gradients */
     double rho_dx = dU[0][0];
     double momx_dx = dU[1][0];
     double momy_dx = dU[2][0];
+    double e_dx = dU[3][0];
     
     double rho_dy = dU[0][1];
     double momx_dy = dU[1][1];
     double momy_dy = dU[2][1];
+    double e_dy = dU[3][1];
 
-    /* Set viscosity */
-    // TODO: Add Sutherland's law and store mu in array
+    // TODO: Add or store mu from Sutherland's law
     double mu = mu_in;
-
-    double du_dx = (momx_dx - rho_dx * u) * invrho;
-    double du_dy = (momx_dy - rho_dy * u) * invrho;
-
-    double dv_dx = (momy_dx - rho_dx * v) * invrho;
-    double dv_dy = (momy_dy - rho_dy * v) * invrho;
-
-    double diag = (du_dx + dv_dy) / 3.0;
-
-    double tauxx = 2.0 * mu * (du_dx - diag);
-    double tauxy = mu * (du_dy + dv_dx);
-    double tauyy = 2.0 * mu * (dv_dy - diag);
+    double diffCo1 = mu * invrho;
+    double diffCo2 = gamma * mu * invrho / prandtl;
 
     /* Set viscous dFdU values in the x-direction */
-    dFdU[3][0][0] += -(u * tauxx + v * tauxy) * invrho;
-    dFdU[3][1][0] += tauxx * invrho;
-    dFdU[3][2][0] += tauxy * invrho;
+    dFdU[1][0][0] -= (2.0/3.0) * (4.0*u*rho_dx - 2.0*(v*rho_dy + momx_dx) + momy_dy) * invrho * diffCo1;
+    dFdU[2][0][0] -= (2.0*(v*rho_dx + u*rho_dy) - (momx_dy + momy_dx)) * invrho * diffCo1;
+    dFdU[3][0][0] -= (1.0/3.0) * (3.0*(4.0*u*u + 3.0*v*v)*rho_dx + 3.0*u*v*rho_dy - 4.0*u*(2.0*momx_dx - momy_dy) - 6.0*v*(momx_dy + momy_dx)) * invrho * diffCo1 + 
+                                 (-e_dx + (2.0*e*invrho - 3.0*(u*u + v*v))*rho_dx + 2.0*(u*momx_dx + v*momy_dx)) * invrho * diffCo2;
+
+    dFdU[1][1][0] -= -(4.0/3.0) * rho_dx * invrho * diffCo1;
+    dFdU[2][1][0] -= -rho_dy * invrho * diffCo1;
+    dFdU[3][1][0] -= -(1.0/3.0) * (8.0*u*rho_dx + v*rho_dy - 4.0*momx_dx + 2.0*momy_dy) * invrho * diffCo1 + 
+                                  (2.0*u*rho_dx - momx_dx) * invrho * diffCo2;
+
+    dFdU[1][2][0] -= (2.0/3.0) * rho_dy * invrho * diffCo1;
+    dFdU[2][2][0] -= -rho_dx * invrho * diffCo1;
+    dFdU[3][2][0] -= -(1.0/3.0) * (6.0*v*rho_dx + u*rho_dy - 3.0*(momx_dy + momy_dx)) * invrho * diffCo1 + 
+                                  (2.0*v*rho_dx - momy_dx) * invrho * diffCo2;
+
+    dFdU[3][3][0] -= -rho_dx * invrho * diffCo2;
 
     /* Set viscous dFdU values in the y-direction */
-    dFdU[3][0][1] += -(u * tauxy + v * tauyy) *invrho;
-    dFdU[3][1][1] += tauxy * invrho;
-    dFdU[3][2][1] += tauyy * invrho;
+    dFdU[1][0][1] -= (2.0*(v*rho_dx + u*rho_dy) - (momx_dy + momy_dx)) * invrho * diffCo1;
+    dFdU[2][0][1] -= (2.0/3.0) * (4.0*v*rho_dy - 2.0*(u*rho_dx + momy_dy) + momx_dx) * invrho * diffCo1;
+    dFdU[3][0][1] -= (1.0/3.0) * (3.0*(3.0*u*u + 4.0*v*v)*rho_dy + 3.0*u*v*rho_dx - 6.0*u*(momx_dy + momy_dx) - 4.0*v*(-momx_dx + 2.0*momy_dy)) * invrho * diffCo1 + 
+                                 (-e_dy + (2.0*e*invrho - 3.0*(u*u + v*v))*rho_dy + 2.0*(u*momx_dy + v*momy_dy)) * invrho * diffCo2;
+
+    dFdU[1][1][1] -= -rho_dy * invrho * diffCo1;
+    dFdU[2][1][1] -= (2.0/3.0) * rho_dx * invrho * diffCo1;
+    dFdU[3][1][1] -= -(1.0/3.0) * (v*rho_dx + 6.0*u*rho_dy - 3.0*(momx_dy + momy_dx)) * invrho * diffCo1 + 
+                                  (2.0*u*rho_dy - momx_dy) * invrho * diffCo2;
+
+    dFdU[1][2][1] -= -rho_dx * invrho * diffCo1;
+    dFdU[2][2][1] -= -(4.0/3.0) * rho_dy * invrho * diffCo1;
+    dFdU[3][2][1] -= -(1.0/3.0) * (u*rho_dx + 8.0*v*rho_dy + 2.0*momx_dx - 4.0*momy_dy) * invrho * diffCo1 + 
+                                  (2.0*v*rho_dy - momy_dy) * invrho * diffCo2;
+
+    dFdU[3][3][1] -= -rho_dy * invrho * diffCo2;
   }
   else if (nDims == 3)
   {
@@ -430,52 +447,52 @@ void compute_dFddUvisc_EulerNS(double U[nVars], double dFddU[nVars][nVars][nDims
     double diffCo2 = gamma * mu * invrho / prandtl;
 
     /* Set viscous dFxddUx values */
-    dFddU[1][0][0][0] = -4.0/3.0 * u * diffCo1;
-    dFddU[2][0][0][0] = -v * diffCo1;
-    dFddU[3][0][0][0] = -(4.0/3.0 * u*u + v*v) * diffCo1 + (u*u + v*v - e*invrho) * diffCo2;
+    dFddU[1][0][0][0] = 4.0/3.0 * u * diffCo1;
+    dFddU[2][0][0][0] = v * diffCo1;
+    dFddU[3][0][0][0] = (4.0/3.0 * u*u + v*v) * diffCo1 - (u*u + v*v - e*invrho) * diffCo2;
 
-    dFddU[1][1][0][0] = 4.0/3.0 * diffCo1;
-    dFddU[3][1][0][0] = u * (4.0/3.0 * diffCo1 - diffCo2);
+    dFddU[1][1][0][0] = -4.0/3.0 * diffCo1;
+    dFddU[3][1][0][0] = -u * (4.0/3.0 * diffCo1 - diffCo2);
 
-    dFddU[2][2][0][0] = diffCo1;
-    dFddU[3][2][0][0] = v * (diffCo1 - diffCo2);
+    dFddU[2][2][0][0] = -diffCo1;
+    dFddU[3][2][0][0] = -v * (diffCo1 - diffCo2);
 
-    dFddU[3][3][0][0] = diffCo2;
+    dFddU[3][3][0][0] = -diffCo2;
 
     /* Set viscous dFyddUx values */
-    dFddU[1][0][1][0] = -v * diffCo1;
-    dFddU[2][0][1][0] = 2.0/3.0 * u * diffCo1;
-    dFddU[3][0][1][0] = -1.0/3.0 * u * v * diffCo1;
+    dFddU[1][0][1][0] = v * diffCo1;
+    dFddU[2][0][1][0] = -2.0/3.0 * u * diffCo1;
+    dFddU[3][0][1][0] = 1.0/3.0 * u * v * diffCo1;
 
-    dFddU[2][1][1][0] = -2.0/3.0 * diffCo1;
-    dFddU[3][1][1][0] = -2.0/3.0 * v * diffCo1;
+    dFddU[2][1][1][0] = 2.0/3.0 * diffCo1;
+    dFddU[3][1][1][0] = 2.0/3.0 * v * diffCo1;
 
-    dFddU[1][2][1][0] = diffCo1;
-    dFddU[3][2][1][0] = u * diffCo1;
+    dFddU[1][2][1][0] = -diffCo1;
+    dFddU[3][2][1][0] = -u * diffCo1;
 
     /* Set viscous dFxddUy values */
-    dFddU[1][0][0][1] = 2.0/3.0 * v * diffCo1;
-    dFddU[2][0][0][1] = -u * diffCo1;
-    dFddU[3][0][0][1] = -1.0/3.0 * u * v * diffCo1;
+    dFddU[1][0][0][1] = -2.0/3.0 * v * diffCo1;
+    dFddU[2][0][0][1] = u * diffCo1;
+    dFddU[3][0][0][1] = 1.0/3.0 * u * v * diffCo1;
 
-    dFddU[2][1][0][1] = diffCo1;
-    dFddU[3][1][0][1] = v * diffCo1;
+    dFddU[2][1][0][1] = -diffCo1;
+    dFddU[3][1][0][1] = -v * diffCo1;
 
-    dFddU[1][2][0][1] = -2.0/3.0 * diffCo1;
-    dFddU[3][2][0][1] = -2.0/3.0 * u * diffCo1;
+    dFddU[1][2][0][1] = 2.0/3.0 * diffCo1;
+    dFddU[3][2][0][1] = 2.0/3.0 * u * diffCo1;
 
     /* Set viscous dFyddUy values */
-    dFddU[1][0][1][1] = -u * diffCo1;
-    dFddU[2][0][1][1] = -4.0/3.0 * v * diffCo1;
-    dFddU[3][0][1][1] = -(u*u + 4.0/3.0 * v*v) * diffCo1 + (u*u + v*v - e*invrho) * diffCo2;
+    dFddU[1][0][1][1] = u * diffCo1;
+    dFddU[2][0][1][1] = 4.0/3.0 * v * diffCo1;
+    dFddU[3][0][1][1] = (u*u + 4.0/3.0 * v*v) * diffCo1 - (u*u + v*v - e*invrho) * diffCo2;
 
-    dFddU[1][1][1][1] = diffCo1;
-    dFddU[3][1][1][1] = u * (diffCo1 - diffCo2);
+    dFddU[1][1][1][1] = -diffCo1;
+    dFddU[3][1][1][1] = -u * (diffCo1 - diffCo2);
 
-    dFddU[2][2][1][1] = 4.0/3.0 * diffCo1;
-    dFddU[3][2][1][1] = v * (4.0/3.0 * diffCo1 - diffCo2);
+    dFddU[2][2][1][1] = -4.0/3.0 * diffCo1;
+    dFddU[3][2][1][1] = -v * (4.0/3.0 * diffCo1 - diffCo2);
 
-    dFddU[3][3][1][1] = diffCo2;
+    dFddU[3][3][1][1] = -diffCo2;
   }
   else if (nDims == 3)
   {
