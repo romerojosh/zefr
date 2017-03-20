@@ -896,6 +896,12 @@ void set_ele_adjacency(GeoStruct &geo)
         std::sort(face.begin(), face.end());
 
         face2eles[face].push_back(geo.eleID[etype](ele));
+
+        /* Special case for periodic boundary */
+        if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC)
+        {
+          face2eles[geo.per_bnd_pairs[face]].push_back(geo.eleID[etype](ele));
+        }
       }
     }
   }
@@ -919,18 +925,13 @@ void set_ele_adjacency(GeoStruct &geo)
 
         std::sort(face.begin(), face.end());
 
-        if (face2eles.count(face))
-        {        
-          if (face2eles[face].empty() or face2eles[face].back() == geo.eleID[etype](ele))
-            geo.ele_adj(n, geo.eleID[etype](ele)) = -1;
-          else
-            geo.ele_adj(n, geo.eleID[etype](ele)) = face2eles[face].back();
-
-          face2eles[face].pop_back();
+        if (face2eles[face].size() == 1)
+        {
+          geo.ele_adj(n, geo.eleID[etype](ele)) = -1;
         }
         else
         {
-          geo.ele_adj(n, geo.eleID[etype](ele)) = -1;
+          geo.ele_adj(n, geo.eleID[etype](ele)) = (ele != face2eles[face][0]) ? face2eles[face][0] : face2eles[face][1];
         }
 
         n++;
@@ -1023,27 +1024,6 @@ void couple_periodic_bnds(GeoStruct &geo)
         {
           paired = true;
           geo.per_bnd_pairs[face1] = face2;
-
-          /* Add element adjacency information to periodic boundaries */
-          /*
-          // TODO: Seems to work, needs to be checked
-          //std::sort(face1.begin(),face1.end());
-          int f1 = geo.nodes_to_face[face1];
-          int f2 = geo.nodes_to_face[face2];
-          int ele1 = geo.face2eles(f1, 0);
-          int ele2 = geo.face2eles(f2, 0);
-          for (int n = 0; n < geo.nFacesPerEle; n++)
-          {
-            if (geo.ele2face(ele1, n) == f1)
-              geo.ele_adj(ele1, n) = ele2;
-
-            if (geo.ele2face(ele2, n) == f2)
-            {
-             geo.ele_adj(ele2, n) = ele1;
-             //geo.ele2face(ele2, n) = f1;
-            }
-          }
-          */
 
           break;
         }

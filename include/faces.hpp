@@ -73,8 +73,9 @@ class Faces
 
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void rusanov_dFdU(unsigned int startFpt, unsigned int endFpt);
-    void LDG_dFcdU(unsigned int startFpt, unsigned int endFpt);
-    void transform_dFcdU();
+
+    template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+    void LDG_dFdU(unsigned int startFpt, unsigned int endFpt);
 
 #ifdef _MPI
     void send_U_data();
@@ -94,13 +95,8 @@ class Faces
     mdvector<double> Vg;  //! Grid velocity
 
     /* Structures for implicit method */
-    mdview<double> dFcdU;
-    mdvector<double> dFcdU_bnd;
-    mdvector<double> dFdUconv, dFdUvisc, dFddUvisc; 
-    mdvector<double> dUcdU, dFcddU;
-    mdvector<double> dFndUL_temp, dFndUR_temp, dFnddUL_temp, dFnddUR_temp;
-    mdvector<double> dFcdU_temp, dFcddU_temp;
-    mdvector<double> dFdURconv, dUcdUR, dFdURvisc, dFddURvisc;
+    mdview<double> dUcdU, dFcdU, dFcddU;
+    mdvector<double> dUcdU_bnd, dFcdU_bnd, dFcddU_bnd;
     mdvector<double> dURdUL, ddURddUL;
 
     /* Moving-Grid Variables */
@@ -138,7 +134,6 @@ class Faces
     mdvector_gpu<double> Vg_d;
 
     /* Structures for implicit method */
-    mdvector_gpu<double> dFdUconv_d, dFdUvisc_d, dFddUvisc_d;
     mdvector_gpu<double> dFcdU_d, dUcdU_d;
 
     /* Moving-Grid Vars */
@@ -165,7 +160,6 @@ class Faces
     void common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned int dim);
     
     /* Routines for implicit method */
-    void compute_dUcdU(unsigned int startFpt, unsigned int endFpt);
     void compute_common_dFdU(unsigned int startFpt, unsigned int endFpt);
 
     //! Get location of right-state U data for a flux point

@@ -1217,10 +1217,18 @@ void FRSolver::setup_views()
   /* Setup face views of element data for implicit */
   mdvector<double*> dFcdU_base_ptrs;
   mdvector<unsigned int> dFcdU_strides;
+  mdvector<double*> dUcdU_base_ptrs, dFcddU_base_ptrs;
+  mdvector<unsigned int> dFcddU_strides;
   if (input->dt_scheme == "MCGS")
   {
     dFcdU_base_ptrs.assign({2 * geo.nGfpts});
     dFcdU_strides.assign({2, 2 * geo.nGfpts});
+    if (input->viscous)
+    {
+      dUcdU_base_ptrs.assign({2 * geo.nGfpts});
+      dFcddU_base_ptrs.assign({2 * geo.nGfpts});
+      dFcddU_strides.assign({3, 2 * geo.nGfpts});
+    }
   }
 
   /* Set pointers for internal faces */
@@ -1269,6 +1277,15 @@ void FRSolver::setup_views()
           dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
           dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
           dFcdU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(2);
+
+          if (input->viscous)
+          {
+            dUcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dUcdU(ele, 0, 0, fpt);
+            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(ele, 0, 0, 0, fpt);
+            dFcddU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(1);
+            dFcddU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(2);
+            dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(3);
+          }
         }
       }
     }
@@ -1324,6 +1341,15 @@ void FRSolver::setup_views()
       dFcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcdU_bnd(0, 0, i);
       dFcdU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(1);
       dFcdU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(2);
+
+      if (input->viscous)
+      {
+        dUcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dUcdU_bnd(0, 0, i);
+        dFcddU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcddU_bnd(0, 0, 0, i);
+        dFcddU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(1);
+        dFcddU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(2);
+        dFcddU_strides(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(3);
+      }
     }
 
     i++;
@@ -1354,6 +1380,11 @@ void FRSolver::setup_views()
   if (input->dt_scheme == "MCGS")
   {
     faces->dFcdU.assign(dFcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
+    if (input->viscous)
+    {
+      faces->dUcdU.assign(dUcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
+      faces->dFcddU.assign(dFcddU_base_ptrs, dFcddU_strides, geo.nGfpts);
+    }
   }
 }
 

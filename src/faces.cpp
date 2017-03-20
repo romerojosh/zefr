@@ -68,6 +68,13 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   {
     dFcdU_bnd.assign({nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
     dURdUL.assign({nFpts, nVars, nVars});
+
+    /* If viscous, allocate arrays used for LDG flux */
+    if(input->viscous)
+    {
+      dUcdU_bnd.assign({nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+      dFcddU_bnd.assign({nDims, nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+    }
   }
 
   /* If running Euler/NS, allocate memory for pressure */
@@ -829,36 +836,7 @@ void Faces::apply_bcs_dFdU()
 
       case SUB_OUT: /* Subsonic Outlet */
       {
-        if (nDims == 3)
-        {
-          ThrowException("3D Subsonic Outlet boundary condition not implemented for implicit method");
-        }
-
-        /* Primitive Variables */
-        double uL = U(0, 1, fpt) / U(0, 0, fpt);
-        double vL = U(0, 2, fpt) / U(0, 0, fpt);
-
-        /* Compute dURdUL */
-        dURdUL(fpt, 0, 0) = 1;
-        dURdUL(fpt, 1, 0) = 0;
-        dURdUL(fpt, 2, 0) = 0;
-        dURdUL(fpt, 3, 0) = -0.5 * (uL*uL + vL*vL);
-
-        dURdUL(fpt, 0, 1) = 0;
-        dURdUL(fpt, 1, 1) = 1;
-        dURdUL(fpt, 2, 1) = 0;
-        dURdUL(fpt, 3, 1) = uL;
-
-        dURdUL(fpt, 0, 2) = 0;
-        dURdUL(fpt, 1, 2) = 0;
-        dURdUL(fpt, 2, 2) = 1;
-        dURdUL(fpt, 3, 2) = vL;
-
-        dURdUL(fpt, 0, 3) = 0;
-        dURdUL(fpt, 1, 3) = 0;
-        dURdUL(fpt, 2, 3) = 0;
-        dURdUL(fpt, 3, 3) = 0;
-
+        ThrowException("Subsonic Outlet boundary condition not implemented for implicit method");
         break;
       }
 
@@ -1241,34 +1219,7 @@ void Faces::apply_bcs_dFdU()
       case SYMMETRY_G: /* Symmetry (ghost) */
       case SLIP_WALL_G: /* Slip Wall (ghost) */
       {
-        if (nDims == 3)
-        {
-          ThrowException("3D Symmetry/Slip Wall (ghost) boundary condition not implemented for implicit method");
-        }
-
-        double nx = norm(0, fpt);
-        double ny = norm(1, fpt);
-
-        dURdUL(fpt, 0, 0) = 1;
-        dURdUL(fpt, 1, 0) = 0;
-        dURdUL(fpt, 2, 0) = 0;
-        dURdUL(fpt, 3, 0) = 0;
-
-        dURdUL(fpt, 0, 1) = 0;
-        dURdUL(fpt, 1, 1) = 1.0 - 2.0 * nx * nx;
-        dURdUL(fpt, 2, 1) = -2.0 * nx * ny;
-        dURdUL(fpt, 3, 1) = 0;
-
-        dURdUL(fpt, 0, 2) = 0;
-        dURdUL(fpt, 1, 2) = -2.0 * nx * ny;
-        dURdUL(fpt, 2, 2) = 1.0 - 2.0 * ny * ny;
-        dURdUL(fpt, 3, 2) = 0;
-
-        dURdUL(fpt, 0, 3) = 0;
-        dURdUL(fpt, 1, 3) = 0;
-        dURdUL(fpt, 2, 3) = 0;
-        dURdUL(fpt, 3, 3) = 1;
-
+        ThrowException("Symmetry/Slip Wall (ghost) boundary condition not implemented for implicit method");
         break;
       }
 
@@ -1957,9 +1908,7 @@ void Faces::rusanov_dFdU(unsigned int startFpt, unsigned int endFpt)
         double rho = UL[0];
         double V[nDims];
         for (unsigned int dim = 0; dim < nDims; dim++)
-        {
           V[dim] = UL[dim+1] / UL[0];
-        }
 
         /* Compute wavespeed derivative */
         dwSdUL[0] = -sgn*VnL/rho - aL/(2.0*rho);
@@ -1980,9 +1929,7 @@ void Faces::rusanov_dFdU(unsigned int startFpt, unsigned int endFpt)
         double rho = UR[0];
         double V[nDims];
         for (unsigned int dim = 0; dim < nDims; dim++)
-        {
           V[dim] = UR[dim+1] / UR[0];
-        }
 
         /* Compute wavespeed derivative */
         dwSdUR[0] = -sgn*VnR/rho - aR/(2.0*rho);
@@ -2010,7 +1957,6 @@ void Faces::rusanov_dFdU(unsigned int startFpt, unsigned int endFpt)
     if (rus_bias(fpt) == 0) /* Upwinded */
     {
       for (unsigned int vari = 0; vari < nVars; vari++)
-      {
         for (unsigned int varj = 0; varj < nVars; varj++)
         {
           double dFcdUL, dFcdUR;
@@ -2027,35 +1973,195 @@ void Faces::rusanov_dFdU(unsigned int startFpt, unsigned int endFpt)
           dFcdU(0, vari, varj, fpt) =  dFcdUL * dA(0, fpt);
           dFcdU(1, vari, varj, fpt) = -dFcdUR * dA(1, fpt);
         }
-      }
     }
     else if (rus_bias(fpt) == 2) /* Central */
     {
       for (unsigned int vari = 0; vari < nVars; vari++)
-      {
         for (unsigned int varj = 0; varj < nVars; varj++)
         {
           dFcdU(0, vari, varj, fpt) =  0.5 * dFndUL[vari][varj] * dA(0, fpt);
           dFcdU(1, vari, varj, fpt) = -0.5 * dFndUR[vari][varj] * dA(1, fpt);
         }
-      }
     }
     else if (rus_bias(fpt) == 1) /* Set flux state */
     {
       for (unsigned int vari = 0; vari < nVars; vari++)
-      {
         for (unsigned int varj = 0; varj < nVars; varj++)
         {
-          double val = 0;
+          double dFcdUR = 0;
           for (unsigned int vark = 0; vark < nVars; vark++)
+            dFcdUR += dFndUR[vari][vark] * dURdUL(fpt, vark, varj);
+
+          dFcdU(0, vari, varj, fpt) =  dFcdUR * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) = -dFcdUR * dA(1, fpt);
+        }
+    }
+  }
+}
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
+{
+  double tau = input->ldg_tau;
+
+  double UL[nVars];
+  double UR[nVars];
+  double dUL[nVars][nDims];
+  double dUR[nVars][nDims];
+
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+  {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
+    /* Setting sign of beta (from HiFiLES) */
+    double beta = input->ldg_b;
+    if (nDims == 2)
+    {
+      if (norm(0, fpt) + norm(1, fpt) < 0.0)
+        beta = -beta;
+    }
+    else if (nDims == 3)
+    {
+      if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
+        beta = -beta;
+    }
+
+    /* Get left and right state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      UL[n] = U_ldg(0, n, fpt); UR[n] = U_ldg(1, n, fpt);
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        dUL[n][dim] = dU(0, dim, n, fpt);
+        dUR[n][dim] = dU(1, dim, n, fpt);
+      }
+    }
+
+    /* Compute viscous flux Jacobians */
+    double dFdUL[nVars][nVars][nDims] = {0};
+    double dFdUR[nVars][nVars][nDims] = {0};
+    double dFddUL[nVars][nVars][nDims][nDims] = {0};
+    double dFddUR[nVars][nVars][nDims][nDims] = {0};
+    if (input->equation == AdvDiff)
+    {
+      compute_dFddUvisc_AdvDiff<nVars, nDims>(dFddUL, input->AdvDiff_D);
+      compute_dFddUvisc_AdvDiff<nVars, nDims>(dFddUR, input->AdvDiff_D);
+    }
+    else if (input->equation == EulerNS)
+    {
+      compute_dFdUvisc_EulerNS_add<nVars, nDims>(UL, dUL, dFdUL, input->gamma, input->prandtl, input->mu);
+      compute_dFdUvisc_EulerNS_add<nVars, nDims>(UR, dUR, dFdUR, input->gamma, input->prandtl, input->mu);
+
+      compute_dFddUvisc_EulerNS<nVars, nDims>(UL, dFddUL, input->gamma, input->prandtl, input->mu);
+      compute_dFddUvisc_EulerNS<nVars, nDims>(UR, dFddUR, input->gamma, input->prandtl, input->mu);
+    }
+
+    /* Get interface-normal dFdU components (from L to R) */
+    double dFndUL[nVars][nVars] = {0};
+    double dFndUR[nVars][nVars] = {0};
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          dFndUL[vari][varj] += dFdUL[vari][varj][dim] * norm(dim, fpt);
+          dFndUR[vari][varj] += dFdUR[vari][varj][dim] * norm(dim, fpt);
+        }
+
+    /* Get interface-normal dFddU components (from L to R) */
+    double dFnddUL[nVars][nVars][nDims] = {0};
+    double dFnddUR[nVars][nVars][nDims] = {0};
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+        for (unsigned int dimi = 0; dimi < nDims; dimi++)
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
           {
-            val += dFndUR[vari][vark] * dURdUL(fpt, vark, varj);
+            dFnddUL[vari][varj][dimj] += dFddUL[vari][varj][dimi][dimj] * norm(dimi, fpt);
+            dFnddUR[vari][varj][dimj] += dFddUR[vari][varj][dimi][dimj] * norm(dimi, fpt);
           }
 
-          dFcdU(0, vari, varj, fpt) =  val * dA(0, fpt);
-          dFcdU(1, vari, varj, fpt) = -val * dA(1, fpt);
-        }
+    /* Compute common normal viscous dFdU */
+    /* If interior, use central */
+    if (LDG_bias(fpt) == 0)
+    {
+      /* Compute common solution Jacobian (dUcdU) */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        dUcdU(0, var, var, fpt) = (0.5 - beta);
+        dUcdU(1, var, var, fpt) = (0.5 + beta);
       }
+
+      /* Compute common viscous flux Jacobian (dFcdU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          double dFcdUL = (0.5 + beta) * dFndUL[vari][varj];
+          double dFcdUR = (0.5 - beta) * dFndUR[vari][varj];
+
+          if (vari == varj)
+          {
+            dFcdUL += tau;
+            dFcdUR -= tau;
+          }
+
+          dFcdU(0, vari, varj, fpt) += dFcdUL * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) -= dFcdUR * dA(1, fpt);
+        }
+
+      /* Compute common viscous flux Jacobian (dFcddU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            double dFcddUL = (0.5 + beta) * dFnddUL[vari][varj][dimj];
+            double dFcddUR = (0.5 - beta) * dFnddUR[vari][varj][dimj];
+
+            dFcddU(0, dimj, vari, varj, fpt) =  dFcddUL * dA(0, fpt);
+            dFcddU(1, dimj, vari, varj, fpt) = -dFcddUR * dA(1, fpt);
+          }
+    }
+
+    /* If boundary, use right state only */
+    else
+    {
+      /* Compute common solution Jacobian (dUcdU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          dUcdU(0, vari, varj, fpt) = dURdUL(fpt, vari, varj);
+          dUcdU(1, vari, varj, fpt) = dURdUL(fpt, vari, varj);
+        }
+
+      /* Compute common viscous flux Jacobian (dFcdU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          /* Compute boundary dFdU */
+          double dFcdUR = 0;
+          for (unsigned int vark = 0; vark < nVars; vark++)
+            dFcdUR += dFndUR[vari][vark] * dURdUL(fpt, vark, varj);
+
+          if (vari == varj)
+          {
+            dFcdUR += tau;
+          }
+          dFcdUR -= tau * dURdUL(fpt, vari, varj);
+
+          dFcdU(0, vari, varj, fpt) += dFcdUR * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) -= dFcdUR * dA(1, fpt);
+        }
+
+      /* Compute common viscous flux Jacobian (dFcddU) */
+      // TODO: Add dependency on ddURddUL for Adiabatic BC
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            double dFcddUR = dFnddUR[vari][varj][dimj];
+
+            dFcddU(0, dimj, vari, varj, fpt) =  dFcddUR * dA(0, fpt);
+            dFcddU(1, dimj, vari, varj, fpt) = -dFcddUR * dA(1, fpt);
+          }
     }
   }
 }
@@ -2087,7 +2193,27 @@ void Faces::compute_common_dFdU(unsigned int startFpt, unsigned int endFpt)
 
   if (input->viscous)
   {
-    ThrowException("Viscous for implicit method not implemented!");
+    if (input->fvisc_type == LDG)
+    {
+      if (input->equation == AdvDiff)
+      {
+        if (nDims == 2)
+          LDG_dFdU<1, 2, AdvDiff>(startFpt, endFpt);
+        else
+          LDG_dFdU<1, 3, AdvDiff>(startFpt, endFpt);
+      }
+      else if (input->equation == EulerNS)
+      {
+        if (nDims == 2)
+          LDG_dFdU<4, 2, EulerNS>(startFpt, endFpt);
+        else
+          LDG_dFdU<5, 3, EulerNS>(startFpt, endFpt);
+      }
+    }
+    else
+    {
+      ThrowException("Numerical viscous flux type not recognized!");
+    }
   }
 #endif
 }

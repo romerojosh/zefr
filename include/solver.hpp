@@ -183,7 +183,6 @@ class FRSolver
 #endif
     void compute_deltaU(unsigned int color = 1);
     void compute_U(unsigned int color = 1);
-    void dFcdU_from_faces();
     void write_color();
 
 #ifdef _BUILD_LIB

@@ -100,13 +100,24 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     dFdU_spts.assign({nEles, nVars, nVars, nDims, nSpts});
     dFcdU.assign({nEles, nVars, nVars, nFpts});
 
+    CtempSF.assign({nSpts, nFpts});
+
     if (input->viscous)
     {
-      dUcdU.assign({2, nFpts, nVars, nVars, nEles});
+      dUcdU.assign({nEles, nVars, nVars, nFpts}, 0);
 
       /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
-      dFddU_spts.assign({nDims, nDims, nSpts, nVars, nVars, nEles});
-      dFcddU.assign({2, nDims, nFpts, nVars, nVars, nEles});
+      dFddU_spts.assign({nEles, nDims, nDims, nVars, nVars, nSpts});
+      dFcddU.assign({nEles, nDims, nVars, nVars, nFpts});
+
+      Cvisc0.assign({nDims, nVars, nVars, nSpts, nSpts});
+      CviscN.assign({nDims, nVars, nSpts, nSpts});
+      CdFddU0.assign({nDims, nVars, nVars, nSpts, nSpts});
+      CdFcddU0.assign({nVars, nVars, nFpts, nSpts});
+
+      CtempD.assign({nDims});
+      CtempFS.assign({nFpts, nSpts});
+      CtempFSN.assign({nSpts1D, nSpts});
     }
 
     /* Solver data structures */
@@ -1145,7 +1156,7 @@ void Elements::add_source(unsigned int stage, double flow_time)
   {
     for (unsigned int n = 0; n < nVars; n++)
     {
-      for (unsigned int ele = 0; ele < 0; ele++)
+      for (unsigned int ele = 0; ele < nEles; ele++)
       {
         if (input->overset && geo->iblank_cell(ele) != NORMAL) continue;
           double x = coord_spts(spt, 0, ele);
@@ -1450,30 +1461,207 @@ void Elements::compute_unit_advF(unsigned int dim)
 
 void Elements::compute_local_dRdU()
 {
-  /* Compute inviscid element local Jacobians */
-  double SF[nSpts][nFpts];
   for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    /* Compute inviscid element local Jacobians */
     for (unsigned int vari = 0; vari < nVars; vari++)
       for (unsigned int varj = 0; varj < nVars; varj++)
       {
+        /* Compute Jacobian at flux points */
         for (unsigned int spti = 0; spti < nSpts; spti++)
           for (unsigned int fptj = 0; fptj < nFpts; fptj++)
-            SF[spti][fptj] = oppDiv_fpts(spti, fptj) * dFcdU(ele, vari, varj, fptj);
+            CtempSF(spti, fptj) = oppDiv_fpts(spti, fptj) * dFcdU(ele, vari, varj, fptj);
 
         for (unsigned int spti = 0; spti < nSpts; spti++)
           for (unsigned int sptj = 0; sptj < nSpts; sptj++)
           {
             double val = 0;
             for (unsigned int fptk = 0; fptk < nFpts; fptk++)
-              val += SF[spti][fptk] * oppE(fptk, sptj);
+              val += CtempSF(spti, fptk) * oppE(fptk, sptj);
             LHS(ele, vari, spti, varj, sptj) = val;
           }
 
-        for (unsigned int spti = 0; spti < nSpts; spti++)
-          for (unsigned int dim = 0; dim < nDims; dim++)
+        /* Compute Jacobian at solution points */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int spti = 0; spti < nSpts; spti++)
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-              LHS(ele, vari, spti, varj, sptj) += oppDiv(spti, dim, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
+              LHS(ele, vari, spti, varj, sptj) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
       }
+
+    /* Compute viscous element local Jacobians */
+    if (input->viscous)
+    {
+      /* Compute gradient Jacobians */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          /* Compute solution gradient Jacobians in reference space */
+          for (unsigned int fpti = 0; fpti < nFpts; fpti++)
+            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+              CtempFS(fpti, sptj) = dUcdU(ele, vari, varj, fpti) * oppE(fpti, sptj);
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+          {
+            for (unsigned int spti = 0; spti < nSpts; spti++)
+              for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+              {
+                double val = 0;
+                for (unsigned int fptk = 0; fptk < nFpts; fptk++)
+                  val += oppD_fpts(dim, spti, fptk) * CtempFS(fptk, sptj);
+                Cvisc0(dim, vari, varj, spti, sptj) = val;
+              }
+
+            if (vari == varj)
+              for (unsigned int spti = 0; spti < nSpts; spti++)
+                for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+                  Cvisc0(dim, vari, varj, spti, sptj) += oppD(dim, spti, sptj);
+          }
+
+          /* Transform gradient Jacobians to physical space */
+          for (unsigned int spti = 0; spti < nSpts; spti++)
+            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+            {
+              CtempD.fill(0);
+              for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+              {
+                for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+                  CtempD(dim1) += Cvisc0(dim2, vari, varj, spti, sptj) * inv_jaco_spts(dim2, spti, dim1, ele);
+                CtempD(dim1) /= jaco_det_spts(spti, ele);
+              }
+
+              for (unsigned int dim = 0; dim < nDims; dim++)
+                Cvisc0(dim, vari, varj, spti, sptj) = CtempD(dim);
+            }
+        }
+
+      /* Compute viscous Jacobian at solution points (dFddU only) */
+      CdFddU0.fill(0);
+      for (unsigned int dimi = 0; dimi < nDims; dimi++)
+        for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          for (unsigned int vari = 0; vari < nVars; vari++)
+            for (unsigned int varj = 0; varj < nVars; varj++)
+              for (unsigned int vark = 0; vark < nVars; vark++)
+                for (unsigned int spti = 0; spti < nSpts; spti++)
+                  for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+                    CdFddU0(dimi, vari, varj, spti, sptj) += dFddU_spts(ele, dimi, dimj, vari, vark, spti) * Cvisc0(dimj, vark, varj, spti, sptj);
+
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int spti = 0; spti < nSpts; spti++)
+            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+            {
+              /* Transform viscous Jacobian at solution points to reference space */
+              CtempD.fill(0);
+              for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+                for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+                  CtempD(dim1) += CdFddU0(dim2, vari, varj, spti, sptj) * inv_jaco_spts(dim1, spti, dim2, ele);
+
+              for (unsigned int dim = 0; dim < nDims; dim++)
+                CdFddU0(dim, vari, varj, spti, sptj) = CtempD(dim);
+            }
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int vari = 0; vari < nVars; vari++)
+          for (unsigned int varj = 0; varj < nVars; varj++)
+            for (unsigned int spti = 0; spti < nSpts; spti++)
+              for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+              {
+                double val = 0;
+                for (unsigned int sptk = 0; sptk < nSpts; sptk++)
+                  val += oppD(dim, spti, sptk) * CdFddU0(dim, vari, varj, sptk, sptj);
+                LHS(ele, vari, spti, varj, sptj) += val;
+              }
+
+      /* Compute viscous Jacobian at flux points (dFcddU only) */
+      CdFcddU0.fill(0);
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int vari = 0; vari < nVars; vari++)
+          for (unsigned int varj = 0; varj < nVars; varj++)
+            for (unsigned int vark = 0; vark < nVars; vark++)
+              for (unsigned int fpti = 0; fpti < nFpts; fpti++)
+                for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+                  for (unsigned int sptk = 0; sptk < nSpts; sptk++)
+                    CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
+
+      for (unsigned int face = 0; face < nFaces; face++)
+      {
+        /* Add center contribution to Neighbor gradient */
+        /* Note: No contribution if element neighbor is a boundary */
+        int eleN = geo->ele_adj(face, ele);
+        if (eleN == -1) continue;
+
+        unsigned int faceN = 0;
+        while (geo->ele_adj(faceN, eleN) != (int)ele) faceN++;
+
+        /* Compute Neighbor gradient Jacobian (only center contribution) */
+        for (unsigned int var = 0; var < nVars; var++)
+        {
+          /* Compute Neighbor gradient Jacobian in reference space */
+          for (unsigned int fpti = 0; fpti < nSpts1D; fpti++)
+            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+            {
+              // TODO: (2D Index) - Generalize to 3D
+              unsigned int ind = (face+1) * nSpts1D - (fpti+1);
+              CtempFSN(fpti, sptj) = dUcdU(ele, var, var, ind) * oppE(ind, sptj);
+            }
+
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            for (unsigned int spti = 0; spti < nSpts; spti++)
+              for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+              {
+                double val = 0;
+                for (unsigned int fptk = 0; fptk < nSpts1D; fptk++)
+                {
+                  // TODO: (2D Index) - Generalize to 3D
+                  unsigned int indN = faceN * nSpts1D + fptk;
+                  val += oppD_fpts(dim, spti, indN) * CtempFSN(fptk, sptj);
+                }
+                CviscN(dim, var, spti, sptj) = val;
+              }
+
+          /* Transform Neighbor gradient Jacobian to physical space */
+          for (unsigned int spti = 0; spti < nSpts; spti++)
+            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+            {
+              CtempD.fill(0);
+              for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+              {
+                for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+                  CtempD(dim1) += CviscN(dim2, var, spti, sptj) * inv_jaco_spts(dim2, spti, dim1, eleN);
+                CtempD(dim1) /= jaco_det_spts(spti, eleN);
+              }
+
+              for (unsigned int dim = 0; dim < nDims; dim++)
+                CviscN(dim, var, spti, sptj) = CtempD(dim);
+            }
+        }
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int vari = 0; vari < nVars; vari++)
+            for (unsigned int varj = 0; varj < nVars; varj++)
+              for (unsigned int fpti = 0; fpti < nSpts1D; fpti++)
+                for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+                  for (unsigned int sptk = 0; sptk < nSpts; sptk++)
+                  {
+                    // TODO: (2D Index) - Generalize to 3D
+                    unsigned int ind = face * nSpts1D + fpti;
+                    unsigned int indN = (faceN+1) * nSpts1D - (fpti+1);
+                    CdFcddU0(vari, varj, ind, sptj) += (-dFcddU(eleN, dim, vari, varj, indN)) * oppE(indN, sptk) * CviscN(dim, varj, sptk, sptj);
+                  }
+      }
+
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int spti = 0; spti < nSpts; spti++)
+            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+            {
+              double val = 0;
+              for (unsigned int fptk = 0; fptk < nFpts; fptk++)
+                val += oppDiv_fpts(spti, fptk) * CdFcddU0(vari, varj, fptk, sptj);
+              LHS(ele, vari, spti, varj, sptj) += val;
+            }
+    }
+  }
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
@@ -1543,14 +1731,13 @@ void Elements::compute_dFdU()
           for (unsigned int varj = 0; varj < nVars; varj++)
             for (unsigned int dimi = 0; dimi < nDims; dimi++)
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
-                dFddU_spts(dimi, dimj, spt, vari, varj, ele) = dFddU[vari][varj][dimi][dimj];
+                dFddU_spts(ele, dimi, dimj, vari, varj, spt) = dFddU[vari][varj][dimi][dimj];
     }
   }
 }
 
 void Elements::compute_dFdU()
 {
-#ifdef _CPU
   if (input->equation == AdvDiff)
   {
     if (nDims == 2)
@@ -1565,7 +1752,6 @@ void Elements::compute_dFdU()
     else if (nDims == 3)
       compute_dFdU<5, 3, EulerNS>();
   }
-#endif
 }
 
 

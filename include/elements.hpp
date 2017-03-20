@@ -115,17 +115,16 @@ class Elements
     std::vector<JAMA::LU<double>> LUptrs;
 #endif
     mdvector<double*> LHS_ptrs, RHS_ptrs, LHSInv_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs, deltaU_ptrs; 
-    mdvector<double> dFdU_spts, dFddU_spts;
-    mdvector<double> dFcdU, dUcdU, dFcddU;
     mdvector<double> deltaU;
     mdvector<double> RHS;
 
     std::vector<mdvector<double>> LHSs, LHSInvs;
 
-    mdvector<double> Cvisc0, CviscN, CdFddU0;
-    mdvector<double> CtempSS, CtempFS, CtempFS2;
-    mdvector<double> CtempSF;
-    mdvector<double> CtempFSN, CtempFSN2;
+    mdvector<double> dFdU_spts, dFddU_spts;
+    mdvector<double> dFcdU, dUcdU, dFcddU;
+
+    mdvector<double> Cvisc0, CviscN, CdFddU0, CdFcddU0;
+    mdvector<double> CtempSF, CtempD, CtempFS, CtempFSN;
 
     _mpi_comm myComm;
 
@@ -249,8 +248,10 @@ class Elements
 
     /* Routines for implicit method */
     void compute_local_dRdU();
+
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void compute_dFdU();
+
     void compute_dFdU();
 
     /* Polynomial squeeze methods */
