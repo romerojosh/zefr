@@ -4,7 +4,7 @@ meshfile sphere_hex.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
-mesh_bound  wall_ns_iso  wall_ns_iso_p
+mesh_bound  wall_ns_iso  wall_ns_iso
 mesh_bound  char char
 
 # Solver:

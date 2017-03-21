@@ -4,7 +4,7 @@ meshfile cyl_quad_ns.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
-mesh_bound  wall_ns_iso_p  wall_ns_iso_p
+mesh_bound  wall_ns_iso  wall_ns_iso
 mesh_bound  char  char
 
 # Solver:

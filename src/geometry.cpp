@@ -1225,15 +1225,12 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
                   overPts.insert(geo.face2nodes(geo.nFaces, j));
                 overFaces.insert(face);
               }
-              else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
-                       bcType == ISOTHERMAL_NOSLIP_G ||
-                       bcType == ISOTHERMAL_NOSLIP_P ||
-                       bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
-                       bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
-                       bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
-                       bcType == ADIABATIC_NOSLIP_MOVING_G ||
-                       bcType == ADIABATIC_NOSLIP_MOVING_P ||
-                       bcType == SYMMETRY_G || bcType == SYMMETRY_P)
+              else if (bcType == SLIP_WALL ||
+                       bcType == ISOTHERMAL_NOSLIP ||
+                       bcType == ISOTHERMAL_NOSLIP_MOVING ||
+                       bcType == ADIABATIC_NOSLIP ||
+                       bcType == ADIABATIC_NOSLIP_MOVING ||
+                       bcType == SYMMETRY)
               {
                 for (int j = 0; j < geo.nNdFaceCurved; j++)
                   wallPts.insert(geo.face2nodes(geo.nFaces, j));
@@ -2525,15 +2522,12 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 
           geo.overFaceList.push_back(fid);
         }
-        else if (bcType == SLIP_WALL_G || bcType == SLIP_WALL_P ||
-                 bcType == ISOTHERMAL_NOSLIP_G ||
-                 bcType == ISOTHERMAL_NOSLIP_P ||
-                 bcType == ISOTHERMAL_NOSLIP_MOVING_G ||
-                 bcType == ISOTHERMAL_NOSLIP_MOVING_P ||
-                 bcType == ADIABATIC_NOSLIP_G || bcType == ADIABATIC_NOSLIP_P ||
-                 bcType == ADIABATIC_NOSLIP_MOVING_G ||
-                 bcType == ADIABATIC_NOSLIP_MOVING_P ||
-                 bcType == SYMMETRY_G || bcType == SYMMETRY_P)
+        else if (bcType == SLIP_WALL ||
+                 bcType == ISOTHERMAL_NOSLIP ||
+                 bcType == ISOTHERMAL_NOSLIP_MOVING ||
+                 bcType == ADIABATIC_NOSLIP ||
+                 bcType == ADIABATIC_NOSLIP_MOVING ||
+                 bcType == SYMMETRY)
         {
           for (int j = 0; j < geo.nNdFaceCurved; j++)
             wallPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved(n, j)));

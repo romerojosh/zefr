@@ -59,9 +59,27 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     Ucomm_bnd.assign({nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
   }
 
-  /* Initialize Riemann/LDG bias variables to zero */
-  LDG_bias.assign({nFpts}, 0);
+  /* Loop over boundary flux points and initialize Riemann/LDG bias variables */
   rus_bias.assign({nFpts}, 0);
+  LDG_bias.assign({nFpts}, 0);
+  for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
+  {
+    if (input->overset && geo->iblank_face[geo->fpt2face[fpt]] == HOLE) continue;
+
+    unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
+
+    if (bnd_id != PERIODIC || bnd_id != OVERSET)
+    {
+      /* Default: Rusanov BC Ghost, LDG BC Prescribed */
+      LDG_bias(fpt) = 1;
+
+      /* Implicit Default: Rusanov BC Prescribed, LDG BC Prescribed */
+      if (input->dt_scheme == "MCGS")
+      {
+        rus_bias(fpt) = 1;
+      }
+    }
+  }
 
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
@@ -178,49 +196,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case SUB_IN: /* Subsonic Inlet */
-      {
-        ThrowException("SUB_IN needs to be reimplemented!");
-
-        break;
-      }
-
-      case SUB_OUT: /* Subsonic Outlet */
-      {
-        if (!input->viscous)
-          ThrowException("Subsonic outlet only for viscous flows currently!");
-
-        /* Extrapolate Density */
-        U(1, 0, fpt) = U(0, 0, fpt);
-        U_ldg(1, 0, fpt) = U(1, 0, fpt);
-
-        /* Extrapolate Momentum */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          U(1, dim+1, fpt) =  U(0, dim+1, fpt);
-          U_ldg(1, dim+1, fpt) =  U(1, dim+1, fpt);
-        }
-
-        double momF = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          momF += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
-        }
-
-        momF /= U(0, 0, fpt);
-
-        /* Fix pressure */
-        U(1, nDims + 1, fpt) = input->P_fs/(input->gamma-1.0) + 0.5 * momF; 
-        U_ldg(1, nDims + 1, fpt) = U(1, nDims + 1, fpt);
-
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
-
-        break;
-      }
-
       case CHAR: /* Characteristic (from PyFR) */
-      case CHAR_P: /* Characteristic (prescribed) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
@@ -299,95 +275,82 @@ void Faces::apply_bcs()
           U_ldg(1, nDims+1, fpt) += 0.5 * rhoR * VR[dim] * VR[dim];
         }
 
-        /* Set Char (prescribed) */
-        if (bnd_id == CHAR_P)
-        {
-          rus_bias(fpt) = 1;
-        }
-
-        /* Set bias */
-        LDG_bias(fpt) = 1;
-
         break;
       }
 
-      case SYMMETRY_P: /* Symmetry (prescribed) */
-      case SLIP_WALL_P: /* Slip Wall (prescribed) */
+      case SYMMETRY: /* Symmetry */
+      case SLIP_WALL: /* Slip Wall */
       {
         if (input->viscous)
           ThrowException("SLIP_WALL_P not supported for viscous!");
 
-        double momN = 0.0;
-
-        /* Compute wall normal momentum */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(0, dim+1, fpt) * norm(dim, fpt);
-
-        if (input->motion)
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
         {
+          double momN = 0.0;
+
+          /* Compute wall normal momentum */
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+            momN += U(0, dim+1, fpt) * norm(dim, fpt);
+
+          if (input->motion)
+          {
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+          }
+
+          U(1, 0, fpt) = U(0, 0, fpt);
+
+          /* Set boundary state with cancelled normal velocity */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(dim, fpt);
+
+          /* Set energy */
+          /* Get left-state pressure */
+          double momFL = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momFL += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
+
+          double PL = (input->gamma - 1.0) * (U(0, nDims + 1 , fpt) - 0.5 * momFL / U(0, 0, fpt));
+
+          /* Get right-state momentum flux after velocity correction */
+          double momFR = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momFR += U(1, dim + 1, fpt) * U(1, dim + 1, fpt);
+
+          /* Compute energy with extrapolated pressure and new momentum */
+          U(1, nDims + 1, fpt) = PL / (input->gamma - 1)  + 0.5 * momFR / U(1, 0, fpt);
         }
 
-        U(1, 0, fpt) = U(0, 0, fpt);
+        /* Rusanov Ghost */
+        else
+        {
+          double momN = 0.0;
 
-        /* Set boundary state with cancelled normal velocity */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(dim, fpt);
+          /* Compute wall normal momentum */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN += U(0, dim+1, fpt) * norm(dim, fpt);
 
-        /* Set energy */
-        /* Get left-state pressure */
-        double momFL = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momFL += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
+          if (input->motion)
+          {
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+          }
 
-        double PL = (input->gamma - 1.0) * (U(0, nDims + 1 , fpt) - 0.5 * momFL / U(0, 0, fpt));
+          U(1, 0, fpt) = U(0, 0, fpt);
 
-        /* Get right-state momentum flux after velocity correction */
-        double momFR = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momFR += U(1, dim + 1, fpt) * U(1, dim + 1, fpt);
+          /* Set boundary state to reflect normal velocity */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            U(1, dim+1, fpt) = U(0, dim+1, fpt) - 2.0 * momN * norm(dim, fpt);
 
-        /* Compute energy with extrapolated pressure and new momentum */
-        U(1, nDims + 1, fpt) = PL / (input->gamma - 1)  + 0.5 * momFR / U(1, 0, fpt);
-
-        /* Set bias */
-        rus_bias(fpt) = 1;
+          /* Set energy */
+          U(1, nDims + 1, fpt) = U(0, nDims + 1, fpt);
+        }
 
         break;
       }
 
-      case SYMMETRY_G: /* Symmetry (ghost) */
-      case SLIP_WALL_G: /* Slip Wall (ghost) */
-      {
-        if (input->viscous)
-          ThrowException("SLIP_WALL_G not supported for viscous!");
-
-        double momN = 0.0;
-
-        /* Compute wall normal momentum */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(0, dim+1, fpt) * norm(dim, fpt);
-
-        if (input->motion)
-        {
-          for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
-        }
-
-        U(1, 0, fpt) = U(0, 0, fpt);
-
-        /* Set boundary state to reflect normal velocity */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(1, dim+1, fpt) = U(0, dim+1, fpt) - 2.0 * momN * norm(dim, fpt);
-
-        /* Set energy */
-        U(1, nDims + 1, fpt) = U(0, nDims + 1, fpt);
-
-        break;
-      }
-
-      case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
+      case ISOTHERMAL_NOSLIP: /* Isothermal No-slip Wall */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -421,24 +384,15 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq) ;
         U_ldg(1, nDims + 1, fpt) = rhoL * cp_over_gam * input->T_wall;
 
-        /* Set bias */
-        LDG_bias(fpt) = 1;
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
 
         break;
       }
 
-      case ISOTHERMAL_NOSLIP_G: /* Isothermal No-slip Wall (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ISO_G not implemented");
-
-        break;
-      }
-
-
-      case ISOTHERMAL_NOSLIP_MOVING_P: /* No-slip Wall (isothermal and moving) */
+      case ISOTHERMAL_NOSLIP_MOVING: /* Isothermal No-slip Wall, moving */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -466,23 +420,15 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq);
         U_ldg(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq_wall);
 
-        /* Set bias */
-        LDG_bias(fpt) = 1;
-        
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
+
         break;
       }
 
-      case ISOTHERMAL_NOSLIP_MOVING_G: /* Isothermal No-slip Wall, moving (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ISO_MOVE_P not implemented yet!");
-        break;
-      }
-
-
-      case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
+      case ADIABATIC_NOSLIP: /* Adiabatic No-slip Wall */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -516,23 +462,15 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
         U_ldg(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq_grid - VLsq);
 
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
 
         break;
       }
 
-      case ADIABATIC_NOSLIP_G: /* Adiabatic No-slip Wall (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ADI_G not implemented");
-
-        break;
-      }
-
-      case ADIABATIC_NOSLIP_MOVING_P: /* Adiabatic No-slip Wall, moving (prescribed) */
+      case ADIABATIC_NOSLIP_MOVING: /* Adiabatic No-slip Wall, moving */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -560,19 +498,12 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
         U_ldg(1, nDims + 1, fpt) = EL - 0.5 * rhoL * (VLsq + Vsq_wall);
 
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
 
         break;
-      }
-
-      case ADIABATIC_NOSLIP_MOVING_G: /* Adiabatic No-slip Wall, moving (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ADI_MOVE_G not implemented yet!");
-
       }
 
       case OVERSET:
@@ -604,8 +535,7 @@ void Faces::apply_bcs_dU()
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Apply specified boundary condition */
-    if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
-            bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* Adibatic Wall */
+    if(bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* Adibatic Wall */
     {
       /* Extrapolate density gradient */
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -800,7 +730,6 @@ void Faces::apply_bcs_dU()
 // TODO: Collapse 2D and 3D boundary condition cases
 void Faces::apply_bcs_dFdU()
 {
-#ifdef _CPU
   /* Loop over boundary flux points */
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
@@ -828,20 +757,7 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case SUB_IN: /* Subsonic Inlet */
-      {
-        ThrowException("Subsonic Inlet boundary condition not implemented for implicit method");
-        break;
-      }
-
-      case SUB_OUT: /* Subsonic Outlet */
-      {
-        ThrowException("Subsonic Outlet boundary condition not implemented for implicit method");
-        break;
-      }
-
       case CHAR: /* Characteristic (from PyFR) */
-      case CHAR_P: /* Characteristic (prescribed) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
@@ -1129,8 +1045,8 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case SYMMETRY_P: /* Symmetry (prescribed) */
-      case SLIP_WALL_P: /* Slip Wall (prescribed) */
+      case SYMMETRY: /* Symmetry */
+      case SLIP_WALL: /* Slip Wall */
       {
         if (nDims == 2)
         {
@@ -1216,19 +1132,11 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case SYMMETRY_G: /* Symmetry (ghost) */
-      case SLIP_WALL_G: /* Slip Wall (ghost) */
-      {
-        ThrowException("Symmetry/Slip Wall (ghost) boundary condition not implemented for implicit method");
-        break;
-      }
-
-      case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
-      //case ISOTHERMAL_NOSLIP_P2: /* Prescribed for both right states */
+      case ISOTHERMAL_NOSLIP: /* Isothermal No-slip Wall */
       {
         if (nDims == 3)
         {
-          ThrowException("3D Isothermal No-slip Wall (prescribed) boundary condition not implemented for implicit method");
+          ThrowException("3D Isothermal No-slip Wall boundary condition not implemented for implicit method");
         }
 
         dURdUL(fpt, 0, 0) = 1;
@@ -1254,18 +1162,11 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case ISOTHERMAL_NOSLIP_G: /* Isothermal No-slip Wall (ghost) */
-      {
-        ThrowException("Isothermal No-slip Wall (ghost) boundary condition not implemented for implicit method");
-        break;
-      }
-
-      case ISOTHERMAL_NOSLIP_MOVING_P: /* Isothermal No-slip Wall, moving (prescribed) */
-      //case ISOTHERMAL_NOSLIP_MOVING_P2: /* Prescribed for both right states */
+      case ISOTHERMAL_NOSLIP_MOVING: /* Isothermal No-slip Wall, moving */
       {
         if (nDims == 3)
         {
-          ThrowException("3D Isothermal No-slip Wall, moving (prescribed) boundary condition not implemented for implicit method");
+          ThrowException("3D Isothermal No-slip Wall, moving boundary condition not implemented for implicit method");
         }
 
         /* Primitive Variables */
@@ -1295,13 +1196,7 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case ISOTHERMAL_NOSLIP_MOVING_G: /* Isothermal No-slip Wall, moving (ghost) */
-      {
-        ThrowException("Isothermal No-slip Wall, moving (ghost) boundary condition not implemented for implicit method");
-        break;
-      }
-
-      case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
+      case ADIABATIC_NOSLIP: /* Adiabatic No-slip Wall */
       {
         if (nDims == 3)
         {
@@ -1428,21 +1323,9 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case ADIABATIC_NOSLIP_G: /* Adiabatic No-slip Wall (ghost) */
+      case ADIABATIC_NOSLIP_MOVING: /* Adiabatic No-slip Wall, moving */
       {
-        ThrowException("Adiabatic No-slip Wall (ghost) boundary condition not implemented for implicit method");
-        break;
-      }
-
-      case ADIABATIC_NOSLIP_MOVING_P: /* Adiabatic No-slip Wall, moving (prescribed) */
-      {
-        ThrowException("Adiabatic No-slip Wall, moving (prescribed) boundary condition not implemented for implicit method");
-        break;
-      }
-
-      case ADIABATIC_NOSLIP_MOVING_G: /* Adiabatic No-slip Wall, moving (ghost) */
-      {
-        ThrowException("Adiabatic No-slip Wall, moving (ghost) boundary condition not implemented for implicit method");
+        ThrowException("Adiabatic No-slip Wall, moving boundary condition not implemented for implicit method");
         break;
       }
 
@@ -1453,14 +1336,6 @@ void Faces::apply_bcs_dFdU()
       }
     }
   }
-#endif
-
-#ifdef _GPU
-  apply_bcs_dFdU_wrapper(U_d, dFdUconv_d, dFdUvisc_d, dUcdU_d, dFddUvisc_d,
-      geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
-      input->P_fs, input->gamma, norm_d, geo->gfpt2bnd_d, input->equation, input->viscous);
-  check_error();
-#endif
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>

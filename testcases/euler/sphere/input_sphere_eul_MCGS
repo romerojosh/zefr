@@ -4,8 +4,8 @@ meshfile sphere_hex.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
-mesh_bound  wall_slip_g  wall_slip_p
-mesh_bound  char  char_p
+mesh_bound  wall_slip  wall_slip
+mesh_bound  char  char
 
 # Solver:
 order     2
