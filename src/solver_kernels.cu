@@ -1452,7 +1452,7 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
 
 __global__
 void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvector_gpu<double> Vg,
-    MotionVars *params, unsigned int nNodes, unsigned int nDims, int motion_type, double time, int gridID = 0)
+    MotionVars params, unsigned int nNodes, unsigned int nDims, int motion_type, double time, int gridID = 0)
 {
   unsigned int node = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -1526,10 +1526,10 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       /// Rigid oscillation in a circle
       if (gridID == 0)
       {
-        double Ax = params->moveAx; // Amplitude  (m)
-        double Ay = params->moveAy; // Amplitude  (m)
-        double fx = params->moveFx; // Frequency  (Hz)
-        double fy = params->moveFy; // Frequency  (Hz)
+        double Ax = params.moveAx; // Amplitude  (m)
+        double Ay = params.moveAy; // Amplitude  (m)
+        double fx = params.moveFx; // Frequency  (Hz)
+        double fy = params.moveFy; // Frequency  (Hz)
         coords(node,0) = coords_0(node,0) + Ax*sin(2.*PI*fx*time);
         coords(node,1) = coords_0(node,1) + Ay*(1-cos(2.*PI*fy*time));
         Vg(node,0) = 2.*PI*fx*Ax*cos(2.*PI*fx*time);
@@ -1537,11 +1537,21 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
 
         if (nDims == 3)
         {
-          double Az = params->moveAz;
-          double fz = params->moveFz;
+          double Az = params.moveAz;
+          double fz = params.moveFz;
           coords(node,2) = coords_0(node,2) - Az*sin(2.*PI*fz*time);
           Vg(node,2) = -2.*PI*fz*Az*cos(2.*PI*fz*time);
         }
+        /*double x0 = coords_0(node,0);
+        double y0 = coords_0(node,1);
+        double z0 = coords_0(node,2);
+        coords(node,0) = x0;
+        coords(node,1) = y0*cos(fx*time) - z0*sin(fx*time);
+        coords(node,2) = z0*cos(fx*time) + y0*sin(fx*time);
+
+        Vg(node,0) = 0.0;
+        Vg(node,1) = -fx*(y0*sin(fx*time) + z0*cos(fx*time));
+        Vg(node,2) = -fx*(z0*sin(fx*time) - y0*cos(fx*time));*/ /// DEBUGGING rigid-body rotation
       }
       break;
     }
@@ -1568,7 +1578,7 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
 }
 
 void move_grid_wrapper(mdvector_gpu<double> &coords,
-    mdvector_gpu<double> &coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
+    mdvector_gpu<double> &coords_0, mdvector_gpu<double> &Vg, MotionVars &params,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,
     int gridID)
 {
@@ -1578,6 +1588,89 @@ void move_grid_wrapper(mdvector_gpu<double> &coords,
       motion_type, time, gridID);
 }
 
+
+template<unsigned int nDims>
+__global__
+void estimate_point_positions_nodes(mdvector_gpu<double> coord_nodes,
+    mdvector_gpu<double> vel_nodes, double dt, unsigned int nNodes)
+{
+  const int node = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (node >= nNodes) return;
+
+  for (int dim = 0; dim < nDims; dim++)
+    coord_nodes(node, dim) += vel_nodes(node, dim) * dt;
+}
+
+template<unsigned int nDims>
+__global__
+void estimate_point_positions_spts(mdvector_gpu<double> coord_spts,
+    mdvector_gpu<double> vel_spts, double dt, unsigned int nSpts, unsigned int nEles)
+{
+  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
+  const int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
+
+  if (spt >= nSpts) return;
+
+  for (int dim = 0; dim < nDims; dim++)
+    coord_spts(spt, dim, ele) += vel_spts(spt, dim, ele) * dt;
+}
+
+template<unsigned int nDims>
+__global__
+void estimate_point_positions_fpts(mdvector_gpu<double> coord_fpts,
+    mdvector_gpu<double> vel_fpts, double dt, unsigned int nFpts)
+{
+  const int fpt = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (fpt >= nFpts) return;
+
+  for (int dim = 0; dim < nDims; dim++)
+    coord_fpts(dim, fpt) += vel_fpts(dim, fpt) * dt;
+}
+
+void estimate_point_positions_nodes_wrapper(mdvector_gpu<double> &coord_nodes,
+  mdvector_gpu<double> &vel_nodes,double dt, unsigned int nNodes, unsigned int nDims)
+{
+  int threads = 192;
+  int blocks = (nNodes + threads - 1) / threads;
+
+  if (nDims == 2)
+    estimate_point_positions_nodes<2><<<blocks,threads>>>(coord_nodes,vel_nodes,dt,nNodes);
+  else
+    estimate_point_positions_nodes<3><<<blocks,threads>>>(coord_nodes,vel_nodes,dt,nNodes);
+
+  check_error();
+}
+
+void estimate_point_positions_fpts_wrapper(mdvector_gpu<double> &coord_fpts,
+  mdvector_gpu<double> &vel_fpts, double dt, unsigned int nFpts, unsigned int nDims)
+{
+  int threads = 192;
+  int blocks = (nFpts + threads - 1) / threads;
+
+  if (nDims == 2)
+    estimate_point_positions_fpts<2><<<blocks,threads>>>(coord_fpts,vel_fpts,dt,nFpts);
+  else
+    estimate_point_positions_fpts<3><<<blocks,threads>>>(coord_fpts,vel_fpts,dt,nFpts);
+
+  check_error();
+}
+
+void estimate_point_positions_spts_wrapper(mdvector_gpu<double> &coord_spts,
+    mdvector_gpu<double> &vel_spts, double dt, unsigned int nSpts,
+    unsigned int nEles, unsigned int nDims)
+{
+  int threads = 192;
+  int blocks = (nSpts*nEles + threads - 1) / threads;
+
+  if (nDims == 2)
+    estimate_point_positions_spts<2><<<blocks,threads>>>(coord_spts,vel_spts,dt,nSpts,nEles);
+  else
+    estimate_point_positions_spts<3><<<blocks,threads>>>(coord_spts,vel_spts,dt,nSpts,nEles);
+
+  check_error();
+}
 
 __global__
 void unpack_fringe_u(mdvector_gpu<double> U_fringe,
@@ -1677,8 +1770,6 @@ void unpack_fringe_grad_wrapper(mdvector_gpu<double> &dU_fringe,
   check_error();
 }
 
-
-
 __global__
 void unpack_unblank_u(mdvector_gpu<double> U_unblank,
     mdvector_gpu<double> U_spts, mdvector_gpu<int> cellIDs,
@@ -1716,7 +1807,6 @@ void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
 
   check_error();
 }
-
 
 template<int nDims>
 __global__
@@ -1836,14 +1926,14 @@ void get_nodal_basis(double* rst_in, double* weights,
   const int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
   const int ipt = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
 
-  if (ipt >= nFringe) return;
-
   __shared__ double xi[nSpts1D];
 
   if (threadIdx.x < nSpts1D)
     xi[threadIdx.x] = xiGrid[threadIdx.x];
 
   __syncthreads();
+
+  if (ipt >= nFringe) return;
 
   double rst[3];
   for (int d = 0; d < 3; d++)

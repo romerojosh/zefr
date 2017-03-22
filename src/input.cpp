@@ -104,6 +104,19 @@ InputStruct read_input_file(std::string inputfile)
   if (input.dt_type != 0)
     read_param(f, "CFL", input.CFL);
 
+  if (input.dt_scheme == "Euler")
+    input.nStages = 1;
+  else if (input.dt_scheme == "RK44")
+    input.nStages = 4;
+  else if (input.dt_scheme == "RKj")
+    input.nStages = 4;
+  else if (input.dt_scheme == "LSRK")
+    input.nStages = 5;
+  else if (input.dt_scheme == "MCGS")
+    input.nStages = 1;
+  else
+    ThrowException("Unknown dt_scheme");
+
   read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
   read_param(f, "CFL_max", input.CFL_max, 1.0);
   read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);

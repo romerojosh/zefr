@@ -112,6 +112,14 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   {
     geo.coords_init = geo.coord_nodes;
     geo.grid_vel_nodes.assign({geo.nNodes, geo.nDims}, 0.0); /// TODO: pinned for _GPU?
+
+    geo.x_cg.assign({3});
+    geo.vel_cg.assign({3});
+    geo.Rmat.assign({3,3});
+
+    // Initialize Rmat to identity matrix
+    for (int d = 0; d < 3; d++)
+      geo.Rmat(d,d) = 1;
   }
 
   if ( nDims == 3 && (input->motion_type == RIGID_BODY) )
@@ -119,21 +127,15 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.q.assign({4});
     geo.qdot.assign({4});
     geo.omega.assign({3});
-    geo.x_cg.assign({3});
-    geo.vel_cg.assign({3});
     geo.mass = input->mass;
 
     geo.Wmat.assign({3,3});
-    geo.Rmat.assign({3,3});
     geo.dRmat.assign({3,3});
 
     geo.q(0) = 1.;  // Initialize to unit quaternion of no rotation
 
     for (int d = 0; d < 3; d++)
-    {
-      geo.Rmat(d,d) = 1;
       geo.dRmat(d,d) = 1;
-    }
 
     // Initial translational & angular velocity
     for (int d = 0; d < 3; d++)
@@ -145,6 +147,24 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
       }
       geo.vel_cg(d) = input->v0[d];
     }
+
+    Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
+    Quat qdot(geo.qdot(0),geo.qdot(1),geo.qdot(2),geo.qdot(3));
+    Quat omega = 2*q.conj()*qdot;
+    mdvector<double> W({3,3}, 0.);
+    int c1[3] = {1,2,0}; // Cross-product index maps
+    int c2[3] = {2,0,1};
+    for (int i = 0; i < 3; i++)
+    {
+      W(i,c2[i]) =  omega[c1[i]+1];
+      W(i,c1[i]) = -omega[c2[i]+1];
+    }
+
+    geo.Wmat.fill(0.);
+    for (unsigned int i = 0; i < 3; i++)
+      for (unsigned int j = 0; j < 3; j++)
+        for (unsigned int k = 0; k < 3; k++)
+          geo.Wmat(i,j) += geo.Rmat(i,k) * W(k,j);
 
     // Inertia tensor for body [Using initial coords as static body coord sys]
     geo.Jmat.assign({3,3});
@@ -168,17 +188,15 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     for (unsigned int i = 0; i < 3; i++)
       for (unsigned int j = 0; j < 3; j++)
         geo.Jinv(i,j) /= det;
-  }
 
-  if (input->motion_type == CIRCULAR_TRANS)
-  {
-    geo.Rmat.assign({3,3});
-    geo.x_cg.assign({3});
-    geo.vel_cg.assign({3});
-
-    // Initialize Rmat to identity matrix
-    for (int i = 0; i < 3; i++)
-      geo.Rmat(i,i) = 1;
+    if (input->dt_scheme != "LSRK")
+    {
+      // Assign storage for stage residuals
+      geo.q_res.assign({input->nStages,4});
+      geo.qdot_res.assign({input->nStages,4});
+      geo.x_res.assign({input->nStages,3});
+      geo.v_res.assign({input->nStages,3});
+    }
   }
 
   return geo;

@@ -189,9 +189,19 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
     double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace);
 
 void move_grid_wrapper(mdvector_gpu<double> &coords,
-    mdvector_gpu<double>& coords_0, mdvector_gpu<double> &Vg, MotionVars *params,
+    mdvector_gpu<double>& coords_0, mdvector_gpu<double> &Vg, MotionVars &params,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,
     int gridID = 0);
+
+void estimate_point_positions_nodes_wrapper(mdvector_gpu<double> &coord_nodes,
+  mdvector_gpu<double> &vel_nodes,double dt, unsigned int nNodes, unsigned int nDims);
+
+void estimate_point_positions_fpts_wrapper(mdvector_gpu<double> &coord_fpts,
+  mdvector_gpu<double> &vel_fpts, double dt, unsigned int nFpts, unsigned int nDims);
+
+void estimate_point_positions_spts_wrapper(mdvector_gpu<double> &coord_spts,
+    mdvector_gpu<double> &vel_spts, double dt, unsigned int nSpts,
+    unsigned int nEles, unsigned int nDims);
 
 void unpack_fringe_u_wrapper(mdvector_gpu<double> &U_fringe, mdview_gpu<double> &U, mdview_gpu<double> &U_ldg,
     mdvector_gpu<unsigned int>& fringe_fpts, mdvector_gpu<unsigned int>& fringe_side, unsigned int nFringe,

@@ -360,6 +360,9 @@ void Zefr::setup_solver(void)
   geo = &solver->geo;
 
   t_start = std::chrono::high_resolution_clock::now();
+
+  solver->grid_time = -1;
+  solver->move(solver->flow_time);
 }
 
 void Zefr::restart_solution(void)

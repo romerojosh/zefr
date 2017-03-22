@@ -126,8 +126,8 @@ class FRSolver
     void compute_element_dt();
 
 #ifdef _GPU
-    // For moving grids
-    MotionVars *motion_vars, *motion_vars_d;
+    // For moving grids, to pass parameters to CUDA kernels more easily
+    MotionVars motion_vars;
 #endif
 
   public:

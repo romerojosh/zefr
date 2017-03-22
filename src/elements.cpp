@@ -1715,7 +1715,6 @@ void Elements::move(std::shared_ptr<Faces> faces)
 #ifdef _GPU
   if (input->motion_type == RIGID_BODY)
   {
-    /// TODO: check whether Rmat, Wmat need to be transposed
     // Positions
     update_nodes_rigid_wrapper(geo->coords_init_d, geo->coord_nodes_d, geo->Rmat_d,
         geo->x_cg_d, geo->nNodes, geo->nDims);
@@ -1739,7 +1738,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
      * So to update from 1 to 2, jaco_2 = R_2 * R_1^inv * jaco_1
      * Where R is the matrix form of the body's roation quaternion */
     update_transforms_rigid_wrapper(jaco_spts_init_d, jaco_spts_d, inv_jaco_spts_d,
-        faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims, input->viscous);
+        faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims, true);
   }
   else if (input->motion_type != CIRCULAR_TRANS)
   {

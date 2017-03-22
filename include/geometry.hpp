@@ -151,6 +151,7 @@ struct GeoStruct
   mdvector<double> omega;   //! Angular velocity of body in body-frame coordinates
   std::array<double,3> omega_res;
   mdvector<double> qdot_res, q_res; //! Residual for rotation quaternion update eqns.
+  mdvector<double> x_res, v_res; //! Residuals of rigid-body dynamics for RK time-stepping
 
   /* --- Overset-Related Variables --- */
 

@@ -80,6 +80,13 @@ void calc_normals_wrapper(mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
     mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2slot, int nFpts,
     int nEles, int nDims);
 
+//! For moving-overset unblanking, estimate positions at end of time step
+void estimate_point_positions_wrapper(mdvector_gpu<double> &coord_nodes,
+  mdvector_gpu<double> &coord_spts, mdvector_gpu<double> &coord_fpts,
+  mdvector_gpu<double> &vel_nodes, mdvector_gpu<double> &vel_spts,
+  mdvector_gpu<double> &vel_fpts, double dt, unsigned int nNodes,
+  unsigned int nSpts, unsigned int nFpts, unsigned int nEles, unsigned int nDims);
+
 //! For overset grid interpolation
 void pack_donor_u_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,

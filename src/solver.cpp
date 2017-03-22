@@ -244,27 +244,11 @@ void FRSolver::restart_solution(void)
 
 #ifdef _BUILD_LIB
       if (input->overset)
-      {
-        // Need to transpose matrix for TIOGA?
-//        double Rtmp[3][3];
-//        for (int i = 0; i < 3; i++)
-//          for (int j = 0 ; j < 3; j++)
-//            Rtmp[j][i] = geo.Rmat(i,j);
-
-//        ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
         ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
-      }
 #endif
     }
 
-    move(flow_time);
-
-#ifdef _BUILD_LIB
-    ZEFR->tg_set_iter_iblanks(input->dt, eles->nVars);
-#ifdef _GPU
-    ZEFR->update_iblank_gpu();
-#endif
-#endif
+    move(flow_time, input->overset);
   }
 }
 
@@ -806,17 +790,12 @@ void FRSolver::solver_data_to_device()
 
     /* Moving-grid parameters for convenience / ease of future additions
      * (add to input.hpp, then also here) */
-    motion_vars = new MotionVars[1];
-
-    motion_vars->moveAx = input->moveAx;
-    motion_vars->moveAy = input->moveAy;
-    motion_vars->moveAz = input->moveAz;
-    motion_vars->moveFx = input->moveFx;
-    motion_vars->moveFy = input->moveFy;
-    motion_vars->moveFz = input->moveFz;
-
-    allocate_device_data(motion_vars_d, 1);
-    copy_to_device(motion_vars_d, motion_vars, 1);
+    motion_vars.moveAx = input->moveAx;
+    motion_vars.moveAy = input->moveAy;
+    motion_vars.moveAz = input->moveAz;
+    motion_vars.moveFx = input->moveFx;
+    motion_vars.moveFy = input->moveFy;
+    motion_vars.moveFz = input->moveFz;
 
     if (input->motion_type == RIGID_BODY)
     {
@@ -1307,28 +1286,7 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   prev_time = flow_time;
 
   // Update grid to start of time step (if not already done so at previous step)
-#ifdef _BUILD_LIB
-  if (input->overset && input->motion)
-  {
-    move(flow_time+elesObjs[0]->dt(0), false);
-
-    PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
-    ZEFR->unblank_1();
-    POP_NVTX_RANGE;
-
-    move(flow_time, true);
-
-    PUSH_NVTX_RANGE("TG-UNBLANK-2",5);
-    ZEFR->unblank_2(eles->nVars);
-    POP_NVTX_RANGE;
-
-#ifdef _GPU
-    ZEFR->update_iblank_gpu();
-#endif
-  }
-#else
-  move(flow_time);
-#endif
+  move(flow_time, input->overset);
 
   if (input->dt_scheme == "LSRK")
   {
@@ -1379,15 +1337,11 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   {
     flow_time = prev_time + rk_alpha(stage) * elesObjs[0]->dt(0);
 
-    move(flow_time, false);
-
-#ifdef _BUILD_LIB
-    PUSH_NVTX_RANGE("TG-PT-CONN",3);
-    if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
-    POP_NVTX_RANGE;
-#endif
+    move(flow_time);
 
     compute_residual(stage);
+
+    rigid_body_update(stage);
 
     /* If in first stage, compute stable timestep */
     if (stage == 0)
@@ -1476,15 +1430,11 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
     if (input->nStages > 1)
       flow_time = prev_time + rk_alpha(input->nStages-2) * elesObjs[0]->dt(0);
 
-    move(flow_time, false);
-
-#ifdef _BUILD_LIB
-    PUSH_NVTX_RANGE("TG-PT-CONN",3);
-    if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
-    POP_NVTX_RANGE;
-#endif
+    move(flow_time);
 
     compute_residual(input->nStages-1);
+
+    rigid_body_update(input->nStages-1);
 
     if (input->nStages > 1)
     {
@@ -1638,7 +1588,6 @@ void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>>
   }
 #endif
 
-
   if (elesObjs[0]->dt(0) < 1e-14)
     ThrowException("dt approaching 0 - quitting simulation");
 
@@ -1729,13 +1678,7 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     PUSH_NVTX_RANGE("ONE_STAGE",6);
     flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
 
-    move(flow_time, false); // Set grid to current evaluation time
-
-#ifdef _BUILD_LIB
-    PUSH_NVTX_RANGE("TG-PT-CONN",3);
-    if (input->overset && input->motion) ZEFR->tg_point_connectivity(); /// TODO: - figure out best location for this
-    POP_NVTX_RANGE;
-#endif
+    move(flow_time); // Set grid to current evaluation time
 
     compute_residual(0);
 
@@ -4119,6 +4062,13 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
           if (std::isnan(res[n]))
           {
             std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << std::endl;
+            for (int i = 0; i < std::min(8,e->nNodes); i++)
+            {
+              if (geo.nDims == 3)
+                printf("%f %f %f\n",e->nodes(i,0,ele),e->nodes(i,1,ele),e->nodes(i,2,ele));
+              else
+                printf("%f %f\n",e->nodes(i,0,ele),e->nodes(i,1,ele));
+            }
             ThrowException("NaN in residual");
           }
         }
@@ -4957,7 +4907,111 @@ void FRSolver::filter_solution()
 void FRSolver::move(double time, bool update_iblank)
 {
   if (!input->motion) return;
-  if (time == grid_time) return; // Already set
+  if (time == grid_time && !update_iblank) return; // Already set
+
+  if (update_iblank && input->overset)
+  {
+#ifdef _BUILD_LIB
+    // Guess grid position at end of time step and perform blanking procedure
+    auto xcg = geo.x_cg;
+    double dt = elesObjs[0]->dt(0);
+
+    for (unsigned int d = 0; d < geo.nDims; d++)
+      geo.x_cg(d) += dt * geo.vel_cg(d);
+
+    /* HACK - works, but not clean & fully general (also does extra work)
+    auto Rmat = geo.Rmat;
+    auto Wmat = geo.Wmat;
+    if (input->motion_type == RIGID_BODY)
+    {
+      Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
+      Quat qdot(geo.qdot(0),geo.qdot(1),geo.qdot(2),geo.qdot(3));
+
+      q.normalize();
+      for (unsigned int i = 0; i < 4; i++)
+        q[i] += qdot[i] * dt;
+
+      geo.Rmat = getRotationMatrix(q);
+
+      int c1[3] = {1,2,0}; // Cross-product index maps
+      int c2[3] = {2,0,1};
+      Quat omega = 2*q.conj()*qdot;
+      mdvector<double> W({3,3}, 0.);
+      for (int i = 0; i < 3; i++)
+      {
+        W(i,c2[i]) =  omega[c1[i]+1];
+        W(i,c1[i]) = -omega[c2[i]+1];
+      }
+
+      geo.Wmat.fill(0.);
+      for (unsigned int i = 0; i < 3; i++)
+        for (unsigned int j = 0; j < 3; j++)
+          for (unsigned int k = 0; k < 3; k++)
+            geo.Wmat(i,j) += Rmat(i,k) * W(k,j);
+    }
+
+#ifdef _GPU
+    geo.x_cg_d = geo.x_cg;
+    geo.Rmat_d = geo.Rmat;
+    geo.Wmat_d = geo.Wmat;
+#endif
+
+    if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
+      ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+
+    for (auto e : elesObjs)
+      e->move(faces);*/
+
+#ifdef _CPU
+    for (unsigned int nd = 0; nd < geo.nNodes; nd++)
+      for (unsigned int dim = 0; dim < geo.nDims; dim++)
+        geo.coord_nodes(nd,dim) += geo.grid_vel_nodes(nd,dim) * dt;
+
+    for (unsigned int dim = 0; dim < geo.nDims; dim++)
+      for (unsigned int fpt = 0; fpt < faces->nFpts; fpt++)
+        faces->coord(dim,fpt) += faces->Vg(dim,fpt) * dt;
+
+    for (auto &eles : elesObjs)
+    {
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int dim = 0; dim < eles->nDims; dim++)
+          for (unsigned int ele = 0; ele < eles->nEles; ele++)
+            eles->coord_spts(spt,dim,ele) += eles->grid_vel_spts(spt,dim,ele) * dt;
+    }
+#endif
+
+#ifdef _GPU
+    geo.x_cg_d = geo.x_cg;
+
+    estimate_point_positions_nodes_wrapper(geo.coord_nodes_d,
+        geo.grid_vel_nodes_d,dt,geo.nNodes,geo.nDims);
+
+    estimate_point_positions_fpts_wrapper(faces->coord_d,faces->Vg_d,dt,
+        faces->nFpts,faces->nDims);
+
+    for (auto &eles : elesObjs)
+    {
+      estimate_point_positions_spts_wrapper(eles->coord_spts_d,
+          eles->grid_vel_spts_d,dt,eles->nSpts,eles->nEles,eles->nDims);
+    }
+
+    geo.coord_nodes = geo.coord_nodes_d;
+#endif
+
+    PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
+    ZEFR->unblank_1();
+    POP_NVTX_RANGE;
+
+    geo.x_cg = xcg;
+//    geo.Rmat = Rmat;
+//    geo.Wmat = Wmat;
+#ifdef _GPU
+    geo.x_cg_d = geo.x_cg;
+//    geo.Rmat_d = geo.Rmat;
+//    geo.Wmat_d = geo.Wmat;
+#endif
+#endif // _BUILD_LIB
+  }
 
 #ifdef _CPU
   move_grid(input, geo, time);
@@ -4965,9 +5019,9 @@ void FRSolver::move(double time, bool update_iblank)
 
 #ifdef _GPU
   if (input->motion_type != RIGID_BODY)
-  { /// TODO
+  { /// TODO?
     move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
-                      motion_vars_d, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
+                      motion_vars, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
     check_error();
   }
 #endif
@@ -4979,7 +5033,7 @@ void FRSolver::move(double time, bool update_iblank)
   // Update the overset connectivity to the new grid positions
   if (input->overset)
   {
-    if (input->motion_type == CIRCULAR_TRANS)// || input->motion_type == RIGID_BODY)
+    if (input->motion_type == CIRCULAR_TRANS || input->motion_type == RIGID_BODY)
     {
       if (input->motion_type == CIRCULAR_TRANS)
       {
@@ -4999,17 +5053,21 @@ void FRSolver::move(double time, bool update_iblank)
     }
 
 #ifdef _GPU
-//    Timer d2gTime("Geo D2H Time: ");
-//    d2gTime.startTimer();
     geo.coord_nodes = geo.coord_nodes_d;
-    //geo.grid_vel_nodes = geo.grid_vel_nodes_d;
-    //faces->coord = faces->coord_d;
-
-//    if (update_iblank) // Only needed in case of unblanking elements
-//      eles->coord_spts = eles->coord_spts_d;
-//    d2gTime.stopTimer();
-//    d2gTime.showTime(5);
 #endif
+
+    if (update_iblank)
+    {
+      // Grid reset to current flow time; re-do blanking, find any unblanked
+      // elements, and perform the unblank interpolation on them
+      PUSH_NVTX_RANGE("TG-UNBLANK-2",5);
+      ZEFR->unblank_2(faces->nVars);
+      POP_NVTX_RANGE;
+
+      ZEFR->update_iblank_gpu();
+    }
+
+    ZEFR->tg_point_connectivity();
   }
 #endif
 
@@ -5082,39 +5140,107 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   // ---- Update x, v, q, qdot ----
 
-  if (stage < input->nStages - 1)
+  if (input->dt_scheme == "LSRK")
   {
-    double ai = rk_alpha(stage);
-    for (unsigned int d = 0; d < eles->nDims; d++)
+    if (stage < input->nStages - 1)
     {
-      geo.x_cg(d) = x_til(d) + ai*eles->dt(0) * geo.vel_cg(d);
-      x_til(d) = geo.x_cg(d) + (bi-ai)*eles->dt(0) * geo.vel_cg(d);
+      double ai = rk_alpha(stage);
+      for (unsigned int d = 0; d < eles->nDims; d++)
+      {
+        geo.x_cg(d) = x_til(d) + ai*eles->dt(0) * geo.vel_cg(d);
+        x_til(d) = geo.x_cg(d) + (bi-ai)*eles->dt(0) * geo.vel_cg(d);
 
-      geo.vel_cg(d) = v_til(d) + ai*eles->dt(0) * v_res[d];
-      v_til(d) = geo.vel_cg(d) + (bi-ai)*eles->dt(0) * v_res[d];
+        geo.vel_cg(d) = v_til(d) + ai*eles->dt(0) * v_res[d];
+        v_til(d) = geo.vel_cg(d) + (bi-ai)*eles->dt(0) * v_res[d];
+      }
+
+      for (unsigned int i = 0; i < 4; i++)
+      {
+        geo.q(i) = q_til(i) + ai*eles->dt(0) * q_res[i];
+        q_til(i) = geo.q(i) + (bi-ai)*eles->dt(0) * q_res[i];
+
+        geo.qdot(i) = qdot_til(i) + ai*eles->dt(0) * qdot_res[i];
+        qdot_til(i) = geo.qdot(i) + (bi-ai)*eles->dt(0) * qdot_res[i];
+      }
     }
-
-    for (unsigned int i = 0; i < 4; i++)
+    else
     {
-      geo.q(i) = q_til(i) + ai*eles->dt(0) * q_res[i];
-      q_til(i) = geo.q(i) + (bi-ai)*eles->dt(0) * q_res[i];
+      for (unsigned int d = 0; d < geo.nDims; d++)
+      {
+        geo.x_cg(d) = x_til(d) + bi*eles->dt(0) * geo.vel_cg(d);
+        geo.vel_cg(d) = v_til(d) + bi*eles->dt(0) * v_res[d];
+      }
 
-      geo.qdot(i) = qdot_til(i) + ai*eles->dt(0) * qdot_res[i];
-      qdot_til(i) = geo.qdot(i) + (bi-ai)*eles->dt(0) * qdot_res[i];
+      for (unsigned int i = 0; i < 4; i++)
+      {
+        geo.q(i) = q_til(i) + bi*eles->dt(0) * q_res[i];
+        geo.qdot(i) = qdot_til(i) + bi*eles->dt(0) * qdot_res[i];
+      }
     }
   }
-  else
+  else if (input->dt_scheme != "MCGS")
   {
-    for (unsigned int d = 0; d < geo.nDims; d++)
+    if (stage == 0 && input->nStages > 1)
     {
-      geo.x_cg(d) = x_til(d) + bi*eles->dt(0) * geo.vel_cg(d);
-      geo.vel_cg(d) = v_til(d) + bi*eles->dt(0) * v_res[d];
+      x_til = geo.x_cg;
+      v_til = geo.vel_cg;
+      q_til = geo.q;
+      qdot_til = geo.qdot;
+    }
+
+    for (unsigned int d = 0; d < eles->nDims; d++)
+    {
+      geo.x_res(stage,d) = geo.vel_cg(d);
+      geo.v_res(stage,d) = v_res[d];
     }
 
     for (unsigned int i = 0; i < 4; i++)
     {
-      geo.q(i) = q_til(i) + bi*eles->dt(0) * q_res[i];
-      geo.qdot(i) = qdot_til(i) + bi*eles->dt(0) * qdot_res[i];
+      geo.q_res(stage,i) = q_res[i];
+      geo.qdot_res(stage,i) = qdot_res[i];
+    }
+
+    if (stage < input->nStages - 1)
+    {
+      double ai = rk_alpha(stage);
+      for (unsigned int d = 0; d < eles->nDims; d++)
+      {
+        geo.x_cg(d) = x_til(d) + ai*eles->dt(0) * geo.x_res(stage,d);
+        geo.vel_cg(d) = v_til(d) + ai*eles->dt(0) * geo.v_res(stage,d);
+      }
+
+      for (unsigned int i = 0; i < 4; i++)
+      {
+        geo.q(i) = q_til(i) + ai*eles->dt(0) * geo.q_res(stage,i);
+        geo.qdot(i) = qdot_til(i) + ai*eles->dt(0) * geo.qdot_res(stage,i);
+      }
+    }
+    else
+    {
+      // Last-stage update
+      if (input->nStages > 1)
+      {
+        geo.x_cg = x_til;
+        geo.vel_cg = v_til;
+        geo.q = q_til;
+        geo.qdot = qdot_til;
+      }
+
+      for (int step = 0; step < input->nStages; step++)
+      {
+        double bi = rk_beta(step);
+        for (unsigned int d = 0; d < geo.nDims; d++)
+        {
+          geo.x_cg(d) += bi*eles->dt(0) * geo.x_res(step,d);
+          geo.vel_cg(d) += bi*eles->dt(0) * geo.v_res(step,d);
+        }
+
+        for (unsigned int i = 0; i < 4; i++)
+        {
+          geo.q(i) += bi*eles->dt(0) * geo.q_res(step,i);
+          geo.qdot(i) += bi*eles->dt(0) * geo.qdot_res(step,i);
+        }
+      }
     }
   }
 
@@ -5179,7 +5305,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 //        Rtmp[j][i] = geo.Rmat(i,j);
 
 //    ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
-    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+//    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims); // done elsewhere
   }
 #endif
 }

@@ -586,11 +586,8 @@ __global__
 void copy_coords_face(mdvector_gpu<double> coord, mdvector_gpu<double> e_coord,
     mdvector_gpu<int> fpt2gfpt, unsigned int nEles, unsigned int nFpts)
 {
-  //int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-  //int ele =  (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
   int fpt = (blockDim.y * blockIdx.y + threadIdx.y);
   int ele =  (blockDim.x * blockIdx.x + threadIdx.x);
-//  int dim = blockIdx.y;
 
   if (ele >= nEles || fpt >= nFpts)
     return;
