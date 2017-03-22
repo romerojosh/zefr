@@ -451,9 +451,7 @@ void FRSolver::setup_update()
     /* Forward or Forward/Backward sweep */
     nCounter = geo.nColors;
     if (input->backsweep)
-    {
       nCounter *= 2;
-    }
 
 #ifdef _GPU
     if (input->viscous)
@@ -1121,6 +1119,11 @@ void FRSolver::compute_RHS(unsigned int color)
 {
   for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      auto etype = geo.eleType(ele);
+      if (geo.ele_colorBT[etype](ele) != color)
+        continue;
+
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
@@ -1129,19 +1132,8 @@ void FRSolver::compute_RHS(unsigned int color)
           else
             e->RHS(ele, var, spt) = -(e->dt(ele) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
         }
+    }
 }
-
-#ifdef _CPU
-void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int color)
-{
-}
-#endif
-
-#ifdef _GPU
-void FRSolver::compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color)
-{
-}
-#endif
 
 void FRSolver::compute_deltaU(unsigned int color)
 {
@@ -1149,6 +1141,10 @@ void FRSolver::compute_deltaU(unsigned int color)
   for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
+      auto etype = geo.eleType(ele);
+      if (geo.ele_colorBT[etype](ele) != color)
+        continue;
+
       /* Create Array1D view of RHS */
       unsigned int N = e->nSpts * e->nVars;
       TNT::Array1D<double> b(N, &e->RHS(ele, 0, 0));
@@ -1166,11 +1162,15 @@ void FRSolver::compute_U(unsigned int color)
 {
   for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      auto etype = geo.eleType(ele);
+      if (geo.ele_colorBT[etype](ele) != color)
+        continue;
+
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
-        {
           e->U_spts(spt, var, ele) += e->deltaU(ele, var, spt);
-        }
+    }
 }
 
 void FRSolver::initialize_U()
@@ -1909,59 +1909,66 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
-  // TODO: Add multigrid functionality and coloring
-  /* Compute residual and block diagonal Jacobian on all elements */
-  int iter = current_iter - restart_iter;
-  if (iter % input->Jfreeze_freq == 0)
+  /* Sweep through colors and backsweep */
+  for (unsigned int counter = 1; counter <= nCounter; counter++)
   {
-    compute_residual(0);
+    /* Set color */
+    unsigned int color = counter;
+    if (color > geo.nColors)
+      color = 2*geo.nColors+1 - counter;
 
-    /* Compute block diagonal components of residual Jacobian */
-    compute_dRdU();
-
-    // TODO: Revisit this as it is kind of expensive.
-    if (input->dt_type != 0)
+    /* Compute residual and block diagonal Jacobian on all elements */
+    int iter = current_iter - restart_iter;
+    if (counter == 1 && iter % input->Jfreeze_freq == 0)
     {
-      compute_element_dt();
+      compute_residual(0);
+
+      /* Compute block diagonal components of residual Jacobian */
+      compute_dRdU();
+
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+
+      /* Compute Backward Euler LHS */
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int vari = 0; vari < e->nVars; vari++)
+            for (unsigned int spti = 0; spti < e->nSpts; spti++)
+              for (unsigned int varj = 0; varj < e->nVars; varj++)
+                for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+                {
+                  if (input->dt_type != 2)
+                    e->LHS(ele, vari, spti, varj, sptj) *= e->dt(0) / e->jaco_det_spts(spti, ele);
+                  else
+                    e->LHS(ele, vari, spti, varj, sptj) *= e->dt(ele) / e->jaco_det_spts(spti, ele); 
+
+                  if (spti == sptj && vari == varj)
+                    e->LHS(ele, vari, spti, varj, sptj) += 1;
+                }
+
+      /* LU factorization of LHS */
+      compute_LHS_LU();
+      //write_LHS(input->output_prefix);
+    }
+    
+    /* Compute residual on elements of this color only */
+    else
+    {
+      compute_residual(0);
     }
 
-    /* Compute Backward Euler LHS */
-    for (auto e : elesObjs)
-      for (unsigned int ele = 0; ele < e->nEles; ele++)
-        for (unsigned int vari = 0; vari < e->nVars; vari++)
-          for (unsigned int spti = 0; spti < e->nSpts; spti++)
-            for (unsigned int varj = 0; varj < e->nVars; varj++)
-              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
-              {
-                if (input->dt_type != 2)
-                  e->LHS(ele, vari, spti, varj, sptj) *= e->dt(0) / e->jaco_det_spts(spti, ele);
-                else
-                  e->LHS(ele, vari, spti, varj, sptj) *= e->dt(ele) / e->jaco_det_spts(spti, ele); 
+    /* Prepare RHS vector */
+    compute_RHS(color);
 
-                if (spti == sptj && vari == varj)
-                  e->LHS(ele, vari, spti, varj, sptj) += 1;
-              }
+    /* Solve system for deltaU */
+    compute_deltaU(color);
 
-    /* LU factorization of LHS */
-    compute_LHS_LU();
-    //write_LHS(input->output_prefix);
+    /* Add deltaU to solution */
+    compute_U(color);
   }
-  else
-  {
-    compute_residual(0);
-  }
-
-  /* Prepare RHS vector */
-  if (sourceBT.size() == 0)
-  {
-    compute_RHS();
-  }
-
-  /* Solve system for deltaU */
-  compute_deltaU();
-
-  /* Add deltaU to solution */
-  compute_U();
 }
 
 void FRSolver::compute_element_dt()
