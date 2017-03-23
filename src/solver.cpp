@@ -385,6 +385,7 @@ void FRSolver::setup_update()
   {
     input->nStages = 1;
     rk_beta.assign({input->nStages}, 1.0);
+    rk_c.assign({input->nStages}, 0.0);
   }
   else if (input->dt_scheme == "RK44")
   {
@@ -392,6 +393,9 @@ void FRSolver::setup_update()
     
     rk_alpha.assign({input->nStages-1});
     rk_alpha(0) = 0.5; rk_alpha(1) = 0.5; rk_alpha(2) = 1.0;
+
+    rk_c.assign({input->nStages});
+    rk_c(1) = 0.5; rk_c(2) = 0.5; rk_c(3) = 1.0;
 
     rk_beta.assign({input->nStages});
     rk_beta(0) = 1./6.; rk_beta(1) = 1./3.; 
@@ -407,6 +411,8 @@ void FRSolver::setup_update()
     /* OptRK4 (r = 0.5) */
     rk_alpha(0) = 0.153; rk_alpha(1) = 0.442; 
     rk_alpha(2) = 0.930; rk_alpha(3) = 1.0;
+
+    rk_c = rk_alpha;
   }
   else if (input->dt_scheme == "LSRK")
   {
@@ -1461,7 +1467,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < nSteps; stage++)
   {
-    flow_time = prev_time + rk_alpha(stage) * elesObjs[0]->dt(0);
+    flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
 
     move(flow_time, false);
 
@@ -1555,8 +1561,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-    if (input->nStages > 1)
-      flow_time = prev_time + rk_alpha(input->nStages-2) * elesObjs[0]->dt(0);
+    flow_time = prev_time + rk_c(input->nStages-1) * elesObjs[0]->dt(0);
 
     move(flow_time, false);
 
