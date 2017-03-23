@@ -168,7 +168,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "turb_stat_freq", input.turb_stat_freq, (unsigned int) 0);
   read_param(f, "test_case", input.test_case, (unsigned int) 0);
   read_param(f, "err_field", input.err_field, (unsigned int) 0);
-  read_param(f, "nQpts1D", input.nQpts1D);
+  read_param(f, "nQpts1D", input.nQpts1D, (unsigned int)5);
   if (input.error_freq == 0 and input.nQpts1D != 0)
     input.nQpts1D = 0;  // if no error computation, no need for quadrature alloc
 

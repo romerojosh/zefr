@@ -1,37 +1,69 @@
 # Geometry:
 nDims    3
-meshfile hex16.msh
+#meshfile hex4.msh
+meshfile hex16.pyfrm
+#meshfile hexball.msh
 
 # Boundary Conditions
-mesh_bound  periodic  periodic
+mesh_bound  periodic  char
+mesh_bound  overset  char
+mesh_bound  farfield  char
 mesh_bound  fluid  fluid
 
 # Solver:
 order    4
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  1
+motion   0
 spt_type Legendre
 
 # Timestepping:
-n_steps   1000
-dt_scheme LSRK      (Euler, RK44, RK54)
+n_steps   200
+dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt	      0.0001
+dt	      0.001
 CFL	      0.3
 CFL_type  1
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix taylorgreen
-write_freq     1000
+output_prefix  rottest4
+write_freq     200
 write_pyfr     1
-write_paraview 0
-report_freq    100
+write_paraview 1
+report_freq    10
 res_type       1
 force_freq     0
 error_freq     0
 nQpts1D        10
 plot_surfaces  0
+
+motion_type  10
+moveFx  .1
+moveFy  0
+moveFz  0
+moveAx  0
+moveAy  0
+moveAz  0
+
+# Set rotation of inner grid w/o translation
+wx0  .1
+wy0  .00
+wz0  .00
+vx0  0.0
+vy0  0.0
+vz0  0.0
+
+# Object properties:
+mass  .2
+Ixx  1.e-4
+Iyy  1.e-4
+Izz  1.e-4
+# Initial grid velocity:
+vx0  0
+vy0  0
+vz0  0
+
 
 # Riemann Solver:
 fconv_type Rusanov

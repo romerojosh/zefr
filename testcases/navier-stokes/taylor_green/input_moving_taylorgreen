@@ -2,30 +2,31 @@
 nDims    3
 overset  true
 meshfile P3/hex16.pyfrm
-overset_grids  hex10_in.pyfrm  P3/hex16_out.pyfrm
+#overset_grids  hex10_in.pyfrm  P3/hex16_out.pyfrm
+overset_grids  hex20_in.pyfrm  P3/hex32_out.pyfrm
 
 # Boundary Conditions
 mesh_bound  periodic  periodic
 mesh_bound  overset   overset
 
 # Solver:
-order    3
+order    2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  1
 motion   1
 spt_type Legendre
 
 # Timestepping:
-n_steps   5000
+n_steps   15000
 dt_scheme LSRK      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt        0.0015
+dt        0.001
 res_tol   1e-12
 
 # Restarting
-restart  0
+restart  1
 restart_type 1
-restart_case movetest
+restart_case TG-Rot-2
 restart_iter 5000
 
 # Adaptive time-stepping variables
@@ -37,18 +38,16 @@ err_rtol  1e-6
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-#output_prefix  overtest
-output_prefix  movetest
-write_freq     100
+output_prefix  TG-Rot-2
+write_freq     200
 write_pyfr     0
 write_paraview 1
 plot_surfaces  0
 plot_overset   0
-report_freq    50
+report_freq    100
 res_type       1
 force_freq     0
 error_freq     0
-nQpts1D        10
 plot_surfaces  0
 
 # ====================================================
@@ -57,16 +56,35 @@ plot_surfaces  0
 # 4: Figure-8-ish periodic motion
 # For 'Ping-Pong' Taylor-Green: inner box [-.4*pi, +.4*pi]
 # outer box [-pi, pi], so max range of motion is .6*pi
-motion_type  4
+#motion_type  4  # presribed periodic circle/figure-8
+motion_type  10  # rigid-body translation/rotation: set full_6dof to add force integration
 moveAx  1.884955
 moveAy  0.9424777
 moveAz  1.884955
 
 # For 'Ping-Pong' Taylor-Green: do 10 complete periods
 # of motion within time range of interest (~169s)
-moveFx  .0591607978
-moveFy  .1183215957
-moveFz  .0591607978
+moveFx  .1 .0591607978
+moveFy  .0 .1183215957
+moveFz  .0 .0591607978
+
+# Set rotation of inner grid w/o translation
+wx0  .05
+wy0  .05
+wz0  .01
+vx0  0.0
+vy0  0.0
+vz0  0.0
+
+# Object properties:
+mass  .2
+Ixx  1.e-4
+Iyy  1.e-4
+Izz  1.e-4
+# Initial grid velocity:
+vx0  0
+vy0  0
+vz0  0
 
 # Riemann Solver:
 fconv_type Rusanov

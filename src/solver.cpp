@@ -52,6 +52,7 @@ extern "C" {
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #include "solver_kernels.h"
+#include "elements_kernels.h"
 #include "cublas_v2.h"
 #endif
 
@@ -248,7 +249,7 @@ void FRSolver::restart_solution(void)
 #endif
     }
 
-    move(flow_time, input->overset);
+    move(flow_time, true);
   }
 }
 
@@ -1286,7 +1287,7 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   prev_time = flow_time;
 
   // Update grid to start of time step (if not already done so at previous step)
-  move(flow_time, input->overset);
+  move(flow_time, true);
 
   if (input->dt_scheme == "LSRK")
   {
@@ -4062,7 +4063,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
           if (std::isnan(res[n]))
           {
             std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << std::endl;
-            for (int i = 0; i < std::min(8,e->nNodes); i++)
+            for (int i = 0; i < std::min(8,(int)e->nNodes); i++)
             {
               if (geo.nDims == 3)
                 printf("%f %f %f\n",e->nodes(i,0,ele),e->nodes(i,1,ele),e->nodes(i,2,ele));
@@ -4907,21 +4908,19 @@ void FRSolver::filter_solution()
 void FRSolver::move(double time, bool update_iblank)
 {
   if (!input->motion) return;
-  if (time == grid_time && !update_iblank) return; // Already set
+  if (time == grid_time && !(update_iblank && input->overset)) return; // Already set
 
   if (update_iblank && input->overset)
   {
 #ifdef _BUILD_LIB
     // Guess grid position at end of time step and perform blanking procedure
     auto xcg = geo.x_cg;
+    auto Rmat = geo.Rmat;
     double dt = elesObjs[0]->dt(0);
 
     for (unsigned int d = 0; d < geo.nDims; d++)
       geo.x_cg(d) += dt * geo.vel_cg(d);
 
-    /* HACK - works, but not clean & fully general (also does extra work)
-    auto Rmat = geo.Rmat;
-    auto Wmat = geo.Wmat;
     if (input->motion_type == RIGID_BODY)
     {
       Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
@@ -4933,51 +4932,34 @@ void FRSolver::move(double time, bool update_iblank)
 
       geo.Rmat = getRotationMatrix(q);
 
-      int c1[3] = {1,2,0}; // Cross-product index maps
-      int c2[3] = {2,0,1};
-      Quat omega = 2*q.conj()*qdot;
-      mdvector<double> W({3,3}, 0.);
-      for (int i = 0; i < 3; i++)
-      {
-        W(i,c2[i]) =  omega[c1[i]+1];
-        W(i,c1[i]) = -omega[c2[i]+1];
-      }
+#ifdef _CPU
+      // Update grid position based on rigid-body motion: CG offset + rotation
+      for (unsigned int i = 0; i < geo->nNodes; i++)
+        for (unsigned int d = 0; d < nDims; d++)
+          geo->coord_nodes(i,d) = geo->x_cg(d);
 
-      geo.Wmat.fill(0.);
-      for (unsigned int i = 0; i < 3; i++)
-        for (unsigned int j = 0; j < 3; j++)
-          for (unsigned int k = 0; k < 3; k++)
-            geo.Wmat(i,j) += Rmat(i,k) * W(k,j);
-    }
+      auto &A = geo->coords_init;
+      auto &B = geo->Rmat;  /// TODO: double-check orientation
+      auto &C = geo->coord_nodes;
 
-#ifdef _GPU
-    geo.x_cg_d = geo.x_cg;
-    geo.Rmat_d = geo.Rmat;
-    geo.Wmat_d = geo.Wmat;
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo->nNodes, nDims, nDims,
+          1.0, A.data(), A.ldim(), B.data(), B.ldim(), 1.0, C.data(), C.ldim());
 #endif
 
-    if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
-      ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+#ifdef _GPU
+      geo.x_cg_d = geo.x_cg;
+      geo.Rmat_d = geo.Rmat;
 
-    for (auto e : elesObjs)
-      e->move(faces);*/
-
+      update_nodes_rigid_wrapper(geo.coords_init_d, geo.coord_nodes_d, geo.Rmat_d,
+          geo.x_cg_d, geo.nNodes, geo.nDims);
+#endif
+    }
+    else
+    {
 #ifdef _CPU
     for (unsigned int nd = 0; nd < geo.nNodes; nd++)
       for (unsigned int dim = 0; dim < geo.nDims; dim++)
         geo.coord_nodes(nd,dim) += geo.grid_vel_nodes(nd,dim) * dt;
-
-    for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      for (unsigned int fpt = 0; fpt < faces->nFpts; fpt++)
-        faces->coord(dim,fpt) += faces->Vg(dim,fpt) * dt;
-
-    for (auto &eles : elesObjs)
-    {
-      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
-        for (unsigned int dim = 0; dim < eles->nDims; dim++)
-          for (unsigned int ele = 0; ele < eles->nEles; ele++)
-            eles->coord_spts(spt,dim,ele) += eles->grid_vel_spts(spt,dim,ele) * dt;
-    }
 #endif
 
 #ifdef _GPU
@@ -4985,30 +4967,24 @@ void FRSolver::move(double time, bool update_iblank)
 
     estimate_point_positions_nodes_wrapper(geo.coord_nodes_d,
         geo.grid_vel_nodes_d,dt,geo.nNodes,geo.nDims);
-
-    estimate_point_positions_fpts_wrapper(faces->coord_d,faces->Vg_d,dt,
-        faces->nFpts,faces->nDims);
-
-    for (auto &eles : elesObjs)
-    {
-      estimate_point_positions_spts_wrapper(eles->coord_spts_d,
-          eles->grid_vel_spts_d,dt,eles->nSpts,eles->nEles,eles->nDims);
+#endif
     }
 
+#ifdef _GPU
     geo.coord_nodes = geo.coord_nodes_d;
 #endif
+
+    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
 
     PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
     ZEFR->unblank_1();
     POP_NVTX_RANGE;
 
     geo.x_cg = xcg;
-//    geo.Rmat = Rmat;
-//    geo.Wmat = Wmat;
+    geo.Rmat = Rmat;
 #ifdef _GPU
     geo.x_cg_d = geo.x_cg;
-//    geo.Rmat_d = geo.Rmat;
-//    geo.Wmat_d = geo.Wmat;
+    geo.Rmat_d = geo.Rmat;
 #endif
 #endif // _BUILD_LIB
   }
@@ -5067,7 +5043,9 @@ void FRSolver::move(double time, bool update_iblank)
       ZEFR->update_iblank_gpu();
     }
 
+    PUSH_NVTX_RANGE("TG-PT-CONN",3);
     ZEFR->tg_point_connectivity();
+    POP_NVTX_RANGE;
   }
 #endif
 
