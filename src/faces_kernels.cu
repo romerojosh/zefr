@@ -86,42 +86,7 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       break;
     }
 
-    case SUB_IN: /* Subsonic Inlet */
-    {
-      /* TODO: implement */
-      break;
-    }
-
-    case SUB_OUT: /* Subsonic Outlet */
-    { 
-      /* Extrapolate Density */
-      U(1, 0, fpt) = U(0, 0, fpt);
-      U_ldg(1, 0, fpt) = U(0, 0, fpt);
-
-      /* Extrapolate Momentum */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        U(1, dim+1, fpt) =  U(0, dim+1, fpt);
-        U_ldg(1, dim+1, fpt) =  U(0, dim+1, fpt);
-      }
-
-      double momF = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        momF += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
-      }
-
-      momF /= U(0, 0, fpt);
-
-      /* Fix pressure */
-      U(1, nDims + 1, fpt) = P_fs/(gamma-1.0) + 0.5 * momF; 
-      U_ldg(1, nDims + 1, fpt) = P_fs/(gamma-1.0) + 0.5 * momF; 
-
-      break;
-    }
-
     case CHAR: /* Characteristic (from PyFR) */
-    case CHAR_P: /* Characteristic (prescribed) */
     {
       /* Compute wall normal velocities */
       double VnL = 0.0; double VnR = 0.0;
@@ -200,89 +165,78 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
         U_ldg(1, nDims+1, fpt) += 0.5 * rhoR * VR[dim] * VR[dim];
       }
 
-      /* Set Char (prescribed) */
-      if (bnd_id == CHAR_P)
-      {
-        rus_bias(fpt) = 1;
-      }
-
-      /* Set LDG bias */
-      LDG_bias(fpt) = 1;
-
       break;
     }
 
-    case SYMMETRY_P: /* Symmetry (prescribed) */
-    case SLIP_WALL_P: /* Slip Wall (prescribed) */
+    case SYMMETRY: /* Symmetry */
+    case SLIP_WALL: /* Slip Wall */
     {
-      double momN = 0.0;
-
-      /* Compute wall normal momentum */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        momN += U(0, dim+1, fpt) * norm(dim, fpt);
-
-      if (motion)
+      /* Rusanov Prescribed */
+      if (rus_bias(fpt) == 1)
       {
+        double momN = 0.0;
+
+        /* Compute wall normal momentum */
         for (unsigned int dim = 0; dim < nDims; dim++)
-          momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+          momN += U(0, dim+1, fpt) * norm(dim, fpt);
+
+        if (motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+        }
+
+        U(1, 0, fpt) = U(0, 0, fpt);
+
+        /* Set boundary state with cancelled normal velocity */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(dim, fpt);
+
+        /* Set energy */
+        /* Get left-state pressure */
+        double momFL = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momFL += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
+
+        double PL = (gamma - 1.0) * (U(0, nDims + 1 , fpt) - 0.5 * momFL / U(0, 0, fpt));
+
+        /* Get right-state momentum flux after velocity correction */
+        double momFR = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momFR += U(1, dim + 1, fpt) * U(1, dim + 1, fpt);
+
+        /* Recompute energy with extrapolated pressure and new momentum */
+        U(1, nDims + 1, fpt) = PL / (gamma - 1)  + 0.5 * momFR / U(1, 0, fpt);
       }
 
-      U(1, 0, fpt) = U(0, 0, fpt);
+      /* Rusanov Ghost */
+      else
+      {
+        double momN = 0.0;
 
-      /* Set boundary state with cancelled normal velocity */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(dim, fpt);
+        /* Compute wall normal momentum */
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          momN += U(0, dim+1, fpt) * norm(dim, fpt);
 
-      /* Set energy */
-      /* Get left-state pressure */
-      double momFL = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        momFL += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
+        if (motion)
+        {
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+        }
 
-      double PL = (gamma - 1.0) * (U(0, nDims + 1 , fpt) - 0.5 * momFL / U(0, 0, fpt));
+        U(1, 0, fpt) = U(0, 0, fpt);
 
-      /* Get right-state momentum flux after velocity correction */
-      double momFR = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        momFR += U(1, dim + 1, fpt) * U(1, dim + 1, fpt);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          /* Set boundary state to reflect normal velocity */
+          U(1, dim+1, fpt) = U(0, dim+1, fpt) - 2.0 * momN * norm(dim, fpt);
 
-      /* Recompute energy with extrapolated pressure and new momentum */
-      U(1, nDims + 1, fpt) = PL / (gamma - 1)  + 0.5 * momFR / U(1, 0, fpt);
-
-      /* Set bias */
-      rus_bias(fpt) = 1;
+        U(1, nDims + 1, fpt) = U(0, nDims + 1, fpt);
+      }
 
       break;
     }
 
-    case SYMMETRY_G: /* Symmetry (ghost) */
-    case SLIP_WALL_G: /* Slip Wall (ghost) */
-    {
-      double momN = 0.0;
-
-      /* Compute wall normal momentum */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        momN += U(0, dim+1, fpt) * norm(dim, fpt);
-
-      if (motion)
-      {
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
-      }
-
-      U(1, 0, fpt) = U(0, 0, fpt);
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        /* Set boundary state to reflect normal velocity */
-        U(1, dim+1, fpt) = U(0, dim+1, fpt) - 2.0 * momN * norm(dim, fpt);
-
-      U(1, nDims + 1, fpt) = U(0, nDims + 1, fpt);
-
-      break;
-    }
-
-
-    case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
+    case ISOTHERMAL_NOSLIP: /* Isothermal No-slip Wall */
     {
       double VG[nVars] = {0.0};
 
@@ -315,19 +269,15 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * T_wall + 0.5 * Vsq);
       U_ldg(1, nDims + 1, fpt) = rhoL * cp_over_gam * T_wall;
 
-      /* Set bias */
-      LDG_bias(fpt) = 1;
+      /* Rusanov Prescribed */
+      if (rus_bias(fpt) == 1)
+        for (unsigned int var = 0; var < nVars; var++)
+          U(1, var, fpt) = U_ldg(1, var, fpt);
+
       break;
     }
 
-    case ISOTHERMAL_NOSLIP_G: /* Isothermal No-slip Wall (ghost) */
-    {
-      // NOT IMPLEMENTED
-      break;
-    }
-
-
-    case ISOTHERMAL_NOSLIP_MOVING_P: /* Moving Isothermal No-slip Wall (prescribed) */
+    case ISOTHERMAL_NOSLIP_MOVING: /* Moving Isothermal No-slip Wall */
     {
       double rhoL = U(0, 0, fpt);
 
@@ -352,21 +302,15 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * T_wall + 0.5 * Vsq);
       U_ldg(1, nDims + 1, fpt) = rhoL * (cp_over_gam * T_wall + 0.5 * Vsq_wall);
 
-      /* Set bias */
-      LDG_bias(fpt) = 1;
+      /* Rusanov Prescribed */
+      if (rus_bias(fpt) == 1)
+        for (unsigned int var = 0; var < nVars; var++)
+          U(1, var, fpt) = U_ldg(1, var, fpt);
 
       break;
     }
     
-    case ISOTHERMAL_NOSLIP_MOVING_G: /* Moving Isothermal No-slip Wall (ghost) */
-    {
-      // NOT IMPLEMENTED
-
-      break;
-    }
-
-
-    case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
+    case ADIABATIC_NOSLIP: /* Adiabatic No-slip Wall */
     {
       double VG[nVars] = {0.0};
       if (motion)
@@ -398,21 +342,15 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
       U_ldg(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq_grid - VLsq);
 
-      /* Set LDG bias */
-      LDG_bias(fpt) = 1;
+      /* Rusanov Prescribed */
+      if (rus_bias(fpt) == 1)
+        for (unsigned int var = 0; var < nVars; var++)
+          U(1, var, fpt) = U_ldg(1, var, fpt);
 
       break;
     }
 
-    case ADIABATIC_NOSLIP_G: /* Adiabatic No-slip Wall (ghost) */
-    {
-
-      // NOT IMPLEMENTED
-      break;
-    }
-
-
-    case ADIABATIC_NOSLIP_MOVING_P: /* Moving Adiabatic No-slip Wall (prescribed) */
+    case ADIABATIC_NOSLIP_MOVING: /* Moving Adiabatic No-slip Wall */
     {
       /* Extrapolate density */
       double rhoL = U(0, 0, fpt);
@@ -437,15 +375,10 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
       U_ldg(1, nDims + 1, fpt) = EL - 0.5 * rhoL * (VLsq + Vsq_wall);
 
-      /* Set LDG bias */
-      LDG_bias(fpt) = 1;
-
-      break;
-    }
-
-    case ADIABATIC_NOSLIP_MOVING_G: /* Moving Adiabatic No-slip Wall (ghost) */
-    {
-      // NOT IMPLEMENTED
+      /* Rusanov Prescribed */
+      if (rus_bias(fpt) == 1)
+        for (unsigned int var = 0; var < nVars; var++)
+          U(1, var, fpt) = U_ldg(1, var, fpt);
 
       break;
     }
@@ -456,7 +389,6 @@ void apply_bcs(mdview_gpu<double> U, mdview_gpu<double> U_ldg, unsigned int nFpt
       break;
     }
   }
-
 }
 
 void apply_bcs_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, unsigned int nFpts, unsigned int nGfpts_int, 
@@ -506,8 +438,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
   unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
 
   /* Apply specified boundary condition */
-  if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
-          bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* Adibatic Wall */
+  if(bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* Adibatic Wall */
   {
     double norm[nDims];
 
@@ -724,744 +655,6 @@ void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvecto
     else
       apply_bcs_dU<5, 3><<<blocks, threads>>>(dU, U, norm, nFpts, nGfpts_int, nGfpts_bnd,
           gfpt2bnd);
-  }
-}
-
-template<unsigned int nVars, unsigned int nDims>
-__global__
-void apply_bcs_dFdU(mdview_gpu<double> U, mdvector_gpu<double> dFdUconv, mdvector_gpu<double> dFdUvisc,
-    mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFddUvisc, unsigned int nGfpts_int, 
-    unsigned int nGfpts_bnd, double rho_fs, mdvector_gpu<double> V_fs, double P_fs, double gamma,
-    mdvector_gpu<double> norm, mdvector_gpu<char> gfpt2bnd, bool viscous)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + nGfpts_int;
-
-  if (fpt >= nGfpts_int + nGfpts_bnd)
-    return;
-
-  unsigned int bnd_id = gfpt2bnd(fpt - nGfpts_int);
-
-  double dURdUL[nVars][nVars];
-  double dFdURconv[nVars][nVars][nDims];
-
-  double dUcdUR[nVars][nVars];
-  double dFdURvisc[nVars][nVars][nDims];
-
-  double ddURddUL[nVars][nVars][nDims][nDims];
-  double dFddURvisc[nVars][nVars][nDims][nDims];
-
-  /* Copy right state values */
-  if (bnd_id != PERIODIC && bnd_id != SUP_IN)
-  {
-    /* Copy right state dFdUconv */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFdURconv[ni][nj][dim] = dFdUconv(fpt, ni, nj, dim, 1);
-        }
-      }
-    }
-
-    if (viscous)
-    {
-      /* Copy right state dUcdU */
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dUcdUR[ni][nj] = dUcdU(fpt, ni, nj, 1);
-        }
-      }
-
-      /* Copy right state dFdUvisc */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dFdURvisc[ni][nj][dim] = dFdUvisc(fpt, ni, nj, dim, 1);
-          }
-        }
-      }
-
-      /* Copy right state dFddUvisc */
-      if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
-      {
-        for (unsigned int dimj = 0; dimj < nDims; dimj++)
-        {
-          for (unsigned int dimi = 0; dimi < nDims; dimi++)
-          {
-            for (unsigned int nj = 0; nj < nVars; nj++)
-            {
-              for (unsigned int ni = 0; ni < nVars; ni++)
-              {
-                dFddURvisc[ni][nj][dimi][dimj] = dFddUvisc(fpt, ni, nj, dimi, dimj, 1);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  /* Apply specified boundary condition */
-  switch(bnd_id)
-  {
-    case SUB_OUT: /* Subsonic Outlet */
-    {
-      /* Primitive Variables */
-      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-
-      /* Compute dURdUL */
-      dURdUL[0][0] = 1;
-      dURdUL[1][0] = 0;
-      dURdUL[2][0] = 0;
-      dURdUL[3][0] = -0.5 * (uL*uL + vL*vL);
-
-      dURdUL[0][1] = 0;
-      dURdUL[1][1] = 1;
-      dURdUL[2][1] = 0;
-      dURdUL[3][1] = uL;
-
-      dURdUL[0][2] = 0;
-      dURdUL[1][2] = 0;
-      dURdUL[2][2] = 1;
-      dURdUL[3][2] = vL;
-
-      dURdUL[0][3] = 0;
-      dURdUL[1][3] = 0;
-      dURdUL[2][3] = 0;
-      dURdUL[3][3] = 0;
-
-      break;
-    }
-
-    case CHAR: /* Characteristic (from PyFR) */
-    case CHAR_P: /* Characteristic (prescribed) */
-    {
-
-      /* Compute wall normal velocities */
-      double VnL = 0.0; double VnR = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim);
-        VnR += V_fs(dim) * norm(fpt, dim);
-      }
-
-      /* Compute pressure. TODO: Compute pressure once!*/
-      double momF = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
-      }
-
-      momF /= U(fpt, 0, 0);
-
-      double PL = (gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
-      double PR = P_fs;
-
-      double cL = std::sqrt(gamma * PL / U(fpt, 0, 0));
-      double cR = std::sqrt(gamma * PR / rho_fs);
-
-      /* Compute Riemann Invariants */
-      // Note: Implicit Char BC not implemented for supersonic flow!
-      double RL = VnL + 2.0 / (gamma - 1) * cL;
-      double RB = VnR - 2.0 / (gamma - 1) * cR;
-
-      double cstar = 0.25 * (gamma - 1) * (RL - RB);
-      double ustarn = 0.5 * (RL + RB);
-
-      if (nDims == 2)
-      {
-        double nx = norm(fpt, 0);
-        double ny = norm(fpt, 1);
-        double gam = gamma;
-
-        /* Primitive Variables */
-        double rhoL = U(fpt, 0, 0);
-        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-
-        double rhoR = U(fpt, 0, 1);
-        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-
-        if (VnL < 0.0) /* Case 1: Inflow */
-        {
-          /* Matrix Parameters */
-          double a1 = 0.5 * rhoR / cstar;
-          double a2 = gam / (rhoL * cL);
-          
-          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
-          double b2 = nx / rhoL - a2 * uL;
-          double b3 = ny / rhoL - a2 * vL;
-          double b4 = a2 / cstar;
-
-          double c1 = cstar * cstar / ((gam-1.0) * gam) + 0.5 * (uR*uR + vR*vR);
-          double c2 = uR * nx + vR * ny + cstar / gam;
-
-          /* Compute dURdUL */
-          dURdUL[0][0] = a1 * b1;
-          dURdUL[1][0] = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-          dURdUL[2][0] = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-          dURdUL[3][0] = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
-
-          dURdUL[0][1] = a1 * b2;
-          dURdUL[1][1] = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-          dURdUL[2][1] = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-          dURdUL[3][1] = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
-
-          dURdUL[0][2] = a1 * b3;
-          dURdUL[1][2] = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-          dURdUL[2][2] = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-          dURdUL[3][2] = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
-
-          dURdUL[0][3] = 0.5 * rhoR * b4;
-          dURdUL[1][3] = 0.5 * rhoR * (b4 * uR + a2 * nx);
-          dURdUL[2][3] = 0.5 * rhoR * (b4 * vR + a2 * ny);
-          dURdUL[3][3] = 0.5 * rhoR * (b4 * c1 + a2 * c2);
-        }
-
-        else  /* Case 2: Outflow */
-        {
-          /* Matrix Parameters */
-          double a1 = gam * rhoR / (gam-1.0);
-          double a2 = gam / (rhoL * cL);
-          double a3 = (gam-1.0) / (gam * PL);
-          double a4 = (gam-1.0) / (2.0 * gam * cstar);
-          double a5 = rhoR * cstar * cstar / (gam-1.0) / (gam-1.0);
-          double a6 = rhoR * cstar / (2.0 * gam);
-
-          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
-          double b2 = nx / rhoL - a2 * uL;
-          double b3 = ny / rhoL - a2 * vL;
-
-          double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
-          double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
-          double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
-          double c4 = ustarn * nx + uL - VnL * nx;
-
-          double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
-          double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
-          double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
-          double d4 = ustarn * ny + vL - VnL * ny;
-
-          double e1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
-          double e2 = a3 * uL + a4 * b2;
-          double e3 = a3 * vL + a4 * b3;
-          double e4 = a3 + a2 * a4;
-
-          double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
-
-          /* Compute dURdUL */
-          dURdUL[0][0] = a1 * e1;
-          dURdUL[1][0] = a1 * e1 * c4 + rhoR * c1;
-          dURdUL[2][0] = a1 * e1 * d4 + rhoR * d1;
-          dURdUL[3][0] = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
-
-          dURdUL[0][1] = a1 * e2;
-          dURdUL[1][1] = a1 * e2 * c4 + rhoR * c2;
-          dURdUL[2][1] = a1 * e2 * d4 + rhoR * d2;
-          dURdUL[3][1] = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
-
-          dURdUL[0][2] = a1 * e3;
-          dURdUL[1][2] = a1 * e3 * c4 + rhoR * c3;
-          dURdUL[2][2] = a1 * e3 * d4 + rhoR * d3;
-          dURdUL[3][2] = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
-
-          dURdUL[0][3] = a1 * e4;
-          dURdUL[1][3] = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
-          dURdUL[2][3] = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
-          dURdUL[3][3] = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
-        }
-      }
-
-      else if (nDims == 3)
-      {
-        double nx = norm(fpt, 0);
-        double ny = norm(fpt, 1);
-        double nz = norm(fpt, 2);
-        double gam = gamma;
-
-        /* Primitive Variables */
-        double rhoL = U(fpt, 0, 0);
-        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-        double wL = U(fpt, 3, 0) / U(fpt, 0, 0);
-
-        double rhoR = U(fpt, 0, 1);
-        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-        double wR = U(fpt, 3, 1) / U(fpt, 0, 1);
-
-        if (VnL < 0.0) /* Case 1: Inflow */
-        {
-          /* Matrix Parameters */
-          double a1 = 0.5 * rhoR / cstar;
-          double a2 = gam / (rhoL * cL);
-          
-          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
-          double b2 = nx / rhoL - a2 * uL;
-          double b3 = ny / rhoL - a2 * vL;
-          double b4 = nz / rhoL - a2 * wL;
-          double b5 = a2 / cstar;
-
-          double c1 = cstar * cstar / ((gam-1.0) * gam) + 0.5 * (uR*uR + vR*vR + wR*wR);
-          double c2 = uR * nx + vR * ny + wR * nz + cstar / gam;
-
-          /* Compute dURdUL */
-          dURdUL[0][0] = a1 * b1;
-          dURdUL[1][0] = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-          dURdUL[2][0] = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-          dURdUL[3][0] = a1 * b1 * wR + 0.5 * rhoR * b1 * nz;
-          dURdUL[4][0] = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
-
-          dURdUL[0][1] = a1 * b2;
-          dURdUL[1][1] = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-          dURdUL[2][1] = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-          dURdUL[3][1] = a1 * b2 * wR + 0.5 * rhoR * b2 * nz;
-          dURdUL[4][1] = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
-
-          dURdUL[0][2] = a1 * b3;
-          dURdUL[1][2] = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-          dURdUL[2][2] = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-          dURdUL[3][2] = a1 * b3 * wR + 0.5 * rhoR * b3 * nz;
-          dURdUL[4][2] = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
-
-          dURdUL[0][3] = a1 * b4;
-          dURdUL[1][3] = a1 * b4 * uR + 0.5 * rhoR * b4 * nx;
-          dURdUL[2][3] = a1 * b4 * vR + 0.5 * rhoR * b4 * ny;
-          dURdUL[3][3] = a1 * b4 * wR + 0.5 * rhoR * b4 * nz;
-          dURdUL[4][3] = a1 * b4 * c1 + 0.5 * rhoR * b4 * c2;
-
-          dURdUL[0][4] = 0.5 * rhoR * b5;
-          dURdUL[1][4] = 0.5 * rhoR * (b5 * uR + a2 * nx);
-          dURdUL[2][4] = 0.5 * rhoR * (b5 * vR + a2 * ny);
-          dURdUL[3][4] = 0.5 * rhoR * (b5 * wR + a2 * nz);
-          dURdUL[4][4] = 0.5 * rhoR * (b5 * c1 + a2 * c2);
-        }
-
-        else  /* Case 2: Outflow */
-        {
-          /* Matrix Parameters */
-          double a1 = gam * rhoR / (gam-1.0);
-          double a2 = gam / (rhoL * cL);
-          double a3 = (gam-1.0) / (gam * PL);
-          double a4 = (gam-1.0) / (2.0 * gam * cstar);
-          double a5 = rhoR * cstar * cstar / (gam-1.0) / (gam-1.0);
-          double a6 = rhoR * cstar / (2.0 * gam);
-
-          double b1 = -VnL / rhoL - a2 / rhoL * (PL / (gam-1.0) - 0.5 * momF);
-          double b2 = nx / rhoL - a2 * uL;
-          double b3 = ny / rhoL - a2 * vL;
-          double b4 = nz / rhoL - a2 * wL;
-
-          double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
-          double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
-          double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
-          double c4 = 0.5 * b4 * nx - nx * nz / rhoL;
-          double c5 = ustarn * nx + uL - VnL * nx;
-
-          double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
-          double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
-          double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
-          double d4 = 0.5 * b4 * ny - ny * nz / rhoL;
-          double d5 = ustarn * ny + vL - VnL * ny;
-
-          double e1 = 0.5 * b1 * nz - (VnL * nz + wL) / rhoL;
-          double e2 = 0.5 * b2 * nz - nx * nz / rhoL;
-          double e3 = 0.5 * b3 * nz - ny * nz / rhoL;
-          double e4 = 0.5 * b4 * nz + (1.0 - nz*nz) / rhoL;
-          double e5 = ustarn * nz + wL - VnL * nz;
-
-          double f1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
-          double f2 = a3 * uL + a4 * b2;
-          double f3 = a3 * vL + a4 * b3;
-          double f4 = a3 * wL + a4 * b4;
-          double f5 = a3 + a2 * a4;
-
-          double g1 = 0.5 * a1 * (c5*c5 + d5*d5 + e5*e5) + a5;
-
-          /* Compute dURdUL */
-          dURdUL[0][0] = a1 * f1;
-          dURdUL[1][0] = a1 * f1 * c5 + rhoR * c1;
-          dURdUL[2][0] = a1 * f1 * d5 + rhoR * d1;
-          dURdUL[3][0] = a1 * f1 * e5 + rhoR * e1;
-          dURdUL[4][0] = rhoR * (c1*c5 + d1*d5 + e1*e5) + f1 * g1 + a6 * b1;
-
-          dURdUL[0][1] = a1 * f2;
-          dURdUL[1][1] = a1 * f2 * c5 + rhoR * c2;
-          dURdUL[2][1] = a1 * f2 * d5 + rhoR * d2;
-          dURdUL[3][1] = a1 * f2 * e5 + rhoR * e2;
-          dURdUL[4][1] = rhoR * (c2*c5 + d2*d5 + e2*e5) + f2 * g1 + a6 * b2;
-
-          dURdUL[0][2] = a1 * f3;
-          dURdUL[1][2] = a1 * f3 * c5 + rhoR * c3;
-          dURdUL[2][2] = a1 * f3 * d5 + rhoR * d3;
-          dURdUL[3][2] = a1 * f3 * e5 + rhoR * e3;
-          dURdUL[4][2] = rhoR * (c3*c5 + d3*d5 + e3*e5) + f3 * g1 + a6 * b3;
-
-          dURdUL[0][3] = a1 * f4;
-          dURdUL[1][3] = a1 * f4 * c5 + rhoR * c4;
-          dURdUL[2][3] = a1 * f4 * d5 + rhoR * d4;
-          dURdUL[3][3] = a1 * f4 * e5 + rhoR * e4;
-          dURdUL[4][3] = rhoR * (c4*c5 + d4*d5 + e4*e5) + f4 * g1 + a6 * b4;
-
-          dURdUL[0][4] = a1 * f5;
-          dURdUL[1][4] = a1 * f5 * c5 + 0.5 * rhoR * a2 * nx;
-          dURdUL[2][4] = a1 * f5 * d5 + 0.5 * rhoR * a2 * ny;
-          dURdUL[3][4] = a1 * f5 * e5 + 0.5 * rhoR * a2 * nz;
-          dURdUL[4][4] = 0.5 * rhoR * a2 * (c5*nx + d5*ny + e5*nz) + f5 * g1 + a2 * a6;
-        }
-      }
-
-      break;
-    }
-
-    case SYMMETRY_P: /* Symmetry (prescribed) */
-    case SLIP_WALL_P: /* Slip Wall (prescribed) */
-    {
-      if (nDims == 2)
-      {
-        double nx = norm(fpt, 0);
-        double ny = norm(fpt, 1);
-
-        /* Primitive Variables */
-        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-
-        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-
-        /* Compute dURdUL */
-        dURdUL[0][0] = 1;
-        dURdUL[1][0] = 0;
-        dURdUL[2][0] = 0;
-        dURdUL[3][0] = 0.5 * (uL*uL + vL*vL - uR*uR - vR*vR);
-
-        dURdUL[0][1] = 0;
-        dURdUL[1][1] = 1.0-nx*nx;
-        dURdUL[2][1] = -nx*ny;
-        dURdUL[3][1] = -uL + (1.0-nx*nx)*uR - nx*ny*vR;
-
-        dURdUL[0][2] = 0;
-        dURdUL[1][2] = -nx*ny;
-        dURdUL[2][2] = 1.0-ny*ny;
-        dURdUL[3][2] = -vL - nx*ny*uR + (1.0-ny*ny)*vR;
-
-        dURdUL[0][3] = 0;
-        dURdUL[1][3] = 0;
-        dURdUL[2][3] = 0;
-        dURdUL[3][3] = 1;
-      }
-
-      else if (nDims == 3)
-      {
-        double nx = norm(fpt, 0);
-        double ny = norm(fpt, 1);
-        double nz = norm(fpt, 2);
-
-        /* Primitive Variables */
-        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-        double wL = U(fpt, 3, 0) / U(fpt, 0, 0);
-
-        double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-        double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-        double wR = U(fpt, 3, 1) / U(fpt, 0, 1);
-
-        /* Compute dURdUL */
-        dURdUL[0][0] = 1;
-        dURdUL[1][0] = 0;
-        dURdUL[2][0] = 0;
-        dURdUL[3][0] = 0;
-        dURdUL[4][0] = 0.5 * (uL*uL + vL*vL + wL*wL - uR*uR - vR*vR - wR*wR);
-
-        dURdUL[0][1] = 0;
-        dURdUL[1][1] = 1.0-nx*nx;
-        dURdUL[2][1] = -nx*ny;
-        dURdUL[3][1] = -nx*nz;
-        dURdUL[4][1] = -uL + (1.0-nx*nx)*uR - nx*ny*vR - nx*nz*wR;
-
-        dURdUL[0][2] = 0;
-        dURdUL[1][2] = -nx*ny;
-        dURdUL[2][2] = 1.0-ny*ny;
-        dURdUL[3][2] = -ny*nz;
-        dURdUL[4][2] = -vL - nx*ny*uR + (1.0-ny*ny)*vR - ny*nz*wR;
-
-        dURdUL[0][3] = 0;
-        dURdUL[1][3] = -nx*nz;
-        dURdUL[2][3] = -ny*nz;
-        dURdUL[3][3] = 1.0-nz*nz;
-        dURdUL[4][3] = -wL - nx*nz*uR - ny*nz*vR + (1.0-nz*nz)*wR;
-
-        dURdUL[0][4] = 0;
-        dURdUL[1][4] = 0;
-        dURdUL[2][4] = 0;
-        dURdUL[3][4] = 0;
-        dURdUL[4][4] = 1;
-      }
-
-      break;
-    }
-
-    case SYMMETRY_G: /* Symmetry (ghost) */
-    case SLIP_WALL_G: /* Slip Wall (ghost) */
-    {
-      double nx = norm(fpt, 0);
-      double ny = norm(fpt, 1);
-
-      dURdUL[0][0] = 1;
-      dURdUL[1][0] = 0;
-      dURdUL[2][0] = 0;
-      dURdUL[3][0] = 0;
-
-      dURdUL[0][1] = 0;
-      dURdUL[1][1] = 1.0 - 2.0 * nx * nx;
-      dURdUL[2][1] = -2.0 * nx * ny;
-      dURdUL[3][1] = 0;
-
-      dURdUL[0][2] = 0;
-      dURdUL[1][2] = -2.0 * nx * ny;
-      dURdUL[2][2] = 1.0 - 2.0 * ny * ny;
-      dURdUL[3][2] = 0;
-
-      dURdUL[0][3] = 0;
-      dURdUL[1][3] = 0;
-      dURdUL[2][3] = 0;
-      dURdUL[3][3] = 1;
-
-      break;
-    }
-
-    case ADIABATIC_NOSLIP_P: /* No-slip Wall (adiabatic) */
-    {
-      double nx = norm(fpt, 0);
-      double ny = norm(fpt, 1);
-
-      /* Primitive Variables */
-      double rhoL = U(fpt, 0, 0);
-      double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-      double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-      double eL = U(fpt, 3, 0);
-
-      /* Compute dURdUL */
-      dURdUL[0][0] = 1;
-      dURdUL[1][0] = 0;
-      dURdUL[2][0] = 0;
-      dURdUL[3][0] = 0.5 * (uL*uL + vL*vL);
-
-      dURdUL[0][1] = 0;
-      dURdUL[1][1] = 0;
-      dURdUL[2][1] = 0;
-      dURdUL[3][1] = -uL;
-
-      dURdUL[0][2] = 0;
-      dURdUL[1][2] = 0;
-      dURdUL[2][2] = 0;
-      dURdUL[3][2] = -vL;
-
-      dURdUL[0][3] = 0;
-      dURdUL[1][3] = 0;
-      dURdUL[2][3] = 0;
-      dURdUL[3][3] = 1;
-
-      if (viscous)
-      {
-        /* Compute dUxR/dUxL */
-        ddURddUL[0][0][0][0] = 1;
-        ddURddUL[1][0][0][0] = 0;
-        ddURddUL[2][0][0][0] = 0;
-        ddURddUL[3][0][0][0] = nx*nx * (eL / rhoL - (uL*uL + vL*vL));
-
-        ddURddUL[0][1][0][0] = 0;
-        ddURddUL[1][1][0][0] = 1;
-        ddURddUL[2][1][0][0] = 0;
-        ddURddUL[3][1][0][0] = nx*nx * uL;
-
-        ddURddUL[0][2][0][0] = 0;
-        ddURddUL[1][2][0][0] = 0;
-        ddURddUL[2][2][0][0] = 1;
-        ddURddUL[3][2][0][0] = nx*nx * vL;
-
-        ddURddUL[0][3][0][0] = 0;
-        ddURddUL[1][3][0][0] = 0;
-        ddURddUL[2][3][0][0] = 0;
-        ddURddUL[3][3][0][0] = 1.0 - nx*nx;
-
-        /* Compute dUyR/dUxL */
-        ddURddUL[0][0][1][0] = 0;
-        ddURddUL[1][0][1][0] = 0;
-        ddURddUL[2][0][1][0] = 0;
-        ddURddUL[3][0][1][0] = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
-
-        ddURddUL[0][1][1][0] = 0;
-        ddURddUL[1][1][1][0] = 0;
-        ddURddUL[2][1][1][0] = 0;
-        ddURddUL[3][1][1][0] = nx*ny * uL;
-
-        ddURddUL[0][2][1][0] = 0;
-        ddURddUL[1][2][1][0] = 0;
-        ddURddUL[2][2][1][0] = 0;
-        ddURddUL[3][2][1][0] = nx*ny * vL;
-
-        ddURddUL[0][3][1][0] = 0;
-        ddURddUL[1][3][1][0] = 0;
-        ddURddUL[2][3][1][0] = 0;
-        ddURddUL[3][3][1][0] = -nx * ny;
-
-        /* Compute dUxR/dUyL */
-        ddURddUL[0][0][0][1] = 0;
-        ddURddUL[1][0][0][1] = 0;
-        ddURddUL[2][0][0][1] = 0;
-        ddURddUL[3][0][0][1] = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
-
-        ddURddUL[0][1][0][1] = 0;
-        ddURddUL[1][1][0][1] = 0;
-        ddURddUL[2][1][0][1] = 0;
-        ddURddUL[3][1][0][1] = nx*ny * uL;
-
-        ddURddUL[0][2][0][1] = 0;
-        ddURddUL[1][2][0][1] = 0;
-        ddURddUL[2][2][0][1] = 0;
-        ddURddUL[3][2][0][1] = nx*ny * vL;
-
-        ddURddUL[0][3][0][1] = 0;
-        ddURddUL[1][3][0][1] = 0;
-        ddURddUL[2][3][0][1] = 0;
-        ddURddUL[3][3][0][1] = -nx * ny;
-
-        /* Compute dUyR/dUyL */
-        ddURddUL[0][0][1][1] = 1;
-        ddURddUL[1][0][1][1] = 0;
-        ddURddUL[2][0][1][1] = 0;
-        ddURddUL[3][0][1][1] = ny*ny * (eL / rhoL - (uL*uL + vL*vL));
-
-        ddURddUL[0][1][1][1] = 0;
-        ddURddUL[1][1][1][1] = 1;
-        ddURddUL[2][1][1][1] = 0;
-        ddURddUL[3][1][1][1] = ny*ny * uL;
-
-        ddURddUL[0][2][1][1] = 0;
-        ddURddUL[1][2][1][1] = 0;
-        ddURddUL[2][2][1][1] = 1;
-        ddURddUL[3][2][1][1] = ny*ny * vL;
-
-        ddURddUL[0][3][1][1] = 0;
-        ddURddUL[1][3][1][1] = 0;
-        ddURddUL[2][3][1][1] = 0;
-        ddURddUL[3][3][1][1] = 1.0 - ny*ny;
-      }
-
-      break;
-    }
-  }
-
-  /* Compute new right state values */
-  if (bnd_id != PERIODIC && bnd_id != SUP_IN)
-  {
-    /* Compute dFdULconv for right state */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int j = 0; j < nVars; j++)
-      {
-        for (unsigned int i = 0; i < nVars; i++)
-        {
-          double val = 0;
-          for (unsigned int k = 0; k < nVars; k++)
-          {
-            val += dFdURconv[i][k][dim] * dURdUL[k][j];
-          }
-          dFdUconv(fpt, i, j, dim, 1) = val;
-        }
-      }
-    }
-
-    if (viscous)
-    {
-      /* Compute dUcdUL for right state */
-      for (unsigned int j = 0; j < nVars; j++)
-      {
-        for (unsigned int i = 0; i < nVars; i++)
-        {
-          double val = 0;
-          for (unsigned int k = 0; k < nVars; k++)
-          {
-            val += dUcdUR[i][k] * dURdUL[k][j];
-          }
-          dUcdU(fpt, i, j, 1) = val;
-        }
-      }
-
-      /* Compute dFdULvisc for right state */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int j = 0; j < nVars; j++)
-        {
-          for (unsigned int i = 0; i < nVars; i++)
-          {
-            double val = 0;
-            for (unsigned int k = 0; k < nVars; k++)
-            {
-              val += dFdURvisc[i][k][dim] * dURdUL[k][j];
-            }
-            dFdUvisc(fpt, i, j, dim, 1) = val;
-          }
-        }
-      }
-
-      /* Compute dFddULvisc for right state */
-      if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
-      {
-        for (unsigned int dimj = 0; dimj < nDims; dimj++)
-        {
-          for (unsigned int dimi = 0; dimi < nDims; dimi++)
-          {
-            for (unsigned int j = 0; j < nVars; j++)
-            {
-              for (unsigned int i = 0; i < nVars; i++)
-              {
-                double val = 0;
-                for (unsigned int dimk = 0; dimk < nDims; dimk++)
-                {
-                  for (unsigned int k = 0; k < nVars; k++)
-                  {
-                    val += dFddURvisc[i][k][dimi][dimk] * ddURddUL[k][j][dimk][dimj];
-                  }
-                }
-                dFddUvisc(fpt, i, j, dimi, dimj, 1) = val;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, mdvector_gpu<double> &dFdUvisc,
-    mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddUvisc, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
-    mdvector_gpu<double> &norm, mdvector_gpu<char> &gfpt2bnd, unsigned int equation, bool viscous)
-{
-  if (nGfpts_bnd == 0) return;
-
-  unsigned int threads = 128;
-  unsigned int blocks = (nGfpts_bnd + threads - 1)/threads;
-
-  if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      apply_bcs_dFdU<4, 2><<<blocks, threads>>>(U, dFdUconv, dFdUvisc, dUcdU, dFddUvisc,
-          nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, gamma, norm, gfpt2bnd, viscous);
-    else
-      apply_bcs_dFdU<5, 3><<<blocks, threads>>>(U, dFdUconv, dFdUvisc, dUcdU, dFddUvisc,
-          nGfpts_int, nGfpts_bnd, rho_fs, V_fs, P_fs, gamma, norm, gfpt2bnd, viscous);
   }
 }
 

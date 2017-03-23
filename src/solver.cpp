@@ -379,6 +379,7 @@ void FRSolver::setup_update()
   {
     input->nStages = 1;
     rk_beta.assign({input->nStages}, 1.0);
+    rk_c.assign({input->nStages}, 0.0);
   }
   else if (input->dt_scheme == "RK44")
   {
@@ -386,6 +387,9 @@ void FRSolver::setup_update()
     
     rk_alpha.assign({input->nStages-1});
     rk_alpha(0) = 0.5; rk_alpha(1) = 0.5; rk_alpha(2) = 1.0;
+
+    rk_c.assign({input->nStages});
+    rk_c(1) = 0.5; rk_c(2) = 0.5; rk_c(3) = 1.0;
 
     rk_beta.assign({input->nStages});
     rk_beta(0) = 1./6.; rk_beta(1) = 1./3.; 
@@ -401,6 +405,8 @@ void FRSolver::setup_update()
     /* OptRK4 (r = 0.5) */
     rk_alpha(0) = 0.153; rk_alpha(1) = 0.442; 
     rk_alpha(2) = 0.930; rk_alpha(3) = 1.0;
+
+    rk_c = rk_alpha;
   }
   else if (input->dt_scheme == "LSRK")
   {
@@ -440,6 +446,13 @@ void FRSolver::setup_update()
   }
   else if (input->dt_scheme == "MCGS")
   {
+    input->nStages = 1;
+
+    /* Forward or Forward/Backward sweep */
+    nCounter = geo.nColors;
+    if (input->backsweep)
+      nCounter *= 2;
+
 #ifdef _GPU
     if (input->viscous)
     {
@@ -447,17 +460,6 @@ void FRSolver::setup_update()
     }
 #endif
 
-    // HACK: (nStages = 1) doesn't work, fix later
-    input->nStages = 2;
-    rk_alpha.assign({input->nStages});
-    rk_beta.assign({input->nStages});
-
-    /* Forward or Forward/Backward sweep */
-    nCounter = geo.nColors;
-    if (input->backsweep)
-    {
-      nCounter *= 2;
-    }
   }
   else
   {
@@ -1009,7 +1011,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     if (input->overset)
     {
 #ifdef _GPU
-      event_record_wait_pair(3, 0, 3); // Event for completion of corrected gradient
+      // Event for completion of *transformed* corrected gradient
+      event_record_wait_pair(3, 0, 3);
 #endif
       ZEFR->overset_interp_send(faces->nVars, 1);
     }
@@ -1089,36 +1092,93 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
 }
 
-void FRSolver::compute_LHS()
+void FRSolver::compute_dRdU()
 {
+  /* Apply boundary conditions for flux Jacobian */
+  faces->apply_bcs_dFdU();
+
+  /* Compute flux Jacobian at solution points */
+  for (auto e : elesObjs)
+    e->compute_dFdU();
+
+  /* Compute common interface flux Jacobian */
+  faces->compute_common_dFdU(0, geo.nGfpts);
+
+  /* Compute block diagonal components of flux divergence Jacobian */
+  for (auto e : elesObjs)
+    e->compute_local_dRdU();
 }
 
-void FRSolver::compute_LHS_LU(unsigned int startEle, unsigned int endEle, unsigned int color)
+void FRSolver::compute_LHS_LU(unsigned int color)
 {
+#ifndef _NO_TNT
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      /* Calculate and store LU object */
+      unsigned int N = e->nSpts * e->nVars;
+      TNT::Array2D<double> A(N, N, &e->LHS(ele, 0, 0, 0, 0));
+      e->LUptrs[ele] = JAMA::LU<double>(A);
+    }
+#endif
 }
 
 void FRSolver::compute_RHS(unsigned int color)
 {
-}
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      auto etype = geo.eleType(ele);
+      if (geo.ele_colorBT[etype](ele) != color)
+        continue;
 
-#ifdef _CPU
-void FRSolver::compute_RHS_source(const mdvector<double> &source, unsigned int color)
-{
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          if (input->dt_type != 2)
+            e->RHS(ele, var, spt) = -(e->dt(0) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
+          else
+            e->RHS(ele, var, spt) = -(e->dt(ele) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
+        }
+    }
 }
-#endif
-
-#ifdef _GPU
-void FRSolver::compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color)
-{
-}
-#endif
 
 void FRSolver::compute_deltaU(unsigned int color)
 {
+#ifndef _NO_TNT
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      auto etype = geo.eleType(ele);
+      if (geo.ele_colorBT[etype](ele) != color)
+        continue;
+
+      /* Create Array1D view of RHS */
+      unsigned int N = e->nSpts * e->nVars;
+      TNT::Array1D<double> b(N, &e->RHS(ele, 0, 0));
+
+      /* Solve for deltaU */
+      TNT::Array1D<double> x(N, &e->deltaU(ele, 0, 0));
+      x.inject(e->LUptrs[ele].solve(b));
+
+      if (x.dim() == 0) ThrowException("LU solve failed!");
+    }
+#endif
 }
 
 void FRSolver::compute_U(unsigned int color)
 {
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      auto etype = geo.eleType(ele);
+      if (geo.ele_colorBT[etype](ele) != color)
+        continue;
+
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          e->U_spts(spt, var, ele) += e->deltaU(ele, var, spt);
+    }
 }
 
 void FRSolver::initialize_U()
@@ -1144,6 +1204,7 @@ void FRSolver::setup_views()
     dU_base_ptrs.assign({2 * geo.nGfpts});
     dU_strides.assign({2, 2 * geo.nGfpts});
   }
+
 #ifdef _GPU
   mdvector<double*> U_base_ptrs_d({2 * geo.nGfpts});
   mdvector<double*> U_ldg_base_ptrs_d({2 * geo.nGfpts});
@@ -1160,6 +1221,23 @@ void FRSolver::setup_views()
     dU_strides_d.assign({2, 2 * geo.nGfpts});
   }
 #endif
+
+  /* Setup face views of element data for implicit */
+  mdvector<double*> dFcdU_base_ptrs;
+  mdvector<unsigned int> dFcdU_strides;
+  mdvector<double*> dUcdU_base_ptrs, dFcddU_base_ptrs;
+  mdvector<unsigned int> dFcddU_strides;
+  if (input->dt_scheme == "MCGS")
+  {
+    dFcdU_base_ptrs.assign({2 * geo.nGfpts});
+    dFcdU_strides.assign({2, 2 * geo.nGfpts});
+    if (input->viscous)
+    {
+      dUcdU_base_ptrs.assign({2 * geo.nGfpts});
+      dFcddU_base_ptrs.assign({2 * geo.nGfpts});
+      dFcddU_strides.assign({3, 2 * geo.nGfpts});
+    }
+  }
 
   /* Set pointers for internal faces */
   for (auto e : elesObjs)
@@ -1199,7 +1277,23 @@ void FRSolver::setup_views()
           dU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_stride(1);
           dU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dU_fpts_d.get_stride(3);
 #endif
-         
+        }
+
+        /* Set pointers for internal faces for implicit */
+        if (input->dt_scheme == "MCGS")
+        {
+          dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
+          dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
+          dFcdU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(2);
+
+          if (input->viscous)
+          {
+            dUcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dUcdU(ele, 0, 0, fpt);
+            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(ele, 0, 0, 0, fpt);
+            dFcddU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(1);
+            dFcddU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(2);
+            dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(3);
+          }
         }
       }
     }
@@ -1249,6 +1343,23 @@ void FRSolver::setup_views()
     
     }
 
+    /* Set pointers for remaining faces for implicit */
+    if (input->dt_scheme == "MCGS")
+    {
+      dFcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcdU_bnd(0, 0, i);
+      dFcdU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(1);
+      dFcdU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(2);
+
+      if (input->viscous)
+      {
+        dUcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dUcdU_bnd(0, 0, i);
+        dFcddU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcddU_bnd(0, 0, 0, i);
+        dFcddU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(1);
+        dFcddU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(2);
+        dFcddU_strides(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(3);
+      }
+    }
+
     i++;
   }
 
@@ -1273,6 +1384,16 @@ void FRSolver::setup_views()
   }
 #endif
 
+  /* Create views of element data for implicit */
+  if (input->dt_scheme == "MCGS")
+  {
+    faces->dFcdU.assign(dFcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
+    if (input->viscous)
+    {
+      faces->dUcdU.assign(dUcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
+      faces->dFcddU.assign(dFcddU_base_ptrs, dFcddU_strides, geo.nGfpts);
+    }
+  }
 }
 
 /* Note: Source term in update() is used primarily for multigrid. To add a true source term, define
@@ -1336,7 +1457,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < nSteps; stage++)
   {
-    flow_time = prev_time + rk_alpha(stage) * elesObjs[0]->dt(0);
+    flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
 
     move(flow_time);
 
@@ -1428,8 +1549,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   /* Final stage combining residuals for full Butcher table style RK timestepping*/
   if (input->dt_scheme != "RKj")
   {
-    if (input->nStages > 1)
-      flow_time = prev_time + rk_alpha(input->nStages-2) * elesObjs[0]->dt(0);
+    flow_time = prev_time + rk_c(input->nStages-1) * elesObjs[0]->dt(0);
 
     move(flow_time);
 
@@ -1769,12 +1889,72 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 }
 
 #ifdef _CPU
-void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &source)
+void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
-void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source)
+void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
+  /* Sweep through colors and backsweep */
+  for (unsigned int counter = 1; counter <= nCounter; counter++)
+  {
+    /* Set color */
+    unsigned int color = counter;
+    if (color > geo.nColors)
+      color = 2*geo.nColors+1 - counter;
+
+    /* Compute residual and block diagonal Jacobian on all elements */
+    int iter = current_iter - restart_iter;
+    if (counter == 1 && iter % input->Jfreeze_freq == 0)
+    {
+      compute_residual(0);
+
+      /* Compute block diagonal components of residual Jacobian */
+      compute_dRdU();
+
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+
+      /* Compute Backward Euler LHS */
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int vari = 0; vari < e->nVars; vari++)
+            for (unsigned int spti = 0; spti < e->nSpts; spti++)
+              for (unsigned int varj = 0; varj < e->nVars; varj++)
+                for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+                {
+                  if (input->dt_type != 2)
+                    e->LHS(ele, vari, spti, varj, sptj) *= e->dt(0) / e->jaco_det_spts(spti, ele);
+                  else
+                    e->LHS(ele, vari, spti, varj, sptj) *= e->dt(ele) / e->jaco_det_spts(spti, ele); 
+
+                  if (spti == sptj && vari == varj)
+                    e->LHS(ele, vari, spti, varj, sptj) += 1;
+                }
+
+      /* LU factorization of LHS */
+      compute_LHS_LU();
+      //write_LHS(input->output_prefix);
+    }
+    
+    /* Compute residual on elements of this color only */
+    else
+    {
+      compute_residual(0);
+    }
+
+    /* Prepare RHS vector */
+    compute_RHS(color);
+
+    /* Solve system for deltaU */
+    compute_deltaU(color);
+
+    /* Add deltaU to solution */
+    compute_U(color);
+  }
 }
 
 void FRSolver::compute_element_dt()
@@ -1899,68 +2079,6 @@ void FRSolver::compute_element_dt()
 
   check_error();
 #endif
-}
-
-void FRSolver::compute_SER_dt()
-{
-  /* Compute norm of residual */
-  // TODO: Create norm function to eliminate repetition, add other norms
-  SER_res[1] = SER_res[0];
-  SER_res[0] = 0;
-
-  for (auto e : elesObjs)
-  {
-    for (unsigned int n = 0; n < e->nVars; n++)
-    {
-      for (unsigned int ele =0; ele < e->nEles; ele++)
-      {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-
-        for (unsigned int spt = 0; spt < e->nSpts; spt++)
-        {
-          SER_res[0] += (e->divF_spts(spt, ele, n, 0) / e->jaco_det_spts(spt, ele)) *
-                         (e->divF_spts(spt, ele, n, 0) / e->jaco_det_spts(spt, ele));
-        }
-      }
-    }
-  }
-  SER_res[0] = std::sqrt(SER_res[0]);
-
-  /* Compute SER time step growth */
-  double omg = SER_res[1] / SER_res[0];
-  if (omg != 0)
-  {
-    /* Clipping */
-    if (omg < 0.1)
-      omg = 0.1;
-    else if (omg > 2.0)
-      omg = 2.0;
-
-    /* Relax Growth */
-    if (omg > 1.0)
-      omg = std::sqrt(omg);
-
-    /* Compute new time step */
-    SER_omg *= omg;
-    for (auto e : elesObjs)
-    {
-      if (input->dt_type == 0)
-      {
-        e->dt(0) *= omg;
-      }
-      else if(input->dt_type == 1)
-      {
-        e->dt(0) *= SER_omg;
-      }
-      else if (input->dt_type == 2)
-      {
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-        {
-          e->dt(ele) *= SER_omg;
-        }
-      }
-    }
-  }
 }
 
 void FRSolver::write_solution_pyfr(const std::string &_prefix)
@@ -4005,7 +4123,7 @@ void FRSolver::write_LHS(const std::string &_prefix)
 
     std::string name = "LHS_" + std::to_string(iter);
     DataSet dset = file.createDataSet(name, PredType::NATIVE_DOUBLE, dspaceU);
-    dset.write(e->LHSs[0].data(), PredType::NATIVE_DOUBLE, dspaceU);
+    dset.write(e->LHS.data(), PredType::NATIVE_DOUBLE, dspaceU);
 
     dspaceU.close();
     dset.close();
@@ -4028,12 +4146,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     e->dt = e->dt_d;
   }
 #endif
-
-  // HACK: Change nStages to compute the correct residual
-  if (input->dt_scheme == "MCGS")
-  {
-    input->nStages = 1;
-  }
 
   std::vector<double> res(elesObjs[0]->nVars,0.0);
 
@@ -4081,12 +4193,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   unsigned int nDoF = 0;
   for (auto e : elesObjs)
     nDoF += (e->nSpts * e->nEles);
-
-  // HACK: Change nStages back
-  if (input->dt_scheme == "MCGS")
-  {
-    input->nStages = 2;
-  }
 
 #ifdef _MPI
   MPI_Op oper = MPI_SUM;
@@ -4431,9 +4537,8 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
     unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
     unsigned int idx = count % geo.nFptsPerFace;
 
-    if (bnd_id == SLIP_WALL_P || bnd_id == SLIP_WALL_G || bnd_id == ISOTHERMAL_NOSLIP_P  || bnd_id == ISOTHERMAL_NOSLIP_G
-        || bnd_id == ISOTHERMAL_NOSLIP_MOVING_P || bnd_id == ISOTHERMAL_NOSLIP_MOVING_G || bnd_id == ADIABATIC_NOSLIP_P
-        || bnd_id == ADIABATIC_NOSLIP_G || bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* On wall boundary */
+    if (bnd_id == SLIP_WALL || bnd_id == ISOTHERMAL_NOSLIP || bnd_id == ISOTHERMAL_NOSLIP_MOVING || 
+        bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* On wall boundary */
     {
       /* Get pressure */
       double PL = faces->P(0, fpt);
@@ -4618,9 +4723,8 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
     unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
     unsigned int idx = count % geo.nFptsPerFace;
 
-    if (bnd_id == SLIP_WALL_P || bnd_id == SLIP_WALL_G || bnd_id == ISOTHERMAL_NOSLIP_P  || bnd_id == ISOTHERMAL_NOSLIP_G
-        || bnd_id == ISOTHERMAL_NOSLIP_MOVING_P || bnd_id == ISOTHERMAL_NOSLIP_MOVING_G || bnd_id == ADIABATIC_NOSLIP_P
-        || bnd_id == ADIABATIC_NOSLIP_G || bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* On wall boundary */
+    if (bnd_id == SLIP_WALL || bnd_id == ISOTHERMAL_NOSLIP || bnd_id == ISOTHERMAL_NOSLIP_MOVING || 
+        bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* On wall boundary */
     {
       /* Get pressure */
       double PL = faces->P(0, fpt);
@@ -5269,22 +5373,6 @@ void FRSolver::rigid_body_update(unsigned int stage)
   geo.vel_cg_d = geo.vel_cg;
   geo.Rmat_d = geo.Rmat;
   geo.Wmat_d = geo.Wmat;
-#endif
-
-#ifdef _BUILD_LIB
-  // Rmat transforms body->global, but is stored column-major here
-  // Transpose (accessing as row-major) transforms global->body as TIOGA needs
-  if (input->overset)
-  {
-    // Need to transpose matrix for TIOGA
-//    double Rtmp[3][3];
-//    for (int i = 0; i < 3; i++)
-//      for (int j = 0 ; j < 3; j++)
-//        Rtmp[j][i] = geo.Rmat(i,j);
-
-//    ZEFR->tg_update_transform(&Rtmp[0][0], geo.x_cg.data(), geo.nDims);
-//    ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims); // done elsewhere
-  }
 #endif
 }
 

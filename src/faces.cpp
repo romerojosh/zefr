@@ -59,13 +59,41 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     Ucomm_bnd.assign({nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
   }
 
-  /* Initialize Riemann/LDG bias variables to zero */
-  LDG_bias.assign({nFpts}, 0);
+  /* Loop over boundary flux points and initialize Riemann/LDG bias variables */
   rus_bias.assign({nFpts}, 0);
+  LDG_bias.assign({nFpts}, 0);
+  for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
+  {
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
+
+    unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
+
+    if (bnd_id != PERIODIC || bnd_id != OVERSET)
+    {
+      /* Default: Rusanov BC Ghost, LDG BC Prescribed */
+      LDG_bias(fpt) = 1;
+
+      /* Implicit Default: Rusanov BC Prescribed, LDG BC Prescribed */
+      if (input->dt_scheme == "MCGS")
+      {
+        rus_bias(fpt) = 1;
+      }
+    }
+  }
 
   /* Allocate memory for implicit method data structures */
   if (input->dt_scheme == "MCGS")
   {
+    dFcdU_bnd.assign({nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+    dURdUL.assign({nFpts, nVars, nVars}, 0);
+
+    /* If viscous, allocate arrays used for LDG flux */
+    if(input->viscous)
+    {
+      dUcdU_bnd.assign({nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+      dFcddU_bnd.assign({nDims, nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+      ddURddUL.assign({nFpts, nDims, nDims, nVars, nVars}, 0);
+    }
   }
 
   /* If running Euler/NS, allocate memory for pressure */
@@ -169,49 +197,7 @@ void Faces::apply_bcs()
         break;
       }
 
-      case SUB_IN: /* Subsonic Inlet */
-      {
-        ThrowException("SUB_IN needs to be reimplemented!");
-
-        break;
-      }
-
-      case SUB_OUT: /* Subsonic Outlet */
-      {
-        if (!input->viscous)
-          ThrowException("Subsonic outlet only for viscous flows currently!");
-
-        /* Extrapolate Density */
-        U(1, 0, fpt) = U(0, 0, fpt);
-        U_ldg(1, 0, fpt) = U(1, 0, fpt);
-
-        /* Extrapolate Momentum */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          U(1, dim+1, fpt) =  U(0, dim+1, fpt);
-          U_ldg(1, dim+1, fpt) =  U(1, dim+1, fpt);
-        }
-
-        double momF = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          momF += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
-        }
-
-        momF /= U(0, 0, fpt);
-
-        /* Fix pressure */
-        U(1, nDims + 1, fpt) = input->P_fs/(input->gamma-1.0) + 0.5 * momF; 
-        U_ldg(1, nDims + 1, fpt) = U(1, nDims + 1, fpt);
-
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
-
-        break;
-      }
-
       case CHAR: /* Characteristic (from PyFR) */
-      case CHAR_P: /* Characteristic (prescribed) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
@@ -290,95 +276,82 @@ void Faces::apply_bcs()
           U_ldg(1, nDims+1, fpt) += 0.5 * rhoR * VR[dim] * VR[dim];
         }
 
-        /* Set Char (prescribed) */
-        if (bnd_id == CHAR_P)
-        {
-          rus_bias(fpt) = 1;
-        }
-
-        /* Set bias */
-        LDG_bias(fpt) = 1;
-
         break;
       }
 
-      case SYMMETRY_P: /* Symmetry (prescribed) */
-      case SLIP_WALL_P: /* Slip Wall (prescribed) */
+      case SYMMETRY: /* Symmetry */
+      case SLIP_WALL: /* Slip Wall */
       {
         if (input->viscous)
           ThrowException("SLIP_WALL_P not supported for viscous!");
 
-        double momN = 0.0;
-
-        /* Compute wall normal momentum */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(0, dim+1, fpt) * norm(dim, fpt);
-
-        if (input->motion)
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
         {
+          double momN = 0.0;
+
+          /* Compute wall normal momentum */
           for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+            momN += U(0, dim+1, fpt) * norm(dim, fpt);
+
+          if (input->motion)
+          {
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+          }
+
+          U(1, 0, fpt) = U(0, 0, fpt);
+
+          /* Set boundary state with cancelled normal velocity */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(dim, fpt);
+
+          /* Set energy */
+          /* Get left-state pressure */
+          double momFL = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momFL += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
+
+          double PL = (input->gamma - 1.0) * (U(0, nDims + 1 , fpt) - 0.5 * momFL / U(0, 0, fpt));
+
+          /* Get right-state momentum flux after velocity correction */
+          double momFR = 0.0;
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momFR += U(1, dim + 1, fpt) * U(1, dim + 1, fpt);
+
+          /* Compute energy with extrapolated pressure and new momentum */
+          U(1, nDims + 1, fpt) = PL / (input->gamma - 1)  + 0.5 * momFR / U(1, 0, fpt);
         }
 
-        U(1, 0, fpt) = U(0, 0, fpt);
+        /* Rusanov Ghost */
+        else
+        {
+          double momN = 0.0;
 
-        /* Set boundary state with cancelled normal velocity */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(1, dim+1, fpt) = U(0, dim+1, fpt) - momN * norm(dim, fpt);
+          /* Compute wall normal momentum */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            momN += U(0, dim+1, fpt) * norm(dim, fpt);
 
-        /* Set energy */
-        /* Get left-state pressure */
-        double momFL = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momFL += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
+          if (input->motion)
+          {
+            for (unsigned int dim = 0; dim < nDims; dim++)
+              momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
+          }
 
-        double PL = (input->gamma - 1.0) * (U(0, nDims + 1 , fpt) - 0.5 * momFL / U(0, 0, fpt));
+          U(1, 0, fpt) = U(0, 0, fpt);
 
-        /* Get right-state momentum flux after velocity correction */
-        double momFR = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momFR += U(1, dim + 1, fpt) * U(1, dim + 1, fpt);
+          /* Set boundary state to reflect normal velocity */
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            U(1, dim+1, fpt) = U(0, dim+1, fpt) - 2.0 * momN * norm(dim, fpt);
 
-        /* Compute energy with extrapolated pressure and new momentum */
-        U(1, nDims + 1, fpt) = PL / (input->gamma - 1)  + 0.5 * momFR / U(1, 0, fpt);
-
-        /* Set bias */
-        rus_bias(fpt) = 1;
+          /* Set energy */
+          U(1, nDims + 1, fpt) = U(0, nDims + 1, fpt);
+        }
 
         break;
       }
 
-      case SYMMETRY_G: /* Symmetry (ghost) */
-      case SLIP_WALL_G: /* Slip Wall (ghost) */
-      {
-        if (input->viscous)
-          ThrowException("SLIP_WALL_G not supported for viscous!");
-
-        double momN = 0.0;
-
-        /* Compute wall normal momentum */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          momN += U(0, dim+1, fpt) * norm(dim, fpt);
-
-        if (input->motion)
-        {
-          for (unsigned int dim = 0; dim < nDims; dim++)
-            momN -= U(0, 0, fpt) * Vg(dim, fpt) * norm(dim, fpt);
-        }
-
-        U(1, 0, fpt) = U(0, 0, fpt);
-
-        /* Set boundary state to reflect normal velocity */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          U(1, dim+1, fpt) = U(0, dim+1, fpt) - 2.0 * momN * norm(dim, fpt);
-
-        /* Set energy */
-        U(1, nDims + 1, fpt) = U(0, nDims + 1, fpt);
-
-        break;
-      }
-
-      case ISOTHERMAL_NOSLIP_P: /* Isothermal No-slip Wall (prescribed) */
+      case ISOTHERMAL_NOSLIP: /* Isothermal No-slip Wall */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -412,24 +385,15 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq) ;
         U_ldg(1, nDims + 1, fpt) = rhoL * cp_over_gam * input->T_wall;
 
-        /* Set bias */
-        LDG_bias(fpt) = 1;
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
 
         break;
       }
 
-      case ISOTHERMAL_NOSLIP_G: /* Isothermal No-slip Wall (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ISO_G not implemented");
-
-        break;
-      }
-
-
-      case ISOTHERMAL_NOSLIP_MOVING_P: /* No-slip Wall (isothermal and moving) */
+      case ISOTHERMAL_NOSLIP_MOVING: /* Isothermal No-slip Wall, moving */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -457,23 +421,15 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq);
         U_ldg(1, nDims + 1, fpt) = rhoL * (cp_over_gam * input->T_wall + 0.5 * Vsq_wall);
 
-        /* Set bias */
-        LDG_bias(fpt) = 1;
-        
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
+
         break;
       }
 
-      case ISOTHERMAL_NOSLIP_MOVING_G: /* Isothermal No-slip Wall, moving (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ISO_MOVE_P not implemented yet!");
-        break;
-      }
-
-
-      case ADIABATIC_NOSLIP_P: /* Adiabatic No-slip Wall (prescribed) */
+      case ADIABATIC_NOSLIP: /* Adiabatic No-slip Wall */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -507,23 +463,15 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
         U_ldg(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq_grid - VLsq);
 
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
 
         break;
       }
 
-      case ADIABATIC_NOSLIP_G: /* Adiabatic No-slip Wall (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ADI_G not implemented");
-
-        break;
-      }
-
-      case ADIABATIC_NOSLIP_MOVING_P: /* Adiabatic No-slip Wall, moving (prescribed) */
+      case ADIABATIC_NOSLIP_MOVING: /* Adiabatic No-slip Wall, moving */
       {
         if (!input->viscous)
           ThrowException("No slip wall boundary only for viscous flows!");
@@ -551,19 +499,12 @@ void Faces::apply_bcs()
         U(1, nDims + 1, fpt) = EL + 0.5 * rhoL * (Vsq - VLsq);
         U_ldg(1, nDims + 1, fpt) = EL - 0.5 * rhoL * (VLsq + Vsq_wall);
 
-        /* Set LDG bias */
-        LDG_bias(fpt) = 1;
+        /* Rusanov Prescribed */
+        if (rus_bias(fpt) == 1)
+          for (unsigned int var = 0; var < nVars; var++)
+            U(1, var, fpt) = U_ldg(1, var, fpt);
 
         break;
-      }
-
-      case ADIABATIC_NOSLIP_MOVING_G: /* Adiabatic No-slip Wall, moving (ghost) */
-      {
-        if (!input->viscous)
-          ThrowException("No slip wall boundary only for viscous flows!");
-
-        ThrowException("WALL_NS_ADI_MOVE_G not implemented yet!");
-
       }
 
       case OVERSET:
@@ -595,8 +536,7 @@ void Faces::apply_bcs_dU()
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
     /* Apply specified boundary condition */
-    if(bnd_id == ADIABATIC_NOSLIP_P || bnd_id == ADIABATIC_NOSLIP_G ||
-            bnd_id == ADIABATIC_NOSLIP_MOVING_P || bnd_id == ADIABATIC_NOSLIP_MOVING_G) /* Adibatic Wall */
+    if(bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* Adibatic Wall */
     {
       /* Extrapolate density gradient */
       for (unsigned int dim = 0; dim < nDims; dim++)
@@ -788,75 +728,15 @@ void Faces::apply_bcs_dU()
 #endif
 }
 
-// TODO: Add a check to ensure proper boundary conditions are used
 // TODO: Collapse 2D and 3D boundary condition cases
 void Faces::apply_bcs_dFdU()
 {
-#ifdef _CPU
   /* Loop over boundary flux points */
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
     if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
-
-    /* Copy right state values */
-    if (bnd_id != PERIODIC && bnd_id != SUP_IN)
-    {
-      /* Copy right state dFdUconv */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dFdURconv(ni, nj, dim) = dFdUconv(fpt, ni, nj, dim, 1);
-          }
-        }
-      }
-
-      if (input->viscous)
-      {
-        /* Copy right state dUcdU */
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dUcdUR(ni, nj) = dUcdU(fpt, ni, nj, 1);
-          }
-        }
-
-        /* Copy right state dFdUvisc */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int nj = 0; nj < nVars; nj++)
-          {
-            for (unsigned int ni = 0; ni < nVars; ni++)
-            {
-              dFdURvisc(ni, nj, dim) = dFdUvisc(fpt, ni, nj, dim, 1);
-            }
-          }
-        }
-
-        /* Copy right state dFddUvisc */
-        if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
-        {
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            for (unsigned int dimi = 0; dimi < nDims; dimi++)
-            {
-              for (unsigned int nj = 0; nj < nVars; nj++)
-              {
-                for (unsigned int ni = 0; ni < nVars; ni++)
-                {
-                  dFddURvisc(ni, nj, dimi, dimj) = dFddUvisc(fpt, ni, nj, dimi, dimj, 1);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
 
     /* Apply specified boundary condition */
     switch(bnd_id)
@@ -866,60 +746,41 @@ void Faces::apply_bcs_dFdU()
         break;
       }
 
-      case SUB_OUT: /* Subsonic Outlet */
+      case SUP_IN: /* Farfield and Supersonic Inlet */
       {
-        /* Primitive Variables */
-        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+        ThrowException("Farfield and Supersonic Inlet boundary condition not implemented for implicit method");
+        break;
+      }
 
-        /* Compute dURdUL */
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = -0.5 * (uL*uL + vL*vL);
-
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 1;
-        dURdUL(2, 1) = 0;
-        dURdUL(3, 1) = uL;
-
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = 0;
-        dURdUL(2, 2) = 1;
-        dURdUL(3, 2) = vL;
-
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 0;
-
+      case SUP_OUT: /* Supersonic Outlet */
+      {
+        ThrowException("Supersonic Outlet boundary condition not implemented for implicit method");
         break;
       }
 
       case CHAR: /* Characteristic (from PyFR) */
-      case CHAR_P: /* Characteristic (prescribed) */
       {
         /* Compute wall normal velocities */
         double VnL = 0.0; double VnR = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          VnL += U(fpt, dim+1, 0) / U(fpt, 0, 0) * norm(fpt, dim);
-          VnR += input->V_fs(dim) * norm(fpt, dim);
+          VnL += U(0, dim+1, fpt) / U(0, 0, fpt) * norm(dim, fpt);
+          VnR += input->V_fs(dim) * norm(dim, fpt);
         }
 
         /* Compute pressure. TODO: Compute pressure once!*/
         double momF = 0.0;
         for (unsigned int dim = 0; dim < nDims; dim++)
         {
-          momF += U(fpt, dim + 1, 0) * U(fpt, dim + 1, 0);
+          momF += U(0, dim + 1, fpt) * U(0, dim + 1, fpt);
         }
 
-        momF /= U(fpt, 0, 0);
+        momF /= U(0, 0, fpt);
 
-        double PL = (input->gamma - 1.0) * (U(fpt, nDims + 1, 0) - 0.5 * momF);
+        double PL = (input->gamma - 1.0) * (U(0, nDims + 1, fpt) - 0.5 * momF);
         double PR = input->P_fs;
 
-        double cL = std::sqrt(input->gamma * PL / U(fpt, 0, 0));
+        double cL = std::sqrt(input->gamma * PL / U(0, 0, fpt));
         double cR = std::sqrt(input->gamma * PR / input->rho_fs);
 
         /* Compute Riemann Invariants */
@@ -940,18 +801,18 @@ void Faces::apply_bcs_dFdU()
 
         if (nDims == 2)
         {
-          double nx = norm(fpt, 0);
-          double ny = norm(fpt, 1);
+          double nx = norm(0, fpt);
+          double ny = norm(1, fpt);
           double gam = input->gamma;
 
           /* Primitive Variables */
-          double rhoL = U(fpt, 0, 0);
-          double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-          double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+          double rhoL = U(0, 0, fpt);
+          double uL = U(0, 1, fpt) / U(0, 0, fpt);
+          double vL = U(0, 2, fpt) / U(0, 0, fpt);
 
-          double rhoR = U(fpt, 0, 1);
-          double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-          double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+          double rhoR = U(1, 0, fpt);
+          double uR = U(1, 1, fpt) / U(1, 0, fpt);
+          double vR = U(1, 2, fpt) / U(1, 0, fpt);
 
           if (VnL < 0.0) /* Case 1: Inflow */
           {
@@ -968,25 +829,25 @@ void Faces::apply_bcs_dFdU()
             double c2 = uR * nx + vR * ny + cstar / gam;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * b1;
-            dURdUL(1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-            dURdUL(2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-            dURdUL(3, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
+            dURdUL(fpt, 0, 0) = a1 * b1;
+            dURdUL(fpt, 1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+            dURdUL(fpt, 2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+            dURdUL(fpt, 3, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
 
-            dURdUL(0, 1) = a1 * b2;
-            dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-            dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-            dURdUL(3, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
+            dURdUL(fpt, 0, 1) = a1 * b2;
+            dURdUL(fpt, 1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+            dURdUL(fpt, 2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+            dURdUL(fpt, 3, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
 
-            dURdUL(0, 2) = a1 * b3;
-            dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-            dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-            dURdUL(3, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
+            dURdUL(fpt, 0, 2) = a1 * b3;
+            dURdUL(fpt, 1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+            dURdUL(fpt, 2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+            dURdUL(fpt, 3, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
 
-            dURdUL(0, 3) = 0.5 * rhoR * b4;
-            dURdUL(1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
-            dURdUL(2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
-            dURdUL(3, 3) = 0.5 * rhoR * (b4 * c1 + a2 * c2);
+            dURdUL(fpt, 0, 3) = 0.5 * rhoR * b4;
+            dURdUL(fpt, 1, 3) = 0.5 * rhoR * (b4 * uR + a2 * nx);
+            dURdUL(fpt, 2, 3) = 0.5 * rhoR * (b4 * vR + a2 * ny);
+            dURdUL(fpt, 3, 3) = 0.5 * rhoR * (b4 * c1 + a2 * c2);
           }
 
           else  /* Case 2: Outflow */
@@ -1021,45 +882,45 @@ void Faces::apply_bcs_dFdU()
             double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * e1;
-            dURdUL(1, 0) = a1 * e1 * c4 + rhoR * c1;
-            dURdUL(2, 0) = a1 * e1 * d4 + rhoR * d1;
-            dURdUL(3, 0) = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
+            dURdUL(fpt, 0, 0) = a1 * e1;
+            dURdUL(fpt, 1, 0) = a1 * e1 * c4 + rhoR * c1;
+            dURdUL(fpt, 2, 0) = a1 * e1 * d4 + rhoR * d1;
+            dURdUL(fpt, 3, 0) = rhoR * (c1*c4 + d1*d4) + e1 * f1 + a6 * b1;
 
-            dURdUL(0, 1) = a1 * e2;
-            dURdUL(1, 1) = a1 * e2 * c4 + rhoR * c2;
-            dURdUL(2, 1) = a1 * e2 * d4 + rhoR * d2;
-            dURdUL(3, 1) = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
+            dURdUL(fpt, 0, 1) = a1 * e2;
+            dURdUL(fpt, 1, 1) = a1 * e2 * c4 + rhoR * c2;
+            dURdUL(fpt, 2, 1) = a1 * e2 * d4 + rhoR * d2;
+            dURdUL(fpt, 3, 1) = rhoR * (c2*c4 + d2*d4) + e2 * f1 + a6 * b2;
 
-            dURdUL(0, 2) = a1 * e3;
-            dURdUL(1, 2) = a1 * e3 * c4 + rhoR * c3;
-            dURdUL(2, 2) = a1 * e3 * d4 + rhoR * d3;
-            dURdUL(3, 2) = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
+            dURdUL(fpt, 0, 2) = a1 * e3;
+            dURdUL(fpt, 1, 2) = a1 * e3 * c4 + rhoR * c3;
+            dURdUL(fpt, 2, 2) = a1 * e3 * d4 + rhoR * d3;
+            dURdUL(fpt, 3, 2) = rhoR * (c3*c4 + d3*d4) + e3 * f1 + a6 * b3;
 
-            dURdUL(0, 3) = a1 * e4;
-            dURdUL(1, 3) = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
-            dURdUL(2, 3) = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
-            dURdUL(3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
+            dURdUL(fpt, 0, 3) = a1 * e4;
+            dURdUL(fpt, 1, 3) = a1 * e4 * c4 + 0.5 * rhoR * a2 * nx;
+            dURdUL(fpt, 2, 3) = a1 * e4 * d4 + 0.5 * rhoR * a2 * ny;
+            dURdUL(fpt, 3, 3) = 0.5 * rhoR * a2 * (c4*nx + d4*ny) + e4 * f1 + a2 * a6;
           }
         }
 
         else if (nDims == 3)
         {
-          double nx = norm(fpt, 0);
-          double ny = norm(fpt, 1);
-          double nz = norm(fpt, 2);
+          double nx = norm(0, fpt);
+          double ny = norm(1, fpt);
+          double nz = norm(2, fpt);
           double gam = input->gamma;
 
           /* Primitive Variables */
-          double rhoL = U(fpt, 0, 0);
-          double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-          double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-          double wL = U(fpt, 3, 0) / U(fpt, 0, 0);
+          double rhoL = U(0, 0, fpt);
+          double uL = U(0, 1, fpt) / U(0, 0, fpt);
+          double vL = U(0, 2, fpt) / U(0, 0, fpt);
+          double wL = U(0, 3, fpt) / U(0, 0, fpt);
 
-          double rhoR = U(fpt, 0, 1);
-          double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-          double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-          double wR = U(fpt, 3, 1) / U(fpt, 0, 1);
+          double rhoR = U(1, 0, fpt);
+          double uR = U(1, 1, fpt) / U(1, 0, fpt);
+          double vR = U(1, 2, fpt) / U(1, 0, fpt);
+          double wR = U(1, 3, fpt) / U(1, 0, fpt);
 
           if (VnL < 0.0) /* Case 1: Inflow */
           {
@@ -1077,35 +938,35 @@ void Faces::apply_bcs_dFdU()
             double c2 = uR * nx + vR * ny + wR * nz + cstar / gam;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * b1;
-            dURdUL(1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
-            dURdUL(2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
-            dURdUL(3, 0) = a1 * b1 * wR + 0.5 * rhoR * b1 * nz;
-            dURdUL(4, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
+            dURdUL(fpt, 0, 0) = a1 * b1;
+            dURdUL(fpt, 1, 0) = a1 * b1 * uR + 0.5 * rhoR * b1 * nx;
+            dURdUL(fpt, 2, 0) = a1 * b1 * vR + 0.5 * rhoR * b1 * ny;
+            dURdUL(fpt, 3, 0) = a1 * b1 * wR + 0.5 * rhoR * b1 * nz;
+            dURdUL(fpt, 4, 0) = a1 * b1 * c1 + 0.5 * rhoR * b1 * c2;
 
-            dURdUL(0, 1) = a1 * b2;
-            dURdUL(1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
-            dURdUL(2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
-            dURdUL(3, 1) = a1 * b2 * wR + 0.5 * rhoR * b2 * nz;
-            dURdUL(4, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
+            dURdUL(fpt, 0, 1) = a1 * b2;
+            dURdUL(fpt, 1, 1) = a1 * b2 * uR + 0.5 * rhoR * b2 * nx;
+            dURdUL(fpt, 2, 1) = a1 * b2 * vR + 0.5 * rhoR * b2 * ny;
+            dURdUL(fpt, 3, 1) = a1 * b2 * wR + 0.5 * rhoR * b2 * nz;
+            dURdUL(fpt, 4, 1) = a1 * b2 * c1 + 0.5 * rhoR * b2 * c2;
 
-            dURdUL(0, 2) = a1 * b3;
-            dURdUL(1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
-            dURdUL(2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
-            dURdUL(3, 2) = a1 * b3 * wR + 0.5 * rhoR * b3 * nz;
-            dURdUL(4, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
+            dURdUL(fpt, 0, 2) = a1 * b3;
+            dURdUL(fpt, 1, 2) = a1 * b3 * uR + 0.5 * rhoR * b3 * nx;
+            dURdUL(fpt, 2, 2) = a1 * b3 * vR + 0.5 * rhoR * b3 * ny;
+            dURdUL(fpt, 3, 2) = a1 * b3 * wR + 0.5 * rhoR * b3 * nz;
+            dURdUL(fpt, 4, 2) = a1 * b3 * c1 + 0.5 * rhoR * b3 * c2;
 
-            dURdUL(0, 3) = a1 * b4;
-            dURdUL(1, 3) = a1 * b4 * uR + 0.5 * rhoR * b4 * nx;
-            dURdUL(2, 3) = a1 * b4 * vR + 0.5 * rhoR * b4 * ny;
-            dURdUL(3, 3) = a1 * b4 * wR + 0.5 * rhoR * b4 * nz;
-            dURdUL(4, 3) = a1 * b4 * c1 + 0.5 * rhoR * b4 * c2;
+            dURdUL(fpt, 0, 3) = a1 * b4;
+            dURdUL(fpt, 1, 3) = a1 * b4 * uR + 0.5 * rhoR * b4 * nx;
+            dURdUL(fpt, 2, 3) = a1 * b4 * vR + 0.5 * rhoR * b4 * ny;
+            dURdUL(fpt, 3, 3) = a1 * b4 * wR + 0.5 * rhoR * b4 * nz;
+            dURdUL(fpt, 4, 3) = a1 * b4 * c1 + 0.5 * rhoR * b4 * c2;
 
-            dURdUL(0, 4) = 0.5 * rhoR * b5;
-            dURdUL(1, 4) = 0.5 * rhoR * (b5 * uR + a2 * nx);
-            dURdUL(2, 4) = 0.5 * rhoR * (b5 * vR + a2 * ny);
-            dURdUL(3, 4) = 0.5 * rhoR * (b5 * wR + a2 * nz);
-            dURdUL(4, 4) = 0.5 * rhoR * (b5 * c1 + a2 * c2);
+            dURdUL(fpt, 0, 4) = 0.5 * rhoR * b5;
+            dURdUL(fpt, 1, 4) = 0.5 * rhoR * (b5 * uR + a2 * nx);
+            dURdUL(fpt, 2, 4) = 0.5 * rhoR * (b5 * vR + a2 * ny);
+            dURdUL(fpt, 3, 4) = 0.5 * rhoR * (b5 * wR + a2 * nz);
+            dURdUL(fpt, 4, 4) = 0.5 * rhoR * (b5 * c1 + a2 * c2);
           }
 
           else  /* Case 2: Outflow */
@@ -1150,276 +1011,238 @@ void Faces::apply_bcs_dFdU()
             double g1 = 0.5 * a1 * (c5*c5 + d5*d5 + e5*e5) + a5;
 
             /* Compute dURdUL */
-            dURdUL(0, 0) = a1 * f1;
-            dURdUL(1, 0) = a1 * f1 * c5 + rhoR * c1;
-            dURdUL(2, 0) = a1 * f1 * d5 + rhoR * d1;
-            dURdUL(3, 0) = a1 * f1 * e5 + rhoR * e1;
-            dURdUL(4, 0) = rhoR * (c1*c5 + d1*d5 + e1*e5) + f1 * g1 + a6 * b1;
+            dURdUL(fpt, 0, 0) = a1 * f1;
+            dURdUL(fpt, 1, 0) = a1 * f1 * c5 + rhoR * c1;
+            dURdUL(fpt, 2, 0) = a1 * f1 * d5 + rhoR * d1;
+            dURdUL(fpt, 3, 0) = a1 * f1 * e5 + rhoR * e1;
+            dURdUL(fpt, 4, 0) = rhoR * (c1*c5 + d1*d5 + e1*e5) + f1 * g1 + a6 * b1;
 
-            dURdUL(0, 1) = a1 * f2;
-            dURdUL(1, 1) = a1 * f2 * c5 + rhoR * c2;
-            dURdUL(2, 1) = a1 * f2 * d5 + rhoR * d2;
-            dURdUL(3, 1) = a1 * f2 * e5 + rhoR * e2;
-            dURdUL(4, 1) = rhoR * (c2*c5 + d2*d5 + e2*e5) + f2 * g1 + a6 * b2;
+            dURdUL(fpt, 0, 1) = a1 * f2;
+            dURdUL(fpt, 1, 1) = a1 * f2 * c5 + rhoR * c2;
+            dURdUL(fpt, 2, 1) = a1 * f2 * d5 + rhoR * d2;
+            dURdUL(fpt, 3, 1) = a1 * f2 * e5 + rhoR * e2;
+            dURdUL(fpt, 4, 1) = rhoR * (c2*c5 + d2*d5 + e2*e5) + f2 * g1 + a6 * b2;
 
-            dURdUL(0, 2) = a1 * f3;
-            dURdUL(1, 2) = a1 * f3 * c5 + rhoR * c3;
-            dURdUL(2, 2) = a1 * f3 * d5 + rhoR * d3;
-            dURdUL(3, 2) = a1 * f3 * e5 + rhoR * e3;
-            dURdUL(4, 2) = rhoR * (c3*c5 + d3*d5 + e3*e5) + f3 * g1 + a6 * b3;
+            dURdUL(fpt, 0, 2) = a1 * f3;
+            dURdUL(fpt, 1, 2) = a1 * f3 * c5 + rhoR * c3;
+            dURdUL(fpt, 2, 2) = a1 * f3 * d5 + rhoR * d3;
+            dURdUL(fpt, 3, 2) = a1 * f3 * e5 + rhoR * e3;
+            dURdUL(fpt, 4, 2) = rhoR * (c3*c5 + d3*d5 + e3*e5) + f3 * g1 + a6 * b3;
 
-            dURdUL(0, 3) = a1 * f4;
-            dURdUL(1, 3) = a1 * f4 * c5 + rhoR * c4;
-            dURdUL(2, 3) = a1 * f4 * d5 + rhoR * d4;
-            dURdUL(3, 3) = a1 * f4 * e5 + rhoR * e4;
-            dURdUL(4, 3) = rhoR * (c4*c5 + d4*d5 + e4*e5) + f4 * g1 + a6 * b4;
+            dURdUL(fpt, 0, 3) = a1 * f4;
+            dURdUL(fpt, 1, 3) = a1 * f4 * c5 + rhoR * c4;
+            dURdUL(fpt, 2, 3) = a1 * f4 * d5 + rhoR * d4;
+            dURdUL(fpt, 3, 3) = a1 * f4 * e5 + rhoR * e4;
+            dURdUL(fpt, 4, 3) = rhoR * (c4*c5 + d4*d5 + e4*e5) + f4 * g1 + a6 * b4;
 
-            dURdUL(0, 4) = a1 * f5;
-            dURdUL(1, 4) = a1 * f5 * c5 + 0.5 * rhoR * a2 * nx;
-            dURdUL(2, 4) = a1 * f5 * d5 + 0.5 * rhoR * a2 * ny;
-            dURdUL(3, 4) = a1 * f5 * e5 + 0.5 * rhoR * a2 * nz;
-            dURdUL(4, 4) = 0.5 * rhoR * a2 * (c5*nx + d5*ny + e5*nz) + f5 * g1 + a2 * a6;
+            dURdUL(fpt, 0, 4) = a1 * f5;
+            dURdUL(fpt, 1, 4) = a1 * f5 * c5 + 0.5 * rhoR * a2 * nx;
+            dURdUL(fpt, 2, 4) = a1 * f5 * d5 + 0.5 * rhoR * a2 * ny;
+            dURdUL(fpt, 3, 4) = a1 * f5 * e5 + 0.5 * rhoR * a2 * nz;
+            dURdUL(fpt, 4, 4) = 0.5 * rhoR * a2 * (c5*nx + d5*ny + e5*nz) + f5 * g1 + a2 * a6;
           }
         }
+
+        /* Extrapolate gradients */
+        if (input->viscous)
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            for (unsigned int var = 0; var < nVars; var++)
+              ddURddUL(fpt, dim, dim, var, var) = 1;
 
         break;
       }
 
-      case SYMMETRY_P: /* Symmetry (prescribed) */
-      case SLIP_WALL_P: /* Slip Wall (prescribed) */
+      case SYMMETRY: /* Symmetry */
+      case SLIP_WALL: /* Slip Wall */
       {
         if (nDims == 2)
         {
-          double nx = norm(fpt, 0);
-          double ny = norm(fpt, 1);
+          double nx = norm(0, fpt);
+          double ny = norm(1, fpt);
 
           /* Primitive Variables */
-          double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-          double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
+          double uL = U(0, 1, fpt) / U(0, 0, fpt);
+          double vL = U(0, 2, fpt) / U(0, 0, fpt);
 
-          double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-          double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
+          double uR = U(1, 1, fpt) / U(1, 0, fpt);
+          double vR = U(1, 2, fpt) / U(1, 0, fpt);
 
           /* Compute dURdUL */
-          dURdUL(0, 0) = 1;
-          dURdUL(1, 0) = 0;
-          dURdUL(2, 0) = 0;
-          dURdUL(3, 0) = 0.5 * (uL*uL + vL*vL - uR*uR - vR*vR);
+          dURdUL(fpt, 0, 0) = 1;
+          dURdUL(fpt, 3, 0) = 0.5 * (uL*uL + vL*vL - uR*uR - vR*vR);
 
-          dURdUL(0, 1) = 0;
-          dURdUL(1, 1) = 1.0-nx*nx;
-          dURdUL(2, 1) = -nx*ny;
-          dURdUL(3, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR;
+          dURdUL(fpt, 1, 1) = 1.0-nx*nx;
+          dURdUL(fpt, 2, 1) = -nx*ny;
+          dURdUL(fpt, 3, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR;
 
-          dURdUL(0, 2) = 0;
-          dURdUL(1, 2) = -nx*ny;
-          dURdUL(2, 2) = 1.0-ny*ny;
-          dURdUL(3, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR;
+          dURdUL(fpt, 1, 2) = -nx*ny;
+          dURdUL(fpt, 2, 2) = 1.0-ny*ny;
+          dURdUL(fpt, 3, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR;
 
-          dURdUL(0, 3) = 0;
-          dURdUL(1, 3) = 0;
-          dURdUL(2, 3) = 0;
-          dURdUL(3, 3) = 1;
+          dURdUL(fpt, 3, 3) = 1;
         }
 
         else if (nDims == 3)
         {
-          double nx = norm(fpt, 0);
-          double ny = norm(fpt, 1);
-          double nz = norm(fpt, 2);
+          double nx = norm(0, fpt);
+          double ny = norm(1, fpt);
+          double nz = norm(2, fpt);
 
           /* Primitive Variables */
-          double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-          double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-          double wL = U(fpt, 3, 0) / U(fpt, 0, 0);
+          double uL = U(0, 1, fpt) / U(0, 0, fpt);
+          double vL = U(0, 2, fpt) / U(0, 0, fpt);
+          double wL = U(0, 3, fpt) / U(0, 0, fpt);
 
-          double uR = U(fpt, 1, 1) / U(fpt, 0, 1);
-          double vR = U(fpt, 2, 1) / U(fpt, 0, 1);
-          double wR = U(fpt, 3, 1) / U(fpt, 0, 1);
+          double uR = U(1, 1, fpt) / U(1, 0, fpt);
+          double vR = U(1, 2, fpt) / U(1, 0, fpt);
+          double wR = U(1, 3, fpt) / U(1, 0, fpt);
 
           /* Compute dURdUL */
-          dURdUL(0, 0) = 1;
-          dURdUL(1, 0) = 0;
-          dURdUL(2, 0) = 0;
-          dURdUL(3, 0) = 0;
-          dURdUL(4, 0) = 0.5 * (uL*uL + vL*vL + wL*wL - uR*uR - vR*vR - wR*wR);
+          dURdUL(fpt, 0, 0) = 1;
+          dURdUL(fpt, 4, 0) = 0.5 * (uL*uL + vL*vL + wL*wL - uR*uR - vR*vR - wR*wR);
 
-          dURdUL(0, 1) = 0;
-          dURdUL(1, 1) = 1.0-nx*nx;
-          dURdUL(2, 1) = -nx*ny;
-          dURdUL(3, 1) = -nx*nz;
-          dURdUL(4, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR - nx*nz*wR;
+          dURdUL(fpt, 1, 1) = 1.0-nx*nx;
+          dURdUL(fpt, 2, 1) = -nx*ny;
+          dURdUL(fpt, 3, 1) = -nx*nz;
+          dURdUL(fpt, 4, 1) = -uL + (1.0-nx*nx)*uR - nx*ny*vR - nx*nz*wR;
 
-          dURdUL(0, 2) = 0;
-          dURdUL(1, 2) = -nx*ny;
-          dURdUL(2, 2) = 1.0-ny*ny;
-          dURdUL(3, 2) = -ny*nz;
-          dURdUL(4, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR - ny*nz*wR;
+          dURdUL(fpt, 1, 2) = -nx*ny;
+          dURdUL(fpt, 2, 2) = 1.0-ny*ny;
+          dURdUL(fpt, 3, 2) = -ny*nz;
+          dURdUL(fpt, 4, 2) = -vL - nx*ny*uR + (1.0-ny*ny)*vR - ny*nz*wR;
 
-          dURdUL(0, 3) = 0;
-          dURdUL(1, 3) = -nx*nz;
-          dURdUL(2, 3) = -ny*nz;
-          dURdUL(3, 3) = 1.0-nz*nz;
-          dURdUL(4, 3) = -wL - nx*nz*uR - ny*nz*vR + (1.0-nz*nz)*wR;
+          dURdUL(fpt, 1, 3) = -nx*nz;
+          dURdUL(fpt, 2, 3) = -ny*nz;
+          dURdUL(fpt, 3, 3) = 1.0-nz*nz;
+          dURdUL(fpt, 4, 3) = -wL - nx*nz*uR - ny*nz*vR + (1.0-nz*nz)*wR;
 
-          dURdUL(0, 4) = 0;
-          dURdUL(1, 4) = 0;
-          dURdUL(2, 4) = 0;
-          dURdUL(3, 4) = 0;
-          dURdUL(4, 4) = 1;
+          dURdUL(fpt, 4, 4) = 1;
         }
 
         break;
       }
 
-      case SYMMETRY_G: /* Symmetry (ghost) */
-      case SLIP_WALL_G: /* Slip Wall (ghost) */
+      case ISOTHERMAL_NOSLIP: /* Isothermal No-slip Wall */
       {
-        double nx = norm(fpt, 0);
-        double ny = norm(fpt, 1);
+        if (nDims == 3)
+        {
+          ThrowException("3D Isothermal No-slip Wall boundary condition not implemented for implicit method");
+        }
 
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = 0;
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0);
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 1.0 - 2.0 * nx * nx;
-        dURdUL(2, 1) = -2.0 * nx * ny;
-        dURdUL(3, 1) = 0;
-
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = -2.0 * nx * ny;
-        dURdUL(2, 2) = 1.0 - 2.0 * ny * ny;
-        dURdUL(3, 2) = 0;
-
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 1;
+        /* Extrapolate gradients */
+        if (input->viscous)
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            for (unsigned int var = 0; var < nVars; var++)
+              ddURddUL(fpt, dim, dim, var, var) = 1;
 
         break;
       }
 
-      case ADIABATIC_NOSLIP_P: /* No-slip Wall (adiabatic) */
+      case ISOTHERMAL_NOSLIP_MOVING: /* Isothermal No-slip Wall, moving */
       {
-        double nx = norm(fpt, 0);
-        double ny = norm(fpt, 1);
+        if (nDims == 3)
+        {
+          ThrowException("3D Isothermal No-slip Wall, moving boundary condition not implemented for implicit method");
+        }
 
         /* Primitive Variables */
-        double rhoL = U(fpt, 0, 0);
-        double uL = U(fpt, 1, 0) / U(fpt, 0, 0);
-        double vL = U(fpt, 2, 0) / U(fpt, 0, 0);
-        double eL = U(fpt, 3, 0);
+        double uR = input->V_wall(0);
+        double vR = input->V_wall(1);
+
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 1, 0) = uR;
+        dURdUL(fpt, 2, 0) = vR;
+        dURdUL(fpt, 3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0) + 0.5 * (uR*uR + vR*vR);
+
+        /* Extrapolate gradients */
+        if (input->viscous)
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            for (unsigned int var = 0; var < nVars; var++)
+              ddURddUL(fpt, dim, dim, var, var) = 1;
+
+        break;
+      }
+
+      case ADIABATIC_NOSLIP: /* Adiabatic No-slip Wall */
+      {
+        if (nDims == 3)
+        {
+          ThrowException("3D Adiabatic No-slip Wall (prescribed) boundary condition not implemented for implicit method");
+        }
+
+        double nx = norm(0, fpt);
+        double ny = norm(1, fpt);
+
+        /* Primitive Variables */
+        double rhoL = U(0, 0, fpt);
+        double uL = U(0, 1, fpt) / U(0, 0, fpt);
+        double vL = U(0, 2, fpt) / U(0, 0, fpt);
+        double eL = U(0, 3, fpt);
 
         /* Compute dURdUL */
-        dURdUL(0, 0) = 1;
-        dURdUL(1, 0) = 0;
-        dURdUL(2, 0) = 0;
-        dURdUL(3, 0) = 0.5 * (uL*uL + vL*vL);
+        dURdUL(fpt, 0, 0) = 1;
+        dURdUL(fpt, 3, 0) = 0.5 * (uL*uL + vL*vL);
 
-        dURdUL(0, 1) = 0;
-        dURdUL(1, 1) = 0;
-        dURdUL(2, 1) = 0;
-        dURdUL(3, 1) = -uL;
+        dURdUL(fpt, 3, 1) = -uL;
 
-        dURdUL(0, 2) = 0;
-        dURdUL(1, 2) = 0;
-        dURdUL(2, 2) = 0;
-        dURdUL(3, 2) = -vL;
+        dURdUL(fpt, 3, 2) = -vL;
 
-        dURdUL(0, 3) = 0;
-        dURdUL(1, 3) = 0;
-        dURdUL(2, 3) = 0;
-        dURdUL(3, 3) = 1;
+        dURdUL(fpt, 3, 3) = 1;
 
         if (input->viscous)
         {
           /* Compute dUxR/dUxL */
-          ddURddUL(0, 0, 0, 0) = 1;
-          ddURddUL(1, 0, 0, 0) = 0;
-          ddURddUL(2, 0, 0, 0) = 0;
-          ddURddUL(3, 0, 0, 0) = nx*nx * (eL / rhoL - (uL*uL + vL*vL));
+          ddURddUL(fpt, 0, 0, 0, 0) = 1;
+          ddURddUL(fpt, 0, 0, 3, 0) = nx*nx * (eL / rhoL - (uL*uL + vL*vL));
 
-          ddURddUL(0, 1, 0, 0) = 0;
-          ddURddUL(1, 1, 0, 0) = 1;
-          ddURddUL(2, 1, 0, 0) = 0;
-          ddURddUL(3, 1, 0, 0) = nx*nx * uL;
+          ddURddUL(fpt, 0, 0, 1, 1) = 1;
+          ddURddUL(fpt, 0, 0, 3, 1) = nx*nx * uL;
 
-          ddURddUL(0, 2, 0, 0) = 0;
-          ddURddUL(1, 2, 0, 0) = 0;
-          ddURddUL(2, 2, 0, 0) = 1;
-          ddURddUL(3, 2, 0, 0) = nx*nx * vL;
+          ddURddUL(fpt, 0, 0, 2, 2) = 1;
+          ddURddUL(fpt, 0, 0, 3, 2) = nx*nx * vL;
 
-          ddURddUL(0, 3, 0, 0) = 0;
-          ddURddUL(1, 3, 0, 0) = 0;
-          ddURddUL(2, 3, 0, 0) = 0;
-          ddURddUL(3, 3, 0, 0) = 1.0 - nx*nx;
+          ddURddUL(fpt, 0, 0, 3, 3) = 1.0 - nx*nx;
 
           /* Compute dUyR/dUxL */
-          ddURddUL(0, 0, 1, 0) = 0;
-          ddURddUL(1, 0, 1, 0) = 0;
-          ddURddUL(2, 0, 1, 0) = 0;
-          ddURddUL(3, 0, 1, 0) = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
+          ddURddUL(fpt, 1, 0, 3, 0) = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
 
-          ddURddUL(0, 1, 1, 0) = 0;
-          ddURddUL(1, 1, 1, 0) = 0;
-          ddURddUL(2, 1, 1, 0) = 0;
-          ddURddUL(3, 1, 1, 0) = nx*ny * uL;
+          ddURddUL(fpt, 1, 0, 3, 1) = nx*ny * uL;
 
-          ddURddUL(0, 2, 1, 0) = 0;
-          ddURddUL(1, 2, 1, 0) = 0;
-          ddURddUL(2, 2, 1, 0) = 0;
-          ddURddUL(3, 2, 1, 0) = nx*ny * vL;
+          ddURddUL(fpt, 1, 0, 3, 2) = nx*ny * vL;
 
-          ddURddUL(0, 3, 1, 0) = 0;
-          ddURddUL(1, 3, 1, 0) = 0;
-          ddURddUL(2, 3, 1, 0) = 0;
-          ddURddUL(3, 3, 1, 0) = -nx * ny;
+          ddURddUL(fpt, 1, 0, 3, 3) = -nx * ny;
 
           /* Compute dUxR/dUyL */
-          ddURddUL(0, 0, 0, 1) = 0;
-          ddURddUL(1, 0, 0, 1) = 0;
-          ddURddUL(2, 0, 0, 1) = 0;
-          ddURddUL(3, 0, 0, 1) = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
+          ddURddUL(fpt, 0, 1, 3, 0) = nx*ny * (eL / rhoL - (uL*uL + vL*vL));
 
-          ddURddUL(0, 1, 0, 1) = 0;
-          ddURddUL(1, 1, 0, 1) = 0;
-          ddURddUL(2, 1, 0, 1) = 0;
-          ddURddUL(3, 1, 0, 1) = nx*ny * uL;
+          ddURddUL(fpt, 0, 1, 3, 1) = nx*ny * uL;
 
-          ddURddUL(0, 2, 0, 1) = 0;
-          ddURddUL(1, 2, 0, 1) = 0;
-          ddURddUL(2, 2, 0, 1) = 0;
-          ddURddUL(3, 2, 0, 1) = nx*ny * vL;
+          ddURddUL(fpt, 0, 1, 3, 2) = nx*ny * vL;
 
-          ddURddUL(0, 3, 0, 1) = 0;
-          ddURddUL(1, 3, 0, 1) = 0;
-          ddURddUL(2, 3, 0, 1) = 0;
-          ddURddUL(3, 3, 0, 1) = -nx * ny;
+          ddURddUL(fpt, 0, 1, 3, 3) = -nx * ny;
 
           /* Compute dUyR/dUyL */
-          ddURddUL(0, 0, 1, 1) = 1;
-          ddURddUL(1, 0, 1, 1) = 0;
-          ddURddUL(2, 0, 1, 1) = 0;
-          ddURddUL(3, 0, 1, 1) = ny*ny * (eL / rhoL - (uL*uL + vL*vL));
+          ddURddUL(fpt, 1, 1, 0, 0) = 1;
+          ddURddUL(fpt, 1, 1, 3, 0) = ny*ny * (eL / rhoL - (uL*uL + vL*vL));
 
-          ddURddUL(0, 1, 1, 1) = 0;
-          ddURddUL(1, 1, 1, 1) = 1;
-          ddURddUL(2, 1, 1, 1) = 0;
-          ddURddUL(3, 1, 1, 1) = ny*ny * uL;
+          ddURddUL(fpt, 1, 1, 1, 1) = 1;
+          ddURddUL(fpt, 1, 1, 3, 1) = ny*ny * uL;
 
-          ddURddUL(0, 2, 1, 1) = 0;
-          ddURddUL(1, 2, 1, 1) = 0;
-          ddURddUL(2, 2, 1, 1) = 1;
-          ddURddUL(3, 2, 1, 1) = ny*ny * vL;
+          ddURddUL(fpt, 1, 1, 2, 2) = 1;
+          ddURddUL(fpt, 1, 1, 3, 2) = ny*ny * vL;
 
-          ddURddUL(0, 3, 1, 1) = 0;
-          ddURddUL(1, 3, 1, 1) = 0;
-          ddURddUL(2, 3, 1, 1) = 0;
-          ddURddUL(3, 3, 1, 1) = 1.0 - ny*ny;
+          ddURddUL(fpt, 1, 1, 3, 3) = 1.0 - ny*ny;
         }
 
+        break;
+      }
+
+      case ADIABATIC_NOSLIP_MOVING: /* Adiabatic No-slip Wall, moving */
+      {
+        ThrowException("Adiabatic No-slip Wall, moving boundary condition not implemented for implicit method");
         break;
       }
 
@@ -1429,96 +1252,7 @@ void Faces::apply_bcs_dFdU()
         break;
       }
     }
-
-    /* Compute new right state values */
-    if (bnd_id != PERIODIC && bnd_id != SUP_IN)
-    {
-      /* Compute dFdULconv for right state */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int j = 0; j < nVars; j++)
-        {
-          for (unsigned int i = 0; i < nVars; i++)
-          {
-            double val = 0;
-            for (unsigned int k = 0; k < nVars; k++)
-            {
-              val += dFdURconv(i, k, dim) * dURdUL(k, j);
-            }
-            dFdUconv(fpt, i, j, dim, 1) = val;
-          }
-        }
-      }
-
-      if (input->viscous)
-      {
-        /* Compute dUcdUL for right state */
-        for (unsigned int j = 0; j < nVars; j++)
-        {
-          for (unsigned int i = 0; i < nVars; i++)
-          {
-            double val = 0;
-            for (unsigned int k = 0; k < nVars; k++)
-            {
-              val += dUcdUR(i, k) * dURdUL(k, j);
-            }
-            dUcdU(fpt, i, j, 1) = val;
-          }
-        }
-
-        /* Compute dFdULvisc for right state */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          for (unsigned int j = 0; j < nVars; j++)
-          {
-            for (unsigned int i = 0; i < nVars; i++)
-            {
-              double val = 0;
-              for (unsigned int k = 0; k < nVars; k++)
-              {
-                val += dFdURvisc(i, k, dim) * dURdUL(k, j);
-              }
-              dFdUvisc(fpt, i, j, dim, 1) = val;
-            }
-          }
-        }
-
-        /* Compute dFddULvisc for right state */
-        if (bnd_id == ADIABATIC_NOSLIP_P) /* Adiabatic Wall */
-        {
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            for (unsigned int dimi = 0; dimi < nDims; dimi++)
-            {
-              for (unsigned int j = 0; j < nVars; j++)
-              {
-                for (unsigned int i = 0; i < nVars; i++)
-                {
-                  double val = 0;
-                  for (unsigned int dimk = 0; dimk < nDims; dimk++)
-                  {
-                    for (unsigned int k = 0; k < nVars; k++)
-                    {
-                      val += dFddURvisc(i, k, dimi, dimk) * ddURddUL(k, j, dimk, dimj);
-                    }
-                  }
-                  dFddUvisc(fpt, i, j, dimi, dimj, 1) = val;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
   }
-#endif
-
-#ifdef _GPU
-  apply_bcs_dFdU_wrapper(U_d, dFdUconv_d, dFdUvisc_d, dUcdU_d, dFddUvisc_d,
-      geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
-      input->P_fs, input->gamma, norm_d, geo->gfpt2bnd_d, input->equation, input->viscous);
-  check_error();
-#endif
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
@@ -1902,20 +1636,352 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
 #endif
 }
 
-void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+void Faces::rusanov_dFdU(unsigned int startFpt, unsigned int endFpt)
 {
+  double dFdUL[nVars][nVars][nDims] = {0};
+  double dFdUR[nVars][nVars][nDims] = {0};
+  double UL[nVars];
+  double UR[nVars];
+
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+  {
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
+
+    /* Get left and right state variables */
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      UL[var] = U(0, var, fpt); UR[var] = U(1, var, fpt);
+    }
+
+    /* Compute flux Jacobians and numerical wavespeed derivative */
+    double dwSdUL[nVars] = {0.0};
+    double dwSdUR[nVars] = {0.0};
+    if (input->equation == AdvDiff)
+    {
+      double A[nDims];
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        A[dim] = input->AdvDiff_A(dim);
+
+      compute_dFdUconv_AdvDiff<nVars, nDims>(dFdUL, A);
+      compute_dFdUconv_AdvDiff<nVars, nDims>(dFdUR, A);
+    }
+    else if (input->equation == EulerNS)
+    {
+      compute_dFdUconv_EulerNS<nVars, nDims>(UL, dFdUL, input->gamma);
+      compute_dFdUconv_EulerNS<nVars, nDims>(UR, dFdUR, input->gamma);
+
+      /* Get pressure */
+      double PL = P(0, fpt);
+      double PR = P(1, fpt);
+
+      /* Compute speed of sound */
+      double aL = std::sqrt(input->gamma * PL / UL[0]);
+      double aR = std::sqrt(input->gamma * PR / UR[0]);
+
+      /* Compute normal velocities */
+      double VnL = 0.0; double VnR = 0.0;
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        VnL += UL[dim+1]/UL[0] * norm(dim, fpt);
+        VnR += UR[dim+1]/UR[0] * norm(dim, fpt);
+      }
+
+      /* Compute numerical wavespeed derivative */
+      double wSL = std::abs(VnL) + aL;
+      double wSR = std::abs(VnR) + aR;
+      if (wSL > wSR)
+      {
+        /* Determine direction */
+        int sgn = (VnL > 0) ? 1 : -1;
+
+        /* Primitive Variables */
+        double rho = UL[0];
+        double V[nDims];
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          V[dim] = UL[dim+1] / UL[0];
+
+        /* Compute wavespeed derivative */
+        dwSdUL[0] = -sgn*VnL/rho - aL/(2.0*rho);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          dwSdUL[0] += input->gamma * (input->gamma-1.0) * V[dim]*V[dim] / (4.0*aL*rho);
+          dwSdUL[dim+1] = sgn*norm(dim, fpt)/rho - input->gamma * (input->gamma-1.0) * V[dim] / (2.0*aL*rho);
+        }
+        dwSdUL[nDims+1] = input->gamma * (input->gamma-1.0) / (2.0*aL*rho);
+      }
+
+      else
+      {
+        /* Determine direction */
+        int sgn = (VnR > 0) ? 1 : -1;
+
+        /* Primitive Variables */
+        double rho = UR[0];
+        double V[nDims];
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          V[dim] = UR[dim+1] / UR[0];
+
+        /* Compute wavespeed derivative */
+        dwSdUR[0] = -sgn*VnR/rho - aR/(2.0*rho);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          dwSdUR[0] += input->gamma * (input->gamma-1.0) * V[dim]*V[dim] / (4.0*aR*rho);
+          dwSdUR[dim+1] = sgn*norm(dim, fpt)/rho - input->gamma * (input->gamma-1.0) * V[dim] / (2.0*aR*rho);
+        }
+        dwSdUR[nDims+1] = input->gamma * (input->gamma-1.0) / (2.0*aR*rho);
+      }
+    }
+
+    /* Get interface-normal dFdU components  (from L to R)*/
+    double dFndUL[nVars][nVars] = {0.0};
+    double dFndUR[nVars][nVars] = {0.0};
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          dFndUL[vari][varj] += dFdUL[vari][varj][dim] * norm(dim, fpt);
+          dFndUR[vari][varj] += dFdUR[vari][varj][dim] * norm(dim, fpt);
+        }
+
+    /* Compute common dFdU */
+    if (rus_bias(fpt) == 0) /* Upwinded */
+    {
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          double dFcdUL, dFcdUR;
+          if (vari == varj)
+          {
+            dFcdUL = 0.5 * dFndUL[vari][varj] - 0.5 * ((UR[vari]-UL[vari]) * dwSdUL[varj] - waveSp(fpt)) * (1.0-input->rus_k);
+            dFcdUR = 0.5 * dFndUR[vari][varj] - 0.5 * ((UR[vari]-UL[vari]) * dwSdUR[varj] + waveSp(fpt)) * (1.0-input->rus_k);
+          }
+          else
+          {
+            dFcdUL = 0.5 * dFndUL[vari][varj] - 0.5 * (UR[vari]-UL[vari]) * dwSdUL[varj] * (1.0-input->rus_k);
+            dFcdUR = 0.5 * dFndUR[vari][varj] - 0.5 * (UR[vari]-UL[vari]) * dwSdUR[varj] * (1.0-input->rus_k);
+          }
+          dFcdU(0, vari, varj, fpt) =  dFcdUL * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) = -dFcdUR * dA(1, fpt);
+        }
+    }
+    else if (rus_bias(fpt) == 2) /* Central */
+    {
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          dFcdU(0, vari, varj, fpt) =  0.5 * dFndUL[vari][varj] * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) = -0.5 * dFndUR[vari][varj] * dA(1, fpt);
+        }
+    }
+    else if (rus_bias(fpt) == 1) /* Set flux state */
+    {
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          double dFcdUR = 0;
+          for (unsigned int vark = 0; vark < nVars; vark++)
+            dFcdUR += dFndUR[vari][vark] * dURdUL(fpt, vark, varj);
+
+          dFcdU(0, vari, varj, fpt) =  dFcdUR * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) = -dFcdUR * dA(1, fpt);
+        }
+    }
+  }
+}
+
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
+{
+  double tau = input->ldg_tau;
+
+  double UL[nVars];
+  double UR[nVars];
+  double dUL[nVars][nDims];
+  double dUR[nVars][nDims];
+
+  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
+  {
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
+
+    /* Setting sign of beta (from HiFiLES) */
+    double beta = input->ldg_b;
+    if (nDims == 2)
+    {
+      if (norm(0, fpt) + norm(1, fpt) < 0.0)
+        beta = -beta;
+    }
+    else if (nDims == 3)
+    {
+      if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
+        beta = -beta;
+    }
+
+    /* Get left and right state variables */
+    for (unsigned int n = 0; n < nVars; n++)
+    {
+      UL[n] = U_ldg(0, n, fpt); UR[n] = U_ldg(1, n, fpt);
+
+      for (unsigned int dim = 0; dim < nDims; dim++)
+      {
+        dUL[n][dim] = dU(0, dim, n, fpt);
+        dUR[n][dim] = dU(1, dim, n, fpt);
+      }
+    }
+
+    /* Compute viscous flux Jacobians */
+    double dFdUL[nVars][nVars][nDims] = {0};
+    double dFdUR[nVars][nVars][nDims] = {0};
+    double dFddUL[nVars][nVars][nDims][nDims] = {0};
+    double dFddUR[nVars][nVars][nDims][nDims] = {0};
+    if (input->equation == AdvDiff)
+    {
+      compute_dFddUvisc_AdvDiff<nVars, nDims>(dFddUL, input->AdvDiff_D);
+      compute_dFddUvisc_AdvDiff<nVars, nDims>(dFddUR, input->AdvDiff_D);
+    }
+    else if (input->equation == EulerNS)
+    {
+      compute_dFdUvisc_EulerNS_add<nVars, nDims>(UL, dUL, dFdUL, input->gamma, input->prandtl, input->mu);
+      compute_dFdUvisc_EulerNS_add<nVars, nDims>(UR, dUR, dFdUR, input->gamma, input->prandtl, input->mu);
+
+      compute_dFddUvisc_EulerNS<nVars, nDims>(UL, dFddUL, input->gamma, input->prandtl, input->mu);
+      compute_dFddUvisc_EulerNS<nVars, nDims>(UR, dFddUR, input->gamma, input->prandtl, input->mu);
+    }
+
+    /* Get interface-normal dFdU components (from L to R) */
+    double dFndUL[nVars][nVars] = {0};
+    double dFndUR[nVars][nVars] = {0};
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          dFndUL[vari][varj] += dFdUL[vari][varj][dim] * norm(dim, fpt);
+          dFndUR[vari][varj] += dFdUR[vari][varj][dim] * norm(dim, fpt);
+        }
+
+    /* Get interface-normal dFddU components (from L to R) */
+    double dFnddUL[nVars][nVars][nDims] = {0};
+    double dFnddUR[nVars][nVars][nDims] = {0};
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+        for (unsigned int dimi = 0; dimi < nDims; dimi++)
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            dFnddUL[vari][varj][dimj] += dFddUL[vari][varj][dimi][dimj] * norm(dimi, fpt);
+            dFnddUR[vari][varj][dimj] += dFddUR[vari][varj][dimi][dimj] * norm(dimi, fpt);
+          }
+
+    /* Compute common normal viscous dFdU */
+    /* If interior, use central */
+    if (LDG_bias(fpt) == 0)
+    {
+      /* Compute common solution Jacobian (dUcdU) */
+      for (unsigned int var = 0; var < nVars; var++)
+      {
+        dUcdU(0, var, var, fpt) = (0.5 - beta);
+        dUcdU(1, var, var, fpt) = (0.5 + beta);
+      }
+
+      /* Compute common viscous flux Jacobian (dFcdU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          double dFcdUL = (0.5 + beta) * dFndUL[vari][varj];
+          double dFcdUR = (0.5 - beta) * dFndUR[vari][varj];
+
+          if (vari == varj)
+          {
+            dFcdUL += tau;
+            dFcdUR -= tau;
+          }
+
+          dFcdU(0, vari, varj, fpt) += dFcdUL * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) -= dFcdUR * dA(1, fpt);
+        }
+
+      /* Compute common viscous flux Jacobian (dFcddU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            double dFcddUL = (0.5 + beta) * dFnddUL[vari][varj][dimj];
+            double dFcddUR = (0.5 - beta) * dFnddUR[vari][varj][dimj];
+
+            dFcddU(0, dimj, vari, varj, fpt) =  dFcddUL * dA(0, fpt);
+            dFcddU(1, dimj, vari, varj, fpt) = -dFcddUR * dA(1, fpt);
+          }
+    }
+
+    /* If boundary, use right state only */
+    else
+    {
+      /* Compute common solution Jacobian (dUcdU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          dUcdU(0, vari, varj, fpt) = dURdUL(fpt, vari, varj);
+          dUcdU(1, vari, varj, fpt) = dURdUL(fpt, vari, varj);
+        }
+
+      /* Compute common viscous flux Jacobian (dFcdU) */
+      for (unsigned int vari = 0; vari < nVars; vari++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+        {
+          /* Compute boundary dFdU */
+          double dFcdUR = 0;
+          for (unsigned int vark = 0; vark < nVars; vark++)
+            dFcdUR += dFndUR[vari][vark] * dURdUL(fpt, vark, varj);
+
+          if (vari == varj)
+          {
+            dFcdUR += tau;
+          }
+          dFcdUR -= tau * dURdUL(fpt, vari, varj);
+
+          dFcdU(0, vari, varj, fpt) += dFcdUR * dA(0, fpt);
+          dFcdU(1, vari, varj, fpt) -= dFcdUR * dA(1, fpt);
+        }
+
+      /* Compute boundary dFddU */
+      double dFcddUR[nDims][nVars][nVars] = {0};
+      for (unsigned int dimj = 0; dimj < nDims; dimj++)
+        for (unsigned int dimk = 0; dimk < nDims; dimk++)
+          for (unsigned int vari = 0; vari < nVars; vari++)
+            for (unsigned int varj = 0; varj < nVars; varj++)
+              for (unsigned int vark = 0; vark < nVars; vark++)
+                dFcddUR[dimj][vari][varj] += dFnddUR[vari][vark][dimk] * ddURddUL(fpt, dimk, dimj, vark, varj);
+
+      /* Compute common viscous flux Jacobian (dFcddU) */
+      for (unsigned int dimj = 0; dimj < nDims; dimj++)
+        for (unsigned int vari = 0; vari < nVars; vari++)
+          for (unsigned int varj = 0; varj < nVars; varj++)
+          {
+            dFcddU(0, dimj, vari, varj, fpt) =  dFcddUR[dimj][vari][varj] * dA(0, fpt);
+            dFcddU(1, dimj, vari, varj, fpt) = -dFcddUR[dimj][vari][varj] * dA(1, fpt);
+          }
+    }
+  }
+}
+
+void Faces::compute_common_dFdU(unsigned int startFpt, unsigned int endFpt)
+{
+#ifdef _CPU
   if (input->fconv_type == Rusanov)
   {
-#ifdef _CPU
-    rusanov_dFcdU(startFpt, endFpt);
-#endif
-
-#ifdef _GPU
-    rusanov_dFcdU_wrapper(U_d, dFdUconv_d, dFcdU_d, P_d, norm_d, waveSp_d, rus_bias_d,
-        input->gamma, input->rus_k, nFpts, nVars, nDims, input->equation, startFpt, endFpt);
-    check_error();
-#endif
-
+    if (input->equation == AdvDiff)
+    {
+      if (nDims == 2)
+        rusanov_dFdU<1, 2, AdvDiff>(startFpt, endFpt);
+      else
+        rusanov_dFdU<1, 3, AdvDiff>(startFpt, endFpt);
+    }
+    else if (input->equation == EulerNS)
+    {
+      if (nDims == 2)
+        rusanov_dFdU<4, 2, EulerNS>(startFpt, endFpt);
+      else
+        rusanov_dFdU<5, 3, EulerNS>(startFpt, endFpt);
+    }
   }
   else
   {
@@ -1926,463 +1992,27 @@ void Faces::compute_dFcdU(unsigned int startFpt, unsigned int endFpt)
   {
     if (input->fvisc_type == LDG)
     {
-#ifdef _CPU
-      LDG_dFcdU(startFpt, endFpt);
-#endif
-
-#ifdef _GPU
-      ThrowException("LDG flux for implicit method not implemented on GPU!");
-#endif
-
+      if (input->equation == AdvDiff)
+      {
+        if (nDims == 2)
+          LDG_dFdU<1, 2, AdvDiff>(startFpt, endFpt);
+        else
+          LDG_dFdU<1, 3, AdvDiff>(startFpt, endFpt);
+      }
+      else if (input->equation == EulerNS)
+      {
+        if (nDims == 2)
+          LDG_dFdU<4, 2, EulerNS>(startFpt, endFpt);
+        else
+          LDG_dFdU<5, 3, EulerNS>(startFpt, endFpt);
+      }
     }
     else
     {
       ThrowException("Numerical viscous flux type not recognized!");
     }
   }
-}
-
-void Faces::compute_dUcdU(unsigned int startFpt, unsigned int endFpt)
-{
-  if (input->fvisc_type == LDG)
-  {
-    for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-    {
-      if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
-
-      double beta = input->ldg_b;
-
-      /* Setting sign of beta (from HiFiLES) */
-      if (nDims == 2)
-      {
-        if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
-          beta = -beta;
-      }
-      else if (nDims == 3)
-      {
-        if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
-          beta = -beta;
-      }
-
-      /* If interior, allow use of beta factor */
-      if (LDG_bias(fpt) == 0)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            if (ni == nj)
-            {
-              dUcdU(fpt, ni, nj, 0) = 0.5 - beta;
-              dUcdU(fpt, ni, nj, 1) = 0.5 + beta;
-            }
-            else
-            {
-              dUcdU(fpt, ni, nj, 0) = 0;
-              dUcdU(fpt, ni, nj, 1) = 0;
-            }
-          }
-        }
-      }
-      /* If on (non-periodic) boundary, don't use beta (this is from HiFILES. Need to check) */
-      /* If on (non-periodic) boundary, set right state as common (strong) */
-      else
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            if (ni == nj)
-            {
-              dUcdU(fpt, ni, nj, 0) = 0;
-              dUcdU(fpt, ni, nj, 1) = 1;
-            }
-            else
-            {
-              dUcdU(fpt, ni, nj, 0) = 0;
-              dUcdU(fpt, ni, nj, 1) = 0;
-            }
-          }
-        }
-      }
-    }
-  }
-  else
-  {
-    ThrowException("Numerical viscous flux type not recognized!");
-  }
-}
-
-void Faces::rusanov_dFcdU(unsigned int startFpt, unsigned int endFpt)
-{
-  std::vector<double> WL(nVars);
-  std::vector<double> WR(nVars);
-
-  dFndUL_temp.fill(0);
-  dFndUR_temp.fill(0);
-
-  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-  {
-    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
-
-    /* Apply central flux at boundaries */
-    double k = input->rus_k;
-
-    /* Get interface-normal dFdU components  (from L to R)*/
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFndUL_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 0) * norm(fpt, dim);
-          dFndUR_temp(fpt, ni, nj) += dFdUconv(fpt, ni, nj, dim, 1) * norm(fpt, dim);
-        }
-      }
-    }
-
-    if (rus_bias(fpt) == 2) /* Central */
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * dFndUL_temp(fpt, ni, nj);
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * dFndUR_temp(fpt, ni, nj);
-
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * dFndUL_temp(fpt, ni, nj);
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * dFndUR_temp(fpt, ni, nj);
-        }
-      }
-      continue;
-    }
-    else if (rus_bias(fpt) == 1) /* Set flux state */
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFcdU(fpt, ni, nj, 0, 0) = 0;
-          dFcdU(fpt, ni, nj, 1, 0) = dFndUR_temp(fpt, ni, nj);
-
-          dFcdU(fpt, ni, nj, 0, 1) = 0;
-          dFcdU(fpt, ni, nj, 1, 1) = dFndUR_temp(fpt, ni, nj);
-        }
-      }
-      continue;
-    }
-   
-    /* Get left and right state variables */
-    for (unsigned int n = 0; n < nVars; n++)
-    {
-      WL[n] = U(fpt, n, 0); WR[n] = U(fpt, n, 1);
-    }
-
-    /* Get numerical wavespeed */
-    // TODO: This can be removed when NK implemented on CPU
-    std::vector<double> dwSdUL(nVars, 0);
-    std::vector<double> dwSdUR(nVars, 0);
-    if (input->equation == AdvDiff)
-    {
-      double An = 0.;
-
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        An += input->AdvDiff_A(dim) * norm(fpt, dim);
-      }
-
-      waveSp(fpt) = std::abs(An);
-    }
-    else if (input->equation == EulerNS)
-    {
-      // TODO: May be able to remove once pressure is stored
-      for (unsigned int slot = 0; slot < 2; slot ++)
-      {
-        double momF = 0.0;
-        for (unsigned int dim = 0; dim < nDims; dim ++)
-        {
-          momF += U(fpt, dim + 1, slot) * U(fpt, dim + 1, slot);
-        }
-
-        momF /= U(fpt, 0, slot);
-
-        P(fpt, slot) = (input->gamma - 1.0) * (U(fpt, nDims + 1, slot) - 0.5 * momF);
-      }
-
-      /* Compute speed of sound */
-      double aL = std::sqrt(std::abs(input->gamma * P(fpt, 0) / WL[0]));
-      double aR = std::sqrt(std::abs(input->gamma * P(fpt, 1) / WR[0]));
-
-      /* Compute normal velocities */
-      double VnL = 0.0; double VnR = 0.0;
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        VnL += WL[dim+1]/WL[0] * norm(fpt, dim);
-        VnR += WR[dim+1]/WR[0] * norm(fpt, dim);
-      }
-
-      /* Compute wavespeed and wavespeed derivative */
-      double gam = input->gamma;
-      double wSL = std::abs(VnL) + aL;
-      double wSR = std::abs(VnR) + aR;
-      if (wSL > wSR)
-      {
-        /* Determine direction */
-        int sgn = (VnL > 0) - (VnL < 0);
-
-        /* Primitive Variables */
-        double rho = WL[0];
-        double V[nDims];
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          V[dim] = WL[dim+1] / WL[0];
-        }
-
-        /* Wavespeed */
-        waveSp(fpt) = wSL;
-
-        /* Compute wavespeed derivative */
-        dwSdUL[0] = -sgn*VnL/rho - aL/(2.0*rho);
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          dwSdUL[0] += gam * (gam-1.0) * V[dim]*V[dim] / (4.0*aL*rho);
-          dwSdUL[dim+1] = sgn*norm(fpt, dim)/rho - gam * (gam-1.0) * V[dim] / (2.0*aL*rho);
-        }
-        dwSdUL[nDims+1] = gam * (gam-1.0) / (2.0*aL*rho);
-      }
-
-      else
-      {
-        /* Determine direction */
-        int sgn = (VnR > 0) - (VnR < 0);
-
-        /* Primitive Variables */
-        double rho = WR[0];
-        double V[nDims];
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          V[dim] = WR[dim+1] / WR[0];
-        }
-
-        /* Wavespeed */
-        waveSp(fpt) = wSR;
-
-        /* Compute wavespeed derivative */
-        dwSdUR[0] = -sgn*VnR/rho - aR/(2.0*rho);
-        for (unsigned int dim = 0; dim < nDims; dim++)
-        {
-          dwSdUR[0] += gam * (gam-1.0) * V[dim]*V[dim] / (4.0*aR*rho);
-          dwSdUR[dim+1] = sgn*norm(fpt, dim)/rho - gam * (gam-1.0) * V[dim] / (2.0*aR*rho);
-        }
-        dwSdUR[nDims+1] = gam * (gam-1.0) / (2.0*aR*rho);
-      }
-    }
-
-    /* Compute common dFdU */
-    for (unsigned int nj = 0; nj < nVars; nj++)
-    {
-      for (unsigned int ni = 0; ni < nVars; ni++)
-      {
-        if (ni == nj)
-        {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUL[nj] - waveSp(fpt)) * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUR[nj] + waveSp(fpt)) * (1.0-k));
-
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUL[nj] - waveSp(fpt)) * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - ((WR[ni]-WL[ni]) * dwSdUR[nj] + waveSp(fpt)) * (1.0-k));
-        }
-        else
-        {
-          dFcdU(fpt, ni, nj, 0, 0) = 0.5 * (dFndUL_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUL[nj] * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 0) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUR[nj] * (1.0-k));
-
-          dFcdU(fpt, ni, nj, 0, 1) = 0.5 * (dFndUL_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUL[nj] * (1.0-k));
-          dFcdU(fpt, ni, nj, 1, 1) = 0.5 * (dFndUR_temp(fpt, ni, nj) - (WR[ni]-WL[ni]) * dwSdUR[nj] * (1.0-k));
-        }
-      }
-    }
-  }
-}
-
-void Faces::LDG_dFcdU(unsigned int startFpt, unsigned int endFpt)
-{
-  double tau = input->ldg_tau;
-
-  dFndUL_temp.fill(0);
-  dFndUR_temp.fill(0);
-  dFnddUL_temp.fill(0);
-  dFnddUR_temp.fill(0);
-
-  dFcdU_temp.fill(0.0);
-  dFcddU_temp.fill(0.0);
-
-  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-  {
-    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
-
-    /* Setting sign of beta (from HiFiLES) */
-    double beta = input->ldg_b;
-    if (nDims == 2)
-    {
-      if (norm(fpt, 0) + norm(fpt, 1) < 0.0)
-        beta = -beta;
-    }
-    else if (nDims == 3)
-    {
-      if (norm(fpt, 0) + norm(fpt, 1) + sqrt(2.) * norm(fpt, 2) < 0.0)
-        beta = -beta;
-    }
-
-    /* Get numerical diffusion coefficient */
-    // TODO: This can be removed when NK implemented on CPU
-    if (input->equation == AdvDiff)
-    {
-      diffCo(fpt) = input->AdvDiff_D;
-    }
-    else if (input->equation == EulerNS)
-    {
-      // TODO: Add or store mu from Sutherland's law
-      double diffCoL = std::max(input->mu / U(fpt, 0, 0), input->gamma * input->mu / (input->prandtl * U(fpt, 0, 0)));
-      double diffCoR = std::max(input->mu / U(fpt, 0, 1), input->gamma * input->mu / (input->prandtl * U(fpt, 0, 1)));
-      diffCo(fpt) = std::max(diffCoL, diffCoR);
-    }
-
-    /* Get interface-normal dFdU components (from L to R) */
-    for (unsigned int dim = 0; dim < nDims; dim++)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFndUL_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 0) * norm(fpt, dim);
-          dFndUR_temp(fpt, ni, nj) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim);
-        }
-      }
-    }
-
-    /* Get interface-normal dFddU components (from L to R) */
-    for (unsigned int dimj = 0; dimj < nDims; dimj++)
-    {
-      for (unsigned int dimi = 0; dimi < nDims; dimi++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dFnddUL_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 0) * norm(fpt, dimi);
-            dFnddUR_temp(fpt, ni, nj, dimj) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi);
-          }
-        }
-      }
-    }
-
-    /* Compute common interface values */
-    /* If interior, use central */
-    if (LDG_bias(fpt) == 0)
-    {
-      /* Compute common dFdU */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dFcdU_temp(fpt, ni, nj, 0) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 0) + beta * norm(fpt, dim) * dFndUL_temp(fpt, ni, nj)) * norm(fpt, dim);
-            dFcdU_temp(fpt, ni, nj, 1) += (0.5 * dFdUvisc(fpt, ni, nj, dim, 1) - beta * norm(fpt, dim) * dFndUR_temp(fpt, ni, nj)) * norm(fpt, dim);
-
-            if (ni == nj)
-            {
-              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim)) * norm(fpt, dim);
-              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim)) * norm(fpt, dim);
-            }
-          }
-        }
-      }
-
-      /* Compute common dFddU */
-      for (unsigned int dimj = 0; dimj < nDims; dimj++)
-      {
-        for (unsigned int dimi = 0; dimi < nDims; dimi++)
-        {
-          for (unsigned int nj = 0; nj < nVars; nj++)
-          {
-            for (unsigned int ni = 0; ni < nVars; ni++)
-            {
-              dFcddU_temp(fpt, ni, nj, dimj, 0) += 
-                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 0) + beta * norm(fpt, dimi) * dFnddUL_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi);
-              dFcddU_temp(fpt, ni, nj, dimj, 1) += 
-                (0.5 * dFddUvisc(fpt, ni, nj, dimi, dimj, 1) - beta * norm(fpt, dimi) * dFnddUR_temp(fpt, ni, nj, dimj)) * norm(fpt, dimi);
-            }
-          }
-        }
-      }
-    }
-    /* If Neumann boundary, use right state only */
-    else
-    {
-      /* Compute common dFdU */
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dFcdU_temp(fpt, ni, nj, 1) += dFdUvisc(fpt, ni, nj, dim, 1) * norm(fpt, dim);
-
-            if (ni == nj)
-            {
-              dFcdU_temp(fpt, ni, nj, 0) += (tau * norm(fpt, dim)) * norm(fpt, dim);
-              dFcdU_temp(fpt, ni, nj, 1) -= (tau * norm(fpt, dim)) * norm(fpt, dim);
-            }
-          }
-        }
-      }
-
-      /* Compute common dFddU */
-      for (unsigned int dimj = 0; dimj < nDims; dimj++)
-      {
-        for (unsigned int dimi = 0; dimi < nDims; dimi++)
-        {
-          for (unsigned int nj = 0; nj < nVars; nj++)
-          {
-            for (unsigned int ni = 0; ni < nVars; ni++)
-            {
-              dFcddU_temp(fpt, ni, nj, dimj, 1) += dFddUvisc(fpt, ni, nj, dimi, dimj, 1) * norm(fpt, dimi);
-            }
-          }
-        }
-      }
-    }
-
-    /* Correct for positive parent space sign convention, dFcdU */
-    for (unsigned int slot = 0; slot < 2; slot++)
-    {
-      for (unsigned int nj = 0; nj < nVars; nj++)
-      {
-        for (unsigned int ni = 0; ni < nVars; ni++)
-        {
-          dFcdU(fpt, ni, nj, slot, 0) += dFcdU_temp(fpt, ni, nj, slot);
-          dFcdU(fpt, ni, nj, slot, 1) += dFcdU_temp(fpt, ni, nj, slot);
-        }
-      }
-    }
-
-    /* Correct for positive parent space sign convention, dFcddU */
-    for (unsigned int slot = 0; slot < 2; slot++)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-      {
-        for (unsigned int nj = 0; nj < nVars; nj++)
-        {
-          for (unsigned int ni = 0; ni < nVars; ni++)
-          {
-            dFcddU(fpt, ni, nj, dim, slot, 0) = dFcddU_temp(fpt, ni, nj, dim, slot);
-            dFcddU(fpt, ni, nj, dim, slot, 1) = dFcddU_temp(fpt, ni, nj, dim, slot);
-          }
-        }
-      }
-    }
-  }
+#endif
 }
 
 #ifdef _MPI

@@ -1236,16 +1236,11 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
   switch (bnd_id)
   {
     // All wall boundary conditions
-    case SLIP_WALL_G:
-    case SLIP_WALL_P:
-    case ISOTHERMAL_NOSLIP_G:
-    case ISOTHERMAL_NOSLIP_P:
-    case ISOTHERMAL_NOSLIP_MOVING_G:
-    case ISOTHERMAL_NOSLIP_MOVING_P:
-    case ADIABATIC_NOSLIP_G:
-    case ADIABATIC_NOSLIP_P:
-    case ADIABATIC_NOSLIP_MOVING_G:
-    case ADIABATIC_NOSLIP_MOVING_P:
+    case SLIP_WALL:
+    case ISOTHERMAL_NOSLIP:
+    case ISOTHERMAL_NOSLIP_MOVING:
+    case ADIABATIC_NOSLIP:
+    case ADIABATIC_NOSLIP_MOVING:
     {
       for (int fpt = 0; fpt < nFptsPerFace; fpt++) /// TODO: NO MORE FACE ORDERING?
       {
