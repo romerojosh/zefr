@@ -117,7 +117,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 
       CtempD.assign({nDims});
       CtempFS.assign({nFpts, nSpts});
-      CtempFSN.assign({nSpts1D, nSpts});
+      CtempFSN.assign({nFptsPerFace, nSpts});
     }
 
     /* Solver data structures */
@@ -1597,12 +1597,14 @@ void Elements::compute_local_dRdU()
         for (unsigned int var = 0; var < nVars; var++)
         {
           /* Compute Neighbor gradient Jacobian in reference space */
-          for (unsigned int fpti = 0; fpti < nSpts1D; fpti++)
+          for (unsigned int fpti = 0; fpti < nFptsPerFace; fpti++)
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
             {
               // TODO: (2D Index) - Generalize to 3D
-              unsigned int ind = (face+1) * nSpts1D - (fpti+1);
-              CtempFSN(fpti, sptj) = dUcdU(ele, var, var, ind) * oppE(ind, sptj);
+              //unsigned int fpt = (face+1) * nFptsPerFace - (fpti+1);
+              unsigned int fptN = faceN * nFptsPerFace + fpti;
+              int fpt = geo->fpt_adj(fptN, eleN);
+              CtempFSN(fpti, sptj) = dUcdU(ele, var, var, fpt) * oppE(fpt, sptj);
             }
 
           for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1610,11 +1612,10 @@ void Elements::compute_local_dRdU()
               for (unsigned int sptj = 0; sptj < nSpts; sptj++)
               {
                 double val = 0;
-                for (unsigned int fptk = 0; fptk < nSpts1D; fptk++)
+                for (unsigned int fptk = 0; fptk < nFptsPerFace; fptk++)
                 {
-                  // TODO: (2D Index) - Generalize to 3D
-                  unsigned int indN = faceN * nSpts1D + fptk;
-                  val += oppD_fpts(dim, spti, indN) * CtempFSN(fptk, sptj);
+                  unsigned int fptN = faceN * nFptsPerFace + fptk;
+                  val += oppD_fpts(dim, spti, fptN) * CtempFSN(fptk, sptj);
                 }
                 CviscN(dim, var, spti, sptj) = val;
               }
@@ -1639,14 +1640,15 @@ void Elements::compute_local_dRdU()
         for (unsigned int dim = 0; dim < nDims; dim++)
           for (unsigned int vari = 0; vari < nVars; vari++)
             for (unsigned int varj = 0; varj < nVars; varj++)
-              for (unsigned int fpti = 0; fpti < nSpts1D; fpti++)
+              for (unsigned int fpti = 0; fpti < nFptsPerFace; fpti++)
                 for (unsigned int sptj = 0; sptj < nSpts; sptj++)
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
                   {
+                    unsigned int fpt = face * nFptsPerFace + fpti;
                     // TODO: (2D Index) - Generalize to 3D
-                    unsigned int ind = face * nSpts1D + fpti;
-                    unsigned int indN = (faceN+1) * nSpts1D - (fpti+1);
-                    CdFcddU0(vari, varj, ind, sptj) += (-dFcddU(eleN, dim, vari, varj, indN)) * oppE(indN, sptk) * CviscN(dim, varj, sptk, sptj);
+                    //unsigned int fptN = (faceN+1) * nFptsPerFace - (fpti+1);
+                    int fptN = geo->fpt_adj(fpt, ele);
+                    CdFcddU0(vari, varj, fpt, sptj) += (-dFcddU(eleN, dim, vari, varj, fptN)) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
                   }
       }
 

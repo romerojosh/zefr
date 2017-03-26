@@ -140,6 +140,10 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   orient_fpts();
 
+  /* Setup fpt adjacency for viscous implicit Jacobians */
+  if (input->dt_scheme == "MCGS" && input->viscous)
+    set_fpt_adjacency();
+
   /* Complete element setup */
   for (auto e : elesObjs)
   {
@@ -370,6 +374,36 @@ void FRSolver::orient_fpts()
     }
   }
 #endif
+}
+
+void FRSolver::set_fpt_adjacency()
+{
+  /* Sizing fpt_adj */
+  if (geo.nDims == 2)
+    geo.fpt_adj.assign({geo.nFacesPerEleBT[QUAD] * geo.nFptsPerFace, geo.nEles}, -1);
+  else
+    geo.fpt_adj.assign({geo.nFacesPerEleBT[HEX] * geo.nFptsPerFace, geo.nEles}, -1);
+
+  // TODO: Generalize to multiple element types
+  mdvector<unsigned int> gfpt2fpt({2, geo.nGfpts}, -1);
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+      {
+        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
+        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        gfpt2fpt(slot, gfpt) = fpt;
+      }
+
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+      {
+        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
+        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        int notslot = (slot == 0) ? 1 : 0;
+        geo.fpt_adj(fpt, ele) = gfpt2fpt(notslot, gfpt);
+      }
 }
 
 void FRSolver::setup_update()
@@ -1907,10 +1941,39 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     int iter = current_iter - restart_iter;
     if (counter == 1 && iter % input->Jfreeze_freq == 0)
     {
-      compute_residual(0);
-
       /* Compute block diagonal components of residual Jacobian */
+      compute_residual(0);
       compute_dRdU();
+
+      /* Compute residual Jacobian using FDA */
+      /*
+      std::cout << "Compute residual Jacobian using FDA..." << std::endl;
+      for (auto e : elesObjs)
+        e->U_ini = e->U_spts;
+      compute_residual(0);
+      mdvector<double> divF;
+      double eps = std::sqrt(std::numeric_limits<double>::epsilon());
+      for (auto e : elesObjs)
+      {
+        divF = e->divF_spts;
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          for (unsigned int var = 0; var < e->nVars; var++)
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
+            {
+              // Add eps to solution and compute divF
+              e->U_spts = e->U_ini;
+              e->U_spts(spt, var, ele) += eps;
+              compute_residual(0);
+
+              // Compute LHS implcit Jacobian
+              for (unsigned int vari = 0; vari < e->nVars; vari++)
+                for (unsigned int spti = 0; spti < e->nSpts; spti++)
+                  e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
+            }
+        e->U_spts = e->U_ini;
+        compute_residual(0);
+      }
+      */
 
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
@@ -1937,6 +2000,8 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 
       /* LU factorization of LHS */
       compute_LHS_LU();
+
+      /* Write LHS */
       //write_LHS(input->output_prefix);
     }
     

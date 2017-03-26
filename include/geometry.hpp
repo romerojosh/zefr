@@ -87,7 +87,7 @@ struct GeoStruct
   std::map<std::vector<unsigned int>, int> bnd_faces;
   std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs;
   mdvector<double> ele_nodes, coord_nodes;
-  mdvector<int> ele_adj;
+  mdvector<int> ele_adj, fpt_adj;
 
   mdvector<double> grid_vel_nodes, coords_init;
 

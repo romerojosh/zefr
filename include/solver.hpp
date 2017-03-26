@@ -125,6 +125,20 @@ class FRSolver
     MotionVars motion_vars;
 #endif
 
+    /* Routines for implicit method */
+    void set_fpt_adjacency();
+    void compute_dRdU();
+    void compute_LHS_LU(unsigned int color = 1);
+    void compute_RHS(unsigned int color = 1);
+#ifdef _CPU
+    void compute_RHS_source(const mdvector<double> &source, unsigned int color = 1);
+#endif
+#ifdef _GPU
+    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color = 1);
+#endif
+    void compute_deltaU(unsigned int color = 1);
+    void compute_U(unsigned int color = 1);
+
   public:
     double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);
@@ -158,6 +172,7 @@ class FRSolver
     void write_surfaces(const std::string &_prefix);
     void write_overset_boundary(const std::string &_prefix);
     void write_LHS(const std::string &_prefix);
+    void write_color();
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
@@ -170,20 +185,6 @@ class FRSolver
 
     void compute_forces(std::array<double, 3>& force_conv, std::array<double, 3>& force_visc, std::ofstream* f);
     void compute_moments(std::array<double, 3>& tot_force, std::array<double, 3>& tot_moment);
-
-    /* Routines for implicit method */
-    void compute_dRdU();
-    void compute_LHS_LU(unsigned int color = 1);
-    void compute_RHS(unsigned int color = 1);
-#ifdef _CPU
-    void compute_RHS_source(const mdvector<double> &source, unsigned int color = 1);
-#endif
-#ifdef _GPU
-    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color = 1);
-#endif
-    void compute_deltaU(unsigned int color = 1);
-    void compute_U(unsigned int color = 1);
-    void write_color();
 
 #ifdef _BUILD_LIB
     Zefr *ZEFR;
