@@ -121,6 +121,22 @@ struct abs_sum
   }
 };
 
+
+/* Diagonal general matrix multiplication (C = alpha * A * diag(x) + beta * C) */
+/*
+template <typename T>
+void dgmm(int m, int n, double alpha, T* A, int lda, T* x, int incx, double beta, T* C, int ldc)
+{
+  for (unsigned int i = 0; i < m; i++)
+  {
+    for (unsigned int j = 0; j < n; j++)
+    {
+      C[ldc*i + j] = alpha * A[lda*i + j] * x[j + incx] + beta * C[ldc*i + j];
+    }
+  }
+}
+*/
+
 /* Diagonal general matrix multiplication (C = alpha * A * diag(x) + beta * C) */
 template <typename T>
 void dgmm(int m, int n, double alpha, T* A, int lda, T* x, int incx, double beta, T* C, int ldc)

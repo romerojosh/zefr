@@ -174,7 +174,7 @@ struct InputStruct
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 
   /* Implicit Parameters */
-  bool SER, inv_mode, stream_mode, backsweep, LU_pivot;
+  bool inv_mode, stream_mode, backsweep, LU_pivot;
   unsigned int Jfreeze_freq, nColors, n_LHS_blocks;
 
   Timer waitTimer; /// DEBUGGING

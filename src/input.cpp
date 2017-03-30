@@ -32,26 +32,17 @@ std::map<std::string,int> bcStr2Num = {
   {"none", NONE},
   {"fluid", NONE},
   {"periodic", PERIODIC},
-  {"char_p", CHAR_P},
   {"char", CHAR},
   {"farfield", SUP_IN},
   {"inlet_sup", SUP_IN},
   {"outlet_sup", SUP_OUT},
-  {"inlet_sub", SUB_IN},
-  {"outlet_sub", SUB_OUT},
-  {"wall_slip_p", SLIP_WALL_P},
-  {"wall_slip_g", SLIP_WALL_G},
-  {"wall_ns_iso_p", ISOTHERMAL_NOSLIP_P},
-  {"wall_ns_iso_g", ISOTHERMAL_NOSLIP_G},
-  {"wall_ns_iso_move_p", ISOTHERMAL_NOSLIP_MOVING_P},
-  {"wall_ns_iso_move_g", ISOTHERMAL_NOSLIP_MOVING_G},
-  {"wall_ns_adi_p", ADIABATIC_NOSLIP_P},
-  {"wall_ns_adi_g", ADIABATIC_NOSLIP_G},
-  {"wall_ns_adi_move_p", ADIABATIC_NOSLIP_MOVING_P},
-  {"wall_ns_adi_move_g", ADIABATIC_NOSLIP_MOVING_G},
+  {"wall_slip", SLIP_WALL},
+  {"wall_ns_iso", ISOTHERMAL_NOSLIP},
+  {"wall_ns_iso_move", ISOTHERMAL_NOSLIP_MOVING},
+  {"wall_ns_adi", ADIABATIC_NOSLIP},
+  {"wall_ns_adi_move", ADIABATIC_NOSLIP_MOVING},
   {"overset", OVERSET},
-  {"symmetry_p", SYMMETRY_P},
-  {"symmetry_g", SYMMETRY_G},
+  {"symmetry", SYMMETRY},
   {"wall_closure", WALL_CLOSURE},
   {"overset_closure", OVERSET_CLOSURE},
 };
@@ -144,7 +135,6 @@ InputStruct read_input_file(std::string inputfile)
   read_param_vec(f, "mg_levels", input.mg_levels);
   read_param_vec(f, "mg_steps", input.mg_steps);
 
-  read_param(f, "SER", input.SER, false);
   read_param(f, "inv_mode", input.inv_mode, true);
   read_param(f, "stream_mode", input.stream_mode, false);
   read_param(f, "backsweep", input.backsweep, false);

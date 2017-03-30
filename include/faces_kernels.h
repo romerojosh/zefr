@@ -35,12 +35,6 @@ void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvecto
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
     unsigned int nDims, mdvector_gpu<char> &gfpt2bnd, unsigned int equation);
 
-/* Face boundary conditions kernel wrappers (Implicit Method) */
-void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, mdvector_gpu<double> &dFdUvisc,
-    mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddUvisc, unsigned int nGfpts_int, unsigned int nGfpts_bnd, 
-    unsigned int nVars, unsigned int nDims, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, 
-    mdvector_gpu<double> &norm, mdvector_gpu<char> &gfpt2bnd, unsigned int equation, bool viscous);
-
 /* Face common value kernel wrappers */
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,

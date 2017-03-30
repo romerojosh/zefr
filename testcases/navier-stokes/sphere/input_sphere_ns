@@ -4,19 +4,18 @@ meshfile sphere_hex.msh
 
 # Boundary Conditions
 mesh_bound  fluid  fluid
-mesh_bound  wall_ns_iso  wall_ns_iso_p
+mesh_bound  wall_ns_iso  wall_ns_iso
 mesh_bound  char char
 
 # Solver:
-order    4
+order     2
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  1
-motion   1
 spt_type Legendre
 
 # Timestepping:
-n_steps   10000
-dt_scheme LSRK      (Euler, RK44, RK54)
+n_steps 1000
+dt_scheme RK44      (Euler, RK44, RK54)
 dt_type   1         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.0001
 CFL	  0.3
@@ -25,32 +24,12 @@ CFL_type  1
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix sphere_ns
-write_freq    500
+write_freq    000
 report_freq   100
 res_type      1
 force_freq    0
 error_freq    0
-nQpts1D       1
-
-motion_type 10
-# Set rotation of inner grid w/o translation
-wz0  .5
-wx0  .00
-wy0  .00
-vx0  0.0
-vy0  0.0
-vz0  0.0
-
-# Object properties:
-mass  .2
-Ixx  1.e-4
-Iyy  1.e-4
-Izz  1.e-4
-# Initial grid velocity:
-vx0  0
-vy0  0
-vz0  0
-
+nQpts1D       10
 
 # Riemann Solver:
 fconv_type Rusanov
