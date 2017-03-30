@@ -50,6 +50,9 @@ const int num_colors = sizeof(colors)/sizeof(uint32_t);
 #define POP_NVTX_RANGE
 #endif
 
+#ifndef _GPU
+#define event_record_wait_pair(event, stream_r, stream_w) {}
+#endif
 
 #define ThrowException(msg) \
 { std::stringstream s; s << __FILE__ << ":" << __LINE__ << ":" << __func__ << ": " << msg; \

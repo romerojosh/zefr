@@ -2422,9 +2422,6 @@ void Faces::send_U_data()
 #endif
 
 #ifdef _GPU
-  /* Wait for extrapolate_U to complete in stream 0 */
-  //stream_wait_event(1, 0);
-  sync_stream(0);
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
@@ -2520,9 +2517,7 @@ void Faces::recv_U_data()
   }
 
   /* Halt main compute stream until U is unpacked */
-  event_record(1, 1);
-  //stream_wait_event(0, 1);
-  sync_stream(1);
+  event_record_wait_pair(1, 1, 0);
 
   check_error();
 #endif
@@ -2568,10 +2563,6 @@ void Faces::send_dU_data()
 #endif
 
 #ifdef _GPU
-  /* Wait for extrapolate_dU to complete in stream 0 */
-  //stream_wait_event(1, 0);
-  sync_stream(0);
-
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int sendRank = entry.first;
@@ -2652,7 +2643,7 @@ void Faces::recv_dU_data()
 
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
-  for (auto &entry : geo->fpt_buffer_map) 
+  for (auto &entry : geo->fpt_buffer_map)
   {
     int pairedRank = entry.first;
     copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
@@ -2667,9 +2658,7 @@ void Faces::recv_dU_data()
   }
 
   /* Halt main stream until dU is unpacked */
-  event_record(1, 1);
-  //stream_wait_event(0, 1);
-  sync_stream(1);
+  event_record_wait_pair(1, 1, 0);
 
   check_error();
 #endif
@@ -2831,11 +2820,13 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
       }
     }
 
-    fringe_fpts_d.set_size(fringe_fpts);
-    fringe_side_d.set_size(fringe_side);
+    fringe_fpts_d.set_size({geo->nFptsPerFace, nFringe});
+    fringe_side_d.set_size({geo->nFptsPerFace, nFringe});
 
     fringe_fpts_d = fringe_fpts;
     fringe_side_d = fringe_side;
+
+    sync_stream(0);
   }
 
   unpack_fringe_u_wrapper(U_fringe_d,U_d,U_ldg_d,fringe_fpts_d,fringe_side_d,nFringe,

@@ -969,8 +969,6 @@ void Elements::extrapolate_U()
   gimmik_mm_gpu(nFpts, nEles * nVars, nSpts, 1.0, A, nSpts, B, nEles * nVars, 
       0.0, C, nEles * nVars, oppE_id);
 
-  event_record(0, 0); // record event for MPI comms
-
   check_error();
 #endif
 
@@ -1003,7 +1001,6 @@ void Elements::extrapolate_dU()
         0.0, C, nEles * nVars, oppE_id);
   }
 
-  event_record(0, 0); // record event for MPI comms
   check_error();
 #endif
 }

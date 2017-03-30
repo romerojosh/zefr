@@ -245,7 +245,7 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pinned)
 #ifdef _GPU
     auto status = cudaMallocHost(&values_ptr, max_size_ * sizeof(T));
     if (status != cudaSuccess)
-      ThrowException("cudaMemcpy from device to host failed!");
+      ThrowException("cudaMallocHost failed!");
 #endif
 
 #ifdef _CPU
