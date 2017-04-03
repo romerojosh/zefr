@@ -1600,8 +1600,6 @@ void Elements::compute_local_dRdU()
           for (unsigned int fpti = 0; fpti < nFptsPerFace; fpti++)
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
             {
-              // TODO: (2D Index) - Generalize to 3D
-              //unsigned int fpt = (face+1) * nFptsPerFace - (fpti+1);
               unsigned int fptN = faceN * nFptsPerFace + fpti;
               int fpt = geo->fpt_adj(fptN, eleN);
               CtempFSN(fpti, sptj) = dUcdU(ele, var, var, fpt) * oppE(fpt, sptj);
@@ -1645,8 +1643,6 @@ void Elements::compute_local_dRdU()
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
                   {
                     unsigned int fpt = face * nFptsPerFace + fpti;
-                    // TODO: (2D Index) - Generalize to 3D
-                    //unsigned int fptN = (faceN+1) * nFptsPerFace - (fpti+1);
                     int fptN = geo->fpt_adj(fpt, ele);
                     CdFcddU0(vari, varj, fpt, sptj) += (-dFcddU(eleN, dim, vari, varj, fptN)) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
                   }

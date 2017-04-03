@@ -175,7 +175,7 @@ void Faces::apply_bcs()
           for (unsigned int dim = 0; dim < nDims; dim++)
           {
             U(1, dim+1, fpt) = input->rho_fs * input->V_fs(dim);
-            U_ldg(1, fpt, dim+1, fpt) = U(1, dim+1, fpt);
+            U_ldg(1, dim+1, fpt) = U(1, dim+1, fpt);
             Vsq += input->V_fs(dim) * input->V_fs(dim);
           }
 
@@ -748,7 +748,13 @@ void Faces::apply_bcs_dFdU()
 
       case SUP_IN: /* Farfield and Supersonic Inlet */
       {
-        ThrowException("Farfield and Supersonic Inlet boundary condition not implemented for implicit method");
+        /* Set solution to freestream */
+        /* Extrapolate gradients */
+        if (input->viscous)
+          for (unsigned int dim = 0; dim < nDims; dim++)
+            for (unsigned int var = 0; var < nVars; var++)
+              ddURddUL(fpt, dim, dim, var, var) = 1;
+
         break;
       }
 
@@ -864,12 +870,12 @@ void Faces::apply_bcs_dFdU()
             double b2 = nx / rhoL - a2 * uL;
             double b3 = ny / rhoL - a2 * vL;
 
-            double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
+            double c1 = 0.5 * b1 * nx - (-VnL * nx + uL) / rhoL;
             double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
             double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
             double c4 = ustarn * nx + uL - VnL * nx;
 
-            double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
+            double d1 = 0.5 * b1 * ny - (-VnL * ny + vL) / rhoL;
             double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
             double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
             double d4 = ustarn * ny + vL - VnL * ny;
@@ -877,7 +883,7 @@ void Faces::apply_bcs_dFdU()
             double e1 = 1.0 / rhoL - 0.5 * a3 * momF / rhoL + a4 * b1;
             double e2 = a3 * uL + a4 * b2;
             double e3 = a3 * vL + a4 * b3;
-            double e4 = a3 + a2 * a4;
+            double e4 = -a3 + a2 * a4;
 
             double f1 = 0.5 * a1 * (c4*c4 + d4*d4) + a5;
 
@@ -984,19 +990,19 @@ void Faces::apply_bcs_dFdU()
             double b3 = ny / rhoL - a2 * vL;
             double b4 = nz / rhoL - a2 * wL;
 
-            double c1 = 0.5 * b1 * nx - (VnL * nx + uL) / rhoL;
+            double c1 = 0.5 * b1 * nx - (-VnL * nx + uL) / rhoL;
             double c2 = 0.5 * b2 * nx + (1.0 - nx*nx) / rhoL;
             double c3 = 0.5 * b3 * nx - nx * ny / rhoL;
             double c4 = 0.5 * b4 * nx - nx * nz / rhoL;
             double c5 = ustarn * nx + uL - VnL * nx;
 
-            double d1 = 0.5 * b1 * ny - (VnL * ny + vL) / rhoL;
+            double d1 = 0.5 * b1 * ny - (-VnL * ny + vL) / rhoL;
             double d2 = 0.5 * b2 * ny - nx * ny / rhoL;
             double d3 = 0.5 * b3 * ny + (1.0 - ny*ny) / rhoL;
             double d4 = 0.5 * b4 * ny - ny * nz / rhoL;
             double d5 = ustarn * ny + vL - VnL * ny;
 
-            double e1 = 0.5 * b1 * nz - (VnL * nz + wL) / rhoL;
+            double e1 = 0.5 * b1 * nz - (-VnL * nz + wL) / rhoL;
             double e2 = 0.5 * b2 * nz - nx * nz / rhoL;
             double e3 = 0.5 * b3 * nz - ny * nz / rhoL;
             double e4 = 0.5 * b4 * nz + (1.0 - nz*nz) / rhoL;
@@ -1006,7 +1012,7 @@ void Faces::apply_bcs_dFdU()
             double f2 = a3 * uL + a4 * b2;
             double f3 = a3 * vL + a4 * b3;
             double f4 = a3 * wL + a4 * b4;
-            double f5 = a3 + a2 * a4;
+            double f5 = -a3 + a2 * a4;
 
             double g1 = 0.5 * a1 * (c5*c5 + d5*d5 + e5*e5) + a5;
 
@@ -1124,13 +1130,8 @@ void Faces::apply_bcs_dFdU()
 
       case ISOTHERMAL_NOSLIP: /* Isothermal No-slip Wall */
       {
-        if (nDims == 3)
-        {
-          ThrowException("3D Isothermal No-slip Wall boundary condition not implemented for implicit method");
-        }
-
         dURdUL(fpt, 0, 0) = 1;
-        dURdUL(fpt, 3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0);
+        dURdUL(fpt, nDims+1, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0);
 
         /* Extrapolate gradients */
         if (input->viscous)
@@ -1143,19 +1144,14 @@ void Faces::apply_bcs_dFdU()
 
       case ISOTHERMAL_NOSLIP_MOVING: /* Isothermal No-slip Wall, moving */
       {
-        if (nDims == 3)
-        {
-          ThrowException("3D Isothermal No-slip Wall, moving boundary condition not implemented for implicit method");
-        }
-
-        /* Primitive Variables */
-        double uR = input->V_wall(0);
-        double vR = input->V_wall(1);
+        double Vsq = 0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          Vsq += input->V_wall(dim) * input->V_wall(dim);
 
         dURdUL(fpt, 0, 0) = 1;
-        dURdUL(fpt, 1, 0) = uR;
-        dURdUL(fpt, 2, 0) = vR;
-        dURdUL(fpt, 3, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0) + 0.5 * (uR*uR + vR*vR);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          dURdUL(fpt, dim+1, 0) = input->V_wall(dim);
+        dURdUL(fpt, nDims+1) = (input->R_ref * input->T_wall) / (input->gamma-1.0) + 0.5 * Vsq;
 
         /* Extrapolate gradients */
         if (input->viscous)

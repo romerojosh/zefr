@@ -12,7 +12,6 @@ order     2
 equation EulerNS    (AdvDiff, Burgers, EulerNS)
 viscous  0
 spt_type Legendre
-serendipity 1
 
 # Timestepping:
 n_steps 10000
