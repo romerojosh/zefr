@@ -1442,32 +1442,6 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
-void Faces::common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned int dim)
-{
-#ifdef _CPU
-  double A[2];
-  for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
-  {
-    double n = norm(dim, fpt);
-    A[0] = dA(0, fpt); A[1] = dA(1, fpt);
-
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      double F = Ucomm(0, var, fpt) * n;
-      Fcomm(0, var, fpt) = F * A[0];
-      Fcomm(1, var, fpt) = -F * A[1];
-    }
-  }
-#endif
-
-#ifdef _GPU
-  common_U_to_F_wrapper(Fcomm_d, Ucomm_d, norm_d, dA_d, nFpts, nVars, nDims, input->equation, startFpt,
-      endFpt, dim);
-
-  check_error();
-#endif
-}
-
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 {

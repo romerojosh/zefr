@@ -120,7 +120,12 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
     else if (etype == HEX)
        elesObjs.push_back(std::make_shared<Hexas>(&geo, input, order));
     else if (etype == TET)
+    {
+      if (input->viscous and !input->grad_via_div)
+        ThrowException("Need to enable grad_via_div to use tetrahedra for viscous problems!");
+
        elesObjs.push_back(std::make_shared<Tets>(&geo, input, order));
+    }
     
   }
 
@@ -755,6 +760,12 @@ void FRSolver::solver_data_to_device()
     e->jaco_det_spts_d = e->jaco_det_spts;
     e->vol_d = e->vol;
 
+    if (input->grad_via_div)
+    {
+      e->norm_fpts_d = e->norm_fpts;
+      e->dA_fpts_d = e->dA_fpts;
+    }
+
     geo.fpt2gfptBT_d[e->etype] = geo.fpt2gfptBT[e->etype];
     geo.fpt2gfpt_slotBT_d[e->etype] = geo.fpt2gfpt_slotBT[e->etype];
 
@@ -980,6 +991,17 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       /* Compute common interface solution and convective flux at non-MPI flux points */
       faces->compute_common_U(startFpt, endFpt);
 
+      for (unsigned int dim = 0; dim < geo.nDims; dim++)
+      {
+        // Compute unit advection flux at solution points with wavespeed along dim
+        for (auto e : elesObjs)
+          e->compute_unit_advF(dim);
+
+        // Compute solution point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
+        for (auto e : elesObjs)
+          e->compute_dU_spts_via_divF(dim);
+      }
+
 #ifdef _MPI
       /* Receieve U data */
       faces->recv_U_data();
@@ -990,19 +1012,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
       for (unsigned int dim = 0; dim < geo.nDims; dim++)
       {
-        // Compute unit advection flux at solution points with wavespeed along dim
-        for (auto e : elesObjs)
-          e->compute_unit_advF(dim);
-
         // Convert common U to common normal advection flux
-        faces->common_U_to_F(startFpt, geo.nGfpts, dim);
-
-        // Compute physical gradient (times jacobian determinant) along dim via divergence of F
         for (auto e : elesObjs)
-        {
-          e->compute_dU_spts_via_divF(dim);
+          e->common_U_to_F(dim);
+
+        // Compute flux point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
+        for (auto e : elesObjs)
           e->compute_dU_fpts_via_divF(dim);
-        }
       }
     }
     else

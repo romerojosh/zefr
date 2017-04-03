@@ -31,6 +31,10 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts, mdvector_gpu<double> &U_spt
     bool grad_via_div, bool overset = false, int* iblank = NULL,
     bool motion = false);
 
+void common_U_to_F_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Ucomm, mdvector_gpu<double> &norm_fpts, 
+    mdvector_gpu<double> &dA_fpts, unsigned int nEles, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
+    unsigned int dim);
+
 void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& inv_jaco_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim);
 

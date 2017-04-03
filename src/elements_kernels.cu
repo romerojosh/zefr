@@ -308,6 +308,50 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
 
 }
 
+template <unsigned int nDims, unsigned int nVars>
+__global__
+void common_U_to_F(mdvector_gpu<double> Fcomm, mdvector_gpu<double> Ucomm, mdvector_gpu<double> norm_fpts, 
+    mdvector_gpu<double> dA_fpts, unsigned int nEles, unsigned int nFpts, unsigned int dim)
+{
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int fpt = (blockDim.y * blockIdx.y + threadIdx.y);
+
+  if (ele >= nEles || fpt >= nFpts) 
+    return;
+
+  double n = norm_fpts(dim, fpt, ele);
+  double dA = dA_fpts(fpt, ele); 
+
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    Fcomm(fpt, var, ele) = Ucomm(fpt, var, ele) * n * dA;
+  }
+}
+
+void common_U_to_F_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Ucomm, mdvector_gpu<double> &norm_fpts, 
+    mdvector_gpu<double> &dA_fpts, unsigned int nEles, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
+    unsigned int dim)
+{
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nFpts + threads.y -1)/threads.y);
+
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      common_U_to_F<2, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
+    else
+      common_U_to_F<3, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      common_U_to_F<2, 4><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
+    else
+      common_U_to_F<3, 5><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
+  }
+
+}
+
 template<unsigned int nVars, unsigned int nDims>
 __global__
 void compute_unit_advF(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, mdvector_gpu<double> inv_jaco_spts,
@@ -315,34 +359,32 @@ void compute_unit_advF(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts,
 {
 
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
 
-  if (ele >= nEles)
+  if (ele >= nEles || spt >= nSpts) 
     return;
 
   double U[nVars];
   double inv_jaco[nDims];
 
-  for (unsigned int spt = 0; spt < nSpts; spt++)
+  /* Get state variables */
+  for (unsigned int var = 0; var < nVars; var++)
   {
-    /* Get state variables */
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      U[var] = U_spts(spt, var, ele);
-    }
+    U[var] = U_spts(spt, var, ele);
+  }
 
-    /* Get required metric terms */
+  /* Get required metric terms */
+  for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+  {
+      inv_jaco[dim1] = inv_jaco_spts(dim1, spt, dim, ele);
+  }
+
+  /* Compute transformed unit advection flux along provided dimension */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
     for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
     {
-        inv_jaco[dim1] = inv_jaco_spts(dim1, spt, dim, ele);
-    }
-
-    /* Compute transformed unit advection flux along provided dimension */
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-      {
-          F_spts(dim1, spt, var, ele) = U[var] * inv_jaco[dim1];
-      }
+        F_spts(dim1, spt, var, ele) = U[var] * inv_jaco[dim1];
     }
   }
 }
@@ -350,8 +392,8 @@ void compute_unit_advF(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts,
 void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& inv_jaco_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim)
 {
-  unsigned int threads = 128;
-  unsigned int blocks = (nEles + threads - 1)/threads;
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
 
   if (equation == AdvDiff)
   {

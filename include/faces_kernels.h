@@ -41,10 +41,6 @@ void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Uco
     unsigned int nDims, unsigned int equation, mdvector_gpu<char> &LDG_bias, unsigned int startFpt, unsigned int endFpt,
     bool overset = false, int* iblank = NULL);
 
-void common_U_to_F_wrapper(mdview_gpu<double> &Fcomm, mdview_gpu<double> &Ucomm, mdvector_gpu<double> &norm, 
-    mdvector_gpu<double> &dA, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
-    unsigned int startFpt, unsigned int endFpt, unsigned int dim);
-
 void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, mdview_gpu<double> &dU,
     mdview_gpu<double> &Fcomm, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
     mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, mdvector_gpu<double> &diffCo,

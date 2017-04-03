@@ -161,7 +161,6 @@ class Faces
     void setup(unsigned int nDims, unsigned int nVars);
     void compute_common_U(unsigned int startFpt, unsigned int endFpt);
     void compute_common_F(unsigned int startFpt, unsigned int endFpt);
-    void common_U_to_F(unsigned int startFpt, unsigned int endFpt, unsigned int dim);
     
     /* Routines for implicit method */
     void compute_common_dFdU(unsigned int startFpt, unsigned int endFpt);

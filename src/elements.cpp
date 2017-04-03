@@ -661,6 +661,13 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
   }
 
   /* --- Calculate Transformation at Flux Points --- */
+  /* If using modified gradient algorithm, store normals and dA in element local structures */
+  if (input->grad_via_div)
+  {
+    norm_fpts.assign({nDims, nFpts, nEles}, 0);
+    dA_fpts.assign({nFpts, nEles}, 0);
+  }
+
   for (unsigned int e = 0; e < nEles; e++)
   {
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -710,6 +717,19 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
       {
         for (uint dim = 0; dim < nDims; dim++)
           faces->norm(dim, gfpt) /= faces->dA(0, gfpt);
+      }
+
+      if (input->grad_via_div)
+      {
+        for (uint dim = 0; dim < nDims; dim++)
+          dA_fpts(fpt, e) += norm[dim] * norm[dim];
+
+        dA_fpts(fpt, e) = sqrt(dA_fpts(fpt, e));
+
+        for (uint dim = 0; dim < nDims; dim++)
+        {
+          norm_fpts(dim, fpt, e) = norm[dim] / dA_fpts(fpt, e);
+        }
       }
     }
   }
@@ -1392,6 +1412,32 @@ void Elements::compute_F()
   compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, grid_vel_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d,
       input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
       input->fix_vis, input->viscous, input->grad_via_div, input->overset, geo->iblank_cell_d.data(), input->motion);
+
+  check_error();
+#endif
+}
+
+void Elements::common_U_to_F(unsigned int dim)
+{
+#ifdef _CPU
+  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        double n = norm_fpts(dim, fpt, ele);
+        double dA = dA_fpts(fpt, ele); 
+        double F = Ucomm(fpt, var, ele) * n;
+
+        Fcomm(fpt, var, ele) = F * dA;
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  common_U_to_F_wrapper(Fcomm_d, Ucomm_d, norm_fpts_d, dA_fpts_d, nEles, nFpts, nVars, nDims, input->equation, dim);
 
   check_error();
 #endif

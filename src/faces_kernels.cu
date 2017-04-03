@@ -760,53 +760,6 @@ void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Uco
 
 }
 
-template <unsigned int nDims, unsigned int nVars>
-__global__
-void common_U_to_F(mdview_gpu<double> Fcomm, mdview_gpu<double> Ucomm, mdvector_gpu<double> norm, 
-    mdvector_gpu<double> dA, unsigned int nFpts, unsigned int startFpt, unsigned int endFpt, unsigned int dim)
-{
-  const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
-
-  if (fpt >= endFpt)
-    return;
-
-  double norm_dim = norm(dim, fpt);
-  double dAL = dA(0, fpt);
-  double dAR = dA(1, fpt);
-
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    double F = Ucomm(0, var, fpt) * norm_dim;
-    Fcomm(0, var, fpt) = F * dAL;
-    Fcomm(1, var, fpt) = -F * dAR;
-  }
-    
-}
-
-void common_U_to_F_wrapper(mdview_gpu<double> &Fcomm, mdview_gpu<double> &Ucomm, mdvector_gpu<double> &norm, 
-    mdvector_gpu<double> &dA, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
-    unsigned int startFpt, unsigned int endFpt, unsigned int dim)
-{
-  unsigned int threads = 128;
-  unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
-
-  if (equation == AdvDiff)
-  {
-    if (nDims == 2)
-      common_U_to_F<2, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
-    else
-      common_U_to_F<3, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      common_U_to_F<2, 4><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
-    else
-      common_U_to_F<3, 5><<<blocks, threads>>>(Fcomm, Ucomm, norm, dA, nFpts, startFpt, endFpt, dim);
-  }
-
-}
-
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __device__ __forceinline__
