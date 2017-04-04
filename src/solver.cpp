@@ -4155,7 +4155,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
           if (std::isnan(res[n]))
           {
-            std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << std::endl;
+            std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << ", var " << n << std::endl;
             for (int i = 0; i < std::min(8,(int)e->nNodes); i++)
             {
               if (geo.nDims == 3)
@@ -5019,15 +5019,15 @@ void FRSolver::move(double time, bool update_iblank)
 
 #ifdef _CPU
       // Update grid position based on rigid-body motion: CG offset + rotation
-      for (unsigned int i = 0; i < geo->nNodes; i++)
-        for (unsigned int d = 0; d < nDims; d++)
-          geo->coord_nodes(i,d) = geo->x_cg(d);
+      for (unsigned int i = 0; i < geo.nNodes; i++)
+        for (unsigned int d = 0; d < geo.nDims; d++)
+          geo.coord_nodes(i,d) = geo.x_cg(d);
 
-      auto &A = geo->coords_init;
-      auto &B = geo->Rmat;  /// TODO: double-check orientation
-      auto &C = geo->coord_nodes;
+      auto &A = geo.coords_init;
+      auto &B = geo.Rmat;  /// TODO: double-check orientation
+      auto &C = geo.coord_nodes;
 
-      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo->nNodes, nDims, nDims,
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo.nNodes, geo.nDims, geo.nDims,
           1.0, A.data(), A.ldim(), B.data(), B.ldim(), 1.0, C.data(), C.ldim());
 #endif
 

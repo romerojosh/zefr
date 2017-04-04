@@ -1274,7 +1274,6 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
       UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
     }
 
-
     double eig = 0;
     double Vgn = 0;
     if (input->motion)
@@ -1486,7 +1485,12 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE)
+        continue;
+
+    bool iflag = false;
+    if (geo->iblank_face(geo->fpt2face[fpt]) == FRINGE)
+      iflag = true;
 
     double beta = input->ldg_b;
 
@@ -1505,7 +1509,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      UL[n] = U_ldg(0, n, fpt); UR[n] = U_ldg(1, n, fpt);
+      UL[n] = U_ldg(0, n, fpt); UR[n] = iflag ? U(1, n, fpt) : U_ldg(1, n, fpt);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
       {

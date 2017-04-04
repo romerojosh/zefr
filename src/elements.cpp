@@ -1325,40 +1325,26 @@ void Elements::compute_F()
             input->rt, input->c_sth, input->fix_vis);
       }
 
-      if (!input->motion)
+      /* Transform flux to reference space */
+      double tF[nVars][nDims] = {{0.0}};;
+
+      for (unsigned int var = 0; var < nVars; var++)
       {
-        /* Transform flux to reference space */
-        double tF[nVars][nDims] = {{0.0}};;
-
-        for (unsigned int var = 0; var < nVars; var++)
+        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
         {
-          for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+          for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
           {
-            for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-            {
-              tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
-            }
-          }
-        }
-
-        /* Write out transformed fluxes */
-        for (unsigned int var = 0; var < nVars; var++)
-        {
-          for(unsigned int dim = 0; dim < nDims; dim++)
-          {
-            F_spts(dim, spt, var, ele) = tF[var][dim];
+            tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
           }
         }
       }
-      else
+
+      /* Write out transformed fluxes */
+      for (unsigned int var = 0; var < nVars; var++)
       {
-        /* Write out physical fluxes */
-        for (unsigned int var = 0; var < nVars; var++)
+        for(unsigned int dim = 0; dim < nDims; dim++)
         {
-          for(unsigned int dim = 0; dim < nDims; dim++)
-          {
-            F_spts(dim, spt, var, ele) = F[var][dim];
-          }
+          F_spts(dim, spt, var, ele) = tF[var][dim];
         }
       }
     }
