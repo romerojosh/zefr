@@ -1918,8 +1918,7 @@ void get_nodal_basis(double* rst_in, double* weights,
     double* xiGrid, int nFringe)
 {
   const int nSpts = nSpts1D*nSpts1D*nSpts1D;
-  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const int ipt = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts;
+  const int idx = (blockDim.x * blockIdx.x + threadIdx.x);
 
   __shared__ double xi[nSpts1D];
 
@@ -1928,25 +1927,31 @@ void get_nodal_basis(double* rst_in, double* weights,
 
   __syncthreads();
 
-  if (ipt >= nFringe) return;
+  for (int i = idx; i < nFringe * nSpts; i += gridDim.x * blockDim.x)
+  {
+    int spt = i % nSpts;
+    int ipt = i / nSpts;
 
-  double rst[3];
-  for (int d = 0; d < 3; d++)
-    rst[d] = rst_in[3*ipt+d];
+    if (ipt >= nFringe) continue;
 
-  int ispt = spt % nSpts1D;
-  int jspt = (spt / nSpts1D) % nSpts1D;
-  int kspt = spt / (nSpts1D*nSpts1D);
-  weights[nSpts*ipt+spt] = Lagrange_gpu(xi,nSpts1D,rst[0],ispt) *
-                           Lagrange_gpu(xi,nSpts1D,rst[1],jspt) *
-                           Lagrange_gpu(xi,nSpts1D,rst[2],kspt);
+    double rst[3];
+    for (int d = 0; d < 3; d++)
+      rst[d] = rst_in[3*ipt+d];
+
+    int ispt = spt % nSpts1D;
+    int jspt = (spt / nSpts1D) % nSpts1D;
+    int kspt = spt / (nSpts1D*nSpts1D);
+    weights[nSpts*ipt+spt] = Lagrange_gpu(xi,nSpts1D,rst[0],ispt) *
+        Lagrange_gpu(xi,nSpts1D,rst[1],jspt) *
+        Lagrange_gpu(xi,nSpts1D,rst[2],kspt);
+  }
 }
 
 void get_nodal_basis_wrapper(int* cellIDs, double* rst, double* weights,
     double* xiGrid, int nFringe, int nSpts, int nSpts1D, int stream)
 {
   int threads = 128;
-  int blocks = (nFringe * nSpts + threads - 1) / threads;
+  int blocks = min((nFringe * nSpts + threads - 1) / threads, MAX_GRID_DIM);
   int nbShare = nSpts1D*sizeof(double);
 
   if (stream == -1)
