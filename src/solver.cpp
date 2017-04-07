@@ -104,6 +104,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
     {
       if(!geo.nElesBT.count(TRI)) //note: nElesBT used here since TRI can be removed from ele_set during MPI preprocessing.
         elesObjs.push_back(std::make_shared<Quads>(&geo, input, order));
+        //elesObjsBC[color].push_back(elesObjs.back())
       else
       {
         std::cout << "Increased order of quads!" << std::endl;
@@ -390,13 +391,33 @@ void FRSolver::orient_fpts()
 
 void FRSolver::set_fpt_adjacency()
 {
-  /* Sizing fpt_adj */
+  /* Sizing face2faceN and fpt2fptN */
   if (geo.nDims == 2)
-    geo.fpt_adj.assign({geo.nFacesPerEleBT[QUAD] * geo.nFptsPerFace, geo.nEles}, -1);
+  {
+    geo.face2faceN.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
+    geo.fpt2fptN.assign({geo.nFacesPerEleBT[QUAD] * geo.nFptsPerFace, geo.nEles}, -1);
+  }
   else
-    geo.fpt_adj.assign({geo.nFacesPerEleBT[HEX] * geo.nFptsPerFace, geo.nEles}, -1);
+  {
+    geo.face2faceN.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
+    geo.fpt2fptN.assign({geo.nFacesPerEleBT[HEX] * geo.nFptsPerFace, geo.nEles}, -1);
+  }
 
-  // TODO: Generalize to multiple element types
+  /* Construct face2faceN connectivity */
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int face = 0; face < e->nFaces; face++)
+      {
+        int eleN = geo.ele2eleN(face, ele);
+        if (eleN == -1) continue;
+
+        unsigned int faceN = 0;
+        while (geo.ele2eleN(faceN, eleN) != (int)ele) faceN++;
+        geo.face2faceN(face, ele) = faceN;
+      }
+  
+
+  /* Construct gfpt2fpt connectivity */
   mdvector<unsigned int> gfpt2fpt({2, geo.nGfpts}, -1);
   for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -407,6 +428,7 @@ void FRSolver::set_fpt_adjacency()
         gfpt2fpt(slot, gfpt) = fpt;
       }
 
+  /* Construct fpt2fptN connectivity */
   for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
       for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
@@ -414,7 +436,7 @@ void FRSolver::set_fpt_adjacency()
         int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
         int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
         int notslot = (slot == 0) ? 1 : 0;
-        geo.fpt_adj(fpt, ele) = gfpt2fpt(notslot, gfpt);
+        geo.fpt2fptN(fpt, ele) = gfpt2fpt(notslot, gfpt);
       }
 }
 
@@ -1162,7 +1184,7 @@ void FRSolver::compute_RHS(unsigned int color)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       auto etype = geo.eleType(ele);
-      if (geo.ele_colorBT[etype](ele) != color)
+      if (geo.ele2colorBT[etype](ele) != color)
         continue;
 
       for (unsigned int var = 0; var < e->nVars; var++)
@@ -1183,7 +1205,7 @@ void FRSolver::compute_deltaU(unsigned int color)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       auto etype = geo.eleType(ele);
-      if (geo.ele_colorBT[etype](ele) != color)
+      if (geo.ele2colorBT[etype](ele) != color)
         continue;
 
       /* Create Array1D view of RHS */
@@ -1205,7 +1227,7 @@ void FRSolver::compute_U(unsigned int color)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
       auto etype = geo.eleType(ele);
-      if (geo.ele_colorBT[etype](ele) != color)
+      if (geo.ele2colorBT[etype](ele) != color)
         continue;
 
       for (unsigned int var = 0; var < e->nVars; var++)
@@ -3268,7 +3290,7 @@ void FRSolver::write_color()
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
       {
-        f << std::scientific << std::setprecision(16) << geo.ele_colorBT[e->etype](ele);
+        f << std::scientific << std::setprecision(16) << geo.ele2colorBT[e->etype](ele);
         f  << " ";
       }
       f << std::endl;

@@ -1612,15 +1612,13 @@ void Elements::compute_local_dRdU()
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
                     CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
 
+      /* Add center contribution to Neighbor gradient */
       for (unsigned int face = 0; face < nFaces; face++)
       {
-        /* Add center contribution to Neighbor gradient */
         /* Note: No contribution if element neighbor is a boundary */
-        int eleN = geo->ele_adj(face, ele);
+        int eleN = geo->ele2eleN(face, ele);
         if (eleN == -1) continue;
-
-        unsigned int faceN = 0;
-        while (geo->ele_adj(faceN, eleN) != (int)ele) faceN++;
+        int faceN = geo->face2faceN(face, ele);
 
         /* Compute Neighbor gradient Jacobian (only center contribution) */
         for (unsigned int var = 0; var < nVars; var++)
@@ -1630,7 +1628,7 @@ void Elements::compute_local_dRdU()
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
             {
               unsigned int fptN = faceN * nFptsPerFace + fpti;
-              int fpt = geo->fpt_adj(fptN, eleN);
+              int fpt = geo->fpt2fptN(fptN, eleN);
               CtempFSN(fpti, sptj) = dUcdU(ele, var, var, fpt) * oppE(fpt, sptj);
             }
 
@@ -1672,7 +1670,7 @@ void Elements::compute_local_dRdU()
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
                   {
                     unsigned int fpt = face * nFptsPerFace + fpti;
-                    int fptN = geo->fpt_adj(fpt, ele);
+                    int fptN = geo->fpt2fptN(fpt, ele);
                     CdFcddU0(vari, varj, fpt, sptj) += (-dFcddU(eleN, dim, vari, varj, fptN)) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
                   }
       }
