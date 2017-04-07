@@ -192,6 +192,12 @@ class FRSolver
 
     void move(double time, bool update_iblank = false);
     void rigid_body_update(unsigned int stage);
+
+    /* Wrappers for the callback functions for overset interpolation */
+    void overset_u_send(void);
+    void overset_u_recv(void);
+    void overset_grad_send(void);
+    void overset_grad_recv(void);
 };
 
 #endif /* solver_hpp */

@@ -40,7 +40,7 @@ else
 ifeq ($(strip $(DEBUG_LEVEL)),2)
 	CCFLAGS += -g -O0 #-D_NVTX
 	CXXFLAGS += -g -O0 #-D_NVTX
-	CUFLAGS += -g -O0 #-D_NVTX
+	CUFLAGS += -g -G -O0 #-D_NVTX
 else
 	CCFLAGS += $(RELEASE_FLAGS)
 	CXXFLAGS += $(RELEASE_FLAGS)

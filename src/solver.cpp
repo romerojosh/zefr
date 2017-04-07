@@ -260,6 +260,11 @@ void FRSolver::restart_solution(void)
 
     move(flow_time, true);
   }
+  else
+  {
+    if (input->overset)
+      ZEFR->tg_point_connectivity();
+  }
 }
 
 void FRSolver::orient_fpts()
@@ -937,7 +942,7 @@ void FRSolver::solver_data_to_device()
 
 void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 {
-#if defined(_GPU) && defined(_BUILD_LIB)
+#ifdef _BUILD_LIB
   // Record event for start of compute_res (solution up-to-date for calculation)
   if (input->overset)
     event_record_wait_pair(2, 0, 3);
@@ -954,11 +959,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->extrapolate_U();
 
-#ifdef _BUILD_LIB
-  if (input->overset)
-    ZEFR->overset_interp_send(faces->nVars, 0);
-#endif
+  // Wait for completion of extrapolated solution before packing MPI buffers
+  event_record_wait_pair(0, 0, 1);
 
+  overset_u_send();
 
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
@@ -983,10 +987,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     // gradient computation from divergence
     if (input->grad_via_div)
     {
-#ifdef _BUILD_LIB
-      if (input->overset)
-        ZEFR->overset_interp_recv(faces->nVars, 0);
-#endif
+      overset_u_recv();
 
       /* Compute common interface solution and convective flux at non-MPI flux points */
       faces->compute_common_U(startFpt, endFpt);
@@ -1027,10 +1028,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       for (auto e : elesObjs)
         e->compute_dU_spts();
       
-#ifdef _BUILD_LIB
-      if (input->overset)
-        ZEFR->overset_interp_recv(faces->nVars, 0);
-#endif
+      overset_u_recv();
 
       /* Compute common interface solution and convective flux at non-MPI flux points */
       faces->compute_common_U(startFpt, endFpt);
@@ -1057,22 +1055,16 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   if (input->viscous)
   {
     /* Interpolate gradient data to/from other grid(s) */
-#ifdef _BUILD_LIB
-    if (input->overset)
-    {
-#ifdef _GPU
-      // Event for completion of *transformed* corrected gradient
-      event_record_wait_pair(3, 0, 3);
-#endif
-      ZEFR->overset_interp_send(faces->nVars, 1);
-    }
-#endif
+    overset_grad_send();
 
     /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
     for (auto e : elesObjs)
       e->extrapolate_dU();
 
-#if defined(_GPU) && defined(_BUILD_LIB)
+    // Wait for completion of extrapolated gradient before packing MPI buffers
+    event_record_wait_pair(0, 0, 1);
+
+#ifdef _BUILD_LIB
     if (input->overset)
       event_record_wait_pair(4, 0, 3);
 #endif
@@ -1088,10 +1080,7 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   }
   else
   {
-#ifdef _BUILD_LIB
-    if (input->overset)
-      ZEFR->overset_interp_recv(faces->nVars, 0);
-#endif
+    overset_u_recv();
   }
 
   /* Compute solution point contribution to divergence of flux */
@@ -1099,16 +1088,8 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
     e->compute_divF_spts(stage);
 
   /* Unpack gradient data from other grid(s) */
-#ifdef _BUILD_LIB
-  if (input->overset && input->viscous)
-  {
-    ZEFR->overset_interp_recv(faces->nVars, 1);
-#ifdef _GPU
-    // Wait for updated data on GPU before moving on to common_F
-    event_record_wait_pair(2, 3, 0);
-#endif
-  }
-#endif
+  if (input->viscous)
+    overset_grad_recv();
 
   /* Compute common interface flux at non-MPI flux points */
   faces->compute_common_F(startFpt, endFpt);
@@ -4255,7 +4236,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
           if (std::isnan(res[n]))
           {
-            std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << std::endl;
+            std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << ", var " << n << std::endl;
             for (int i = 0; i < std::min(8,(int)e->nNodes); i++)
             {
               if (geo.nDims == 3)
@@ -5119,15 +5100,15 @@ void FRSolver::move(double time, bool update_iblank)
 
 #ifdef _CPU
       // Update grid position based on rigid-body motion: CG offset + rotation
-      for (unsigned int i = 0; i < geo->nNodes; i++)
-        for (unsigned int d = 0; d < nDims; d++)
-          geo->coord_nodes(i,d) = geo->x_cg(d);
+      for (unsigned int i = 0; i < geo.nNodes; i++)
+        for (unsigned int d = 0; d < geo.nDims; d++)
+          geo.coord_nodes(i,d) = geo.x_cg(d);
 
-      auto &A = geo->coords_init;
-      auto &B = geo->Rmat;  /// TODO: double-check orientation
-      auto &C = geo->coord_nodes;
+      auto &A = geo.coords_init;
+      auto &B = geo.Rmat;  /// TODO: double-check orientation
+      auto &C = geo.coord_nodes;
 
-      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo->nNodes, nDims, nDims,
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo.nNodes, geo.nDims, geo.nDims,
           1.0, A.data(), A.ldim(), B.data(), B.ldim(), 1.0, C.data(), C.ldim());
 #endif
 
@@ -5180,7 +5161,7 @@ void FRSolver::move(double time, bool update_iblank)
 
 #ifdef _GPU
   if (input->motion_type != RIGID_BODY)
-  { /// TODO?
+  {
     move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
                       motion_vars, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
     check_error();
@@ -5266,8 +5247,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   // Add in force from gravity
   force[2] -= input->g*geo.mass;
-//  if (current_iter % 100 == 0 && stage == 0)
-//    printf("force = %.3e  %.3e  %.3e\n",force[0],force[1],force[2]);
+
   int c1[3] = {1,2,0}; // Cross-product index maps
   int c2[3] = {2,0,1};
 
@@ -5425,14 +5405,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
   for (unsigned int i = 0; i < geo.nDims; i++)
     geo.omega(i) = omega[i+1];
 
-  // RmatN = Rmat * Rmat_prev^T
-  auto Rmat = getRotationMatrix(q);
-//  geo.dRmat.fill(0.);
-//  for (unsigned int i = 0; i < 3; i++)
-//    for (unsigned int j = 0; j < 3; j++)
-//      for (unsigned int k = 0; k < 3; k++)
-//        geo.dRmat(i,j) += Rmat(i,k) * geo.Rmat(j,k);
-  geo.Rmat = Rmat;
+  geo.Rmat = getRotationMatrix(q);
 
   // v_g = q * (omega_b cross x_b) * q_conj = Rmat * W_b * x_b = Wmat * x_b
   // W is 'Spin' of omega (cross-product in matrix form)
@@ -5447,13 +5420,55 @@ void FRSolver::rigid_body_update(unsigned int stage)
   for (unsigned int i = 0; i < 3; i++)
     for (unsigned int j = 0; j < 3; j++)
       for (unsigned int k = 0; k < 3; k++)
-        geo.Wmat(i,j) += Rmat(i,k) * W(k,j);
+        geo.Wmat(i,j) += geo.Rmat(i,k) * W(k,j);
 
 #ifdef _GPU
   geo.x_cg_d = geo.x_cg;
   geo.vel_cg_d = geo.vel_cg;
   geo.Rmat_d = geo.Rmat;
   geo.Wmat_d = geo.Wmat;
+#endif
+}
+
+void FRSolver::overset_u_send(void)
+{
+#ifdef _BUILD_LIB
+  if (input->overset)
+    ZEFR->overset_interp_send(faces->nVars, 0);
+#endif
+}
+
+void FRSolver::overset_u_recv(void)
+{
+#ifdef _BUILD_LIB
+  if (input->overset)
+    ZEFR->overset_interp_recv(faces->nVars, 0);
+#endif
+}
+
+void FRSolver::overset_grad_send(void)
+{
+#ifdef _BUILD_LIB
+  if (input->overset)
+  {
+    // Wait for completion of corrected *and transformed* gradient
+    event_record_wait_pair(3, 0, 3);
+
+    ZEFR->overset_interp_send(faces->nVars, 1);
+  }
+#endif
+}
+
+void FRSolver::overset_grad_recv(void)
+{
+#ifdef _BUILD_LIB
+  if (input->overset)
+  {
+    ZEFR->overset_interp_recv(faces->nVars, 1);
+
+    // Wait for updated data on GPU before moving on to common_F
+    event_record_wait_pair(2, 3, 0);
+  }
 #endif
 }
 
