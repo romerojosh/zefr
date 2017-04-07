@@ -262,8 +262,10 @@ void FRSolver::restart_solution(void)
   }
   else
   {
+#ifdef _BUILD_LIB
     if (input->overset)
       ZEFR->tg_point_connectivity();
+#endif
   }
 }
 
