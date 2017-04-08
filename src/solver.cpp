@@ -1951,16 +1951,16 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 #endif
 {
   /* Sweep through colors and backsweep */
-  for (unsigned int counter = 1; counter <= nCounter; counter++)
+  for (unsigned int counter = 0; counter < nCounter; counter++)
   {
     /* Set color */
     unsigned int color = counter;
-    if (color > geo.nColors)
-      color = 2*geo.nColors+1 - counter;
+    if (color >= geo.nColors)
+      color = 2*geo.nColors-1 - counter;
 
     /* Compute residual and block diagonal Jacobian on all elements */
     int iter = current_iter - restart_iter;
-    if (counter == 1 && iter % input->Jfreeze_freq == 0)
+    if (counter == 0 && iter % input->Jfreeze_freq == 0)
     {
       /* Compute block diagonal components of residual Jacobian */
       compute_residual(0);

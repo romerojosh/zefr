@@ -94,7 +94,7 @@ struct GeoStruct
 
   /* Color Data for MCGS */
   unsigned int nColors;
-  std::map<ELE_TYPE, mdvector<unsigned int>> ele2colorBT;
+  std::map<ELE_TYPE, mdvector<int>> ele2colorBT;
   std::map<ELE_TYPE, std::vector<unsigned int>> nElesPerColorBT;
   std::map<ELE_TYPE, std::vector<unsigned int>> rangePerColorBT;
 

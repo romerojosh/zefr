@@ -128,16 +128,16 @@ class FRSolver
     /* Routines for implicit method */
     void set_fpt_adjacency();
     void compute_dRdU();
-    void compute_LHS_LU(unsigned int color = 1);
-    void compute_RHS(unsigned int color = 1);
+    void compute_LHS_LU(unsigned int color = 0);
+    void compute_RHS(unsigned int color = 0);
 #ifdef _CPU
-    void compute_RHS_source(const mdvector<double> &source, unsigned int color = 1);
+    void compute_RHS_source(const mdvector<double> &source, unsigned int color = 0);
 #endif
 #ifdef _GPU
-    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color = 1);
+    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color = 0);
 #endif
-    void compute_deltaU(unsigned int color = 1);
-    void compute_U(unsigned int color = 1);
+    void compute_deltaU(unsigned int color = 0);
+    void compute_U(unsigned int color = 0);
 
   public:
     double res_max = 1;

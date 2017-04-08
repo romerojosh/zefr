@@ -1485,13 +1485,13 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
 {
   /* Setup element colors */
   for (auto etype : geo.ele_set)
-    geo.ele2colorBT[etype].assign({geo.nElesBT[etype]}, 0);
+    geo.ele2colorBT[etype].assign({geo.nElesBT[etype]}, -1);
 
   if (input->nColors == 1)
   {
     geo.nColors = 1;
     for (auto etype : geo.ele_set)
-      geo.ele2colorBT[etype].fill(1);
+      geo.ele2colorBT[etype].fill(0);
   }
   else
   {
@@ -1509,49 +1509,43 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
       auto etype = geo.eleType(ele);
       eleQ.pop();
 
-      if (geo.ele2colorBT[etype](ele - geo.eleID[etype](0)) != 0)
-        continue;
+      if (geo.ele2colorBT[etype](ele - geo.eleID[etype](0)) != -1) continue;
 
       for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
       {
         int eleN = geo.ele2eleN(face, ele);
-        ELE_TYPE etypeN;
+        if (eleN == -1) continue;
 
-        if (eleN != -1) etypeN = geo.eleType(eleN);
+        ELE_TYPE etypeN = geo.eleType(eleN);
+        int colorN = geo.ele2colorBT[etypeN](eleN - geo.eleID[etypeN](0));
 
-        if (eleN != -1 && geo.ele2colorBT[etypeN](eleN - geo.eleID[etypeN](0)) == 0)
-        {
+        /* Add element to queue if neighbor has no color */
+        if (colorN == -1)
           eleQ.push(eleN);
-        }
-
-        if (eleN == -1)
-          continue;
-
-        unsigned int colorN = geo.ele2colorBT[etypeN](eleN - geo.eleID[etypeN](0));
 
         /* Record if neighbor is using a given color */
-        if (colorN != 0)
-          used[colorN - 1] = true;
+        else
+          used[colorN] = true;
       }
 
-      unsigned int color = 0;
+      int color = -1;
       unsigned int min_count = 0;
-      unsigned int min_color_all = 1;
+      unsigned int min_color_all = 0;
       unsigned int min_count_all = counts[0];
 
       /* Set current element color to color unused by neighbors with minimum count in domain */
       for (unsigned int c = 0; c < geo.nColors; c++)
       {
-        if (!used[c] and color == 0)
+        if (!used[c] and color == -1)
         {
-          color = c + 1;
+          color = c;
           min_count = counts[c];
         }
         else if (!used[c])
         {
           if (counts[c] < min_count)
           {
-            color = c + 1;
+            color = c;
             min_count = counts[c];
           }
         }
@@ -1559,17 +1553,15 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
         if (counts[c] < min_count_all)
         {
           min_count_all = counts[c];
-          min_color_all = c + 1;
+          min_color_all = c;
         }
       }
 
-      if (color == 0)
-      {
+      if (color == -1)
         ThrowException("Could not color graph with number of colors provided. Increase nColors!");
-      }
 
       geo.ele2colorBT[etype](ele - geo.eleID[etype](0)) = color;
-      counts[color-1]++;
+      counts[color]++;
       used.assign(geo.nColors, false);
     }
   }
@@ -1583,17 +1575,17 @@ void shuffle_data_by_color(GeoStruct &geo)
   {
     color2elesBT[etype].resize(geo.nColors);
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
-      color2elesBT[etype][geo.ele2colorBT[etype](ele) - 1].push_back(ele);
+      color2elesBT[etype][geo.ele2colorBT[etype](ele)].push_back(ele);
   }
 
   /* Construct global element map */
   std::vector<unsigned int> ele2ele_new(geo.nEles);
   unsigned int ele_new = 0;
   for (auto etype : geo.ele_set)
-    for (unsigned int color = 1; color <= geo.nColors; color++)
-      for (unsigned int i = 0; i < color2elesBT[etype][color-1].size(); i++)
+    for (unsigned int color = 0; color < geo.nColors; color++)
+      for (unsigned int i = 0; i < color2elesBT[etype][color].size(); i++)
       {
-        unsigned int eleBT = color2elesBT[etype][color-1][i];
+        unsigned int eleBT = color2elesBT[etype][color][i];
         unsigned int ele = geo.eleID[etype](eleBT);
         ele2ele_new[ele] = ele_new;
         ele_new++;
@@ -1637,10 +1629,10 @@ void shuffle_data_by_color(GeoStruct &geo)
 
     geo.rangePerColorBT[etype][1] = color2elesBT[etype][0].size(); 
     geo.nElesPerColorBT[etype][0] = color2elesBT[etype][0].size(); 
-    for (unsigned int color = 2; color <= geo.nColors; color++)
+    for (unsigned int color = 1; color < geo.nColors; color++)
     {
-      geo.rangePerColorBT[etype][color] = geo.rangePerColorBT[etype][color - 1] + color2elesBT[etype][color - 1].size(); 
-      geo.nElesPerColorBT[etype][color - 1] = geo.rangePerColorBT[etype][color] - geo.rangePerColorBT[etype][color - 1];
+      geo.rangePerColorBT[etype][color+1] = geo.rangePerColorBT[etype][color] + color2elesBT[etype][color].size(); 
+      geo.nElesPerColorBT[etype][color] = geo.rangePerColorBT[etype][color+1] - geo.rangePerColorBT[etype][color];
     }
   }
 
@@ -1648,9 +1640,9 @@ void shuffle_data_by_color(GeoStruct &geo)
   for (auto etype : geo.ele_set)
   {
     std::cout << "color distribution: ";
-    for (unsigned int color = 1; color <= geo.nColors; color++)
+    for (unsigned int color = 0; color < geo.nColors; color++)
     {
-      std::cout<< geo.nElesPerColorBT[etype][color - 1] << " ";
+      std::cout<< geo.nElesPerColorBT[etype][color] << " ";
     }
     std::cout << std::endl;
   }
