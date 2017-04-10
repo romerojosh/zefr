@@ -395,6 +395,9 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
 
    /* For curved grids, Figure out which grid elements can be treated as linear */
    int nCorners = geo->nCornerNodesBT[etype];
+
+   if (nCorners == 8) return; // No need to do anything
+
    mdvector<double> shape_ppts_lin({nCorners, nPpts});
    mdvector<double> coord_ppts_lin({nPpts, nDim, nEles});
    mdvector<double> corner_nodes({nCorners, nDims, nEles});
@@ -654,6 +657,8 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
   /* --- Compute Element Volumes --- */
   for (unsigned int e = 0; e < nEles; e++)
   {
+    vol(e) = 0.0;
+
     for (unsigned int spt = 0; spt < nSpts; spt++)
     {
       vol(e) += weights_spts(spt) * jaco_det_spts(spt, e);
@@ -1977,9 +1982,12 @@ void Elements::poly_squeeze_ppts()
     for (unsigned int ppt = 0; ppt < nPpts; ppt++)
     {
       double rho = U_ppts(ppt, 0, ele);
-      double momF = (U_ppts(ppt, 1, ele) * U_ppts(ppt, 1, ele) + U_ppts(ppt, 2, ele) * 
-          U_ppts(ppt, 2, ele)) / U_ppts(ppt, 0, ele);
-      double P = (input->gamma - 1.0) * (U_ppts(ppt, 3, ele) - 0.5 * momF);
+      double momF = 0.0;
+      for (int dim = 0; dim < nDims; dim++)
+        momF += U_ppts(ppt, dim+1, ele) * U_ppts(ppt, dim+1, ele);
+
+      momF /= rho;
+      double P = (input->gamma - 1.0) * (U_ppts(ppt, nDims+1, ele) - 0.5 * momF);
 
       double tau = P - input->exps0 * std::pow(rho, input->gamma);
       minTau = std::min(minTau, tau);
@@ -1996,14 +2004,14 @@ void Elements::poly_squeeze_ppts()
         Vsq += V[dim] * V[dim];
       }
 
-      double e = Uavg(3, ele);
+      double e = Uavg(nDims+1, ele);
       double P = (input->gamma - 1.0) * (e - 0.5 * rho * Vsq);
 
       double eps = minTau / (minTau - P + input->exps0 * std::pow(rho, input->gamma));
 
-      for (unsigned int n = 0; n < nVars; n++)
+      for (unsigned int ppt = 0; ppt < nPpts; ppt++)
       {
-        for (unsigned int ppt = 0; ppt < nPpts; ppt++)
+        for (unsigned int n = 0; n < nVars; n++)
         {
           U_ppts(ppt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_ppts(ppt, n, ele);
           //U_ppts(ppt, ele, n) = (1.0 - eps) * Uavg(ele, n) + eps * U_ppts(ppt, ele, n);

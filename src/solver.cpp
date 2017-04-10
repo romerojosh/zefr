@@ -961,11 +961,6 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   for (auto e : elesObjs)
     e->extrapolate_U();
 
-  // Wait for completion of extrapolated solution before packing MPI buffers
-  event_record_wait_pair(0, 0, 1);
-
-  overset_u_send();
-
   /* If "squeeze" stabilization enabled, apply  it */
   if (input->squeeze)
   {
@@ -975,6 +970,11 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
       e->poly_squeeze();
     }
   }
+
+  // Wait for completion of extrapolated solution before packing MPI buffers
+  event_record_wait_pair(0, 0, 1);
+
+  overset_u_send();
 
 #ifdef _MPI
   /* Commence sending U data to other processes */

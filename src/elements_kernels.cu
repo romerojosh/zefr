@@ -469,6 +469,8 @@ void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts,
   unsigned int blocks = (nEles + threads - 1)/ threads;
 
   compute_Uavg<<<blocks, threads>>>(U_spts, Uavg, jaco_det_spts, weights_spts, vol, nSpts, nEles, nVars, nDims, order);
+
+  check_error();
 }
 
 __global__
@@ -533,7 +535,7 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
     for (unsigned int dim = 0; dim < nDims; dim++)
       momF += U_spts(spt, dim + 1, ele) * U_spts(spt, dim + 1, ele);
 
-    momF /= U_spts(spt, 0, ele);
+    momF /= rho;
     double P = (gamma - 1.0) * (U_spts(spt, nDims + 1, ele) - 0.5 * momF);
 
     double tau = P - exps0 * pow(rho, gamma);
@@ -559,7 +561,7 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
   /* If minTau is negative, squeeze solution */
   if (minTau < 0)
   {
-    double rho = Uavg(ele, 0);
+    double rho = Uavg(0, ele);
     double Vsq = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -575,17 +577,17 @@ void poly_squeeze(mdvector_gpu<double> U_spts,
 //      if (P < input->exps0 * std::pow(rho, input->gamma))
 //        std::cout << "Constraint violated. Lower CFL?" << std::endl;
 
-    for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int spt = 0; spt < nSpts; spt++)
     {
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int n = 0; n < nVars; n++)
       {
         U_spts(spt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_spts(spt, n, ele);
       }
     }
 
-    for (unsigned int n = 0; n < nVars; n++)
+    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      for (unsigned int n = 0; n < nVars; n++)
       {
         U_fpts(fpt, n, ele) = eps * Uavg(n, ele) + (1.0 - eps) * U_fpts(fpt, n, ele);
       }
@@ -605,6 +607,8 @@ void poly_squeeze_wrapper(mdvector_gpu<double> &U_spts,
 
   poly_squeeze<<<blocks, threads>>>(U_spts, U_fpts, Uavg, gamma, exps0, nSpts, nFpts,
       nEles, nVars, nDims);
+
+  check_error();
 }
 
 //! Copy node positions from GeoStruct's array to ele's array
