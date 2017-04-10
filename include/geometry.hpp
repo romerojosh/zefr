@@ -82,18 +82,21 @@ struct GeoStruct
   mdvector<int> ele2face, face2nodes, face2eles, face2eles_idx;
 
   std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
-  std::vector<unsigned int> ele_color_range, ele_color_nEles;
   mdvector<char> gfpt2bnd;
   std::map<std::vector<unsigned int>, int> bnd_faces;
   std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs;
   mdvector<double> ele_nodes, coord_nodes;
-  mdvector<int> ele_adj, fpt_adj;
 
   mdvector<double> grid_vel_nodes, coords_init;
 
+  /* Connectivity Data for Implicit */
+  mdvector<int> ele2eleN, face2faceN, fpt2fptN;
+
+  /* Color Data for MCGS */
   unsigned int nColors;
-  mdvector<unsigned int> ele_color;
-  std::map<ELE_TYPE, mdvector<unsigned int>> ele_colorBT;
+  std::map<ELE_TYPE, mdvector<int>> ele2colorBT;
+  std::map<ELE_TYPE, std::vector<unsigned int>> nElesPerColorBT;
+  std::map<ELE_TYPE, std::vector<unsigned int>> rangePerColorBT;
 
   unsigned int nBounds;               //! Number of distinct mesh boundary regions
   std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
@@ -202,11 +205,13 @@ void read_node_coords(std::ifstream &f, GeoStruct &geo);
 void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *input);
 void read_boundary_faces(std::ifstream &f, GeoStruct &geo);
 void set_face_nodes(GeoStruct &geo);
-void set_ele_adjacency(GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order);
 void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int order);
 void pair_periodic_gfpts(GeoStruct &geo);
+
+/* Methods for Implicit */
+void set_ele_adjacency(GeoStruct &geo);
 void setup_element_colors(InputStruct *input, GeoStruct &geo);
 void shuffle_data_by_color(GeoStruct &geo);
 

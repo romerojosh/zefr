@@ -1459,7 +1459,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
         continue;
 
     bool iflag = false;
-    if (geo->iblank_face(geo->fpt2face[fpt]) == FRINGE)
+    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == FRINGE)
       iflag = true;
 
     double beta = input->ldg_b;

@@ -76,15 +76,17 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   else
     load_mesh_data_pyfr(input, geo);
 
-  if (input->dt_scheme == "MCGS")
-  {
-    setup_element_colors(input, geo);
-  }
-
 #ifdef _MPI
   if (format == GMSH)
     partition_geometry(input, geo);
 #endif
+
+  if (input->dt_scheme == "MCGS")
+  {
+    set_ele_adjacency(geo);
+    setup_element_colors(input, geo);
+    shuffle_data_by_color(geo);
+  }
 
   if (format == GMSH)
   {
@@ -95,11 +97,6 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   }
   else
     setup_global_fpts_pyfr(input, geo, order);
-
-  if (input->dt_scheme == "MCGS")
-  {
-    shuffle_data_by_color(geo);
-  }
 
   if (input->overset)
   {
@@ -224,7 +221,6 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   read_element_connectivity(f, geo, input);
   read_boundary_faces(f, geo);
 
-  set_ele_adjacency(geo);
 
   f.close();
 }
@@ -895,79 +891,6 @@ void set_face_nodes(GeoStruct &geo)
 #endif
 }
 
-void set_ele_adjacency(GeoStruct &geo)
-{
-  std::map<std::vector<unsigned int>, std::vector<unsigned int>> face2eles;
-
-  /* Sizing ele_adj for possible element type with greatest number of faces */
-  if (geo.nDims == 2)
-    geo.ele_adj.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
-  else
-    geo.ele_adj.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
-
-  for (auto etype : geo.ele_set)
-  {
-    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
-
-    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
-    {
-      for (auto face_nodes : geo.face_nodesBT[etype])
-      {
-        face.assign(face_nodes.size(), 0);
-
-        for (unsigned int i = 0; i < face_nodes.size(); i++)
-        {
-          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
-        }
-
-        /* Sort for consistency */
-        std::sort(face.begin(), face.end());
-
-        face2eles[face].push_back(geo.eleID[etype](ele));
-
-        /* Special case for periodic boundary */
-        if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC)
-        {
-          face2eles[geo.per_bnd_pairs[face]].push_back(geo.eleID[etype](ele));
-        }
-      }
-    }
-  }
-
-  for (auto etype : geo.ele_set)
-  {
-    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
-
-    /* Generate element adjacency (element to elements connectivity) */
-    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
-    {
-      unsigned int n = 0;
-      for (auto face_nodes : geo.face_nodesBT[etype])
-      {
-        face.assign(face_nodes.size(), 0);
-
-        for (unsigned int i = 0; i < face_nodes.size(); i++)
-        {
-          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
-        }
-
-        std::sort(face.begin(), face.end());
-
-        if (face2eles[face].size() == 1)
-        {
-          geo.ele_adj(n, geo.eleID[etype](ele)) = -1;
-        }
-        else
-        {
-          geo.ele_adj(n, geo.eleID[etype](ele)) = (ele != face2eles[face][0]) ? face2eles[face][0] : face2eles[face][1];
-        }
-
-        n++;
-      }
-    }
-  }
-}
-
 void couple_periodic_bnds(GeoStruct &geo)
 {
   mdvector<double> coords_face1, coords_face2;
@@ -1485,19 +1408,90 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   }
 }
 
+void set_ele_adjacency(GeoStruct &geo)
+{
+  std::map<std::vector<unsigned int>, std::vector<unsigned int>> face2eles;
+
+  /* Sizing ele2eleN for possible element type with greatest number of faces */
+  if (geo.nDims == 2)
+    geo.ele2eleN.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
+  else
+    geo.ele2eleN.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
+
+  for (auto etype : geo.ele_set)
+  {
+    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
+
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+    {
+      for (auto face_nodes : geo.face_nodesBT[etype])
+      {
+        face.assign(face_nodes.size(), 0);
+
+        for (unsigned int i = 0; i < face_nodes.size(); i++)
+        {
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
+        }
+
+        /* Sort for consistency */
+        std::sort(face.begin(), face.end());
+
+        face2eles[face].push_back(geo.eleID[etype](ele));
+
+        /* Special case for periodic boundary */
+        if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC)
+        {
+          face2eles[geo.per_bnd_pairs[face]].push_back(geo.eleID[etype](ele));
+        }
+      }
+    }
+  }
+
+  for (auto etype : geo.ele_set)
+  {
+    std::vector<unsigned int> face(geo.nNodesPerFaceBT[etype], 0);
+
+    /* Generate element adjacency (element to elements connectivity) */
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+    {
+      unsigned int n = 0;
+      for (auto face_nodes : geo.face_nodesBT[etype])
+      {
+        face.assign(face_nodes.size(), 0);
+
+        for (unsigned int i = 0; i < face_nodes.size(); i++)
+        {
+          face[i] = geo.ele2nodesBT[etype](ele, face_nodes[i]);
+        }
+
+        std::sort(face.begin(), face.end());
+
+        if (face2eles[face].size() == 1)
+        {
+          geo.ele2eleN(n, geo.eleID[etype](ele)) = -1;
+        }
+        else
+        {
+          geo.ele2eleN(n, geo.eleID[etype](ele)) = (ele != face2eles[face][0]) ? face2eles[face][0] : face2eles[face][1];
+        }
+
+        n++;
+      }
+    }
+  }
+}
+
 void setup_element_colors(InputStruct *input, GeoStruct &geo)
 {
   /* Setup element colors */
-  geo.ele_color.assign({geo.nEles});
   for (auto etype : geo.ele_set)
-    geo.ele_colorBT[etype].assign({geo.nElesBT[etype]}, 0);
+    geo.ele2colorBT[etype].assign({geo.nElesBT[etype]}, -1);
 
   if (input->nColors == 1)
   {
     geo.nColors = 1;
-    geo.ele_color.fill(1);
     for (auto etype : geo.ele_set)
-      geo.ele_colorBT[etype].fill(1);
+      geo.ele2colorBT[etype].fill(0);
   }
   else
   {
@@ -1505,7 +1499,6 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
     std::vector<bool> used(geo.nColors, false);
     std::vector<unsigned int> counts(geo.nColors, 0);
     std::queue<unsigned int> eleQ;
-    //geo.ele_color(0) = 0;
 
     eleQ.push(0);
 
@@ -1516,51 +1509,43 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
       auto etype = geo.eleType(ele);
       eleQ.pop();
 
-      //if (geo.ele_color(ele) != 0)
-      //  continue;
-      if (geo.ele_colorBT[etype](ele - geo.eleID[etype](0)) != 0)
-        continue;
+      if (geo.ele2colorBT[etype](ele - geo.eleID[etype](0)) != -1) continue;
 
       for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
       {
-        int eleN = geo.ele_adj(face, ele);
-        ELE_TYPE etypeN;
+        int eleN = geo.ele2eleN(face, ele);
+        if (eleN == -1) continue;
 
-        if (eleN != -1) etypeN = geo.eleType(eleN);
+        ELE_TYPE etypeN = geo.eleType(eleN);
+        int colorN = geo.ele2colorBT[etypeN](eleN - geo.eleID[etypeN](0));
 
-        if (eleN != -1 && geo.ele_colorBT[etypeN](eleN - geo.eleID[etypeN](0)) == 0)
-        {
+        /* Add element to queue if neighbor has no color */
+        if (colorN == -1)
           eleQ.push(eleN);
-        }
-
-        if (eleN == -1)
-          continue;
-
-        unsigned int colorN = geo.ele_colorBT[etypeN](eleN - geo.eleID[etypeN](0));
 
         /* Record if neighbor is using a given color */
-        if (colorN != 0)
-          used[colorN - 1] = true;
+        else
+          used[colorN] = true;
       }
 
-      unsigned int color = 0;
+      int color = -1;
       unsigned int min_count = 0;
-      unsigned int min_color_all = 1;
+      unsigned int min_color_all = 0;
       unsigned int min_count_all = counts[0];
 
       /* Set current element color to color unused by neighbors with minimum count in domain */
       for (unsigned int c = 0; c < geo.nColors; c++)
       {
-        if (!used[c] and color == 0)
+        if (!used[c] and color == -1)
         {
-          color = c + 1;
+          color = c;
           min_count = counts[c];
         }
         else if (!used[c])
         {
           if (counts[c] < min_count)
           {
-            color = c + 1;
+            color = c;
             min_count = counts[c];
           }
         }
@@ -1568,17 +1553,15 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
         if (counts[c] < min_count_all)
         {
           min_count_all = counts[c];
-          min_color_all = c + 1;
+          min_color_all = c;
         }
       }
 
-      if (color == 0)
-      {
+      if (color == -1)
         ThrowException("Could not color graph with number of colors provided. Increase nColors!");
-      }
 
-      geo.ele_colorBT[etype](ele - geo.eleID[etype](0)) = color;
-      counts[color-1]++;
+      geo.ele2colorBT[etype](ele - geo.eleID[etype](0)) = color;
+      counts[color]++;
       used.assign(geo.nColors, false);
     }
   }
@@ -1586,61 +1569,83 @@ void setup_element_colors(InputStruct *input, GeoStruct &geo)
 
 void shuffle_data_by_color(GeoStruct &geo)
 {
-//  /* Reorganize required geometry data by color */
-//  std::vector<std::vector<unsigned int>> color2eles(geo.nColors);
-//  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-//  {
-//    color2eles[geo.ele_color(ele) - 1].push_back(ele);
-//  }
-//
-//  /* TODO: Consider an in-place permutation to save memory */
-//  auto ele2nodes_temp = geo.ele2nodes;
-//  auto fpt2gfpt_temp = geo.fpt2gfpt;
-//  auto fpt2gfpt_slot_temp = geo.fpt2gfpt_slot;
-//
-//  unsigned int ele1 = 0;
-//  for (unsigned int color = 1; color <= geo.nColors; color++)
-//  {
-//    for (unsigned int i = 0; i < color2eles[color - 1].size(); i++)
-//    {
-//      unsigned int ele2 = color2eles[color - 1][i];
-//
-//      for (unsigned int node = 0; node < geo.nNodesPerEle; node++)
-//      {
-//        geo.ele2nodes(node, ele1) = ele2nodes_temp(node, ele2);
-//      }
-//
-//      for (unsigned int fpt = 0; fpt < geo.nFptsPerFace * geo.nFacesPerEle; fpt++) 
-//      {
-//        geo.fpt2gfpt(fpt, ele1) = fpt2gfpt_temp(fpt, ele2);
-//        geo.fpt2gfpt_slot(fpt, ele1) = fpt2gfpt_slot_temp(fpt, ele2);
-//      }
-//
-//      geo.ele_color(ele1) = color;
-//
-//      ele1++;
-//    }
-//  }
-//
-//  /* Setup element color ranges */
-//  geo.ele_color_nEles.assign(geo.nColors, 0);
-//  geo.ele_color_range.assign(geo.nColors + 1, 0);
-//
-//  geo.ele_color_range[1] = color2eles[0].size(); 
-//  geo.ele_color_nEles[0] = color2eles[0].size(); 
-//  for (unsigned int color = 2; color <= geo.nColors; color++)
-//  {
-//    geo.ele_color_range[color] = geo.ele_color_range[color - 1] + color2eles[color-1].size(); 
-//    geo.ele_color_nEles[color - 1] = geo.ele_color_range[color] - geo.ele_color_range[color-1];
-//  }
-//
-//  /* Print out color distribution */
-//  std::cout << "color distribution: ";
-//  for (unsigned int color = 1; color <= geo.nColors; color++)
-//  {
-//    std::cout<< geo.ele_color_nEles[color - 1] << " ";
-//  }
-//  std::cout << std::endl;
+  /* Reorganize elements by color */
+  std::map<ELE_TYPE, std::vector<std::vector<unsigned int>>> color2elesBT;
+  for (auto etype : geo.ele_set)
+  {
+    color2elesBT[etype].resize(geo.nColors);
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+      color2elesBT[etype][geo.ele2colorBT[etype](ele)].push_back(ele);
+  }
+
+  /* Construct global element map */
+  std::vector<unsigned int> ele2ele_new(geo.nEles);
+  unsigned int ele_new = 0;
+  for (auto etype : geo.ele_set)
+    for (unsigned int color = 0; color < geo.nColors; color++)
+      for (unsigned int i = 0; i < color2elesBT[etype][color].size(); i++)
+      {
+        unsigned int eleBT = color2elesBT[etype][color][i];
+        unsigned int ele = geo.eleID[etype](eleBT);
+        ele2ele_new[ele] = ele_new;
+        ele_new++;
+      }
+
+  /* Reorganize geometry data */
+  // TODO: Consider an in-place permutation to save memory
+  auto ele2nodesBT_temp = geo.ele2nodesBT;
+  auto ele2colorBT_temp = geo.ele2colorBT;
+  auto ele2eleN_temp = geo.ele2eleN;
+  for (auto etype : geo.ele_set)
+    for (unsigned int eleBT = 0; eleBT < geo.nElesBT[etype]; eleBT++)
+    {
+      unsigned int ele = geo.eleID[etype](eleBT);
+      unsigned int ele_new = ele2ele_new[ele];
+      unsigned int eleBT_new = ele_new - geo.eleID[etype](0);
+
+      for (unsigned int node = 0; node < geo.nNodesPerEleBT[etype]; node++)
+        geo.ele2nodesBT[etype](eleBT_new, node) = ele2nodesBT_temp[etype](eleBT, node);
+
+      geo.ele2colorBT[etype](eleBT_new) = ele2colorBT_temp[etype](eleBT);
+
+      for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
+      {
+        int eleN = ele2eleN_temp(face, ele);
+        if (eleN == -1)
+          geo.ele2eleN(face, ele_new) = -1;
+        else
+        {
+          unsigned int eleN_new = ele2ele_new[eleN];
+          geo.ele2eleN(face, ele_new) = eleN_new;
+        }
+      }
+    }
+
+  /* Setup element color ranges */
+  for (auto etype : geo.ele_set)
+  {
+    geo.nElesPerColorBT[etype].assign(geo.nColors, 0);
+    geo.rangePerColorBT[etype].assign(geo.nColors + 1, 0);
+
+    geo.rangePerColorBT[etype][1] = color2elesBT[etype][0].size(); 
+    geo.nElesPerColorBT[etype][0] = color2elesBT[etype][0].size(); 
+    for (unsigned int color = 1; color < geo.nColors; color++)
+    {
+      geo.rangePerColorBT[etype][color+1] = geo.rangePerColorBT[etype][color] + color2elesBT[etype][color].size(); 
+      geo.nElesPerColorBT[etype][color] = geo.rangePerColorBT[etype][color+1] - geo.rangePerColorBT[etype][color];
+    }
+  }
+
+  /* Print out color distribution */
+  for (auto etype : geo.ele_set)
+  {
+    std::cout << "color distribution: ";
+    for (unsigned int color = 0; color < geo.nColors; color++)
+    {
+      std::cout<< geo.nElesPerColorBT[etype][color] << " ";
+    }
+    std::cout << std::endl;
+  }
 }
 
 #ifdef _MPI
@@ -1796,12 +1801,14 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   if (input->dt_scheme == "MCGS")
   {
     /* Reduce color data to only contain partition local elements */
-    auto ele_color_glob = geo.ele_color;
-    geo.ele_color.assign({(unsigned int) myEles.size()}, 0);
+    /*
+    auto ele2color_glob = geo.ele2color;
+    geo.ele2color.assign({(unsigned int) myEles.size()}, 0);
     for (unsigned int ele = 0; ele < myEles.size(); ele++)
     {
-      geo.ele_color(ele) = ele_color_glob(myEles[ele]);
+      geo.ele2color(ele) = ele2color_glob(myEles[ele]);
     }
+    */
   }
 
   /* Obtain set of unique nodes on this partition. Set number of nodes. */
@@ -2386,8 +2393,9 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
   if (input->dt_scheme == "MCGS")
   {
-    // Setup ele_adj
-    geo.ele_adj.assign({geo.nEles, geo.nFacesPerEleBT[etype]},-1);
+    /*
+    // Setup ele2eleN
+    geo.ele2eleN.assign({geo.nEles, geo.nFacesPerEleBT[etype]},-1);
     for (int ff = 0; ff < geo.nFaces; ff++)
     {
       int ic1 = geo.face2eles(ff,0);
@@ -2397,13 +2405,14 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
         for (int n = 0; n < geo.nFacesPerEleBT[etype]; n++)
         {
           if (geo.ele2face(ic1,n) == ff)
-            geo.ele_adj(ic1,n) = ic2;
+            geo.ele2eleN(ic1,n) = ic2;
 
           if (geo.ele2face(ic2,n) == ff)
-            geo.ele_adj(ic2,n) = ic1;
+            geo.ele2eleN(ic2,n) = ic1;
         }
       }
     }
+    */
   }
 
   std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles << ", nMpiFaces = " << geo.nMpiFaces << std::endl;
