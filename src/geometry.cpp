@@ -1593,20 +1593,23 @@ void shuffle_data_by_color(GeoStruct &geo)
 
   /* Reorganize geometry data */
   // TODO: Consider an in-place permutation to save memory
-  auto ele2nodesBT_temp = geo.ele2nodesBT;
-  auto ele2colorBT_temp = geo.ele2colorBT;
   auto ele2eleN_temp = geo.ele2eleN;
   for (auto etype : geo.ele_set)
+  {
+    auto eleID_temp = geo.eleID[etype];
+    auto ele2colorBT_temp = geo.ele2colorBT[etype];
+    auto ele2nodesBT_temp = geo.ele2nodesBT[etype];
     for (unsigned int eleBT = 0; eleBT < geo.nElesBT[etype]; eleBT++)
     {
-      unsigned int ele = geo.eleID[etype](eleBT);
+      unsigned int ele = eleID_temp(eleBT);
       unsigned int ele_new = ele2ele_new[ele];
-      unsigned int eleBT_new = ele_new - geo.eleID[etype](0);
+      unsigned int eleBT_new = ele_new - eleID_temp(0);
+
+      geo.eleID[etype](eleBT_new) = ele_new;
+      geo.ele2colorBT[etype](eleBT_new) = ele2colorBT_temp(eleBT);
 
       for (unsigned int node = 0; node < geo.nNodesPerEleBT[etype]; node++)
-        geo.ele2nodesBT[etype](eleBT_new, node) = ele2nodesBT_temp[etype](eleBT, node);
-
-      geo.ele2colorBT[etype](eleBT_new) = ele2colorBT_temp[etype](eleBT);
+        geo.ele2nodesBT[etype](eleBT_new, node) = ele2nodesBT_temp(eleBT, node);
 
       for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
       {
@@ -1620,6 +1623,7 @@ void shuffle_data_by_color(GeoStruct &geo)
         }
       }
     }
+  }
 
   /* Setup element color ranges */
   for (auto etype : geo.ele_set)

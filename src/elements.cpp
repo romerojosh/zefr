@@ -251,10 +251,13 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   {
     for (unsigned int dim = 0; dim < nDims; dim++)
       for (unsigned int ele = 0; ele < nEles; ele++)
+      {
+        unsigned int eleBT = ele + startEle;
         for (unsigned int node = 0; node < nNodes; node++)
         {
-          nodes(node, dim, ele) = geo->coord_nodes(geo->ele2nodesBT[etype](ele,node), dim);
+          nodes(node, dim, ele) = geo->coord_nodes(geo->ele2nodesBT[etype](eleBT,node), dim);
         }
+      }
   }
 
   int ms = nSpts;
@@ -299,10 +302,11 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
+      unsigned int eleBT = ele + startEle;
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
-        int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
+        int gfpt = geo->fpt2gfptBT[etype](fpt,eleBT);
+        int slot = geo->fpt2gfpt_slotBT[etype](fpt,eleBT);
 
         if (slot == 0)
         {
@@ -675,11 +679,12 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
 
   for (unsigned int e = 0; e < nEles; e++)
   {
+    unsigned int eBT = e + startEle;
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      int gfpt = geo->fpt2gfptBT[etype](fpt,e);
+      int gfpt = geo->fpt2gfptBT[etype](fpt,eBT);
 
-      unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,e);
+      unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,eBT);
 
       /* --- Calculate outward unit normal vector at flux point ("left" element only) --- */
       double norm[3] = {0.0};
@@ -1493,7 +1498,7 @@ void Elements::compute_unit_advF(unsigned int dim)
 }
 
 
-void Elements::compute_local_dRdU()
+void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesObjs, mdvector<unsigned int> &ele2elesObj)
 {
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
@@ -1618,12 +1623,16 @@ void Elements::compute_local_dRdU()
                     CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
 
       /* Add center contribution to Neighbor gradient */
+      unsigned int eleID = geo->eleID[etype](ele + startEle);
       for (unsigned int face = 0; face < nFaces; face++)
       {
         /* Note: No contribution if element neighbor is a boundary */
-        int eleN = geo->ele2eleN(face, ele);
-        if (eleN == -1) continue;
-        int faceN = geo->face2faceN(face, ele);
+        int eleNID = geo->ele2eleN(face, eleID);
+        if (eleNID == -1) continue;
+
+        auto elesN = elesObjs[ele2elesObj(eleNID)];
+        unsigned int eleN = eleNID - geo->eleID[etype](elesN->startEle);
+        unsigned int faceN = geo->face2faceN(face, eleID);
 
         /* Compute Neighbor gradient Jacobian (only center contribution) */
         for (unsigned int var = 0; var < nVars; var++)
@@ -1633,7 +1642,7 @@ void Elements::compute_local_dRdU()
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
             {
               unsigned int fptN = faceN * nFptsPerFace + fpti;
-              int fpt = geo->fpt2fptN(fptN, eleN);
+              unsigned int fpt = geo->fpt2fptN(fptN, eleNID);
               CtempFSN(fpti, sptj) = dUcdU(ele, var, var, fpt) * oppE(fpt, sptj);
             }
 
@@ -1658,8 +1667,8 @@ void Elements::compute_local_dRdU()
               for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
               {
                 for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-                  CtempD(dim1) += CviscN(dim2, var, spti, sptj) * inv_jaco_spts(dim2, spti, dim1, eleN);
-                CtempD(dim1) /= jaco_det_spts(spti, eleN);
+                  CtempD(dim1) += CviscN(dim2, var, spti, sptj) * elesN->inv_jaco_spts(dim2, spti, dim1, eleN);
+                CtempD(dim1) /= elesN->jaco_det_spts(spti, eleN);
               }
 
               for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1675,8 +1684,8 @@ void Elements::compute_local_dRdU()
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
                   {
                     unsigned int fpt = face * nFptsPerFace + fpti;
-                    int fptN = geo->fpt2fptN(fpt, ele);
-                    CdFcddU0(vari, varj, fpt, sptj) += (-dFcddU(eleN, dim, vari, varj, fptN)) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
+                    int fptN = geo->fpt2fptN(fpt, eleID);
+                    CdFcddU0(vari, varj, fpt, sptj) += (-elesN->dFcddU(eleN, dim, vari, varj, fptN)) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
                   }
       }
 
@@ -2111,8 +2120,11 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
 #endif
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
+    {
+      uint eleBT = ele + startEle;
       for (uint dim = 0; dim < nDims; dim++)
-        nodes(node, dim, ele) = geo->coord_nodes(geo->ele2nodesBT[etype](ele,node),dim);
+        nodes(node, dim, ele) = geo->coord_nodes(geo->ele2nodesBT[etype](eleBT,node),dim);
+    }
 
   int ms = nSpts;
   int mf = nFpts;
@@ -2140,9 +2152,10 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
   {
     for (unsigned int ele = 0; ele < nEles; ele++)
     {
+      unsigned int eleBT = ele + startEle;
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
+        int gfpt = geo->fpt2gfptBT[etype](fpt,eleBT);
 
         faces->coord(dim,gfpt) = coord_fpts(fpt,dim,ele);
       }
@@ -2212,8 +2225,11 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
 {
   for (uint node = 0; node < nNodes; node++)
     for (uint ele = 0; ele < nEles; ele++)
+    {
+      uint eleBT = ele + startEle;
       for (uint dim = 0; dim < nDims; dim++)
-        grid_vel_nodes(node, dim, ele) = geo->grid_vel_nodes(geo->ele2nodesBT[etype](ele,node), dim);
+        grid_vel_nodes(node, dim, ele) = geo->grid_vel_nodes(geo->ele2nodesBT[etype](eleBT,node), dim);
+    }
 
   int ms = nSpts;
   int mf = nFpts;
@@ -2239,10 +2255,11 @@ void Elements::update_grid_velocities(std::shared_ptr<Faces> faces)
   /* Store grid velocity in face class */
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
+    unsigned int eleBT = ele + startEle;
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      int gfpt = geo->fpt2gfptBT[etype](fpt,ele);
-      unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,ele);
+      int gfpt = geo->fpt2gfptBT[etype](fpt,eleBT);
+      unsigned int slot = geo->fpt2gfpt_slotBT[etype](fpt,eleBT);
 
       if (slot != 0)
         continue;

@@ -40,12 +40,15 @@ extern "C" {
 #endif
 
 //Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
-Quads::Quads(GeoStruct *geo, InputStruct *input, int order)
+Quads::Quads(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
 {
   etype = QUAD;
   this->geo = geo;
-  this->input = input;  
-  this->nEles = geo->nElesBT[QUAD];  
+  this->input = input;
+  this->elesObjID = elesObjID;
+  this->startEle = startEle;
+  this->endEle = endEle;
+  this->nEles = endEle - startEle;
   this->nQpts = input->nQpts1D * input->nQpts1D;
 
   /* Generic quadrilateral geometry */

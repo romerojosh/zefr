@@ -51,9 +51,11 @@ class Elements
     InputStruct *input = NULL;
     GeoStruct *geo = NULL;
     ELE_TYPE etype;
+    unsigned int elesObjID;
 
     /* Geometric Parameters */
     unsigned int order;
+    unsigned int startEle, endEle;
     unsigned int nEles, nDims, nVars;
     unsigned int nSpts, nFpts, nSpts1D, nPpts, nQpts, nFptsPerFace;
     unsigned int nFaces, nNodes;
@@ -254,7 +256,7 @@ class Elements
          unsigned int nPts, unsigned int nDims);
 
     /* Routines for implicit method */
-    void compute_local_dRdU();
+    void compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesObjs, mdvector<unsigned int> &ele2elesObj);
 
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void compute_dFdU();

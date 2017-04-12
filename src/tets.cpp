@@ -39,12 +39,15 @@ extern "C" {
 #include "solver_kernels.h"
 #endif
 
-Tets::Tets(GeoStruct *geo, InputStruct *input, int order)
+Tets::Tets(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
 {
   etype = TET;
   this->geo = geo;
   this->input = input;  
-  this->nEles = geo->nElesBT[TET];  
+  this->elesObjID = elesObjID;
+  this->startEle = startEle;
+  this->endEle = endEle;
+  this->nEles = endEle - startEle;
   this->nQpts = 84; // Note: Fixing quadrature points to Shunn-Hamm 84 point rule
 
   if (input->error_freq == 0) this->nQpts = 0; // disable allocation if not needed

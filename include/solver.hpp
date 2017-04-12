@@ -91,6 +91,8 @@ class FRSolver
     /* Implicit method parameters */
     unsigned int nCounter;
     unsigned int prev_color = 0;
+    std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
+    mdvector<unsigned int> ele2elesObj;
 
 #ifdef _GPU
     mdvector_gpu<double> rk_alpha_d, rk_beta_d;
@@ -112,6 +114,7 @@ class FRSolver
     void restart_pyfr(std::string restart_file, unsigned restart_iter = 0);
     void setup_update();
     void setup_output();
+    void create_elesObj(ELE_TYPE etype, unsigned int elesObjID, unsigned int startEle, unsigned int endEle);
     void orient_fpts();
 
 #ifdef _GPU
@@ -128,23 +131,23 @@ class FRSolver
     /* Routines for implicit method */
     void set_fpt_adjacency();
     void compute_dRdU();
-    void compute_LHS_LU(unsigned int color = 0);
-    void compute_RHS(unsigned int color = 0);
+    void compute_LHS_LU();
+    void compute_RHS(unsigned int color);
 #ifdef _CPU
-    void compute_RHS_source(const mdvector<double> &source, unsigned int color = 0);
+    void compute_RHS_source(const mdvector<double> &source, unsigned int color);
 #endif
 #ifdef _GPU
-    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color = 0);
+    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color);
 #endif
-    void compute_deltaU(unsigned int color = 0);
-    void compute_U(unsigned int color = 0);
+    void compute_deltaU(unsigned int color);
+    void compute_U(unsigned int color);
 
   public:
     double res_max = 1;
     FRSolver(InputStruct *input, int order = -1);
     void setup(_mpi_comm comm_in, _mpi_comm comm_world = DEFAULT_COMM);
     void restart_solution(void);
-    void compute_residual(unsigned int stage, unsigned int color = 0);
+    void compute_residual(unsigned int stage, int color = -1);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
     void update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());

@@ -98,36 +98,42 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   if (input->rank == 0) std::cout << "Setting up elements and faces..." << std::endl;
 
-  for (auto etype : geo.ele_set)
+  /* Create eles objects */
+  unsigned int elesObjID = 0;
+  if (input->dt_scheme == "MCGS")
   {
-    if (etype == QUAD)
-    {
-      if(!geo.nElesBT.count(TRI)) //note: nElesBT used here since TRI can be removed from ele_set during MPI preprocessing.
-        elesObjs.push_back(std::make_shared<Quads>(&geo, input, order));
-        //elesObjsBC[color].push_back(elesObjs.back())
-      else
+    ele2elesObj.assign({geo.nEles});
+    for (auto etype : geo.ele_set)
+      for (unsigned int color = 0; color < geo.nColors; color++)
       {
-        std::cout << "Increased order of quads!" << std::endl;
-        elesObjs.push_back(std::make_shared<Quads>(&geo, input, order + 1));
+        unsigned int startEle = geo.rangePerColorBT[etype][color];
+        unsigned int endEle = geo.rangePerColorBT[etype][color+1];
+        create_elesObj(etype, elesObjID, startEle, endEle);
+
+        /* Create connectivity from global ele to elesObjID */
+        for (unsigned int ele = startEle; ele < endEle; ele++)
+        {
+          unsigned int eleID = geo.eleID[etype](ele);
+          ele2elesObj(eleID) = elesObjID;
+        }
+        elesObjID++;
       }
-    }
-    else if (etype == TRI)
-    {
-      if (input->viscous and !input->grad_via_div)
-        ThrowException("Need to enable grad_via_div to use triangles for viscous problems!");
 
-       elesObjs.push_back(std::make_shared<Tris>(&geo, input, order));
-    }
-    else if (etype == HEX)
-       elesObjs.push_back(std::make_shared<Hexas>(&geo, input, order));
-    else if (etype == TET)
+    /* Organize eles objects by color */
+    elesObjsBC.resize(geo.nColors);
+    for (unsigned int color = 0; color < geo.nColors; color++)
+      for (unsigned int etypeID = 0; etypeID < geo.ele_set.size(); etypeID++)
+        elesObjsBC[color].push_back(elesObjs[etypeID*geo.nColors + color]);
+  }
+  else
+  {
+    for (auto etype : geo.ele_set)
     {
-      if (input->viscous and !input->grad_via_div)
-        ThrowException("Need to enable grad_via_div to use tetrahedra for viscous problems!");
-
-       elesObjs.push_back(std::make_shared<Tets>(&geo, input, order));
+      unsigned int startEle = 0;
+      unsigned int endEle = geo.nElesBT[etype];
+      create_elesObj(etype, elesObjID, startEle, endEle);
+      elesObjID++;
     }
-    
   }
 
   eles = elesObjs[0];
@@ -270,6 +276,36 @@ void FRSolver::restart_solution(void)
   }
 }
 
+void FRSolver::create_elesObj(ELE_TYPE etype, unsigned int elesObjID, unsigned int startEle, unsigned int endEle)
+{
+  if (etype == QUAD)
+  {
+    if(!geo.nElesBT.count(TRI)) //note: nElesBT used here since TRI can be removed from ele_set during MPI preprocessing.
+      elesObjs.push_back(std::make_shared<Quads>(&geo, input, elesObjID, startEle, endEle, order));
+    else
+    {
+      std::cout << "Increased order of quads!" << std::endl;
+      elesObjs.push_back(std::make_shared<Quads>(&geo, input, elesObjID, startEle, endEle, order+1));
+    }
+  }
+  else if (etype == TRI)
+  {
+    if (input->viscous and !input->grad_via_div)
+      ThrowException("Need to enable grad_via_div to use triangles for viscous problems!");
+
+     elesObjs.push_back(std::make_shared<Tris>(&geo, input, elesObjID, startEle, endEle, order));
+  }
+  else if (etype == HEX)
+     elesObjs.push_back(std::make_shared<Hexas>(&geo, input, elesObjID, startEle, endEle, order));
+  else if (etype == TET)
+  {
+    if (input->viscous and !input->grad_via_div)
+      ThrowException("Need to enable grad_via_div to use tetrahedra for viscous problems!");
+
+     elesObjs.push_back(std::make_shared<Tets>(&geo, input, elesObjID, startEle, endEle, order));
+  }
+}
+
 void FRSolver::orient_fpts()
 {
   mdvector<double> fpt_coords_L({geo.nDims, geo.nGfpts}), fpt_coords_R({geo.nDims, geo.nGfpts});
@@ -281,10 +317,11 @@ void FRSolver::orient_fpts()
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
+      unsigned int eleBT = ele + e->startEle;
       for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
       {
-        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
-        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        int gfpt = geo.fpt2gfptBT[e->etype](fpt,eleBT);
+        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,eleBT);
 
         for (unsigned int dim = 0; dim < geo.nDims; dim++)
         {
@@ -336,26 +373,25 @@ void FRSolver::orient_fpts()
   }
 
   /* Reindex face flux points */
-  for (auto e : elesObjs)
+  for (auto etype : geo.ele_set)
   {
-    auto etype = e->etype;
-    auto fpt2gfptBT_copy = geo.fpt2gfptBT[e->etype];
-    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    auto fpt2gfptBT_copy = geo.fpt2gfptBT[etype];
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {
-      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+      for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * geo.nFptsPerFace; fpt++)
       {
-        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        int slot = geo.fpt2gfpt_slotBT[etype](fpt,ele);
         int gfpt_old = fpt2gfptBT_copy(fpt, ele);
 
         if (gfpt_old >= geo.nGfpts_int) continue;
 
         if (slot == 0)
         {
-          geo.fpt2gfptBT[e->etype](fpt, ele) = idxL[gfpt_old];
+          geo.fpt2gfptBT[etype](fpt, ele) = idxL[gfpt_old];
         }
         else
         {
-          geo.fpt2gfptBT[e->etype](fpt, ele) = idxR[gfpt_old];
+          geo.fpt2gfptBT[etype](fpt, ele) = idxR[gfpt_old];
         }
       }
     }
@@ -404,39 +440,40 @@ void FRSolver::set_fpt_adjacency()
   }
 
   /* Construct face2faceN connectivity */
-  for (auto e : elesObjs)
-    for (unsigned int ele = 0; ele < e->nEles; ele++)
-      for (unsigned int face = 0; face < e->nFaces; face++)
+  for (auto etype : geo.ele_set)
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+      for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
       {
-        int eleN = geo.ele2eleN(face, ele);
-        if (eleN == -1) continue;
+        unsigned int eleID = geo.eleID[etype](ele);
+        int eleNID = geo.ele2eleN(face, eleID);
+        if (eleNID == -1) continue;
 
         unsigned int faceN = 0;
-        while (geo.ele2eleN(faceN, eleN) != (int)ele) faceN++;
-        geo.face2faceN(face, ele) = faceN;
+        while (geo.ele2eleN(faceN, eleNID) != (int)eleID) faceN++;
+        geo.face2faceN(face, eleID) = faceN;
       }
-  
 
   /* Construct gfpt2fpt connectivity */
   mdvector<unsigned int> gfpt2fpt({2, geo.nGfpts}, -1);
-  for (auto e : elesObjs)
-    for (unsigned int ele = 0; ele < e->nEles; ele++)
-      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+  for (auto etype : geo.ele_set)
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+      for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * geo.nFptsPerFace; fpt++)
       {
-        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
-        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        int gfpt = geo.fpt2gfptBT[etype](fpt,ele);
+        int slot = geo.fpt2gfpt_slotBT[etype](fpt,ele);
         gfpt2fpt(slot, gfpt) = fpt;
       }
 
   /* Construct fpt2fptN connectivity */
-  for (auto e : elesObjs)
-    for (unsigned int ele = 0; ele < e->nEles; ele++)
-      for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
+  for (auto etype : geo.ele_set)
+    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
+      for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * geo.nFptsPerFace; fpt++)
       {
-        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
-        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        unsigned int eleID = geo.eleID[etype](ele);
+        int gfpt = geo.fpt2gfptBT[etype](fpt,ele);
+        int slot = geo.fpt2gfpt_slotBT[etype](fpt,ele);
         int notslot = (slot == 0) ? 1 : 0;
-        geo.fpt2fptN(fpt, ele) = gfpt2fpt(notslot, gfpt);
+        geo.fpt2fptN(fpt, eleID) = gfpt2fpt(notslot, gfpt);
       }
 }
 
@@ -765,6 +802,19 @@ void FRSolver::solver_data_to_device()
   /* Initial copy of data to GPU. Assignment operator will allocate data on device when first
    * used. */
 
+  /* -- Geometry Data -- */
+  geo.gfpt2bnd_d = geo.gfpt2bnd;
+  for (auto etype : geo.ele_set)
+  {
+    geo.fpt2gfptBT_d[etype] = geo.fpt2gfptBT[etype];
+    geo.fpt2gfpt_slotBT_d[etype] = geo.fpt2gfpt_slotBT[etype];
+
+    if (input->motion)
+    {
+      geo.ele2nodesBT_d[etype] = geo.ele2nodesBT[etype];
+    }
+  }
+
   /* -- Element Data -- */
   for (auto e : elesObjs)
   {
@@ -795,9 +845,6 @@ void FRSolver::solver_data_to_device()
       e->dA_fpts_d = e->dA_fpts;
     }
 
-    geo.fpt2gfptBT_d[e->etype] = geo.fpt2gfptBT[e->etype];
-    geo.fpt2gfpt_slotBT_d[e->etype] = geo.fpt2gfpt_slotBT[e->etype];
-
     if (input->CFL_type == 2)
       e->h_ref_d = e->h_ref;
 
@@ -813,10 +860,6 @@ void FRSolver::solver_data_to_device()
     {
       e->U_til_d = e->U_til;
       e->rk_err_d = e->rk_err;
-    }
-
-    if (input->dt_scheme == "MCGS")
-    {
     }
 
     //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
@@ -844,7 +887,6 @@ void FRSolver::solver_data_to_device()
       e->inv_jaco_fpts_d = e->inv_jaco_fpts;
       e->tnorm_d = e->tnorm;
       
-      geo.ele2nodesBT_d[e->etype] = geo.ele2nodesBT[e->etype];
 
       if (input->motion_type == RIGID_BODY)
       {
@@ -924,10 +966,6 @@ void FRSolver::solver_data_to_device()
     faces->dU_bnd_d = faces->dU_bnd;
   }
 
-  if (input->dt_scheme == "MCGS")
-  {
-  }
-
   if (input->motion)
   {
     faces->Vg_d = faces->Vg;
@@ -937,9 +975,6 @@ void FRSolver::solver_data_to_device()
     faces->coord_d = faces->coord;
 
   /* -- Additional data -- */
-  /* Geometry */
-  geo.gfpt2bnd_d = geo.gfpt2bnd;
-
   /* Input parameters */
   input->V_fs_d = input->V_fs;
   input->V_wall_d = input->V_wall;
@@ -964,7 +999,7 @@ void FRSolver::solver_data_to_device()
 }
 #endif
 
-void FRSolver::compute_residual(unsigned int stage, unsigned int color)
+void FRSolver::compute_residual(unsigned int stage, int color)
 {
 #ifdef _BUILD_LIB
   // Record event for start of compute_res (solution up-to-date for calculation)
@@ -978,6 +1013,13 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   endFpt = geo.nGfpts_int + geo.nGfpts_bnd;
   unsigned int startFptMpi = endFpt;
 #endif
+
+  /* MCGS: Extrapolate solution on the previous color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (color > -1 && geo.nColors > 1)
+    elesObjs = elesObjsBC[prev_color];
+  else
+    elesObjs = this->elesObjs;
 
   /* Extrapolate solution to flux points */
   for (auto e : elesObjs)
@@ -997,6 +1039,15 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
   event_record_wait_pair(0, 0, 1);
 
   overset_u_send();
+
+  /* MCGS: Compute, transform and extrapolate gradient on all colors */
+  if (color > -1 && geo.nColors > 1)
+  {
+    if (input->viscous)
+      elesObjs = this->elesObjs;
+    else
+      elesObjs = elesObjsBC[color];
+  }
 
 #ifdef _MPI
   /* Commence sending U data to other processes */
@@ -1100,7 +1151,10 @@ void FRSolver::compute_residual(unsigned int stage, unsigned int color)
 
     /* Apply boundary conditions to the gradient */
     faces->apply_bcs_dU();
-   
+
+    /* MCGS: Compute residual on current color */
+    if (color > -1 && geo.nColors > 1)
+      elesObjs = elesObjsBC[color];
   }
   else
   {
@@ -1161,10 +1215,10 @@ void FRSolver::compute_dRdU()
 
   /* Compute block diagonal components of flux divergence Jacobian */
   for (auto e : elesObjs)
-    e->compute_local_dRdU();
+    e->compute_local_dRdU(elesObjs, ele2elesObj);
 }
 
-void FRSolver::compute_LHS_LU(unsigned int color)
+void FRSolver::compute_LHS_LU()
 {
 #ifndef _NO_TNT
   for (auto e : elesObjs)
@@ -1180,13 +1234,8 @@ void FRSolver::compute_LHS_LU(unsigned int color)
 
 void FRSolver::compute_RHS(unsigned int color)
 {
-  for (auto e : elesObjs)
+  for (auto e : elesObjsBC[color])
     for (unsigned int ele = 0; ele < e->nEles; ele++)
-    {
-      auto etype = geo.eleType(ele);
-      if (geo.ele2colorBT[etype](ele) != color)
-        continue;
-
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
@@ -1195,19 +1244,14 @@ void FRSolver::compute_RHS(unsigned int color)
           else
             e->RHS(ele, var, spt) = -(e->dt(ele) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
         }
-    }
 }
 
 void FRSolver::compute_deltaU(unsigned int color)
 {
 #ifndef _NO_TNT
-  for (auto e : elesObjs)
+  for (auto e : elesObjsBC[color])
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      auto etype = geo.eleType(ele);
-      if (geo.ele2colorBT[etype](ele) != color)
-        continue;
-
       /* Create Array1D view of RHS */
       unsigned int N = e->nSpts * e->nVars;
       TNT::Array1D<double> b(N, &e->RHS(ele, 0, 0));
@@ -1223,17 +1267,11 @@ void FRSolver::compute_deltaU(unsigned int color)
 
 void FRSolver::compute_U(unsigned int color)
 {
-  for (auto e : elesObjs)
+  for (auto e : elesObjsBC[color])
     for (unsigned int ele = 0; ele < e->nEles; ele++)
-    {
-      auto etype = geo.eleType(ele);
-      if (geo.ele2colorBT[etype](ele) != color)
-        continue;
-
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
           e->U_spts(spt, var, ele) += e->deltaU(ele, var, spt);
-    }
 }
 
 void FRSolver::initialize_U()
@@ -1299,10 +1337,11 @@ void FRSolver::setup_views()
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
+      unsigned int eleBT = ele + e->startEle;
       for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
       {
-        int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
-        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+        int gfpt = geo.fpt2gfptBT[e->etype](fpt,eleBT);
+        int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,eleBT);
 
         U_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, 0, ele);
         U_ldg_base_ptrs(gfpt + slot * geo.nGfpts) = &e->U_fpts(fpt, 0, ele);
@@ -2029,8 +2068,9 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     /* Compute residual on elements of this color only */
     else
     {
-      compute_residual(0);
+      compute_residual(0, color);
     }
+    prev_color = color;
 
     /* Prepare RHS vector */
     compute_RHS(color);
@@ -2070,13 +2110,14 @@ void FRSolver::compute_element_dt()
     {
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       { 
+        unsigned int eleBT = ele + e->startEle;
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
 
         for (unsigned int fpt = 0; fpt < e->nFpts; fpt++)
         {
-          int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
-          int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,ele);
+          int gfpt = geo.fpt2gfptBT[e->etype](fpt,eleBT);
+          int slot = geo.fpt2gfpt_slotBT[e->etype](fpt,eleBT);
 
           int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(slot, gfpt); 
         }
@@ -2093,6 +2134,7 @@ void FRSolver::compute_element_dt()
     {
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       { 
+        unsigned int eleBT = ele + e->startEle;
         if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
         /* Compute inverse of timestep in each face */
         std::vector<double> dtinv(2*e->nDims);
@@ -2100,7 +2142,7 @@ void FRSolver::compute_element_dt()
         {
           for (unsigned int fpt = face * e->nFptsPerFace; fpt < (face+1) * e->nFptsPerFace; fpt++)
           {
-            int gfpt = geo.fpt2gfptBT[e->etype](fpt,ele);
+            int gfpt = geo.fpt2gfptBT[e->etype](fpt,eleBT);
 
             double dtinv_temp = faces->waveSp(gfpt) / (get_cfl_limit_adv(order) * e->h_ref(fpt, ele));
             if (input->viscous)
@@ -2784,7 +2826,9 @@ void FRSolver::write_solution(const std::string &_prefix)
     }
   }
 
-  std::map<ELE_TYPE, unsigned int> nElesBT = geo.nElesBT;
+  std::vector<unsigned int> nElesBO(elesObjs.size());
+  for (auto e : elesObjs)
+    nElesBO[e->elesObjID] = e->nEles;
 
   if (input->overset)
   {
@@ -2792,8 +2836,8 @@ void FRSolver::write_solution(const std::string &_prefix)
     for (auto e : elesObjs)
     {
       for (int ele = 0; ele < e->nEles; ele++)
-        if (geo.iblank_cell(ele) != NORMAL) nElesBT[e->etype]--;
-//      if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBT[e->etype]--;
+        if (geo.iblank_cell(ele) != NORMAL) nElesBO[e->elesObjID]--;
+//      if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBO[e->elesObjID]--;
     }
   }
 
@@ -2802,8 +2846,8 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   for (auto e : elesObjs)
   {
-    nCells += e->nSubelements * nElesBT[e->etype];
-    nPts += e->nPpts * nElesBT[e->etype];
+    nCells += e->nSubelements * nElesBO[e->elesObjID];
+    nPts += e->nPpts * nElesBO[e->elesObjID];
   }
 
   f << "<UnstructuredGrid>" << std::endl;
@@ -2835,7 +2879,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     f << "format=\"appended\" offset=\"" << b_offset << "\"/>"<< std::endl;
     b_offset += sizeof(unsigned int);
     for (auto e : elesObjs)
-      b_offset += (nElesBT[e->etype] * e->nPpts * sizeof(double));
+      b_offset += (nElesBO[e->elesObjID] * e->nPpts * sizeof(double));
   }
 
   if (input->filt_on && input->sen_write)
@@ -2868,7 +2912,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     f << "format=\"appended\" offset=\"" << b_offset << "\"/>"<< std::endl;
     b_offset += sizeof(unsigned int);
     for (auto e : elesObjs)
-      b_offset += (nElesBT[e->etype] * e->nPpts * 3 * sizeof(double));
+      b_offset += (nElesBO[e->elesObjID] * e->nPpts * 3 * sizeof(double));
   }
 
   f << "</PointData>" << std::endl;
@@ -2880,7 +2924,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "</Points>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (nElesBT[e->etype] * e->nPpts * 3 * sizeof(float));
+    b_offset += (nElesBO[e->elesObjID] * e->nPpts * 3 * sizeof(float));
 
   /* Write cell information */
   f << "<Cells>" << std::endl;
@@ -2888,19 +2932,19 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (nElesBT[e->etype] * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int));
+    b_offset += (nElesBO[e->elesObjID] * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int));
 
   f << "<DataArray type=\"UInt32\" Name=\"offsets\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (nElesBT[e->etype] * e->nSubelements * sizeof(unsigned int));
+    b_offset += (nElesBO[e->elesObjID] * e->nSubelements * sizeof(unsigned int));
 
   f << "<DataArray type=\"UInt8\" Name=\"types\" format=\"appended\" ";
   f << "offset=\""<< b_offset << "\"/>" << std::endl;
   b_offset += sizeof(unsigned int);
   for (auto e : elesObjs)
-    b_offset += (nElesBT[e->etype] * e->nSubelements * sizeof(char));
+    b_offset += (nElesBO[e->elesObjID] * e->nSubelements * sizeof(char));
   f << "</Cells>" << std::endl;
 
   f << "</Piece>" << std::endl;
@@ -2942,7 +2986,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   /* Write out conservative variables */
 
   for (auto e : elesObjs)
-    nBytes += nElesBT[e->etype] * e->nPpts * sizeof(double);
+    nBytes += nElesBO[e->elesObjID] * e->nPpts * sizeof(double);
 
   for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
   {
@@ -2966,7 +3010,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     nBytes = 0;
     for (auto e : elesObjs)
-      nBytes += nElesBT[e->etype] * e->nPpts * 3 * sizeof(double);
+      nBytes += nElesBO[e->elesObjID] * e->nPpts * 3 * sizeof(double);
     binary_write(f, nBytes);
     for (auto e : elesObjs)
     {
@@ -2988,7 +3032,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   /* Write plot point coordinates */
   nBytes = 0;
   for (auto e : elesObjs)
-    nBytes += nElesBT[e->etype] * e->nPpts * 3 * sizeof(float);
+    nBytes += nElesBO[e->elesObjID] * e->nPpts * 3 * sizeof(float);
   binary_write(f, nBytes);
 
   for (auto e : elesObjs)
@@ -3012,7 +3056,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   // Write connectivity
   nBytes = 0;
   for (auto e : elesObjs)
-    nBytes += nElesBT[e->etype] * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int);
+    nBytes += nElesBO[e->elesObjID] * e->nSubelements * e->nNodesPerSubelement * sizeof(unsigned int);
   binary_write(f, nBytes);
 
   int shift = 0; // To account for blanked elements
@@ -3035,7 +3079,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   // Offsets
   nBytes = 0;
   for (auto e: elesObjs)
-    nBytes += nElesBT[e->etype] * e->nSubelements * sizeof(unsigned int);
+    nBytes += nElesBO[e->elesObjID] * e->nSubelements * sizeof(unsigned int);
 
   binary_write(f, nBytes);
 
@@ -3056,7 +3100,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   // Types
   nBytes = 0;
   for (auto e : elesObjs)
-    nBytes += nElesBT[e->etype] * e->nSubelements * sizeof(char);
+    nBytes += nElesBO[e->elesObjID] * e->nSubelements * sizeof(char);
   binary_write(f, nBytes);
 
   for (auto e : elesObjs)
@@ -3147,7 +3191,9 @@ void FRSolver::write_color()
   /* Write partition color to file in .vtu format */
   std::ofstream f(outputfile);
 
-  std::map<ELE_TYPE, unsigned int> nElesBT = geo.nElesBT;
+  std::vector<unsigned int> nElesBO(elesObjs.size());
+  for (auto e : elesObjs)
+    nElesBO[e->elesObjID] = e->nEles;
 
   if (input->overset)
   {
@@ -3155,7 +3201,7 @@ void FRSolver::write_color()
     for (auto e : elesObjs)
     {
       for (int ele = 0; ele < e->nEles; ele++)
-        if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBT[e->etype]--;
+        if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBO[e->elesObjID]--;
     }
   }
 
@@ -3164,8 +3210,8 @@ void FRSolver::write_color()
 
   for (auto e : elesObjs)
   {
-    nCells += e->nSubelements * nElesBT[e->etype];
-    nPts += e->nPpts * nElesBT[e->etype];
+    nCells += e->nSubelements * nElesBO[e->elesObjID];
+    nPts += e->nPpts * nElesBO[e->elesObjID];
   }
 
   /* Write header */
@@ -3285,9 +3331,9 @@ void FRSolver::write_color()
   f << "format=\"ascii\">"<< std::endl;
   for (auto e : elesObjs)
   {
-    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    for (unsigned int ele = e->startEle; ele < e->endEle; ele++)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
       {
         f << std::scientific << std::setprecision(16) << geo.ele2colorBT[e->etype](ele);
@@ -3726,6 +3772,9 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 {
   if (geo.ele_set.count(TET))
     ThrowException("Surface write not implemented for triangular faces.");
+
+  if (input->dt_scheme == "MCGS")
+    ThrowException("Surface write not implemented for MCGS.");
 
   auto e = elesObjs[0];
 

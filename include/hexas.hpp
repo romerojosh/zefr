@@ -54,7 +54,7 @@ class Hexas: public Elements
     void modify_sensor();
 
   public:
-    Hexas(GeoStruct *geo, InputStruct *input, int order = -1);
+    Hexas(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order = -1);
 
     void setup_PMG(int pro_order, int res_order);
     void setup_ppt_connectivity();

@@ -39,12 +39,15 @@ extern "C" {
 #include "solver_kernels.h"
 #endif
 
-Tris::Tris(GeoStruct *geo, InputStruct *input, int order)
+Tris::Tris(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
 {
   etype = TRI;
   this->geo = geo;
   this->input = input;  
-  this->nEles = geo->nElesBT[TRI];  
+  this->elesObjID = elesObjID;
+  this->startEle = startEle;
+  this->endEle = endEle;
+  this->nEles = endEle - startEle;
   this->nQpts = 45; // Note: Fixing quadrature points to Williams-Shunn 45 point rule
 
   if (input->error_freq == 0) this->nQpts = 0; // disable allocation if not needed
