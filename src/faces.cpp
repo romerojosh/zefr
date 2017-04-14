@@ -2032,8 +2032,10 @@ void Faces::send_U_data()
     auto &fpts = entry.second;
     
     /* Pack buffer of solution data at flux points in list */
-    pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars, 1);
+    pack_U_wrapper(U_sbuffs_d[sendRank], fpts, U_d, nVars, 0);
   }
+
+  sync_stream(0);
 
   /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
@@ -2112,16 +2114,18 @@ void Faces::recv_U_data()
     int pairedRank = entry.first;
     copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
   }
+  
+  sync_stream(1);
 
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int recvRank = entry.first;
     auto &fpts = entry.second;
-    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 1, input->overset, geo->iblank_fpts_d.data());    
+    unpack_U_wrapper(U_rbuffs_d[recvRank], fpts, U_d, nVars, 0, input->overset, geo->iblank_fpts_d.data());    
   }
 
   /* Halt main compute stream until U is unpacked */
-  event_record_wait_pair(1, 1, 0);
+  //event_record_wait_pair(1, 1, 0);
 
   check_error();
 #endif
@@ -2173,8 +2177,10 @@ void Faces::send_dU_data()
     auto &fpts = entry.second;
     
     /* Pack buffer of solution data at flux points in list */
-    pack_dU_wrapper(U_sbuffs_d[sendRank], fpts, dU_d, nVars, nDims, 1);
+    pack_dU_wrapper(U_sbuffs_d[sendRank], fpts, dU_d, nVars, nDims, 0);
   }
+
+  sync_stream(0);
 
   /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
@@ -2253,16 +2259,18 @@ void Faces::recv_dU_data()
     copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
   }
 
+  sync_stream(1);
+
   for (auto &entry : geo->fpt_buffer_map_d)
   {
     int recvRank = entry.first;
     auto &fpts = entry.second;
 
-    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, 1, input->overset, geo->iblank_fpts_d.data());
+    unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, 0, input->overset, geo->iblank_fpts_d.data());
   }
 
   /* Halt main stream until dU is unpacked */
-  event_record_wait_pair(1, 1, 0);
+  //event_record_wait_pair(1, 1, 0);
 
   check_error();
 #endif
