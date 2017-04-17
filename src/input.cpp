@@ -135,13 +135,10 @@ InputStruct read_input_file(std::string inputfile)
   read_param_vec(f, "mg_levels", input.mg_levels);
   read_param_vec(f, "mg_steps", input.mg_steps);
 
-  read_param(f, "inv_mode", input.inv_mode, true);
-  read_param(f, "stream_mode", input.stream_mode, false);
-  read_param(f, "backsweep", input.backsweep, false);
+  read_param(f, "nColors", input.nColors, (unsigned int) 1);
   read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
-  read_param(f, "nColors", input.nColors, (unsigned int) 4);
-  read_param(f, "n_LHS_blocks", input.n_LHS_blocks, (unsigned int) 1);
-  read_param(f, "LU_pivot", input.LU_pivot, false);
+  read_param(f, "backsweep", input.backsweep, false);
+  read_param(f, "inv_mode", input.inv_mode, false);
 
   read_param(f, "catch_signals", input.catch_signals, false);
   read_param(f, "output_prefix", input.output_prefix);

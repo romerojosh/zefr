@@ -132,13 +132,8 @@ class FRSolver
     void set_fpt_adjacency();
     void compute_dRdU();
     void compute_LHS_LU();
+    void compute_LHS_inverse();
     void compute_RHS(unsigned int color);
-#ifdef _CPU
-    void compute_RHS_source(const mdvector<double> &source, unsigned int color);
-#endif
-#ifdef _GPU
-    void compute_RHS_source(const mdvector_gpu<double> &source, unsigned int color);
-#endif
     void compute_deltaU(unsigned int color);
     void compute_U(unsigned int color);
 

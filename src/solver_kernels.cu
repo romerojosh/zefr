@@ -360,8 +360,8 @@ void gaussJordanInv_wrapper(int N, double** Aarray, int lda, double** Carray, in
 
 
 __global__
-void cublasDgemvBatched_custom(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
-    const double beta, double** yarray, int incy, int batchCount)
+void DgemvBatched_noAlpha_noBeta(const int M, const int N, const double** Aarray, int lda, const double** xarray, int incx,
+    double** yarray, int incy, int batchCount)
 {
   const unsigned int tidx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -370,28 +370,26 @@ void cublasDgemvBatched_custom(const int M, const int N, const double alpha, con
     for (unsigned int i = tidx; i < M; i += blockDim.x)
     { 
       double sum = 0.0;
-
       for (unsigned int j = 0; j < N; j++)
-      {
-        sum += Aarray[batch][i + j*lda] * xarray[batch][j];
-      }
+        sum += Aarray[batch][i*lda + j] * xarray[batch][j * incx];
 
       yarray[batch][i * incy] = sum;
     }
 
-    __syncthreads(); /* To avoid divergence */
+    __syncthreads(); // To avoid divergence
   }
-
-
 }
 
-void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
+void DgemvBatched_wrapper(const int M, const int N, const double alpha, const double** Aarray, int lda, const double** xarray, int incx,
     const double beta, double** yarray, int incy, int batchCount)
 {
   dim3 threads(32, 6);
   dim3 blocks(1, std::min((batchCount + threads.y - 1)/threads.y, MAX_GRID_DIM));
 
-  cublasDgemvBatched_custom<<<blocks, threads>>>(M, N, alpha, Aarray, lda, xarray, incx, beta, yarray, incy, batchCount);
+  if (alpha == 1.0 && beta == 0.0)
+    DgemvBatched_noAlpha_noBeta<<<blocks, threads>>>(M, N, Aarray, lda, xarray, incx, yarray, incy, batchCount);
+  else
+    ThrowException("DgemvBatched not implemented for alpha and nonzero beta!");
 }
 
 template<unsigned int nVars, unsigned int nDims>

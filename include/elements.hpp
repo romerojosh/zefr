@@ -120,7 +120,9 @@ class Elements
 #if defined(_CPU) && !defined(_NO_TNT)
     std::vector<JAMA::LU<double>> LHS_ptrs;
 #elif defined(_GPU)
-    mdvector<double*> LHS_ptrs, RHS_ptrs;
+    mdvector<double> LHS_inv;
+    mdvector<double*> LHS_ptrs, RHS_ptrs, deltaU_ptrs;
+    mdvector<double*> LHS_inv_ptrs;
     mdvector<int> LHS_info;
 #endif
 
@@ -169,7 +171,9 @@ class Elements
 
     /* Element structures for implicit method */
     mdvector_gpu<double> LHS_d, deltaU_d, RHS_d;
-    mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d;
+    mdvector_gpu<double> LHS_inv_d;
+    mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
+    mdvector_gpu<double*> LHS_inv_ptrs_d;
     mdvector_gpu<int> LHS_info_d;
 
     /* Overset Related */

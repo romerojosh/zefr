@@ -130,6 +130,14 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     LHS_ptrs.assign({nEles});
     RHS_ptrs.assign({nEles});
     LHS_info.assign({nEles});
+
+    if (input->inv_mode)
+    {
+      LHS_inv.assign({nEles, nVars, nSpts, nVars, nSpts});
+      LHS_inv_ptrs.assign({nEles});
+      deltaU.assign({nEles, nVars, nSpts});
+      deltaU_ptrs.assign({nEles});
+    }
 #endif
   }
 }

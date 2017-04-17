@@ -899,10 +899,22 @@ void FRSolver::solver_data_to_device()
         e->LHS_ptrs(ele) = e->LHS_d.data() + ele * (N * N);
         e->RHS_ptrs(ele) = e->RHS_d.data() + ele * N;
       }
-
       e->LHS_ptrs_d = e->LHS_ptrs;
       e->RHS_ptrs_d = e->RHS_ptrs;
       e->LHS_info_d = e->LHS_info;
+
+      if (input->inv_mode)
+      {
+        e->LHS_inv_d = e->LHS_inv;
+        e->deltaU_d = e->deltaU;
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        {
+          e->LHS_inv_ptrs(ele) = e->LHS_inv_d.data() + ele * (N * N);
+          e->deltaU_ptrs(ele) = e->deltaU_d.data() + ele * N;
+        }
+        e->LHS_inv_ptrs_d = e->LHS_inv_ptrs;
+        e->deltaU_ptrs_d = e->deltaU_ptrs;
+      }
     }
   }
 
@@ -1243,12 +1255,30 @@ void FRSolver::compute_LHS_LU()
 #endif
 
 #ifdef _GPU
-  /* Perform batched LU of A transpose using cuBLAS */
+  /* Perform in-place batched LU of A transpose using cuBLAS (col-maj) */
   for (auto e : elesObjs)
   {
     unsigned int N = e->nSpts * e->nVars;
     cublasDgetrfBatched_wrapper(N, e->LHS_ptrs_d.data(), N, nullptr, e->LHS_info_d.data(), e->nEles);
   }
+#endif
+}
+
+void FRSolver::compute_LHS_inverse()
+{
+#ifdef _CPU
+  ThrowException("LHS Inversion not supported on CPU!");
+#endif
+
+#ifdef _GPU
+  /* Perform batched inversion on LU of A transpose using cuBLAS (col-maj) */
+  for (auto e : elesObjs)
+  {
+    unsigned int N = e->nSpts * e->nVars;
+    cublasDgetriBatched_wrapper(N, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
+        e->LHS_inv_ptrs_d.data(), N, e->LHS_info_d.data(), e->nEles);
+  }
+
 #endif
 }
 
@@ -1270,7 +1300,7 @@ void FRSolver::compute_RHS(unsigned int color)
 #ifdef _GPU
   for (auto e : elesObjsBC[color])
     compute_RHS_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->RHS_d, input->dt_type, 
-      e->nSpts, e->nEles, e->nVars);
+        e->nSpts, e->nEles, e->nVars);
 #endif
 }
 
@@ -1293,15 +1323,29 @@ void FRSolver::compute_deltaU(unsigned int color)
 #endif
 
 #ifdef _GPU
-  /* Perform batched LU solve of transposed A using cuBLAS */
-  for (auto e : elesObjsBC[color])
+  if (!input->inv_mode)
   {
-    unsigned int N = e->nSpts * e->nVars;
-    int info;
-    cublasDgetrsBatched_trans_wrapper(N, 1, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
-      e->RHS_ptrs_d.data(), N, &info, e->nEles);
+    /* Perform in-place batched LU solve of A using cuBLAS */
+    for (auto e : elesObjsBC[color])
+    {
+      unsigned int N = e->nSpts * e->nVars;
+      int info;
+      cublasDgetrsBatched_trans_wrapper(N, 1, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
+          e->RHS_ptrs_d.data(), N, &info, e->nEles);
 
-    if (info) ThrowException("cuBLAS batch LU solve failed!");
+      if (info) ThrowException("cuBLAS batch LU solve failed!");
+    }
+  }
+
+  else
+  {
+    /* Perform batched matrix-vector of A inverse and RHS */
+    for (auto e : elesObjsBC[color])
+    {
+      unsigned int N = e->nSpts * e->nVars;
+      DgemvBatched_wrapper(N, N, 1.0, (const double**) e->LHS_inv_ptrs_d.data(), N, 
+          (const double**) e->RHS_ptrs_d.data(), 1, 0.0, e->deltaU_ptrs_d.data(), 1, e->nEles);
+    }
   }
 #endif
 }
@@ -1317,9 +1361,18 @@ void FRSolver::compute_U(unsigned int color)
 #endif
 
 #ifdef _GPU
-  /* Note: RHS contains deltaU */
-  for (auto e : elesObjsBC[color])
-    compute_U_wrapper(e->U_spts_d, e->RHS_d, e->nSpts, e->nEles, e->nVars);
+  if (!input->inv_mode)
+  {
+    /* Note: RHS contains deltaU */
+    for (auto e : elesObjsBC[color])
+      compute_U_wrapper(e->U_spts_d, e->RHS_d, e->nSpts, e->nEles, e->nVars);
+  }
+
+  else
+  {
+    for (auto e : elesObjsBC[color])
+      compute_U_wrapper(e->U_spts_d, e->deltaU_d, e->nSpts, e->nEles, e->nVars);
+  }
 #endif
 }
 
@@ -2143,8 +2196,9 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
         e->LHS_d = e->LHS;
 #endif
 
-      /* LU factorization of LHS */
       compute_LHS_LU();
+      if (input->inv_mode) 
+        compute_LHS_inverse();
     }
     
     /* Compute residual on elements of this color only */
@@ -4317,9 +4371,9 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 
 void FRSolver::write_LHS(const std::string &_prefix)
 {
-  auto e = elesObjs[0];
 #if !defined (_MPI)
-  if (input->dt_scheme == "MCGS" && !input->stream_mode)
+  auto e = elesObjs[0];
+  if (input->dt_scheme == "MCGS")
   {
     if (input->rank == 0) std::cout << "Writing LHS to file..." << std::endl;
 
