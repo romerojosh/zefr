@@ -959,7 +959,9 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
   rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, V, PL, PR, norm, waveSp_gfpts(fpt),
       AdvDiff_A.data(), Vgn, gamma, rus_k, rus_bias(fpt));
 
-  if (fpt >= nFpts_int) P(0, fpt) = PL; // Write out pressure on boundary only
+  //if (fpt >= nFpts_int) P(0, fpt) = PL; // Write out pressure on boundary only
+  P(0, fpt) = PL;
+  P(1, fpt) = PR;
 
   if (viscous)
   {

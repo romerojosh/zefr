@@ -295,6 +295,12 @@ void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda
   cublasDgetrsBatched(cublas_handles[0], CUBLAS_OP_N, N, NRHS, Aarray, lda, PivotArray, Barray, ldb, info, batchCount);
 }
 
+void cublasDgetrsBatched_trans_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
+    double** Barray, int ldb, int* info, int batchCount)
+{
+  cublasDgetrsBatched(cublas_handles[0], CUBLAS_OP_T, N, NRHS, Aarray, lda, PivotArray, Barray, ldb, info, batchCount);
+}
+
 void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchCount)
 {
   cublasDgetriBatched(cublas_handles[0], N, Aarray, lda, PivotArray, Carray, ldc, InfoArray, batchCount);
@@ -390,7 +396,7 @@ void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, co
 
 template<unsigned int nVars, unsigned int nDims>
 __global__
-void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> coord_spts, 
+void add_source(mdvector_gpu<double> divF, const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int equation, 
     double flow_time, unsigned int stage, bool overset = false, const int* iblank = NULL)
 {
@@ -415,12 +421,12 @@ void add_source(mdvector_gpu<double> divF_spts, const mdvector_gpu<double> jaco_
 
     for (unsigned int n = 0; n < nVars; n++)
     {
-      divF_spts(stage, spt, n, ele) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
+      divF(stage, spt, n, ele) += compute_source_term_dev(x, y, z, flow_time, n, nDims, equation) * jaco_det;
     }
   }
 }
 
-void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
+void add_source_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
     double flow_time, unsigned int stage, bool overset, int* iblank)
 {
@@ -430,19 +436,19 @@ void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &j
   if (nDims == 2)
   {
     if (equation == AdvDiff)
-      add_source<1, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+      add_source<1, 2><<<blocks, threads>>>(divF, jaco_det_spts, coord_spts, nSpts, nEles, equation,
           flow_time, stage);
     else
-      add_source<4, 2><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+      add_source<4, 2><<<blocks, threads>>>(divF, jaco_det_spts, coord_spts, nSpts, nEles, equation,
           flow_time, stage, overset, iblank);
   }
   else
   {
     if (equation == AdvDiff)
-      add_source<1, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+      add_source<1, 3><<<blocks, threads>>>(divF, jaco_det_spts, coord_spts, nSpts, nEles, equation,
           flow_time, stage);
     else
-      add_source<5, 3><<<blocks, threads>>>(divF_spts, jaco_det_spts, coord_spts, nSpts, nEles, equation,
+      add_source<5, 3><<<blocks, threads>>>(divF, jaco_det_spts, coord_spts, nSpts, nEles, equation,
           flow_time, stage, overset, iblank);
   }
 }
@@ -864,12 +870,14 @@ __global__
 void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> waveSp_gfpts, const mdvector_gpu<double> diffCo_gfpts,
     const mdvector_gpu<double> dA, const mdvector_gpu<int> fpt2gfpt, const mdvector_gpu<char> fpt2gfpt_slot, const mdvector_gpu<double> weights_fpts,
     const mdvector_gpu<double> vol, const mdvector_gpu<double> h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, int CFL_type,
-    unsigned int nFpts, unsigned int nEles, bool overset = false, const int* iblank = NULL)
+    unsigned int nFpts, unsigned int nEles, unsigned int startEle, bool overset = false, const int* iblank = NULL)
 {
   const unsigned int ele = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (ele >= nEles)
     return;
+
+  unsigned int eleBT = ele + startEle;
 
   if (overset)
   {
@@ -885,8 +893,8 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
     double int_waveSp = 0.;  /* Edge/Face integrated wavespeed */
     for (unsigned int fpt = 0; fpt < nFpts; fpt++)
     {
-      int gfpt = fpt2gfpt(fpt,ele);
-      int slot = fpt2gfpt_slot(fpt,ele);
+      int gfpt = fpt2gfpt(fpt,eleBT);
+      int slot = fpt2gfpt_slot(fpt,eleBT);
 
       int_waveSp += weights_fpts(fpt % nFptsPerFace) * waveSp_gfpts(gfpt) * dA(slot, gfpt);
     }
@@ -903,7 +911,7 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
     {
       for (unsigned int fpt = face * nFptsPerFace; fpt < (face+1) * nFptsPerFace; fpt++)
       {
-        int gfpt = fpt2gfpt(fpt,ele);
+        int gfpt = fpt2gfpt(fpt,eleBT);
 
         /* Compute inverse of timestep for each fpt */
         double dtinv_temp = waveSp_gfpts(gfpt) / (get_cfl_limit_adv_dev(order) * h_ref(fpt, ele)) + 
@@ -935,7 +943,7 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, mdvector_gpu<double> &diffCo_gfpts,
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
     mdvector_gpu<double> &h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, unsigned int dt_type, unsigned int CFL_type,
-    unsigned int nFpts, unsigned int nEles, unsigned int nDims, _mpi_comm comm_in, bool overset,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims, unsigned int startEle, _mpi_comm comm_in, bool overset,
     int* iblank)
 {
   unsigned int threads = 128;
@@ -944,12 +952,12 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
   if (nDims == 2)
   {
     compute_element_dt<2><<<blocks, threads>>>(dt, waveSp_gfpts, diffCo_gfpts, dA, fpt2gfpt, fpt2gfpt_slot, weights_fpts, vol, h_ref,
-        nFptsPerFace, CFL, beta, order, CFL_type, nFpts, nEles);
+        nFptsPerFace, CFL, beta, order, CFL_type, nFpts, nEles, startEle);
   }
   else
   {
     compute_element_dt<3><<<blocks, threads>>>(dt, waveSp_gfpts, diffCo_gfpts, dA, fpt2gfpt, fpt2gfpt_slot, weights_fpts, vol, h_ref,
-        nFptsPerFace, CFL, beta, order, CFL_type, nFpts, nEles, overset, iblank);
+        nFptsPerFace, CFL, beta, order, CFL_type, nFpts, nEles, startEle, overset, iblank);
   }
 
   if (dt_type == 1)
@@ -972,14 +980,13 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
 
 
 __global__
-void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
-    mdvector_gpu<double> RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle)
+void compute_RHS(mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
+    mdvector_gpu<double> RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
 
-  if (spt >= nSpts || ele >= endEle)
+  if (spt >= nSpts || ele >= nEles)
     return;
 
   double dt;
@@ -988,79 +995,40 @@ void compute_RHS(mdvector_gpu<double> divF_spts, mdvector_gpu<double> jaco_det_s
   else
     dt = dt_in(ele);
 
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    RHS(spt, n, ele) = -(dt * divF_spts(spt, ele, n, 0)) / jaco_det_spts(spt, ele);
-  }
+  double jaco_det = jaco_det_spts(spt, ele);
+
+  for (unsigned int var = 0; var < nVars; var++)
+    RHS(ele, var, spt) = -(dt * divF(0, spt, var, ele)) / jaco_det;
 }
 
-void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle)
+void compute_RHS_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
-  unsigned int threads = 128;
-  unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y - 1)/threads.y);
 
-  compute_RHS<<<blocks, threads>>>(divF_spts, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars, startEle, endEle);
+  compute_RHS<<<blocks, threads>>>(divF, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars);
 }
 
 __global__
-void compute_RHS_source(mdvector_gpu<double> divF_spts, mdvector_gpu<double> source, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
-    mdvector_gpu<double> RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle)
-{
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
-
-  if (spt >= nSpts || ele >= endEle)
-    return;
-
-  double dt;
-  if (dt_type != 2)
-    dt = dt_in(0);
-  else
-    dt = dt_in(ele);
-
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    RHS(spt, n, ele) = -(dt * (divF_spts(spt, ele, n, 0) + source(spt, ele, n))) / jaco_det_spts(spt, ele);
-  }
-}
-
-void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, const mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle)
-{
-  unsigned int threads = 128;
-  unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
-
-  compute_RHS_source<<<blocks, threads>>>(divF_spts, source, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars, startEle, endEle);
-}
-
-__global__
-void compute_U(mdvector_gpu<double> U_spts, mdvector_gpu<double> deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle)
+void compute_U(mdvector_gpu<double> U_spts, mdvector_gpu<double> deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {  
-  const unsigned int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nSpts;
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nSpts + startEle;
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
 
-  if (spt >= nSpts || ele >= endEle)
+  if (spt >= nSpts || ele >= nEles)
     return;
 
-  for (unsigned int n = 0; n < nVars; n++)
-  {
-    U_spts(spt, ele, n) += deltaU(spt, n, ele);
-  }
-
+  for (unsigned int var = 0; var < nVars; var++)
+    U_spts(spt, var, ele) += deltaU(ele, var, spt);
 }
 
-void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle)
+void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
-  unsigned int threads = 128;
-  unsigned int blocks = (nSpts * (endEle - startEle) + threads - 1)/ threads;
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y - 1)/threads.y);
 
-  compute_U<<<blocks, threads>>>(U_spts, deltaU, nSpts, nEles, nVars, startEle, endEle);
+  compute_U<<<blocks, threads>>>(U_spts, deltaU, nSpts, nEles, nVars);
 }
 
 #ifdef _MPI

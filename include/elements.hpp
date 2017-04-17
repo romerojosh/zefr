@@ -112,22 +112,17 @@ class Elements
     mdvector<double> dt, rk_err;
 
     /* Element structures for implicit method */
-    mdvector<double> LHS, LHSInv;  // Element local matrices for implicit system
-    mdvector<int> LU_pivots, LU_info; 
-#ifndef _NO_TNT
-    std::vector<JAMA::LU<double>> LUptrs;
-#endif
-    mdvector<double*> LHS_ptrs, RHS_ptrs, LHSInv_ptrs, LHS_subptrs, LHS_tempSF_subptrs, oppE_ptrs, deltaU_ptrs; 
-    mdvector<double> deltaU;
-    mdvector<double> RHS;
-
-    std::vector<mdvector<double>> LHSs, LHSInvs;
-
     mdvector<double> dFdU_spts, dFddU_spts;
     mdvector<double> dFcdU, dUcdU, dFcddU;
-
     mdvector<double> Cvisc0, CviscN, CdFddU0, CdFcddU0;
     mdvector<double> CtempSF, CtempD, CtempFS, CtempFSN;
+    mdvector<double> LHS, deltaU, RHS;
+#if defined(_CPU) && !defined(_NO_TNT)
+    std::vector<JAMA::LU<double>> LHS_ptrs;
+#elif defined(_GPU)
+    mdvector<double*> LHS_ptrs, RHS_ptrs;
+    mdvector<int> LHS_info;
+#endif
 
     _mpi_comm myComm;
 
@@ -173,12 +168,9 @@ class Elements
     mdvector_gpu<double> dt_d, rk_err_d;
 
     /* Element structures for implicit method */
-    mdvector_gpu<double> LHS_d, LHSInv_d;
-    mdvector_gpu<int> LU_pivots_d, LU_info_d; 
-    mdvector_gpu<double*> LHS_ptrs_d, LHSInv_ptrs_d, RHS_ptrs_d, LHS_subptrs_d, LHS_tempSF_subptrs_d, oppE_ptrs_d, deltaU_ptrs_d; 
-    mdvector_gpu<double> dFcdU_fpts_d, dFdU_spts_d;
-    mdvector_gpu<double> deltaU_d;
-    mdvector_gpu<double> RHS_d;
+    mdvector_gpu<double> LHS_d, deltaU_d, RHS_d;
+    mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d;
+    mdvector_gpu<int> LHS_info_d;
 
     /* Overset Related */
     mdvector_gpu<double> U_donors_d, dU_donors_d;

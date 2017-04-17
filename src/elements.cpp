@@ -123,8 +123,14 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     /* Solver data structures */
     LHS.assign({nEles, nVars, nSpts, nVars, nSpts});
     RHS.assign({nEles, nVars, nSpts});
+#ifdef _CPU
     deltaU.assign({nEles, nVars, nSpts});
-    LUptrs.resize(nEles);
+    LHS_ptrs.resize(nEles);
+#elif defined(_GPU)
+    LHS_ptrs.assign({nEles});
+    RHS_ptrs.assign({nEles});
+    LHS_info.assign({nEles});
+#endif
   }
 }
 

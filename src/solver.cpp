@@ -557,14 +557,6 @@ void FRSolver::setup_update()
     nCounter = geo.nColors;
     if (input->backsweep)
       nCounter *= 2;
-
-#ifdef _GPU
-    if (input->viscous)
-    {
-      ThrowException("Viscous MCGS not implemented on GPU");
-    }
-#endif
-
   }
   else
   {
@@ -863,7 +855,7 @@ void FRSolver::solver_data_to_device()
     }
 
     //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
-    if (input->motion || input->dt_scheme == "MCGS")
+    if (input->motion)
     {
       e->jaco_spts_d = e->jaco_spts;
     }
@@ -894,6 +886,23 @@ void FRSolver::solver_data_to_device()
           e->inv_jaco_spts_init_d = e->inv_jaco_spts;
         e->jaco_spts_init_d = e->jaco_spts;
       }
+    }
+
+    if (input->dt_scheme == "MCGS")
+    {
+      e->LHS_d = e->LHS;
+      e->RHS_d = e->RHS;
+
+      unsigned int N = e->nSpts * e->nVars;
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        e->LHS_ptrs(ele) = e->LHS_d.data() + ele * (N * N);
+        e->RHS_ptrs(ele) = e->RHS_d.data() + ele * N;
+      }
+
+      e->LHS_ptrs_d = e->LHS_ptrs;
+      e->RHS_ptrs_d = e->RHS_ptrs;
+      e->LHS_info_d = e->LHS_info;
     }
   }
 
@@ -1220,20 +1229,32 @@ void FRSolver::compute_dRdU()
 
 void FRSolver::compute_LHS_LU()
 {
-#ifndef _NO_TNT
+#if defined(_CPU) && !defined(_NO_TNT)
+  /* Perform LU using TNT */
   for (auto e : elesObjs)
+  {
+    unsigned int N = e->nSpts * e->nVars;
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      /* Calculate and store LU object */
-      unsigned int N = e->nSpts * e->nVars;
       TNT::Array2D<double> A(N, N, &e->LHS(ele, 0, 0, 0, 0));
-      e->LUptrs[ele] = JAMA::LU<double>(A);
+      e->LHS_ptrs[ele] = JAMA::LU<double>(A);
     }
+  }
+#endif
+
+#ifdef _GPU
+  /* Perform batched LU of A transpose using cuBLAS */
+  for (auto e : elesObjs)
+  {
+    unsigned int N = e->nSpts * e->nVars;
+    cublasDgetrfBatched_wrapper(N, e->LHS_ptrs_d.data(), N, nullptr, e->LHS_info_d.data(), e->nEles);
+  }
 #endif
 }
 
 void FRSolver::compute_RHS(unsigned int color)
 {
+#ifdef _CPU
   for (auto e : elesObjsBC[color])
     for (unsigned int ele = 0; ele < e->nEles; ele++)
       for (unsigned int var = 0; var < e->nVars; var++)
@@ -1244,34 +1265,62 @@ void FRSolver::compute_RHS(unsigned int color)
           else
             e->RHS(ele, var, spt) = -(e->dt(ele) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
         }
+#endif
+
+#ifdef _GPU
+  for (auto e : elesObjsBC[color])
+    compute_RHS_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->RHS_d, input->dt_type, 
+      e->nSpts, e->nEles, e->nVars);
+#endif
 }
 
 void FRSolver::compute_deltaU(unsigned int color)
 {
-#ifndef _NO_TNT
+#if defined(_CPU) && !defined(_NO_TNT)
+  /* Perform LU solve using TNT */
   for (auto e : elesObjsBC[color])
+  {
+    unsigned int N = e->nSpts * e->nVars;
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      /* Create Array1D view of RHS */
-      unsigned int N = e->nSpts * e->nVars;
-      TNT::Array1D<double> b(N, &e->RHS(ele, 0, 0));
-
-      /* Solve for deltaU */
       TNT::Array1D<double> x(N, &e->deltaU(ele, 0, 0));
-      x.inject(e->LUptrs[ele].solve(b));
+      TNT::Array1D<double> b(N, &e->RHS(ele, 0, 0));
+      x.inject(e->LHS_ptrs[ele].solve(b));
 
-      if (x.dim() == 0) ThrowException("LU solve failed!");
+      if (x.dim() == 0) ThrowException("TNT LU solve failed!");
     }
+  }
+#endif
+
+#ifdef _GPU
+  /* Perform batched LU solve of transposed A using cuBLAS */
+  for (auto e : elesObjsBC[color])
+  {
+    unsigned int N = e->nSpts * e->nVars;
+    int info;
+    cublasDgetrsBatched_trans_wrapper(N, 1, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
+      e->RHS_ptrs_d.data(), N, &info, e->nEles);
+
+    if (info) ThrowException("cuBLAS batch LU solve failed!");
+  }
 #endif
 }
 
 void FRSolver::compute_U(unsigned int color)
 {
+#ifdef _CPU
   for (auto e : elesObjsBC[color])
     for (unsigned int ele = 0; ele < e->nEles; ele++)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
           e->U_spts(spt, var, ele) += e->deltaU(ele, var, spt);
+#endif
+
+#ifdef _GPU
+  /* Note: RHS contains deltaU */
+  for (auto e : elesObjsBC[color])
+    compute_U_wrapper(e->U_spts_d, e->RHS_d, e->nSpts, e->nEles, e->nVars);
+#endif
 }
 
 void FRSolver::initialize_U()
@@ -2001,8 +2050,35 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     int iter = current_iter - restart_iter;
     if (counter == 0 && iter % input->Jfreeze_freq == 0)
     {
-      /* Compute block diagonal components of residual Jacobian */
       compute_residual(0);
+
+      /* Copy GPU data structures for CPU Jacobian computation */
+#ifdef _GPU
+      for (auto e : elesObjs)
+      {
+        e->U_spts = e->U_spts_d;
+        e->U_fpts = e->U_fpts_d;
+
+        if (input->viscous)
+        {
+          e->dU_spts = e->dU_spts_d;
+          e->dU_fpts = e->dU_fpts_d;
+        }
+      }
+
+      faces->U_bnd = faces->U_bnd_d;
+      faces->U_bnd_ldg = faces->U_bnd_ldg_d;
+      faces->P = faces->P_d;
+      faces->waveSp = faces->waveSp_d;
+      faces->diffCo = faces->diffCo_d;
+
+      if (input->viscous)
+      {
+        faces->dU_bnd = faces->dU_bnd_d;
+      }
+#endif
+
+      /* Compute block diagonal components of residual Jacobian */
       compute_dRdU();
 
       /* Compute residual Jacobian using FDA */
@@ -2025,7 +2101,7 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
               e->U_spts(spt, var, ele) += eps;
               compute_residual(0);
 
-              // Compute LHS implcit Jacobian
+              // Compute LHS implicit Jacobian
               for (unsigned int vari = 0; vari < e->nVars; vari++)
                 for (unsigned int spti = 0; spti < e->nSpts; spti++)
                   e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
@@ -2037,9 +2113,12 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
-      {
         compute_element_dt();
-      }
+
+#ifdef _GPU
+      for (auto e : elesObjs)
+        e->dt = e->dt_d;
+#endif
 
       /* Compute Backward Euler LHS */
       for (auto e : elesObjs)
@@ -2058,11 +2137,14 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
                     e->LHS(ele, vari, spti, varj, sptj) += 1;
                 }
 
+      /* Copy LHS to GPU */
+#ifdef _GPU
+      for (auto e : elesObjs)
+        e->LHS_d = e->LHS;
+#endif
+
       /* LU factorization of LHS */
       compute_LHS_LU();
-
-      /* Write LHS */
-      //write_LHS(input->output_prefix);
     }
     
     /* Compute residual on elements of this color only */
@@ -2201,7 +2283,7 @@ void FRSolver::compute_element_dt()
   {
     compute_element_dt_wrapper(e->dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfptBT_d[e->etype], 
         geo.fpt2gfpt_slotBT_d[e->etype], e->weights_fpts_d, e->vol_d, e->h_ref_d, e->nFptsPerFace, CFL, input->ldg_b, order, 
-        input->dt_type, input->CFL_type, e->nFpts, e->nEles, e->nDims, myComm,
+        input->dt_type, input->CFL_type, e->nFpts, e->nEles, e->nDims, e->startEle, myComm,
         input->overset, geo.iblank_cell_d.data());
   }
 
@@ -4236,7 +4318,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 void FRSolver::write_LHS(const std::string &_prefix)
 {
   auto e = elesObjs[0];
-#if !defined (_MPI) && !defined (_GPU)
+#if !defined (_MPI)
   if (input->dt_scheme == "MCGS" && !input->stream_mode)
   {
     if (input->rank == 0) std::cout << "Writing LHS to file..." << std::endl;

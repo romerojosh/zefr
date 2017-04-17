@@ -100,6 +100,10 @@ void cublasDgetrfBatched_wrapper(int N, double** Aarray, int lda, int* PivotArra
 void cublasDgetrsBatched_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
     double** Barray, int ldb, int* info, int batchCount);
 
+// cublas batched DGETRS with transposed 'A'
+void cublasDgetrsBatched_trans_wrapper(int N, int NRHS, const double** Aarray, int lda, const int* PivotArray, 
+    double** Barray, int ldb, int* info, int batchCount);
+
 void cublasDgetriBatched_wrapper(int N, const double** Aarray, int lda, int* PivotArray, double** Carray, int ldc, int* InfoArray, int batchCount);
 
 void gaussJordanInv_wrapper(int N, double** Aarray, int lda, double** Carray, int ldc, int batchCount);
@@ -108,7 +112,7 @@ void cublasDgemvBatched_wrapper(const int M, const int N, const double alpha, co
     const double beta, double** yarray, int incy, int batchCount);
 
 /* Wrappers for custom kernels */
-void add_source_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
+void add_source_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &coord_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
     double flow_time, unsigned int stage, bool overset = false, int* iblank = NULL);
 
@@ -155,19 +159,13 @@ double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, mdvector_gpu<double> &diffCo_gfpts,
     mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
     mdvector_gpu<double> &h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, unsigned int dt_type, unsigned int CFL_type,
-    unsigned int nFpts, unsigned int nEles, unsigned int nDims, _mpi_comm comm_in,
+    unsigned int nFpts, unsigned int nEles, unsigned int nDims, unsigned int startEle, _mpi_comm comm_in,
     bool overset = false, int* iblank = NULL);
 
-void compute_RHS_wrapper(mdvector_gpu<double> &divF_spts, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt_in,
-    mdvector_gpu<double> &b, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle);
+void compute_RHS_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt_in,
+    mdvector_gpu<double> &b, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 
-void compute_RHS_source_wrapper(mdvector_gpu<double> &divF_spts, const mdvector_gpu<double> &source, mdvector_gpu<double> &jaco_det_spts, 
-    mdvector_gpu<double> &dt_in, mdvector_gpu<double> &b, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle);
-
-void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int startEle, unsigned int endEle);
+void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 
 #ifdef _MPI
 void pack_U_wrapper(mdvector_gpu<double> &U_sbuffs, mdvector_gpu<unsigned int> &fpts, 

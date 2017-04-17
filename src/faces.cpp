@@ -1939,7 +1939,6 @@ void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
 
 void Faces::compute_common_dFdU(unsigned int startFpt, unsigned int endFpt)
 {
-#ifdef _CPU
   if (input->fconv_type == Rusanov)
   {
     if (input->equation == AdvDiff)
@@ -1986,7 +1985,6 @@ void Faces::compute_common_dFdU(unsigned int startFpt, unsigned int endFpt)
       ThrowException("Numerical viscous flux type not recognized!");
     }
   }
-#endif
 }
 
 #ifdef _MPI
