@@ -2035,14 +2035,17 @@ void Faces::send_U_data()
 
   sync_stream(0);
 
+#ifndef _CUDA_AWARE
   /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
+#endif
 
   check_error();
+
 #endif
 }
 
@@ -2057,7 +2060,11 @@ void Faces::recv_U_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
+#ifndef _CUDA_AWARE
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+#else
+    MPI_Irecv(U_rbuffs_d[recvRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+#endif
     ridx++;
   }
 
@@ -2071,7 +2078,11 @@ void Faces::recv_U_data()
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
+#ifndef _CUDA_AWARE
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
+#else
+    MPI_Isend(U_sbuffs_d[sendRank].data(), (unsigned int) fpts.size() * nVars, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
+#endif
     sidx++;
   }
 #endif
@@ -2107,11 +2118,13 @@ void Faces::recv_U_data()
 
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
+#ifndef _CUDA_AWARE
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
     copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
   }
+#endif
   
   sync_stream(1);
 
@@ -2180,12 +2193,14 @@ void Faces::send_dU_data()
 
   sync_stream(0);
 
+#ifndef _CUDA_AWARE
   /* Copy buffer to host (TODO: Use cuda aware MPI for direct transfer) */
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
+#endif
 
   check_error();
 #endif
@@ -2200,7 +2215,11 @@ void Faces::recv_dU_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
+#ifndef _CUDA_AWARE
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+#else
+    MPI_Irecv(U_rbuffs_d[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
+#endif
     ridx++;
   }
   
@@ -2213,7 +2232,11 @@ void Faces::recv_dU_data()
     auto &fpts = entry.second;
 
     /* Send buffer to paired rank */
+#ifndef _CUDA_AWARE
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
+#else
+    MPI_Isend(U_sbuffs_d[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
+#endif
     sidx++;
   }
 
@@ -2251,11 +2274,13 @@ void Faces::recv_dU_data()
 
 #ifdef _GPU
   /* Copy buffer to device (TODO: Use cuda aware MPI for direct transfer) */
+#ifndef _CUDA_AWARE
   for (auto &entry : geo->fpt_buffer_map)
   {
     int pairedRank = entry.first;
     copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
   }
+#endif
 
   sync_stream(1);
 
