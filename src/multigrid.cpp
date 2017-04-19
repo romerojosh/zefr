@@ -394,17 +394,17 @@ void PMGrid::restrict_pmg(FRSolver &grid_f, FRSolver &grid_c)
       auto *C = ec->U_spts_d.data();
 
       /* Restrict solution */
-      cublasDGEMM_wrapper(ef->nEles * ef->nVars, ec->nSpts,
-          ef->nSpts, 1.0, B, ef->nEles * ef->nVars, A, ef->nSpts, 0.0, C, 
-          ef->nEles * ef->nVars);
+      cublasDGEMM_wrapper(ef->nElesPad * ef->nVars, ec->nSpts,
+          ef->nSpts, 1.0, B, ef->nElesPad * ef->nVars, A, ef->nSpts, 0.0, C, 
+          ef->nElesPad * ef->nVars);
 
       auto *B2 = ef->divF_spts_d.data();
       auto *C2 = ec->divF_spts_d.data();
 
       /* Restrict residual */
-      cublasDGEMM_wrapper(ef->nEles * ef->nVars, ec->nSpts,
-          ef->nSpts, 1.0, B2, ef->nEles * ef->nVars,  
-          A, ef->nSpts, 0.0, C2, ef->nEles * ef->nVars);
+      cublasDGEMM_wrapper(ef->nElesPad * ef->nVars, ec->nSpts,
+          ef->nSpts, 1.0, B2, ef->nElesPad * ef->nVars,  
+          A, ef->nSpts, 0.0, C2, ef->nElesPad * ef->nVars);
     }
   }
 #endif
@@ -444,8 +444,8 @@ void PMGrid::prolong_err(FRSolver &grid_c, std::map<ELE_TYPE, mdvector_gpu<doubl
       auto *C = ef->U_spts_d.data();
 
       /* Prolong error */
-      cublasDGEMM_wrapper(ec->nEles * ec->nVars, ef->nSpts, ec->nSpts, input->rel_fac, 
-          B, ec->nEles * ec->nVars, A, ec->nSpts, 1.0, C, ec->nEles * ec->nVars);
+      cublasDGEMM_wrapper(ec->nElesPad * ec->nVars, ef->nSpts, ec->nSpts, input->rel_fac, 
+          B, ec->nElesPad * ec->nVars, A, ec->nSpts, 1.0, C, ec->nElesPad * ec->nVars);
     }
   }
 }
@@ -482,8 +482,8 @@ void PMGrid::prolong_U(FRSolver &grid_c, FRSolver &grid_f)
       auto *B = ec->U_spts_d.data();
       auto *C = ef->U_spts_d.data();
 
-      cublasDGEMM_wrapper(ec->nEles * ec->nVars, ef->nSpts, ec->nSpts, 1.0, 
-          B, ec->nEles * ec->nVars, A, ec->nSpts, 0.0, C, ec->nEles * ec->nVars);
+      cublasDGEMM_wrapper(ec->nElesPad * ec->nVars, ef->nSpts, ec->nSpts, 1.0, 
+          B, ec->nElesPad * ec->nVars, A, ec->nSpts, 0.0, C, ec->nElesPad * ec->nVars);
 
     }
   }

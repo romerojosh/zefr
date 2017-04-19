@@ -214,8 +214,8 @@ void Filter::apply_sensor()
     auto *B = U_ini_d[e->etype].data();
     auto *C = KS_d[e->etype].data();
 
-    cublasDGEMM_wrapper(e->nEles * e->nVars, e->nDims * nSptsKS, e->nSpts, 1.0, B, e->nEles * e->nVars,
-      A, e->nSpts, 0.0, C, e->nEles * e->nVars);
+    cublasDGEMM_wrapper(e->nElesPad * e->nVars, e->nDims * nSptsKS, e->nSpts, 1.0, B, e->nElesPad * e->nVars,
+      A, e->nSpts, 0.0, C, e->nElesPad * e->nVars);
     
     // Apply non-linear enhancement and store sensor values
     double epsilon = log(e->order)/e->order;
@@ -259,8 +259,8 @@ void Filter::apply_expfilter()
     auto *B = e->U_spts_d.data();
     auto *C = U_filt_d[e->etype].data();
 
-    cublasDGEMM_wrapper(e->nEles * e->nVars, e->nSpts,
-      e->nSpts, 1.0, B, e->nEles * e->nVars, A, e->nSpts, 0.0, C, e->nEles * e->nVars);
+    cublasDGEMM_wrapper(e->nElesPad * e->nVars, e->nSpts,
+      e->nSpts, 1.0, B, e->nElesPad * e->nVars, A, e->nSpts, 0.0, C, e->nElesPad * e->nVars);
 
     // Copy back to e->U_Spts only when sensor is greater than threshold
     copy_filtered_solution_wrapper(U_filt_d[e->etype], e->U_spts_d, sensor_d[e->etype], threshJ[e->etype], e->nSpts, e->nEles, e->nVars);

@@ -56,7 +56,7 @@ class Elements
     /* Geometric Parameters */
     unsigned int order;
     unsigned int startEle, endEle;
-    unsigned int nEles, nDims, nVars;
+    unsigned int nEles, nElesPad, nDims, nVars;
     unsigned int nSpts, nFpts, nSpts1D, nPpts, nQpts, nFptsPerFace;
     unsigned int nFaces, nNodes;
     unsigned int nSubelements, nNodesPerSubelement;

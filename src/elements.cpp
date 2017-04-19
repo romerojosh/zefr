@@ -48,6 +48,12 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 {
   myComm = comm_in;
 
+#ifdef _GPU
+  nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#else
+  nElesPad = nEles; //TODO: Padding for CPU
+#endif
+
   set_locs();
   set_shape();
   set_coords(faces);
@@ -59,38 +65,38 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 
   /* Allocate memory for solution data structures */
   /* Solution and Flux Variables */
-  U_spts.assign({nSpts, nVars, nEles});
-  U_fpts.assign({nFpts, nVars, nEles});
+  U_spts.assign({nSpts, nVars, nElesPad});
+  U_fpts.assign({nFpts, nVars, nElesPad});
   if (input->viscous)
-    Ucomm.assign({nFpts, nVars, nEles});
-  U_ppts.assign({nPpts, nVars, nEles});
-  U_qpts.assign({nQpts, nVars, nEles});
+    Ucomm.assign({nFpts, nVars, nElesPad});
+  U_ppts.assign({nPpts, nVars, nElesPad});
+  U_qpts.assign({nQpts, nVars, nElesPad});
 
   if (input->squeeze)
-    Uavg.assign({nVars, nEles});
+    Uavg.assign({nVars, nElesPad});
 
-  F_spts.assign({nDims, nSpts, nVars, nEles});
-  Fcomm.assign({nFpts, nVars, nEles});
+  F_spts.assign({nDims, nSpts, nVars, nElesPad});
+  Fcomm.assign({nFpts, nVars, nElesPad});
 
   if (input->viscous)
   {
-    dU_spts.assign({nDims, nSpts, nVars, nEles});
-    dU_fpts.assign({nDims, nFpts, nVars, nEles});
-    dU_qpts.assign({nDims, nQpts, nVars, nEles});
+    dU_spts.assign({nDims, nSpts, nVars, nElesPad});
+    dU_fpts.assign({nDims, nFpts, nVars, nElesPad});
+    dU_qpts.assign({nDims, nQpts, nVars, nElesPad});
   }
 
   if (input->dt_scheme != "LSRK")
   {
-    divF_spts.assign({input->nStages, nSpts, nVars, nEles});
+    divF_spts.assign({input->nStages, nSpts, nVars, nElesPad});
   }
   else
   {
-    divF_spts.assign({1, nSpts, nVars, nEles});
-    U_til.assign({nSpts, nVars, nEles});
-    rk_err.assign({nSpts, nVars, nEles});
+    divF_spts.assign({1, nSpts, nVars, nElesPad});
+    U_til.assign({nSpts, nVars, nElesPad});
+    rk_err.assign({nSpts, nVars, nElesPad});
   }
 
-  U_ini.assign({nSpts, nVars, nEles});
+  U_ini.assign({nSpts, nVars, nElesPad});
   dt.assign({nEles}, input->dt);
 
   /* Allocate memory for implicit method data structures */
@@ -144,6 +150,12 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 
 void Elements::set_shape()
 {
+  // Pad set again here due to set_shape being called before setup.
+#ifdef _GPU
+  nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#else
+  nElesPad = nEles; //TODO: Padding for CPU
+#endif
   /* Allocate memory for shape function and related derivatives */
   shape_spts.assign({nSpts, nNodes},1);
   shape_fpts.assign({nFpts, nNodes},1);
@@ -165,9 +177,9 @@ void Elements::set_shape()
   jaco_spts.assign({nDims, nSpts, nDims, nEles});
   jaco_fpts.assign({nDims, nFpts, nDims, nEles});
   jaco_qpts.assign({nDims, nQpts, nDims, nEles});
-  inv_jaco_spts.assign({nDims, nSpts, nDims, nEles});
+  inv_jaco_spts.assign({nDims, nSpts, nDims, nElesPad});
   inv_jaco_fpts.assign({nDims, nFpts, nDims, nEles});
-  jaco_det_spts.assign({nSpts, nEles});
+  jaco_det_spts.assign({nSpts, nElesPad});
   jaco_det_fpts.assign({nFpts, nEles});
   jaco_det_qpts.assign({nQpts, nEles});
   vol.assign({nEles});
@@ -1037,8 +1049,8 @@ void Elements::extrapolate_U()
   auto *C = U_fpts_d.data();
   //cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0,
   //    B, nEles * nVars, A, nSpts, 0.0, C, nEles * nVars);
-  gimmik_mm_gpu(nFpts, nEles * nVars, nSpts, 1.0, A, nSpts, B, nEles * nVars, 
-      0.0, C, nEles * nVars, oppE_id);
+  gimmik_mm_gpu(nFpts, nElesPad * nVars, nSpts, 1.0, A, nSpts, B, nElesPad * nVars, 
+      0.0, C, nElesPad * nVars, oppE_id);
 
   check_error();
 #endif
@@ -1068,8 +1080,8 @@ void Elements::extrapolate_dU()
 
     //cublasDGEMM_wrapper(nEles * nVars, nFpts, nSpts, 1.0, B, nEles * nVars,
     //    A, nSpts, 0.0, C, nEles * nVars);
-    gimmik_mm_gpu(nFpts, nEles * nVars, nSpts, 1.0, A, nSpts, B, nEles * nVars, 
-        0.0, C, nEles * nVars, oppE_id);
+    gimmik_mm_gpu(nFpts, nElesPad * nVars, nSpts, 1.0, A, nSpts, B, nElesPad * nVars, 
+        0.0, C, nElesPad * nVars, oppE_id);
   }
 
   check_error();
@@ -1098,8 +1110,8 @@ void Elements::compute_dU_spts()
   /* Compute contribution to derivative from solution at solution points */
   //cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nSpts, 1.0, B, nEles * nVars, 
   //    A, nSpts, 0.0, C, nEles * nVars);
-  gimmik_mm_gpu(nSpts * nDims, nEles * nVars, nSpts, 1.0, A, nSpts, B, nEles * nVars, 
-      0.0, C, nEles * nVars, oppD_id);
+  gimmik_mm_gpu(nSpts * nDims, nElesPad * nVars, nSpts, 1.0, A, nSpts, B, nElesPad * nVars, 
+      0.0, C, nElesPad * nVars, oppD_id);
 
   check_error();
 #endif
@@ -1128,8 +1140,8 @@ void Elements::compute_dU_fpts()
   /* Compute contribution to derivative from common solution at flux points */
   //cublasDGEMM_wrapper(nEles * nVars, nSpts * nDims, nFpts, 1.0,
   //    B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
-  gimmik_mm_gpu(nSpts * nDims, nEles * nVars, nFpts, 1.0, A, nFpts, B, nEles * nVars, 
-      1.0, C, nEles * nVars, oppD_fpts_id);
+  gimmik_mm_gpu(nSpts * nDims, nElesPad * nVars, nFpts, 1.0, A, nFpts, B, nElesPad * nVars, 
+      1.0, C, nElesPad * nVars, oppD_fpts_id);
 
   check_error();
 #endif
@@ -1157,8 +1169,8 @@ void Elements::compute_divF_spts(unsigned int stage)
   /* Compute contribution to derivative from solution at solution points */
   //cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts * nDims, 1.0,
   //    B, nEles * nVars, A, nSpts * nDims, 0.0, C, nEles * nVars, 0);
-  gimmik_mm_gpu(nSpts, nEles * nVars, nSpts * nDims, 1.0, A, nSpts * nDims, B, nEles * nVars, 
-      0.0, C, nEles * nVars, oppDiv_id);
+  gimmik_mm_gpu(nSpts, nElesPad * nVars, nSpts * nDims, 1.0, A, nSpts * nDims, B, nElesPad * nVars, 
+      0.0, C, nElesPad * nVars, oppDiv_id);
   check_error();
 #endif
 }
@@ -1183,8 +1195,8 @@ void Elements::compute_divF_fpts(unsigned int stage)
 
   //cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
   //    B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars, 0);
-  gimmik_mm_gpu(nSpts, nEles * nVars, nFpts, 1.0, A, nFpts, B, nEles * nVars, 
-      1.0, C, nEles * nVars, oppDiv_fpts_id);
+  gimmik_mm_gpu(nSpts, nElesPad * nVars, nFpts, 1.0, A, nFpts, B, nElesPad * nVars, 
+      1.0, C, nElesPad * nVars, oppDiv_fpts_id);
 
   check_error();
 #endif
@@ -1241,8 +1253,8 @@ void Elements::compute_dU_spts_via_divF(unsigned int dim)
   /* Compute contribution to derivative from solution at solution points */
   //cublasDGEMM_wrapper(nEles * nVars, nSpts, nSpts * nDims, 1.0,
   //    B, nEles * nVars, A, nSpts * nDims, 0.0, C, nEles * nVars);
-  gimmik_mm_gpu(nSpts, nEles * nVars, nSpts * nDims, 1.0, A, nSpts * nDims, B, nEles * nVars, 
-      0.0, C, nEles * nVars, oppDiv_id);
+  gimmik_mm_gpu(nSpts, nElesPad * nVars, nSpts * nDims, 1.0, A, nSpts * nDims, B, nElesPad * nVars, 
+      0.0, C, nElesPad * nVars, oppDiv_id);
   check_error();
 #endif
 }
@@ -1267,8 +1279,8 @@ void Elements::compute_dU_fpts_via_divF(unsigned int dim)
 
   //cublasDGEMM_wrapper(nEles * nVars, nSpts,  nFpts, 1.0,
   //    B, nEles * nVars, A, nFpts, 1.0, C, nEles * nVars);
-  gimmik_mm_gpu(nSpts, nEles * nVars, nFpts, 1.0, A, nFpts, B, nEles * nVars, 
-      1.0, C, nEles * nVars, oppDiv_fpts_id);
+  gimmik_mm_gpu(nSpts, nElesPad * nVars, nFpts, 1.0, A, nFpts, B, nElesPad * nVars, 
+      1.0, C, nElesPad * nVars, oppDiv_fpts_id);
 
   check_error();
 #endif
