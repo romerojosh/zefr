@@ -513,8 +513,8 @@ double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
 double *Zefr::get_u_spts(int &ele_stride, int &spt_stride, int &var_stride)
 {
   ele_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles;
-  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
+  var_stride = solver->elesObjs[0]->nElesPad;
+  spt_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars;
 
   return solver->elesObjs[0]->U_spts.data();
 }
@@ -534,8 +534,8 @@ double *Zefr::get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
 {
 #ifdef _GPU
   ele_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles;
-  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
+  var_stride = solver->elesObjs[0]->nElesPad;
+  spt_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars;
 
   return solver->elesObjs[0]->U_spts_d.data();
 #endif
@@ -548,9 +548,9 @@ double *Zefr::get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, i
 {
 #ifdef _GPU
   ele_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles;
-  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
-  dim_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars * solver->elesObjs[0]->nSpts;
+  var_stride = solver->elesObjs[0]->nElesPad;
+  spt_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars;
+  dim_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars * solver->elesObjs[0]->nSpts;
 
   return solver->elesObjs[0]->dU_spts_d.data();
 #endif
