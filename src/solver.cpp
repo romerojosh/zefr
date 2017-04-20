@@ -2470,6 +2470,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   std::string stats = ss.str();
 
   int nEles = e->nEles;
+  int nElesPad = e->nElesPad;
   int nVars = e->nVars;
   int nSpts = e->nSpts;
 
@@ -2492,7 +2493,11 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   for (int p = 1; p < input->nRanks; p++)
   {
     int nEles = nEles_p[p];
-    int size = nEles * nSpts * nVars;
+    int nElesPad = nEles;
+#ifdef _GPU
+    nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#endif
+    int size = nElesPad * nSpts * nVars;
 
     if (input->rank == 0)
     {
@@ -2551,11 +2556,30 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
     for (int p = 0; p < input->nRanks; p++)
     {
       nEles = nEles_p[p];
-      hsize_t dims[3] = {nSpts, nVars, nEles};
-      DataSpace dspaceU(3, dims);
+#ifdef _GPU
+      nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#else
+      nElesPad = nEles;
+#endif
+
+      hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+      hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+      // Create a dataspace for the solution, using a hyperslab to ignore padding
+      DataSpace dspaceU(3, dimsU);
+#ifdef _GPU
+      hsize_t count[3] = {1,1,1};
+      hsize_t start[3] = {0,0,0};
+      hsize_t stride[3] = {1,1,1};
+      hsize_t block[3] = {nSpts, nVars, nEles};
+      dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
+      // Create a dataspace for the actual dataset
+      DataSpace dspaceF(3, dimsF);
 
       std::string solname = sol_prefix + std::to_string(p);
-      dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+      dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
       if (p == 0)
         dset.write(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
       else
@@ -2574,8 +2598,6 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
     }
   }
 #else
-  hsize_t dims[3] = {nSpts, nVars, nEles};
-
   /* --- Write Data to File --- */
 
   H5File file(filename, H5F_ACC_TRUNC);
@@ -2595,11 +2617,26 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   dspace.close();
 
-  DataSpace dspaceU(3, dims);
+  hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+  hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+  // Create a dataspace for the solution, using a hyperslab to ignore padding
+  DataSpace dspaceU(3, dimsU);
+#ifdef _GPU
+  hsize_t count[3] = {1,1,1};
+  hsize_t start[3] = {0,0,0};
+  hsize_t stride[3] = {1,1,1};
+  hsize_t block[3] = {nSpts, nVars, nEles};
+  dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
+  // Create a dataspace for the actual dataset
+  DataSpace dspaceF(3, dimsF);
+
   std::string solname = "soln_";
   solname += (geo.nDims == 2) ? "quad" : "hex";
   solname += "_p" + std::to_string(input->rank);
-  dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceU);
+  dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
   dset.write(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
   dset.close();
 #endif 
@@ -3099,8 +3136,8 @@ void FRSolver::write_solution(const std::string &_prefix)
     auto &C = e->U_ppts(0, 0, 0);
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nPpts, 
-        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B, 
-        e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
+        e->nElesPad * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
+        e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
 
     /* Apply squeezing if needed */
     if (input->squeeze)
@@ -3996,8 +4033,8 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   auto &C = e->U_ppts(0, 0, 0);
 
   cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nPpts,
-              e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
-              e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
+              e->nElesPad * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
+              e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
 
   /* Apply squeezing if needed */
   if (input->squeeze)
@@ -4689,8 +4726,8 @@ void FRSolver::report_error(std::ofstream &f)
     auto &C = e->U_qpts(0, 0, 0);
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nQpts, 
-        e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B, 
-        e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
+        e->nElesPad * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
+        e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
 
     /* Extrapolate derivatives to quadrature points */
     if (input->viscous)
@@ -4702,8 +4739,8 @@ void FRSolver::report_error(std::ofstream &f)
         auto &C = e->dU_qpts(dim, 0, 0, 0);
 
         cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nQpts,
-                    e->nEles * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
-                    e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
+                    e->nElesPad * e->nVars, e->nSpts, 1.0, &A, e->nSpts, &B,
+                    e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
 
       }
     }
