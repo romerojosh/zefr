@@ -97,6 +97,11 @@ ifeq ($(strip $(ARCH)),GPU)
 	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas -lnvToolsExt -Wl,-rpath=$(strip $(CUDA_DIR))/lib64
 	INCS += -I$(strip $(CUDA_DIR))/include
 
+  # CUDA-aware MPI capability
+ifeq ($(strip $(CUDA_AWARE)),YES)
+	CXXFLAGS += -D_CUDA_AWARE
+endif
+
 ifeq ($(CU),)
   CUFLAGS += -arch=sm_20
 else

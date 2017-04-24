@@ -2731,6 +2731,11 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   int nEles = e->nEles;
   int nVars = e->nVars;
+#ifdef _GPU
+  int nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#else
+  int nElesPad = nEles;
+#endif
 
   if (dims[2] != nEles || dims[1] != nVars)
     ThrowException("Size of solution data set does not match that from mesh.");
@@ -2759,10 +2764,24 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     }
   }
 
+  // Create dataspaces to handle reading of data into padded solution storage
+  hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+  hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+  DataSpace dspaceU(3, dimsU);
+  DataSpace dspaceF(3, dimsF);
+#ifdef _GPU
+  hsize_t count[3] = {1,1,1};
+  hsize_t start[3] = {0,0,0};
+  hsize_t stride[3] = {1,1,1};
+  hsize_t block[3] = {nSpts, nVars, nEles};
+  dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
   if (nSpts == e->nSpts)
   {
-    e->U_spts.assign({nSpts,nEles,nVars});
-    dset.read(e->U_spts.data(), PredType::NATIVE_DOUBLE);
+    e->U_spts.assign({nSpts,nVars,nElesPad});
+    dset.read(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU, dspaceF);
   }
   else
   {
@@ -2770,12 +2789,11 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
                      ? (std::sqrt(nSpts)-1) : (std::cbrt(nSpts)-1);
 
     // Transpose solution data from PyFR to Zefr layout
-    mdvector<double> U_restart({nSpts,nEles,nVars});
-    dset.read(U_restart.data(), PredType::NATIVE_DOUBLE);
+    mdvector<double> U_restart({nSpts,nVars,nElesPad});
+    dset.read(U_restart.data(), PredType::NATIVE_DOUBLE, dspaceU, dspaceF);
 
     // Setup extrapolation operator from restart points
     e->set_oppRestart(restartOrder);
-
 
     // Extrapolate values from restart points to solution points
     auto &A = e->oppRestart(0, 0);
@@ -2783,8 +2801,8 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     auto &C = e->U_spts(0, 0, 0);
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
-        e->nEles * e->nVars, nSpts, 1.0, &A, nSpts, &B,
-        e->nEles * e->nVars, 0.0, &C, e->nEles * e->nVars);
+        e->nElesPad * e->nVars, nSpts, 1.0, &A, nSpts, &B,
+        e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
   }
 
   dset.close();
