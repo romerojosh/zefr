@@ -2773,7 +2773,6 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
     try
     {
-      printf("Trying to read iblank data...\n");
       DataSet dsetI = file.openDataSet(iname);
       DataSpace dspaceI = dsetI.getSpace();
       hsize_t dimsI[1];
@@ -2782,10 +2781,6 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
       if (dimsI[0] != geo.nEles) ThrowException("Error reading iblank data!");
 
       dsetI.read(geo.iblank_cell.data(), PredType::NATIVE_INT);
-      printf("Iblank data successfully read\n");
-
-      for (int i = 0; i < geo.nEles; i++)
-        if (geo.iblank_cell(i) < 1) printf("%d -> %d\n",i,geo.iblank_cell(i));
     }
     catch (...)
     {
