@@ -61,7 +61,6 @@ extern "C" {
 #include <jama_lu.h>
 #endif
 
-#ifndef _NO_HDF5
 #include "H5Cpp.h"
 #ifndef _H5_NO_NAMESPACE
 using namespace H5;
@@ -71,7 +70,18 @@ using namespace H5;
 //    #define _USE_H5_PARALLEL
   #endif
 #endif
-#endif
+
+/*! NOTE: size of HDF5 attributes limited to 64kb, including header data
+ *  Empirically determined max of 65471 8-byte ints
+ *  (I'm rounding down to a nice number, though, just for safety) */
+#define MAX_H5_ATTR_SIZE 65000
+
+//! Function to use in iterateAttrs to grab all attribute names on an object
+void attrOp(H5Location &loc, const H5std_string attr_name, void *op_data)
+{
+  std::vector<std::string> *names = static_cast<std::vector<std::string>*>(op_data);
+  names->push_back(attr_name);
+}
 
 FRSolver::FRSolver(InputStruct *input, int order)
 {
@@ -2401,6 +2411,10 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       ss << "advection" << std::endl;
   }
   ss << "order = " << input->order << std::endl;
+  if (input->overset)
+  {
+    ss << "overset = true" << std::endl;
+  }
   ss << std::endl;
 
   if (geo.nDims == 2)
@@ -2585,16 +2599,20 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       else
         dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
 
+      dspaceU.close();
+      dset.close();
+
       if (input->overset) // Write out iblank tags as DataSet attribute
       {
         hsize_t dims[1] = {nEles};
         DataSpace dspaceI(1, dims);
-        Attribute att = dset.createAttribute("iblank", PredType::NATIVE_INT8, dspaceI);
-        att.write(PredType::NATIVE_INT, iblank_p[p].data());
+        std::string iname = "iblank_";
+        iname += (geo.nDims == 2) ? "quad" : "hex";
+        iname += "_p" + std::to_string(p);
+        dset = file.createDataSet(iname, PredType::NATIVE_INT8, dspaceI);
+        dset.write(iblank_p[p].data(), PredType::NATIVE_INT, dspaceI);
+        dset.close();
       }
-
-      dspaceU.close();
-      dset.close();
     }
   }
 #else
@@ -2744,23 +2762,82 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
   if (input->overset)
   {
-    if (dset.attrExists("iblank"))
+    geo.iblank_cell.assign({geo.nEles}, 1);
+
+    // Use an iterator function to collect all attribute names
+    /*attr_operator_t oper = &attrOp;
+    std::vector<std::string> attrNames;
+    dset.iterateAttrs(oper,NULL,(void*)&attrNames);
+
+    for (auto &str : attrNames)
     {
-      Attribute att = dset.openAttribute("iblank");
-      DataSpace dspaceI = att.getSpace();
-      hsize_t dim[1];
-      dspaceI.getSimpleExtentDims(dim);
+      if (str.find("iblank") != std::string::npos)
+      {
+        int part = 0;
+        if (nEles > MAX_H5_ATTR_SIZE)
+        {
+          size_t ind = str.find("-");
 
-      if (dim[0] != geo.nEles)
-        ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+          if (ind == std::string::npos)
+            ThrowException("Error reading iblank attribute - unknown naming format for nEles > MAX_H5_ATTR_SIZE");
 
-      geo.iblank_cell.assign({geo.nEles});
-      att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+          std::stringstream ss(str.substr(ind+1,str.length()));
+          ss >> part;
+        }
+
+        Attribute att = dset.openAttribute(str);
+        DataSpace dspaceI = att.getSpace();
+        hsize_t dim[1];
+        dspaceI.getSimpleExtentDims(dim);
+
+        if (geo.nEles <= MAX_H5_ATTR_SIZE && dim[0] != geo.nEles)
+          ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+
+        att.read(PredType::NATIVE_INT, geo.iblank_cell.data()+part*MAX_H5_ATTR_SIZE);
+      }
+    }*/
+
+    // Check for a dataset of iblank
+    std::string iname = "iblank_";
+    iname += (geo.nDims == 2) ? "quad" : "hex";
+    iname += "_p" + std::to_string(input->rank);
+
+    try
+    {
+      printf("Trying to read iblank data...\n");
+      DataSet dsetI = file.openDataSet(iname);
+      DataSpace dspaceI = dsetI.getSpace();
+      hsize_t dimsI[1];
+      dspaceI.getSimpleExtentDims(dimsI);
+
+      if (dimsI[0] != geo.nEles) ThrowException("Error reading iblank data!");
+
+      dsetI.read(geo.iblank_cell.data(), PredType::NATIVE_INT);
+      printf("Iblank data successfully read\n");
+
+      for (int i = 0; i < geo.nEles; i++)
+        if (geo.iblank_cell(i) < 1) printf("%d -> %d\n",i,geo.iblank_cell(i));
     }
-    else
+    catch (...)
     {
-      // No iblank attribute - ignore (will be re-calculated anyways)
-      geo.iblank_cell.assign({geo.nEles}, 1);
+      // No iblank dataset found; try looking for an iblank attribute:
+      if (dset.attrExists("iblank"))
+      {
+        Attribute att = dset.openAttribute("iblank");
+        DataSpace dspaceI = att.getSpace();
+        hsize_t dim[1];
+        dspaceI.getSimpleExtentDims(dim);
+
+        if (geo.nEles <= MAX_H5_ATTR_SIZE && dim[0] != geo.nEles)
+          ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+
+        att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+      }
+      else
+      {
+        // No iblank data found; just assign all 'NORMAL'
+        geo.iblank_cell.assign({nEles}, 1);
+      }
     }
   }
 
