@@ -523,7 +523,7 @@ void FRSolver::setup_update()
 
     rk_c = rk_alpha;
   }
-  else if (input->dt_scheme == "LSRK")
+  else if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54")
   {
     input->nStages = 5;
     rk_alpha.assign({input->nStages - 1});
@@ -858,7 +858,7 @@ void FRSolver::solver_data_to_device()
     }
     
 
-    if (input->dt_scheme == "LSRK")
+    if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54")
     {
       e->U_til_d = e->U_til;
       e->rk_err_d = e->rk_err;
@@ -1624,8 +1624,10 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   {
     if (input->dt_scheme == "MCGS")
       step_MCGS(sourceBT);
+    else if (input->dt_scheme == "RK54")
+        step_LSRK(sourceBT);
     else
-      step_RK(sourceBT);
+        step_RK(sourceBT);
 
     flow_time = prev_time + elesObjs[0]->dt(0);
   }
@@ -5583,7 +5585,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   // ---- Update x, v, q, qdot ----
 
-  if (input->dt_scheme == "LSRK")
+  if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54")
   {
     if (stage < input->nStages - 1)
     {

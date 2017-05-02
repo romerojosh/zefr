@@ -99,6 +99,8 @@ InputStruct read_input_file(std::string inputfile)
     input.nStages = 1;
   else if (input.dt_scheme == "RK44")
     input.nStages = 4;
+  else if (input.dt_scheme == "RK54")
+    input.nStages = 5;
   else if (input.dt_scheme == "RKj")
     input.nStages = 4;
   else if (input.dt_scheme == "LSRK")

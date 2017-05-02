@@ -85,7 +85,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     dU_qpts.assign({nDims, nQpts, nVars, nElesPad});
   }
 
-  if (input->dt_scheme != "LSRK")
+  if (input->dt_scheme != "LSRK" && input->dt_scheme != "RK54")
   {
     divF_spts.assign({input->nStages, nSpts, nVars, nElesPad});
   }
