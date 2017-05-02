@@ -2602,13 +2602,15 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
       dspaceU.close();
       dset.close();
 
-      if (input->overset) // Write out iblank tags as DataSet attribute
+      // Write out iblank as separate DataSet with same naming convention as soln
+      if (input->overset)
       {
         hsize_t dims[1] = {nEles};
         DataSpace dspaceI(1, dims);
         std::string iname = "iblank_";
         iname += (geo.nDims == 2) ? "quad" : "hex";
         iname += "_p" + std::to_string(p);
+        // NOTE: be aware of C++ 32-bit int vs. HDF5 8-bit int
         dset = file.createDataSet(iname, PredType::NATIVE_INT8, dspaceI);
         dset.write(iblank_p[p].data(), PredType::NATIVE_INT, dspaceI);
         dset.close();
@@ -2764,39 +2766,6 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
   {
     geo.iblank_cell.assign({geo.nEles}, 1);
 
-    // Use an iterator function to collect all attribute names
-    /*attr_operator_t oper = &attrOp;
-    std::vector<std::string> attrNames;
-    dset.iterateAttrs(oper,NULL,(void*)&attrNames);
-
-    for (auto &str : attrNames)
-    {
-      if (str.find("iblank") != std::string::npos)
-      {
-        int part = 0;
-        if (nEles > MAX_H5_ATTR_SIZE)
-        {
-          size_t ind = str.find("-");
-
-          if (ind == std::string::npos)
-            ThrowException("Error reading iblank attribute - unknown naming format for nEles > MAX_H5_ATTR_SIZE");
-
-          std::stringstream ss(str.substr(ind+1,str.length()));
-          ss >> part;
-        }
-
-        Attribute att = dset.openAttribute(str);
-        DataSpace dspaceI = att.getSpace();
-        hsize_t dim[1];
-        dspaceI.getSimpleExtentDims(dim);
-
-        if (geo.nEles <= MAX_H5_ATTR_SIZE && dim[0] != geo.nEles)
-          ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
-
-        att.read(PredType::NATIVE_INT, geo.iblank_cell.data()+part*MAX_H5_ATTR_SIZE);
-      }
-    }*/
-
     // Check for a dataset of iblank
     std::string iname = "iblank_";
     iname += (geo.nDims == 2) ? "quad" : "hex";
@@ -2833,11 +2802,6 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 
         att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
       }
-      else
-      {
-        // No iblank data found; just assign all 'NORMAL'
-        geo.iblank_cell.assign({nEles}, 1);
-      }
     }
   }
 
@@ -2865,7 +2829,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     int restartOrder = (input->nDims == 2)
                      ? (std::sqrt(nSpts)-1) : (std::cbrt(nSpts)-1);
 
-    // Transpose solution data from PyFR to Zefr layout
+    // Read into temporary storage, in case changing polynomial order
     mdvector<double> U_restart({nSpts,nVars,nElesPad});
     dset.read(U_restart.data(), PredType::NATIVE_DOUBLE, dspaceU, dspaceF);
 
