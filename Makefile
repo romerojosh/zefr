@@ -123,8 +123,6 @@ endif
 
 # Including external template libraries
 FLAGS += -DEIGEN_MPL2_ONLY
-INCS += -I$(CURDIR)/external/tnt/
-INCS += -I$(CURDIR)/external/jama/
 INCS += -I$(CURDIR)/external/
 INCS += -I$(strip $(AUX_DIR))/
 
@@ -199,7 +197,7 @@ $(BINDIR)/%.o: src/%.c  include/*.hpp include/*.h
 
 ifeq ($(strip $(ARCH)),GPU)
 $(BINDIR)/%.o: src/%.cu include/*.hpp include/*.h
-	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS) -D_NO_TNT
+	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS)
 endif
 
 $(BINDIR)/%_swig.cpp: include/%.i include/*.hpp

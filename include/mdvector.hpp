@@ -37,10 +37,7 @@
 
 #include "macros.hpp"
 
-#ifndef _NO_TNT
-#include "tnt.h"
-#include <jama_lu.h>
-#endif
+#include <Eigen/Dense>
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
@@ -62,10 +59,6 @@ class mdvector
     std::array<unsigned int,6> strides;
     std::vector<T> values;
     T* values_ptr; // For pinned memory only!
-
-#ifndef _NO_TNT
-    std::shared_ptr<JAMA::LU<double>> LUptr;
-#endif
 
     bool pinned = false;
 
@@ -120,11 +113,8 @@ class mdvector
     //! Method to return min element
     T min_val() const;
     
-    //! Method to calculate LU factors
-    void calc_LU();
-    
-    //! Method to solve L U x = B for x
-    void solve(mdvector<T>& x, const mdvector<T>& B) const;
+    //! Method to calculate inverse
+    void inverse(mdvector<T>& inv) const;
 
     //! Method to return pointer to dim and strides (for GPU)
     const unsigned int* dims_ptr() const;
@@ -386,41 +376,12 @@ T mdvector<T>::min_val(void) const
 }
 
 template <typename T>
-void mdvector<T>::calc_LU()
+void mdvector<T>::inverse(mdvector<T>& inv) const
 {
-#ifndef _NO_TNT
-  // Copy mdvector into TNT object
-  unsigned int m = dims[0], n = dims[1];
-  TNT::Array2D<double> A(m, n);
-  for (unsigned int j = 0; j < n; j++)
-    for (unsigned int i = 0; i < m; i++)
-      A[i][j] = (*this)(i,j);
-      
-  // Calculate and store LU object
-  LUptr = std::make_shared<JAMA::LU<double>>(A);
-#endif
-}
-
-template <typename T>
-void mdvector<T>::solve(mdvector<T>& x, const mdvector<T>& B) const
-{
-#ifndef _NO_TNT
-  // Copy mdvector into TNT object
-  auto B_dims = B.shape();
-  unsigned int n = B_dims[0], p = B_dims[1];
-  TNT::Array2D<double> BArr(n, p);
-  for (unsigned int j = 0; j < p; j++)
-    for (unsigned int i = 0; i < n; i++)
-      BArr[i][j] = B(i,j);
-  
-  // Solve for x
-  TNT::Array2D<double> xArr = LUptr->solve(BArr);
-      
-  // Convert back to mdvector format
-  for (unsigned int j = 0; j < p; j++)
-    for (unsigned int i = 0; i < n; i++)
-      x(i,j) = xArr[i][j];
-#endif
+  typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
+  Eigen::Map<const MatrixXdRM> A(values.data(), dims[0], dims[1]);
+  Eigen::Map<MatrixXdRM> Ainv(inv.data(), dims[0], dims[1]);
+  Ainv = A.inverse();
 }
 
 template <typename T>

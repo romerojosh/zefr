@@ -142,7 +142,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "backsweep", input.backsweep, false);
   read_param(f, "svd_omg", input.svd_omg, 0.5);
   read_param(f, "svd_cutoff", input.svd_cutoff, 1.0);
-  read_param(f, "linear_solver", str);
+  read_param(f, "linear_solver", str, std::string("LU"));
   if (str == "LU")
     input.linear_solver = LU;
   else if (str == "INV")

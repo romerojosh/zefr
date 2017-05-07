@@ -2042,7 +2042,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     std::stringstream ss(name.substr(5,name.length()));
     int _rank; ss >> _rank;
-    max_rank = max(_rank, max_rank);
+    max_rank = std::max(_rank, max_rank);
   }
 
   if (max_rank != input->nRanks-1)

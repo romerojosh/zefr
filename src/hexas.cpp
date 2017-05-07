@@ -342,16 +342,8 @@ void Hexas::set_vandermonde_mats()
       vand(i,j) = Legendre3D(order, loc_spts(i, 0), loc_spts(i, 1), loc_spts(i, 2), j);
   }
 
-  vand.calc_LU();
-
   inv_vand.assign({nSpts, nSpts});
-
-  mdvector<double> eye({nSpts, nSpts});
-
-  for (unsigned int j = 0; j < nSpts; j++)
-    eye(j,j) = 1.0;
-
-  vand.solve(inv_vand, eye);
+  vand.inverse(inv_vand);
 }
 
 void Hexas::set_oppRestart(unsigned int order_restart, bool use_shape)

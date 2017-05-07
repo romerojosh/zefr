@@ -29,11 +29,11 @@
 #include "input.hpp"
 #include "mdvector.hpp"
 
+#include <Eigen/Dense>
+
 #ifdef _GPU
 #include "mdvector_gpu.h"
 #endif
-
-#include <Eigen/Dense>
 
 #ifdef _BUILD_LIB
 #include "zefr.hpp"

@@ -942,13 +942,8 @@ void Elements::setup_filter()
       vand1D(spt, j) = Legendre(j, loc_spts_1D[spt]) / normC;
   }
   
-  vand1D.calc_LU();
   mdvector<double> inv_vand1D({nSpts1D, order + 1});
-  mdvector<double> eye({nSpts1D, order + 1});
-  for (unsigned int j = 0; j <= order; j++)
-    eye(j,j) = 1.0;
-
-  vand1D.solve(inv_vand1D, eye);
+  vand1D.inverse(inv_vand1D);
   
   /* Compute 1D vandermonde matrix for the derivative */
   mdvector<double> vand1D_d1({nSpts1D, order + 1});

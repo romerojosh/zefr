@@ -45,6 +45,8 @@ extern "C" {
 #include "tris.hpp"
 #include "solver.hpp"
 
+#include <Eigen/Dense>
+
 #ifdef _MPI
 #include "mpi.h"
 #endif
@@ -55,8 +57,6 @@ extern "C" {
 #include "elements_kernels.h"
 #include "cublas_v2.h"
 #endif
-
-#include <Eigen/Dense>
 
 #include "H5Cpp.h"
 #ifndef _H5_NO_NAMESPACE
@@ -4006,7 +4006,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
       {
         f << count + j << " ";
         f << count + j + 1 << " ";
-        f << endl;
+        f << std::endl;
       }
       count += nPtsFace;
     }
@@ -4024,7 +4024,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
           f << count + j*nPts1D     + i+1 << " ";
           f << count + (j+1)*nPts1D + i+1 << " ";
           f << count + (j+1)*nPts1D + i   << " ";
-          f << endl;
+          f << std::endl;
         }
       }
       count += nPtsFace;
@@ -4466,7 +4466,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
         {
           f << count + j << " ";
           f << count + j + 1 << " ";
-          f << endl;
+          f << std::endl;
         }
         count += nPtsFace;
       }
@@ -4484,7 +4484,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
             f << count + j*nPts1D     + i+1 << " ";
             f << count + (j+1)*nPts1D + i+1 << " ";
             f << count + (j+1)*nPts1D + i   << " ";
-            f << endl;
+            f << std::endl;
           }
         }
         count += nPtsFace;
