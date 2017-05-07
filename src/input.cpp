@@ -140,7 +140,17 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "nColors", input.nColors, (unsigned int) 1);
   read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
   read_param(f, "backsweep", input.backsweep, false);
-  read_param(f, "inv_mode", input.inv_mode, false);
+  read_param(f, "svd_omg", input.svd_omg, 0.5);
+  read_param(f, "svd_cutoff", input.svd_cutoff, 1.0);
+  read_param(f, "linear_solver", str);
+  if (str == "LU")
+    input.linear_solver = LU;
+  else if (str == "INV")
+    input.linear_solver = INV;
+  else if (str == "SVD")
+    input.linear_solver = SVD;
+  else
+    ThrowException("Linear solver not recognized!");
 
   read_param(f, "catch_signals", input.catch_signals, false);
   read_param(f, "output_prefix", input.output_prefix);
@@ -148,7 +158,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "write_pyfr", input.write_pyfr, (short)0);
   read_param(f, "plot_surfaces", input.plot_surfaces, (short)0);
   read_param(f, "plot_overset", input.plot_overset, (short)0);
-  read_param(f, "write_LHS", input.write_LHS, (short)0);
+  read_param(f, "write_LHS", input.write_LHS, false);
+  read_param(f, "write_RHS", input.write_RHS, false);
   read_param(f, "write_freq", input.write_freq);
   read_param(f, "report_freq", input.report_freq);
   read_param(f, "res_type", input.res_type);

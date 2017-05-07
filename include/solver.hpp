@@ -32,13 +32,10 @@
 #include "input.hpp"
 #include "filter.hpp"
 
+#include <Eigen/Dense>
+
 #ifdef _GPU
 #include "mdvector_gpu.h"
-#endif
-
-#ifndef _NO_TNT
-#include "tnt.h"
-#include <jama_lu.h>
 #endif
 
 #ifdef _BUILD_LIB
@@ -89,6 +86,7 @@ class FRSolver
     mdvector<double> qdot_ini, qdot_til; //! Grid rotation vector
 
     /* Implicit method parameters */
+    typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
     unsigned int nCounter;
     unsigned int prev_color = 0;
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
@@ -133,6 +131,7 @@ class FRSolver
     void compute_dRdU();
     void compute_LHS_LU();
     void compute_LHS_inverse();
+    void compute_LHS_SVD();
     void compute_RHS(unsigned int color);
     void compute_deltaU(unsigned int color);
     void compute_U(unsigned int color);
@@ -170,6 +169,7 @@ class FRSolver
     void write_surfaces(const std::string &_prefix);
     void write_overset_boundary(const std::string &_prefix);
     void write_LHS(const std::string &_prefix);
+    void write_RHS(const std::string &_prefix);
     void write_color();
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_forces(std::ofstream &f);

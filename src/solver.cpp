@@ -56,10 +56,7 @@ extern "C" {
 #include "cublas_v2.h"
 #endif
 
-#ifndef _NO_TNT
-#include "tnt.h"
-#include <jama_lu.h>
-#endif
+#include <Eigen/Dense>
 
 #include "H5Cpp.h"
 #ifndef _H5_NO_NAMESPACE
@@ -172,6 +169,16 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
     e->setup(faces, myComm);
   }
 
+  /* Write Low Rank Approximation rank */
+#ifdef _CPU
+  if (input->linear_solver == SVD)
+  {
+    std::cout << "Low Rank Approximation rank:";
+    for (auto e : elesObjs)
+      std::cout << " " << e->svd_rank;
+    std::cout << std::endl;
+  }
+#endif
 
   if (input->rank == 0) std::cout << "Setting up output..." << std::endl;
   setup_output();
@@ -913,16 +920,16 @@ void FRSolver::solver_data_to_device()
       e->RHS_ptrs_d = e->RHS_ptrs;
       e->LHS_info_d = e->LHS_info;
 
-      if (input->inv_mode)
+      if (input->linear_solver == INV)
       {
-        e->LHS_inv_d = e->LHS_inv;
+        e->LHSinv_d = e->LHSinv;
         e->deltaU_d = e->deltaU;
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
-          e->LHS_inv_ptrs(ele) = e->LHS_inv_d.data() + ele * (N * N);
+          e->LHSinv_ptrs(ele) = e->LHSinv_d.data() + ele * (N * N);
           e->deltaU_ptrs(ele) = e->deltaU_d.data() + ele * N;
         }
-        e->LHS_inv_ptrs_d = e->LHS_inv_ptrs;
+        e->LHSinv_ptrs_d = e->LHSinv_ptrs;
         e->deltaU_ptrs_d = e->deltaU_ptrs;
       }
     }
@@ -1251,15 +1258,15 @@ void FRSolver::compute_dRdU()
 
 void FRSolver::compute_LHS_LU()
 {
-#if defined(_CPU) && !defined(_NO_TNT)
-  /* Perform LU using TNT */
+#ifdef _CPU
+  /* Perform LU using Eigen */
   for (auto e : elesObjs)
   {
     unsigned int N = e->nSpts * e->nVars;
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      TNT::Array2D<double> A(N, N, &e->LHS(ele, 0, 0, 0, 0));
-      e->LHS_ptrs[ele] = JAMA::LU<double>(A);
+      Eigen::Map<MatrixXdRM> A(&e->LHS(ele, 0, 0, 0, 0), N, N);
+      e->LU_ptrs[ele] = Eigen::PartialPivLU<Eigen::MatrixXd>(A);
     }
   }
 #endif
@@ -1277,7 +1284,17 @@ void FRSolver::compute_LHS_LU()
 void FRSolver::compute_LHS_inverse()
 {
 #ifdef _CPU
-  ThrowException("LHS Inversion not supported on CPU!");
+  /* Perform inversion using Eigen */
+  for (auto e : elesObjs)
+  {
+    unsigned int N = e->nSpts * e->nVars;
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      Eigen::Map<MatrixXdRM> A(&e->LHS(ele, 0, 0, 0, 0), N, N);
+      Eigen::Map<MatrixXdRM> Ainv(&e->LHSinv(ele, 0, 0, 0, 0), N, N);
+      Ainv = A.inverse();
+    }
+  }
 #endif
 
 #ifdef _GPU
@@ -1285,10 +1302,74 @@ void FRSolver::compute_LHS_inverse()
   for (auto e : elesObjs)
   {
     unsigned int N = e->nSpts * e->nVars;
+    cublasDgetrfBatched_wrapper(N, e->LHS_ptrs_d.data(), N, nullptr, e->LHS_info_d.data(), e->nEles);
     cublasDgetriBatched_wrapper(N, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
-        e->LHS_inv_ptrs_d.data(), N, e->LHS_info_d.data(), e->nEles);
+        e->LHSinv_ptrs_d.data(), N, e->LHS_info_d.data(), e->nEles);
   }
 
+#endif
+}
+
+void FRSolver::compute_LHS_SVD()
+{
+#ifdef _CPU
+  /* Perform SVD using Eigen */
+  for (auto e : elesObjs)
+  {
+    unsigned int N = e->nSpts * e->nVars;
+    unsigned int rank = e->svd_rank;
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      /* Compute SVD */
+      Eigen::Map<MatrixXdRM> A(&e->LHS(ele, 0, 0, 0, 0), N, N);
+      e->SVD_ptrs[ele] = Eigen::JacobiSVD<Eigen::MatrixXd>(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
+      MatrixXdRM U = e->SVD_ptrs[ele].matrixU();
+      MatrixXdRM V = e->SVD_ptrs[ele].matrixV();
+      Eigen::VectorXd invS = e->SVD_ptrs[ele].singularValues();
+      for (unsigned int i = 0; i < N; i++)
+        invS(i) = 1.0 / invS(i);
+
+      /* Copy Low Rank Approximation */
+      Eigen::Map<MatrixXdRM> U_hat(&e->LHSU(ele, 0, 0), N, rank);
+      Eigen::Map<MatrixXdRM> V_hat(&e->LHSV(ele, 0, 0), N, rank);
+      for (unsigned int i = 0; i < N; i++)
+        for (unsigned int r = 0; r < rank; r++)
+        {
+          unsigned int j = (N-rank) + r;
+          U_hat(i, r) = U(i, j);
+          V_hat(i, r) = V(i, j);
+        }
+
+      Eigen::Map<Eigen::VectorXd> invS_hat(&e->LHSinvS(ele, 0), rank);
+      for (unsigned int r = 0; r < rank; r++)
+      {
+        unsigned int j = (N-rank) + r;
+        invS_hat(r) = invS(j);
+      }
+
+      /* Compute diagonal of inverse diagonal matrices */
+      Eigen::VectorXd AinvD(N);
+      Eigen::VectorXd AinvD_hat(N);
+      for (unsigned int i = 0; i < N; i++)
+      {
+        AinvD(i) = 0;
+        for (unsigned int j = 0; j < N; j++)
+          AinvD(i) += invS(j) * V(i, j) * U(i, j);
+
+        AinvD_hat(i) = 0;
+        for (unsigned int r = 0; r < rank; r++)
+          AinvD_hat(i) += invS_hat(r) * V_hat(i, r) * U_hat(i, r);
+      }
+
+      /* Store inverse diagonal correction */
+      Eigen::Map<Eigen::VectorXd> AinvD_corr(&e->LHSinvD(ele, 0), N);
+      AinvD_corr = input->svd_omg * (AinvD - AinvD_hat);
+    }
+  }
+#endif
+
+#ifdef _GPU
+  ThrowException("SVD solver not implemented on GPU!");
 #endif
 }
 
@@ -1316,30 +1397,97 @@ void FRSolver::compute_RHS(unsigned int color)
 
 void FRSolver::compute_deltaU(unsigned int color)
 {
-#if defined(_CPU) && !defined(_NO_TNT)
-  /* Perform LU solve using TNT */
-  for (auto e : elesObjsBC[color])
+#ifdef _CPU
+  /* Perform LU solve using Eigen */
+  if (input->linear_solver == LU)
   {
-    unsigned int N = e->nSpts * e->nVars;
-    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    for (auto e : elesObjsBC[color])
     {
-      TNT::Array1D<double> x(N, &e->deltaU(ele, 0, 0));
-      TNT::Array1D<double> b(N, &e->RHS(ele, 0, 0));
-      x.inject(e->LHS_ptrs[ele].solve(b));
-
-      if (x.dim() == 0) ThrowException("TNT LU solve failed!");
+      unsigned int N = e->nSpts * e->nVars;
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        Eigen::Map<Eigen::VectorXd> x(&e->deltaU(ele, 0, 0), N);
+        Eigen::Map<Eigen::VectorXd> b(&e->RHS(ele, 0, 0), N);
+        x = e->LU_ptrs[ele].solve(b);
+      }
     }
+  }
+
+  /* Perform matrix-vector of A inverse and RHS */
+  else if (input->linear_solver == INV)
+  {
+    for (auto e : elesObjsBC[color])
+    {
+      unsigned int N = e->nSpts * e->nVars;
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        Eigen::Map<MatrixXdRM> Ainv(&e->LHSinv(ele, 0, 0, 0, 0), N, N);
+        Eigen::Map<Eigen::VectorXd> x(&e->deltaU(ele, 0, 0), N);
+        Eigen::Map<Eigen::VectorXd> b(&e->RHS(ele, 0, 0), N);
+        x = Ainv*b;
+      }
+    }
+  }
+
+  /* Perform SVD solve */
+  else if (input->linear_solver == SVD)
+  {
+    for (auto e : elesObjsBC[color])
+    {
+      unsigned int N = e->nSpts * e->nVars;
+      unsigned int rank = e->svd_rank;
+      mdvector<double> deltaU_temp({rank});
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        // deltaU = LHSinv_diag * RHS
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+          {
+            unsigned int i = e->nSpts * vari + spti;
+            e->deltaU(ele, vari, spti) = e->LHSinvD(ele, i) * e->RHS(ele, vari, spti);
+          }
+
+        // deltaU_temp = U transpose * RHS  / s
+        for (unsigned int r = 0; r < rank; r++)
+        {
+          double val = 0;
+          for (unsigned int varj = 0; varj < e->nVars; varj++)
+            for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+            {
+              unsigned int j = e->nSpts * varj + sptj;
+              val += e->LHSU(ele, j, r) * e->RHS(ele, varj, sptj);
+            }
+          deltaU_temp(r) = val * e->LHSinvS(ele, r);
+        }
+
+        // deltaU += V * deltaU_temp
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+          {
+            unsigned int i = e->nSpts * vari + spti;
+            double val = 0;
+            for (unsigned int r = 0; r < rank; r++)
+              val += e->LHSV(ele, i, r) * deltaU_temp(r);
+            e->deltaU(ele, vari, spti) += val;
+          }
+      }
+    }
+  }
+
+  else
+  {
+    ThrowException("Linear solver not recognized!");
   }
 #endif
 
 #ifdef _GPU
-  if (!input->inv_mode)
+  /* Perform in-place batched LU solve of A using cuBLAS */
+  if (input->linear_solver == LU)
   {
-    /* Perform in-place batched LU solve of A using cuBLAS */
     for (auto e : elesObjsBC[color])
     {
-      unsigned int N = e->nSpts * e->nVars;
       int info;
+      unsigned int N = e->nSpts * e->nVars;
       cublasDgetrsBatched_trans_wrapper(N, 1, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
           e->RHS_ptrs_d.data(), N, &info, e->nEles);
 
@@ -1347,15 +1495,20 @@ void FRSolver::compute_deltaU(unsigned int color)
     }
   }
 
-  else
+  /* Perform batched matrix-vector of A inverse and RHS */
+  else if (input->linear_solver == INV)
   {
-    /* Perform batched matrix-vector of A inverse and RHS */
     for (auto e : elesObjsBC[color])
     {
       unsigned int N = e->nSpts * e->nVars;
-      DgemvBatched_wrapper(N, N, 1.0, (const double**) e->LHS_inv_ptrs_d.data(), N, 
+      DgemvBatched_wrapper(N, N, 1.0, (const double**) e->LHSinv_ptrs_d.data(), N, 
           (const double**) e->RHS_ptrs_d.data(), 1, 0.0, e->deltaU_ptrs_d.data(), 1, e->nEles);
     }
+  }
+
+  else
+  {
+    ThrowException("Linear solver not recognized!");
   }
 #endif
 }
@@ -1371,7 +1524,7 @@ void FRSolver::compute_U(unsigned int color)
 #endif
 
 #ifdef _GPU
-  if (!input->inv_mode)
+  if (input->linear_solver == LU)
   {
     /* Note: RHS contains deltaU */
     for (auto e : elesObjsBC[color])
@@ -2202,15 +2355,25 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
                     e->LHS(ele, vari, spti, varj, sptj) += 1;
                 }
 
+      /* Write LHS */
+      if (input->write_LHS)
+        write_LHS(input->output_prefix);
+
       /* Copy LHS to GPU */
 #ifdef _GPU
       for (auto e : elesObjs)
         e->LHS_d = e->LHS;
 #endif
 
-      compute_LHS_LU();
-      if (input->inv_mode) 
+      /* Setup linear solver */
+      if (input->linear_solver == LU)
+        compute_LHS_LU();
+      else if (input->linear_solver == INV)
         compute_LHS_inverse();
+      else if (input->linear_solver == SVD)
+        compute_LHS_SVD();
+      else
+        ThrowException("Linear solver not recognized!");
     }
     
     /* Compute residual on elements of this color only */
@@ -2222,6 +2385,10 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 
     /* Prepare RHS vector */
     compute_RHS(color);
+
+    /* Write RHS */
+    if (input->write_RHS)
+      write_RHS(input->output_prefix);
 
     /* Solve system for deltaU */
     compute_deltaU(color);
@@ -4482,12 +4649,50 @@ void FRSolver::write_LHS(const std::string &_prefix)
 
     H5File file(ss.str(), H5F_ACC_TRUNC);
     unsigned int N = e->nSpts * e->nVars;
-    hsize_t dims[3] = {geo.nEles, N, N};
+    hsize_t dims[3] = {e->nEles, N, N};
     DataSpace dspaceU(3, dims);
 
     std::string name = "LHS_" + std::to_string(iter);
     DataSet dset = file.createDataSet(name, PredType::NATIVE_DOUBLE, dspaceU);
     dset.write(e->LHS.data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+    dspaceU.close();
+    dset.close();
+    file.close();
+  }
+#endif
+}
+
+void FRSolver::write_RHS(const std::string &_prefix)
+{
+#if !defined (_MPI)
+  auto e = elesObjs[0];
+  if (input->dt_scheme == "MCGS")
+  {
+    if (input->rank == 0) std::cout << "Writing RHS to file..." << std::endl;
+#ifdef _GPU
+    for (auto e : elesObjs)
+      e->RHS = e->RHS_d;
+#endif
+
+    unsigned int iter = current_iter;
+    if (input->p_multi)
+      iter = iter / input->mg_steps[0];
+
+    std::string prefix = _prefix;
+    std::stringstream ss;
+    ss << input->output_prefix << "/";
+    ss << prefix << "_RHS_" << std::setw(9) << std::setfill('0');
+    ss << iter << ".dat";
+
+    H5File file(ss.str(), H5F_ACC_TRUNC);
+    unsigned int N = e->nSpts * e->nVars;
+    hsize_t dims[2] = {e->nEles, N};
+    DataSpace dspaceU(2, dims);
+
+    std::string name = "RHS_" + std::to_string(iter);
+    DataSet dset = file.createDataSet(name, PredType::NATIVE_DOUBLE, dspaceU);
+    dset.write(e->RHS.data(), PredType::NATIVE_DOUBLE, dspaceU);
 
     dspaceU.close();
     dset.close();

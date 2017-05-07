@@ -191,8 +191,6 @@ int main(int argc, char* argv[])
         solver.write_surfaces(input.output_prefix);
       if (input.write_pyfr)
         solver.write_solution_pyfr(input.output_prefix);
-      if (input.write_LHS)
-        solver.write_LHS(input.output_prefix);
     }
 
     if (input.force_freq != 0 && (n%input.force_freq == 0 || n == input.n_steps || solver.res_max <= input.res_tol))

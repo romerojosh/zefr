@@ -33,6 +33,8 @@
 #include "mdvector_gpu.h"
 #endif
 
+#include <Eigen/Dense>
+
 #ifdef _BUILD_LIB
 #include "zefr.hpp"
 #endif
@@ -116,13 +118,15 @@ class Elements
     mdvector<double> dFcdU, dUcdU, dFcddU;
     mdvector<double> Cvisc0, CviscN, CdFddU0, CdFcddU0;
     mdvector<double> CtempSF, CtempD, CtempFS, CtempFSN;
-    mdvector<double> LHS, deltaU, RHS;
-#if defined(_CPU) && !defined(_NO_TNT)
-    std::vector<JAMA::LU<double>> LHS_ptrs;
+    mdvector<double> LHS, LHSinv, RHS, deltaU;
+
+#ifdef _CPU
+    unsigned int svd_rank;
+    std::vector<Eigen::PartialPivLU<Eigen::MatrixXd>> LU_ptrs;
+    std::vector<Eigen::JacobiSVD<Eigen::MatrixXd>> SVD_ptrs;
+    mdvector<double> LHSinvD, LHSinvS, LHSU, LHSV;
 #elif defined(_GPU)
-    mdvector<double> LHS_inv;
-    mdvector<double*> LHS_ptrs, RHS_ptrs, deltaU_ptrs;
-    mdvector<double*> LHS_inv_ptrs;
+    mdvector<double*> LHS_ptrs, LHSinv_ptrs, RHS_ptrs, deltaU_ptrs;
     mdvector<int> LHS_info;
 #endif
 
@@ -170,10 +174,8 @@ class Elements
     mdvector_gpu<double> dt_d, rk_err_d;
 
     /* Element structures for implicit method */
-    mdvector_gpu<double> LHS_d, deltaU_d, RHS_d;
-    mdvector_gpu<double> LHS_inv_d;
-    mdvector_gpu<double*> LHS_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
-    mdvector_gpu<double*> LHS_inv_ptrs_d;
+    mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d;
+    mdvector_gpu<double*> LHS_ptrs_d, LHSinv_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
     mdvector_gpu<int> LHS_info_d;
 
     /* Overset Related */

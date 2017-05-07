@@ -122,8 +122,10 @@ endif
 endif
 
 # Including external template libraries
+FLAGS += -DEIGEN_MPL2_ONLY
 INCS += -I$(CURDIR)/external/tnt/
 INCS += -I$(CURDIR)/external/jama/
+INCS += -I$(CURDIR)/external/
 INCS += -I$(strip $(AUX_DIR))/
 
 SRCDIR = $(CURDIR)/src

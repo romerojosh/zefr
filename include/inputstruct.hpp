@@ -146,10 +146,11 @@ struct InputStruct
   double atol, rtol;
 
   /* --- I/O --- */
-  short write_paraview, write_pyfr, plot_surfaces, plot_overset, write_LHS;
+  short write_paraview, write_pyfr, plot_surfaces, plot_overset;
   unsigned int restart_iter, restart_type;
   std::string restart_case;
   bool catch_signals = false;
+  bool write_LHS, write_RHS;
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp, full_6dof;
@@ -174,8 +175,9 @@ struct InputStruct
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 
   /* Implicit Parameters */
-  bool backsweep, inv_mode;
-  unsigned int nColors, Jfreeze_freq;
+  unsigned int nColors, Jfreeze_freq, linear_solver;
+  bool backsweep;
+  double svd_omg, svd_cutoff;
 
   Timer waitTimer; /// DEBUGGING
 #ifdef _GPU

@@ -131,16 +131,39 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     RHS.assign({nEles, nVars, nSpts});
 #ifdef _CPU
     deltaU.assign({nEles, nVars, nSpts});
-    LHS_ptrs.resize(nEles);
+    if (input->linear_solver == LU)
+    {
+      LU_ptrs.resize(nEles);
+    }
+    else if (input->linear_solver == INV)
+    {
+      LHSinv.assign({nEles, nVars, nSpts, nVars, nSpts});
+    }
+    else if (input->linear_solver == SVD)
+    {
+      SVD_ptrs.resize(nEles);
+
+      /* Low Rank Approximation */
+      unsigned int N = nVars * nSpts;
+      svd_rank = (unsigned int) (input->svd_cutoff * N);
+      LHSinvD.assign({nEles, N});
+      LHSinvS.assign({nEles, svd_rank});
+      LHSU.assign({nEles, N, svd_rank});
+      LHSV.assign({nEles, N, svd_rank});
+    }
+    else
+    {
+      ThrowException("Linear solver not recognized!");
+    }
 #elif defined(_GPU)
     LHS_ptrs.assign({nEles});
     RHS_ptrs.assign({nEles});
     LHS_info.assign({nEles});
 
-    if (input->inv_mode)
+    if (input->linear_solver == INV)
     {
-      LHS_inv.assign({nEles, nVars, nSpts, nVars, nSpts});
-      LHS_inv_ptrs.assign({nEles});
+      LHSinv.assign({nEles, nVars, nSpts, nVars, nSpts});
+      LHSinv_ptrs.assign({nEles});
       deltaU.assign({nEles, nVars, nSpts});
       deltaU_ptrs.assign({nEles});
     }

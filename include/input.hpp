@@ -41,8 +41,7 @@ extern double pi;
 
 enum EQN {
   AdvDiff = 0, 
-  EulerNS = 1, 
-  Burgers = 2
+  EulerNS = 1
 };
 
 enum FC_TYPE {
@@ -86,6 +85,13 @@ enum BC_TYPE {
   SYMMETRY,
   WALL_CLOSURE,
   OVERSET_CLOSURE
+};
+
+/*! Enumeration for implicit linear solver type */
+enum LS_TYPE {
+  LU = 0,
+  INV = 1,
+  SVD = 2
 };
 
 extern std::map<std::string,int> bcStr2Num;
