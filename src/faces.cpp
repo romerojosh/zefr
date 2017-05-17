@@ -517,7 +517,7 @@ void Faces::apply_bcs()
 
 #ifdef _GPU
   apply_bcs_wrapper(U_d, U_ldg_d, nFpts, geo->nGfpts_int, geo->nGfpts_bnd, nVars, nDims, input->rho_fs, input->V_fs_d, 
-      input->P_fs, input->gamma, input->R_ref, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d, 
+      input->P_fs, input->gamma, input->R, input->T_tot_fs, input->P_tot_fs, input->T_wall, input->V_wall_d,
       Vg_d, input->norm_fs_d, norm_d, geo->gfpt2bnd_d, rus_bias_d, LDG_bias_d, input->equation, input->motion);
 
   check_error();
@@ -1131,7 +1131,7 @@ void Faces::apply_bcs_dFdU()
       case ISOTHERMAL_NOSLIP: /* Isothermal No-slip Wall */
       {
         dURdUL(fpt, 0, 0) = 1;
-        dURdUL(fpt, nDims+1, 0) = (input->R_ref * input->T_wall) / (input->gamma-1.0);
+        dURdUL(fpt, nDims+1, 0) = (input->R * input->T_wall) / (input->gamma-1.0);
 
         /* Extrapolate gradients */
         if (input->viscous)
@@ -1151,7 +1151,7 @@ void Faces::apply_bcs_dFdU()
         dURdUL(fpt, 0, 0) = 1;
         for (unsigned int dim = 0; dim < nDims; dim++)
           dURdUL(fpt, dim+1, 0) = input->V_wall(dim);
-        dURdUL(fpt, nDims+1) = (input->R_ref * input->T_wall) / (input->gamma-1.0) + 0.5 * Vsq;
+        dURdUL(fpt, nDims+1) = (input->R * input->T_wall) / (input->gamma-1.0) + 0.5 * Vsq;
 
         /* Extrapolate gradients */
         if (input->viscous)
