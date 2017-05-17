@@ -74,7 +74,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
       LDG_bias(fpt) = 1;
 
       /* Implicit Default: Rusanov BC Prescribed, LDG BC Prescribed */
-      if (input->dt_scheme == "MCGS")
+      if (input->implicit_method)
       {
         rus_bias(fpt) = 1;
       }
@@ -82,7 +82,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   }
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     dFcdU_bnd.assign({nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
     dURdUL.assign({nFpts, nVars, nVars}, 0);

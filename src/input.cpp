@@ -105,10 +105,15 @@ InputStruct read_input_file(std::string inputfile)
     input.nStages = 4;
   else if (input.dt_scheme == "LSRK")
     input.nStages = 5;
-  else if (input.dt_scheme == "MCGS")
+  else if (input.dt_scheme == "BDF1")
     input.nStages = 1;
+  else if (input.dt_scheme == "DIRK34")
+    input.nStages = 3;
   else
     ThrowException("Unknown dt_scheme");
+
+  if (input.dt_scheme == "BDF1" || input.dt_scheme == "DIRK34")
+    input.implicit_method = true;
 
   read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
   read_param(f, "CFL_max", input.CFL_max, 1.0);
@@ -137,6 +142,15 @@ InputStruct read_input_file(std::string inputfile)
   read_param_vec(f, "mg_levels", input.mg_levels);
   read_param_vec(f, "mg_steps", input.mg_steps);
 
+  /*
+  read_param(f, "iterative_method", str, std::string("Jacobi"));
+  if (str == "Jacobi")
+    input.iterative_method = Jacobi;
+  else if (str == "MCGS")
+    input.iterative_method = MCGS;
+  else
+    ThrowException("Iterative method not recognized!");
+  */
   read_param(f, "nColors", input.nColors, (unsigned int) 1);
   read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
   read_param(f, "backsweep", input.backsweep, false);

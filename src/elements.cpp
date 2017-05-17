@@ -100,7 +100,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   dt.assign({nEles}, input->dt);
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     /* Data structures for constructing the implicit Jacobian */
     dFdU_spts.assign({nEles, nVars, nVars, nDims, nSpts});

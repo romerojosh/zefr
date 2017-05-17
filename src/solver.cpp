@@ -107,7 +107,8 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   /* Create eles objects */
   unsigned int elesObjID = 0;
-  if (input->dt_scheme == "MCGS")
+  //if (input->iterative_method == MCGS)
+  if (input->implicit_method)
   {
     ele2elesObj.assign({geo.nEles});
     for (auto etype : geo.ele_set)
@@ -160,7 +161,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
   orient_fpts();
 
   /* Setup fpt adjacency for viscous implicit Jacobians */
-  if (input->dt_scheme == "MCGS" && input->viscous)
+  if (input->implicit_method && input->viscous)
     set_fpt_adjacency();
 
   /* Complete element setup */
@@ -566,20 +567,26 @@ void FRSolver::setup_update()
     prev_err = 1.;
 
   }
-  else if (input->dt_scheme == "MCGS")
+  else if (input->dt_scheme == "BDF1")
   {
     input->nStages = 1;
-
-    /* Forward or Forward/Backward sweep */
-    nCounter = geo.nColors;
-    if (input->backsweep)
-      nCounter *= 2;
   }
   else
   {
     ThrowException("dt_scheme not recognized!");
   }
 
+  if (input->implicit_method)
+  {
+    /*
+    if (input->iterative_method == Jacobi)
+      nCounter = 1;
+    else if (input->iterative_method == MCGS)
+    */
+      nCounter = geo.nColors;
+    if (input->backsweep)
+      nCounter *= 2;
+  }
 }
 
 void FRSolver::setup_output()
@@ -905,7 +912,7 @@ void FRSolver::solver_data_to_device()
       }
     }
 
-    if (input->dt_scheme == "MCGS")
+    if (input->implicit_method)
     {
       e->LHS_d = e->LHS;
       e->RHS_d = e->RHS;
@@ -1585,7 +1592,7 @@ void FRSolver::setup_views()
   mdvector<unsigned int> dFcdU_strides;
   mdvector<double*> dUcdU_base_ptrs, dFcddU_base_ptrs;
   mdvector<unsigned int> dFcddU_strides;
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     dFcdU_base_ptrs.assign({2 * geo.nGfpts});
     dFcdU_strides.assign({2, 2 * geo.nGfpts});
@@ -1639,7 +1646,7 @@ void FRSolver::setup_views()
         }
 
         /* Set pointers for internal faces for implicit */
-        if (input->dt_scheme == "MCGS")
+        if (input->implicit_method)
         {
           dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
           dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
@@ -1703,7 +1710,7 @@ void FRSolver::setup_views()
     }
 
     /* Set pointers for remaining faces for implicit */
-    if (input->dt_scheme == "MCGS")
+    if (input->implicit_method)
     {
       dFcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcdU_bnd(0, 0, i);
       dFcdU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(1);
@@ -1744,7 +1751,7 @@ void FRSolver::setup_views()
 #endif
 
   /* Create views of element data for implicit */
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     faces->dFcdU.assign(dFcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
     if (input->viscous)
@@ -1775,7 +1782,7 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   }
   else
   {
-    if (input->dt_scheme == "MCGS")
+    if (input->dt_scheme == "BDF1")
       step_MCGS(sourceBT);
     else if (input->dt_scheme == "RK54")
         step_LSRK(sourceBT);
@@ -4169,8 +4176,8 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   if (geo.ele_set.count(TET))
     ThrowException("Surface write not implemented for triangular faces.");
 
-  if (input->dt_scheme == "MCGS")
-    ThrowException("Surface write not implemented for MCGS.");
+  if (input->implicit_method)
+    ThrowException("Surface write not implemented for implicit methods.");
 
   auto e = elesObjs[0];
 
@@ -4633,7 +4640,7 @@ void FRSolver::write_LHS(const std::string &_prefix)
 {
 #if !defined (_MPI)
   auto e = elesObjs[0];
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     if (input->rank == 0) std::cout << "Writing LHS to file..." << std::endl;
 
@@ -4667,7 +4674,7 @@ void FRSolver::write_RHS(const std::string &_prefix)
 {
 #if !defined (_MPI)
   auto e = elesObjs[0];
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     if (input->rank == 0) std::cout << "Writing RHS to file..." << std::endl;
 #ifdef _GPU
@@ -5828,7 +5835,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
       }
     }
   }
-  else if (input->dt_scheme != "MCGS")
+  else if (!input->implicit_method)
   {
     if (stage == 0 && input->nStages > 1)
     {
