@@ -1600,7 +1600,7 @@ void FRSolver::setup_views()
     {
       dUcdU_base_ptrs.assign({2 * geo.nGfpts});
       dFcddU_base_ptrs.assign({2 * geo.nGfpts});
-      dFcddU_strides.assign({3, 2 * geo.nGfpts});
+      dFcddU_strides.assign({4, 2 * geo.nGfpts});
     }
   }
 
@@ -1655,10 +1655,11 @@ void FRSolver::setup_views()
           if (input->viscous)
           {
             dUcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dUcdU(ele, 0, 0, fpt);
-            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(ele, 0, 0, 0, fpt);
+            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(ele, 0, 0, 0, 0, fpt);
             dFcddU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(1);
             dFcddU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(2);
             dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(3);
+            dFcddU_strides(3, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(4);
           }
         }
       }
@@ -1719,10 +1720,11 @@ void FRSolver::setup_views()
       if (input->viscous)
       {
         dUcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dUcdU_bnd(0, 0, i);
-        dFcddU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcddU_bnd(0, 0, 0, i);
+        dFcddU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcddU_bnd(0, 0, 0, 0, i);
         dFcddU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(1);
         dFcddU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(2);
         dFcddU_strides(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(3);
+        dFcddU_strides(3, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(4);
       }
     }
 
