@@ -175,7 +175,10 @@ struct InputStruct
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 
   /* Implicit Parameters */
-  unsigned int nColors, Jfreeze_freq, linear_solver;
+  bool implicit_method = false;
+  unsigned int linear_solver;
+  //unsigned int iterative_method, linear_solver;
+  unsigned int nColors, Jfreeze_freq;
   bool backsweep;
   double svd_omg, svd_cutoff;
 

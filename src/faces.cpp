@@ -74,7 +74,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
       LDG_bias(fpt) = 1;
 
       /* Implicit Default: Rusanov BC Prescribed, LDG BC Prescribed */
-      if (input->dt_scheme == "MCGS")
+      if (input->implicit_method)
       {
         rus_bias(fpt) = 1;
       }
@@ -82,7 +82,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   }
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     dFcdU_bnd.assign({nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
     dURdUL.assign({nFpts, nVars, nVars}, 0);
@@ -91,7 +91,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
     if(input->viscous)
     {
       dUcdU_bnd.assign({nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
-      dFcddU_bnd.assign({nDims, nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
+      dFcddU_bnd.assign({2, nDims, nVars, nVars, geo->nGfpts_bnd + geo->nGfpts_mpi});
       ddURddUL.assign({nFpts, nDims, nDims, nVars, nVars}, 0);
     }
   }
@@ -1881,8 +1881,11 @@ void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
             double dFcddUL = (0.5 + beta) * dFnddUL[vari][varj][dimj];
             double dFcddUR = (0.5 - beta) * dFnddUR[vari][varj][dimj];
 
-            dFcddU(0, dimj, vari, varj, fpt) =  dFcddUL * dA(0, fpt);
-            dFcddU(1, dimj, vari, varj, fpt) = -dFcddUR * dA(1, fpt);
+            dFcddU(0, 0, dimj, vari, varj, fpt) =  dFcddUL * dA(0, fpt);
+            dFcddU(0, 1, dimj, vari, varj, fpt) =  dFcddUR * dA(1, fpt);
+
+            dFcddU(1, 0, dimj, vari, varj, fpt) = -dFcddUR * dA(1, fpt);
+            dFcddU(1, 1, dimj, vari, varj, fpt) = -dFcddUL * dA(0, fpt);
           }
     }
 
@@ -1892,10 +1895,7 @@ void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
       /* Compute common solution Jacobian (dUcdU) */
       for (unsigned int vari = 0; vari < nVars; vari++)
         for (unsigned int varj = 0; varj < nVars; varj++)
-        {
           dUcdU(0, vari, varj, fpt) = dURdUL(fpt, vari, varj);
-          dUcdU(1, vari, varj, fpt) = dURdUL(fpt, vari, varj);
-        }
 
       /* Compute common viscous flux Jacobian (dFcdU) */
       for (unsigned int vari = 0; vari < nVars; vari++)
@@ -1913,7 +1913,6 @@ void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
           dFcdUR -= tau * dURdUL(fpt, vari, varj);
 
           dFcdU(0, vari, varj, fpt) += dFcdUR * dA(0, fpt);
-          dFcdU(1, vari, varj, fpt) -= dFcdUR * dA(1, fpt);
         }
 
       /* Compute boundary dFddU */
@@ -1929,10 +1928,7 @@ void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
       for (unsigned int dimj = 0; dimj < nDims; dimj++)
         for (unsigned int vari = 0; vari < nVars; vari++)
           for (unsigned int varj = 0; varj < nVars; varj++)
-          {
-            dFcddU(0, dimj, vari, varj, fpt) =  dFcddUR[dimj][vari][varj] * dA(0, fpt);
-            dFcddU(1, dimj, vari, varj, fpt) = -dFcddUR[dimj][vari][varj] * dA(1, fpt);
-          }
+            dFcddU(0, 0, dimj, vari, varj, fpt) =  dFcddUR[dimj][vari][varj] * dA(0, fpt);
     }
   }
 }

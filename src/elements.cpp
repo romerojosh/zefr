@@ -100,7 +100,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   dt.assign({nEles}, input->dt);
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     /* Data structures for constructing the implicit Jacobian */
     dFdU_spts.assign({nEles, nVars, nVars, nDims, nSpts});
@@ -114,7 +114,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 
       /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
       dFddU_spts.assign({nEles, nDims, nDims, nVars, nVars, nSpts});
-      dFcddU.assign({nEles, nDims, nVars, nVars, nFpts});
+      dFcddU.assign({nEles, 2, nDims, nVars, nVars, nFpts});
 
       Cvisc0.assign({nDims, nVars, nVars, nSpts, nSpts});
       CviscN.assign({nDims, nVars, nSpts, nSpts});
@@ -1664,7 +1664,7 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
               for (unsigned int fpti = 0; fpti < nFpts; fpti++)
                 for (unsigned int sptj = 0; sptj < nSpts; sptj++)
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
-                    CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
+                    CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, 0, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
 
       /* Add center contribution to Neighbor gradient */
       unsigned int eleID = geo->eleID[etype](ele + startEle);
@@ -1729,7 +1729,7 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
                   {
                     unsigned int fpt = face * nFptsPerFace + fpti;
                     int fptN = geo->fpt2fptN(fpt, eleID);
-                    CdFcddU0(vari, varj, fpt, sptj) += (-elesN->dFcddU(eleN, dim, vari, varj, fptN)) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
+                    CdFcddU0(vari, varj, fpt, sptj) += dFcddU(ele, 1, dim, vari, varj, fpt) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
                   }
       }
 

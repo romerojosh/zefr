@@ -81,11 +81,14 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     partition_geometry(input, geo);
 #endif
 
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     set_ele_adjacency(geo);
-    setup_element_colors(input, geo);
-    shuffle_data_by_color(geo);
+    //if (input->iterative_method == MCGS)
+    {
+      setup_element_colors(input, geo);
+      shuffle_data_by_color(geo);
+    }
   }
 
   if (format == GMSH)
@@ -1802,7 +1805,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  if (input->dt_scheme == "MCGS")
+  //if (input->iterative_method == MCGS)
   {
     /* Reduce color data to only contain partition local elements */
     /*
@@ -2395,7 +2398,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     /*
     // Setup ele2eleN

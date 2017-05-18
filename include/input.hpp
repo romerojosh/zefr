@@ -87,6 +87,14 @@ enum BC_TYPE {
   OVERSET_CLOSURE
 };
 
+/*! Enumeration for implicit iterative method type */
+/*
+enum IM_TYPE {
+  Jacobi = 0,
+  MCGS = 1
+};
+*/
+
 /*! Enumeration for implicit linear solver type */
 enum LS_TYPE {
   LU = 0,
