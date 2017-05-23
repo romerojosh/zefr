@@ -1542,7 +1542,7 @@ void Elements::compute_unit_advF(unsigned int dim)
 }
 
 
-void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesObjs, mdvector<unsigned int> &ele2elesObj)
+void Elements::compute_local_dRdU()
 {
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
@@ -1674,8 +1674,6 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
         int eleNID = geo->ele2eleN(face, eleID);
         if (eleNID == -1) continue;
 
-        auto elesN = elesObjs[ele2elesObj(eleNID)];
-        unsigned int eleN = eleNID - geo->eleID[etype](elesN->startEle);
         unsigned int faceN = geo->face2faceN(face, eleID);
 
         /* Compute Neighbor gradient Jacobian (only center contribution) */
@@ -1711,8 +1709,8 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
               for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
               {
                 for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-                  CtempD(dim1) += CviscN(dim2, var, spti, sptj) * elesN->inv_jaco_spts(dim2, spti, dim1, eleN);
-                CtempD(dim1) /= elesN->jaco_det_spts(spti, eleN);
+                  CtempD(dim1) += CviscN(dim2, var, spti, sptj) * inv_jacoN_spts(face, dim2, spti, dim1, ele);
+                CtempD(dim1) /= jacoN_det_spts(face, spti, ele);
               }
 
               for (unsigned int dim = 0; dim < nDims; dim++)

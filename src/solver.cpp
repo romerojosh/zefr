@@ -160,14 +160,17 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   orient_fpts();
 
-  /* Setup fpt adjacency for viscous implicit Jacobians */
-  if (input->implicit_method && input->viscous)
-    set_fpt_adjacency();
-
   /* Complete element setup */
   for (auto e : elesObjs)
   {
     e->setup(faces, myComm);
+  }
+
+  /* Setup fpt adjacency and jacoN views for viscous implicit Jacobians */
+  if (input->implicit_method && input->viscous)
+  {
+    set_fpt_adjacency();
+    set_jacoN_views();
   }
 
   /* Write Low Rank Approximation rank */
@@ -493,6 +496,63 @@ void FRSolver::set_fpt_adjacency()
         int notslot = (slot == 0) ? 1 : 0;
         geo.fpt2fptN(fpt, eleID) = gfpt2fpt(notslot, gfpt);
       }
+}
+
+void FRSolver::set_jacoN_views()
+{
+  for (auto eles : elesObjs)
+  {
+    /* Setup jacoN views of neighboring element data */
+    unsigned int base_stride = eles->nElesPad;
+    mdvector<double*> inv_jacoN_base_ptrs({eles->nFaces*eles->nElesPad});
+    mdvector<unsigned int> inv_jacoN_strides({3, eles->nFaces*eles->nElesPad});
+    mdvector<double*> jacoN_det_base_ptrs({eles->nFaces*eles->nElesPad});
+    mdvector<unsigned int> jacoN_det_strides({eles->nFaces*eles->nElesPad});
+
+    /* Set pointers for jacoN */
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      unsigned int eleID = geo.eleID[eles->etype](ele + eles->startEle);
+      for (unsigned int face = 0; face < eles->nFaces; face++)
+      {
+        int eleNID = geo.ele2eleN(face, eleID);
+
+        /* Element neighbor is a boundary */
+        if (eleNID == -1)
+        {
+          inv_jacoN_base_ptrs(ele + face * base_stride) = nullptr;
+          inv_jacoN_strides(ele + face * base_stride) = 0;
+
+          jacoN_det_base_ptrs(ele + face * base_stride) = nullptr;
+          jacoN_det_strides(ele + face * base_stride) = 0;
+          continue;
+        }
+
+        /* Element neighbor on this rank */
+        auto elesN = elesObjs[ele2elesObj(eleNID)];
+        unsigned int eleN = eleNID - geo.eleID[elesN->etype](elesN->startEle);
+
+        inv_jacoN_base_ptrs(ele + face * base_stride) = &elesN->inv_jaco_spts(0, 0, 0, eleN);
+        inv_jacoN_strides(0, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(1);
+        inv_jacoN_strides(1, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(2);
+        inv_jacoN_strides(2, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(3);
+
+        jacoN_det_base_ptrs(ele + face * base_stride) = &elesN->jaco_det_spts(0, eleN);
+        jacoN_det_strides(ele + face * base_stride) = elesN->jaco_det_spts.get_stride(1);
+
+        /* Neighbor on another rank */
+        // Create jacoN_det_bnd structure in eles? 
+        /*
+        jacoN_det_base_ptrs(ele + face * base_stride) = &eles->jacoN_det_bnd(0, MPIface);
+        jacoN_det_strides(ele + face * base_stride) = eles->jacoN_det_bnd.get_stride(1);
+        */
+      }
+    }
+
+    /* Create jacoN views of neighboring element data */
+    eles->inv_jacoN_spts.assign(inv_jacoN_base_ptrs, inv_jacoN_strides, base_stride);
+    eles->jacoN_det_spts.assign(jacoN_det_base_ptrs, jacoN_det_strides, base_stride);
+  }
 }
 
 void FRSolver::setup_update()
@@ -1260,7 +1320,7 @@ void FRSolver::compute_dRdU()
 
   /* Compute block diagonal components of flux divergence Jacobian */
   for (auto e : elesObjs)
-    e->compute_local_dRdU(elesObjs, ele2elesObj);
+    e->compute_local_dRdU();
 }
 
 void FRSolver::compute_LHS_LU()
