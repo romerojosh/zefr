@@ -5348,7 +5348,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           /* Get viscous normal stress */
           taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
           taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
-          taun[3] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
+          taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
@@ -5521,7 +5521,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           /* Get viscous normal stress */
           taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
           taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
-          taun[3] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
+          taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
