@@ -4971,8 +4971,8 @@ void FRSolver::report_forces(std::ofstream &f)
     force_visc[i] *= fac;
   }
 
-  /* Compute lift and drag coefficients */
-  double CL_conv, CD_conv, CL_visc, CD_visc;
+  /* Compute lift, drag, and side force coefficients */
+  double CL_conv, CD_conv, CL_visc, CD_visc, CQ_conv, CQ_visc;
 
 #ifdef _MPI
   if (input->rank == 0)
@@ -4988,40 +4988,61 @@ void FRSolver::report_forces(std::ofstream &f)
 #endif
 
   /* Get angle of attack (and sideslip) */
-  double aoa = std::atan2(input->V_fs(1), input->V_fs(0));
-  double aos = 0.0;
+  double alpha = std::atan2(input->V_fs(1), input->V_fs(0));
+  double cosa = std::cos(alpha);
+  double sina = std::sin(alpha);
+
+  double beta = 0.0;
   if (geo.nDims == 3)
-    aos = std::atan2(input->V_fs(2), input->V_fs(0));
+    beta = std::atan2(input->V_fs(2), input->V_fs(0)*cosa + input->V_fs(1)*sina);
+  double cosb = std::cos(beta);
+  double sinb = std::sin(beta);
 
   if (input->rank == 0)
   {
     if (geo.nDims == 2)
     {
-      CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
-      CD_conv = force_conv[0] * std::cos(aoa) + force_conv[1] * std::sin(aoa);
-      CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
-      CD_visc = force_visc[0] * std::cos(aoa) + force_visc[1] * std::sin(aoa);
+      CL_conv = -force_conv[0] * sina + force_conv[1] * cosa;
+      CD_conv = force_conv[0] * cosa + force_conv[1] * sina;
+      CL_visc = -force_visc[0] * sina + force_visc[1] * cosa;
+      CD_visc = force_visc[0] * cosa + force_visc[1] * sina;
     }
     else if (geo.nDims == 3)
     {
-      CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
-      CD_conv = force_conv[0] * std::cos(aoa) * std::cos(aos) + force_conv[1] * std::sin(aoa) + 
-        force_conv[2] * std::sin(aoa) * std::cos(aos);
-      CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
-      CD_visc = force_visc[0] * std::cos(aoa) * std::cos(aos) + force_visc[1] * std::sin(aoa) + 
-        force_visc[2] * std::sin(aoa) * cos(aos);
+      CD_conv = (force_conv[0] * cosa - force_conv[1] * sina) * cosb
+          + force_conv[2] * sina * sinb;
+      CD_visc = (force_visc[0] * cosa - force_visc[1] * sina) * cosb
+          + force_visc[2] * sina * sinb;
+
+      CL_conv = -force_conv[0] * sina + force_conv[1] * cosa;
+      CL_visc = -force_visc[0] * sina + force_visc[1] * cosa;
+
+      CQ_conv = -(force_conv[0] * cosa + force_conv[1] * sina) * sinb
+          + force_conv[2] * cosb;
+      CQ_visc = -(force_visc[0] * cosa + force_visc[1] * sina) * sinb
+          + force_visc[2] * cosb;
     }
 
     std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
 
     f << iter << " " << std::scientific << std::setprecision(16) << flow_time << " ";
+    f << CL_conv << " " << CD_conv;
 
-    f  << CL_conv << " " << CD_conv;
+    if (geo.nDims == 3)
+    {
+      std::cout << " CQ_conv = " << CQ_conv;
+      f << " " << CQ_conv;
+    }
 
     if (input->viscous)
     {
       std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
       f << " " << CL_visc << " " << CD_visc;
+      if (geo.nDims == 3)
+      {
+        std::cout << " CQ_visc = " << CQ_visc;
+        f << " " << CQ_visc;
+      }
     }
 
     std::cout << std::endl;
