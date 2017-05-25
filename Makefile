@@ -163,6 +163,7 @@ swig: $(SOBJS) $(SWIG_OBJ)
 .PHONY: static
 static: FLAGS += -D_BUILD_LIB
 static: CXXFLAGS += -fPIC
+static: CUFLAGS += -Xcompiler -fPIC
 static: $(SOBJS)
 	$(AR) $(BINDIR)/libzefr.a $(SOBJS)
 

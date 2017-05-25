@@ -646,6 +646,16 @@ void copy_coords_face(mdvector_gpu<double> coord, mdvector_gpu<double> e_coord,
     coord(dim, gfpt) = e_coord(fpt, dim, ele);
 }
 
+void copy_coords_ele_wrapper(mdvector_gpu<double> &nodes,
+    mdvector_gpu<double> &g_nodes, mdvector_gpu<int> &ele2node,
+    unsigned int nNodes, unsigned int nEles, unsigned int nDims)
+{
+  int threads = 128;
+  dim3 blocksE((nEles * nNodes + threads - 1) / threads, nDims);
+
+  copy_coords_ele<<<blocksE,threads>>>(nodes, g_nodes, ele2node, nEles, nNodes);
+}
+
 void update_coords_wrapper(mdvector_gpu<double> &nodes,
     mdvector_gpu<double> &g_nodes,  mdvector_gpu<double> &shape_spts,
     mdvector_gpu<double> &shape_fpts, mdvector_gpu<double> &coord_spts,
