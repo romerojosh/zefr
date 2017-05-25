@@ -76,17 +76,20 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   else
     load_mesh_data_pyfr(input, geo);
 
+  if (input->implicit_method)
+  {
+    set_ele_adjacency(geo);
+    //if (input->iterative_method == MCGS)
+    {
+      setup_element_colors(input, geo);
+      shuffle_data_by_color(geo);
+    }
+  }
+
 #ifdef _MPI
   if (format == GMSH)
     partition_geometry(input, geo);
 #endif
-
-  if (input->dt_scheme == "MCGS")
-  {
-    set_ele_adjacency(geo);
-    setup_element_colors(input, geo);
-    shuffle_data_by_color(geo);
-  }
 
   if (format == GMSH)
   {
@@ -1479,6 +1482,17 @@ void set_ele_adjacency(GeoStruct &geo)
       }
     }
   }
+
+  /* Print ele connectivity */
+  /*
+  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+  {
+    std::cout << "Ele: " << ele << " EleN:";
+    for (unsigned int face = 0; face < geo.nFacesPerEleBT[QUAD]; face++)
+      std::cout << " " << geo.ele2eleN(face, ele);
+    std::cout << std::endl;
+  }
+  */
 }
 
 void setup_element_colors(InputStruct *input, GeoStruct &geo)
@@ -1802,7 +1816,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  if (input->dt_scheme == "MCGS")
+  //if (input->iterative_method == MCGS)
   {
     /* Reduce color data to only contain partition local elements */
     /*
@@ -2395,7 +2409,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     /*
     // Setup ele2eleN

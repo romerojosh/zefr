@@ -128,6 +128,7 @@ class FRSolver
 
     /* Routines for implicit method */
     void set_fpt_adjacency();
+    void set_jacoN_views();
     void compute_dRdU();
     void compute_LHS_LU();
     void compute_LHS_inverse();

@@ -1886,6 +1886,13 @@ void get_nodal_basis(double* rst_in, double* weights,
   const int nSpts = nSpts1D*nSpts1D*nSpts1D;
   const int idx = (blockDim.x * blockIdx.x + threadIdx.x);
 
+  if (nSpts1D == 1)
+  {
+    for (int i = idx; i < nFringe * nSpts; i += gridDim.x * blockDim.x)
+      weights[i] = 1.0;
+    return;
+  }
+
   __shared__ double xi[nSpts1D];
 
   if (threadIdx.x < nSpts1D)
@@ -1924,6 +1931,9 @@ void get_nodal_basis_wrapper(int* cellIDs, double* rst, double* weights,
   {
     switch (nSpts1D)
     {
+      case 1:
+        get_nodal_basis<1><<<blocks, threads, nbShare>>>(rst,weights,xiGrid,nFringe);
+        break;
       case 2:
         get_nodal_basis<2><<<blocks, threads, nbShare>>>(rst,weights,xiGrid,nFringe);
         break;
@@ -1947,6 +1957,10 @@ void get_nodal_basis_wrapper(int* cellIDs, double* rst, double* weights,
   {
     switch (nSpts1D)
     {
+      case 1:
+        get_nodal_basis<1><<<blocks, threads, nbShare, stream_handles[stream]>>>
+            (rst,weights,xiGrid,nFringe);
+        break;
       case 2:
         get_nodal_basis<2><<<blocks, threads, nbShare, stream_handles[stream]>>>
             (rst,weights,xiGrid,nFringe);

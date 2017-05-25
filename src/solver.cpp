@@ -107,7 +107,8 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   /* Create eles objects */
   unsigned int elesObjID = 0;
-  if (input->dt_scheme == "MCGS")
+  //if (input->iterative_method == MCGS)
+  if (input->implicit_method)
   {
     ele2elesObj.assign({geo.nEles});
     for (auto etype : geo.ele_set)
@@ -159,14 +160,17 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   orient_fpts();
 
-  /* Setup fpt adjacency for viscous implicit Jacobians */
-  if (input->dt_scheme == "MCGS" && input->viscous)
-    set_fpt_adjacency();
-
   /* Complete element setup */
   for (auto e : elesObjs)
   {
     e->setup(faces, myComm);
+  }
+
+  /* Setup fpt adjacency and jacoN views for viscous implicit Jacobians */
+  if (input->implicit_method && input->viscous)
+  {
+    set_fpt_adjacency();
+    set_jacoN_views();
   }
 
   /* Write Low Rank Approximation rank */
@@ -494,6 +498,63 @@ void FRSolver::set_fpt_adjacency()
       }
 }
 
+void FRSolver::set_jacoN_views()
+{
+  for (auto eles : elesObjs)
+  {
+    /* Setup jacoN views of neighboring element data */
+    unsigned int base_stride = eles->nElesPad;
+    mdvector<double*> inv_jacoN_base_ptrs({eles->nFaces*eles->nElesPad});
+    mdvector<unsigned int> inv_jacoN_strides({3, eles->nFaces*eles->nElesPad});
+    mdvector<double*> jacoN_det_base_ptrs({eles->nFaces*eles->nElesPad});
+    mdvector<unsigned int> jacoN_det_strides({eles->nFaces*eles->nElesPad});
+
+    /* Set pointers for jacoN */
+    for (unsigned int ele = 0; ele < eles->nEles; ele++)
+    {
+      unsigned int eleID = geo.eleID[eles->etype](ele + eles->startEle);
+      for (unsigned int face = 0; face < eles->nFaces; face++)
+      {
+        int eleNID = geo.ele2eleN(face, eleID);
+
+        /* Element neighbor is a boundary */
+        if (eleNID == -1)
+        {
+          inv_jacoN_base_ptrs(ele + face * base_stride) = nullptr;
+          inv_jacoN_strides(ele + face * base_stride) = 0;
+
+          jacoN_det_base_ptrs(ele + face * base_stride) = nullptr;
+          jacoN_det_strides(ele + face * base_stride) = 0;
+          continue;
+        }
+
+        /* Element neighbor on this rank */
+        auto elesN = elesObjs[ele2elesObj(eleNID)];
+        unsigned int eleN = eleNID - geo.eleID[elesN->etype](elesN->startEle);
+
+        inv_jacoN_base_ptrs(ele + face * base_stride) = &elesN->inv_jaco_spts(0, 0, 0, eleN);
+        inv_jacoN_strides(0, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(1);
+        inv_jacoN_strides(1, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(2);
+        inv_jacoN_strides(2, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(3);
+
+        jacoN_det_base_ptrs(ele + face * base_stride) = &elesN->jaco_det_spts(0, eleN);
+        jacoN_det_strides(ele + face * base_stride) = elesN->jaco_det_spts.get_stride(1);
+
+        /* Neighbor on another rank */
+        // Create jacoN_det_bnd structure in eles? 
+        /*
+        jacoN_det_base_ptrs(ele + face * base_stride) = &eles->jacoN_det_bnd(0, MPIface);
+        jacoN_det_strides(ele + face * base_stride) = eles->jacoN_det_bnd.get_stride(1);
+        */
+      }
+    }
+
+    /* Create jacoN views of neighboring element data */
+    eles->inv_jacoN_spts.assign(inv_jacoN_base_ptrs, inv_jacoN_strides, base_stride);
+    eles->jacoN_det_spts.assign(jacoN_det_base_ptrs, jacoN_det_strides, base_stride);
+  }
+}
+
 void FRSolver::setup_update()
 {
   /* Setup variables for timestepping scheme */
@@ -566,20 +627,26 @@ void FRSolver::setup_update()
     prev_err = 1.;
 
   }
-  else if (input->dt_scheme == "MCGS")
+  else if (input->dt_scheme == "BDF1")
   {
     input->nStages = 1;
-
-    /* Forward or Forward/Backward sweep */
-    nCounter = geo.nColors;
-    if (input->backsweep)
-      nCounter *= 2;
   }
   else
   {
     ThrowException("dt_scheme not recognized!");
   }
 
+  if (input->implicit_method)
+  {
+    /*
+    if (input->iterative_method == Jacobi)
+      nCounter = 1;
+    else if (input->iterative_method == MCGS)
+    */
+      nCounter = geo.nColors;
+    if (input->backsweep)
+      nCounter *= 2;
+  }
 }
 
 void FRSolver::setup_output()
@@ -905,7 +972,7 @@ void FRSolver::solver_data_to_device()
       }
     }
 
-    if (input->dt_scheme == "MCGS")
+    if (input->implicit_method)
     {
       e->LHS_d = e->LHS;
       e->RHS_d = e->RHS;
@@ -1253,7 +1320,7 @@ void FRSolver::compute_dRdU()
 
   /* Compute block diagonal components of flux divergence Jacobian */
   for (auto e : elesObjs)
-    e->compute_local_dRdU(elesObjs, ele2elesObj);
+    e->compute_local_dRdU();
 }
 
 void FRSolver::compute_LHS_LU()
@@ -1585,7 +1652,7 @@ void FRSolver::setup_views()
   mdvector<unsigned int> dFcdU_strides;
   mdvector<double*> dUcdU_base_ptrs, dFcddU_base_ptrs;
   mdvector<unsigned int> dFcddU_strides;
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     dFcdU_base_ptrs.assign({2 * geo.nGfpts});
     dFcdU_strides.assign({2, 2 * geo.nGfpts});
@@ -1593,7 +1660,7 @@ void FRSolver::setup_views()
     {
       dUcdU_base_ptrs.assign({2 * geo.nGfpts});
       dFcddU_base_ptrs.assign({2 * geo.nGfpts});
-      dFcddU_strides.assign({3, 2 * geo.nGfpts});
+      dFcddU_strides.assign({4, 2 * geo.nGfpts});
     }
   }
 
@@ -1639,7 +1706,7 @@ void FRSolver::setup_views()
         }
 
         /* Set pointers for internal faces for implicit */
-        if (input->dt_scheme == "MCGS")
+        if (input->implicit_method)
         {
           dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
           dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
@@ -1648,10 +1715,11 @@ void FRSolver::setup_views()
           if (input->viscous)
           {
             dUcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dUcdU(ele, 0, 0, fpt);
-            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(ele, 0, 0, 0, fpt);
+            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(ele, 0, 0, 0, 0, fpt);
             dFcddU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(1);
             dFcddU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(2);
             dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(3);
+            dFcddU_strides(3, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(4);
           }
         }
       }
@@ -1703,7 +1771,7 @@ void FRSolver::setup_views()
     }
 
     /* Set pointers for remaining faces for implicit */
-    if (input->dt_scheme == "MCGS")
+    if (input->implicit_method)
     {
       dFcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcdU_bnd(0, 0, i);
       dFcdU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(1);
@@ -1712,10 +1780,11 @@ void FRSolver::setup_views()
       if (input->viscous)
       {
         dUcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dUcdU_bnd(0, 0, i);
-        dFcddU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcddU_bnd(0, 0, 0, i);
+        dFcddU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcddU_bnd(0, 0, 0, 0, i);
         dFcddU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(1);
         dFcddU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(2);
         dFcddU_strides(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(3);
+        dFcddU_strides(3, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(4);
       }
     }
 
@@ -1744,7 +1813,7 @@ void FRSolver::setup_views()
 #endif
 
   /* Create views of element data for implicit */
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     faces->dFcdU.assign(dFcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
     if (input->viscous)
@@ -1775,7 +1844,7 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   }
   else
   {
-    if (input->dt_scheme == "MCGS")
+    if (input->dt_scheme == "BDF1")
       step_MCGS(sourceBT);
     else if (input->dt_scheme == "RK54")
         step_LSRK(sourceBT);
@@ -4169,8 +4238,8 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   if (geo.ele_set.count(TET))
     ThrowException("Surface write not implemented for triangular faces.");
 
-  if (input->dt_scheme == "MCGS")
-    ThrowException("Surface write not implemented for MCGS.");
+  if (input->implicit_method)
+    ThrowException("Surface write not implemented for implicit methods.");
 
   auto e = elesObjs[0];
 
@@ -4633,7 +4702,7 @@ void FRSolver::write_LHS(const std::string &_prefix)
 {
 #if !defined (_MPI)
   auto e = elesObjs[0];
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     if (input->rank == 0) std::cout << "Writing LHS to file..." << std::endl;
 
@@ -4667,7 +4736,7 @@ void FRSolver::write_RHS(const std::string &_prefix)
 {
 #if !defined (_MPI)
   auto e = elesObjs[0];
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     if (input->rank == 0) std::cout << "Writing RHS to file..." << std::endl;
 #ifdef _GPU
@@ -4902,8 +4971,8 @@ void FRSolver::report_forces(std::ofstream &f)
     force_visc[i] *= fac;
   }
 
-  /* Compute lift and drag coefficients */
-  double CL_conv, CD_conv, CL_visc, CD_visc;
+  /* Compute lift, drag, and side force coefficients */
+  double CL_conv, CD_conv, CL_visc, CD_visc, CQ_conv, CQ_visc;
 
 #ifdef _MPI
   if (input->rank == 0)
@@ -4919,40 +4988,61 @@ void FRSolver::report_forces(std::ofstream &f)
 #endif
 
   /* Get angle of attack (and sideslip) */
-  double aoa = std::atan2(input->V_fs(1), input->V_fs(0));
-  double aos = 0.0;
+  double alpha = std::atan2(input->V_fs(1), input->V_fs(0));
+  double cosa = std::cos(alpha);
+  double sina = std::sin(alpha);
+
+  double beta = 0.0;
   if (geo.nDims == 3)
-    aos = std::atan2(input->V_fs(2), input->V_fs(0));
+    beta = std::atan2(input->V_fs(2), input->V_fs(0)*cosa + input->V_fs(1)*sina);
+  double cosb = std::cos(beta);
+  double sinb = std::sin(beta);
 
   if (input->rank == 0)
   {
     if (geo.nDims == 2)
     {
-      CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
-      CD_conv = force_conv[0] * std::cos(aoa) + force_conv[1] * std::sin(aoa);
-      CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
-      CD_visc = force_visc[0] * std::cos(aoa) + force_visc[1] * std::sin(aoa);
+      CL_conv = -force_conv[0] * sina + force_conv[1] * cosa;
+      CD_conv = force_conv[0] * cosa + force_conv[1] * sina;
+      CL_visc = -force_visc[0] * sina + force_visc[1] * cosa;
+      CD_visc = force_visc[0] * cosa + force_visc[1] * sina;
     }
     else if (geo.nDims == 3)
     {
-      CL_conv = -force_conv[0] * std::sin(aoa) + force_conv[1] * std::cos(aoa);
-      CD_conv = force_conv[0] * std::cos(aoa) * std::cos(aos) + force_conv[1] * std::sin(aoa) + 
-        force_conv[2] * std::sin(aoa) * std::cos(aos);
-      CL_visc = -force_visc[0] * std::sin(aoa) + force_visc[1] * std::cos(aoa);
-      CD_visc = force_visc[0] * std::cos(aoa) * std::cos(aos) + force_visc[1] * std::sin(aoa) + 
-        force_visc[2] * std::sin(aoa) * cos(aos);
+      CD_conv = (force_conv[0] * cosa - force_conv[1] * sina) * cosb
+          + force_conv[2] * sina * sinb;
+      CD_visc = (force_visc[0] * cosa - force_visc[1] * sina) * cosb
+          + force_visc[2] * sina * sinb;
+
+      CL_conv = -force_conv[0] * sina + force_conv[1] * cosa;
+      CL_visc = -force_visc[0] * sina + force_visc[1] * cosa;
+
+      CQ_conv = -(force_conv[0] * cosa + force_conv[1] * sina) * sinb
+          + force_conv[2] * cosb;
+      CQ_visc = -(force_visc[0] * cosa + force_visc[1] * sina) * sinb
+          + force_visc[2] * cosb;
     }
 
     std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
 
     f << iter << " " << std::scientific << std::setprecision(16) << flow_time << " ";
+    f << CL_conv << " " << CD_conv;
 
-    f  << CL_conv << " " << CD_conv;
+    if (geo.nDims == 3)
+    {
+      std::cout << " CQ_conv = " << CQ_conv;
+      f << " " << CQ_conv;
+    }
 
     if (input->viscous)
     {
       std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
       f << " " << CL_visc << " " << CD_visc;
+      if (geo.nDims == 3)
+      {
+        std::cout << " CQ_visc = " << CQ_visc;
+        f << " " << CQ_visc;
+      }
     }
 
     std::cout << std::endl;
@@ -5258,7 +5348,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           /* Get viscous normal stress */
           taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
           taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
-          taun[3] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
+          taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
@@ -5431,7 +5521,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           /* Get viscous normal stress */
           taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
           taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
-          taun[3] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
+          taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
           //TODO: need to fix quadrature weights for mixed element cases!
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
@@ -5830,7 +5920,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
       }
     }
   }
-  else if (input->dt_scheme != "MCGS")
+  else if (!input->implicit_method)
   {
     if (stage == 0 && input->nStages > 1)
     {

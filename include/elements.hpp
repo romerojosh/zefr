@@ -120,6 +120,10 @@ class Elements
     mdvector<double> CtempSF, CtempD, CtempFS, CtempFSN;
     mdvector<double> LHS, LHSinv, RHS, deltaU;
 
+    /* Views for viscous implicit Jacobian */
+    mdview<double> inv_jacoN_spts;
+    mdview<double> jacoN_det_spts;
+
 #ifdef _CPU
     unsigned int svd_rank;
     std::vector<Eigen::PartialPivLU<Eigen::MatrixXd>> LU_ptrs;
@@ -254,7 +258,7 @@ class Elements
          unsigned int nPts, unsigned int nDims);
 
     /* Routines for implicit method */
-    void compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesObjs, mdvector<unsigned int> &ele2elesObj);
+    void compute_local_dRdU();
 
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void compute_dFdU();

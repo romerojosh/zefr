@@ -126,7 +126,7 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
       double v = -U0 * cos(x/L) * sin(y/L) * cos(z/L);
 
       double p = P0 + Rho0*U0*U0/16. * (cos(2*x/L) + cos(2*y/L)) * (cos(2*z/L) + 2);
-      double rho = p / (input->R_ref * input->T_fs);
+      double rho = p / (input->R * input->T_fs);
 
       switch (var)
       {
@@ -148,7 +148,7 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
       double gamma = input->gamma;
       double Pr = input->prandtl;
       double P = input->P_fs;
-      double R = input->R_ref;
+      double R = input->R;
       double Vw = input->V_wall(0);
       double Tw = input->T_wall;
       double cp = gamma * R / (gamma - 1);
@@ -282,7 +282,7 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
         double gamma = input->gamma;
         double Pr = input->prandtl;
         double P = input->P_fs;
-        double R = input->R_ref;
+        double R = input->R;
         double Vw = input->V_wall(0);
         double Tw = input->T_wall;
         double cp = gamma * R / (gamma - 1);

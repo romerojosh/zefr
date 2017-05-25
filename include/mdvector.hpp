@@ -594,6 +594,22 @@ class mdview
       return *(base_ptrs(idx0 + base_stride * idx4) + strides(0, idx0 + base_stride * idx4) * idx1 + 
           strides(1, idx0 + base_stride * idx4) * idx2 + strides(2, idx0 + base_stride * idx4) * idx3);
     }
+
+    T& operator() (unsigned int idx5, unsigned int idx4, unsigned int idx3, 
+        unsigned int idx2, unsigned int idx1, unsigned int idx0)
+    {
+      return *(base_ptrs(idx0 + base_stride * idx5) + strides(0, idx0 + base_stride * idx5) * idx1 + 
+          strides(1, idx0 + base_stride * idx5) * idx2 + strides(2, idx0 + base_stride * idx5) * idx3 +
+          strides(3, idx0 + base_stride * idx5) * idx4);
+    }
+
+    T operator() (unsigned int idx5, unsigned int idx4, unsigned int idx3, 
+        unsigned int idx2, unsigned int idx1, unsigned int idx0) const
+    {
+      return *(base_ptrs(idx0 + base_stride * idx5) + strides(0, idx0 + base_stride * idx5) * idx1 + 
+          strides(1, idx0 + base_stride * idx5) * idx2 + strides(2, idx0 + base_stride * idx5) * idx3 +
+          strides(3, idx0 + base_stride * idx5) * idx4);
+    }
 };
 
 

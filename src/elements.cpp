@@ -100,7 +100,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   dt.assign({nEles}, input->dt);
 
   /* Allocate memory for implicit method data structures */
-  if (input->dt_scheme == "MCGS")
+  if (input->implicit_method)
   {
     /* Data structures for constructing the implicit Jacobian */
     dFdU_spts.assign({nEles, nVars, nVars, nDims, nSpts});
@@ -114,7 +114,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 
       /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
       dFddU_spts.assign({nEles, nDims, nDims, nVars, nVars, nSpts});
-      dFcddU.assign({nEles, nDims, nVars, nVars, nFpts});
+      dFcddU.assign({nEles, 2, nDims, nVars, nVars, nFpts});
 
       Cvisc0.assign({nDims, nVars, nVars, nSpts, nSpts});
       CviscN.assign({nDims, nVars, nSpts, nSpts});
@@ -1542,7 +1542,7 @@ void Elements::compute_unit_advF(unsigned int dim)
 }
 
 
-void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesObjs, mdvector<unsigned int> &ele2elesObj)
+void Elements::compute_local_dRdU()
 {
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
@@ -1664,7 +1664,7 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
               for (unsigned int fpti = 0; fpti < nFpts; fpti++)
                 for (unsigned int sptj = 0; sptj < nSpts; sptj++)
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
-                    CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
+                    CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, 0, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
 
       /* Add center contribution to Neighbor gradient */
       unsigned int eleID = geo->eleID[etype](ele + startEle);
@@ -1674,8 +1674,6 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
         int eleNID = geo->ele2eleN(face, eleID);
         if (eleNID == -1) continue;
 
-        auto elesN = elesObjs[ele2elesObj(eleNID)];
-        unsigned int eleN = eleNID - geo->eleID[etype](elesN->startEle);
         unsigned int faceN = geo->face2faceN(face, eleID);
 
         /* Compute Neighbor gradient Jacobian (only center contribution) */
@@ -1711,8 +1709,8 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
               for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
               {
                 for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-                  CtempD(dim1) += CviscN(dim2, var, spti, sptj) * elesN->inv_jaco_spts(dim2, spti, dim1, eleN);
-                CtempD(dim1) /= elesN->jaco_det_spts(spti, eleN);
+                  CtempD(dim1) += CviscN(dim2, var, spti, sptj) * inv_jacoN_spts(face, dim2, spti, dim1, ele);
+                CtempD(dim1) /= jacoN_det_spts(face, spti, ele);
               }
 
               for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1729,7 +1727,7 @@ void Elements::compute_local_dRdU(std::vector<std::shared_ptr<Elements>> &elesOb
                   {
                     unsigned int fpt = face * nFptsPerFace + fpti;
                     int fptN = geo->fpt2fptN(fpt, eleID);
-                    CdFcddU0(vari, varj, fpt, sptj) += (-elesN->dFcddU(eleN, dim, vari, varj, fptN)) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
+                    CdFcddU0(vari, varj, fpt, sptj) += dFcddU(ele, 1, dim, vari, varj, fpt) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
                   }
       }
 

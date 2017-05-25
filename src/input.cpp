@@ -105,10 +105,15 @@ InputStruct read_input_file(std::string inputfile)
     input.nStages = 4;
   else if (input.dt_scheme == "LSRK")
     input.nStages = 5;
-  else if (input.dt_scheme == "MCGS")
+  else if (input.dt_scheme == "BDF1")
     input.nStages = 1;
+  else if (input.dt_scheme == "DIRK34")
+    input.nStages = 3;
   else
     ThrowException("Unknown dt_scheme");
+
+  if (input.dt_scheme == "BDF1" || input.dt_scheme == "DIRK34")
+    input.implicit_method = true;
 
   read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
   read_param(f, "CFL_max", input.CFL_max, 1.0);
@@ -137,6 +142,15 @@ InputStruct read_input_file(std::string inputfile)
   read_param_vec(f, "mg_levels", input.mg_levels);
   read_param_vec(f, "mg_steps", input.mg_steps);
 
+  /*
+  read_param(f, "iterative_method", str, std::string("Jacobi"));
+  if (str == "Jacobi")
+    input.iterative_method = Jacobi;
+  else if (str == "MCGS")
+    input.iterative_method = MCGS;
+  else
+    ThrowException("Iterative method not recognized!");
+  */
   read_param(f, "nColors", input.nColors, (unsigned int) 1);
   read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
   read_param(f, "backsweep", input.backsweep, false);
@@ -203,7 +217,6 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "T_gas", input.T_gas, 291.15);
   read_param(f, "gamma", input.gamma, 1.4);
   read_param(f, "R", input.R, 286.9);
-  read_param(f, "mu", input.mu, 1.827E-5);
   read_param(f, "prandtl", input.prandtl, 0.72);
   read_param(f, "S", input.S, 120.0);
 
@@ -332,7 +345,7 @@ void apply_nondim(InputStruct &input)
   if (input.disable_nondim) 
   { 
     /* Run with dimensional quantities from input file:
-     * ++ Re, Ma, rho, V, L, p, gamma specified
+     * ++ Re, Ma, rho, V, L, p, gamma, Prandtl specified
      * ++ Remaining parameters calculated for consistency */
     input.R = 1.;  // Free parameter (only R*T important to us)
     input.mu = input.rho_fs * input.v_mag_fs * input.L_fs  / input.Re_fs; // Re -> mu
@@ -351,36 +364,34 @@ void apply_nondim(InputStruct &input)
     for (unsigned int n = 0; n < input.nDims; n++)
       input.V_wall(n) = V_wall_mag * input.norm_wall(n) / input.v_mag_fs;
     
-    /// TODO: update Sutherland's Law, or disable it here
+    input.fix_vis = 1;
 
     return;
   }
 
   /* Compute dimensional freestream quantities */
+
   double V_fs_mag = input.mach_fs * std::sqrt(input.gamma * input.R * input.T_fs);
   for (unsigned int dim = 0; dim < input.nDims; dim++)
     input.V_fs(dim) = V_fs_mag * input.norm_fs(dim);
 
+  input.mu = (input.rho_fs * V_fs_mag * input.L_fs) / input.Re_fs;
+
   /* If using Sutherland's law, update viscosity */
   if (!input.fix_vis)
-  {
     input.mu = input.mu * std::pow(input.T_fs / input.T_gas, 1.5) * ((input.T_gas + input.S)/
         (input.T_fs + input.S));
-  }
 
   input.rho_fs = input.mu * input.Re_fs / (V_fs_mag * input.L_fs);
   input.P_fs = input.rho_fs * input.R * input.T_fs;
   input.rt = input.T_gas * input.R / (V_fs_mag * V_fs_mag);
   input.c_sth = input.S / input.T_gas;
 
-  /* -- Set reference quantities for nondimensionalization --
-   * Note that we are setting rho_ref s.t. we get a 'normalized' density of 2.
-   * This is for performance, to avoid taking an exponent of a number close to 1
-   * in the characteristic boundary condition. */
+  /* -- Set reference quantities for nondimensionalization -- */
   input.T_ref = input.T_fs;
   input.rho_ref = input.rho_fs;
   input.P_ref = input.rho_fs * V_fs_mag * V_fs_mag;
-  input.mu_ref = input.rho_fs * V_fs_mag * input.L_fs;
+  input.mu_ref = input.rho_fs * V_fs_mag;
   input.R_ref = input.R * input.T_fs / (V_fs_mag * V_fs_mag);
 
   /* Nondimensionalize freestream quantities */
@@ -392,8 +403,7 @@ void apply_nondim(InputStruct &input)
   input.T_tot_fs = (input.T_fs / input.T_ref) * (1.0 + 0.5 * (input.gamma - 1.0) * 
       input.mach_fs * input.mach_fs);
   input.P_tot_fs = input.P_fs * std::pow(1.0 + 0.5 * (input.gamma - 1.0) * input.mach_fs * 
-      input.mach_fs, input.gamma /
-      (input.gamma - 1.0));
+      input.mach_fs, input.gamma / (input.gamma - 1.0));
 
   /* Compute and nondimensionalize wall quantities */
   double V_wall_mag = input.mach_wall * std::sqrt(input.gamma * input.R * input.T_wall);
@@ -404,5 +414,5 @@ void apply_nondim(InputStruct &input)
 
   input.v_mag_fs = 1.0;
   input.T_fs = 1.0;
-  input.R = input.R_ref; /// TODO: replace all usage of "R_ref"
+  input.R = input.R_ref;
 }
