@@ -448,31 +448,11 @@ void FRSolver::orient_fpts()
 
 void FRSolver::set_fpt_adjacency()
 {
-  /* Sizing face2faceN and fpt2fptN */
+  /* Sizing fpt2fptN */
   if (geo.nDims == 2)
-  {
-    geo.face2faceN.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
     geo.fpt2fptN.assign({geo.nFacesPerEleBT[QUAD] * geo.nFptsPerFace, geo.nEles}, -1);
-  }
   else
-  {
-    geo.face2faceN.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
     geo.fpt2fptN.assign({geo.nFacesPerEleBT[HEX] * geo.nFptsPerFace, geo.nEles}, -1);
-  }
-
-  /* Construct face2faceN connectivity */
-  for (auto etype : geo.ele_set)
-    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
-      for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
-      {
-        unsigned int eleID = geo.eleID[etype](ele);
-        int eleNID = geo.ele2eleN(face, eleID);
-        if (eleNID == -1) continue;
-
-        unsigned int faceN = 0;
-        while (geo.ele2eleN(faceN, eleNID) != (int)eleID) faceN++;
-        geo.face2faceN(face, eleID) = faceN;
-      }
 
   /* Construct gfpt2fpt connectivity */
   mdvector<unsigned int> gfpt2fpt({2, geo.nGfpts}, -1);
@@ -496,10 +476,126 @@ void FRSolver::set_fpt_adjacency()
         int notslot = (slot == 0) ? 1 : 0;
         geo.fpt2fptN(fpt, eleID) = gfpt2fpt(notslot, gfpt);
       }
+
+#ifdef _MPI
+  /* Send fpt2fptN connectivity on MPI faces */
+  std::map<unsigned int, mdvector<unsigned int>> fpts_rbuffs, fpts_sbuffs;
+  std::vector<MPI_Request> rreqs(geo.fpt_buffer_map.size());
+  std::vector<MPI_Request> sreqs(geo.fpt_buffer_map.size());
+  unsigned int idx = 0;
+  for (const auto &entry : geo.fpt_buffer_map)
+  {
+    unsigned int rankN = entry.first;
+    const auto &gfpts = entry.second;
+
+    /* Stage nonblocking receives */
+    fpts_rbuffs[rankN].assign({(unsigned int) gfpts.size()}, 0);
+    MPI_Irecv(fpts_rbuffs[rankN].data(), (unsigned int) gfpts.size(), MPI_UNSIGNED, 
+        rankN, 0, myComm, &rreqs[idx]);
+
+    /* Pack buffer of fpt data */
+    fpts_sbuffs[rankN].assign({(unsigned int) gfpts.size()}, 0);
+    for (unsigned int i = 0; i < gfpts.size(); i++)
+    {
+      unsigned int gfpt = gfpts(i);
+      unsigned int fpt = gfpt2fpt(0, gfpt);
+      fpts_sbuffs[rankN](i) = fpt;
+    }
+
+    /* Send buffer to paired rank */
+    MPI_Isend(fpts_sbuffs[rankN].data(), (unsigned int) gfpts.size(), MPI_UNSIGNED,
+        rankN, 0, myComm, &sreqs[idx]);
+    idx++;
+  }
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+
+  /* Unpack buffer into fpt2fptN */
+  for (const auto &entry : geo.fpt_buffer_map)
+  {
+    unsigned int rankN = entry.first;
+    const auto &gfpts = entry.second;
+    for (unsigned int i = 0; i < gfpts.size(); i++)
+    {
+      unsigned int gfpt = gfpts(i);
+      unsigned int fpt = gfpt2fpt(0, gfpt);
+      unsigned int faceID = geo.fpt2face[gfpt];
+      unsigned int eleID = geo.face2eles(faceID, 0);
+      geo.fpt2fptN(fpt, eleID) = fpts_rbuffs[rankN](i);
+    }
+  }
+#endif
 }
 
 void FRSolver::set_jacoN_views()
 {
+#ifdef _MPI
+  /* Allocate memory for jacoN data on MPI faces */
+  inv_jacoN_spts_mpibnd.assign({geo.nMpiFaces, eles->nDims, eles->nSpts, eles->nDims});
+  jacoN_det_spts_mpibnd.assign({geo.nMpiFaces, eles->nSpts});
+
+  /* Fill in inv_jacoN on MPI faces */
+  /* Note: Consider creating a larger buffer if this takes too long */
+  std::map<unsigned int, mdvector<double>> inv_jacoN_sbuffs;
+  std::vector<MPI_Request> rreqs(geo.nMpiFaces);
+  std::vector<MPI_Request> sreqs(geo.nMpiFaces);
+  for (unsigned int mpiFace = 0; mpiFace < geo.nMpiFaces; mpiFace++)
+  {
+    unsigned int faceID = geo.mpiFaces[mpiFace];
+    unsigned int eleID = geo.face2eles(faceID, 0);
+    auto eles = elesObjs[ele2elesObj(eleID)];
+    unsigned int rankN = geo.procR[mpiFace];
+
+    /* Stage nonblocking receives */
+    MPI_Irecv(&inv_jacoN_spts_mpibnd(mpiFace, 0, 0, 0), eles->nDims * eles->nSpts * eles->nDims, 
+        MPI_DOUBLE, rankN, faceID, myComm, &rreqs[mpiFace]);
+
+    /* Pack buffer of jacoN data */
+    unsigned int faceNID = geo.faceID_R[mpiFace];
+    unsigned int ele = eleID - geo.eleID[eles->etype](eles->startEle);
+    inv_jacoN_sbuffs[faceNID].assign({eles->nDims, eles->nSpts, eles->nDims});
+    for (unsigned int dim1 = 0; dim1 < eles->nDims; dim1++)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int dim2 = 0; dim2 < eles->nDims; dim2++)
+          inv_jacoN_sbuffs[faceNID](dim1, spt, dim2) = eles->inv_jaco_spts(dim1, spt, dim2, ele);
+
+    /* Send buffer to paired rank */
+    MPI_Isend(inv_jacoN_sbuffs[faceNID].data(), eles->nDims * eles->nSpts * eles->nDims, 
+        MPI_DOUBLE, rankN, faceNID, myComm, &sreqs[mpiFace]);
+  }
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+
+  /* Fill in jacoN_det on MPI faces */
+  std::map<unsigned int, mdvector<double>> jacoN_det_sbuffs;
+  std::fill(rreqs.begin(), rreqs.end(), MPI_REQUEST_NULL);
+  std::fill(sreqs.begin(), sreqs.end(), MPI_REQUEST_NULL);
+  for (unsigned int mpiFace = 0; mpiFace < geo.nMpiFaces; mpiFace++)
+  {
+    unsigned int faceID = geo.mpiFaces[mpiFace];
+    unsigned int eleID = geo.face2eles(faceID, 0);
+    auto eles = elesObjs[ele2elesObj(eleID)];
+    unsigned int rankN = geo.procR[mpiFace];
+
+    /* Stage nonblocking receives */
+    MPI_Irecv(&jacoN_det_spts_mpibnd(mpiFace, 0), eles->nSpts, MPI_DOUBLE, 
+        rankN, faceID, myComm, &rreqs[mpiFace]);
+
+    /* Pack buffer of jacoN data */
+    unsigned int faceNID = geo.faceID_R[mpiFace];
+    unsigned int ele = eleID - geo.eleID[eles->etype](eles->startEle);
+    jacoN_det_sbuffs[faceNID].assign({eles->nSpts});
+    for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      jacoN_det_sbuffs[faceNID](spt) = eles->jaco_det_spts(spt, ele);
+
+    /* Send buffer to paired rank */
+    MPI_Isend(jacoN_det_sbuffs[faceNID].data(), eles->nSpts, MPI_DOUBLE,
+        rankN, faceNID, myComm, &sreqs[mpiFace]);
+  }
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+#endif
+
   for (auto eles : elesObjs)
   {
     /* Setup jacoN views of neighboring element data */
@@ -515,37 +611,50 @@ void FRSolver::set_jacoN_views()
       unsigned int eleID = geo.eleID[eles->etype](ele + eles->startEle);
       for (unsigned int face = 0; face < eles->nFaces; face++)
       {
-        int eleNID = geo.ele2eleN(face, eleID);
+#ifdef _MPI
+        /* Element neighbor is on another rank */
+        int faceID = geo.ele2face(eleID, face);
+        int mpiFace = findFirst(geo.mpiFaces, faceID);
+        if (mpiFace > -1)
+        {
+          inv_jacoN_base_ptrs(ele + face * base_stride) = &inv_jacoN_spts_mpibnd(mpiFace, 0, 0, 0);
+          inv_jacoN_strides(0, ele + face * base_stride) = inv_jacoN_spts_mpibnd.get_stride(0);
+          inv_jacoN_strides(1, ele + face * base_stride) = inv_jacoN_spts_mpibnd.get_stride(1);
+          inv_jacoN_strides(2, ele + face * base_stride) = inv_jacoN_spts_mpibnd.get_stride(2);
+
+          jacoN_det_base_ptrs(ele + face * base_stride) = &jacoN_det_spts_mpibnd(mpiFace, 0);
+          jacoN_det_strides(ele + face * base_stride) = jacoN_det_spts_mpibnd.get_stride(0);
+          continue;
+        }
+#endif
 
         /* Element neighbor is a boundary */
+        int eleNID = geo.ele2eleN(face, eleID);
         if (eleNID == -1)
         {
           inv_jacoN_base_ptrs(ele + face * base_stride) = nullptr;
-          inv_jacoN_strides(ele + face * base_stride) = 0;
+          inv_jacoN_strides(0, ele + face * base_stride) = 0;
+          inv_jacoN_strides(1, ele + face * base_stride) = 0;
+          inv_jacoN_strides(2, ele + face * base_stride) = 0;
 
           jacoN_det_base_ptrs(ele + face * base_stride) = nullptr;
           jacoN_det_strides(ele + face * base_stride) = 0;
-          continue;
         }
 
-        /* Element neighbor on this rank */
-        auto elesN = elesObjs[ele2elesObj(eleNID)];
-        unsigned int eleN = eleNID - geo.eleID[elesN->etype](elesN->startEle);
+        /* Interior element neighbor */
+        else
+        {
+          auto elesN = elesObjs[ele2elesObj(eleNID)];
+          unsigned int eleN = eleNID - geo.eleID[elesN->etype](elesN->startEle);
 
-        inv_jacoN_base_ptrs(ele + face * base_stride) = &elesN->inv_jaco_spts(0, 0, 0, eleN);
-        inv_jacoN_strides(0, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(1);
-        inv_jacoN_strides(1, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(2);
-        inv_jacoN_strides(2, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(3);
+          inv_jacoN_base_ptrs(ele + face * base_stride) = &elesN->inv_jaco_spts(0, 0, 0, eleN);
+          inv_jacoN_strides(0, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(1);
+          inv_jacoN_strides(1, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(2);
+          inv_jacoN_strides(2, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(3);
 
-        jacoN_det_base_ptrs(ele + face * base_stride) = &elesN->jaco_det_spts(0, eleN);
-        jacoN_det_strides(ele + face * base_stride) = elesN->jaco_det_spts.get_stride(1);
-
-        /* Neighbor on another rank */
-        // Create jacoN_det_bnd structure in eles? 
-        /*
-        jacoN_det_base_ptrs(ele + face * base_stride) = &eles->jacoN_det_bnd(0, MPIface);
-        jacoN_det_strides(ele + face * base_stride) = eles->jacoN_det_bnd.get_stride(1);
-        */
+          jacoN_det_base_ptrs(ele + face * base_stride) = &elesN->jaco_det_spts(0, eleN);
+          jacoN_det_strides(ele + face * base_stride) = elesN->jaco_det_spts.get_stride(1);
+        }
       }
     }
 

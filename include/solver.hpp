@@ -92,6 +92,12 @@ class FRSolver
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
     mdvector<unsigned int> ele2elesObj;
 
+    /* Viscous implicit jacoN data for MPI boundaries */
+#ifdef _MPI
+    mdvector<double> inv_jacoN_spts_mpibnd;
+    mdvector<double> jacoN_det_spts_mpibnd;
+#endif
+
 #ifdef _GPU
     mdvector_gpu<double> rk_alpha_d, rk_beta_d;
 

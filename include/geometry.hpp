@@ -121,7 +121,7 @@ struct GeoStruct
   std::map<std::vector<unsigned int>, std::set<int>> mpi_faces;
   std::vector<std::vector<unsigned int>> per_mpi_faces;
   std::unordered_map<unsigned int, unsigned int> node_map_p2g, node_map_g2p;
-  std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map;
+  std::map<unsigned int, mdvector<unsigned int>> fpt_buffer_map, face_buffer_map;
 
   unsigned int nMpiFaces;
   std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;

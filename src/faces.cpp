@@ -1882,7 +1882,11 @@ void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
             double dFcddUR = (0.5 - beta) * dFnddUR[vari][varj][dimj];
 
             dFcddU(0, 0, dimj, vari, varj, fpt) =  dFcddUL * dA(0, fpt);
-            dFcddU(0, 1, dimj, vari, varj, fpt) =  dFcddUR * dA(1, fpt);
+
+            // HACK: Temporarily use dA(0, fpt) since dA(1, fpt) doesn't exist on mpi faces
+            // Note: (May not work for triangles/tets) consider removing dA dependence on slots
+            dFcddU(0, 1, dimj, vari, varj, fpt) =  dFcddUR * dA(0, fpt);
+            //dFcddU(0, 1, dimj, vari, varj, fpt) =  dFcddUR * dA(1, fpt);
 
             dFcddU(1, 0, dimj, vari, varj, fpt) = -dFcddUR * dA(1, fpt);
             dFcddU(1, 1, dimj, vari, varj, fpt) = -dFcddUL * dA(0, fpt);
