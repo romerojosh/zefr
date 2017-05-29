@@ -16,7 +16,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 100000
 res_tol 1e-11
-dt_scheme MCGS      (Euler, RK44, RK54, MCGS)
+dt_scheme BDF1      (Euler, RK44, RK54, MCGS)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
 CFL	  1.5
@@ -27,13 +27,11 @@ CFL_max 1e5
 CFL_ratio 2.0
 
 # Implicit
-SER 0
-stream_mode 0
-backsweep 0
-Jfreeze_freq 100
+iterative_method MCGS
 nColors 2
-n_LHS_blocks 4
-write_LHS 0
+Jfreeze_freq 100
+backsweep 0
+linear_solver LU
 
 restart 0
 restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu

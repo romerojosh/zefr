@@ -76,7 +76,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   else
     load_mesh_data_pyfr(input, geo);
 
-  if (input->implicit_method)
+  if (input->iterative_method == MCGS)
     setup_element_colors(input, geo);
 
 #ifdef _MPI
@@ -84,7 +84,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     partition_geometry(input, geo);
 #endif
 
-  if (input->implicit_method)
+  if (input->iterative_method == MCGS)
     shuffle_data_by_color(geo);
 
   if (format == GMSH)
@@ -97,7 +97,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   else
     setup_global_fpts_pyfr(input, geo, order);
 
-  if (input->implicit_method)
+  if (input->implicit_method && input->viscous)
     set_ele_adjacency(geo);
 
   if (input->overset)
@@ -1864,8 +1864,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     }
   }
 
-  //if (input->iterative_method == MCGS)
-  if (input->implicit_method)
+  if (input->iterative_method == MCGS)
   {
     /* Reduce color data to only contain partition local elements */
     auto ele2colorBT_glob = geo.ele2colorBT;

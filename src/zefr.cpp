@@ -150,11 +150,8 @@ int main(int argc, char* argv[])
       solver.write_solution_pyfr(input.output_prefix);
   }
 
-  if (input.implicit_method)
-  //if (input.iterative_method == MCGS)
-  {
+  if (input.iterative_method == MCGS)
     solver.write_color();
-  }
 
   /* Write initial error (if required) */
   if (input.error_freq != 0)

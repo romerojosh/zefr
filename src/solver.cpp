@@ -107,10 +107,9 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   /* Create eles objects */
   unsigned int elesObjID = 0;
-  //if (input->iterative_method == MCGS)
-  if (input->implicit_method)
+  ele2elesObj.assign({geo.nEles});
+  if (input->iterative_method == MCGS)
   {
-    ele2elesObj.assign({geo.nEles});
     for (auto etype : geo.ele_set)
       for (unsigned int color = 0; color < geo.nColors; color++)
       {
@@ -133,6 +132,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
       for (unsigned int etypeID = 0; etypeID < geo.ele_set.size(); etypeID++)
         elesObjsBC[color].push_back(elesObjs[etypeID*geo.nColors + color]);
   }
+
   else
   {
     for (auto etype : geo.ele_set)
@@ -140,6 +140,13 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
       unsigned int startEle = 0;
       unsigned int endEle = geo.nElesBT[etype];
       create_elesObj(etype, elesObjID, startEle, endEle);
+
+      /* Create connectivity from global ele to elesObjID */
+      for (unsigned int ele = startEle; ele < endEle; ele++)
+      {
+        unsigned int eleID = geo.eleID[etype](ele);
+        ele2elesObj(eleID) = elesObjID;
+      }
       elesObjID++;
     }
   }
@@ -747,11 +754,9 @@ void FRSolver::setup_update()
 
   if (input->implicit_method)
   {
-    /*
-    if (input->iterative_method == Jacobi)
+    if (input->iterative_method == JAC)
       nCounter = 1;
     else if (input->iterative_method == MCGS)
-    */
       nCounter = geo.nColors;
     if (input->backsweep)
       nCounter *= 2;
@@ -1230,7 +1235,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
   /* MCGS: Extrapolate solution on the previous color */
   std::vector<std::shared_ptr<Elements>> elesObjs;
-  if (color > -1 && geo.nColors > 1)
+  if (input->iterative_method == MCGS && color > -1)
     elesObjs = elesObjsBC[prev_color];
   else
     elesObjs = this->elesObjs;
@@ -1255,7 +1260,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
   overset_u_send();
 
   /* MCGS: Compute, transform and extrapolate gradient on all colors */
-  if (color > -1 && geo.nColors > 1)
+  if (input->iterative_method == MCGS && color > -1)
   {
     if (input->viscous)
       elesObjs = this->elesObjs;
@@ -1367,7 +1372,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
     faces->apply_bcs_dU();
 
     /* MCGS: Compute residual on current color */
-    if (color > -1 && geo.nColors > 1)
+    if (input->iterative_method == MCGS && color > -1)
       elesObjs = elesObjsBC[color];
   }
   else
@@ -1549,10 +1554,17 @@ void FRSolver::compute_LHS_SVD()
 #endif
 }
 
-void FRSolver::compute_RHS(unsigned int color)
+void FRSolver::compute_RHS(int color)
 {
+  /* MCGS: compute_RHS for a given color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (input->iterative_method == MCGS && color > -1)
+    elesObjs = elesObjsBC[color];
+  else
+    elesObjs = this->elesObjs;
+
 #ifdef _CPU
-  for (auto e : elesObjsBC[color])
+  for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
@@ -1565,19 +1577,26 @@ void FRSolver::compute_RHS(unsigned int color)
 #endif
 
 #ifdef _GPU
-  for (auto e : elesObjsBC[color])
+  for (auto e : elesObjs)
     compute_RHS_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->RHS_d, input->dt_type, 
         e->nSpts, e->nEles, e->nVars);
 #endif
 }
 
-void FRSolver::compute_deltaU(unsigned int color)
+void FRSolver::compute_deltaU(int color)
 {
+  /* MCGS: compute_deltaU for a given color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (input->iterative_method == MCGS && color > -1)
+    elesObjs = elesObjsBC[color];
+  else
+    elesObjs = this->elesObjs;
+
 #ifdef _CPU
   /* Perform LU solve using Eigen */
   if (input->linear_solver == LU)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -1592,7 +1611,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform matrix-vector of A inverse and RHS */
   else if (input->linear_solver == INV)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -1608,7 +1627,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform SVD solve */
   else if (input->linear_solver == SVD)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       unsigned int rank = e->svd_rank;
@@ -1660,7 +1679,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform in-place batched LU solve of A using cuBLAS */
   if (input->linear_solver == LU)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       int info;
       unsigned int N = e->nSpts * e->nVars;
@@ -1674,7 +1693,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform batched matrix-vector of A inverse and RHS */
   else if (input->linear_solver == INV)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       DgemvBatched_wrapper(N, N, 1.0, (const double**) e->LHSinv_ptrs_d.data(), N, 
@@ -1689,10 +1708,17 @@ void FRSolver::compute_deltaU(unsigned int color)
 #endif
 }
 
-void FRSolver::compute_U(unsigned int color)
+void FRSolver::compute_U(int color)
 {
+  /* MCGS: compute_U for a given color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (input->iterative_method == MCGS && color > -1)
+    elesObjs = elesObjsBC[color];
+  else
+    elesObjs = this->elesObjs;
+
 #ifdef _CPU
-  for (auto e : elesObjsBC[color])
+  for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
@@ -1703,13 +1729,13 @@ void FRSolver::compute_U(unsigned int color)
   if (input->linear_solver == LU)
   {
     /* Note: RHS contains deltaU */
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
       compute_U_wrapper(e->U_spts_d, e->RHS_d, e->nSpts, e->nEles, e->nVars);
   }
 
   else
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
       compute_U_wrapper(e->U_spts_d, e->deltaU_d, e->nSpts, e->nEles, e->nVars);
   }
 #endif
@@ -2438,9 +2464,17 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
   for (unsigned int counter = 0; counter < nCounter; counter++)
   {
     /* Set color */
-    unsigned int color = counter;
-    if (color >= geo.nColors)
-      color = 2*geo.nColors-1 - counter;
+    int color;
+    if (input->iterative_method == JAC)
+      color = -1;
+    else if (input->iterative_method == MCGS)
+    {
+      color = counter;
+      if (color >= geo.nColors)
+        color = 2*geo.nColors-1 - counter;
+    }
+    else
+      ThrowException("Iterative method not recognized!");
 
     /* Compute residual and block diagonal Jacobian on all elements */
     int iter = current_iter - restart_iter;
@@ -2469,9 +2503,7 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       faces->diffCo = faces->diffCo_d;
 
       if (input->viscous)
-      {
         faces->dU_bnd = faces->dU_bnd_d;
-      }
 #endif
 
       /* Compute block diagonal components of residual Jacobian */

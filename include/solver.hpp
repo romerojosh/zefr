@@ -88,7 +88,7 @@ class FRSolver
     /* Implicit method parameters */
     typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
     unsigned int nCounter;
-    unsigned int prev_color = 0;
+    int prev_color = 0;
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
     mdvector<unsigned int> ele2elesObj;
 
@@ -139,9 +139,9 @@ class FRSolver
     void compute_LHS_LU();
     void compute_LHS_inverse();
     void compute_LHS_SVD();
-    void compute_RHS(unsigned int color);
-    void compute_deltaU(unsigned int color);
-    void compute_U(unsigned int color);
+    void compute_RHS(int color = -1);
+    void compute_deltaU(int color = -1);
+    void compute_U(int color = -1);
 
   public:
     double res_max = 1;

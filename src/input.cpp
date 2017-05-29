@@ -91,9 +91,11 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "dt_scheme", input.dt_scheme);
   read_param(f, "dt", input.dt);
   read_param(f, "dt_type", input.dt_type);
-  read_param(f, "CFL_type", input.CFL_type, (unsigned int) 1);
   if (input.dt_type != 0)
+  {
+    read_param(f, "CFL_type", input.CFL_type, (unsigned int) 1);
     read_param(f, "CFL", input.CFL);
+  }
 
   if (input.dt_scheme == "Euler")
     input.nStages = 1;
@@ -111,13 +113,6 @@ InputStruct read_input_file(std::string inputfile)
     input.nStages = 3;
   else
     ThrowException("Unknown dt_scheme");
-
-  if (input.dt_scheme == "BDF1" || input.dt_scheme == "DIRK34")
-    input.implicit_method = true;
-
-  read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
-  read_param(f, "CFL_max", input.CFL_max, 1.0);
-  read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
 
   // NOTE: to reduce time step size (generally speaking), reduce atol and rtol
   read_param(f, "err_atol", input.atol, 0.00001);
@@ -141,30 +136,6 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "rel_fac", input.rel_fac, 1.0);
   read_param_vec(f, "mg_levels", input.mg_levels);
   read_param_vec(f, "mg_steps", input.mg_steps);
-
-  /*
-  read_param(f, "iterative_method", str, std::string("Jacobi"));
-  if (str == "Jacobi")
-    input.iterative_method = Jacobi;
-  else if (str == "MCGS")
-    input.iterative_method = MCGS;
-  else
-    ThrowException("Iterative method not recognized!");
-  */
-  read_param(f, "nColors", input.nColors, (unsigned int) 1);
-  read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
-  read_param(f, "backsweep", input.backsweep, false);
-  read_param(f, "svd_omg", input.svd_omg, 0.5);
-  read_param(f, "svd_cutoff", input.svd_cutoff, 1.0);
-  read_param(f, "linear_solver", str, std::string("LU"));
-  if (str == "LU")
-    input.linear_solver = LU;
-  else if (str == "INV")
-    input.linear_solver = INV;
-  else if (str == "SVD")
-    input.linear_solver = SVD;
-  else
-    ThrowException("Linear solver not recognized!");
 
   read_param(f, "catch_signals", input.catch_signals, false);
   read_param(f, "output_prefix", input.output_prefix);
@@ -259,6 +230,49 @@ InputStruct read_input_file(std::string inputfile)
     input.filt_on = 0;
   }
 
+  /* Implicit parameters */
+  if (input.dt_scheme == "BDF1" || input.dt_scheme == "DIRK34")
+  {
+    input.implicit_method = true;
+
+    /* CFL Control */
+    read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
+    read_param(f, "CFL_max", input.CFL_max, 1.0);
+    read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
+
+    /* Block iterative method */
+    read_param(f, "iterative_method", str, std::string("JAC"));
+    read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
+    read_param(f, "backsweep", input.backsweep, false);
+    if (str == "JAC")
+      input.iterative_method = JAC;
+    else if (str == "MCGS")
+    {
+      input.iterative_method = MCGS;
+      read_param(f, "nColors", input.nColors, (unsigned int) 1);
+    }
+    else
+      ThrowException("Iterative method not recognized!");
+
+    /* Block Linear Solver */
+    read_param(f, "linear_solver", str, std::string("LU"));
+    if (str == "LU")
+      input.linear_solver = LU;
+    else if (str == "INV")
+      input.linear_solver = INV;
+    else if (str == "SVD")
+    {
+      input.linear_solver = SVD;
+      read_param(f, "svd_omg", input.svd_omg, 0.5);
+      read_param(f, "svd_cutoff", input.svd_cutoff, 1.0);
+    }
+    else
+      ThrowException("Linear solver not recognized!");
+
+    /* Restrictions */
+    if (input.viscous && !input.fix_vis)
+      ThrowException("Viscous implicit Jacobians with Sutherland's law not available!"); 
+  }
 
   read_param(f, "overset", input.overset, false);
   read_param_vec(f, "overset_grids", input.oversetGrids);

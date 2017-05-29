@@ -87,19 +87,17 @@ enum BC_TYPE {
   OVERSET_CLOSURE
 };
 
-/*! Enumeration for implicit iterative method type */
-/*
+/*! Enumeration for implicit block iterative method type */
 enum IM_TYPE {
-  Jacobi = 0,
-  MCGS = 1
+  JAC = 1,
+  MCGS = 2
 };
-*/
 
-/*! Enumeration for implicit linear solver type */
+/*! Enumeration for implicit block linear solver type */
 enum LS_TYPE {
-  LU = 0,
-  INV = 1,
-  SVD = 2
+  LU = 1,
+  INV = 2,
+  SVD = 3
 };
 
 extern std::map<std::string,int> bcStr2Num;
