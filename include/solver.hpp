@@ -153,22 +153,26 @@ class FRSolver
 #ifdef _CPU
     void update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
-    //! Implicit Multi-Color Gauss-Seidel update loop
-    void step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
-
     //! Standard explicit (diagonal) Runge-Kutta update loop
     void step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop
     void step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+
+    //! Implicit Multi-Color Gauss-Seidel update loop
+    void step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+
+    //! Diagonally Implicit Runge-Kutta update loop
+    void step_DIRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 #endif
 #ifdef _GPU
     void update(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
-    void step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif
 
     void write_solution(const std::string &_prefix);

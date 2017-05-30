@@ -747,6 +747,29 @@ void FRSolver::setup_update()
   {
     input->nStages = 1;
   }
+  else if (input->dt_scheme == "DIRK34")
+  {
+    input->nStages = 3;
+    double alp = 2.0 * std::cos(M_PI / 18.0) / std::sqrt(3.0);
+
+    rk_alpha.assign({input->nStages, input->nStages});
+    rk_alpha(0, 0) = (1.0 + alp) / 2.0;
+    rk_alpha(1, 0) = -alp / 2.0;
+    rk_alpha(1, 1) = (1.0 + alp) / 2.0;
+    rk_alpha(2, 0) = 1.0 + alp;
+    rk_alpha(2, 1) = -(1.0 + 2.0*alp);
+    rk_alpha(2, 2) = (1.0 + alp) / 2.0;
+
+    rk_c.assign({input->nStages});
+    rk_c(0) = (1.0 + alp) / 2.0;
+    rk_c(1) = 1.0 / 2.0;
+    rk_c(2) = (1.0 - alp) / 2.0;
+
+    rk_beta.assign({input->nStages});
+    rk_beta(0) = 1.0 / (6.0*alp*alp);
+    rk_beta(1) = 1.0 - 1.0 / (3.0*alp*alp);
+    rk_beta(2) = 1.0 / (6.0*alp*alp);
+  }
   else
   {
     ThrowException("dt_scheme not recognized!");
@@ -1981,10 +2004,12 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   {
     if (input->dt_scheme == "BDF1")
       step_MCGS(sourceBT);
+    else if (input->dt_scheme == "DIRK34")
+      step_DIRK(sourceBT);
     else if (input->dt_scheme == "RK54")
-        step_LSRK(sourceBT);
+      step_LSRK(sourceBT);
     else
-        step_RK(sourceBT);
+      step_RK(sourceBT);
 
     flow_time = prev_time + elesObjs[0]->dt(0);
   }
@@ -2606,6 +2631,135 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     /* Add deltaU to solution */
     compute_U(color);
   }
+}
+
+#ifdef _CPU
+void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+#endif
+#ifdef _GPU
+void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+#endif
+{
+#ifdef _GPU
+  ThrowException("DIRK schemes not yet implemented for GPU!");
+#endif
+
+  for (auto e : elesObjs)
+    e->U_ini = e->U_spts;
+
+  /* Main stage loop */
+  for (unsigned int stage = 0; stage < input->nStages; stage++)
+  {
+    compute_residual(stage);
+
+    /* Compute block diagonal components of residual Jacobian */
+    compute_dRdU();
+
+    /* If in first stage, compute stable timestep */
+    // TODO: Revisit this as it is kind of expensive.
+    if (stage == 0 && input->dt_type != 0)
+      compute_element_dt();
+    flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+    /* Compute LHS */
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+            for (unsigned int varj = 0; varj < e->nVars; varj++)
+              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+              {
+                if (input->dt_type != 2)
+                  e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * e->dt(0) / e->jaco_det_spts(spti, ele);
+                else
+                  e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * e->dt(ele) / e->jaco_det_spts(spti, ele); 
+
+                if (spti == sptj && vari == varj)
+                  e->LHS(ele, vari, spti, varj, sptj) += 1;
+              }
+
+    /* Setup linear solver */
+    if (input->linear_solver == LU)
+      compute_LHS_LU();
+    else if (input->linear_solver == INV)
+      compute_LHS_inverse();
+    else if (input->linear_solver == SVD)
+      compute_LHS_SVD();
+    else
+      ThrowException("Linear solver not recognized!");
+
+    /* Block Iterative Method */
+    double resBM_max = 1.0;
+    double resBM_tol = 1e-11;
+    unsigned int resBM_freq = 10;
+    unsigned int iterBM_max = 1000;
+    for (unsigned int iterBM = 0; (iterBM <= iterBM_max) && (resBM_max > resBM_tol); iterBM++)
+    {
+      /* Compute RHS */
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int var = 0; var < e->nVars; var++)
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              e->RHS(ele, var, spt) = -(e->U_spts(spt, var, ele) - e->U_ini(spt, var, ele));
+
+      for (unsigned int s = 0; s <= stage; s++)
+        for (auto e : elesObjs)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+            for (unsigned int var = 0; var < e->nVars; var++)
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              {
+                if (input->dt_type != 2)
+                  e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->dt(0) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
+                else
+                  e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->dt(ele) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
+              }
+
+      /* Solve system for deltaU */
+      compute_deltaU();
+
+      /* Add deltaU to solution */
+      compute_U();
+
+      /* Recompute residual */
+      compute_residual(stage);
+
+      /* Report L2 norm of deltaU */
+      if (iterBM % resBM_freq == 0)
+      {
+        resBM_max = 0;
+        for (auto e : elesObjs)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+            for (unsigned int var = 0; var < e->nVars; var++)
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+                resBM_max += e->deltaU(ele, var, spt) * e->deltaU(ele, var, spt);
+
+        unsigned int nDoF = 0;
+        for (auto e : elesObjs)
+          nDoF += (e->nEles * e->nVars * e->nSpts);
+        resBM_max = std::sqrt(resBM_max) / nDoF;
+
+        std::cout << std::setw(6) << std::left << iterBM << " ";
+        std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << resBM_max << " ";
+        std::cout << std::endl;
+      }
+    }
+  }
+
+  for (auto e : elesObjs)
+    e->U_spts = e->U_ini;
+
+  /* Sum all stages */
+  for (unsigned int stage = 0; stage < input->nStages; stage++)
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+              e->U_spts(spt, var, ele) -= rk_beta(stage) * e->dt(0) * e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
+            else
+              e->U_spts(spt, var, ele) -= rk_beta(stage) * e->dt(ele) * e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
+          }
 }
 
 void FRSolver::compute_element_dt()

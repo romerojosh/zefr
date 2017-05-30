@@ -230,15 +230,15 @@ InputStruct read_input_file(std::string inputfile)
     input.filt_on = 0;
   }
 
+  /* CFL Control */
+  read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
+  read_param(f, "CFL_max", input.CFL_max, 1.0);
+  read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
+
   /* Implicit parameters */
   if (input.dt_scheme == "BDF1" || input.dt_scheme == "DIRK34")
   {
     input.implicit_method = true;
-
-    /* CFL Control */
-    read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
-    read_param(f, "CFL_max", input.CFL_max, 1.0);
-    read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
 
     /* Block iterative method */
     read_param(f, "iterative_method", str, std::string("JAC"));
