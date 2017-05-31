@@ -107,10 +107,9 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   /* Create eles objects */
   unsigned int elesObjID = 0;
-  //if (input->iterative_method == MCGS)
-  if (input->implicit_method)
+  ele2elesObj.assign({geo.nEles});
+  if (input->iterative_method == MCGS)
   {
-    ele2elesObj.assign({geo.nEles});
     for (auto etype : geo.ele_set)
       for (unsigned int color = 0; color < geo.nColors; color++)
       {
@@ -133,6 +132,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
       for (unsigned int etypeID = 0; etypeID < geo.ele_set.size(); etypeID++)
         elesObjsBC[color].push_back(elesObjs[etypeID*geo.nColors + color]);
   }
+
   else
   {
     for (auto etype : geo.ele_set)
@@ -140,6 +140,13 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
       unsigned int startEle = 0;
       unsigned int endEle = geo.nElesBT[etype];
       create_elesObj(etype, elesObjID, startEle, endEle);
+
+      /* Create connectivity from global ele to elesObjID */
+      for (unsigned int ele = startEle; ele < endEle; ele++)
+      {
+        unsigned int eleID = geo.eleID[etype](ele);
+        ele2elesObj(eleID) = elesObjID;
+      }
       elesObjID++;
     }
   }
@@ -448,31 +455,11 @@ void FRSolver::orient_fpts()
 
 void FRSolver::set_fpt_adjacency()
 {
-  /* Sizing face2faceN and fpt2fptN */
+  /* Sizing fpt2fptN */
   if (geo.nDims == 2)
-  {
-    geo.face2faceN.assign({geo.nFacesPerEleBT[QUAD], geo.nEles}, -1);
     geo.fpt2fptN.assign({geo.nFacesPerEleBT[QUAD] * geo.nFptsPerFace, geo.nEles}, -1);
-  }
   else
-  {
-    geo.face2faceN.assign({geo.nFacesPerEleBT[HEX], geo.nEles}, -1);
     geo.fpt2fptN.assign({geo.nFacesPerEleBT[HEX] * geo.nFptsPerFace, geo.nEles}, -1);
-  }
-
-  /* Construct face2faceN connectivity */
-  for (auto etype : geo.ele_set)
-    for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
-      for (unsigned int face = 0; face < geo.nFacesPerEleBT[etype]; face++)
-      {
-        unsigned int eleID = geo.eleID[etype](ele);
-        int eleNID = geo.ele2eleN(face, eleID);
-        if (eleNID == -1) continue;
-
-        unsigned int faceN = 0;
-        while (geo.ele2eleN(faceN, eleNID) != (int)eleID) faceN++;
-        geo.face2faceN(face, eleID) = faceN;
-      }
 
   /* Construct gfpt2fpt connectivity */
   mdvector<unsigned int> gfpt2fpt({2, geo.nGfpts}, -1);
@@ -496,10 +483,126 @@ void FRSolver::set_fpt_adjacency()
         int notslot = (slot == 0) ? 1 : 0;
         geo.fpt2fptN(fpt, eleID) = gfpt2fpt(notslot, gfpt);
       }
+
+#ifdef _MPI
+  /* Send fpt2fptN connectivity on MPI faces */
+  std::map<unsigned int, mdvector<unsigned int>> fpts_rbuffs, fpts_sbuffs;
+  std::vector<MPI_Request> rreqs(geo.fpt_buffer_map.size());
+  std::vector<MPI_Request> sreqs(geo.fpt_buffer_map.size());
+  unsigned int idx = 0;
+  for (const auto &entry : geo.fpt_buffer_map)
+  {
+    unsigned int rankN = entry.first;
+    const auto &gfpts = entry.second;
+
+    /* Stage nonblocking receives */
+    fpts_rbuffs[rankN].assign({(unsigned int) gfpts.size()}, 0);
+    MPI_Irecv(fpts_rbuffs[rankN].data(), (unsigned int) gfpts.size(), MPI_UNSIGNED, 
+        rankN, 0, myComm, &rreqs[idx]);
+
+    /* Pack buffer of fpt data */
+    fpts_sbuffs[rankN].assign({(unsigned int) gfpts.size()}, 0);
+    for (unsigned int i = 0; i < gfpts.size(); i++)
+    {
+      unsigned int gfpt = gfpts(i);
+      unsigned int fpt = gfpt2fpt(0, gfpt);
+      fpts_sbuffs[rankN](i) = fpt;
+    }
+
+    /* Send buffer to paired rank */
+    MPI_Isend(fpts_sbuffs[rankN].data(), (unsigned int) gfpts.size(), MPI_UNSIGNED,
+        rankN, 0, myComm, &sreqs[idx]);
+    idx++;
+  }
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+
+  /* Unpack buffer into fpt2fptN */
+  for (const auto &entry : geo.fpt_buffer_map)
+  {
+    unsigned int rankN = entry.first;
+    const auto &gfpts = entry.second;
+    for (unsigned int i = 0; i < gfpts.size(); i++)
+    {
+      unsigned int gfpt = gfpts(i);
+      unsigned int fpt = gfpt2fpt(0, gfpt);
+      unsigned int faceID = geo.fpt2face[gfpt];
+      unsigned int eleID = geo.face2eles(faceID, 0);
+      geo.fpt2fptN(fpt, eleID) = fpts_rbuffs[rankN](i);
+    }
+  }
+#endif
 }
 
 void FRSolver::set_jacoN_views()
 {
+#ifdef _MPI
+  /* Allocate memory for jacoN data on MPI faces */
+  inv_jacoN_spts_mpibnd.assign({geo.nMpiFaces, eles->nDims, eles->nSpts, eles->nDims});
+  jacoN_det_spts_mpibnd.assign({geo.nMpiFaces, eles->nSpts});
+
+  /* Fill in inv_jacoN on MPI faces */
+  /* Note: Consider creating a larger buffer if this takes too long */
+  std::map<unsigned int, mdvector<double>> inv_jacoN_sbuffs;
+  std::vector<MPI_Request> rreqs(geo.nMpiFaces);
+  std::vector<MPI_Request> sreqs(geo.nMpiFaces);
+  for (unsigned int mpiFace = 0; mpiFace < geo.nMpiFaces; mpiFace++)
+  {
+    unsigned int faceID = geo.mpiFaces[mpiFace];
+    unsigned int eleID = geo.face2eles(faceID, 0);
+    auto eles = elesObjs[ele2elesObj(eleID)];
+    unsigned int rankN = geo.procR[mpiFace];
+
+    /* Stage nonblocking receives */
+    MPI_Irecv(&inv_jacoN_spts_mpibnd(mpiFace, 0, 0, 0), eles->nDims * eles->nSpts * eles->nDims, 
+        MPI_DOUBLE, rankN, faceID, myComm, &rreqs[mpiFace]);
+
+    /* Pack buffer of jacoN data */
+    unsigned int faceNID = geo.faceID_R[mpiFace];
+    unsigned int ele = eleID - geo.eleID[eles->etype](eles->startEle);
+    inv_jacoN_sbuffs[faceNID].assign({eles->nDims, eles->nSpts, eles->nDims});
+    for (unsigned int dim1 = 0; dim1 < eles->nDims; dim1++)
+      for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+        for (unsigned int dim2 = 0; dim2 < eles->nDims; dim2++)
+          inv_jacoN_sbuffs[faceNID](dim1, spt, dim2) = eles->inv_jaco_spts(dim1, spt, dim2, ele);
+
+    /* Send buffer to paired rank */
+    MPI_Isend(inv_jacoN_sbuffs[faceNID].data(), eles->nDims * eles->nSpts * eles->nDims, 
+        MPI_DOUBLE, rankN, faceNID, myComm, &sreqs[mpiFace]);
+  }
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+
+  /* Fill in jacoN_det on MPI faces */
+  std::map<unsigned int, mdvector<double>> jacoN_det_sbuffs;
+  std::fill(rreqs.begin(), rreqs.end(), MPI_REQUEST_NULL);
+  std::fill(sreqs.begin(), sreqs.end(), MPI_REQUEST_NULL);
+  for (unsigned int mpiFace = 0; mpiFace < geo.nMpiFaces; mpiFace++)
+  {
+    unsigned int faceID = geo.mpiFaces[mpiFace];
+    unsigned int eleID = geo.face2eles(faceID, 0);
+    auto eles = elesObjs[ele2elesObj(eleID)];
+    unsigned int rankN = geo.procR[mpiFace];
+
+    /* Stage nonblocking receives */
+    MPI_Irecv(&jacoN_det_spts_mpibnd(mpiFace, 0), eles->nSpts, MPI_DOUBLE, 
+        rankN, faceID, myComm, &rreqs[mpiFace]);
+
+    /* Pack buffer of jacoN data */
+    unsigned int faceNID = geo.faceID_R[mpiFace];
+    unsigned int ele = eleID - geo.eleID[eles->etype](eles->startEle);
+    jacoN_det_sbuffs[faceNID].assign({eles->nSpts});
+    for (unsigned int spt = 0; spt < eles->nSpts; spt++)
+      jacoN_det_sbuffs[faceNID](spt) = eles->jaco_det_spts(spt, ele);
+
+    /* Send buffer to paired rank */
+    MPI_Isend(jacoN_det_sbuffs[faceNID].data(), eles->nSpts, MPI_DOUBLE,
+        rankN, faceNID, myComm, &sreqs[mpiFace]);
+  }
+  MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+#endif
+
   for (auto eles : elesObjs)
   {
     /* Setup jacoN views of neighboring element data */
@@ -515,37 +618,50 @@ void FRSolver::set_jacoN_views()
       unsigned int eleID = geo.eleID[eles->etype](ele + eles->startEle);
       for (unsigned int face = 0; face < eles->nFaces; face++)
       {
-        int eleNID = geo.ele2eleN(face, eleID);
+#ifdef _MPI
+        /* Element neighbor is on another rank */
+        int faceID = geo.ele2face(eleID, face);
+        int mpiFace = findFirst(geo.mpiFaces, faceID);
+        if (mpiFace > -1)
+        {
+          inv_jacoN_base_ptrs(ele + face * base_stride) = &inv_jacoN_spts_mpibnd(mpiFace, 0, 0, 0);
+          inv_jacoN_strides(0, ele + face * base_stride) = inv_jacoN_spts_mpibnd.get_stride(0);
+          inv_jacoN_strides(1, ele + face * base_stride) = inv_jacoN_spts_mpibnd.get_stride(1);
+          inv_jacoN_strides(2, ele + face * base_stride) = inv_jacoN_spts_mpibnd.get_stride(2);
+
+          jacoN_det_base_ptrs(ele + face * base_stride) = &jacoN_det_spts_mpibnd(mpiFace, 0);
+          jacoN_det_strides(ele + face * base_stride) = jacoN_det_spts_mpibnd.get_stride(0);
+          continue;
+        }
+#endif
 
         /* Element neighbor is a boundary */
+        int eleNID = geo.ele2eleN(face, eleID);
         if (eleNID == -1)
         {
           inv_jacoN_base_ptrs(ele + face * base_stride) = nullptr;
-          inv_jacoN_strides(ele + face * base_stride) = 0;
+          inv_jacoN_strides(0, ele + face * base_stride) = 0;
+          inv_jacoN_strides(1, ele + face * base_stride) = 0;
+          inv_jacoN_strides(2, ele + face * base_stride) = 0;
 
           jacoN_det_base_ptrs(ele + face * base_stride) = nullptr;
           jacoN_det_strides(ele + face * base_stride) = 0;
-          continue;
         }
 
-        /* Element neighbor on this rank */
-        auto elesN = elesObjs[ele2elesObj(eleNID)];
-        unsigned int eleN = eleNID - geo.eleID[elesN->etype](elesN->startEle);
+        /* Interior element neighbor */
+        else
+        {
+          auto elesN = elesObjs[ele2elesObj(eleNID)];
+          unsigned int eleN = eleNID - geo.eleID[elesN->etype](elesN->startEle);
 
-        inv_jacoN_base_ptrs(ele + face * base_stride) = &elesN->inv_jaco_spts(0, 0, 0, eleN);
-        inv_jacoN_strides(0, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(1);
-        inv_jacoN_strides(1, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(2);
-        inv_jacoN_strides(2, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(3);
+          inv_jacoN_base_ptrs(ele + face * base_stride) = &elesN->inv_jaco_spts(0, 0, 0, eleN);
+          inv_jacoN_strides(0, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(1);
+          inv_jacoN_strides(1, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(2);
+          inv_jacoN_strides(2, ele + face * base_stride) = elesN->inv_jaco_spts.get_stride(3);
 
-        jacoN_det_base_ptrs(ele + face * base_stride) = &elesN->jaco_det_spts(0, eleN);
-        jacoN_det_strides(ele + face * base_stride) = elesN->jaco_det_spts.get_stride(1);
-
-        /* Neighbor on another rank */
-        // Create jacoN_det_bnd structure in eles? 
-        /*
-        jacoN_det_base_ptrs(ele + face * base_stride) = &eles->jacoN_det_bnd(0, MPIface);
-        jacoN_det_strides(ele + face * base_stride) = eles->jacoN_det_bnd.get_stride(1);
-        */
+          jacoN_det_base_ptrs(ele + face * base_stride) = &elesN->jaco_det_spts(0, eleN);
+          jacoN_det_strides(ele + face * base_stride) = elesN->jaco_det_spts.get_stride(1);
+        }
       }
     }
 
@@ -631,6 +747,29 @@ void FRSolver::setup_update()
   {
     input->nStages = 1;
   }
+  else if (input->dt_scheme == "DIRK34")
+  {
+    input->nStages = 3;
+    double alp = 2.0 * std::cos(M_PI / 18.0) / std::sqrt(3.0);
+
+    rk_alpha.assign({input->nStages, input->nStages});
+    rk_alpha(0, 0) = (1.0 + alp) / 2.0;
+    rk_alpha(1, 0) = -alp / 2.0;
+    rk_alpha(1, 1) = (1.0 + alp) / 2.0;
+    rk_alpha(2, 0) = 1.0 + alp;
+    rk_alpha(2, 1) = -(1.0 + 2.0*alp);
+    rk_alpha(2, 2) = (1.0 + alp) / 2.0;
+
+    rk_c.assign({input->nStages});
+    rk_c(0) = (1.0 + alp) / 2.0;
+    rk_c(1) = 1.0 / 2.0;
+    rk_c(2) = (1.0 - alp) / 2.0;
+
+    rk_beta.assign({input->nStages});
+    rk_beta(0) = 1.0 / (6.0*alp*alp);
+    rk_beta(1) = 1.0 - 1.0 / (3.0*alp*alp);
+    rk_beta(2) = 1.0 / (6.0*alp*alp);
+  }
   else
   {
     ThrowException("dt_scheme not recognized!");
@@ -638,11 +777,9 @@ void FRSolver::setup_update()
 
   if (input->implicit_method)
   {
-    /*
-    if (input->iterative_method == Jacobi)
+    if (input->iterative_method == JAC)
       nCounter = 1;
     else if (input->iterative_method == MCGS)
-    */
       nCounter = geo.nColors;
     if (input->backsweep)
       nCounter *= 2;
@@ -1121,7 +1258,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
   /* MCGS: Extrapolate solution on the previous color */
   std::vector<std::shared_ptr<Elements>> elesObjs;
-  if (color > -1 && geo.nColors > 1)
+  if (input->iterative_method == MCGS && color > -1)
     elesObjs = elesObjsBC[prev_color];
   else
     elesObjs = this->elesObjs;
@@ -1146,7 +1283,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
   overset_u_send();
 
   /* MCGS: Compute, transform and extrapolate gradient on all colors */
-  if (color > -1 && geo.nColors > 1)
+  if (input->iterative_method == MCGS && color > -1)
   {
     if (input->viscous)
       elesObjs = this->elesObjs;
@@ -1258,7 +1395,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
     faces->apply_bcs_dU();
 
     /* MCGS: Compute residual on current color */
-    if (color > -1 && geo.nColors > 1)
+    if (input->iterative_method == MCGS && color > -1)
       elesObjs = elesObjsBC[color];
   }
   else
@@ -1440,10 +1577,17 @@ void FRSolver::compute_LHS_SVD()
 #endif
 }
 
-void FRSolver::compute_RHS(unsigned int color)
+void FRSolver::compute_RHS(int color)
 {
+  /* MCGS: compute_RHS for a given color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (input->iterative_method == MCGS && color > -1)
+    elesObjs = elesObjsBC[color];
+  else
+    elesObjs = this->elesObjs;
+
 #ifdef _CPU
-  for (auto e : elesObjsBC[color])
+  for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
@@ -1456,19 +1600,26 @@ void FRSolver::compute_RHS(unsigned int color)
 #endif
 
 #ifdef _GPU
-  for (auto e : elesObjsBC[color])
+  for (auto e : elesObjs)
     compute_RHS_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->RHS_d, input->dt_type, 
         e->nSpts, e->nEles, e->nVars);
 #endif
 }
 
-void FRSolver::compute_deltaU(unsigned int color)
+void FRSolver::compute_deltaU(int color)
 {
+  /* MCGS: compute_deltaU for a given color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (input->iterative_method == MCGS && color > -1)
+    elesObjs = elesObjsBC[color];
+  else
+    elesObjs = this->elesObjs;
+
 #ifdef _CPU
   /* Perform LU solve using Eigen */
   if (input->linear_solver == LU)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -1483,7 +1634,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform matrix-vector of A inverse and RHS */
   else if (input->linear_solver == INV)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -1499,7 +1650,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform SVD solve */
   else if (input->linear_solver == SVD)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       unsigned int rank = e->svd_rank;
@@ -1551,7 +1702,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform in-place batched LU solve of A using cuBLAS */
   if (input->linear_solver == LU)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       int info;
       unsigned int N = e->nSpts * e->nVars;
@@ -1565,7 +1716,7 @@ void FRSolver::compute_deltaU(unsigned int color)
   /* Perform batched matrix-vector of A inverse and RHS */
   else if (input->linear_solver == INV)
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
     {
       unsigned int N = e->nSpts * e->nVars;
       DgemvBatched_wrapper(N, N, 1.0, (const double**) e->LHSinv_ptrs_d.data(), N, 
@@ -1580,10 +1731,17 @@ void FRSolver::compute_deltaU(unsigned int color)
 #endif
 }
 
-void FRSolver::compute_U(unsigned int color)
+void FRSolver::compute_U(int color)
 {
+  /* MCGS: compute_U for a given color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (input->iterative_method == MCGS && color > -1)
+    elesObjs = elesObjsBC[color];
+  else
+    elesObjs = this->elesObjs;
+
 #ifdef _CPU
-  for (auto e : elesObjsBC[color])
+  for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
@@ -1594,13 +1752,13 @@ void FRSolver::compute_U(unsigned int color)
   if (input->linear_solver == LU)
   {
     /* Note: RHS contains deltaU */
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
       compute_U_wrapper(e->U_spts_d, e->RHS_d, e->nSpts, e->nEles, e->nVars);
   }
 
   else
   {
-    for (auto e : elesObjsBC[color])
+    for (auto e : elesObjs)
       compute_U_wrapper(e->U_spts_d, e->deltaU_d, e->nSpts, e->nEles, e->nVars);
   }
 #endif
@@ -1846,10 +2004,12 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   {
     if (input->dt_scheme == "BDF1")
       step_MCGS(sourceBT);
+    else if (input->dt_scheme == "DIRK34")
+      step_DIRK(sourceBT);
     else if (input->dt_scheme == "RK54")
-        step_LSRK(sourceBT);
+      step_LSRK(sourceBT);
     else
-        step_RK(sourceBT);
+      step_RK(sourceBT);
 
     flow_time = prev_time + elesObjs[0]->dt(0);
   }
@@ -2329,9 +2489,17 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
   for (unsigned int counter = 0; counter < nCounter; counter++)
   {
     /* Set color */
-    unsigned int color = counter;
-    if (color >= geo.nColors)
-      color = 2*geo.nColors-1 - counter;
+    int color;
+    if (input->iterative_method == JAC)
+      color = -1;
+    else if (input->iterative_method == MCGS)
+    {
+      color = counter;
+      if (color >= geo.nColors)
+        color = 2*geo.nColors-1 - counter;
+    }
+    else
+      ThrowException("Iterative method not recognized!");
 
     /* Compute residual and block diagonal Jacobian on all elements */
     int iter = current_iter - restart_iter;
@@ -2360,9 +2528,7 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       faces->diffCo = faces->diffCo_d;
 
       if (input->viscous)
-      {
         faces->dU_bnd = faces->dU_bnd_d;
-      }
 #endif
 
       /* Compute block diagonal components of residual Jacobian */
@@ -2465,6 +2631,135 @@ void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     /* Add deltaU to solution */
     compute_U(color);
   }
+}
+
+#ifdef _CPU
+void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+#endif
+#ifdef _GPU
+void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+#endif
+{
+#ifdef _GPU
+  ThrowException("DIRK schemes not yet implemented for GPU!");
+#endif
+
+  for (auto e : elesObjs)
+    e->U_ini = e->U_spts;
+
+  /* Main stage loop */
+  for (unsigned int stage = 0; stage < input->nStages; stage++)
+  {
+    compute_residual(stage);
+
+    /* Compute block diagonal components of residual Jacobian */
+    compute_dRdU();
+
+    /* If in first stage, compute stable timestep */
+    // TODO: Revisit this as it is kind of expensive.
+    if (stage == 0 && input->dt_type != 0)
+      compute_element_dt();
+    flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+    /* Compute LHS */
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+            for (unsigned int varj = 0; varj < e->nVars; varj++)
+              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+              {
+                if (input->dt_type != 2)
+                  e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * e->dt(0) / e->jaco_det_spts(spti, ele);
+                else
+                  e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * e->dt(ele) / e->jaco_det_spts(spti, ele); 
+
+                if (spti == sptj && vari == varj)
+                  e->LHS(ele, vari, spti, varj, sptj) += 1;
+              }
+
+    /* Setup linear solver */
+    if (input->linear_solver == LU)
+      compute_LHS_LU();
+    else if (input->linear_solver == INV)
+      compute_LHS_inverse();
+    else if (input->linear_solver == SVD)
+      compute_LHS_SVD();
+    else
+      ThrowException("Linear solver not recognized!");
+
+    /* Block Iterative Method */
+    double resBM_max = 1.0;
+    double resBM_tol = 1e-11;
+    unsigned int resBM_freq = 10;
+    unsigned int iterBM_max = 1000;
+    for (unsigned int iterBM = 0; (iterBM <= iterBM_max) && (resBM_max > resBM_tol); iterBM++)
+    {
+      /* Compute RHS */
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int var = 0; var < e->nVars; var++)
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              e->RHS(ele, var, spt) = -(e->U_spts(spt, var, ele) - e->U_ini(spt, var, ele));
+
+      for (unsigned int s = 0; s <= stage; s++)
+        for (auto e : elesObjs)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+            for (unsigned int var = 0; var < e->nVars; var++)
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              {
+                if (input->dt_type != 2)
+                  e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->dt(0) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
+                else
+                  e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->dt(ele) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
+              }
+
+      /* Solve system for deltaU */
+      compute_deltaU();
+
+      /* Add deltaU to solution */
+      compute_U();
+
+      /* Recompute residual */
+      compute_residual(stage);
+
+      /* Report L2 norm of deltaU */
+      if (iterBM % resBM_freq == 0)
+      {
+        resBM_max = 0;
+        for (auto e : elesObjs)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+            for (unsigned int var = 0; var < e->nVars; var++)
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+                resBM_max += e->deltaU(ele, var, spt) * e->deltaU(ele, var, spt);
+
+        unsigned int nDoF = 0;
+        for (auto e : elesObjs)
+          nDoF += (e->nEles * e->nVars * e->nSpts);
+        resBM_max = std::sqrt(resBM_max) / nDoF;
+
+        std::cout << std::setw(6) << std::left << iterBM << " ";
+        std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << resBM_max << " ";
+        std::cout << std::endl;
+      }
+    }
+  }
+
+  for (auto e : elesObjs)
+    e->U_spts = e->U_ini;
+
+  /* Sum all stages */
+  for (unsigned int stage = 0; stage < input->nStages; stage++)
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            if (input->dt_type != 2)
+              e->U_spts(spt, var, ele) -= rk_beta(stage) * e->dt(0) * e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
+            else
+              e->U_spts(spt, var, ele) -= rk_beta(stage) * e->dt(ele) * e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
+          }
 }
 
 void FRSolver::compute_element_dt()

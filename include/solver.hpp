@@ -88,9 +88,15 @@ class FRSolver
     /* Implicit method parameters */
     typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
     unsigned int nCounter;
-    unsigned int prev_color = 0;
+    int prev_color = 0;
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
     mdvector<unsigned int> ele2elesObj;
+
+    /* Viscous implicit jacoN data for MPI boundaries */
+#ifdef _MPI
+    mdvector<double> inv_jacoN_spts_mpibnd;
+    mdvector<double> jacoN_det_spts_mpibnd;
+#endif
 
 #ifdef _GPU
     mdvector_gpu<double> rk_alpha_d, rk_beta_d;
@@ -133,9 +139,9 @@ class FRSolver
     void compute_LHS_LU();
     void compute_LHS_inverse();
     void compute_LHS_SVD();
-    void compute_RHS(unsigned int color);
-    void compute_deltaU(unsigned int color);
-    void compute_U(unsigned int color);
+    void compute_RHS(int color = -1);
+    void compute_deltaU(int color = -1);
+    void compute_U(int color = -1);
 
   public:
     double res_max = 1;
@@ -147,22 +153,26 @@ class FRSolver
 #ifdef _CPU
     void update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
-    //! Implicit Multi-Color Gauss-Seidel update loop
-    void step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
-
     //! Standard explicit (diagonal) Runge-Kutta update loop
     void step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop
     void step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+
+    //! Implicit Multi-Color Gauss-Seidel update loop
+    void step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+
+    //! Diagonally Implicit Runge-Kutta update loop
+    void step_DIRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 #endif
 #ifdef _GPU
     void update(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
-    void step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif
 
     void write_solution(const std::string &_prefix);

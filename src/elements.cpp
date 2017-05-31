@@ -1684,7 +1684,13 @@ void Elements::compute_local_dRdU()
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
             {
               unsigned int fptN = faceN * nFptsPerFace + fpti;
-              unsigned int fpt = geo->fpt2fptN(fptN, eleNID);
+
+              // HACK: fpt2fptN of eleNID doesn't exist for mpi faces so search for fpt manually
+              // Note: Consider creating this connectivity during preprocessing
+              unsigned int fpt = face * nFptsPerFace;
+              while (geo->fpt2fptN(fpt, eleID) != (int)fptN) fpt++;
+              //unsigned int fpt = geo->fpt2fptN(fptN, eleNID);
+
               CtempFSN(fpti, sptj) = dUcdU(ele, var, var, fpt) * oppE(fpt, sptj);
             }
 
