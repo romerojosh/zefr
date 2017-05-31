@@ -326,6 +326,8 @@ void Zefr::read_input(const char *inputfile)
 
     input.meshfile = input.oversetGrids[myGrid];
     input.gridID = myGrid;
+    input.gridType = input.gridTypes[myGrid];
+    gridType = input.gridType;
   }
 }
 
@@ -427,14 +429,14 @@ void Zefr::write_wall_time(void)
     std::cout << "Elapsed time: " << elapsed_time.count() << " s" << std::endl;
 }
 
-void Zefr::get_basic_geo_data(int& btag, int& nnodes, double*& xyz, int*& iblank,
-                              int& nwall, int& nover, int*& wallNodes,
-                              int*& overNodes, int& nCellTypes, int &nvert_cell,
-                              int &nCells_type, int*& c2v)
+void Zefr::get_basic_geo_data(int& btag, int& gType, int& nnodes, double*& xyz,
+    int*& iblank, int& nwall, int& nover, int*& wallNodes, int*& overNodes,
+    int& nCellTypes, int &nvert_cell, int &nCells_type, int*& c2v)
 {
   auto etype = solver->elesObjs[0]->etype;
 
   btag = myGrid;
+  gType = gridType;
   nnodes = geo->nNodes;
   xyz = geo->coord_nodes.data();
   iblank = geo->iblank_node.data();

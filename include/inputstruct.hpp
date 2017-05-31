@@ -155,8 +155,9 @@ struct InputStruct
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp, full_6dof;
   unsigned int gridID = 0;
-  unsigned int oversetMethod, nGrids, quad_order, motion_type;
-  std::vector<std::string> oversetGrids;
+  unsigned int nGrids, gridType, motion_type;
+  std::vector<std::string> oversetGrids;  //! List of mesh files for each overset grid
+  std::vector<int> gridTypes;             //! Overset grid types (background or geometry-containing)
 
   double moveAx, moveAy, moveAz;
   double moveFx, moveFy, moveFz;

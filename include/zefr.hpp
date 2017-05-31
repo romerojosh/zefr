@@ -86,7 +86,7 @@ public:
   /* ==== Overset-Related Functions ==== */
 
   // Geometry Access Functions
-  void get_basic_geo_data(int &btag, int &nnodes, double *&xyz, int *&iblank,
+  void get_basic_geo_data(int &btag, int& gType, int &nnodes, double *&xyz, int *&iblank,
                           int &nwall, int &nover, int *&wallNodes, int *&overNodes,
                           int &nCellTypes, int &nvert_cell, int &nCells_type,
                           int *&c2v);
@@ -151,6 +151,7 @@ private:
   int grank = 0;   //! Global MPI rank
   int myGrid = 0;  //! For overset: which grid this rank belongs to
   int nGrids = 1;  //! For overset: # of grids in entire system
+  int gridType = 1; //! For overset: with Direct Cut: background (0) or geometry (1)
 
   // Basic ZEFR Solver Objects
   std::shared_ptr<FRSolver> solver;

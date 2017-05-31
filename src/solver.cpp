@@ -5715,9 +5715,10 @@ void FRSolver::move(double time, bool update_iblank)
 
       update_nodes_rigid_wrapper(geo.coords_init_d, geo.coord_nodes_d, geo.Rmat_d,
           geo.x_cg_d, geo.nNodes, geo.nDims);
-#endif
+
       copy_coords_ele_wrapper(eles->nodes_d, geo.coord_nodes_d,
           geo.ele2nodesBT_d[HEX], eles->nNodes, eles->nNodes, eles->nDims);
+#endif
     }
     else
     {
@@ -5745,6 +5746,7 @@ void FRSolver::move(double time, bool update_iblank)
     ZEFR->unblank_1();
     POP_NVTX_RANGE;
 
+    // Reset position & orientation to original values
     geo.x_cg = xcg;
     geo.Rmat = Rmat;
 #ifdef _GPU

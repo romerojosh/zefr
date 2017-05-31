@@ -25,6 +25,7 @@
 struct BasicGeo
 {
   int btag;         //! Body tag (aka grid ID)
+  int gridType;     //! Grid type for Direct Cut (background or geometry)
   int nnodes;       //! # of mesh nodes
   double *xyz;      //! Physical positions of all mesh nodes
   int *iblank;      //! Nodal iblank values [to be set externally]

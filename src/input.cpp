@@ -259,9 +259,11 @@ InputStruct read_input_file(std::string inputfile)
     input.filt_on = 0;
   }
 
-
   read_param(f, "overset", input.overset, false);
   read_param_vec(f, "overset_grids", input.oversetGrids);
+  read_param_vec(f, "overset_grid_type", input.gridTypes);
+  if (input.gridTypes.size() < input.oversetGrids.size())
+    input.gridTypes.assign(input.oversetGrids.size(), 1);
 
   read_param(f, "motion", input.motion, false);
   if (input.motion)

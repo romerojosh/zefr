@@ -73,7 +73,7 @@ BasicGeo get_basic_geo_data(void)
 {
   BasicGeo geo;
 
-  ZEFR->get_basic_geo_data(geo.btag,geo.nnodes,geo.xyz,geo.iblank,geo.nwall,
+  ZEFR->get_basic_geo_data(geo.btag,geo.gridType,geo.nnodes,geo.xyz,geo.iblank,geo.nwall,
                            geo.nover,geo.wallNodes,geo.overNodes,geo.nCellTypes,
                            geo.nvert_cell,geo.nCells_type,geo.c2v);
 
