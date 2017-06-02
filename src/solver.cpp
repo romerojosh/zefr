@@ -5235,14 +5235,17 @@ void FRSolver::report_forces(std::ofstream &f)
   faces->P = faces->P_d;
 #endif
 
+  std::string prefix = input->output_prefix;
+  if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
+
   std::stringstream ss;
 #ifdef _MPI
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter;
   ss << "_" << std::setw(3) << std::setfill('0') << input->rank << ".cp";
 #else
   ss << input->output_prefix << "/";
-  ss << input->output_prefix << "_" << std::setw(9) << std::setfill('0') << iter;
+  ss << prefix << "_" << std::setw(9) << std::setfill('0') << iter;
   ss << ".cp";
 #endif
 
@@ -5253,7 +5256,8 @@ void FRSolver::report_forces(std::ofstream &f)
   std::array<double, 3> force_visc = {0,0,0};
   compute_forces(force_conv, force_visc, &g);
 
-  /* Convert dimensional forces into non-dimensional coefficients */
+  /* Convert dimensional forces into non-dimensional coefficients
+   * NOTE: Reference area assumed to be 1. Divide by A for 'true' Cl, Cd */
   double Vsq = 0.0;
   for (unsigned int dim = 0; dim < geo.nDims; dim++)
     Vsq += input->V_fs(dim) * input->V_fs(dim);
