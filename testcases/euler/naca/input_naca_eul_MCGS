@@ -16,7 +16,7 @@ spt_type Legendre
 # Timestepping:
 n_steps 100000
 res_tol 1e-11
-dt_scheme BDF1      (Euler, RK44, RK54, MCGS)
+dt_scheme Steady      (Euler, RK44, RK54, Steady)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
 CFL	  1.5
@@ -32,6 +32,7 @@ nColors 2
 Jfreeze_freq 100
 backsweep 0
 linear_solver LU
+report_conv_freq 100
 
 restart 0
 restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
@@ -40,9 +41,9 @@ restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
 # Note: You can suppress output by setting freq to zero. 
 output_prefix naca_eul_MCGS
 write_freq    100000
-report_freq   100
+report_freq   0
 res_type      1
-force_freq    1000
+force_freq    10
 error_freq    0
 nQpts1D       10
 

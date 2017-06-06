@@ -1618,13 +1618,16 @@ void shuffle_data_by_color(GeoStruct &geo)
   }
 
   /* Print out color distribution */
+#ifdef _MPI
+  std::cout << "Rank " << geo.rank << " ";
+#endif
   for (auto etype : geo.ele_set)
   {
-    std::cout << "color distribution: ";
+    if (geo.ele_set.size() > 1) std::cout << "Ele Type " << etype << " ";
+    std::cout << "Color Distribution:";
+
     for (unsigned int color = 0; color < geo.nColors; color++)
-    {
-      std::cout<< geo.nElesPerColorBT[etype][color] << " ";
-    }
+      std::cout << " " << geo.nElesPerColorBT[etype][color];
     std::cout << std::endl;
   }
 }
@@ -2041,8 +2044,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
       }
     }
   }
-
-  
 
   std::cout << "Rank " << input->rank << ": nEles = " << geo.nEles;
   std::cout << ", nMpiFaces = " << geo.mpi_faces.size() << std::endl;

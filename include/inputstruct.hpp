@@ -177,9 +177,11 @@ struct InputStruct
 
   /* Implicit Parameters */
   bool implicit_method = false;
+  bool pseudo_time;
+  double dtau;
   unsigned int iterative_method = 0;
   unsigned int linear_solver = 0;
-  unsigned int nColors, Jfreeze_freq;
+  unsigned int nColors, Jfreeze_freq, report_conv_freq;
   bool backsweep;
   double svd_omg, svd_cutoff;
 

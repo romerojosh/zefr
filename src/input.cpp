@@ -93,8 +93,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "dt_type", input.dt_type);
   if (input.dt_type != 0)
   {
-    read_param(f, "CFL_type", input.CFL_type, (unsigned int) 1);
     read_param(f, "CFL", input.CFL);
+    read_param(f, "CFL_type", input.CFL_type, (unsigned int) 1);
   }
 
   if (input.dt_scheme == "Euler")
@@ -107,7 +107,7 @@ InputStruct read_input_file(std::string inputfile)
     input.nStages = 4;
   else if (input.dt_scheme == "LSRK")
     input.nStages = 5;
-  else if (input.dt_scheme == "BDF1")
+  else if (input.dt_scheme == "Steady")
     input.nStages = 1;
   else if (input.dt_scheme == "DIRK34")
     input.nStages = 3;
@@ -236,14 +236,20 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
 
   /* Implicit parameters */
-  if (input.dt_scheme == "BDF1" || input.dt_scheme == "DIRK34")
+  if (input.dt_scheme == "Steady" || input.dt_scheme == "DIRK34")
   {
     input.implicit_method = true;
+
+    /* Pseudo Time-stepping */
+    read_param(f, "pseudo_time", input.pseudo_time, false);
+    if (input.pseudo_time)
+      read_param(f, "dtau", input.dtau, 1.0);
 
     /* Block iterative method */
     read_param(f, "iterative_method", str, std::string("JAC"));
     read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
     read_param(f, "backsweep", input.backsweep, false);
+    read_param(f, "report_conv_freq", input.report_conv_freq, (unsigned int) 0);
     if (str == "JAC")
       input.iterative_method = JAC;
     else if (str == "MCGS")
@@ -270,7 +276,7 @@ InputStruct read_input_file(std::string inputfile)
       ThrowException("Linear solver not recognized!");
 
     /* Restrictions */
-    if (input.viscous && !input.fix_vis)
+    if (input.equation == EulerNS && input.viscous && !input.fix_vis)
       ThrowException("Viscous implicit Jacobians with Sutherland's law not available!"); 
   }
 

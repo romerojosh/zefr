@@ -129,16 +129,12 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     /* Solver data structures */
     LHS.assign({nEles, nVars, nSpts, nVars, nSpts});
     RHS.assign({nEles, nVars, nSpts});
-#ifdef _CPU
     deltaU.assign({nEles, nVars, nSpts});
+#ifdef _CPU
     if (input->linear_solver == LU)
-    {
       LU_ptrs.resize(nEles);
-    }
     else if (input->linear_solver == INV)
-    {
       LHSinv.assign({nEles, nVars, nSpts, nVars, nSpts});
-    }
     else if (input->linear_solver == SVD)
     {
       SVD_ptrs.resize(nEles);
@@ -152,20 +148,18 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
       LHSV.assign({nEles, N, svd_rank});
     }
     else
-    {
       ThrowException("Linear solver not recognized!");
-    }
+
 #elif defined(_GPU)
     LHS_ptrs.assign({nEles});
     RHS_ptrs.assign({nEles});
+    deltaU_ptrs.assign({nEles});
     LHS_info.assign({nEles});
 
     if (input->linear_solver == INV)
     {
       LHSinv.assign({nEles, nVars, nSpts, nVars, nSpts});
       LHSinv_ptrs.assign({nEles});
-      deltaU.assign({nEles, nVars, nSpts});
-      deltaU_ptrs.assign({nEles});
     }
 #endif
   }
@@ -365,7 +359,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
   }
 
-  if (input->CFL_type == 2)
+  if (input->dt_type != 0 && input->CFL_type == 2)
   {
     /* Allocate memory for tensor-line reference lengths */
     h_ref.assign({nFpts, nEles});
@@ -2152,7 +2146,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
     calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
                          geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nFpts, nEles, nDims);
 
-    if (input->CFL_type == 2)
+    if (input->dt_type != 0 && input->CFL_type == 2)
       update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
   }
 
@@ -2210,7 +2204,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
     }
   }
 
-  if (input->CFL_type == 2)
+  if (input->dt_type != 0 && input->CFL_type == 2)
   {
     /* Compute tensor-line lengths */
     for (unsigned int ele = 0; ele < nEles; ele++)
