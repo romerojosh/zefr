@@ -203,6 +203,9 @@ void compute_Fvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], double 
 
 
 template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
 void compute_dFdUconv_AdvDiff(double dFdU[nVars][nVars][nDims], double A[nDims])
 {
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -210,6 +213,9 @@ void compute_dFdUconv_AdvDiff(double dFdU[nVars][nVars][nDims], double A[nDims])
 }
 
 template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
 void compute_dFdUconv_EulerNS(double U[nVars], double dFdU[nVars][nVars][nDims], double gamma)
 {
   if (nDims == 2)
@@ -335,6 +341,9 @@ void compute_dFdUconv_EulerNS(double U[nVars], double dFdU[nVars][nVars][nDims],
 }
 
 template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
 void compute_dFddUvisc_AdvDiff(double dFddU[nVars][nVars][nDims][nDims], double D)
 {
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -342,6 +351,9 @@ void compute_dFddUvisc_AdvDiff(double dFddU[nVars][nVars][nDims][nDims], double 
 }
 
 template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
 void compute_dFdUvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], double dFdU[nVars][nVars][nDims], 
     double gamma, double prandtl, double mu_in)
 {
@@ -513,6 +525,9 @@ void compute_dFdUvisc_EulerNS_add(double U[nVars], double dU[nVars][nDims], doub
 }
 
 template <size_t nVars, size_t nDims>
+#ifdef _GPU
+__device__ __forceinline__
+#endif
 void compute_dFddUvisc_EulerNS(double U[nVars], double dFddU[nVars][nVars][nDims][nDims], 
     double gamma, double prandtl, double mu_in)
 {

@@ -245,6 +245,9 @@ InputStruct read_input_file(std::string inputfile)
     if (input.pseudo_time)
       read_param(f, "dtau", input.dtau, 1.0);
 
+    /* Compute residual Jacobian using finite difference approximation */
+    read_param(f, "FDA_Jacobian", input.FDA_Jacobian, false);
+
     /* Block iterative method */
     read_param(f, "iterative_method", str, std::string("JAC"));
     read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);

@@ -1111,6 +1111,15 @@ void FRSolver::solver_data_to_device()
 
     if (input->implicit_method)
     {
+      e->dFdU_spts_d = e->dFdU_spts;
+      e->dFcdU_d = e->dFcdU;
+      if (input->viscous)
+      {
+        e->dFddU_spts_d = e->dFddU_spts;
+        e->dUcdU_d = e->dUcdU;
+        e->dFcddU_d = e->dFcddU;
+      }
+
       e->LHS_d = e->LHS;
       e->RHS_d = e->RHS;
       e->deltaU_d = e->deltaU;
@@ -1213,6 +1222,19 @@ void FRSolver::solver_data_to_device()
 
   if (input->overset || input->motion)
     faces->coord_d = faces->coord;
+
+  if (input->implicit_method)
+  {
+    faces->dFcdU_bnd_d = faces->dFcdU_bnd;
+    faces->dUbdU_d = faces->dUbdU;
+
+    if (input->viscous)
+    {
+      faces->dUcdU_bnd_d = faces->dUcdU_bnd;
+      faces->dFcddU_bnd_d = faces->dFcddU_bnd;
+      faces->ddUbddU_d = faces->ddUbddU;
+    }
+  }
 
   /* -- Additional data -- */
   /* Input parameters */
@@ -1443,19 +1465,70 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
 void FRSolver::compute_dRdU()
 {
-  /* Apply boundary conditions for flux Jacobian */
-  faces->apply_bcs_dFdU();
+  if (!input->FDA_Jacobian)
+  {
+    /* Apply boundary conditions for flux Jacobian */
+    faces->apply_bcs_dFdU();
 
-  /* Compute flux Jacobian at solution points */
-  for (auto e : elesObjs)
-    e->compute_dFdU();
+    /* Compute flux Jacobian at solution points */
+    for (auto e : elesObjs)
+      e->compute_dFdU();
 
-  /* Compute common interface flux Jacobian */
-  faces->compute_common_dFdU(0, geo.nGfpts);
+    /* Compute common interface flux Jacobian */
+    faces->compute_common_dFdU(0, geo.nGfpts);
 
-  /* Compute block diagonal components of flux divergence Jacobian */
-  for (auto e : elesObjs)
-    e->compute_local_dRdU();
+    /* Copy GPU data structures for CPU Jacobian computation */
+#ifdef _GPU
+    for (auto e : elesObjs)
+    {
+      e->dFdU_spts = e->dFdU_spts_d;
+      e->dFcdU = e->dFcdU_d;
+
+      if (input->viscous)
+      {
+        e->dFddU_spts = e->dFddU_spts_d;
+        e->dUcdU = e->dUcdU_d;
+        e->dFcddU = e->dFcddU_d;
+      }
+    }
+#endif
+
+    /* Compute block diagonal components of flux divergence Jacobian */
+    for (auto e : elesObjs)
+      e->compute_local_dRdU();
+  }
+
+  else
+  {
+    /* Compute residual Jacobian using FDA */
+    // Note: This is very expensive! Only for testing.
+    std::cout << "Compute residual Jacobian using FDA..." << std::endl;
+    std::vector<mdvector<double>> U0(elesObjs.size());
+    for (auto e : elesObjs)
+      U0[e->elesObjID] = e->U_spts;
+    mdvector<double> divF;
+    double eps = std::sqrt(std::numeric_limits<double>::epsilon());
+    for (auto e : elesObjs)
+    {
+      divF = e->divF_spts;
+      for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            // Add eps to solution and compute divF
+            e->U_spts = U0[e->elesObjID];
+            e->U_spts(spt, var, ele) += eps;
+            compute_residual(0);
+
+            // Compute LHS implicit Jacobian
+            for (unsigned int vari = 0; vari < e->nVars; vari++)
+              for (unsigned int spti = 0; spti < e->nSpts; spti++)
+                e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
+          }
+      e->U_spts = U0[e->elesObjID];
+      compute_residual(0);
+    }
+  }
 }
 
 void FRSolver::compute_LHS_LU()
@@ -1816,6 +1889,24 @@ void FRSolver::setup_views()
     }
   }
 
+#ifdef _GPU
+  mdvector<double*> dFcdU_base_ptrs_d;
+  mdvector<unsigned int> dFcdU_strides_d;
+  mdvector<double*> dUcdU_base_ptrs_d, dFcddU_base_ptrs_d;
+  mdvector<unsigned int> dFcddU_strides_d;
+  if (input->implicit_method)
+  {
+    dFcdU_base_ptrs_d.assign({2 * geo.nGfpts});
+    dFcdU_strides_d.assign({2, 2 * geo.nGfpts});
+    if (input->viscous)
+    {
+      dUcdU_base_ptrs_d.assign({2 * geo.nGfpts});
+      dFcddU_base_ptrs_d.assign({2 * geo.nGfpts});
+      dFcddU_strides_d.assign({4, 2 * geo.nGfpts});
+    }
+  }
+#endif
+
   /* Set pointers for internal faces */
   for (auto e : elesObjs)
   {
@@ -1863,6 +1954,11 @@ void FRSolver::setup_views()
           dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
           dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
           dFcdU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(2);
+#ifdef _GPU
+          dFcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_ptr(ele, 0, 0, fpt);
+          dFcdU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_stride(1);
+          dFcdU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_stride(2);
+#endif
 
           if (input->viscous)
           {
@@ -1872,6 +1968,14 @@ void FRSolver::setup_views()
             dFcddU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(2);
             dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(3);
             dFcddU_strides(3, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(4);
+#ifdef _GPU
+            dUcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dUcdU_d.get_ptr(ele, 0, 0, fpt);
+            dFcddU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_ptr(ele, 0, 0, 0, 0, fpt);
+            dFcddU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(1);
+            dFcddU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(2);
+            dFcddU_strides_d(2, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(3);
+            dFcddU_strides_d(3, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(4);
+#endif
           }
         }
       }
@@ -1919,7 +2023,6 @@ void FRSolver::setup_views()
       dU_strides_d(0, gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_stride(1);
       dU_strides_d(1, gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_stride(2);
 #endif
-    
     }
 
     /* Set pointers for remaining faces for implicit */
@@ -1928,6 +2031,11 @@ void FRSolver::setup_views()
       dFcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcdU_bnd(0, 0, i);
       dFcdU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(1);
       dFcdU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(2);
+#ifdef _GPU
+      dFcdU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd_d.get_ptr(0, 0, i);
+      dFcdU_strides_d(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd_d.get_stride(1);
+      dFcdU_strides_d(1, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd_d.get_stride(2);
+#endif
 
       if (input->viscous)
       {
@@ -1937,6 +2045,14 @@ void FRSolver::setup_views()
         dFcddU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(2);
         dFcddU_strides(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(3);
         dFcddU_strides(3, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(4);
+#ifdef _GPU
+        dUcdU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dUcdU_bnd_d.get_ptr(0, 0, i);
+        dFcddU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_ptr(0, 0, 0, 0, i);
+        dFcddU_strides_d(0, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(1);
+        dFcddU_strides_d(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(2);
+        dFcddU_strides_d(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(3);
+        dFcddU_strides_d(3, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(4);
+#endif
       }
     }
 
@@ -1973,6 +2089,15 @@ void FRSolver::setup_views()
       faces->dUcdU.assign(dUcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
       faces->dFcddU.assign(dFcddU_base_ptrs, dFcddU_strides, geo.nGfpts);
     }
+
+#ifdef _GPU
+    faces->dFcdU_d.assign(dFcdU_base_ptrs_d, dFcdU_strides_d, geo.nGfpts);
+    if (input->viscous)
+    {
+      faces->dUcdU_d.assign(dUcdU_base_ptrs_d, dFcdU_strides_d, geo.nGfpts);
+      faces->dFcddU_d.assign(dFcddU_base_ptrs_d, dFcddU_strides_d, geo.nGfpts);
+    }
+#endif
   }
 }
 
@@ -2482,62 +2607,8 @@ void FRSolver::step_Steady(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourc
   /* Compute residual everywhere before computing Jacobian */
   compute_residual(0);
 
-  /* Copy GPU data structures for CPU Jacobian computation */
-#ifdef _GPU
-  for (auto e : elesObjs)
-  {
-    e->U_spts = e->U_spts_d;
-    e->U_fpts = e->U_fpts_d;
-
-    if (input->viscous)
-    {
-      e->dU_spts = e->dU_spts_d;
-      e->dU_fpts = e->dU_fpts_d;
-    }
-  }
-
-  faces->U_bnd = faces->U_bnd_d;
-  faces->U_bnd_ldg = faces->U_bnd_ldg_d;
-  faces->P = faces->P_d;
-  faces->waveSp = faces->waveSp_d;
-  faces->diffCo = faces->diffCo_d;
-
-  if (input->viscous)
-    faces->dU_bnd = faces->dU_bnd_d;
-#endif
-
   /* Compute block diagonal components of residual Jacobian */
   compute_dRdU();
-
-  /* Compute residual Jacobian using FDA */
-  /*
-  std::cout << "Compute residual Jacobian using FDA..." << std::endl;
-  for (auto e : elesObjs)
-    e->U_ini = e->U_spts;
-  compute_residual(0);
-  mdvector<double> divF;
-  double eps = std::sqrt(std::numeric_limits<double>::epsilon());
-  for (auto e : elesObjs)
-  {
-    divF = e->divF_spts;
-    for (unsigned int spt = 0; spt < e->nSpts; spt++)
-      for (unsigned int var = 0; var < e->nVars; var++)
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-        {
-          // Add eps to solution and compute divF
-          e->U_spts = e->U_ini;
-          e->U_spts(spt, var, ele) += eps;
-          compute_residual(0);
-
-          // Compute LHS implicit Jacobian
-          for (unsigned int vari = 0; vari < e->nVars; vari++)
-            for (unsigned int spti = 0; spti < e->nSpts; spti++)
-              e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
-        }
-    e->U_spts = e->U_ini;
-    compute_residual(0);
-  }
-  */
 
   // TODO: Revisit this as it is kind of expensive.
   if (input->dt_type != 0)

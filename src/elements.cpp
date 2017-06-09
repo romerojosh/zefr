@@ -1819,6 +1819,7 @@ void Elements::compute_dFdU()
 
 void Elements::compute_dFdU()
 {
+#ifdef _CPU
   if (input->equation == AdvDiff)
   {
     if (nDims == 2)
@@ -1833,6 +1834,14 @@ void Elements::compute_dFdU()
     else if (nDims == 3)
       compute_dFdU<5, 3, EulerNS>();
   }
+#endif
+
+#ifdef _GPU
+  compute_dFdU_wrapper(dFdU_spts_d, dFddU_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, 
+      input->AdvDiff_A_d, input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->viscous);
+
+  check_error();
+#endif
 }
 
 

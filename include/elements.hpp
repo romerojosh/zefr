@@ -178,6 +178,8 @@ class Elements
     mdvector_gpu<double> dt_d, rk_err_d;
 
     /* Element structures for implicit method */
+    mdvector_gpu<double> dFdU_spts_d, dFddU_spts_d;
+    mdvector_gpu<double> dFcdU_d, dUcdU_d, dFcddU_d;
     mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d;
     mdvector_gpu<double*> LHS_ptrs_d, LHSinv_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
     mdvector_gpu<int> LHS_info_d;

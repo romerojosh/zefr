@@ -177,7 +177,7 @@ struct InputStruct
 
   /* Implicit Parameters */
   bool implicit_method = false;
-  bool pseudo_time;
+  bool pseudo_time, FDA_Jacobian;
   double dtau;
   unsigned int iterative_method = 0;
   unsigned int linear_solver = 0;
