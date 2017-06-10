@@ -1742,6 +1742,12 @@ void Elements::compute_local_dRdU()
               LHS(ele, vari, spti, varj, sptj) += val;
             }
     }
+
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int spti = 0; spti < nSpts; spti++)
+        for (unsigned int varj = 0; varj < nVars; varj++)
+          for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+            LHS(ele, vari, spti, varj, sptj) /= jaco_det_spts(spti, ele);
   }
 }
 

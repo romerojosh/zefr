@@ -979,7 +979,8 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
 
 __global__
 void compute_RHS(mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, 
-    mdvector_gpu<double> RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double> RHS, bool pseudo_time, double dtau_ratio, unsigned int dt_type, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
   const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
@@ -987,25 +988,20 @@ void compute_RHS(mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, 
   if (spt >= nSpts || ele >= nEles)
     return;
 
-  double dt;
-  if (dt_type != 2)
-    dt = dt_in(0);
-  else
-    dt = dt_in(ele);
-
+  double dtau = pseudo_time ? (dtau_ratio * ((dt_type != 2) ? dt_in(0) : dt_in(ele))) : 1.0;
   double jaco_det = jaco_det_spts(spt, ele);
-
   for (unsigned int var = 0; var < nVars; var++)
-    RHS(ele, var, spt) = -(dt * divF(0, spt, var, ele)) / jaco_det;
+    RHS(ele, var, spt) = -(dtau * divF(0, spt, var, ele)) / jaco_det;
 }
 
 void compute_RHS_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
+    mdvector_gpu<double> &RHS, bool pseudo_time, double dtau_ratio, unsigned int dt_type, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   dim3 threads(32, 4);
   dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y - 1)/threads.y);
 
-  compute_RHS<<<blocks, threads>>>(divF, jaco_det_spts, dt, RHS, dt_type, nSpts, nEles, nVars);
+  compute_RHS<<<blocks, threads>>>(divF, jaco_det_spts, dt, RHS, pseudo_time, dtau_ratio, dt_type, nSpts, nEles, nVars);
 }
 
 __global__

@@ -19,12 +19,16 @@ res_tol 1e-11
 dt_scheme Steady      (Euler, RK44, RK54, Steady)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
-CFL	  1.5
+CFL	  1.0
 
-# CFL Adaptation
-adapt_CFL 1
-CFL_max 1e5
-CFL_ratio 2.0
+# Pseudo Timestepping
+pseudo_time 1
+dtau_ratio 3.0
+
+# Adapt dtau
+adapt_dtau 1
+dtau_ratio_max 1e5
+dtau_growth_rate 1.0
 
 # Implicit
 iterative_method MCGS

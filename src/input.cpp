@@ -230,20 +230,20 @@ InputStruct read_input_file(std::string inputfile)
     input.filt_on = 0;
   }
 
-  /* CFL Control */
-  read_param(f, "adapt_CFL", input.adapt_CFL, (unsigned int) 0);
-  read_param(f, "CFL_max", input.CFL_max, 1.0);
-  read_param(f, "CFL_ratio", input.CFL_ratio, 1.0);
-
   /* Implicit parameters */
   if (input.dt_scheme == "Steady" || input.dt_scheme == "DIRK34")
   {
     input.implicit_method = true;
 
-    /* Pseudo Time-stepping */
+    /* Pseudo Timestepping */
     read_param(f, "pseudo_time", input.pseudo_time, false);
+    read_param(f, "dtau_ratio", input.dtau_ratio, 1.0);
     if (input.pseudo_time)
-      read_param(f, "dtau", input.dtau, 1.0);
+    {
+      read_param(f, "adapt_dtau", input.adapt_dtau, false);
+      read_param(f, "dtau_ratio_max", input.dtau_ratio_max, 1.0);
+      read_param(f, "dtau_growth_rate", input.dtau_growth_rate, 0.0);
+    }
 
     /* Compute residual Jacobian using finite difference approximation */
     read_param(f, "FDA_Jacobian", input.FDA_Jacobian, false);
