@@ -108,7 +108,10 @@ InputStruct read_input_file(std::string inputfile)
   else if (input.dt_scheme == "LSRK")
     input.nStages = 5;
   else if (input.dt_scheme == "Steady")
+  {
     input.nStages = 1;
+    input.implicit_steady = true;
+  }
   else if (input.dt_scheme == "DIRK34")
     input.nStages = 3;
   else

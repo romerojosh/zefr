@@ -91,6 +91,7 @@ class FRSolver
     int prev_color = 0;
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
     mdvector<unsigned int> ele2elesObj;
+    unsigned int report_conv_freq;
     std::ofstream conv_file;
     std::chrono::high_resolution_clock::time_point timer1;
 
@@ -141,7 +142,7 @@ class FRSolver
     void compute_LHS_LU();
     void compute_LHS_inverse();
     void compute_LHS_SVD();
-    void compute_RHS(int color = -1);
+    void compute_RHS(unsigned int stage, int color = -1);
     void compute_deltaU(int color = -1);
     void compute_U(int color = -1);
 
@@ -163,7 +164,7 @@ class FRSolver
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Implicit Steady State update loop
-    void step_Steady(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+    void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Diagonally Implicit Runge-Kutta update loop
     void step_DIRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
@@ -173,7 +174,7 @@ class FRSolver
     void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
-    void step_Steady(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif
 
@@ -185,7 +186,7 @@ class FRSolver
     void write_RHS(const std::string &_prefix);
     void write_color();
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
-    void report_RHS(unsigned int iter);
+    void report_RHS(unsigned int stage, unsigned int iterNM, unsigned int iter);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
     void report_turbulent_stats(std::ofstream &f);
