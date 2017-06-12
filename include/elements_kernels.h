@@ -38,6 +38,13 @@ void common_U_to_F_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Uc
 void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& inv_jaco_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim);
 
+/* Element dFdU kernel wrappers for implicit */
+void compute_dFdU_wrapper(mdvector_gpu<double> &dFdU_spts, mdvector_gpu<double> &dFddU_spts,
+    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts,
+    mdvector_gpu<double> &inv_jaco_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims,
+    unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
+    double prandtl, double mu, bool viscous);
+
 /* Additional wrappers */
 void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 
     mdvector_gpu<double> &Uavg, mdvector_gpu<double> &jaco_det_spts, 

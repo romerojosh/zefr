@@ -116,14 +116,14 @@ public:
 
 struct InputStruct
 {
-  unsigned int equation, dt_type, CFL_type, ic_type, nDims, nQpts1D, n_steps, order, adapt_CFL;
+  unsigned int equation, dt_type, CFL_type, ic_type, nDims, nQpts1D, n_steps, order;
   unsigned int report_freq, write_freq, force_freq, turb_stat_freq, res_type, error_freq, test_case, err_field, FMG_vcycles;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
   bool viscous, p_multi, restart, fix_vis, squeeze, source, grad_via_div, disable_nondim;
   std::vector<unsigned int> mg_levels, mg_steps;
   unsigned int fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau;
-  double AdvDiff_D, dt, res_tol, CFL, rel_fac, CFL_max, CFL_ratio;
+  double AdvDiff_D, dt, res_tol, CFL, rel_fac;
   mdvector<double> AdvDiff_A, V_fs, norm_fs, V_wall, norm_wall;
   double T_gas, gamma, prandtl, mu, R, S;
   double rho_fs, u_fs, v_mag_fs, P_fs;
@@ -177,9 +177,12 @@ struct InputStruct
 
   /* Implicit Parameters */
   bool implicit_method = false;
+  bool implicit_steady = false;
+  bool pseudo_time, adapt_dtau, FDA_Jacobian;
+  double dtau_ratio, dtau_growth_rate, dtau_ratio_max;
   unsigned int iterative_method = 0;
   unsigned int linear_solver = 0;
-  unsigned int nColors, Jfreeze_freq;
+  unsigned int nColors, Jfreeze_freq, report_conv_freq;
   bool backsweep;
   double svd_omg, svd_cutoff;
 

@@ -97,7 +97,7 @@ class Faces
     /* Structures for implicit method */
     mdview<double> dUcdU, dFcdU, dFcddU;
     mdvector<double> dUcdU_bnd, dFcdU_bnd, dFcddU_bnd;
-    mdvector<double> dURdUL, ddURddUL;
+    mdvector<double> dUbdU, ddUbddU;
 
     /* Moving-Grid Variables */
     mdvector<double> norm_init;
@@ -134,7 +134,9 @@ class Faces
     mdvector_gpu<double> Vg_d;
 
     /* Structures for implicit method */
-    mdvector_gpu<double> dFcdU_d, dUcdU_d;
+    mdview_gpu<double> dUcdU_d, dFcdU_d, dFcddU_d;
+    mdvector_gpu<double> dUcdU_bnd_d, dFcdU_bnd_d, dFcddU_bnd_d;
+    mdvector_gpu<double> dUbdU_d, ddUbddU_d;
 
     /* Moving-Grid Vars */
     mdvector_gpu<double> norm_init_d;

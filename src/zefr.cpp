@@ -157,7 +157,10 @@ int main(int argc, char* argv[])
   if (input.error_freq != 0)
     solver.report_error(error_file);
 
+  /* Set convergence file and timer parameters in solver */
   auto t1 = std::chrono::high_resolution_clock::now();
+  if (input.implicit_method) solver.set_conv_file(t1);
+
   input.time = solver.get_current_time();
   /* Main iteration loop */
   for (unsigned int n = input.initIter+1; (n <= input.n_steps) && (input.time < input.tfinal) && (solver.res_max > input.res_tol); n++)

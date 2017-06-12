@@ -411,6 +411,115 @@ void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double
   }
 }
 
+template<unsigned int nVars, unsigned int nDims, unsigned int equation>
+__global__
+void compute_dFdU(mdvector_gpu<double> dFdU_spts, mdvector_gpu<double> dFddU_spts,
+    const mdvector_gpu<double> U_spts, const mdvector_gpu<double> dU_spts,
+    const mdvector_gpu<double> inv_jaco_spts, unsigned int nSpts, unsigned int nEles,
+    const mdvector_gpu<double> AdvDiff_A, double AdvDiff_D, double gamma,
+    double prandtl, double mu, bool viscous)
+{
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
+
+  if (ele >= nEles || spt >= nSpts) 
+    return;
+
+  double U[nVars];
+  double dU[nVars][nDims];
+  double dFdU[nVars][nVars][nDims] = {0};
+  double dFddU[nVars][nVars][nDims][nDims] = {0};
+  double inv_jaco[nDims][nDims];
+  double tdFdU[nVars][nVars][nDims] = {{0.0}};
+
+  /* Get state variables and physical space gradients */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    U[var] = U_spts(spt, var, ele);
+
+    if(viscous) 
+      for(unsigned int dim = 0; dim < nDims; dim++)
+        dU[var][dim] = dU_spts(dim, spt, var, ele);
+  }
+
+  /* Compute flux derivatives */
+  if (equation == AdvDiff)
+  {
+    double A[nDims];
+    for(unsigned int dim = 0; dim < nDims; dim++)
+      A[dim] = AdvDiff_A(dim);
+
+    compute_dFdUconv_AdvDiff<nVars, nDims>(dFdU, A);
+    if(viscous) compute_dFddUvisc_AdvDiff<nVars, nDims>(dFddU, AdvDiff_D);
+  }
+  else if (equation == EulerNS)
+  {
+    compute_dFdUconv_EulerNS<nVars, nDims>(U, dFdU, gamma);
+    if(viscous)
+    {
+      compute_dFdUvisc_EulerNS_add<nVars, nDims>(U, dU, dFdU, gamma, prandtl, mu);
+      compute_dFddUvisc_EulerNS<nVars, nDims>(U, dFddU, gamma, prandtl, mu);
+    }
+  }
+
+  /* Get metric terms */
+  for (int dim1 = 0; dim1 < nDims; dim1++)
+    for (int dim2 = 0; dim2 < nDims; dim2++)
+      inv_jaco[dim1][dim2] = inv_jaco_spts(dim1, spt, dim2, ele);
+
+  /* Transform flux derivative to reference space */
+  for (unsigned int vari = 0; vari < nVars; vari++)
+    for (unsigned int varj = 0; varj < nVars; varj++)
+      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+        for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+          tdFdU[vari][varj][dim1] += dFdU[vari][varj][dim2] * inv_jaco[dim1][dim2];
+
+  /* Write out transformed flux derivatives */
+  for (unsigned int vari = 0; vari < nVars; vari++)
+    for (unsigned int varj = 0; varj < nVars; varj++)
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        dFdU_spts(ele, vari, varj, dim, spt) = tdFdU[vari][varj][dim];
+
+  if(viscous)
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+        for (unsigned int dimi = 0; dimi < nDims; dimi++)
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+            dFddU_spts(ele, dimi, dimj, vari, varj, spt) = dFddU[vari][varj][dimi][dimj];
+}
+
+void compute_dFdU_wrapper(mdvector_gpu<double> &dFdU_spts, mdvector_gpu<double> &dFddU_spts,
+    mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts,
+    mdvector_gpu<double> &inv_jaco_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims,
+    unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
+    double prandtl, double mu, bool viscous)
+{
+  //unsigned int threads = 128;
+  //unsigned int blocks = (nEles + threads - 1)/threads;
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
+
+  if (equation == AdvDiff)
+  {
+    if (nDims == 2)
+      compute_dFdU<1, 2, AdvDiff><<<blocks, threads>>>(dFdU_spts, dFddU_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+          AdvDiff_D, gamma, prandtl, mu, viscous);
+    else if (nDims == 3)
+      compute_dFdU<1, 3, AdvDiff><<<blocks, threads>>>(dFdU_spts, dFddU_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+          AdvDiff_D, gamma, prandtl, mu, viscous);
+  }
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      compute_dFdU<4, 2, EulerNS><<<blocks, threads>>>(dFdU_spts, dFddU_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+          AdvDiff_D, gamma, prandtl, mu, viscous);
+    else if (nDims == 3)
+      compute_dFdU<5, 3, EulerNS><<<blocks, threads>>>(dFdU_spts, dFddU_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
+          AdvDiff_D, gamma, prandtl, mu, viscous);
+  }
+}
+
+
 __global__
 void normal_flux(mdvector_gpu<double> tempF, mdvector_gpu<double> dFn,
     mdvector_gpu<double> norm, mdvector_gpu<double> dA,

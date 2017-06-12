@@ -144,6 +144,12 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
     unsigned int stage, unsigned int nStages, bool overset = false,
     int* iblank = NULL);
 
+void DIRK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &divF, 
+    mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    unsigned int nStages);
+
 double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err, uint nSpts,
     uint nEles, uint nVars, double atol, double rtol, _mpi_comm comm_in,
@@ -162,8 +168,14 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
     unsigned int nFpts, unsigned int nEles, unsigned int nDims, unsigned int startEle, _mpi_comm comm_in,
     bool overset = false, int* iblank = NULL);
 
-void compute_RHS_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt_in,
-    mdvector_gpu<double> &b, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
+void compute_RHS_steady_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &RHS, bool pseudo_time, double dtau_ratio, unsigned int dt_type, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars);
+
+void compute_RHS_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
+    mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_coeff, mdvector_gpu<double> &RHS, bool pseudo_time, double dtau_ratio, 
+    unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int stage);
 
 void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 

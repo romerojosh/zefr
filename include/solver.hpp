@@ -20,8 +20,9 @@
 #ifndef solver_hpp
 #define solver_hpp
 
-#include <fstream>
 #include <chrono>
+#include <fstream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -69,7 +70,6 @@ class FRSolver
     double prev_time = 0.;
     double restart_time = 0.;
     double grid_time = 0.;
-    double CFL_ratio = 1;
     mdvector<double> rk_alpha, rk_beta, rk_bhat, rk_c;
     Filter filt;
 
@@ -91,6 +91,9 @@ class FRSolver
     int prev_color = 0;
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
     mdvector<unsigned int> ele2elesObj;
+    unsigned int report_conv_freq;
+    std::ofstream conv_file;
+    std::chrono::high_resolution_clock::time_point timer1;
 
     /* Viscous implicit jacoN data for MPI boundaries */
 #ifdef _MPI
@@ -139,12 +142,12 @@ class FRSolver
     void compute_LHS_LU();
     void compute_LHS_inverse();
     void compute_LHS_SVD();
-    void compute_RHS(int color = -1);
+    void compute_RHS(unsigned int stage, int color = -1);
     void compute_deltaU(int color = -1);
     void compute_U(int color = -1);
 
   public:
-    double res_max = 1;
+    double res_max = std::numeric_limits<double>::max();
     FRSolver(InputStruct *input, int order = -1);
     void setup(_mpi_comm comm_in, _mpi_comm comm_world = DEFAULT_COMM);
     void restart_solution(void);
@@ -160,8 +163,8 @@ class FRSolver
     void step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
-    //! Implicit Multi-Color Gauss-Seidel update loop
-    void step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+    //! Implicit Steady State update loop
+    void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Diagonally Implicit Runge-Kutta update loop
     void step_DIRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
@@ -171,7 +174,7 @@ class FRSolver
     void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
-    void step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif
 
@@ -183,12 +186,14 @@ class FRSolver
     void write_RHS(const std::string &_prefix);
     void write_color();
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
+    void report_RHS(unsigned int stage, unsigned int iterNM, unsigned int iter);
     void report_forces(std::ofstream &f);
     void report_error(std::ofstream &f);
     void report_turbulent_stats(std::ofstream &f);
 #ifdef _GPU
     void report_gpu_mem_usage();
 #endif
+    void set_conv_file(std::chrono::high_resolution_clock::time_point t1);
     double get_current_time(void);
     void filter_solution();
 

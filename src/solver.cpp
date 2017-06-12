@@ -743,7 +743,7 @@ void FRSolver::setup_update()
     prev_err = 1.;
 
   }
-  else if (input->dt_scheme == "BDF1")
+  else if (input->dt_scheme == "Steady")
   {
     input->nStages = 1;
   }
@@ -1058,7 +1058,7 @@ void FRSolver::solver_data_to_device()
       e->dA_fpts_d = e->dA_fpts;
     }
 
-    if (input->CFL_type == 2)
+    if (input->dt_type != 0 && input->CFL_type == 2)
       e->h_ref_d = e->h_ref;
 
     if (input->viscous)
@@ -1111,30 +1111,37 @@ void FRSolver::solver_data_to_device()
 
     if (input->implicit_method)
     {
+      e->dFdU_spts_d = e->dFdU_spts;
+      e->dFcdU_d = e->dFcdU;
+      if (input->viscous)
+      {
+        e->dFddU_spts_d = e->dFddU_spts;
+        e->dUcdU_d = e->dUcdU;
+        e->dFcddU_d = e->dFcddU;
+      }
+
       e->LHS_d = e->LHS;
       e->RHS_d = e->RHS;
+      e->deltaU_d = e->deltaU;
 
       unsigned int N = e->nSpts * e->nVars;
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
         e->LHS_ptrs(ele) = e->LHS_d.data() + ele * (N * N);
         e->RHS_ptrs(ele) = e->RHS_d.data() + ele * N;
+        e->deltaU_ptrs(ele) = e->deltaU_d.data() + ele * N;
       }
       e->LHS_ptrs_d = e->LHS_ptrs;
       e->RHS_ptrs_d = e->RHS_ptrs;
+      e->deltaU_ptrs_d = e->deltaU_ptrs;
       e->LHS_info_d = e->LHS_info;
 
       if (input->linear_solver == INV)
       {
         e->LHSinv_d = e->LHSinv;
-        e->deltaU_d = e->deltaU;
         for (unsigned int ele = 0; ele < e->nEles; ele++)
-        {
           e->LHSinv_ptrs(ele) = e->LHSinv_d.data() + ele * (N * N);
-          e->deltaU_ptrs(ele) = e->deltaU_d.data() + ele * N;
-        }
         e->LHSinv_ptrs_d = e->LHSinv_ptrs;
-        e->deltaU_ptrs_d = e->deltaU_ptrs;
       }
     }
   }
@@ -1216,6 +1223,19 @@ void FRSolver::solver_data_to_device()
   if (input->overset || input->motion)
     faces->coord_d = faces->coord;
 
+  if (input->implicit_method)
+  {
+    faces->dFcdU_bnd_d = faces->dFcdU_bnd;
+    faces->dUbdU_d = faces->dUbdU;
+
+    if (input->viscous)
+    {
+      faces->dUcdU_bnd_d = faces->dUcdU_bnd;
+      faces->dFcddU_bnd_d = faces->dFcddU_bnd;
+      faces->ddUbddU_d = faces->ddUbddU;
+    }
+  }
+
   /* -- Additional data -- */
   /* Input parameters */
   input->V_fs_d = input->V_fs;
@@ -1258,7 +1278,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
   /* MCGS: Extrapolate solution on the previous color */
   std::vector<std::shared_ptr<Elements>> elesObjs;
-  if (input->iterative_method == MCGS && color > -1)
+  if (color > -1)
     elesObjs = elesObjsBC[prev_color];
   else
     elesObjs = this->elesObjs;
@@ -1283,7 +1303,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
   overset_u_send();
 
   /* MCGS: Compute, transform and extrapolate gradient on all colors */
-  if (input->iterative_method == MCGS && color > -1)
+  if (color > -1)
   {
     if (input->viscous)
       elesObjs = this->elesObjs;
@@ -1395,7 +1415,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
     faces->apply_bcs_dU();
 
     /* MCGS: Compute residual on current color */
-    if (input->iterative_method == MCGS && color > -1)
+    if (color > -1)
       elesObjs = elesObjsBC[color];
   }
   else
@@ -1445,19 +1465,70 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
 void FRSolver::compute_dRdU()
 {
-  /* Apply boundary conditions for flux Jacobian */
-  faces->apply_bcs_dFdU();
+  if (!input->FDA_Jacobian)
+  {
+    /* Apply boundary conditions for flux Jacobian */
+    faces->apply_bcs_dFdU();
 
-  /* Compute flux Jacobian at solution points */
-  for (auto e : elesObjs)
-    e->compute_dFdU();
+    /* Compute flux Jacobian at solution points */
+    for (auto e : elesObjs)
+      e->compute_dFdU();
 
-  /* Compute common interface flux Jacobian */
-  faces->compute_common_dFdU(0, geo.nGfpts);
+    /* Compute common interface flux Jacobian */
+    faces->compute_common_dFdU(0, geo.nGfpts);
 
-  /* Compute block diagonal components of flux divergence Jacobian */
-  for (auto e : elesObjs)
-    e->compute_local_dRdU();
+    /* Copy GPU data structures for CPU Jacobian computation */
+#ifdef _GPU
+    for (auto e : elesObjs)
+    {
+      e->dFdU_spts = e->dFdU_spts_d;
+      e->dFcdU = e->dFcdU_d;
+
+      if (input->viscous)
+      {
+        e->dFddU_spts = e->dFddU_spts_d;
+        e->dUcdU = e->dUcdU_d;
+        e->dFcddU = e->dFcddU_d;
+      }
+    }
+#endif
+
+    /* Compute block diagonal components of flux divergence Jacobian */
+    for (auto e : elesObjs)
+      e->compute_local_dRdU();
+  }
+
+  else
+  {
+    /* Compute residual Jacobian using FDA */
+    // Note: This is very expensive! Only for testing.
+    std::cout << "Compute residual Jacobian using FDA..." << std::endl;
+    std::vector<mdvector<double>> U0(elesObjs.size());
+    for (auto e : elesObjs)
+      U0[e->elesObjID] = e->U_spts;
+    mdvector<double> divF;
+    double eps = std::sqrt(std::numeric_limits<double>::epsilon());
+    for (auto e : elesObjs)
+    {
+      divF = e->divF_spts;
+      for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            // Add eps to solution and compute divF
+            e->U_spts = U0[e->elesObjID];
+            e->U_spts(spt, var, ele) += eps;
+            compute_residual(0);
+
+            // Compute LHS implicit Jacobian
+            for (unsigned int vari = 0; vari < e->nVars; vari++)
+              for (unsigned int spti = 0; spti < e->nSpts; spti++)
+                e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
+          }
+      e->U_spts = U0[e->elesObjID];
+      compute_residual(0);
+    }
+  }
 }
 
 void FRSolver::compute_LHS_LU()
@@ -1577,32 +1648,79 @@ void FRSolver::compute_LHS_SVD()
 #endif
 }
 
-void FRSolver::compute_RHS(int color)
+void FRSolver::compute_RHS(unsigned int stage, int color)
 {
   /* MCGS: compute_RHS for a given color */
   std::vector<std::shared_ptr<Elements>> elesObjs;
-  if (input->iterative_method == MCGS && color > -1)
+  if (color > -1)
     elesObjs = elesObjsBC[color];
   else
     elesObjs = this->elesObjs;
 
 #ifdef _CPU
-  for (auto e : elesObjs)
-    for (unsigned int ele = 0; ele < e->nEles; ele++)
-      for (unsigned int var = 0; var < e->nVars; var++)
-        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+  if (input->implicit_steady)
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            e->RHS(ele, var, spt) = -e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
+
+  else
+  {
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            e->RHS(ele, var, spt) = -(e->U_spts(spt, var, ele) - e->U_ini(spt, var, ele));
+
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
-          if (input->dt_type != 2)
-            e->RHS(ele, var, spt) = -(e->dt(0) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
-          else
-            e->RHS(ele, var, spt) = -(e->dt(ele) * e->divF_spts(0, spt, var, ele)) / e->jaco_det_spts(spt, ele);
+          double dt = (input->dt_type != 2) ? e->dt(0) : e->dt(ele);
+          for (unsigned int var = 0; var < e->nVars; var++)
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              for (unsigned int s = 0; s <= stage; s++)
+                e->RHS(ele, var, spt) -= rk_alpha(stage, s) * dt * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
         }
+  }
+
+  if (input->pseudo_time)
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        double dtau = input->dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele));
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            e->RHS(ele, var, spt) *= dtau;
+      }
 #endif
 
 #ifdef _GPU
-  for (auto e : elesObjs)
-    compute_RHS_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->RHS_d, input->dt_type, 
-        e->nSpts, e->nEles, e->nVars);
+  if (input->implicit_steady)
+  {
+    /* Compute RHS in deltaU (in-place solve) */
+    if (input->linear_solver == LU)
+      for (auto e : elesObjs)
+        compute_RHS_steady_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->deltaU_d, 
+            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars);
+    else
+      for (auto e : elesObjs)
+        compute_RHS_steady_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->RHS_d, 
+            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars);
+  }
+
+  else
+  {
+    /* Compute RHS in deltaU (in-place solve) */
+    if (input->linear_solver == LU)
+      for (auto e : elesObjs)
+        compute_RHS_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_alpha_d, e->deltaU_d, 
+            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
+    else
+      for (auto e : elesObjs)
+        compute_RHS_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_alpha_d, e->RHS_d, 
+            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
+  }
 #endif
 }
 
@@ -1610,7 +1728,7 @@ void FRSolver::compute_deltaU(int color)
 {
   /* MCGS: compute_deltaU for a given color */
   std::vector<std::shared_ptr<Elements>> elesObjs;
-  if (input->iterative_method == MCGS && color > -1)
+  if (color > -1)
     elesObjs = elesObjsBC[color];
   else
     elesObjs = this->elesObjs;
@@ -1707,7 +1825,7 @@ void FRSolver::compute_deltaU(int color)
       int info;
       unsigned int N = e->nSpts * e->nVars;
       cublasDgetrsBatched_trans_wrapper(N, 1, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
-          e->RHS_ptrs_d.data(), N, &info, e->nEles);
+          e->deltaU_ptrs_d.data(), N, &info, e->nEles);
 
       if (info) ThrowException("cuBLAS batch LU solve failed!");
     }
@@ -1735,7 +1853,7 @@ void FRSolver::compute_U(int color)
 {
   /* MCGS: compute_U for a given color */
   std::vector<std::shared_ptr<Elements>> elesObjs;
-  if (input->iterative_method == MCGS && color > -1)
+  if (color > -1)
     elesObjs = elesObjsBC[color];
   else
     elesObjs = this->elesObjs;
@@ -1749,18 +1867,8 @@ void FRSolver::compute_U(int color)
 #endif
 
 #ifdef _GPU
-  if (input->linear_solver == LU)
-  {
-    /* Note: RHS contains deltaU */
-    for (auto e : elesObjs)
-      compute_U_wrapper(e->U_spts_d, e->RHS_d, e->nSpts, e->nEles, e->nVars);
-  }
-
-  else
-  {
-    for (auto e : elesObjs)
-      compute_U_wrapper(e->U_spts_d, e->deltaU_d, e->nSpts, e->nEles, e->nVars);
-  }
+  for (auto e : elesObjs)
+    compute_U_wrapper(e->U_spts_d, e->deltaU_d, e->nSpts, e->nEles, e->nVars);
 #endif
 }
 
@@ -1822,6 +1930,24 @@ void FRSolver::setup_views()
     }
   }
 
+#ifdef _GPU
+  mdvector<double*> dFcdU_base_ptrs_d;
+  mdvector<unsigned int> dFcdU_strides_d;
+  mdvector<double*> dUcdU_base_ptrs_d, dFcddU_base_ptrs_d;
+  mdvector<unsigned int> dFcddU_strides_d;
+  if (input->implicit_method)
+  {
+    dFcdU_base_ptrs_d.assign({2 * geo.nGfpts});
+    dFcdU_strides_d.assign({2, 2 * geo.nGfpts});
+    if (input->viscous)
+    {
+      dUcdU_base_ptrs_d.assign({2 * geo.nGfpts});
+      dFcddU_base_ptrs_d.assign({2 * geo.nGfpts});
+      dFcddU_strides_d.assign({4, 2 * geo.nGfpts});
+    }
+  }
+#endif
+
   /* Set pointers for internal faces */
   for (auto e : elesObjs)
   {
@@ -1869,6 +1995,11 @@ void FRSolver::setup_views()
           dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
           dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
           dFcdU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(2);
+#ifdef _GPU
+          dFcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_ptr(ele, 0, 0, fpt);
+          dFcdU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_stride(1);
+          dFcdU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_stride(2);
+#endif
 
           if (input->viscous)
           {
@@ -1878,6 +2009,14 @@ void FRSolver::setup_views()
             dFcddU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(2);
             dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(3);
             dFcddU_strides(3, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(4);
+#ifdef _GPU
+            dUcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dUcdU_d.get_ptr(ele, 0, 0, fpt);
+            dFcddU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_ptr(ele, 0, 0, 0, 0, fpt);
+            dFcddU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(1);
+            dFcddU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(2);
+            dFcddU_strides_d(2, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(3);
+            dFcddU_strides_d(3, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(4);
+#endif
           }
         }
       }
@@ -1925,7 +2064,6 @@ void FRSolver::setup_views()
       dU_strides_d(0, gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_stride(1);
       dU_strides_d(1, gfpt + 1 * geo.nGfpts) = faces->dU_bnd_d.get_stride(2);
 #endif
-    
     }
 
     /* Set pointers for remaining faces for implicit */
@@ -1934,6 +2072,11 @@ void FRSolver::setup_views()
       dFcdU_base_ptrs(gfpt + 1 * geo.nGfpts) = &faces->dFcdU_bnd(0, 0, i);
       dFcdU_strides(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(1);
       dFcdU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd.get_stride(2);
+#ifdef _GPU
+      dFcdU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd_d.get_ptr(0, 0, i);
+      dFcdU_strides_d(0, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd_d.get_stride(1);
+      dFcdU_strides_d(1, gfpt + 1 * geo.nGfpts) = faces->dFcdU_bnd_d.get_stride(2);
+#endif
 
       if (input->viscous)
       {
@@ -1943,6 +2086,14 @@ void FRSolver::setup_views()
         dFcddU_strides(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(2);
         dFcddU_strides(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(3);
         dFcddU_strides(3, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd.get_stride(4);
+#ifdef _GPU
+        dUcdU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dUcdU_bnd_d.get_ptr(0, 0, i);
+        dFcddU_base_ptrs_d(gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_ptr(0, 0, 0, 0, i);
+        dFcddU_strides_d(0, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(1);
+        dFcddU_strides_d(1, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(2);
+        dFcddU_strides_d(2, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(3);
+        dFcddU_strides_d(3, gfpt + 1 * geo.nGfpts) = faces->dFcddU_bnd_d.get_stride(4);
+#endif
       }
     }
 
@@ -1979,6 +2130,15 @@ void FRSolver::setup_views()
       faces->dUcdU.assign(dUcdU_base_ptrs, dFcdU_strides, geo.nGfpts);
       faces->dFcddU.assign(dFcddU_base_ptrs, dFcddU_strides, geo.nGfpts);
     }
+
+#ifdef _GPU
+    faces->dFcdU_d.assign(dFcdU_base_ptrs_d, dFcdU_strides_d, geo.nGfpts);
+    if (input->viscous)
+    {
+      faces->dUcdU_d.assign(dUcdU_base_ptrs_d, dFcdU_strides_d, geo.nGfpts);
+      faces->dFcddU_d.assign(dFcddU_base_ptrs_d, dFcddU_strides_d, geo.nGfpts);
+    }
+#endif
   }
 }
 
@@ -1991,6 +2151,21 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
+  // Determine whether to turn on implicit output
+  if (input->implicit_method)
+  {
+    if (input->implicit_steady)
+      report_conv_freq = input->report_conv_freq;
+    else
+    {
+      unsigned int iter = (current_iter - restart_iter)+1;
+      if (input->report_freq != 0 && (iter%input->report_freq == 0 || iter == input->n_steps || iter == 1))
+        report_conv_freq = input->report_conv_freq;
+      else
+        report_conv_freq = 0;
+    }
+  }
+
   prev_time = flow_time;
 
   // Update grid to start of time step (if not already done so at previous step)
@@ -2002,8 +2177,8 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   }
   else
   {
-    if (input->dt_scheme == "BDF1")
-      step_MCGS(sourceBT);
+    if (input->dt_scheme == "Steady")
+      step_Steady(0, current_iter+1, sourceBT);
     else if (input->dt_scheme == "DIRK34")
       step_DIRK(sourceBT);
     else if (input->dt_scheme == "RK54")
@@ -2479,157 +2654,195 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 }
 
 #ifdef _CPU
-void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
-void FRSolver::step_MCGS(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
-  /* Sweep through colors and backsweep */
-  for (unsigned int counter = 0; counter < nCounter; counter++)
+  /* Compute residual everywhere before computing Jacobian */
+  compute_residual(stage);
+
+  /* Estimate timestep */
+  if ((!input->implicit_steady || input->pseudo_time) && stage == 0)
   {
-    /* Set color */
-    int color;
-    if (input->iterative_method == JAC)
-      color = -1;
-    else if (input->iterative_method == MCGS)
+    // TODO: Revisit this as it is kind of expensive.
+    if (input->dt_type != 0)
     {
-      color = counter;
-      if (color >= geo.nColors)
-        color = 2*geo.nColors-1 - counter;
-    }
-    else
-      ThrowException("Iterative method not recognized!");
-
-    /* Compute residual and block diagonal Jacobian on all elements */
-    int iter = current_iter - restart_iter;
-    if (counter == 0 && iter % input->Jfreeze_freq == 0)
-    {
-      compute_residual(0);
-
-      /* Copy GPU data structures for CPU Jacobian computation */
-#ifdef _GPU
-      for (auto e : elesObjs)
-      {
-        e->U_spts = e->U_spts_d;
-        e->U_fpts = e->U_fpts_d;
-
-        if (input->viscous)
-        {
-          e->dU_spts = e->dU_spts_d;
-          e->dU_fpts = e->dU_fpts_d;
-        }
-      }
-
-      faces->U_bnd = faces->U_bnd_d;
-      faces->U_bnd_ldg = faces->U_bnd_ldg_d;
-      faces->P = faces->P_d;
-      faces->waveSp = faces->waveSp_d;
-      faces->diffCo = faces->diffCo_d;
-
-      if (input->viscous)
-        faces->dU_bnd = faces->dU_bnd_d;
-#endif
-
-      /* Compute block diagonal components of residual Jacobian */
-      compute_dRdU();
-
-      /* Compute residual Jacobian using FDA */
-      /*
-      std::cout << "Compute residual Jacobian using FDA..." << std::endl;
-      for (auto e : elesObjs)
-        e->U_ini = e->U_spts;
-      compute_residual(0);
-      mdvector<double> divF;
-      double eps = std::sqrt(std::numeric_limits<double>::epsilon());
-      for (auto e : elesObjs)
-      {
-        divF = e->divF_spts;
-        for (unsigned int spt = 0; spt < e->nSpts; spt++)
-          for (unsigned int var = 0; var < e->nVars; var++)
-            for (unsigned int ele = 0; ele < e->nEles; ele++)
-            {
-              // Add eps to solution and compute divF
-              e->U_spts = e->U_ini;
-              e->U_spts(spt, var, ele) += eps;
-              compute_residual(0);
-
-              // Compute LHS implicit Jacobian
-              for (unsigned int vari = 0; vari < e->nVars; vari++)
-                for (unsigned int spti = 0; spti < e->nSpts; spti++)
-                  e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
-            }
-        e->U_spts = e->U_ini;
-        compute_residual(0);
-      }
-      */
-
-      // TODO: Revisit this as it is kind of expensive.
-      if (input->dt_type != 0)
-        compute_element_dt();
+      compute_element_dt();
 
 #ifdef _GPU
-      for (auto e : elesObjs)
-        e->dt = e->dt_d;
+    for (auto e : elesObjs)
+      e->dt = e->dt_d;
 #endif
-
-      /* Compute Backward Euler LHS */
-      for (auto e : elesObjs)
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-          for (unsigned int vari = 0; vari < e->nVars; vari++)
-            for (unsigned int spti = 0; spti < e->nSpts; spti++)
-              for (unsigned int varj = 0; varj < e->nVars; varj++)
-                for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
-                {
-                  if (input->dt_type != 2)
-                    e->LHS(ele, vari, spti, varj, sptj) *= e->dt(0) / e->jaco_det_spts(spti, ele);
-                  else
-                    e->LHS(ele, vari, spti, varj, sptj) *= e->dt(ele) / e->jaco_det_spts(spti, ele); 
-
-                  if (spti == sptj && vari == varj)
-                    e->LHS(ele, vari, spti, varj, sptj) += 1;
-                }
-
-      /* Write LHS */
-      if (input->write_LHS)
-        write_LHS(input->output_prefix);
-
-      /* Copy LHS to GPU */
-#ifdef _GPU
-      for (auto e : elesObjs)
-        e->LHS_d = e->LHS;
-#endif
-
-      /* Setup linear solver */
-      if (input->linear_solver == LU)
-        compute_LHS_LU();
-      else if (input->linear_solver == INV)
-        compute_LHS_inverse();
-      else if (input->linear_solver == SVD)
-        compute_LHS_SVD();
-      else
-        ThrowException("Linear solver not recognized!");
     }
     
-    /* Compute residual on elements of this color only */
-    else
+    /* Set flow time of current stage */
+    if (!input->implicit_steady)
+      flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+  }
+
+  /* Compute block diagonal components of residual Jacobian */
+  compute_dRdU();
+
+  /* If unsteady, compute LHS for stage */
+  if (!input->implicit_steady)
+  {
+    /* Compute stage LHS */
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        double dt = (input->dt_type != 2) ? e->dt(0) : e->dt(ele);
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+            for (unsigned int varj = 0; varj < e->nVars; varj++)
+              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+              {
+                e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * dt;
+                if (spti == sptj && vari == varj)
+                  e->LHS(ele, vari, spti, varj, sptj) += 1;
+              }
+      }
+  }
+
+  /* Apply pseudo timestepping */
+  if (input->pseudo_time)
+  {
+    /* Adapt dtau_ratio */
+    // FIXME: Restart dtau_ratio
+    if (input->adapt_dtau && (current_iter - restart_iter) != 0)
     {
-      compute_residual(0, color);
+      input->dtau_ratio *= (1.0 + input->dtau_growth_rate);
+      if (input->dtau_ratio > input->dtau_ratio_max)
+        input->dtau_ratio = input->dtau_ratio_max;
     }
-    prev_color = color;
 
-    /* Prepare RHS vector */
-    compute_RHS(color);
+    /* Apply pseudo time to LHS */
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        double dtau = input->dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele));
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+            for (unsigned int varj = 0; varj < e->nVars; varj++)
+              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+              {
+                e->LHS(ele, vari, spti, varj, sptj) *= dtau;
+                if (spti == sptj && vari == varj)
+                  e->LHS(ele, vari, spti, varj, sptj) += 1;
+              }
+      }
+  }
 
-    /* Write RHS */
-    if (input->write_RHS)
-      write_RHS(input->output_prefix);
+  /* Write LHS */
+  if (input->write_LHS)
+    write_LHS(input->output_prefix);
 
-    /* Solve system for deltaU */
-    compute_deltaU(color);
+  /* Copy LHS to GPU */
+#ifdef _GPU
+  for (auto e : elesObjs)
+    e->LHS_d = e->LHS;
+#endif
 
-    /* Add deltaU to solution */
-    compute_U(color);
+  /* Setup linear solver */
+  if (input->linear_solver == LU)
+    compute_LHS_LU();
+  else if (input->linear_solver == INV)
+    compute_LHS_inverse();
+  else if (input->linear_solver == SVD)
+    compute_LHS_SVD();
+  else
+    ThrowException("Linear solver not recognized!");
+
+  /* Block Iterative Method */
+  unsigned int iterBM_max = input->Jfreeze_freq;
+  for (unsigned int iterBM = 1; (iterBM <= iterBM_max) && (res_max > input->res_tol); iterBM++)
+  {
+    /* Sweep through colors and backsweep */
+    for (unsigned int counter = 0; counter < nCounter; counter++)
+    {
+      /* Set color */
+      int color;
+      if (input->iterative_method == JAC)
+        color = -1;
+      else if (input->iterative_method == MCGS)
+      {
+        color = counter;
+        if (color >= geo.nColors)
+          color = 2*geo.nColors-1 - counter;
+      }
+      else
+        ThrowException("Iterative method not recognized!");
+
+      /* Compute residual */
+      // FIXME: fix iterBM, include counter
+      if (iterBM > 0)
+        compute_residual(stage, color);
+      prev_color = color;
+
+      /* Compute RHS */
+      compute_RHS(stage, color);
+
+#ifdef _GPU
+      /* If running on GPU, copy out RHS for residual */
+      if (report_conv_freq != 0 && (iterBM%report_conv_freq == 0 || iterBM == iterBM_max || iterNM*iterBM == 1))
+      {
+        /* MCGS: Copy RHS for a given color */
+        std::vector<std::shared_ptr<Elements>> elesObjs;
+        if (color > -1)
+          elesObjs = elesObjsBC[color];
+        else
+          elesObjs = this->elesObjs;
+
+        /* If LU, RHS in deltaU */
+        if (input->linear_solver == LU)
+          for (auto e : elesObjs)
+            e->RHS = e->deltaU_d;
+        else
+          for (auto e : elesObjs)
+            e->RHS = e->RHS_d;
+      }
+#endif
+
+      /* Write RHS */
+      if (input->write_RHS)
+        write_RHS(input->output_prefix);
+
+      /* Solve system for deltaU */
+      compute_deltaU(color);
+
+      /* Add deltaU to solution */
+      compute_U(color);
+    }
+
+    /* Write residual to convergence file */
+    if (report_conv_freq != 0 && (iterBM%report_conv_freq == 0 || iterBM == iterBM_max || iterNM*iterBM == 1))
+      report_RHS(stage, iterNM, iterBM);
+
+    /* Compute L2 norm of deltaU */
+    /*
+    if (iterBM % resBM_freq == 0)
+    {
+      resBM_max = 0;
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int var = 0; var < e->nVars; var++)
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              resBM_max += e->deltaU(ele, var, spt) * e->deltaU(ele, var, spt);
+
+      unsigned int nDoF = 0;
+      for (auto e : elesObjs)
+        nDoF += (e->nEles * e->nVars * e->nSpts);
+      resBM_max = std::sqrt(resBM_max) / nDoF;
+
+      if ((iterBM == iterBM_max) || (resBM_max < resBM_tol))
+      {
+        std::cout << "L2 deltaU: " << std::setw(6) << std::left << iterBM << " ";
+        std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << resBM_max << " ";
+        std::cout << std::endl;
+      }
+    }
+    */
   }
 }
 
@@ -2640,111 +2853,28 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
-#ifdef _GPU
-  ThrowException("DIRK schemes not yet implemented for GPU!");
-#endif
-
+#ifdef _CPU
   for (auto e : elesObjs)
     e->U_ini = e->U_spts;
+#endif
+
+#ifdef _GPU
+  for (auto e : elesObjs)
+    device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
+  check_error();
+#endif
 
   /* Main stage loop */
   for (unsigned int stage = 0; stage < input->nStages; stage++)
   {
-    compute_residual(stage);
-
-    /* Compute block diagonal components of residual Jacobian */
-    compute_dRdU();
-
-    /* If in first stage, compute stable timestep */
-    // TODO: Revisit this as it is kind of expensive.
-    if (stage == 0 && input->dt_type != 0)
-      compute_element_dt();
-    flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
-
-    /* Compute LHS */
-    for (auto e : elesObjs)
-      for (unsigned int ele = 0; ele < e->nEles; ele++)
-        for (unsigned int vari = 0; vari < e->nVars; vari++)
-          for (unsigned int spti = 0; spti < e->nSpts; spti++)
-            for (unsigned int varj = 0; varj < e->nVars; varj++)
-              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
-              {
-                if (input->dt_type != 2)
-                  e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * e->dt(0) / e->jaco_det_spts(spti, ele);
-                else
-                  e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * e->dt(ele) / e->jaco_det_spts(spti, ele); 
-
-                if (spti == sptj && vari == varj)
-                  e->LHS(ele, vari, spti, varj, sptj) += 1;
-              }
-
-    /* Setup linear solver */
-    if (input->linear_solver == LU)
-      compute_LHS_LU();
-    else if (input->linear_solver == INV)
-      compute_LHS_inverse();
-    else if (input->linear_solver == SVD)
-      compute_LHS_SVD();
-    else
-      ThrowException("Linear solver not recognized!");
-
-    /* Block Iterative Method */
-    double resBM_max = 1.0;
-    double resBM_tol = 1e-11;
-    unsigned int resBM_freq = 10;
-    unsigned int iterBM_max = 1000;
-    for (unsigned int iterBM = 0; (iterBM <= iterBM_max) && (resBM_max > resBM_tol); iterBM++)
-    {
-      /* Compute RHS */
-      for (auto e : elesObjs)
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-          for (unsigned int var = 0; var < e->nVars; var++)
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
-              e->RHS(ele, var, spt) = -(e->U_spts(spt, var, ele) - e->U_ini(spt, var, ele));
-
-      for (unsigned int s = 0; s <= stage; s++)
-        for (auto e : elesObjs)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
-            for (unsigned int var = 0; var < e->nVars; var++)
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
-              {
-                if (input->dt_type != 2)
-                  e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->dt(0) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
-                else
-                  e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->dt(ele) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
-              }
-
-      /* Solve system for deltaU */
-      compute_deltaU();
-
-      /* Add deltaU to solution */
-      compute_U();
-
-      /* Recompute residual */
-      compute_residual(stage);
-
-      /* Report L2 norm of deltaU */
-      if (iterBM % resBM_freq == 0)
-      {
-        resBM_max = 0;
-        for (auto e : elesObjs)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
-            for (unsigned int var = 0; var < e->nVars; var++)
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
-                resBM_max += e->deltaU(ele, var, spt) * e->deltaU(ele, var, spt);
-
-        unsigned int nDoF = 0;
-        for (auto e : elesObjs)
-          nDoF += (e->nEles * e->nVars * e->nSpts);
-        resBM_max = std::sqrt(resBM_max) / nDoF;
-
-        std::cout << std::setw(6) << std::left << iterBM << " ";
-        std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << resBM_max << " ";
-        std::cout << std::endl;
-      }
-    }
+    /* Newton's Method */
+    unsigned int iterNM_max = 1;
+    for (unsigned int iterNM = 1; (iterNM <= iterNM_max) && (res_max > input->res_tol); iterNM++)
+      step_Steady(stage, iterNM, sourceBT);
+    //compute_residual(stage);
   }
 
+#ifdef _CPU
   for (auto e : elesObjs)
     e->U_spts = e->U_ini;
 
@@ -2760,26 +2890,22 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
             else
               e->U_spts(spt, var, ele) -= rk_beta(stage) * e->dt(ele) * e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
           }
+#endif
+
+#ifdef _GPU
+  for (auto e : elesObjs)
+    device_copy(e->U_spts_d, e->U_ini_d, e->U_spts_d.max_size());
+
+  for (auto e : elesObjs)
+    DIRK_update_wrapper(e->U_spts_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_beta_d, input->dt_type, 
+        e->nSpts, e->nEles, e->nVars, e->nDims, input->equation, input->nStages);
+
+  check_error();
+#endif
 }
 
 void FRSolver::compute_element_dt()
 {
-  /* Adapt CFL number */
-  double CFL;
-  if (input->adapt_CFL)
-  {
-    CFL_ratio *= input->CFL_ratio;
-    CFL = input->CFL * CFL_ratio;
-    if (CFL > input->CFL_max)
-    {
-      CFL = input->CFL_max;
-    }
-  }
-  else
-  {
-    CFL = input->CFL;
-  }
-
 #ifdef _CPU
   /* CFL-estimate used by Liang, Lohner, and others. Factor of 2 to be 
    * consistent with 1D CFL estimates. */
@@ -2801,7 +2927,7 @@ void FRSolver::compute_element_dt()
           int_waveSp += e->weights_fpts(fpt % e->nFptsPerFace) * faces->waveSp(gfpt) * faces->dA(slot, gfpt); 
         }
 
-        e->dt(ele) = 2.0 * CFL * get_cfl_limit_adv(order) * e->vol(ele) / int_waveSp;
+        e->dt(ele) = 2.0 * input->CFL * get_cfl_limit_adv(order) * e->vol(ele) / int_waveSp;
       }
     }
   }
@@ -2836,7 +2962,7 @@ void FRSolver::compute_element_dt()
           dtinv[0] = std::max(dtinv[0], dtinv[2]);
           dtinv[1] = std::max(dtinv[1], dtinv[3]);
 
-          e->dt(ele) = CFL / (dtinv[0] + dtinv[1]);
+          e->dt(ele) = input->CFL / (dtinv[0] + dtinv[1]);
         }
         else
         {
@@ -2845,7 +2971,7 @@ void FRSolver::compute_element_dt()
           dtinv[2] = std::max(dtinv[4],dtinv[5]);
 
           /// NOTE: this seems ultra-conservative.  Need additional scaling factor?
-          e->dt(ele) = CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
+          e->dt(ele) = input->CFL / (dtinv[0] + dtinv[1] + dtinv[2]); // * 32; = empirically-found factor for sphere
         }
       }
     }
@@ -2879,7 +3005,7 @@ void FRSolver::compute_element_dt()
   for (auto e : elesObjs)
   {
     compute_element_dt_wrapper(e->dt_d, faces->waveSp_d, faces->diffCo_d, faces->dA_d, geo.fpt2gfptBT_d[e->etype], 
-        geo.fpt2gfpt_slotBT_d[e->etype], e->weights_fpts_d, e->vol_d, e->h_ref_d, e->nFptsPerFace, CFL, input->ldg_b, order, 
+        geo.fpt2gfpt_slotBT_d[e->etype], e->weights_fpts_d, e->vol_d, e->h_ref_d, e->nFptsPerFace, input->CFL, input->ldg_b, order, 
         input->dt_type, input->CFL_type, e->nFpts, e->nEles, e->nDims, e->startEle, myComm,
         input->overset, geo.iblank_cell_d.data());
   }
@@ -5081,9 +5207,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 #endif
 
   std::vector<double> res(elesObjs[0]->nVars,0.0);
-
-  unsigned int nEles = 0;
-
   for (auto e : elesObjs)
   {
     for (unsigned int n = 0; n < e->nVars; n++)
@@ -5118,7 +5241,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
             ThrowException("NaN in residual");
           }
         }
-        if (n == 0) nEles++;
       }
     }
   }
@@ -5207,6 +5329,147 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     for (auto val : res)
       f << val / nDoF << " ";
     f << std::endl;
+
+    /* Store maximum residual */
+    res_max = res[0] / nDoF;
+  }
+
+#ifdef _MPI
+  /* Broadcast maximum residual */
+  MPI_Bcast(&res_max, 1, MPI_DOUBLE, 0, myComm);
+#endif
+}
+
+void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int iterBM)
+{
+  std::vector<double> res(elesObjs[0]->nVars, 0.0);
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+    {
+      double dtau = input->pseudo_time ? 
+        (input->dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele))) : 1.0;
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          if (input->res_type == 0)
+            res[var] = std::max(res[var], std::abs(e->RHS(ele, var, spt) / dtau));
+
+          else if (input->res_type == 1)
+            res[var] += std::abs(e->RHS(ele, var, spt) / dtau);
+
+          else if (input->res_type == 2)
+            res[var] += (e->RHS(ele, var, spt) * e->RHS(ele, var, spt)) / (dtau*dtau);
+
+          if (std::isnan(res[var]))
+          {
+            std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << ", var " << var << std::endl;
+            for (int i = 0; i < std::min(8,(int)e->nNodes); i++)
+            {
+              if (geo.nDims == 3)
+                printf("%f %f %f\n",e->nodes(i,0,ele),e->nodes(i,1,ele),e->nodes(i,2,ele));
+              else
+                printf("%f %f\n",e->nodes(i,0,ele),e->nodes(i,1,ele));
+            }
+            ThrowException("NaN in residual");
+          }
+        }
+    }
+
+  unsigned int nDoF = 0;
+  for (auto e : elesObjs)
+    nDoF += (e->nSpts * e->nEles);
+
+#ifdef _MPI
+  MPI_Op oper = MPI_SUM;
+  if (input->res_type == 0)
+    oper = MPI_MAX;
+
+  if (input->rank == 0)
+  {
+    MPI_Reduce(MPI_IN_PLACE, res.data(), elesObjs[0]->nVars, MPI_DOUBLE, oper, 0, myComm);
+    MPI_Reduce(MPI_IN_PLACE, &nDoF, 1, MPI_INT, MPI_SUM, 0, myComm);
+  }
+  else
+  {
+    MPI_Reduce(res.data(), res.data(), elesObjs[0]->nVars, MPI_DOUBLE, oper, 0, myComm);
+    MPI_Reduce(&nDoF, &nDoF, 1, MPI_INT, MPI_SUM, 0, myComm);
+  }
+#endif
+
+  double minDT = INFINITY; double maxDT = 0.0; 
+  if (input->dt_type == 2)
+  {
+    for (auto e : elesObjs)
+    {
+      minDT = std::min(minDT, *std::min_element(e->dt.data(), e->dt.data() + e->nEles));
+      maxDT = std::max(maxDT, *std::max_element(e->dt.data(), e->dt.data() + e->nEles));
+    }
+
+#ifdef _MPI
+    if (input->rank == 0)
+    {
+      MPI_Reduce(MPI_IN_PLACE, &minDT, 1, MPI_DOUBLE, MPI_MIN, 0, myComm);
+      MPI_Reduce(MPI_IN_PLACE, &maxDT, 1, MPI_DOUBLE, MPI_MAX, 0, myComm);
+    }
+    else
+    {
+      MPI_Reduce(&minDT, &minDT, 1, MPI_DOUBLE, MPI_MIN, 0, myComm);
+      MPI_Reduce(&maxDT, &maxDT, 1, MPI_DOUBLE, MPI_MAX, 0, myComm);
+    }
+#endif
+  }
+
+  /* Print residual to terminal (normalized by number of solution points) */
+  if (input->rank == 0) 
+  {
+    if (input->res_type == 2)
+      std::transform(res.begin(), res.end(), res.begin(), (double(*)(double)) std::sqrt);
+
+    if ((stage+1) * iterNM * iterBM == 1)
+    {
+      std::cout << std::endl;
+      if (!input->implicit_steady)
+        std::cout << "Stage ";
+      std::cout << "IterNM IterBM ";
+      if (input->equation == AdvDiff)
+        std::cout << "Res[U]" << std::endl;
+      else if (input->equation == EulerNS)
+      {
+        std::cout << "Res[Rho]        Res[xMom]       Res[yMom]       ";
+        if (geo.nDims == 3)
+          std::cout << "Res[zMom]       ";
+        std::cout << "Res[Energy]" << std::endl;
+      }
+    }
+
+    if (!input->implicit_steady)
+      std::cout << std::setw(5) << std::left << stage << " ";
+    std::cout << std::setw(6) << std::left << iterNM << " ";
+    std::cout << std::setw(6) << std::left << iterBM << " ";
+    for (auto val : res)
+      std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << val / nDoF << " ";
+
+    if (input->pseudo_time)
+    {
+      if (input->dt_type == 2)
+      {
+        std::cout << "dtau: " << input->dtau_ratio * minDT << " (min) ";
+        std::cout << input->dtau_ratio * maxDT << " (max)";
+      }
+      else
+        std::cout << "dtau: " << input->dtau_ratio * elesObjs[0]->dt(0);
+    }
+    std::cout << std::endl;
+    
+    /* Write to convergence file */
+    if (!input->implicit_steady)
+      conv_file << current_iter+1 << " " << stage << " ";
+    auto timer2 = std::chrono::high_resolution_clock::now();
+    auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(timer2-this->timer1);
+    conv_file << iterNM << " " << iterBM << " " << std::scientific << current_runtime.count() << " ";
+    for (auto val : res)
+      conv_file << val / nDoF << " ";
+    conv_file << std::endl;
 
     /* Store maximum residual */
     res_max = res[0] / nDoF;
@@ -6402,6 +6665,15 @@ void FRSolver::report_gpu_mem_usage()
 #endif
 }
 #endif
+
+void FRSolver::set_conv_file(std::chrono::high_resolution_clock::time_point t1)
+{
+  if (input->restart)
+    this->conv_file.open(input->output_prefix + "/" + input->output_prefix + "_conv.dat", std::ios::app);
+  else
+    this->conv_file.open(input->output_prefix + "/" + input->output_prefix + "_conv.dat");
+  this->timer1 = t1;
+}
 
 double FRSolver::get_current_time(void)
 {

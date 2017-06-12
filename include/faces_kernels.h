@@ -35,6 +35,12 @@ void apply_bcs_dU_wrapper(mdview_gpu<double> &dU, mdview_gpu<double> &U, mdvecto
     unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, 
     unsigned int nDims, mdvector_gpu<char> &gfpt2bnd, unsigned int equation);
 
+/* Face boundary conditions kernel wrappers (Implicit Method) */
+void apply_bcs_dFdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dUbdU, mdvector_gpu<double> &ddUbddU,
+    unsigned int nFpts, unsigned int nGfpts_int, unsigned int nGfpts_bnd, unsigned int nVars, unsigned int nDims, 
+    bool viscous, double rho_fs, mdvector_gpu<double> &V_fs, double P_fs, double gamma, double R_ref, double T_wall, 
+    mdvector_gpu<double> &V_wall, mdvector_gpu<double> &norm, mdvector_gpu<char> &gfpt2bnd, unsigned int equation);
+
 /* Face common value kernel wrappers */
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars,
@@ -50,10 +56,11 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
     bool viscous, bool motion, bool overset = false, int* iblank = NULL);
 
 /* Face common value kernel wrappers (Implicit Method) */
-void rusanov_dFcdU_wrapper(mdview_gpu<double> &U, mdvector_gpu<double> &dFdUconv, 
-    mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &P, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
-    mdvector_gpu<char> &rus_bias, double gamma, double rus_k, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt);
+void compute_common_dFdU_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU, mdview_gpu<double> &dFcdU, mdview_gpu<double> &dUcdU, mdview_gpu<double> &dFcddU,
+    mdvector_gpu<double> &dUbdU, mdvector_gpu<double> &ddUbddU, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
+    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias,  
+    mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double rus_k, double mu, double prandtl, double beta, double tau, 
+    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool viscous);
 
 
 #endif /* faces_kernels_h */
