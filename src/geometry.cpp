@@ -2155,6 +2155,10 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.nElesBT[etype] = dims[1];
     geo.eleType.assign({geo.nEles}, etype);
 
+    geo.eleID[etype].assign({geo.nEles});
+    for (int ele = 0; ele < geo.nEles; ele++)
+      geo.eleID[etype](ele) = ele;
+
     if (etype == HEX)
     {
       int nSide = cbrt(geo.nNodesPerEleBT[etype]);
