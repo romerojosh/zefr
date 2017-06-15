@@ -1218,7 +1218,7 @@ __global__
 void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm, 
     const mdvector_gpu<double> norm, double beta, unsigned int nFpts,
     const mdvector_gpu<char> LDG_bias, unsigned int startFpt, unsigned int endFpt,
-    bool overset = false, const int* iblank = NULL)
+    const mdvector_gpu<char> flip_beta, bool overset = false, const int* iblank = NULL)
 {
     const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -1233,16 +1233,18 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
         return;
 
     /* Setting sign of beta (from HiFiLES) */
-    if (nDims == 2)
-    {
-      if (norm(0, fpt) + norm(1, fpt) < 0.0)
-        beta = -beta;
-    }
-    else if (nDims == 3)
-    {
-      if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
-        beta = -beta;
-    }
+    //if (nDims == 2)
+    //{
+    //  if (norm(0, fpt) + norm(1, fpt) < 0.0)
+    //    beta = -beta;
+    //}
+    //else if (nDims == 3)
+    //{
+    //  if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
+    //    beta = -beta;
+    //}
+
+    beta *= flip_beta(fpt);
 
     if (LDG_bias(fpt) == 0)
     {
@@ -1289,7 +1291,7 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, mdvector_gpu<char> &LDG_bias, unsigned int startFpt,
-    unsigned int endFpt, bool overset, int* iblank) 
+    unsigned int endFpt, mdvector_gpu<char> &flip_beta, bool overset, int* iblank) 
 {
   unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
@@ -1298,19 +1300,19 @@ void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Uco
   {
     if (nDims == 2)
       compute_common_U_LDG<2, 1><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
-          LDG_bias, startFpt, endFpt);
+          LDG_bias, startFpt, endFpt, flip_beta);
     else
       compute_common_U_LDG<3, 1><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
-          LDG_bias, startFpt, endFpt, overset, iblank);
+          LDG_bias, startFpt, endFpt, flip_beta, overset, iblank);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       compute_common_U_LDG<2, 4><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
-          LDG_bias, startFpt, endFpt);
+          LDG_bias, startFpt, endFpt, flip_beta);
     else
       compute_common_U_LDG<3, 5><<<blocks, threads>>>(U, Ucomm, norm, beta, nFpts,
-          LDG_bias, startFpt, endFpt, overset, iblank);
+          LDG_bias, startFpt, endFpt, flip_beta, overset, iblank);
   }
 
 }
@@ -1472,7 +1474,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<double> diffCo,
     mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias,  mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double AdvDiff_D, double gamma, double rus_k, 
     double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nFpts_int,
-    unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, bool viscous, bool motion, bool overset, int* iblank)
+    unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<char> flip_beta, bool motion, bool overset, int* iblank)
 {
 
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -1526,16 +1528,17 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     char LDG_bias_ = LDG_bias(fpt);
 
     /* Setting sign of beta (from HiFiLES) */
-    if (nDims == 2)
-    {
-      if (norm[0] + norm[1] < 0.0)
-        beta = -beta;
-    }
-    else if (nDims == 3)
-    {
-      if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
-        beta = -beta;
-    }
+    //if (nDims == 2)
+    //{
+    //  if (norm[0] + norm[1] < 0.0)
+    //    beta = -beta;
+    //}
+    //else if (nDims == 3)
+    //{
+    //  if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
+    //    beta = -beta;
+    //}
+    beta *= flip_beta(fpt);
 
     if (LDG_bias_ == 0)
     {
@@ -1595,7 +1598,7 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
     mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double AdvDiff_D, double gamma, double rus_k, 
     double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nFpts_int, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, 
-    bool viscous, bool motion, bool overset, int* iblank)
+    bool viscous, mdvector_gpu<char> &flip_beta, bool motion, bool overset, int* iblank)
 {
   unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
@@ -1604,19 +1607,19 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
   {
     if (nDims == 2)
       compute_common_F<1, 2, AdvDiff><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, flip_beta, motion, overset, iblank);
     else
       compute_common_F<1, 3, AdvDiff><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, flip_beta, motion, overset, iblank);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       compute_common_F<4, 2, EulerNS><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, flip_beta, motion, overset, iblank);
     else
       compute_common_F<5, 3, EulerNS><<<blocks, threads>>>(U, U_ldg, dU, Fcomm, P, AdvDiff_A, norm, waveSp, diffCo, rus_bias, LDG_bias, dA, Vg, AdvDiff_D, gamma, rus_k, 
-        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, motion, overset, iblank);
+        mu, prandtl, rt, c_sth, fix_vis, beta, tau, nFpts, nFpts_int, fconv_type, fvisc_type, startFpt, endFpt, viscous, flip_beta, motion, overset, iblank);
   }
 }
 

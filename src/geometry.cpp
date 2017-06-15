@@ -95,7 +95,11 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
       setup_global_fpts(input, geo, order);
   }
   else
+  {
     setup_global_fpts_pyfr(input, geo, order);
+  }
+
+  setup_flip_beta(input, geo);
 
   if (input->implicit_method && input->viscous)
     set_ele_adjacency(geo);
@@ -2743,6 +2747,36 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 
   MPI_Barrier(geo.myComm);
 #endif
+}
+
+void setup_flip_beta(InputStruct *input, GeoStruct &geo)
+{
+  geo.flip_beta.assign({geo.nGfpts}, 1);
+
+  /* Only apply flipping trick if beta = +-0.5 */
+  if (std::abs(input->ldg_b) != 0.5) return;
+
+#ifdef _MPI
+  for (const auto &entry : geo.fpt_buffer_map)
+  {
+    int pairedRank = entry.first;
+    const auto &fpts = entry.second;
+
+    char val = 0;
+    if ((input->rank + pairedRank) % 2)
+    {
+      val = (input->rank > pairedRank) ? 1 : -1;
+    }
+    else
+    {
+      val = (input->rank < pairedRank) ? 1 : -1;
+    }
+
+    for (unsigned int i = 0; i < fpts.size(); i++)
+      geo.flip_beta(fpts(i)) = val;
+  }
+#endif
+
 }
 
 void move_grid(InputStruct *input, GeoStruct &geo, double time)

@@ -126,6 +126,7 @@ struct GeoStruct
   unsigned int nMpiFaces;
   std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
 #endif
+  mdvector<char> flip_beta;
 
 #ifdef _GPU
     std::map<ELE_TYPE, mdvector_gpu<int>> fpt2gfptBT_d;
@@ -133,6 +134,7 @@ struct GeoStruct
     std::map<ELE_TYPE, mdvector_gpu<char>> fpt2gfpt_slotBT_d;
     mdvector_gpu<char> gfpt2bnd_d;
     mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
+    mdvector_gpu<char> flip_beta_d;
 #ifdef _MPI
   std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif
@@ -208,6 +210,7 @@ void set_face_nodes(GeoStruct &geo);
 void couple_periodic_bnds(GeoStruct &geo);
 void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order);
 void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int order);
+void setup_flip_beta(InputStruct *input, GeoStruct &geo);
 void pair_periodic_gfpts(GeoStruct &geo);
 
 /* Methods for Implicit */

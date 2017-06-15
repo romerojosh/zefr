@@ -65,6 +65,9 @@ class Faces
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void rusanov_flux(unsigned int startFpt, unsigned int endFpt);
 
+    template<unsigned int nVars>
+    void compute_common_U(unsigned int startFpt, unsigned int endFpt);
+
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void LDG_flux(unsigned int startFpt, unsigned int endFpt);
 

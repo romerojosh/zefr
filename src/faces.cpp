@@ -1380,6 +1380,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
+template<unsigned int nVars>
 void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 {
   
@@ -1391,26 +1392,47 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
     {
       if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
-      double beta = input->ldg_b;
+      double beta = geo->flip_beta(fpt)*input->ldg_b;
 
 
-      /* Setting sign of beta (from HiFiLES) */
-      if (nDims == 2)
-      {
-        if (norm(0, fpt) + norm(1, fpt) < 0.0)
-          beta = -beta;
-      }
-      else if (nDims == 3)
-      {
-        if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
-          beta = -beta;
-      }
+      ///* Setting sign of beta (from HiFiLES) */
+      //if (nDims == 2)
+      //{
+      //  if (norm(0, fpt) + norm(1, fpt) < 0.0)
+      //    beta = -beta;
+      //}
+      //else if (nDims == 3)
+      //{
+      //  if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
+      //    beta = -beta;
+      //}
 
 
       /* Get left and right state variables */
       /* If interior, allow use of beta factor */
       if (LDG_bias(fpt) == 0)
       {
+        double UL[nVars] = {};
+        double UR[nVars] = {};
+
+        if (beta == 0.5)
+        {
+          for (unsigned int n = 0; n < nVars; n++)
+            UR[n] = U_ldg(1, n, fpt);
+        }
+        else if (beta == -0.5)
+        {
+          for (unsigned int n = 0; n < nVars; n++)
+            UL[n] = U_ldg(0, n, fpt);
+        }
+        else
+        {
+          for (unsigned int n = 0; n < nVars; n++)
+          {
+            UL[n] = U_ldg(0, n, fpt); UR[n] = U_ldg(1, n, fpt);
+          }
+        }
+
         for (unsigned int n = 0; n < nVars; n++)
         {
           double UL = U_ldg(0, n, fpt); double UR = U_ldg(1, n, fpt);
@@ -1436,7 +1458,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
 #ifdef _GPU
     compute_common_U_LDG_wrapper(U_ldg_d, Ucomm_d, norm_d, input->ldg_b, nFpts, nVars, nDims, input->equation, 
-        LDG_bias_d, startFpt, endFpt, input->overset, geo->iblank_fpts_d.data());
+        LDG_bias_d, startFpt, endFpt, geo->flip_beta_d, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
 
@@ -1449,6 +1471,20 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
   }
 }
 
+void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
+{
+  if (input->equation == AdvDiff)
+    compute_common_U<1>(startFpt, endFpt);
+  else if (input->equation == EulerNS)
+  {
+    if (nDims == 2)
+      compute_common_U<4>(startFpt, endFpt);
+    else
+      compute_common_U<5>(startFpt, endFpt);
+  }
+
+}
+
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 {
@@ -1457,8 +1493,6 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
   double UL[nVars];
   double UR[nVars];
-  double dUL[nVars][nDims];
-  double dUR[nVars][nDims];
   double Fc[nVars];
 
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
@@ -1470,30 +1504,61 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == FRINGE)
       iflag = true;
 
-    double beta = input->ldg_b;
+    double beta = geo->flip_beta(fpt)*input->ldg_b;
 
-    /* Setting sign of beta (from HiFiLES) */
-    if (nDims == 2)
-    {
-      if (norm(0, fpt) + norm(1, fpt) < 0.0)
-        beta = -beta;
-    }
-    else if (nDims == 3)
-    {
-      if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
-        beta = -beta;
-    }
+    ///* Setting sign of beta (from HiFiLES) */
+    //if (nDims == 2)
+    //{
+    //  if (norm(0, fpt) + norm(1, fpt) < 0.0)
+    //    beta = -beta;
+    //}
+    //else if (nDims == 3)
+    //{
+    //  if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
+    //    beta = -beta;
+    //}
 
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
       UL[n] = U_ldg(0, n, fpt); UR[n] = iflag ? U(1, n, fpt) : U_ldg(1, n, fpt);
+    }
 
-      for (unsigned int dim = 0; dim < nDims; dim++)
+    double dUL[nVars][nDims] = {{}};
+    double dUR[nVars][nDims] = {{}};
+
+    if (LDG_bias(fpt) == 0)
+    {
+      /* Get left and/or right gradients */
+      if (beta == 0.5)
       {
-        dUL[n][dim] = dU(0, dim, n, fpt);
-        dUR[n][dim] = dU(1, dim, n, fpt);
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int n = 0; n < nVars; n++)
+            dUL[n][dim] = dU(0, dim, n, fpt);
       }
+      else if (beta == -0.5)
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int n = 0; n < nVars; n++)
+            dUR[n][dim] = dU(1, dim, n, fpt);
+      }
+      else
+      {
+        for (unsigned int dim = 0; dim < nDims; dim++)
+        {
+          for (unsigned int n = 0; n < nVars; n++)
+          {
+            dUL[n][dim] = dU(0, dim, n, fpt); dUR[n][dim] = dU(1, dim, n, fpt);
+          }
+        }
+      }
+    }
+    else
+    {
+      /* Get right gradients */
+      for (unsigned int dim = 0; dim < nDims; dim++)
+        for (unsigned int n = 0; n < nVars; n++)
+          dUR[n][dim] = dU(1, dim, n, fpt);
     }
 
     double FL[nVars][nDims] = {{0.0}};
@@ -1612,7 +1677,7 @@ void Faces::compute_common_F(unsigned int startFpt, unsigned int endFpt)
     compute_common_F_wrapper(U_d, U_ldg_d, dU_d, Fcomm_d, P_d, input->AdvDiff_A_d, norm_d, waveSp_d, diffCo_d,
     rus_bias_d, LDG_bias_d,  dA_d, Vg_d, input->AdvDiff_D, input->gamma, input->rus_k, input->mu, input->prandtl, 
     input->rt, input->c_sth, input->fix_vis, input->ldg_b, input->ldg_tau, nFpts, geo->nGfpts_int, nVars, nDims, input->equation, 
-    input->fconv_type, input->fvisc_type, startFpt, endFpt, input->viscous, input->motion, input->overset, geo->iblank_fpts_d.data());
+    input->fconv_type, input->fvisc_type, startFpt, endFpt, input->viscous, geo->flip_beta_d, input->motion, input->overset, geo->iblank_fpts_d.data());
 
     check_error();
 #endif
@@ -2189,6 +2254,9 @@ void Faces::send_dU_data()
     int recvRank = entry.first;
     const auto &fpts = entry.second;
 
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) continue;
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1) continue;
+
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
     ridx++;
   }
@@ -2198,6 +2266,9 @@ void Faces::send_dU_data()
   {
     int sendRank = entry.first;
     const auto &fpts = entry.second;
+
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == -1) continue;
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) continue;
     
     /* Pack buffer of solution data at flux points in list */
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -2222,6 +2293,10 @@ void Faces::send_dU_data()
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
+
+    auto flip = geo->flip_beta(geo->fpt_buffer_map[sendRank](0));
+    if (input->ldg_b == 0.5 and flip == -1) continue;
+    else if (input->ldg_b == -0.5 and flip == 1) continue;
     
     /* Pack buffer of solution data at flux points in list */
     pack_dU_wrapper(U_sbuffs_d[sendRank], fpts, dU_d, nVars, nDims, 0);
@@ -2234,6 +2309,10 @@ void Faces::send_dU_data()
   for (auto &entry : geo->fpt_buffer_map) 
   {
     int pairedRank = entry.first;
+    auto flip = geo->flip_beta(entry.second(0));
+    if (input->ldg_b == 0.5 and flip == -1) continue;
+    else if (input->ldg_b == -0.5 and flip == 1) continue;
+
     copy_from_device(U_sbuffs[pairedRank].data(), U_sbuffs_d[pairedRank].data(), U_sbuffs[pairedRank].max_size(), 1);
   }
 #endif
@@ -2250,6 +2329,8 @@ void Faces::recv_dU_data()
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) continue;
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1) continue;
 
 #ifndef _CUDA_AWARE
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
@@ -2266,6 +2347,8 @@ void Faces::recv_dU_data()
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == -1) continue;
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) continue;
 
     /* Send buffer to paired rank */
 #ifndef _CUDA_AWARE
@@ -2292,6 +2375,8 @@ void Faces::recv_dU_data()
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) continue;
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1) continue;
 
     for (unsigned int dim = 0; dim < nDims; dim++)
     {
@@ -2314,6 +2399,10 @@ void Faces::recv_dU_data()
   for (auto &entry : geo->fpt_buffer_map)
   {
     int pairedRank = entry.first;
+    auto flip = geo->flip_beta(entry.second(0));
+    if (input->ldg_b == 0.5 and flip == 1) continue;
+    else if (input->ldg_b == -0.5 and flip == -1) continue;
+
     copy_to_device(U_rbuffs_d[pairedRank].data(), U_rbuffs[pairedRank].data(), U_rbuffs_d[pairedRank].max_size(), 1);
   }
 #endif
@@ -2324,6 +2413,9 @@ void Faces::recv_dU_data()
   {
     int recvRank = entry.first;
     auto &fpts = entry.second;
+    auto flip = geo->flip_beta(geo->fpt_buffer_map[recvRank](0));
+    if (input->ldg_b == 0.5 and flip == 1) continue;
+    else if (input->ldg_b == -0.5 and flip == -1) continue;
 
     unpack_dU_wrapper(U_rbuffs_d[recvRank], fpts, dU_d, nVars, nDims, 0, input->overset, geo->iblank_fpts_d.data());
   }

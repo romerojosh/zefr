@@ -1027,6 +1027,7 @@ void FRSolver::solver_data_to_device()
       geo.ele2nodesBT_d[etype] = geo.ele2nodesBT[etype];
     }
   }
+  geo.flip_beta_d = geo.flip_beta;
 
   /* -- Element Data -- */
   for (auto e : elesObjs)
