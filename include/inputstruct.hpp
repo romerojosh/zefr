@@ -182,7 +182,7 @@ struct InputStruct
   double dtau_ratio, dtau_growth_rate, dtau_ratio_max;
   unsigned int iterative_method = 0;
   unsigned int linear_solver = 0;
-  unsigned int nColors, Jfreeze_freq, report_conv_freq;
+  unsigned int nColors, Jfreeze_freq, iterNM_max, iterBM_max, report_conv_freq;
   bool backsweep;
   double svd_omg, svd_cutoff;
 
