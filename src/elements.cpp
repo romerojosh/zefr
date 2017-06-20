@@ -1555,14 +1555,26 @@ void Elements::compute_local_dRdU()
             double val = 0;
             for (unsigned int fptk = 0; fptk < nFpts; fptk++)
               val += CtempSF(spti, fptk) * oppE(fptk, sptj);
+#ifdef _CPU
             LHS(ele, vari, spti, varj, sptj) = val;
+#endif
+#ifdef _GPU
+            LHS(ele, varj, sptj, vari, spti) = val;
+#endif
           }
 
         /* Compute Jacobian at solution points */
         for (unsigned int dim = 0; dim < nDims; dim++)
           for (unsigned int spti = 0; spti < nSpts; spti++)
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+            {
+#ifdef _CPU
               LHS(ele, vari, spti, varj, sptj) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
+#endif
+#ifdef _GPU
+              LHS(ele, varj, sptj, vari, spti) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
+#endif
+            }
       }
 
     /* Compute viscous element local Jacobians */
@@ -1646,7 +1658,12 @@ void Elements::compute_local_dRdU()
                 double val = 0;
                 for (unsigned int sptk = 0; sptk < nSpts; sptk++)
                   val += oppD(dim, spti, sptk) * CdFddU0(dim, vari, varj, sptk, sptj);
+#ifdef _CPU
                 LHS(ele, vari, spti, varj, sptj) += val;
+#endif
+#ifdef _GPU
+                LHS(ele, varj, sptj, vari, spti) += val;
+#endif
               }
 
       /* Compute viscous Jacobian at flux points (dFcddU only) */
@@ -1739,7 +1756,12 @@ void Elements::compute_local_dRdU()
               double val = 0;
               for (unsigned int fptk = 0; fptk < nFpts; fptk++)
                 val += oppDiv_fpts(spti, fptk) * CdFcddU0(vari, varj, fptk, sptj);
+#ifdef _CPU
               LHS(ele, vari, spti, varj, sptj) += val;
+#endif
+#ifdef _GPU
+              LHS(ele, varj, sptj, vari, spti) += val;
+#endif
             }
     }
 
@@ -1747,7 +1769,14 @@ void Elements::compute_local_dRdU()
       for (unsigned int spti = 0; spti < nSpts; spti++)
         for (unsigned int varj = 0; varj < nVars; varj++)
           for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+          {
+#ifdef _CPU
             LHS(ele, vari, spti, varj, sptj) /= jaco_det_spts(spti, ele);
+#endif
+#ifdef _GPU
+            LHS(ele, varj, sptj, vari, spti) /= jaco_det_spts(spti, ele);
+#endif
+          }
   }
 }
 

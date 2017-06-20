@@ -367,11 +367,41 @@ void DgemvBatched_noAlpha_noBeta(const int M, const int N, const double** Aarray
 
   for (unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y; batch < batchCount; batch += gridDim.y * blockDim.y)
   {
+    /*
+    // HACK: if N == M
+    __shared__ double xvals[600];
+    for (unsigned int j = tidx; j < N; j += blockDim.x)
+      xvals[j + threadIdx.y*100] = xarray[batch][j * incx];
+
+    __syncthreads(); // To avoid divergence
+
+    double sum[4] = {0};
+    for (unsigned int col = 0; col < N; col++)
+    {
+      unsigned int i = 0;
+      for (unsigned int row = tidx; row < M; row += blockDim.x)
+      {
+        sum[i] += Aarray[batch][row + col*lda] * xvals[col + threadIdx.y*100];
+        i++;
+      }
+    }
+
+    unsigned int i = 0;
+    for (unsigned int row = tidx; row < M; row += blockDim.x)
+    {
+      yarray[batch][row * incy] = sum[i];
+      i++;
+    }
+    */
+
     for (unsigned int i = tidx; i < M; i += blockDim.x)
     { 
       double sum = 0.0;
       for (unsigned int j = 0; j < N; j++)
-        sum += Aarray[batch][i*lda + j] * xarray[batch][j * incx];
+      {
+        //sum += Aarray[batch][i + j*lda] * xvals[j + threadIdx.y*100];
+        sum += Aarray[batch][i + j*lda] * xarray[batch][j * incx];
+      }
 
       yarray[batch][i * incy] = sum;
     }

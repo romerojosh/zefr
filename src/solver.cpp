@@ -1523,7 +1523,14 @@ void FRSolver::compute_dRdU()
             // Compute LHS implicit Jacobian
             for (unsigned int vari = 0; vari < e->nVars; vari++)
               for (unsigned int spti = 0; spti < e->nSpts; spti++)
+              {
+#ifdef _CPU
                 e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
+#endif
+#ifdef _GPU
+                e->LHS(ele, var, spt, vari, spti) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
+#endif
+              }
           }
       e->U_spts = U0[e->elesObjID];
       compute_residual(0);
@@ -1553,6 +1560,7 @@ void FRSolver::compute_LHS_LU()
     unsigned int N = e->nSpts * e->nVars;
     cublasDgetrfBatched_wrapper(N, e->LHS_ptrs_d.data(), N, nullptr, e->LHS_info_d.data(), e->nEles);
   }
+  check_error();
 #endif
 }
 
@@ -1581,7 +1589,7 @@ void FRSolver::compute_LHS_inverse()
     cublasDgetriBatched_wrapper(N, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
         e->LHSinv_ptrs_d.data(), N, e->LHS_info_d.data(), e->nEles);
   }
-
+  check_error();
 #endif
 }
 
@@ -1721,6 +1729,7 @@ void FRSolver::compute_RHS(unsigned int stage, int color)
         compute_RHS_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_alpha_d, e->RHS_d, 
             input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
   }
+  check_error();
 #endif
 }
 
@@ -1824,7 +1833,7 @@ void FRSolver::compute_deltaU(int color)
     {
       int info;
       unsigned int N = e->nSpts * e->nVars;
-      cublasDgetrsBatched_trans_wrapper(N, 1, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
+      cublasDgetrsBatched_wrapper(N, 1, (const double**) e->LHS_ptrs_d.data(), N, nullptr, 
           e->deltaU_ptrs_d.data(), N, &info, e->nEles);
 
       if (info) ThrowException("cuBLAS batch LU solve failed!");
@@ -1846,6 +1855,7 @@ void FRSolver::compute_deltaU(int color)
   {
     ThrowException("Linear solver not recognized!");
   }
+  check_error();
 #endif
 }
 
@@ -1869,6 +1879,7 @@ void FRSolver::compute_U(int color)
 #ifdef _GPU
   for (auto e : elesObjs)
     compute_U_wrapper(e->U_spts_d, e->deltaU_d, e->nSpts, e->nEles, e->nVars);
+  check_error();
 #endif
 }
 
@@ -2664,6 +2675,7 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
   unsigned int iter = (current_iter - restart_iter)+1;
   if (((iter-1)%input->Jfreeze_freq == 0 && stage == 0) || iterNM > 1)
   {
+    PUSH_NVTX_RANGE("compute_Jacobian",0);
     /* Compute residual everywhere before computing Jacobian */
     compute_residual(stage);
 
@@ -2687,12 +2699,15 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     }
 
     /* Compute block diagonal components of residual Jacobian */
+    PUSH_NVTX_RANGE("compute_dRdU",1);
     compute_dRdU();
+    POP_NVTX_RANGE;
 
     /* If unsteady, compute LHS for stage */
     if (!input->implicit_steady)
     {
       /* Compute stage LHS */
+      PUSH_NVTX_RANGE("Compute stage LHS",2);
       for (auto e : elesObjs)
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
@@ -2707,6 +2722,7 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
                     e->LHS(ele, vari, spti, varj, sptj) += 1;
                 }
         }
+      POP_NVTX_RANGE;
     }
 
     /* Apply pseudo timestepping */
@@ -2743,12 +2759,15 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       write_LHS(input->output_prefix);
 
     /* Copy LHS to GPU */
+    PUSH_NVTX_RANGE("Copy LHS",3);
 #ifdef _GPU
     for (auto e : elesObjs)
       e->LHS_d = e->LHS;
 #endif
+    POP_NVTX_RANGE;
 
     /* Setup linear solver */
+    PUSH_NVTX_RANGE("Setup_LHS",4);
     if (input->linear_solver == LU)
       compute_LHS_LU();
     else if (input->linear_solver == INV)
@@ -2757,9 +2776,12 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       compute_LHS_SVD();
     else
       ThrowException("Linear solver not recognized!");
+    POP_NVTX_RANGE;
+    POP_NVTX_RANGE;
   }
 
   /* Block Iterative Method */
+  PUSH_NVTX_RANGE("Block_iter_method",1);
   for (unsigned int iterBM = 1; (iterBM <= input->iterBM_max) && (res_max > input->res_tol); iterBM++)
   {
     /* Sweep through colors and backsweep */
@@ -2847,6 +2869,7 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     }
     */
   }
+  POP_NVTX_RANGE;
 }
 
 #ifdef _CPU
