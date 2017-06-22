@@ -36,7 +36,7 @@ iterative_method MCGS
 nColors 2
 iterBM_max 100
 backsweep 0
-linear_solver LU
+linear_solver INV
 report_conv_freq 100
 
 restart 0

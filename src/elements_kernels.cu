@@ -411,6 +411,120 @@ void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double
   }
 }
 
+
+__global__
+void compute_inv_Jac_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
+    mdvector_gpu<double> oppE, mdvector_gpu<double> dFcdU, unsigned int nSpts, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nEles)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
+
+  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
+  {
+    const unsigned int ele = elevarj / nVars;
+    const unsigned int varj = elevarj % nVars;
+
+    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
+    {
+      const unsigned int vari = varispti / nSpts;
+      const unsigned int spti = varispti % nSpts;
+
+      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+      {
+        double sum = 0.0;
+        for (unsigned int fptk = 0; fptk < nFpts; fptk++)
+          sum += oppDiv_fpts(spti, fptk) * dFcdU(ele, vari, varj, fptk) * oppE(fptk, sptj);
+        LHS(ele, varj, sptj, vari, spti) = sum;
+      }
+    }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void compute_inv_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
+    mdvector_gpu<double> oppE, mdvector_gpu<double> dFcdU, unsigned int nSpts, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nEles)
+{
+  dim3 threads(32, 6);
+  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
+
+  compute_inv_Jac_fpts<<<blocks, threads>>>(LHS, oppDiv_fpts, oppE, dFcdU, nSpts, nFpts, nVars, nEles);
+}
+
+__global__
+void compute_inv_Jac_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+    mdvector_gpu<double> dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
+
+  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
+  {
+    const unsigned int ele = elevarj / nVars;
+    const unsigned int varj = elevarj % nVars;
+
+    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
+    {
+      const unsigned int vari = varispti / nSpts;
+      const unsigned int spti = varispti % nSpts;
+
+      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          LHS(ele, varj, sptj, vari, spti) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
+    }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void compute_inv_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+    mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims)
+{
+  dim3 threads(32, 6);
+  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
+
+  compute_inv_Jac_spts<<<blocks, threads>>>(LHS, oppD, dFdU_spts, nSpts, nVars, nEles, nDims);
+}
+
+__global__
+void scale_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> jaco_det_spts, 
+    unsigned int nSpts, unsigned int nVars, unsigned int nEles)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
+
+  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
+  {
+    const unsigned int ele = elevarj / nVars;
+    const unsigned int varj = elevarj % nVars;
+
+    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
+    {
+      const unsigned int vari = varispti / nSpts;
+      const unsigned int spti = varispti % nSpts;
+      const double jaco_det = jaco_det_spts(spti, ele);
+
+      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+        LHS(ele, varj, sptj, vari, spti) /= jaco_det;
+    }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void scale_Jac_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &jaco_det_spts, 
+    unsigned int nSpts, unsigned int nVars, unsigned int nEles)
+{
+  dim3 threads(32, 6);
+  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
+
+  scale_Jac<<<blocks, threads>>>(LHS, jaco_det_spts, nSpts, nVars, nEles);
+}
+
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__
 void compute_dFdU(mdvector_gpu<double> dFdU_spts, mdvector_gpu<double> dFddU_spts,

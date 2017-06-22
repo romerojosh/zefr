@@ -1538,6 +1538,7 @@ void Elements::compute_unit_advF(unsigned int dim)
 
 void Elements::compute_local_dRdU()
 {
+#ifdef _CPU
   for (unsigned int ele = 0; ele < nEles; ele++)
   {
     /* Compute inviscid element local Jacobians */
@@ -1765,6 +1766,7 @@ void Elements::compute_local_dRdU()
             }
     }
 
+    /* Scale residual Jacobian */
     for (unsigned int vari = 0; vari < nVars; vari++)
       for (unsigned int spti = 0; spti < nSpts; spti++)
         for (unsigned int varj = 0; varj < nVars; varj++)
@@ -1778,6 +1780,32 @@ void Elements::compute_local_dRdU()
 #endif
           }
   }
+#endif
+
+#ifdef _GPU
+  /* Compute inviscid element local Jacobians */
+  /* Compute Jacobian at flux points */
+  compute_inv_Jac_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_d, nSpts, nFpts, nVars, nEles);
+
+  /* Compute Jacobian at solution points */
+  compute_inv_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
+
+//  /* Compute viscous element local Jacobians */
+//  if (input->viscous)
+//  {
+//    /* Compute Jacobian (local gradient contributions) */
+//    compute_visc_Jac_grad_wrapper();
+//
+//    /* Compute Jacobian (neighbor gradient contributions) */
+//    compute_visc_Jac_gradN_wrapper();
+//  }
+
+  /* Scale residual Jacobian */
+  scale_Jac_wrapper(LHS_d, jaco_det_spts_d, nSpts, nVars, nEles);
+
+  check_error();
+
+#endif
 }
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>

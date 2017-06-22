@@ -1478,6 +1478,7 @@ void FRSolver::compute_dRdU()
     faces->compute_common_dFdU(0, geo.nGfpts);
 
     /* Copy GPU data structures for CPU Jacobian computation */
+    /*
 #ifdef _GPU
     for (auto e : elesObjs)
     {
@@ -1492,6 +1493,7 @@ void FRSolver::compute_dRdU()
       }
     }
 #endif
+    */
 
     /* Compute block diagonal components of flux divergence Jacobian */
     for (auto e : elesObjs)
@@ -2687,10 +2689,12 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       {
         compute_element_dt();
 
+        /*
 #ifdef _GPU
       for (auto e : elesObjs)
         e->dt = e->dt_d;
 #endif
+        */
       }
       
       /* Set flow time of current stage */
@@ -2707,7 +2711,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     if (!input->implicit_steady)
     {
       /* Compute stage LHS */
-      PUSH_NVTX_RANGE("Compute stage LHS",2);
       for (auto e : elesObjs)
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
@@ -2722,7 +2725,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
                     e->LHS(ele, vari, spti, varj, sptj) += 1;
                 }
         }
-      POP_NVTX_RANGE;
     }
 
     /* Apply pseudo timestepping */
@@ -2738,6 +2740,7 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       }
 
       /* Apply pseudo time to LHS */
+#ifdef _CPU
       for (auto e : elesObjs)
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
@@ -2752,6 +2755,13 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
                     e->LHS(ele, vari, spti, varj, sptj) += 1;
                 }
         }
+#endif
+
+#ifdef _GPU
+      for (auto e : elesObjs)
+        apply_pseudo_time_LHS_wrapper(e->LHS_d, e->dt_d, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars);
+      check_error();
+#endif
     }
 
     /* Write LHS */
@@ -2759,15 +2769,14 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       write_LHS(input->output_prefix);
 
     /* Copy LHS to GPU */
-    PUSH_NVTX_RANGE("Copy LHS",3);
+    /*
 #ifdef _GPU
     for (auto e : elesObjs)
       e->LHS_d = e->LHS;
 #endif
-    POP_NVTX_RANGE;
+    */
 
     /* Setup linear solver */
-    PUSH_NVTX_RANGE("Setup_LHS",4);
     if (input->linear_solver == LU)
       compute_LHS_LU();
     else if (input->linear_solver == INV)
@@ -2776,7 +2785,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       compute_LHS_SVD();
     else
       ThrowException("Linear solver not recognized!");
-    POP_NVTX_RANGE;
     POP_NVTX_RANGE;
   }
 
@@ -5367,6 +5375,13 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
 void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int iterBM)
 {
+  /* If running on GPU, copy out timestep */
+#ifdef _GPU
+  if (input->pseudo_time)
+    for (auto e : elesObjs)
+      e->dt = e->dt_d;
+#endif
+
   std::vector<double> res(elesObjs[0]->nVars, 0.0);
   for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -5422,7 +5437,7 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
 #endif
 
   double minDT = INFINITY; double maxDT = 0.0; 
-  if (input->dt_type == 2)
+  if (input->pseudo_time && input->dt_type == 2)
   {
     for (auto e : elesObjs)
     {

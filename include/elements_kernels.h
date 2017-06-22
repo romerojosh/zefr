@@ -38,7 +38,20 @@ void common_U_to_F_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Uc
 void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& inv_jaco_spts, 
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim);
 
-/* Element dFdU kernel wrappers for implicit */
+/* Residual Jacobian kernel wrappers (Implicit) */
+void compute_inv_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
+    mdvector_gpu<double> oppE, mdvector_gpu<double> dFcdU, unsigned int nSpts, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nEles);
+
+void compute_inv_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+    mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims);
+
+void scale_Jac_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &jaco_det_spts, 
+    unsigned int nSpts, unsigned int nVars, unsigned int nEles);
+
+
+/* Element dFdU kernel wrappers (Implicit) */
 void compute_dFdU_wrapper(mdvector_gpu<double> &dFdU_spts, mdvector_gpu<double> &dFddU_spts,
     mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts,
     mdvector_gpu<double> &inv_jaco_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims,
