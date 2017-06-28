@@ -168,6 +168,11 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
     unsigned int nFpts, unsigned int nEles, unsigned int nDims, unsigned int startEle, _mpi_comm comm_in,
     bool overset = false, int* iblank = NULL);
 
+
+void apply_stage_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int stage);
+
 void apply_pseudo_time_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
     double dtau_ratio, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars);

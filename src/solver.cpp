@@ -173,12 +173,9 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
     e->setup(faces, myComm);
   }
 
-  /* Setup fpt adjacency and jacoN views for viscous implicit Jacobians */
+  /* Setup fpt adjacency for viscous implicit Jacobians */
   if (input->implicit_method && input->viscous)
-  {
     set_fpt_adjacency();
-    set_jacoN_views();
-  }
 
   /* Write Low Rank Approximation rank */
 #ifdef _CPU
@@ -211,6 +208,10 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 #endif
 
   setup_views(); // Note: This function allocates addtional GPU memory for views
+
+  /* Setup jacoN views for viscous implicit Jacobians */
+  if (input->implicit_method && input->viscous)
+    setup_jacoN_views();
 
 #ifdef _GPU
   report_gpu_mem_usage();
@@ -534,7 +535,7 @@ void FRSolver::set_fpt_adjacency()
 #endif
 }
 
-void FRSolver::set_jacoN_views()
+void FRSolver::setup_jacoN_views()
 {
 #ifdef _MPI
   /* Allocate memory for jacoN data on MPI faces */
@@ -573,6 +574,11 @@ void FRSolver::set_jacoN_views()
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
 
+#ifdef _GPU
+  /* Copy inv_jacoN to GPU */
+  inv_jacoN_spts_mpibnd_d = inv_jacoN_spts_mpibnd;
+#endif
+
   /* Fill in jacoN_det on MPI faces */
   std::map<unsigned int, mdvector<double>> jacoN_det_sbuffs;
   std::fill(rreqs.begin(), rreqs.end(), MPI_REQUEST_NULL);
@@ -601,6 +607,11 @@ void FRSolver::set_jacoN_views()
   }
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+
+#ifdef _GPU
+  /* Copy jacoN_det to GPU */
+  jacoN_det_spts_mpibnd_d = jacoN_det_spts_mpibnd;
+#endif
 #endif
 
   for (auto eles : elesObjs)
@@ -611,6 +622,13 @@ void FRSolver::set_jacoN_views()
     mdvector<unsigned int> inv_jacoN_strides({3, eles->nFaces*eles->nElesPad});
     mdvector<double*> jacoN_det_base_ptrs({eles->nFaces*eles->nElesPad});
     mdvector<unsigned int> jacoN_det_strides({eles->nFaces*eles->nElesPad});
+
+#ifdef _GPU
+    mdvector<double*> inv_jacoN_base_ptrs_d({eles->nFaces*eles->nElesPad});
+    mdvector<unsigned int> inv_jacoN_strides_d({3, eles->nFaces*eles->nElesPad});
+    mdvector<double*> jacoN_det_base_ptrs_d({eles->nFaces*eles->nElesPad});
+    mdvector<unsigned int> jacoN_det_strides_d({eles->nFaces*eles->nElesPad});
+#endif
 
     /* Set pointers for jacoN */
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
@@ -631,6 +649,16 @@ void FRSolver::set_jacoN_views()
 
           jacoN_det_base_ptrs(ele + face * base_stride) = &jacoN_det_spts_mpibnd(mpiFace, 0);
           jacoN_det_strides(ele + face * base_stride) = jacoN_det_spts_mpibnd.get_stride(0);
+
+#ifdef _GPU
+          inv_jacoN_base_ptrs_d(ele + face * base_stride) = inv_jacoN_spts_mpibnd_d.get_ptr(mpiFace, 0, 0, 0);
+          inv_jacoN_strides_d(0, ele + face * base_stride) = inv_jacoN_spts_mpibnd_d.get_stride(0);
+          inv_jacoN_strides_d(1, ele + face * base_stride) = inv_jacoN_spts_mpibnd_d.get_stride(1);
+          inv_jacoN_strides_d(2, ele + face * base_stride) = inv_jacoN_spts_mpibnd_d.get_stride(2);
+
+          jacoN_det_base_ptrs_d(ele + face * base_stride) = jacoN_det_spts_mpibnd_d.get_ptr(mpiFace, 0);
+          jacoN_det_strides_d(ele + face * base_stride) = jacoN_det_spts_mpibnd_d.get_stride(0);
+#endif
           continue;
         }
 #endif
@@ -646,6 +674,16 @@ void FRSolver::set_jacoN_views()
 
           jacoN_det_base_ptrs(ele + face * base_stride) = nullptr;
           jacoN_det_strides(ele + face * base_stride) = 0;
+
+#ifdef _GPU
+          inv_jacoN_base_ptrs_d(ele + face * base_stride) = nullptr;
+          inv_jacoN_strides_d(0, ele + face * base_stride) = 0;
+          inv_jacoN_strides_d(1, ele + face * base_stride) = 0;
+          inv_jacoN_strides_d(2, ele + face * base_stride) = 0;
+
+          jacoN_det_base_ptrs_d(ele + face * base_stride) = nullptr;
+          jacoN_det_strides_d(ele + face * base_stride) = 0;
+#endif
         }
 
         /* Interior element neighbor */
@@ -661,6 +699,16 @@ void FRSolver::set_jacoN_views()
 
           jacoN_det_base_ptrs(ele + face * base_stride) = &elesN->jaco_det_spts(0, eleN);
           jacoN_det_strides(ele + face * base_stride) = elesN->jaco_det_spts.get_stride(1);
+
+#ifdef _GPU
+          inv_jacoN_base_ptrs_d(ele + face * base_stride) = elesN->inv_jaco_spts_d.get_ptr(0, 0, 0, eleN);
+          inv_jacoN_strides_d(0, ele + face * base_stride) = elesN->inv_jaco_spts_d.get_stride(1);
+          inv_jacoN_strides_d(1, ele + face * base_stride) = elesN->inv_jaco_spts_d.get_stride(2);
+          inv_jacoN_strides_d(2, ele + face * base_stride) = elesN->inv_jaco_spts_d.get_stride(3);
+
+          jacoN_det_base_ptrs_d(ele + face * base_stride) = elesN->jaco_det_spts_d.get_ptr(0, eleN);
+          jacoN_det_strides_d(ele + face * base_stride) = elesN->jaco_det_spts_d.get_stride(1);
+#endif
         }
       }
     }
@@ -668,6 +716,11 @@ void FRSolver::set_jacoN_views()
     /* Create jacoN views of neighboring element data */
     eles->inv_jacoN_spts.assign(inv_jacoN_base_ptrs, inv_jacoN_strides, base_stride);
     eles->jacoN_det_spts.assign(jacoN_det_base_ptrs, jacoN_det_strides, base_stride);
+
+#ifdef _GPU
+    eles->inv_jacoN_spts_d.assign(inv_jacoN_base_ptrs_d, inv_jacoN_strides_d, base_stride);
+    eles->jacoN_det_spts_d.assign(jacoN_det_base_ptrs_d, jacoN_det_strides_d, base_stride);
+#endif
   }
 }
 
@@ -1026,6 +1079,16 @@ void FRSolver::solver_data_to_device()
     {
       geo.ele2nodesBT_d[etype] = geo.ele2nodesBT[etype];
     }
+
+    if (input->implicit_method && input->viscous)
+      geo.eleID_d[etype] = geo.eleID[etype];
+  }
+
+  if (input->implicit_method && input->viscous)
+  {
+    geo.ele2eleN_d = geo.ele2eleN;
+    geo.face2faceN_d = geo.face2faceN;
+    geo.fpt2fptN_d = geo.fpt2fptN;
   }
 
   /* -- Element Data -- */
@@ -2710,7 +2773,8 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     /* If unsteady, compute LHS for stage */
     if (!input->implicit_steady)
     {
-      /* Compute stage LHS */
+      /* Apply stage coefficient to LHS */
+#ifdef _CPU
       for (auto e : elesObjs)
         for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
@@ -2725,6 +2789,13 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
                     e->LHS(ele, vari, spti, varj, sptj) += 1;
                 }
         }
+#endif
+#ifdef _GPU
+      for (auto e : elesObjs)
+        apply_stage_LHS_wrapper(e->LHS_d, e->dt_d, rk_alpha_d, input->dt_type, 
+            e->nSpts, e->nEles, e->nVars, stage);
+      check_error();
+#endif
     }
 
     /* Apply pseudo timestepping */
@@ -2756,10 +2827,10 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
                 }
         }
 #endif
-
 #ifdef _GPU
       for (auto e : elesObjs)
-        apply_pseudo_time_LHS_wrapper(e->LHS_d, e->dt_d, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars);
+        apply_pseudo_time_LHS_wrapper(e->LHS_d, e->dt_d, input->dtau_ratio, 
+            input->dt_type, e->nSpts, e->nEles, e->nVars);
       check_error();
 #endif
     }

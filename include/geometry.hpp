@@ -91,6 +91,10 @@ struct GeoStruct
 
   /* Connectivity Data for Implicit */
   mdvector<int> ele2eleN, face2faceN, fpt2fptN;
+#ifdef _GPU
+  std::map<ELE_TYPE, mdvector_gpu<unsigned int>> eleID_d;
+  mdvector_gpu<int> ele2eleN_d, face2faceN_d, fpt2fptN_d;
+#endif
 
   /* Color Data for MCGS */
   unsigned int nColors;
