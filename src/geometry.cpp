@@ -1276,6 +1276,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.wallNodes.resize(0);
     geo.overNodes.resize(0);
     geo.overFaceList.resize(0);
+    geo.overFaceList.reserve(overFaces.size());
     geo.wallNodes.reserve(geo.nWall);
     geo.overNodes.reserve(geo.nOver);
     for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
@@ -2600,8 +2601,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         int bcType = geo.bnd_ids[bnd];
         if (bcType == OVERSET)
         {
-          for (int j = 0; j < geo.nNodesPerFaceBT[etype]; j++)
-            overPts.insert(geo.ele2nodesBT[etype](ele, ct2fv[eType](n, j)));
+          for (int j = 0; j < geo.nNdFaceCurved; j++)
+            overPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved(n, j)));
 
           geo.overFaceList.push_back(fid);
         }
