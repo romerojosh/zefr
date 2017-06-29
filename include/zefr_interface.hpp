@@ -50,8 +50,10 @@ struct ExtraGeo
   int *iblank_cell; //! Cell iblank values
   int *iblank_face; //! Face iblank values
   int nOverFaces;   //! # of explicitly-defined overset faces
+  int nWallFaces;   //! # of solid wall boundary faces
   int nMpiFaces;    //! # of MPI faces
   int *overFaces;   //! List of explicitly-defined overset faces
+  int *wallFaces;   //! List of solid wal  boundary faces
   int *mpiFaces;    //! List of MPI face ID's on this rank
   int *procR;       //! Opposite rank for each MPI face
   int *mpiFidR;     //! Face ID of MPI face on opposite rank

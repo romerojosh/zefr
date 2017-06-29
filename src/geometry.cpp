@@ -1108,7 +1108,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #endif
 
   std::set<int> overPts, wallPts;
-  std::set<std::vector<unsigned int>> overFaces;
+  std::set<std::vector<unsigned int>> overFaces, wallFaces;
 
   /* Begin loop through faces */
   for (auto etype : geo.ele_set)
@@ -1187,6 +1187,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
               {
                 for (int j = 0; j < geo.nNdFaceCurved; j++)
                   wallPts.insert(geo.face2nodes(geo.nFaces, j));
+                wallFaces.insert(face);
               }
             }
 #endif
@@ -1277,12 +1278,16 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.overNodes.resize(0);
     geo.overFaceList.resize(0);
     geo.overFaceList.reserve(overFaces.size());
+    geo.wallFaceList.resize(0);
+    geo.wallFaceList.reserve(wallFaces.size());
     geo.wallNodes.reserve(geo.nWall);
     geo.overNodes.reserve(geo.nOver);
     for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
     for (auto &pt:overPts) geo.overNodes.push_back(pt);
     for (auto &face:overFaces)
       geo.overFaceList.push_back(geo.nodes_to_face[face]);
+    for (auto &face:wallFaces)
+      geo.wallFaceList.push_back(geo.nodes_to_face[face]);
   }
 #endif
 
@@ -2567,6 +2572,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   int eType = (geo.nDims == 2) ? QUAD : HEX;
   std::set<int> overPts, wallPts;
   geo.overFaceList.resize(0);
+  geo.wallFaceList.resize(0);
 
   // Counter of total boundary flux points so far
   unsigned int gfpt_bnd = 0;
@@ -2615,6 +2621,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         {
           for (int j = 0; j < geo.nNdFaceCurved; j++)
             wallPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved(n, j)));
+
+          geo.wallFaceList.push_back(fid);
         }
       }
 #endif
@@ -2636,6 +2644,8 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     for (auto &pt:overPts) geo.overNodes.push_back(pt);
     std::sort(geo.overFaceList.begin(),geo.overFaceList.end());
     geo.overFaceList.erase( std::unique(geo.overFaceList.begin(),geo.overFaceList.end()), geo.overFaceList.end() );
+    std::sort(geo.wallFaceList.begin(),geo.wallFaceList.end());
+    geo.wallFaceList.erase( std::unique(geo.wallFaceList.begin(),geo.wallFaceList.end()), geo.wallFaceList.end() );
   }
 #endif
 

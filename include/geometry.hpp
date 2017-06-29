@@ -173,7 +173,7 @@ struct GeoStruct
 
   std::vector<int> bndFaces, mpiFaces; //! Current list of all boundar & MPI faces
   std::set<int> overFaces;  //! Ordered list of all current overset faces
-  std::vector<int> overFaceList;
+  std::vector<int> overFaceList, wallFaceList;
 
   int nWall, nOver; //! Number of nodes on wall & overset boundaries
   std::vector<int> wallNodes, overNodes; //! Wall & overset boundary node lists

@@ -149,10 +149,11 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
 
   tioga_setcelliblank_(geoAB.iblank_cell);
 
-  tioga_register_face_data_(geo.gridType, geoAB.f2c,geoAB.c2f,geoAB.iblank_face,
-                            geoAB.nOverFaces,geoAB.nMpiFaces,geoAB.overFaces,geoAB.mpiFaces,
-                            geoAB.procR,geoAB.mpiFidR,geoAB.nFaceTypes,geoAB.nvert_face,
-                            geoAB.nFaces_type,geoAB.f2v);
+  tioga_register_face_data_(geo.gridType,geoAB.f2c,geoAB.c2f,geoAB.iblank_face,
+                            geoAB.nOverFaces,geoAB.nWallFaces,geoAB.nMpiFaces,
+                            geoAB.overFaces,geoAB.wallFaces,geoAB.mpiFaces,
+                            geoAB.procR,geoAB.mpiFidR,geoAB.nFaceTypes,
+                            geoAB.nvert_face,geoAB.nFaces_type,geoAB.f2v);
 
   tioga_set_highorder_callback_(cbs.get_nodes_per_cell, cbs.get_receptor_nodes,
                                 cbs.donor_inclusion_test, cbs.donor_frac, cbs.convert_to_modal);

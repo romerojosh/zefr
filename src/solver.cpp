@@ -6270,6 +6270,28 @@ void FRSolver::filter_solution()
   }
 }
 
+void FRSolver::init_grid_motion(double time)
+{
+  if (!input->motion) return;
+
+#ifdef _CPU
+  move_grid(input, geo, time);
+#endif
+
+#ifdef _GPU
+  if (input->motion_type != RIGID_BODY)
+  {
+    move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
+                      motion_vars, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
+    check_error();
+  }
+#endif
+
+  for (auto e : elesObjs)
+    e->move(faces);
+
+  grid_time = time;
+}
 void FRSolver::move(double time, bool update_iblank)
 {
   if (!input->motion) return;

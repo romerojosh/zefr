@@ -365,7 +365,7 @@ void Zefr::setup_solver(void)
   t_start = std::chrono::high_resolution_clock::now();
 
   solver->grid_time = -1;
-  solver->move(solver->flow_time);
+  solver->init_grid_motion(solver->flow_time);
 }
 
 void Zefr::restart_solution(void)
@@ -453,9 +453,9 @@ void Zefr::get_basic_geo_data(int& btag, int& gType, int& nnodes, double*& xyz,
 void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face, int& nFaces_type,
                               int*& f2v, int*& f2c, int*& c2f, int*& iblank_face,
                               int*& iblank_cell, int &nOver, int*& overFaces,
-                              int &nMpiFaces, int*& mpiFaces, int*& procR,
-                              int*& faceIdR, double*& grid_vel, double*& offset,
-                              double*& Rmat)
+                              int &nWall, int*& wallFaces, int &nMpiFaces,
+                              int*& mpiFaces, int*& procR, int*& faceIdR,
+                              double*& grid_vel, double*& offset, double*& Rmat)
 {
   auto etype = solver->elesObjs[0]->etype;
 
@@ -469,6 +469,8 @@ void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face, int& nFaces_type
   iblank_cell = geo->iblank_cell.data();
   nOver = geo->overFaceList.size();
   overFaces = geo->overFaceList.data();
+  nWall = geo->wallFaceList.size();
+  wallFaces = geo->wallFaceList.data();
   nMpiFaces = geo->nMpiFaces;
   mpiFaces = geo->mpiFaces.data();
   procR = geo->procR.data();
