@@ -1063,6 +1063,49 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
 
 
 __global__
+void apply_stage_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt_in, 
+    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int stage)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
+
+  const double rk_a = rk_coeff(stage, stage);
+
+  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
+  {
+    const unsigned int ele = elevarj / nVars;
+    const unsigned int varj = elevarj % nVars;
+
+    const double dt = (dt_type != 2) ? dt_in(0) : dt_in(ele);
+
+    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
+    {
+      const unsigned int vari = varispti / nSpts;
+      const unsigned int spti = varispti % nSpts;
+
+      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+      {
+        LHS(ele, varj, sptj, vari, spti) = rk_a * dt * LHS(ele, varj, sptj, vari, spti) 
+          + (double) (spti == sptj && vari == varj);
+      }
+    }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void apply_stage_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int stage)
+{
+  dim3 threads(32, 6);
+  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
+
+  apply_stage_LHS<<<blocks, threads>>>(LHS, dt, rk_coeff, dt_type, nSpts, nEles, nVars, stage);
+}
+
+__global__
 void apply_pseudo_time_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
     double dtau_ratio, unsigned int dt_type, unsigned int nSpts, unsigned int nEles,
     unsigned int nVars)

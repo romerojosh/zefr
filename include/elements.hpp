@@ -121,15 +121,15 @@ class Elements
     mdvector<double> LHS, LHSinv, RHS, deltaU;
 
     /* Views for viscous implicit Jacobian */
-    mdview<double> inv_jacoN_spts;
-    mdview<double> jacoN_det_spts;
+    mdview<double> inv_jacoN_spts, jacoN_det_spts;
 
 #ifdef _CPU
     unsigned int svd_rank;
     std::vector<Eigen::PartialPivLU<Eigen::MatrixXd>> LU_ptrs;
     std::vector<Eigen::JacobiSVD<Eigen::MatrixXd>> SVD_ptrs;
     mdvector<double> LHSinvD, LHSinvS, LHSU, LHSV;
-#elif defined(_GPU)
+#endif
+#ifdef _GPU
     mdvector<double*> LHS_ptrs, LHSinv_ptrs, RHS_ptrs, deltaU_ptrs;
     mdvector<int> LHS_info;
 #endif
@@ -183,6 +183,9 @@ class Elements
     mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d;
     mdvector_gpu<double*> LHS_ptrs_d, LHSinv_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
     mdvector_gpu<int> LHS_info_d;
+
+    /* Views for viscous implicit Jacobian */
+    mdview_gpu<double> inv_jacoN_spts_d, jacoN_det_spts_d;
 
     /* Overset Related */
     mdvector_gpu<double> U_donors_d, dU_donors_d;

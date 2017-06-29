@@ -149,8 +149,8 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     }
     else
       ThrowException("Linear solver not recognized!");
-
-#elif defined(_GPU)
+#endif
+#ifdef _GPU
     LHS_ptrs.assign({nEles});
     RHS_ptrs.assign({nEles});
     deltaU_ptrs.assign({nEles});
@@ -1790,19 +1790,28 @@ void Elements::compute_local_dRdU()
   /* Compute Jacobian at solution points */
   compute_inv_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
 
-//  /* Compute viscous element local Jacobians */
-//  if (input->viscous)
-//  {
-//    /* Compute Jacobian (local gradient contributions) */
-//    compute_visc_Jac_grad_wrapper();
-//
-//    /* Compute Jacobian (neighbor gradient contributions) */
-//    compute_visc_Jac_gradN_wrapper();
-//  }
+  /* Compute viscous element local Jacobians */
+  if (input->viscous)
+  {
+    /* Compute Jacobian at flux points (local gradient contributions) */
+    compute_visc_Jac_grad_fpts_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
+        dUcdU_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, nVars, nEles, 
+        nDims);
+
+    /* Compute Jacobian at solution points (local gradient contributions) */
+    compute_visc_Jac_grad_spts_wrapper(LHS_d, oppD_d, oppD_fpts_d, oppE_d, dUcdU_d, 
+        dFddU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, nVars, 
+        nEles, nDims);
+
+    /* Compute Jacobian at flux points (neighbor gradient contributions) */
+    compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
+        dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
+        geo->face2faceN_d, geo->fpt2fptN_d, startEle, nSpts, nFpts, nFptsPerFace, nVars, 
+        nFaces, nEles, nDims);
+  }
 
   /* Scale residual Jacobian */
   scale_Jac_wrapper(LHS_d, jaco_det_spts_d, nSpts, nVars, nEles);
-
   check_error();
 
 #endif
