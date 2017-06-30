@@ -99,7 +99,7 @@ class FRSolver
 #ifdef _MPI
     mdvector<double> inv_jacoN_spts_mpibnd, jacoN_det_spts_mpibnd;
 #ifdef _GPU
-    mdvector<double> inv_jacoN_spts_mpibnd_d, jacoN_det_spts_mpibnd_d;
+    mdvector_gpu<double> inv_jacoN_spts_mpibnd_d, jacoN_det_spts_mpibnd_d;
 #endif
 #endif
 

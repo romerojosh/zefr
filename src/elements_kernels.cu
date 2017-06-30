@@ -506,10 +506,16 @@ void compute_visc_Jac_grad_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
   const unsigned int nSpts = 9;
   const unsigned int nFpts = 12;
   */
+  /*
   const unsigned int nDims = 2;
   const unsigned int nVars = 4;
   const unsigned int nSpts = 25;
   const unsigned int nFpts = 20;
+  */
+  const unsigned int nDims = 3;
+  const unsigned int nVars = 5;
+  const unsigned int nSpts = 125;
+  const unsigned int nFpts = 150;
 
   /* Allocate temporary data structures */
   double Cvisc0[nDims][nVars][nSpts];
@@ -604,10 +610,16 @@ void compute_visc_Jac_grad_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
   const unsigned int nSpts = 9;
   const unsigned int nFpts = 12;
   */
+  /*
   const unsigned int nDims = 2;
   const unsigned int nVars = 4;
   const unsigned int nSpts = 25;
   const unsigned int nFpts = 20;
+  */
+  const unsigned int nDims = 3;
+  const unsigned int nVars = 5;
+  const unsigned int nSpts = 125;
+  const unsigned int nFpts = 150;
 
   /* Allocate temporary data structures */
   double CdFddU0[nDims][nVars][nSpts];
@@ -716,11 +728,18 @@ void compute_visc_Jac_gradN_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> 
   const unsigned int nFpts = 12;
   const unsigned int nFptsPerFace = 3;
   */
+  /*
   const unsigned int nDims = 2;
   const unsigned int nVars = 4;
   const unsigned int nSpts = 25;
   const unsigned int nFpts = 20;
   const unsigned int nFptsPerFace = 5;
+  */
+  const unsigned int nDims = 3;
+  const unsigned int nVars = 5;
+  const unsigned int nSpts = 125;
+  const unsigned int nFpts = 150;
+  const unsigned int nFptsPerFace = 25;
 
   /* Allocate temporary data structures */
   double CviscN[nDims][nSpts];
