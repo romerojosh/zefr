@@ -1174,7 +1174,12 @@ void FRSolver::solver_data_to_device()
 
     if (input->implicit_method)
     {
-      e->oppDivE_fpts_d = e->oppDivE_fpts;
+      if (input->KPF_Jacobian)
+      {
+        e->oppD_spts1D_d = e->oppD_spts1D;
+        e->oppDivE_spts1D_d = e->oppDivE_spts1D;
+      }
+
       e->dFdU_spts_d = e->dFdU_spts;
       e->dFcdU_d = e->dFcdU;
       if (input->viscous)
@@ -1558,6 +1563,13 @@ void FRSolver::compute_dRdU()
     }
 #endif
     */
+
+    if (input->KPF_Jacobian)
+    {
+      /* Zero out LHS */
+      for (auto e : elesObjs)
+        device_fill(e->LHS_d, e->LHS_d.max_size(), 0.);
+    }
 
     /* Compute block diagonal components of flux divergence Jacobian */
     for (auto e : elesObjs)

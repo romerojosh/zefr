@@ -114,7 +114,7 @@ class Elements
     mdvector<double> dt, rk_err;
 
     /* Element structures for implicit method */
-    mdvector<double> oppDivE_fpts;
+    mdvector<double> oppD_spts1D, oppDivE_spts1D;
     mdvector<double> dFdU_spts, dFddU_spts;
     mdvector<double> dFcdU, dUcdU, dFcddU;
     mdvector<double> Cvisc0, CviscN, CdFddU0, CdFcddU0;
@@ -179,7 +179,7 @@ class Elements
     mdvector_gpu<double> dt_d, rk_err_d;
 
     /* Element structures for implicit method */
-    mdvector_gpu<double> oppDivE_fpts_d;
+    mdvector_gpu<double> oppD_spts1D_d, oppDivE_spts1D_d;
     mdvector_gpu<double> dFdU_spts_d, dFddU_spts_d;
     mdvector_gpu<double> dFcdU_d, dUcdU_d, dFcddU_d;
     mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d;

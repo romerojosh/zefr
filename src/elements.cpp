@@ -639,14 +639,21 @@ void Elements::setup_FR()
   /* Setup combined differentiation/extrapolation operator for flux Jacobians (DFR Specific) */
   if (input->implicit_method && input->KPF_Jacobian)
   {
-    oppDivE_fpts.assign({2, nSpts1D, nSpts1D});
+    oppD_spts1D.assign({nSpts1D, nSpts1D});
     for (unsigned int spti = 0; spti < nSpts1D; spti++)
       for (unsigned int sptj = 0; sptj < nSpts1D; sptj++)
       {
-        oppDivE_fpts(0, spti, sptj) = -
+        oppD_spts1D(spti, sptj) = Lagrange_d1(loc_DFR_1D, sptj+1, loc_spts_1D[spti]);
+      }
+
+    oppDivE_spts1D.assign({2, nSpts1D, nSpts1D});
+    for (unsigned int spti = 0; spti < nSpts1D; spti++)
+      for (unsigned int sptj = 0; sptj < nSpts1D; sptj++)
+      {
+        oppDivE_spts1D(0, spti, sptj) = -
           Lagrange_d1(loc_DFR_1D, 0, loc_spts_1D[spti]) *
           Lagrange(loc_spts_1D, sptj, -1);
-        oppDivE_fpts(1, spti, sptj) = 
+        oppDivE_spts1D(1, spti, sptj) = 
           Lagrange_d1(loc_DFR_1D, nSpts1D+1, loc_spts_1D[spti]) *
           Lagrange(loc_spts_1D, sptj,  1);
       }
@@ -1799,14 +1806,19 @@ void Elements::compute_local_dRdU()
 
 #ifdef _GPU
   /* Compute inviscid element local Jacobians */
-  /* Compute Jacobian at solution points */
-  compute_inv_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
-
-  /* Compute Jacobian at flux points */
   if (input->KPF_Jacobian)
-    compute_inv_KPF_Jac_fpts_wrapper(LHS_d, oppDivE_fpts_d, dFcdU_d, nSpts1D, nVars, nEles, nDims);
+  {
+    compute_inv_KPF_Jac_wrapper(LHS_d, oppD_d, oppDivE_spts1D_d, dFdU_spts_d, dFcdU_d, nSpts1D, nVars, nEles, nDims);
+  }
+
   else
+  {
+    /* Compute Jacobian at solution points */
+    compute_inv_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
+
+    /* Compute Jacobian at flux points */
     compute_inv_Jac_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_d, nSpts, nFpts, nVars, nEles);
+  }
 
   /* Compute viscous element local Jacobians */
   if (input->viscous)
