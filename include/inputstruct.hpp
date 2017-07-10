@@ -178,7 +178,7 @@ struct InputStruct
   /* Implicit Parameters */
   bool implicit_method = false;
   bool implicit_steady = false;
-  bool pseudo_time, adapt_dtau, FDA_Jacobian;
+  bool pseudo_time, adapt_dtau, FDA_Jacobian, KPF_Jacobian;
   double dtau_ratio, dtau_growth_rate, dtau_ratio_max;
   unsigned int iterative_method = 0;
   unsigned int linear_solver = 0;

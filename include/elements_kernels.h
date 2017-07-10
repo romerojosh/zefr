@@ -39,14 +39,25 @@ void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double
     unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim);
 
 /* Residual Jacobian kernel wrappers (Implicit) */
-void compute_inv_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
-    mdvector_gpu<double> oppE, mdvector_gpu<double> dFcdU, unsigned int nSpts, unsigned int nFpts, 
-    unsigned int nVars, unsigned int nEles);
-
 void compute_inv_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims);
 
+void compute_inv_KPF_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDivE_fpts, 
+    mdvector_gpu<double> dFcdU, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims);
+
+void compute_inv_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
+    mdvector_gpu<double> oppE, mdvector_gpu<double> dFcdU, unsigned int nSpts, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nEles);
+
+void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+    mdvector_gpu<double> &oppDiv_fpts, mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, 
+    mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &dFcddU, 
+    mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, 
+    unsigned int nFpts, unsigned int nVars, unsigned int nEles, unsigned int nDims);
+
+/*
 void compute_visc_Jac_grad_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &oppDiv_fpts, mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, 
     mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFcddU, mdvector_gpu<double> &inv_jaco_spts, 
@@ -58,6 +69,7 @@ void compute_visc_Jac_grad_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<
     mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &inv_jaco_spts, 
     mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nFpts, 
     unsigned int nVars, unsigned int nEles, unsigned int nDims);
+*/
 
 void compute_visc_Jac_gradN_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppDiv_fpts, 
     mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, mdvector_gpu<double> &dUcdU, 

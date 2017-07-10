@@ -1174,6 +1174,7 @@ void FRSolver::solver_data_to_device()
 
     if (input->implicit_method)
     {
+      e->oppDivE_fpts_d = e->oppDivE_fpts;
       e->dFdU_spts_d = e->dFdU_spts;
       e->dFcdU_d = e->dFcdU;
       if (input->viscous)

@@ -636,6 +636,21 @@ void Elements::setup_FR()
   write_opp(oppDiv_fpts, str, oppDiv_fpts_id, nSpts, nFpts);
 #endif
 
+  /* Setup combined differentiation/extrapolation operator for flux Jacobians (DFR Specific) */
+  if (input->implicit_method && input->KPF_Jacobian)
+  {
+    oppDivE_fpts.assign({2, nSpts1D, nSpts1D});
+    for (unsigned int spti = 0; spti < nSpts1D; spti++)
+      for (unsigned int sptj = 0; sptj < nSpts1D; sptj++)
+      {
+        oppDivE_fpts(0, spti, sptj) = -
+          Lagrange_d1(loc_DFR_1D, 0, loc_spts_1D[spti]) *
+          Lagrange(loc_spts_1D, sptj, -1);
+        oppDivE_fpts(1, spti, sptj) = 
+          Lagrange_d1(loc_DFR_1D, nSpts1D+1, loc_spts_1D[spti]) *
+          Lagrange(loc_spts_1D, sptj,  1);
+      }
+  }
 }
 
 void Elements::setup_aux()
@@ -1784,24 +1799,35 @@ void Elements::compute_local_dRdU()
 
 #ifdef _GPU
   /* Compute inviscid element local Jacobians */
-  /* Compute Jacobian at flux points */
-  compute_inv_Jac_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_d, nSpts, nFpts, nVars, nEles);
-
   /* Compute Jacobian at solution points */
   compute_inv_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
+
+  /* Compute Jacobian at flux points */
+  if (input->KPF_Jacobian)
+    compute_inv_KPF_Jac_fpts_wrapper(LHS_d, oppDivE_fpts_d, dFcdU_d, nSpts1D, nVars, nEles, nDims);
+  else
+    compute_inv_Jac_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_d, nSpts, nFpts, nVars, nEles);
 
   /* Compute viscous element local Jacobians */
   if (input->viscous)
   {
+    compute_visc_Jac_grad_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
+        dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, 
+        nVars, nEles, nDims);
+
     /* Compute Jacobian at flux points (local gradient contributions) */
+    /*
     compute_visc_Jac_grad_fpts_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
         dUcdU_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, nVars, nEles, 
         nDims);
+        */
 
     /* Compute Jacobian at solution points (local gradient contributions) */
+    /*
     compute_visc_Jac_grad_spts_wrapper(LHS_d, oppD_d, oppD_fpts_d, oppE_d, dUcdU_d, 
         dFddU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, nVars, 
         nEles, nDims);
+        */
 
     /* Compute Jacobian at flux points (neighbor gradient contributions) */
     compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 

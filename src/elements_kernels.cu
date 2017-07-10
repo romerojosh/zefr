@@ -411,6 +411,136 @@ void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double
   }
 }
 
+__global__
+void compute_inv_Jac_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+    mdvector_gpu<double> dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
+
+  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
+  {
+    const unsigned int ele = elevarj / nVars;
+    const unsigned int varj = elevarj % nVars;
+
+    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
+    {
+      const unsigned int vari = varispti / nSpts;
+      const unsigned int spti = varispti % nSpts;
+
+      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+      {
+        double val = 0.0;
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          val += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
+        LHS(ele, varj, sptj, vari, spti) = val;
+      }
+    }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void compute_inv_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+    mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims)
+{
+  dim3 threads(32, 6);
+  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
+
+  compute_inv_Jac_spts<<<blocks, threads>>>(LHS, oppD, dFdU_spts, nSpts, nVars, nEles, nDims);
+}
+
+template<unsigned int nDims>
+__global__
+void compute_inv_KPF_Jac_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDivE_fpts, 
+    mdvector_gpu<double> dFcdU, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  for (unsigned int elevarjvari = tidx; elevarjvari < nEles*nVars*nVars; elevarjvari += gridDim.x * blockDim.x)
+  {
+    const unsigned int ele = elevarjvari / (nVars*nVars);
+    const unsigned int varjvari = elevarjvari % (nVars*nVars);
+    const unsigned int varj = varjvari / nVars;
+    const unsigned int vari = varjvari % nVars;
+
+    /* dFcdU follows idx_fpts */
+    // TODO: Construct reverse data structure (i.e. 3D: (fpti, fptj) -> fpt)
+    if (nDims == 2)
+    {
+      for (unsigned int fpt = 0; fpt < nSpts1D; fpt++)
+      {
+        const double dFcdUB = dFcdU(ele, vari, varj, fpt);
+        const double dFcdUR = dFcdU(ele, vari, varj, nSpts1D + fpt);
+        const double dFcdUT = dFcdU(ele, vari, varj, 3*nSpts1D - fpt-1);
+        const double dFcdUL = dFcdU(ele, vari, varj, 4*nSpts1D - fpt-1);
+        for (unsigned int i = 0; i < nSpts1D; i++)
+          for (unsigned int j = 0; j < nSpts1D; j++)
+          {
+            unsigned int spti = fpt * nSpts1D + i;
+            unsigned int sptj = fpt * nSpts1D + j;
+            LHS(ele, varj, sptj, vari, spti) += oppDivE_fpts(0, i, j) * dFcdUL +
+                                                oppDivE_fpts(1, i, j) * dFcdUR;
+
+            spti = i * nSpts1D + fpt;
+            sptj = j * nSpts1D + fpt;
+            LHS(ele, varj, sptj, vari, spti) += oppDivE_fpts(0, i, j) * dFcdUB +
+                                                oppDivE_fpts(1, i, j) * dFcdUT;
+          }
+      }
+    }
+
+    else if (nDims == 3)
+    {
+      for (unsigned int fpti = 0; fpti < nSpts1D; fpti++)
+        for (unsigned int fptj = 0; fptj < nSpts1D; fptj++)
+        {
+          const double dFcdUB  = dFcdU(ele, vari, varj, fpti*nSpts1D + fptj);
+          const double dFcdUT  = dFcdU(ele, vari, varj, nSpts1D*nSpts1D + fpti*nSpts1D + (nSpts1D - fptj-1));
+          const double dFcdUL  = dFcdU(ele, vari, varj, 2*nSpts1D*nSpts1D + fpti*nSpts1D + fptj);
+          const double dFcdUR  = dFcdU(ele, vari, varj, 3*nSpts1D*nSpts1D + fpti*nSpts1D + (nSpts1D - fptj-1));
+          const double dFcdUF  = dFcdU(ele, vari, varj, 4*nSpts1D*nSpts1D + fpti*nSpts1D + (nSpts1D - fptj-1));
+          const double dFcdUBk = dFcdU(ele, vari, varj, 5*nSpts1D*nSpts1D + fpti*nSpts1D + fptj);
+
+          for (unsigned int i = 0; i < nSpts1D; i++)
+            for (unsigned int j = 0; j < nSpts1D; j++)
+            {
+              unsigned int spti = fpti*nSpts1D*nSpts1D + fptj*nSpts1D + i;
+              unsigned int sptj = fpti*nSpts1D*nSpts1D + fptj*nSpts1D + j;
+              LHS(ele, varj, sptj, vari, spti) += oppDivE_fpts(0, i, j) * dFcdUL +
+                                                  oppDivE_fpts(1, i, j) * dFcdUR;
+
+              spti = i*nSpts1D*nSpts1D + fpti*nSpts1D + fptj;
+              sptj = j*nSpts1D*nSpts1D + fpti*nSpts1D + fptj;
+              LHS(ele, varj, sptj, vari, spti) += oppDivE_fpts(0, i, j) * dFcdUB +
+                                                  oppDivE_fpts(1, i, j) * dFcdUT;
+
+              spti = fpti*nSpts1D*nSpts1D + i*nSpts1D + fptj;
+              sptj = fpti*nSpts1D*nSpts1D + j*nSpts1D + fptj;
+              LHS(ele, varj, sptj, vari, spti) += oppDivE_fpts(0, i, j) * dFcdUF +
+                                                  oppDivE_fpts(1, i, j) * dFcdUBk;
+            }
+        }
+    }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void compute_inv_KPF_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDivE_fpts, 
+    mdvector_gpu<double> dFcdU, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles,
+    unsigned int nDims)
+{
+  dim3 threads(192);
+  dim3 blocks(std::min((nEles*nVars*nVars + threads.x - 1) / threads.x, MAX_GRID_DIM));
+
+  if (nDims == 2)
+    compute_inv_KPF_Jac_fpts<2><<<blocks, threads>>>(LHS, oppDivE_fpts, dFcdU, nSpts1D, nVars, nEles);
+  else if (nDims == 3)
+    compute_inv_KPF_Jac_fpts<3><<<blocks, threads>>>(LHS, oppDivE_fpts, dFcdU, nSpts1D, nVars, nEles);
+}
 
 __global__
 void compute_inv_Jac_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
@@ -432,10 +562,10 @@ void compute_inv_Jac_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_
 
       for (unsigned int sptj = 0; sptj < nSpts; sptj++)
       {
-        double sum = 0.0;
+        double val = 0.0;
         for (unsigned int fptk = 0; fptk < nFpts; fptk++)
-          sum += oppDiv_fpts(spti, fptk) * dFcdU(ele, vari, varj, fptk) * oppE(fptk, sptj);
-        LHS(ele, varj, sptj, vari, spti) = sum;
+          val += oppDiv_fpts(spti, fptk) * dFcdU(ele, vari, varj, fptk) * oppE(fptk, sptj);
+        LHS(ele, varj, sptj, vari, spti) += val;
       }
     }
 
@@ -454,48 +584,11 @@ void compute_inv_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double>
 }
 
 __global__
-void compute_inv_Jac_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
-    mdvector_gpu<double> dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
-    unsigned int nDims)
-{
-  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
-  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
-
-  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
-  {
-    const unsigned int ele = elevarj / nVars;
-    const unsigned int varj = elevarj % nVars;
-
-    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
-    {
-      const unsigned int vari = varispti / nSpts;
-      const unsigned int spti = varispti % nSpts;
-
-      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          LHS(ele, varj, sptj, vari, spti) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
-    }
-
-    __syncthreads(); /* To avoid divergence */
-  }
-}
-
-void compute_inv_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
-    mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
-    unsigned int nDims)
-{
-  dim3 threads(32, 6);
-  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
-
-  compute_inv_Jac_spts<<<blocks, threads>>>(LHS, oppD, dFdU_spts, nSpts, nVars, nEles, nDims);
-}
-
-__global__
-void compute_visc_Jac_grad_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+void compute_visc_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
     mdvector_gpu<double> oppDiv_fpts, mdvector_gpu<double> oppD_fpts, mdvector_gpu<double> oppE, 
-    mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFcddU, mdvector_gpu<double> inv_jaco_spts, 
-    mdvector_gpu<double> jaco_det_spts, unsigned int nSpts1, unsigned int nFpts1, unsigned int nVars1, 
-    unsigned int nEles, unsigned int nDims1)
+    mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFddU_spts, mdvector_gpu<double> dFcddU, 
+    mdvector_gpu<double> inv_jaco_spts, mdvector_gpu<double> jaco_det_spts, unsigned int nSpts1, 
+    unsigned int nFpts1, unsigned int nVars1, unsigned int nEles, unsigned int nDims1)
 {
   const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
 
@@ -519,6 +612,7 @@ void compute_visc_Jac_grad_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
 
   /* Allocate temporary data structures */
   double Cvisc0[nDims][nVars][nSpts];
+  double CtempDV[nDims][nVars];
   double CtempD[nDims];
   double CdFcddU0[nFpts];
 
@@ -532,11 +626,15 @@ void compute_visc_Jac_grad_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
           for (unsigned int vari = 0; vari < nVars; vari++)
             for (unsigned int spti = 0; spti < nSpts; spti++)
             {
-              double val = (vari == varj) ? oppD(dim, spti, sptj) : 0.0;
+              double val = 0.0;
               for (unsigned int fptk = 0; fptk < nFpts; fptk++)
                 val += oppD_fpts(dim, spti, fptk) * dUcdU(ele, vari, varj, fptk) * oppE(fptk, sptj);
               Cvisc0[dim][vari][spti] = val;
             }
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          for (unsigned int spti = 0; spti < nSpts; spti++)
+            Cvisc0[dim][varj][spti] += oppD(dim, spti, sptj);
 
         /* Transform gradient Jacobians to physical space */
         for (unsigned int vari = 0; vari < nVars; vari++)
@@ -575,88 +673,6 @@ void compute_visc_Jac_grad_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
             LHS(ele, varj, sptj, vari, spti) += val;
           }
         }
-      }
-
-    __syncthreads(); /* To avoid divergence */
-  }
-}
-
-void compute_visc_Jac_grad_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
-    mdvector_gpu<double> &oppDiv_fpts, mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, 
-    mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFcddU, mdvector_gpu<double> &inv_jaco_spts, 
-    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
-    unsigned int nEles, unsigned int nDims)
-{
-  dim3 threads(128, 1);
-  dim3 blocks(std::min((nEles + threads.x - 1) / threads.x, MAX_GRID_DIM), 1);
-
-  compute_visc_Jac_grad_fpts<<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, oppE, dUcdU, 
-      dFcddU, inv_jaco_spts, jaco_det_spts, nSpts, nFpts, nVars, nEles, nDims);
-}
-
-__global__
-void compute_visc_Jac_grad_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
-    mdvector_gpu<double> oppD_fpts, mdvector_gpu<double> oppE, mdvector_gpu<double> dUcdU, 
-    mdvector_gpu<double> dFddU_spts, mdvector_gpu<double> inv_jaco_spts, 
-    mdvector_gpu<double> jaco_det_spts, unsigned int nSpts1, unsigned int nFpts1, 
-    unsigned int nVars1, unsigned int nEles, unsigned int nDims1)
-{
-  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
-
-  /* Temporary constants */
-  /*
-  const unsigned int nDims = 2;
-  const unsigned int nVars = 1;
-  const unsigned int nSpts = 9;
-  const unsigned int nFpts = 12;
-  */
-  /*
-  const unsigned int nDims = 2;
-  const unsigned int nVars = 4;
-  const unsigned int nSpts = 25;
-  const unsigned int nFpts = 20;
-  */
-  const unsigned int nDims = 3;
-  const unsigned int nVars = 5;
-  const unsigned int nSpts = 125;
-  const unsigned int nFpts = 150;
-
-  /* Allocate temporary data structures */
-  double CdFddU0[nDims][nVars][nSpts];
-  double CtempDV[nDims][nVars];
-  double CtempD[nDims];
-
-  for (unsigned int ele = tidx; ele < nEles; ele += gridDim.x * blockDim.x)
-  {
-    for (unsigned int varj = 0; varj < nVars; varj++)
-      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-      {
-        /* Compute solution gradient Jacobians in reference space */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          for (unsigned int vari = 0; vari < nVars; vari++)
-            for (unsigned int spti = 0; spti < nSpts; spti++)
-            {
-              double val = (vari == varj) ? oppD(dim, spti, sptj) : 0.0;
-              for (unsigned int fptk = 0; fptk < nFpts; fptk++)
-                val += oppD_fpts(dim, spti, fptk) * dUcdU(ele, vari, varj, fptk) * oppE(fptk, sptj);
-              CdFddU0[dim][vari][spti] = val;
-            }
-
-        /* Transform gradient Jacobians to physical space */
-        for (unsigned int vari = 0; vari < nVars; vari++)
-          for (unsigned int spti = 0; spti < nSpts; spti++)
-          {
-            for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-            {
-              double val = 0.0;
-              for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-                val += CdFddU0[dim2][vari][spti] * inv_jaco_spts(dim2, spti, dim1, ele);
-              CtempD[dim1] = val / jaco_det_spts(spti, ele);
-            }
-
-            for (unsigned int dim = 0; dim < nDims; dim++)
-              CdFddU0[dim][vari][spti] = CtempD[dim];
-          }
 
         /* Compute viscous Jacobian at solution points (dFddU only) */
         for (unsigned int spti = 0; spti < nSpts; spti++)
@@ -667,7 +683,7 @@ void compute_visc_Jac_grad_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
               double val = 0.0;
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
                 for (unsigned int vark = 0; vark < nVars; vark++)
-                  val += dFddU_spts(ele, dimi, dimj, vari, vark, spti) * CdFddU0[dimj][vark][spti];
+                  val += dFddU_spts(ele, dimi, dimj, vari, vark, spti) * Cvisc0[dimj][vark][spti];
               CtempDV[dimi][vari] = val;
             }
 
@@ -678,7 +694,7 @@ void compute_visc_Jac_grad_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
               double val = 0.0;
               for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
                 val += CtempDV[dim2][vari] * inv_jaco_spts(dim1, spti, dim2, ele);
-              CdFddU0[dim1][vari][spti] = val;
+              Cvisc0[dim1][vari][spti] = val;
             }
         }
 
@@ -688,7 +704,7 @@ void compute_visc_Jac_grad_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
             {
               double val = 0.0;
               for (unsigned int sptk = 0; sptk < nSpts; sptk++)
-                val += oppD(dim, spti, sptk) * CdFddU0[dim][vari][sptk];
+                val += oppD(dim, spti, sptk) * Cvisc0[dim][vari][sptk];
               LHS(ele, varj, sptj, vari, spti) += val;
             }
       }
@@ -697,18 +713,240 @@ void compute_visc_Jac_grad_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> o
   }
 }
 
-void compute_visc_Jac_grad_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
-    mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, mdvector_gpu<double> &dUcdU, 
-    mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &inv_jaco_spts, 
-    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nFpts, 
-    unsigned int nVars, unsigned int nEles, unsigned int nDims)
+void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+    mdvector_gpu<double> &oppDiv_fpts, mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, 
+    mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &dFcddU, 
+    mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, 
+    unsigned int nFpts, unsigned int nVars, unsigned int nEles, unsigned int nDims)
 {
   dim3 threads(128, 1);
   dim3 blocks(std::min((nEles + threads.x - 1) / threads.x, MAX_GRID_DIM), 1);
 
-  compute_visc_Jac_grad_spts<<<blocks, threads>>>(LHS, oppD, oppD_fpts, oppE, dUcdU, 
-      dFddU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nFpts, nVars, nEles, nDims);
+  compute_visc_Jac_grad<<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, oppE, dUcdU, 
+      dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nSpts, nFpts, nVars, nEles, nDims);
 }
+
+
+
+//__global__
+//void compute_visc_Jac_grad_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+//    mdvector_gpu<double> oppDiv_fpts, mdvector_gpu<double> oppD_fpts, mdvector_gpu<double> oppE, 
+//    mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFcddU, mdvector_gpu<double> inv_jaco_spts, 
+//    mdvector_gpu<double> jaco_det_spts, unsigned int nSpts1, unsigned int nFpts1, unsigned int nVars1, 
+//    unsigned int nEles, unsigned int nDims1)
+//{
+//  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+//
+//  /* Temporary constants */
+//  /*
+//  const unsigned int nDims = 2;
+//  const unsigned int nVars = 1;
+//  const unsigned int nSpts = 9;
+//  const unsigned int nFpts = 12;
+//  */
+//  /*
+//  const unsigned int nDims = 2;
+//  const unsigned int nVars = 4;
+//  const unsigned int nSpts = 25;
+//  const unsigned int nFpts = 20;
+//  */
+//  const unsigned int nDims = 3;
+//  const unsigned int nVars = 5;
+//  const unsigned int nSpts = 125;
+//  const unsigned int nFpts = 150;
+//
+//  /* Allocate temporary data structures */
+//  double Cvisc0[nDims][nVars][nSpts];
+//  double CtempD[nDims];
+//  double CdFcddU0[nFpts];
+//
+//  for (unsigned int ele = tidx; ele < nEles; ele += gridDim.x * blockDim.x)
+//  {
+//    for (unsigned int varj = 0; varj < nVars; varj++)
+//      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+//      {
+//        /* Compute solution gradient Jacobians in reference space */
+//        for (unsigned int dim = 0; dim < nDims; dim++)
+//          for (unsigned int vari = 0; vari < nVars; vari++)
+//            for (unsigned int spti = 0; spti < nSpts; spti++)
+//            {
+//              double val = (vari == varj) ? oppD(dim, spti, sptj) : 0.0;
+//              for (unsigned int fptk = 0; fptk < nFpts; fptk++)
+//                val += oppD_fpts(dim, spti, fptk) * dUcdU(ele, vari, varj, fptk) * oppE(fptk, sptj);
+//              Cvisc0[dim][vari][spti] = val;
+//            }
+//
+//        /* Transform gradient Jacobians to physical space */
+//        for (unsigned int vari = 0; vari < nVars; vari++)
+//          for (unsigned int spti = 0; spti < nSpts; spti++)
+//          {
+//            for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+//            {
+//              double val = 0.0;
+//              for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+//                val += Cvisc0[dim2][vari][spti] * inv_jaco_spts(dim2, spti, dim1, ele);
+//              CtempD[dim1] = val / jaco_det_spts(spti, ele);
+//            }
+//
+//            for (unsigned int dim = 0; dim < nDims; dim++)
+//              Cvisc0[dim][vari][spti] = CtempD[dim];
+//          }
+//
+//        /* Compute viscous Jacobian at flux points (dFcddU only) */
+//        for (unsigned int vari = 0; vari < nVars; vari++)
+//        {
+//          for (unsigned int fpti = 0; fpti < nFpts; fpti++)
+//          {
+//            double val = 0.0;
+//            for (unsigned int dim = 0; dim < nDims; dim++)
+//              for (unsigned int vark = 0; vark < nVars; vark++)
+//                for (unsigned int sptk = 0; sptk < nSpts; sptk++)
+//                  val += dFcddU(ele, 0, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0[dim][vark][sptk];
+//            CdFcddU0[fpti] = val;
+//          }
+//
+//          for (unsigned int spti = 0; spti < nSpts; spti++)
+//          {
+//            double val = 0.0;
+//            for (unsigned int fptk = 0; fptk < nFpts; fptk++)
+//              val += oppDiv_fpts(spti, fptk) * CdFcddU0[fptk];
+//            LHS(ele, varj, sptj, vari, spti) += val;
+//          }
+//        }
+//      }
+//
+//    __syncthreads(); /* To avoid divergence */
+//  }
+//}
+//
+//void compute_visc_Jac_grad_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+//    mdvector_gpu<double> &oppDiv_fpts, mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, 
+//    mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFcddU, mdvector_gpu<double> &inv_jaco_spts, 
+//    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nFpts, unsigned int nVars, 
+//    unsigned int nEles, unsigned int nDims)
+//{
+//  dim3 threads(128, 1);
+//  dim3 blocks(std::min((nEles + threads.x - 1) / threads.x, MAX_GRID_DIM), 1);
+//
+//  compute_visc_Jac_grad_fpts<<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, oppE, dUcdU, 
+//      dFcddU, inv_jaco_spts, jaco_det_spts, nSpts, nFpts, nVars, nEles, nDims);
+//}
+//
+//__global__
+//void compute_visc_Jac_grad_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+//    mdvector_gpu<double> oppD_fpts, mdvector_gpu<double> oppE, mdvector_gpu<double> dUcdU, 
+//    mdvector_gpu<double> dFddU_spts, mdvector_gpu<double> inv_jaco_spts, 
+//    mdvector_gpu<double> jaco_det_spts, unsigned int nSpts1, unsigned int nFpts1, 
+//    unsigned int nVars1, unsigned int nEles, unsigned int nDims1)
+//{
+//  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+//
+//  /* Temporary constants */
+//  /*
+//  const unsigned int nDims = 2;
+//  const unsigned int nVars = 1;
+//  const unsigned int nSpts = 9;
+//  const unsigned int nFpts = 12;
+//  */
+//  /*
+//  const unsigned int nDims = 2;
+//  const unsigned int nVars = 4;
+//  const unsigned int nSpts = 25;
+//  const unsigned int nFpts = 20;
+//  */
+//  const unsigned int nDims = 3;
+//  const unsigned int nVars = 5;
+//  const unsigned int nSpts = 125;
+//  const unsigned int nFpts = 150;
+//
+//  /* Allocate temporary data structures */
+//  double CdFddU0[nDims][nVars][nSpts];
+//  double CtempDV[nDims][nVars];
+//  double CtempD[nDims];
+//
+//  for (unsigned int ele = tidx; ele < nEles; ele += gridDim.x * blockDim.x)
+//  {
+//    for (unsigned int varj = 0; varj < nVars; varj++)
+//      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
+//      {
+//        /* Compute solution gradient Jacobians in reference space */
+//        for (unsigned int dim = 0; dim < nDims; dim++)
+//          for (unsigned int vari = 0; vari < nVars; vari++)
+//            for (unsigned int spti = 0; spti < nSpts; spti++)
+//            {
+//              double val = (vari == varj) ? oppD(dim, spti, sptj) : 0.0;
+//              for (unsigned int fptk = 0; fptk < nFpts; fptk++)
+//                val += oppD_fpts(dim, spti, fptk) * dUcdU(ele, vari, varj, fptk) * oppE(fptk, sptj);
+//              CdFddU0[dim][vari][spti] = val;
+//            }
+//
+//        /* Transform gradient Jacobians to physical space */
+//        for (unsigned int vari = 0; vari < nVars; vari++)
+//          for (unsigned int spti = 0; spti < nSpts; spti++)
+//          {
+//            for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+//            {
+//              double val = 0.0;
+//              for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+//                val += CdFddU0[dim2][vari][spti] * inv_jaco_spts(dim2, spti, dim1, ele);
+//              CtempD[dim1] = val / jaco_det_spts(spti, ele);
+//            }
+//
+//            for (unsigned int dim = 0; dim < nDims; dim++)
+//              CdFddU0[dim][vari][spti] = CtempD[dim];
+//          }
+//
+//        /* Compute viscous Jacobian at solution points (dFddU only) */
+//        for (unsigned int spti = 0; spti < nSpts; spti++)
+//        {
+//          for (unsigned int dimi = 0; dimi < nDims; dimi++)
+//            for (unsigned int vari = 0; vari < nVars; vari++)
+//            {
+//              double val = 0.0;
+//              for (unsigned int dimj = 0; dimj < nDims; dimj++)
+//                for (unsigned int vark = 0; vark < nVars; vark++)
+//                  val += dFddU_spts(ele, dimi, dimj, vari, vark, spti) * CdFddU0[dimj][vark][spti];
+//              CtempDV[dimi][vari] = val;
+//            }
+//
+//          /* Transform viscous Jacobian at solution points to reference space */
+//          for (unsigned int vari = 0; vari < nVars; vari++)
+//            for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+//            {
+//              double val = 0.0;
+//              for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+//                val += CtempDV[dim2][vari] * inv_jaco_spts(dim1, spti, dim2, ele);
+//              CdFddU0[dim1][vari][spti] = val;
+//            }
+//        }
+//
+//        for (unsigned int dim = 0; dim < nDims; dim++)
+//          for (unsigned int vari = 0; vari < nVars; vari++)
+//            for (unsigned int spti = 0; spti < nSpts; spti++)
+//            {
+//              double val = 0.0;
+//              for (unsigned int sptk = 0; sptk < nSpts; sptk++)
+//                val += oppD(dim, spti, sptk) * CdFddU0[dim][vari][sptk];
+//              LHS(ele, varj, sptj, vari, spti) += val;
+//            }
+//      }
+//
+//    __syncthreads(); /* To avoid divergence */
+//  }
+//}
+//
+//void compute_visc_Jac_grad_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+//    mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, mdvector_gpu<double> &dUcdU, 
+//    mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &inv_jaco_spts, 
+//    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts, unsigned int nFpts, 
+//    unsigned int nVars, unsigned int nEles, unsigned int nDims)
+//{
+//  dim3 threads(128, 1);
+//  dim3 blocks(std::min((nEles + threads.x - 1) / threads.x, MAX_GRID_DIM), 1);
+//
+//  compute_visc_Jac_grad_spts<<<blocks, threads>>>(LHS, oppD, oppD_fpts, oppE, dUcdU, 
+//      dFddU_spts, inv_jaco_spts, jaco_det_spts, nSpts, nFpts, nVars, nEles, nDims);
+//}
 
 __global__
 void compute_visc_Jac_gradN_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 

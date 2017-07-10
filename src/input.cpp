@@ -241,6 +241,10 @@ InputStruct read_input_file(std::string inputfile)
     /* Compute residual Jacobian using finite difference approximation */
     read_param(f, "FDA_Jacobian", input.FDA_Jacobian, false);
 
+    /* Form Jacobians based on Kronecker product formulation */
+    // Note: only valid for quad and hex elements
+    read_param(f, "KPF_Jacobian", input.KPF_Jacobian, false);
+
     /* Freeze Jacobian */
     // Note: frequency based on n_steps
     if (input.dt_scheme == "Steady")

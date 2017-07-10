@@ -31,6 +31,7 @@ dtau_ratio_max 1e5
 dtau_growth_rate 1.0
 
 # Implicit
+KPF_Jacobian 1
 iterNM_max 100
 iterative_method MCGS
 nColors 2
