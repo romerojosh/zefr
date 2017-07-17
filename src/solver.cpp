@@ -1564,12 +1564,14 @@ void FRSolver::compute_dRdU()
 #endif
     */
 
+#ifdef _GPU
     if (input->KPF_Jacobian)
     {
       /* Zero out LHS */
       for (auto e : elesObjs)
         device_fill(e->LHS_d, e->LHS_d.max_size(), 0.);
     }
+#endif
 
     /* Compute block diagonal components of flux divergence Jacobian */
     for (auto e : elesObjs)

@@ -1657,21 +1657,6 @@ void Elements::compute_local_dRdU()
                   for (unsigned int sptj = 0; sptj < nSpts; sptj++)
                     CdFddU0(dimi, vari, varj, spti, sptj) += dFddU_spts(ele, dimi, dimj, vari, vark, spti) * Cvisc0(dimj, vark, varj, spti, sptj);
 
-      for (unsigned int vari = 0; vari < nVars; vari++)
-        for (unsigned int varj = 0; varj < nVars; varj++)
-          for (unsigned int spti = 0; spti < nSpts; spti++)
-            for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-            {
-              /* Transform viscous Jacobian at solution points to reference space */
-              CtempD.fill(0);
-              for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-                for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
-                  CtempD(dim1) += CdFddU0(dim2, vari, varj, spti, sptj) * inv_jaco_spts(dim1, spti, dim2, ele);
-
-              for (unsigned int dim = 0; dim < nDims; dim++)
-                CdFddU0(dim, vari, varj, spti, sptj) = CtempD(dim);
-            }
-
       for (unsigned int dim = 0; dim < nDims; dim++)
         for (unsigned int vari = 0; vari < nVars; vari++)
           for (unsigned int varj = 0; varj < nVars; varj++)
@@ -1823,25 +1808,12 @@ void Elements::compute_local_dRdU()
   /* Compute viscous element local Jacobians */
   if (input->viscous)
   {
+    /* Compute Jacobian (local gradient contributions) */
     compute_visc_Jac_grad_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
         dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, 
         nVars, nEles, nDims);
 
-    /* Compute Jacobian at flux points (local gradient contributions) */
-    /*
-    compute_visc_Jac_grad_fpts_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
-        dUcdU_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, nVars, nEles, 
-        nDims);
-        */
-
-    /* Compute Jacobian at solution points (local gradient contributions) */
-    /*
-    compute_visc_Jac_grad_spts_wrapper(LHS_d, oppD_d, oppD_fpts_d, oppE_d, dUcdU_d, 
-        dFddU_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, nVars, 
-        nEles, nDims);
-        */
-
-    /* Compute Jacobian at flux points (neighbor gradient contributions) */
+    /* Compute Jacobian (neighbor gradient contributions) */
     compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
         dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
         geo->face2faceN_d, geo->fpt2fptN_d, startEle, nSpts, nFpts, nFptsPerFace, nVars, 
@@ -1918,11 +1890,23 @@ void Elements::compute_dFdU()
             dFdU_spts(ele, vari, varj, dim, spt) = tdFdU[vari][varj][dim];
 
       if(input->viscous)
+      {
+        /* Transform flux derivative to reference space */
+        double tdFddU[nVars][nVars][nDims][nDims] = {{0.0}};
+        for (unsigned int vari = 0; vari < nVars; vari++)
+          for (unsigned int varj = 0; varj < nVars; varj++)
+            for (unsigned int dimj = 0; dimj < nDims; dimj++)
+              for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+                for (unsigned int dim2 = 0; dim2 < nDims; dim2++)
+                  tdFddU[vari][varj][dim1][dimj] += dFddU[vari][varj][dim2][dimj] * inv_jaco[dim1][dim2];
+
+        /* Write out transformed flux derivatives */
         for (unsigned int vari = 0; vari < nVars; vari++)
           for (unsigned int varj = 0; varj < nVars; varj++)
             for (unsigned int dimi = 0; dimi < nDims; dimi++)
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
-                dFddU_spts(ele, dimi, dimj, vari, varj, spt) = dFddU[vari][varj][dimi][dimj];
+                dFddU_spts(ele, dimi, dimj, vari, varj, spt) = tdFddU[vari][varj][dimi][dimj];
+      }
     }
   }
 }
