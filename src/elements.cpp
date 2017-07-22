@@ -636,7 +636,7 @@ void Elements::setup_FR()
   write_opp(oppDiv_fpts, str, oppDiv_fpts_id, nSpts, nFpts);
 #endif
 
-  /* Setup combined differentiation/extrapolation operator for flux Jacobians (DFR Specific) */
+  /* Setup combined differentiation/extrapolation Jacobian operators (DFR Specific) */
   if (input->implicit_method && input->KPF_Jacobian)
   {
     oppD_spts1D.assign({nSpts1D, nSpts1D});
@@ -644,6 +644,18 @@ void Elements::setup_FR()
       for (unsigned int sptj = 0; sptj < nSpts1D; sptj++)
       {
         oppD_spts1D(spti, sptj) = Lagrange_d1(loc_DFR_1D, sptj+1, loc_spts_1D[spti]);
+      }
+
+    oppDE_spts1D.assign({2, nSpts1D, nSpts1D});
+    for (unsigned int spti = 0; spti < nSpts1D; spti++)
+      for (unsigned int sptj = 0; sptj < nSpts1D; sptj++)
+      {
+        oppDE_spts1D(0, spti, sptj) =
+          Lagrange_d1(loc_DFR_1D, 0, loc_spts_1D[spti]) *
+          Lagrange(loc_spts_1D, sptj, -1);
+        oppDE_spts1D(1, spti, sptj) = 
+          Lagrange_d1(loc_DFR_1D, nSpts1D+1, loc_spts_1D[spti]) *
+          Lagrange(loc_spts_1D, sptj,  1);
       }
 
     oppDivE_spts1D.assign({2, nSpts1D, nSpts1D});
@@ -1790,34 +1802,51 @@ void Elements::compute_local_dRdU()
 #endif
 
 #ifdef _GPU
-  /* Compute inviscid element local Jacobians */
   if (input->KPF_Jacobian)
   {
-    compute_inv_KPF_Jac_wrapper(LHS_d, oppD_d, oppDivE_spts1D_d, dFdU_spts_d, dFcdU_d, nSpts1D, nVars, nEles, nDims);
+    /* Compute inviscid element local Jacobians */
+    compute_inv_KPF_Jac_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, dFdU_spts_d, dFcdU_d, 
+        nSpts1D, nVars, nEles, nDims);
+
+    /* Compute viscous element local Jacobians */
+    if (input->viscous)
+    {
+      /* Compute Jacobian (local gradient contributions) */
+      compute_visc_KPF_Jac_grad_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, oppDE_spts1D_d, 
+          dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts1D, nSpts, 
+          nVars, nEles, nDims);
+
+      /* Compute Jacobian (neighbor gradient contributions) */
+      compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
+          dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
+          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nSpts, nFpts, nFptsPerFace, nVars, 
+          nFaces, nEles, nDims);
+    }
   }
 
   else
   {
+    /* Compute inviscid element local Jacobians */
     /* Compute Jacobian at solution points */
     compute_inv_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
 
     /* Compute Jacobian at flux points */
     compute_inv_Jac_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_d, nSpts, nFpts, nVars, nEles);
-  }
 
-  /* Compute viscous element local Jacobians */
-  if (input->viscous)
-  {
-    /* Compute Jacobian (local gradient contributions) */
-    compute_visc_Jac_grad_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
-        dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, 
-        nVars, nEles, nDims);
+    /* Compute viscous element local Jacobians */
+    if (input->viscous)
+    {
+      /* Compute Jacobian (local gradient contributions) */
+      compute_visc_Jac_grad_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
+          dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, 
+          nVars, nEles, nDims);
 
-    /* Compute Jacobian (neighbor gradient contributions) */
-    compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
-        dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
-        geo->face2faceN_d, geo->fpt2fptN_d, startEle, nSpts, nFpts, nFptsPerFace, nVars, 
-        nFaces, nEles, nDims);
+      /* Compute Jacobian (neighbor gradient contributions) */
+      compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
+          dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
+          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nSpts, nFpts, nFptsPerFace, nVars, 
+          nFaces, nEles, nDims);
+    }
   }
 
   /* Scale residual Jacobian */

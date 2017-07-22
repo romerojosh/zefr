@@ -43,6 +43,12 @@ void compute_inv_KPF_Jac_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> 
     mdvector_gpu<double> oppDivE_spts1D, mdvector_gpu<double> dFdU_spts, mdvector_gpu<double> dFcdU, 
     unsigned int nSpts1D, unsigned int nVars, unsigned int nEles, unsigned int nDims);
 
+void compute_visc_KPF_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD_spts1D, 
+    mdvector_gpu<double> &oppDivE_spts1D, mdvector_gpu<double> &oppDE_spts1D, mdvector_gpu<double> &dUcdU, 
+    mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &dFcddU, mdvector_gpu<double> &inv_jaco_spts, 
+    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts1D, unsigned int nSpts, unsigned int nVars, 
+    unsigned int nEles, unsigned int nDims);
+
 void compute_inv_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims);
