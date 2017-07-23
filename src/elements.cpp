@@ -1819,8 +1819,8 @@ void Elements::compute_local_dRdU()
       /* Compute Jacobian (neighbor gradient contributions) */
       compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
           dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
-          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nSpts, nFpts, nFptsPerFace, nVars, 
-          nFaces, nEles, nDims);
+          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nFptsPerFace, nFaces, nVars, nEles, 
+          nDims, order);
     }
   }
 
@@ -1838,14 +1838,14 @@ void Elements::compute_local_dRdU()
     {
       /* Compute Jacobian (local gradient contributions) */
       compute_visc_Jac_grad_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
-          dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nFpts, 
-          nVars, nEles, nDims);
+          dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nVars, nEles, 
+          nDims, order);
 
       /* Compute Jacobian (neighbor gradient contributions) */
       compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
           dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
-          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nSpts, nFpts, nFptsPerFace, nVars, 
-          nFaces, nEles, nDims);
+          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nFptsPerFace, nFaces, nVars, nEles, 
+          nDims, order);
     }
   }
 

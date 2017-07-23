@@ -1575,8 +1575,8 @@ void FRSolver::compute_dRdU()
         std::cout << "LHS:" << std::endl;
         device_fill(e->LHS_d, e->LHS_d.max_size(), 0.);
         compute_visc_Jac_grad_wrapper(e->LHS_d, e->oppD_d, e->oppDiv_fpts_d, e->oppD_fpts_d, e->oppE_d, 
-            e->dUcdU_d, e->dFddU_spts_d, e->dFcddU_d, e->inv_jaco_spts_d, e->jaco_det_spts_d, e->nSpts, e->nFpts, 
-            e->nVars, e->nEles, e->nDims);
+            e->dUcdU_d, e->dFddU_spts_d, e->dFcddU_d, e->inv_jaco_spts_d, e->jaco_det_spts_d, e->nVars, 
+            e->nEles, e->nDims, e->order);
         e->LHS = e->LHS_d;
         for (unsigned int vari = 0; vari < e->nVars; vari++)
           for (unsigned int spti = 0; spti < e->nSpts; spti++)
