@@ -1804,45 +1804,45 @@ void Elements::compute_local_dRdU()
 #ifdef _GPU
   if (input->KPF_Jacobian)
   {
-    /* Compute inviscid element local Jacobians */
-    compute_inv_KPF_Jac_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, dFdU_spts_d, dFcdU_d, 
+    /* Compute element local Jacobians */
+    compute_KPF_Jac_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, dFdU_spts_d, dFcdU_d, 
         nSpts1D, nVars, nEles, nDims);
 
-    /* Compute viscous element local Jacobians */
+    /* Compute element local Jacobians (gradient contributions) */
     if (input->viscous)
     {
       /* Compute Jacobian (local gradient contributions) */
-      compute_visc_KPF_Jac_grad_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, oppDE_spts1D_d, 
-          dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts1D, nSpts, 
-          nVars, nEles, nDims);
+      compute_KPF_Jac_grad_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, oppDE_spts1D_d, 
+          dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts1D, nVars, 
+          nEles, nDims);
 
       /* Compute Jacobian (neighbor gradient contributions) */
-      compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
+      compute_KPF_Jac_gradN_wrapper(LHS_d, oppDivE_spts1D_d, oppDE_spts1D_d, dUcdU_d, 
           dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
-          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nFptsPerFace, nFaces, nVars, nEles, 
-          nDims, order);
+          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nFptsPerFace, nFaces, nSpts1D, nVars, 
+          nEles, nDims);
     }
   }
 
   else
   {
-    /* Compute inviscid element local Jacobians */
+    /* Compute element local Jacobians */
     /* Compute Jacobian at solution points */
-    compute_inv_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
+    compute_Jac_spts_wrapper(LHS_d, oppD_d, dFdU_spts_d, nSpts, nVars, nEles, nDims);
 
     /* Compute Jacobian at flux points */
-    compute_inv_Jac_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_d, nSpts, nFpts, nVars, nEles);
+    compute_Jac_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppE_d, dFcdU_d, nSpts, nFpts, nVars, nEles);
 
-    /* Compute viscous element local Jacobians */
+    /* Compute element local Jacobians (gradient contributions) */
     if (input->viscous)
     {
       /* Compute Jacobian (local gradient contributions) */
-      compute_visc_Jac_grad_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
+      compute_Jac_grad_wrapper(LHS_d, oppD_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, 
           dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nVars, nEles, 
           nDims, order);
 
       /* Compute Jacobian (neighbor gradient contributions) */
-      compute_visc_Jac_gradN_fpts_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
+      compute_Jac_gradN_wrapper(LHS_d, oppDiv_fpts_d, oppD_fpts_d, oppE_d, dUcdU_d, 
           dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
           geo->face2faceN_d, geo->fpt2fptN_d, startEle, nFptsPerFace, nFaces, nVars, nEles, 
           nDims, order);

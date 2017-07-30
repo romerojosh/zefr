@@ -414,7 +414,7 @@ void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double
 
 template<unsigned int nDims>
 __global__
-void compute_inv_KPF_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D, 
+void compute_KPF_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D, 
     mdvector_gpu<double> oppDivE_spts1D, mdvector_gpu<double> dFdU_spts, mdvector_gpu<double> dFcdU, 
     unsigned int nSpts1D, unsigned int nVars, unsigned int nEles)
 {
@@ -496,7 +496,7 @@ void compute_inv_KPF_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spt
   }
 }
 
-void compute_inv_KPF_Jac_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D, 
+void compute_KPF_Jac_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D, 
     mdvector_gpu<double> oppDivE_spts1D, mdvector_gpu<double> dFdU_spts, mdvector_gpu<double> dFcdU, 
     unsigned int nSpts1D, unsigned int nVars, unsigned int nEles, unsigned int nDims)
 {
@@ -504,20 +504,19 @@ void compute_inv_KPF_Jac_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> 
   dim3 blocks(std::min((nEles*nVars*nVars + threads.x - 1) / threads.x, MAX_GRID_DIM));
 
   if (nDims == 2)
-    compute_inv_KPF_Jac<2><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, dFdU_spts, dFcdU, 
+    compute_KPF_Jac<2><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, dFdU_spts, dFcdU, 
         nSpts1D, nVars, nEles);
   else if (nDims == 3)
-    compute_inv_KPF_Jac<3><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, dFdU_spts, dFcdU, 
+    compute_KPF_Jac<3><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, dFdU_spts, dFcdU, 
         nSpts1D, nVars, nEles);
 }
 
 template<unsigned int nDims>
 __global__
-void compute_visc_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D, 
+void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D, 
     mdvector_gpu<double> oppDivE_spts1D, mdvector_gpu<double> oppDE_spts1D, mdvector_gpu<double> dUcdU, 
     mdvector_gpu<double> dFddU_spts, mdvector_gpu<double> dFcddU, mdvector_gpu<double> inv_jaco_spts, 
-    mdvector_gpu<double> jaco_det_spts, unsigned int nSpts1D, unsigned int nSpts, unsigned int nVars, 
-    unsigned int nEles)
+    mdvector_gpu<double> jaco_det_spts, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles)
 {
   const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
 
@@ -835,26 +834,206 @@ void compute_visc_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> op
   }
 }
 
-void compute_visc_KPF_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD_spts1D, 
+void compute_KPF_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD_spts1D, 
     mdvector_gpu<double> &oppDivE_spts1D, mdvector_gpu<double> &oppDE_spts1D, mdvector_gpu<double> &dUcdU, 
     mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &dFcddU, mdvector_gpu<double> &inv_jaco_spts, 
-    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts1D, unsigned int nSpts, unsigned int nVars, 
-    unsigned int nEles, unsigned int nDims)
+    mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles, 
+    unsigned int nDims)
 {
   dim3 threads(192);
   dim3 blocks(std::min((nEles*nVars*nVars + threads.x - 1) / threads.x, MAX_GRID_DIM));
 
   if (nDims == 2)
-    compute_visc_KPF_Jac_grad<2><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, oppDE_spts1D, 
-        dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nSpts1D, nSpts, nVars, nEles);
+    compute_KPF_Jac_grad<2><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, oppDE_spts1D, 
+        dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nSpts1D, nVars, nEles);
   else if (nDims == 3)
-    compute_visc_KPF_Jac_grad<3><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, oppDE_spts1D,
-        dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nSpts1D, nSpts, nVars, nEles);
+    compute_KPF_Jac_grad<3><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, oppDE_spts1D,
+        dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nSpts1D, nVars, nEles);
+}
+
+template<unsigned int nDims>
+__global__
+void compute_KPF_Jac_gradN(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDivE_spts1D, 
+    mdvector_gpu<double> oppDE_spts1D, mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFcddU, 
+    mdview_gpu<double> inv_jacoN_spts, mdview_gpu<double> jacoN_det_spts, 
+    mdvector_gpu<unsigned int> eleID_in, mdvector_gpu<int> ele2eleN, mdvector_gpu<int> face2faceN, 
+    mdvector_gpu<int> fpt2fptN, unsigned int startEle, unsigned int nFptsPerFace, 
+    unsigned int nFaces, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+
+  for (unsigned int elevarjvari = tidx; elevarjvari < nEles*nVars*nVars; elevarjvari += gridDim.x * blockDim.x)
+  {
+    const unsigned int ele = elevarjvari / (nVars*nVars);
+    const unsigned int eleID = eleID_in(ele + startEle);
+
+    const unsigned int varjvari = elevarjvari % (nVars*nVars);
+    const unsigned int varj = varjvari / nVars;
+    const unsigned int vari = varjvari % nVars;
+
+    /* Note: dFcddU follows idx_fpts */
+    // TODO: Construct reverse data structure (i.e. 3D: (fpti, fptj) -> fpt)
+    if (nDims == 2)
+    {
+      for (unsigned int fpt = 0; fpt < nSpts1D; fpt++)
+      {
+        const unsigned int fptR = nSpts1D - fpt-1;
+
+        /* Compute neighbor contributions */
+        // TODO: Cleanup this section
+        /* Bottom */
+        double dFcdUB = 0;
+        unsigned int face = 0;
+        int eleNID = ele2eleN(face, eleID);
+        if (eleNID != -1)
+        {
+          /* Determine neighbor's bias and outward dimension on each face */
+          // TODO: This could be done as a preprocessing step
+          const unsigned int faceN = face2faceN(face, eleID);
+          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
+          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 1 : 0;
+          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
+
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            /* Compute inner product */
+            double val = 0.0;
+            for (unsigned int k = 0; k < nSpts1D; k++)
+            {
+              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
+              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
+              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
+            }
+            dFcdUB += dFcddU(ele, 1, dimj, vari, varj, fpt) * val * dUcdU(ele, varj, varj, fpt);
+          }
+        }
+
+        /* Right */
+        double dFcdUR = 0;
+        face = 1;
+        eleNID = ele2eleN(face, eleID);
+        if (eleNID != -1)
+        {
+          /* Determine neighbor's bias and outward dimension on each face */
+          // TODO: This could be done as a preprocessing step
+          const unsigned int faceN = face2faceN(face, eleID);
+          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
+          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 1 : 0;
+          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
+
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            /* Compute inner product */
+            double val = 0.0;
+            for (unsigned int k = 0; k < nSpts1D; k++)
+            {
+              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
+              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
+              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
+            }
+            dFcdUR += dFcddU(ele, 1, dimj, vari, varj, nSpts1D + fpt) * val * dUcdU(ele, varj, varj, nSpts1D + fpt);
+          }
+        }
+
+        /* Top */
+        double dFcdUT = 0;
+        face = 2;
+        eleNID = ele2eleN(face, eleID);
+        if (eleNID != -1)
+        {
+          /* Determine neighbor's bias and outward dimension on each face */
+          // TODO: This could be done as a preprocessing step
+          const unsigned int faceN = face2faceN(face, eleID);
+          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
+          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 0 : 1;
+          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
+
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            /* Compute inner product */
+            double val = 0.0;
+            for (unsigned int k = 0; k < nSpts1D; k++)
+            {
+              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
+              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
+              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
+            }
+            dFcdUT += dFcddU(ele, 1, dimj, vari, varj, 3*nSpts1D - fpt-1) * val * dUcdU(ele, varj, varj, 3*nSpts1D - fpt-1);
+          }
+        }
+
+        /* Left */
+        double dFcdUL = 0;
+        face = 3;
+        eleNID = ele2eleN(face, eleID);
+        if (eleNID != -1)
+        {
+          /* Determine neighbor's bias and outward dimension on each face */
+          // TODO: This could be done as a preprocessing step
+          const unsigned int faceN = face2faceN(face, eleID);
+          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
+          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 0 : 1;
+          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
+
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            /* Compute inner product */
+            double val = 0.0;
+            for (unsigned int k = 0; k < nSpts1D; k++)
+            {
+              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
+              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
+              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
+            }
+            dFcdUL += dFcddU(ele, 1, dimj, vari, varj, 4*nSpts1D - fpt-1) * val * dUcdU(ele, varj, varj, 4*nSpts1D - fpt-1);
+          }
+        }
+
+        /* Fill LHS */
+        // TODO: This is actually the same as KPF_Jac, move there?
+        for (unsigned int i = 0; i < nSpts1D; i++)
+          for (unsigned int j = 0; j < nSpts1D; j++)
+          {
+            /* xi-direction */
+            unsigned int spti = fpt * nSpts1D + i;
+            unsigned int sptj = fpt * nSpts1D + j;
+            LHS(ele, varj, sptj, vari, spti) += oppDivE_spts1D(0, i, j) * dFcdUL + oppDivE_spts1D(1, i, j) * dFcdUR;
+
+            /* eta-direction */
+            spti = i * nSpts1D + fpt;
+            sptj = j * nSpts1D + fpt;
+            LHS(ele, varj, sptj, vari, spti) += oppDivE_spts1D(0, i, j) * dFcdUB + oppDivE_spts1D(1, i, j) * dFcdUT;
+
+          }
+      }
+    }
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void compute_KPF_Jac_gradN_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppDivE_spts1D, 
+    mdvector_gpu<double> &oppDE_spts1D, mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFcddU, 
+    mdview_gpu<double> &inv_jacoN_spts, mdview_gpu<double> &jacoN_det_spts, 
+    mdvector_gpu<unsigned int> &eleID, mdvector_gpu<int> &ele2eleN, mdvector_gpu<int> &face2faceN, 
+    mdvector_gpu<int> &fpt2fptN, unsigned int startEle, unsigned int nFptsPerFace, unsigned int nFaces, 
+    unsigned int nSpts1D, unsigned int nVars, unsigned int nEles, unsigned int nDims)
+{
+  dim3 threads(192);
+  dim3 blocks(std::min((nEles*nVars*nVars + threads.x - 1) / threads.x, MAX_GRID_DIM));
+
+  if (nDims == 2)
+    compute_KPF_Jac_gradN<2><<<blocks, threads>>>(LHS, oppDivE_spts1D, oppDE_spts1D, dUcdU, dFcddU, 
+        inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN, startEle, nFptsPerFace, 
+        nFaces, nSpts1D, nVars, nEles);
+  else if (nDims == 3)
+    compute_KPF_Jac_gradN<3><<<blocks, threads>>>(LHS, oppDivE_spts1D, oppDE_spts1D, dUcdU, dFcddU, 
+        inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN, startEle, nFptsPerFace, 
+        nFaces, nSpts1D, nVars, nEles);
 }
 
 
 __global__
-void compute_inv_Jac_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+void compute_Jac_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
     mdvector_gpu<double> dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims)
 {
@@ -884,18 +1063,18 @@ void compute_inv_Jac_spts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD,
   }
 }
 
-void compute_inv_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+void compute_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims)
 {
   dim3 threads(32, 6);
   dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
 
-  compute_inv_Jac_spts<<<blocks, threads>>>(LHS, oppD, dFdU_spts, nSpts, nVars, nEles, nDims);
+  compute_Jac_spts<<<blocks, threads>>>(LHS, oppD, dFdU_spts, nSpts, nVars, nEles, nDims);
 }
 
 __global__
-void compute_inv_Jac_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
+void compute_Jac_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
     mdvector_gpu<double> oppE, mdvector_gpu<double> dFcdU, unsigned int nSpts, unsigned int nFpts, 
     unsigned int nVars, unsigned int nEles)
 {
@@ -925,19 +1104,19 @@ void compute_inv_Jac_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_
   }
 }
 
-void compute_inv_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
+void compute_Jac_fpts_wrapper(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
     mdvector_gpu<double> oppE, mdvector_gpu<double> dFcdU, unsigned int nSpts, unsigned int nFpts, 
     unsigned int nVars, unsigned int nEles)
 {
   dim3 threads(32, 6);
   dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
 
-  compute_inv_Jac_fpts<<<blocks, threads>>>(LHS, oppDiv_fpts, oppE, dFcdU, nSpts, nFpts, nVars, nEles);
+  compute_Jac_fpts<<<blocks, threads>>>(LHS, oppDiv_fpts, oppE, dFcdU, nSpts, nFpts, nVars, nEles);
 }
 
 template<unsigned int nDims, unsigned int nVars, unsigned int nSpts, unsigned int nFpts>
 __global__
-void compute_visc_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
+void compute_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD, 
     mdvector_gpu<double> oppDiv_fpts, mdvector_gpu<double> oppD_fpts, mdvector_gpu<double> oppE, 
     mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFddU_spts, mdvector_gpu<double> dFcddU, 
     mdvector_gpu<double> inv_jaco_spts, mdvector_gpu<double> jaco_det_spts, unsigned int nEles)
@@ -1035,7 +1214,7 @@ void compute_visc_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD,
   }
 }
 
-void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
+void compute_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &oppDiv_fpts, mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, 
     mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFddU_spts, mdvector_gpu<double> &dFcddU, 
     mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &jaco_det_spts, unsigned int nVars, 
@@ -1050,7 +1229,7 @@ void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<doubl
     if (nVars == 1)
     {
       if (order == 2)
-        compute_visc_Jac_grad<2,1,9,12><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
+        compute_Jac_grad<2,1,9,12><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
             oppE, dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nEles);
       else
         ThrowException("Viscous grad Jacobian kernel not added for this order!");
@@ -1058,7 +1237,7 @@ void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<doubl
     else if (nVars == 4)
     {
       if (order == 4)
-        compute_visc_Jac_grad<2,4,25,20><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
+        compute_Jac_grad<2,4,25,20><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
             oppE, dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nEles);
       else
         ThrowException("Viscous grad Jacobian kernel not added for this order!");
@@ -1069,7 +1248,7 @@ void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<doubl
     if (nVars == 1)
     {
       if (order == 2)
-        compute_visc_Jac_grad<3,1,27,54><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
+        compute_Jac_grad<3,1,27,54><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
             oppE, dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nEles);
       else
         ThrowException("Viscous grad Jacobian kernel not added for this order!");
@@ -1077,7 +1256,7 @@ void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<doubl
     else if (nVars == 5)
     {
       if (order == 4)
-        compute_visc_Jac_grad<3,5,125,150><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
+        compute_Jac_grad<3,5,125,150><<<blocks, threads>>>(LHS, oppD, oppDiv_fpts, oppD_fpts, 
             oppE, dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nEles);
       else
         ThrowException("Viscous grad Jacobian kernel not added for this order!");
@@ -1087,7 +1266,7 @@ void compute_visc_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<doubl
 
 template<unsigned int nDims, unsigned int nVars, unsigned int nSpts, unsigned int nFpts>
 __global__
-void compute_visc_Jac_gradN_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
+void compute_Jac_gradN(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDiv_fpts, 
     mdvector_gpu<double> oppD_fpts, mdvector_gpu<double> oppE, mdvector_gpu<double> dUcdU, 
     mdvector_gpu<double> dFcddU, mdview_gpu<double> inv_jacoN_spts, mdview_gpu<double> jacoN_det_spts, 
     mdvector_gpu<unsigned int> eleID_in, mdvector_gpu<int> ele2eleN, mdvector_gpu<int> face2faceN, 
@@ -1190,7 +1369,7 @@ void compute_visc_Jac_gradN_fpts(mdvector_gpu<double> LHS, mdvector_gpu<double> 
   }
 }
 
-void compute_visc_Jac_gradN_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppDiv_fpts, 
+void compute_Jac_gradN_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppDiv_fpts, 
     mdvector_gpu<double> &oppD_fpts, mdvector_gpu<double> &oppE, mdvector_gpu<double> &dUcdU, 
     mdvector_gpu<double> &dFcddU, mdview_gpu<double> &inv_jacoN_spts, mdview_gpu<double> &jacoN_det_spts, 
     mdvector_gpu<unsigned int> &eleID, mdvector_gpu<int> &ele2eleN, mdvector_gpu<int> &face2faceN, 
@@ -1206,8 +1385,8 @@ void compute_visc_Jac_gradN_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu
     if (nVars == 1)
     {
       if (order == 2)
-        compute_visc_Jac_gradN_fpts<2,1,9,12><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, dUcdU, 
-            dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
+        compute_Jac_gradN<2,1,9,12><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, 
+            dUcdU, dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
             startEle, nFptsPerFace, nFaces, nEles);
       else
         ThrowException("Viscous gradN Jacobian kernel not added for this order!");
@@ -1215,8 +1394,8 @@ void compute_visc_Jac_gradN_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu
     else if (nVars == 4)
     {
       if (order == 4)
-        compute_visc_Jac_gradN_fpts<2,4,25,20><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, dUcdU, 
-            dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
+        compute_Jac_gradN<2,4,25,20><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, 
+            dUcdU, dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
             startEle, nFptsPerFace, nFaces, nEles);
       else
         ThrowException("Viscous gradN Jacobian kernel not added for this order!");
@@ -1227,8 +1406,8 @@ void compute_visc_Jac_gradN_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu
     if (nVars == 1)
     {
       if (order == 2)
-        compute_visc_Jac_gradN_fpts<3,1,27,54><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, dUcdU, 
-            dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
+        compute_Jac_gradN<3,1,27,54><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, 
+            dUcdU, dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
             startEle, nFptsPerFace, nFaces, nEles);
       else
         ThrowException("Viscous gradN Jacobian kernel not added for this order!");
@@ -1236,8 +1415,8 @@ void compute_visc_Jac_gradN_fpts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu
     else if (nVars == 5)
     {
       if (order == 4)
-        compute_visc_Jac_gradN_fpts<3,5,125,150><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, dUcdU, 
-            dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
+        compute_Jac_gradN<3,5,125,150><<<blocks, threads>>>(LHS, oppDiv_fpts, oppD_fpts, oppE, 
+            dUcdU, dFcddU, inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN,
             startEle, nFptsPerFace, nFaces, nEles);
       else
         ThrowException("Viscous gradN Jacobian kernel not added for this order!");
