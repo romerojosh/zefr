@@ -218,10 +218,12 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
     if (input->KPF_Jacobian)
     {
       for (auto e : elesObjs)
-      {
         e->setup_ddUdUc();
+
+#ifdef _GPU
+      for (auto e : elesObjs)
         e->ddUdUc_d = e->ddUdUc;
-      }
+#endif
     }
   }
 
