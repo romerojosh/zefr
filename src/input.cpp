@@ -304,7 +304,15 @@ InputStruct read_input_file(std::string inputfile)
 
     /* Restrictions */
     if (input.equation == EulerNS && input.viscous && !input.fix_vis)
-      ThrowException("Viscous implicit Jacobians with Sutherland's law not available!"); 
+      ThrowException("Viscous implicit Jacobians with Sutherland's law not available!");
+#ifdef _CPU
+    if (input.KPF_Jacobian)
+      ThrowException("Implicit KPF Jacobians only implemented on GPU!");
+#endif
+#ifdef _GPU
+    if (input.FDA_Jacobian)
+      ThrowException("Implicit FDA Jacobians only implemented on CPU!");
+#endif
   }
 
   read_param(f, "overset", input.overset, false);

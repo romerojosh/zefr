@@ -106,8 +106,6 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
     dFdU_spts.assign({nEles, nVars, nVars, nDims, nSpts});
     dFcdU.assign({nEles, nVars, nVars, nFpts});
 
-    CtempSF.assign({nSpts, nFpts});
-
     if (input->viscous)
     {
       dUcdU.assign({nEles, nVars, nVars, nFpts}, 0);
@@ -116,6 +114,17 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
       dFddU_spts.assign({nEles, nDims, nDims, nVars, nVars, nSpts});
       dFcddU.assign({nEles, 2, nDims, nVars, nVars, nFpts});
 
+      if (input->KPF_Jacobian)
+      {
+        ddUdUc.assign({nEles, nDims, nFpts}, 0);
+      }
+    }
+
+    /* Temporary data structures for Jacobian on CPU */
+#ifdef _CPU
+    CtempSF.assign({nSpts, nFpts});
+    if (input->viscous)
+    {
       Cvisc0.assign({nDims, nVars, nVars, nSpts, nSpts});
       CviscN.assign({nDims, nVars, nSpts, nSpts});
       CdFddU0.assign({nDims, nVars, nVars, nSpts, nSpts});
@@ -125,6 +134,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
       CtempFS.assign({nFpts, nSpts});
       CtempFSN.assign({nFptsPerFace, nSpts});
     }
+#endif
 
     /* Solver data structures */
     LHS.assign({nEles, nVars, nSpts, nVars, nSpts});
@@ -1077,6 +1087,89 @@ void Elements::setup_filter()
 
 }
 
+void Elements::setup_ddUdUc()
+{
+  /* Setup fpt2spts */
+  mdvector<unsigned int> fpt2spts({nFpts, nSpts1D});
+  for (unsigned int face = 0; face < nFaces; face++)
+  {
+    if (etype == QUAD)
+    {
+      for (unsigned int fi = 0; fi < nSpts1D; fi++)
+      {
+        unsigned int fpt = face * nFptsPerFace + fi;
+        for (unsigned int sk = 0; sk < nSpts1D; sk++)
+        {
+          switch(face)
+          {
+            case 0: /* Bottom edge */
+              fpt2spts(fpt, sk) = sk*nSpts1D + fi; break;
+
+            case 1: /* Right edge */
+              fpt2spts(fpt, sk) = fi*nSpts1D + sk; break;
+
+            case 2: /* Upper edge */
+              fpt2spts(fpt, sk) = sk*nSpts1D + (nSpts1D-fi-1); break;
+
+            case 3: /* Left edge */
+              fpt2spts(fpt, sk) = (nSpts1D-fi-1)*nSpts1D + sk; break;
+          }
+        }
+      }
+    }
+    else if (etype == HEX)
+    {
+    }
+    else
+      ThrowException("fpt2spts should only be setup for QUAD or HEX!")
+  }
+
+  /* Setup ddUdUc */
+  for (unsigned int ele = 0; ele < nEles; ele++)
+  {
+    unsigned int eleID = geo->eleID[etype](ele + startEle);
+    for (unsigned int face = 0; face < nFaces; face++)
+    {
+      /* Note: No contribution if element neighbor is a boundary */
+      int eleNID = geo->ele2eleN(face, eleID);
+      if (eleNID == -1) continue;
+
+      if (etype == QUAD)
+      {
+        /* Determine neighbor's LR state and outward dimension on each face */
+        int faceN = geo->face2faceN(face, eleID);
+        unsigned int LR = (faceN == 0 || faceN == 3) ? 0 : 1;
+        unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
+
+        /* Compute inner product on each fpt */
+        for (unsigned int fi = 0; fi < nSpts1D; fi++)
+        {
+          unsigned int fpt = face * nFptsPerFace + fi;
+          int fptN = geo->fpt2fptN(fpt, eleID);
+
+          /* Compute inner product */
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+          {
+            double val = 0.0;
+            for (unsigned int sk = 0; sk < nSpts1D; sk++)
+            {
+              unsigned int sptk = fpt2spts(fptN, sk);
+              val += oppDE_spts1D(LR, sk, sk) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
+            }
+            ddUdUc(ele, dimj, fpt) = val;
+          }
+        }
+      }
+      else if (etype == HEX)
+      {
+      }
+      else
+        ThrowException("ddUdUc should only be setup for QUAD or HEX!")
+    }
+  }
+}
+
+
 void Elements::extrapolate_U()
 {
 #ifdef _CPU
@@ -1590,26 +1683,14 @@ void Elements::compute_local_dRdU()
             double val = 0;
             for (unsigned int fptk = 0; fptk < nFpts; fptk++)
               val += CtempSF(spti, fptk) * oppE(fptk, sptj);
-#ifdef _CPU
             LHS(ele, vari, spti, varj, sptj) = val;
-#endif
-#ifdef _GPU
-            LHS(ele, varj, sptj, vari, spti) = val;
-#endif
           }
 
         /* Compute Jacobian at solution points */
         for (unsigned int dim = 0; dim < nDims; dim++)
           for (unsigned int spti = 0; spti < nSpts; spti++)
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-            {
-#ifdef _CPU
               LHS(ele, vari, spti, varj, sptj) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
-#endif
-#ifdef _GPU
-              LHS(ele, varj, sptj, vari, spti) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
-#endif
-            }
       }
 
     /* Compute viscous element local Jacobians */
@@ -1678,12 +1759,7 @@ void Elements::compute_local_dRdU()
                 double val = 0;
                 for (unsigned int sptk = 0; sptk < nSpts; sptk++)
                   val += oppD(dim, spti, sptk) * CdFddU0(dim, vari, varj, sptk, sptj);
-#ifdef _CPU
                 LHS(ele, vari, spti, varj, sptj) += val;
-#endif
-#ifdef _GPU
-                LHS(ele, varj, sptj, vari, spti) += val;
-#endif
               }
 
       /* Compute viscous Jacobian at flux points (dFcddU only) */
@@ -1776,12 +1852,7 @@ void Elements::compute_local_dRdU()
               double val = 0;
               for (unsigned int fptk = 0; fptk < nFpts; fptk++)
                 val += oppDiv_fpts(spti, fptk) * CdFcddU0(vari, varj, fptk, sptj);
-#ifdef _CPU
               LHS(ele, vari, spti, varj, sptj) += val;
-#endif
-#ifdef _GPU
-              LHS(ele, varj, sptj, vari, spti) += val;
-#endif
             }
     }
 
@@ -1790,14 +1861,7 @@ void Elements::compute_local_dRdU()
       for (unsigned int spti = 0; spti < nSpts; spti++)
         for (unsigned int varj = 0; varj < nVars; varj++)
           for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-          {
-#ifdef _CPU
             LHS(ele, vari, spti, varj, sptj) /= jaco_det_spts(spti, ele);
-#endif
-#ifdef _GPU
-            LHS(ele, varj, sptj, vari, spti) /= jaco_det_spts(spti, ele);
-#endif
-          }
   }
 #endif
 
@@ -1808,18 +1872,11 @@ void Elements::compute_local_dRdU()
     compute_KPF_Jac_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, dFdU_spts_d, dFcdU_d, 
         nSpts1D, nVars, nEles, nDims);
 
-    /* Compute element local Jacobians (gradient contributions) */
+    /* Compute Jacobian (local gradient contributions) */
     if (input->viscous)
     {
-      /* Compute Jacobian (local gradient contributions) */
       compute_KPF_Jac_grad_wrapper(LHS_d, oppD_spts1D_d, oppDivE_spts1D_d, oppDE_spts1D_d, 
           dUcdU_d, dFddU_spts_d, dFcddU_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts1D, nVars, 
-          nEles, nDims);
-
-      /* Compute Jacobian (neighbor gradient contributions) */
-      compute_KPF_Jac_gradN_wrapper(LHS_d, oppDivE_spts1D_d, oppDE_spts1D_d, dUcdU_d, 
-          dFcddU_d, inv_jacoN_spts_d, jacoN_det_spts_d, geo->eleID_d[etype], geo->ele2eleN_d, 
-          geo->face2faceN_d, geo->fpt2fptN_d, startEle, nFptsPerFace, nFaces, nSpts1D, nVars, 
           nEles, nDims);
     }
   }
@@ -1962,6 +2019,19 @@ void Elements::compute_dFdU()
 #ifdef _GPU
   compute_dFdU_wrapper(dFdU_spts_d, dFddU_spts_d, U_spts_d, dU_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, 
       input->AdvDiff_A_d, input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->viscous);
+
+  check_error();
+#endif
+}
+
+void Elements::compute_KPF_dFcdU_gradN()
+{
+#ifdef _CPU
+  ThrowException("compute_KPF_dFcdU_gradN() not implemented on CPU!");
+#endif
+
+#ifdef _GPU
+  compute_KPF_dFcdU_gradN_wrapper(dFcdU_d, dFcddU_d, ddUdUc_d, dUcdU_d, nFpts, nVars, nEles, nDims);
 
   check_error();
 #endif

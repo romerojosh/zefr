@@ -113,17 +113,21 @@ class Elements
 
     mdvector<double> dt, rk_err;
 
-    /* Element structures for implicit method */
+    /* Element structures for implicit Jacobian computation */
     mdvector<double> oppD_spts1D, oppDE_spts1D, oppDivE_spts1D;
     mdvector<double> dFdU_spts, dFddU_spts;
     mdvector<double> dFcdU, dUcdU, dFcddU;
+    mdvector<double> ddUdUc;
+
+    /* Temporary structures for implicit method (CPU) */
     mdvector<double> Cvisc0, CviscN, CdFddU0, CdFcddU0;
     mdvector<double> CtempSF, CtempD, CtempFS, CtempFSN;
-    mdvector<double> LHS, LHSinv, RHS, deltaU;
 
     /* Views for viscous implicit Jacobian */
     mdview<double> inv_jacoN_spts, jacoN_det_spts;
 
+    /* Element structures for implicit method */
+    mdvector<double> LHS, LHSinv, RHS, deltaU;
 #ifdef _CPU
     unsigned int svd_rank;
     std::vector<Eigen::PartialPivLU<Eigen::MatrixXd>> LU_ptrs;
@@ -178,16 +182,19 @@ class Elements
 
     mdvector_gpu<double> dt_d, rk_err_d;
 
-    /* Element structures for implicit method */
+    /* Element structures for implicit Jacobian computation */
     mdvector_gpu<double> oppD_spts1D_d, oppDE_spts1D_d, oppDivE_spts1D_d;
     mdvector_gpu<double> dFdU_spts_d, dFddU_spts_d;
     mdvector_gpu<double> dFcdU_d, dUcdU_d, dFcddU_d;
-    mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d;
-    mdvector_gpu<double*> LHS_ptrs_d, LHSinv_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
-    mdvector_gpu<int> LHS_info_d;
+    mdvector_gpu<double> ddUdUc_d;
 
     /* Views for viscous implicit Jacobian */
     mdview_gpu<double> inv_jacoN_spts_d, jacoN_det_spts_d;
+
+    /* Element structures for implicit method */
+    mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d;
+    mdvector_gpu<double*> LHS_ptrs_d, LHSinv_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
+    mdvector_gpu<int> LHS_info_d;
 
     /* Overset Related */
     mdvector_gpu<double> U_donors_d, dU_donors_d;
@@ -265,12 +272,14 @@ class Elements
          unsigned int nPts, unsigned int nDims);
 
     /* Routines for implicit method */
+    void setup_ddUdUc();
     void compute_local_dRdU();
 
     template<unsigned int nVars, unsigned int nDims, unsigned int equation>
     void compute_dFdU();
 
     void compute_dFdU();
+    void compute_KPF_dFcdU_gradN();
 
     /* Polynomial squeeze methods */
     void compute_Uavg();

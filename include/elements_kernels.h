@@ -49,13 +49,6 @@ void compute_KPF_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double
     mdvector_gpu<double> &jaco_det_spts, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles,
     unsigned int nDims);
 
-void compute_KPF_Jac_gradN_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppDivE_spts1D, 
-    mdvector_gpu<double> &oppDE_spts1D, mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFcddU, 
-    mdview_gpu<double> &inv_jacoN_spts, mdview_gpu<double> &jacoN_det_spts, 
-    mdvector_gpu<unsigned int> &eleID, mdvector_gpu<int> &ele2eleN, mdvector_gpu<int> &face2faceN, 
-    mdvector_gpu<int> &fpt2fptN, unsigned int startEle, unsigned int nFptsPerFace, unsigned int nFaces, 
-    unsigned int nSpts1D, unsigned int nVars, unsigned int nEles, unsigned int nDims);
-
 void compute_Jac_spts_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppD, 
     mdvector_gpu<double> &dFdU_spts, unsigned int nSpts, unsigned int nVars, unsigned int nEles,
     unsigned int nDims);
@@ -87,6 +80,10 @@ void compute_dFdU_wrapper(mdvector_gpu<double> &dFdU_spts, mdvector_gpu<double> 
     mdvector_gpu<double> &inv_jaco_spts, unsigned int nSpts, unsigned int nEles, unsigned int nDims,
     unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
     double prandtl, double mu, bool viscous);
+
+void compute_KPF_dFcdU_gradN_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dFcddU,
+    mdvector_gpu<double> &ddUdUc, mdvector_gpu<double> &dUcdU, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nEles, unsigned int nDims);
 
 /* Additional wrappers */
 void compute_Uavg_wrapper(mdvector_gpu<double> &U_spts, 

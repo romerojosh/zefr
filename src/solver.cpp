@@ -209,9 +209,21 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   setup_views(); // Note: This function allocates addtional GPU memory for views
 
-  /* Setup jacoN views for viscous implicit Jacobians */
   if (input->implicit_method && input->viscous)
+  {
+    /* Setup jacoN views for viscous implicit Jacobians */
     setup_jacoN_views();
+
+    /* Setup ddUdUc for viscous KPF implicit Jacobians */
+    if (input->KPF_Jacobian)
+    {
+      for (auto e : elesObjs)
+      {
+        e->setup_ddUdUc();
+        e->ddUdUc_d = e->ddUdUc;
+      }
+    }
+  }
 
 #ifdef _GPU
   report_gpu_mem_usage();
@@ -453,6 +465,7 @@ void FRSolver::orient_fpts()
   }
 #endif
 }
+
 
 void FRSolver::set_fpt_adjacency()
 {
@@ -723,6 +736,7 @@ void FRSolver::setup_jacoN_views()
 #endif
   }
 }
+
 
 void FRSolver::setup_update()
 {
@@ -1080,11 +1094,11 @@ void FRSolver::solver_data_to_device()
       geo.ele2nodesBT_d[etype] = geo.ele2nodesBT[etype];
     }
 
-    if (input->implicit_method && input->viscous)
+    if (input->implicit_method && input->viscous && !input->KPF_Jacobian)
       geo.eleID_d[etype] = geo.eleID[etype];
   }
 
-  if (input->implicit_method && input->viscous)
+  if (input->implicit_method && input->viscous && !input->KPF_Jacobian)
   {
     geo.ele2eleN_d = geo.ele2eleN;
     geo.face2faceN_d = geo.face2faceN;
@@ -1547,61 +1561,15 @@ void FRSolver::compute_dRdU()
     /* Compute common interface flux Jacobian */
     faces->compute_common_dFdU(0, geo.nGfpts);
 
-    /* Copy GPU data structures for CPU Jacobian computation */
-    /*
-#ifdef _GPU
-    for (auto e : elesObjs)
-    {
-      e->dFdU_spts = e->dFdU_spts_d;
-      e->dFcdU = e->dFcdU_d;
-
-      if (input->viscous)
-      {
-        e->dFddU_spts = e->dFddU_spts_d;
-        e->dUcdU = e->dUcdU_d;
-        e->dFcddU = e->dFcddU_d;
-      }
-    }
-#endif
-    */
-
 #ifdef _GPU
     if (input->KPF_Jacobian)
     {
-      /* Print LHS */
-      /*
-      for (auto e : elesObjs)
+      if (input->viscous)
       {
-        std::cout << "LHS:" << std::endl;
-        device_fill(e->LHS_d, e->LHS_d.max_size(), 0.);
-        compute_Jac_grad_wrapper(e->LHS_d, e->oppD_d, e->oppDiv_fpts_d, e->oppD_fpts_d, e->oppE_d, 
-            e->dUcdU_d, e->dFddU_spts_d, e->dFcddU_d, e->inv_jaco_spts_d, e->jaco_det_spts_d, e->nVars, 
-            e->nEles, e->nDims, e->order);
-        e->LHS = e->LHS_d;
-        for (unsigned int vari = 0; vari < e->nVars; vari++)
-          for (unsigned int spti = 0; spti < e->nSpts; spti++)
-          {
-            for (unsigned int varj = 0; varj < e->nVars; varj++)
-              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
-                std::cout << " " << e->LHS(0, vari, spti, varj, sptj);
-            std::cout << std::endl;
-          }
-
-        std::cout << "KPF LHS:" << std::endl;
-        device_fill(e->LHS_d, e->LHS_d.max_size(), 0.);
-        compute_KPF_Jac_grad_wrapper(e->LHS_d, e->oppD_spts1D_d, e->oppDivE_spts1D_d, e->oppDE_spts1D_d, e->dUcdU_d, e->dFddU_spts_d, 
-            e->dFcddU_d, e->inv_jaco_spts_d, e->jaco_det_spts_d, e->nSpts1D, e->nVars, e->nEles, e->nDims);
-        e->LHS = e->LHS_d;
-        for (unsigned int vari = 0; vari < e->nVars; vari++)
-          for (unsigned int spti = 0; spti < e->nSpts; spti++)
-          {
-            for (unsigned int varj = 0; varj < e->nVars; varj++)
-              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
-                std::cout << " " << e->LHS(0, vari, spti, varj, sptj);
-            std::cout << std::endl;
-          }
+        /* Compute common interface flux Jacobian (neighbor gradient contributions) */
+        for (auto e : elesObjs)
+          e->compute_KPF_dFcdU_gradN();
       }
-      */
 
       /* Zero out LHS */
       for (auto e : elesObjs)
@@ -1639,14 +1607,7 @@ void FRSolver::compute_dRdU()
             // Compute LHS implicit Jacobian
             for (unsigned int vari = 0; vari < e->nVars; vari++)
               for (unsigned int spti = 0; spti < e->nSpts; spti++)
-              {
-#ifdef _CPU
                 e->LHS(ele, vari, spti, var, spt) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
-#endif
-#ifdef _GPU
-                e->LHS(ele, var, spt, vari, spti) = (e->divF_spts(0, spti, vari, ele) - divF(0, spti, vari, ele)) / eps;
-#endif
-              }
           }
       e->U_spts = U0[e->elesObjID];
       compute_residual(0);
@@ -2800,16 +2761,7 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     {
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
-      {
         compute_element_dt();
-
-        /*
-#ifdef _GPU
-      for (auto e : elesObjs)
-        e->dt = e->dt_d;
-#endif
-        */
-      }
       
       /* Set flow time of current stage */
       if (!input->implicit_steady)
@@ -2890,14 +2842,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     if (input->write_LHS)
       write_LHS(input->output_prefix);
 
-    /* Copy LHS to GPU */
-    /*
-#ifdef _GPU
-    for (auto e : elesObjs)
-      e->LHS_d = e->LHS;
-#endif
-    */
-
     /* Setup linear solver */
     if (input->linear_solver == LU)
       compute_LHS_LU();
@@ -2973,31 +2917,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     /* Write residual to convergence file */
     if (report_conv_freq != 0 && (iterBM%report_conv_freq == 0 || iterBM == input->iterBM_max || iterNM*iterBM == 1))
       report_RHS(stage, iterNM, iterBM);
-
-    /* Compute L2 norm of deltaU */
-    /*
-    if (iterBM % resBM_freq == 0)
-    {
-      resBM_max = 0;
-      for (auto e : elesObjs)
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-          for (unsigned int var = 0; var < e->nVars; var++)
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
-              resBM_max += e->deltaU(ele, var, spt) * e->deltaU(ele, var, spt);
-
-      unsigned int nDoF = 0;
-      for (auto e : elesObjs)
-        nDoF += (e->nEles * e->nVars * e->nSpts);
-      resBM_max = std::sqrt(resBM_max) / nDoF;
-
-      if ((iterBM == input->iterBM_max) || (resBM_max < resBM_tol))
-      {
-        std::cout << "L2 deltaU: " << std::setw(6) << std::left << iterBM << " ";
-        std::cout << std::scientific << std::setprecision(6) << std::setw(15) << std::left << resBM_max << " ";
-        std::cout << std::endl;
-      }
-    }
-    */
   }
   POP_NVTX_RANGE;
 }

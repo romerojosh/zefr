@@ -428,29 +428,29 @@ void compute_KPF_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D,
     const unsigned int vari = varjvari % nVars;
 
     /* Note: dFcdU follows idx_fpts */
-    // TODO: Construct reverse data structure (i.e. 3D: (fpti, fptj) -> fpt)
+    // TODO: Construct reverse data structure (i.e. 3D: (fi, fj) -> fpt)
     if (nDims == 2)
     {
-      for (unsigned int fpt = 0; fpt < nSpts1D; fpt++)
+      for (unsigned int fi = 0; fi < nSpts1D; fi++)
       {
-        const double dFcdUB = dFcdU(ele, vari, varj, fpt);
-        const double dFcdUR = dFcdU(ele, vari, varj, nSpts1D + fpt);
-        const double dFcdUT = dFcdU(ele, vari, varj, 3*nSpts1D - fpt-1);
-        const double dFcdUL = dFcdU(ele, vari, varj, 4*nSpts1D - fpt-1);
-        for (unsigned int i = 0; i < nSpts1D; i++)
-          for (unsigned int j = 0; j < nSpts1D; j++)
+        const double dFcdUB = dFcdU(ele, vari, varj, fi);
+        const double dFcdUR = dFcdU(ele, vari, varj, nSpts1D + fi);
+        const double dFcdUT = dFcdU(ele, vari, varj, 3*nSpts1D - fi-1);
+        const double dFcdUL = dFcdU(ele, vari, varj, 4*nSpts1D - fi-1);
+        for (unsigned int si = 0; si < nSpts1D; si++)
+          for (unsigned int sj = 0; sj < nSpts1D; sj++)
           {
             /* xi-direction */
-            unsigned int spti = fpt * nSpts1D + i;
-            unsigned int sptj = fpt * nSpts1D + j;
-            LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(i, j) * dFdU_spts(ele, vari, varj, 0, sptj) +
-              oppDivE_spts1D(0, i, j) * dFcdUL + oppDivE_spts1D(1, i, j) * dFcdUR;
+            unsigned int spti = fi * nSpts1D + si;
+            unsigned int sptj = fi * nSpts1D + sj;
+            LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(si, sj) * dFdU_spts(ele, vari, varj, 0, sptj) +
+              oppDivE_spts1D(0, si, sj) * dFcdUL + oppDivE_spts1D(1, si, sj) * dFcdUR;
 
             /* eta-direction */
-            spti = i * nSpts1D + fpt;
-            sptj = j * nSpts1D + fpt;
-            LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(i, j) * dFdU_spts(ele, vari, varj, 1, sptj) +
-              oppDivE_spts1D(0, i, j) * dFcdUB + oppDivE_spts1D(1, i, j) * dFcdUT;
+            spti = si * nSpts1D + fi;
+            sptj = sj * nSpts1D + fi;
+            LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(si, sj) * dFdU_spts(ele, vari, varj, 1, sptj) +
+              oppDivE_spts1D(0, si, sj) * dFcdUB + oppDivE_spts1D(1, si, sj) * dFcdUT;
           }
       }
     }
@@ -458,36 +458,36 @@ void compute_KPF_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D,
     else if (nDims == 3)
     {
       const unsigned int nSpts2D = nSpts1D * nSpts1D;
-      for (unsigned int fpti = 0; fpti < nSpts1D; fpti++)
-        for (unsigned int fptj = 0; fptj < nSpts1D; fptj++)
+      for (unsigned int fi = 0; fi < nSpts1D; fi++)
+        for (unsigned int fj = 0; fj < nSpts1D; fj++)
         {
-          const double dFcdUB  = dFcdU(ele, vari, varj, fpti*nSpts1D + fptj);
-          const double dFcdUT  = dFcdU(ele, vari, varj, nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
-          const double dFcdUL  = dFcdU(ele, vari, varj, 2*nSpts2D + fpti*nSpts1D + fptj);
-          const double dFcdUR  = dFcdU(ele, vari, varj, 3*nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
-          const double dFcdUF  = dFcdU(ele, vari, varj, 4*nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
-          const double dFcdUBk = dFcdU(ele, vari, varj, 5*nSpts2D + fpti*nSpts1D + fptj);
+          const double dFcdUB  = dFcdU(ele, vari, varj, fi*nSpts1D + fj);
+          const double dFcdUT  = dFcdU(ele, vari, varj, nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+          const double dFcdUL  = dFcdU(ele, vari, varj, 2*nSpts2D + fi*nSpts1D + fj);
+          const double dFcdUR  = dFcdU(ele, vari, varj, 3*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+          const double dFcdUF  = dFcdU(ele, vari, varj, 4*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+          const double dFcdUBk = dFcdU(ele, vari, varj, 5*nSpts2D + fi*nSpts1D + fj);
 
-          for (unsigned int i = 0; i < nSpts1D; i++)
-            for (unsigned int j = 0; j < nSpts1D; j++)
+          for (unsigned int si = 0; si < nSpts1D; si++)
+            for (unsigned int sj = 0; sj < nSpts1D; sj++)
             {
               /* xi-direction */
-              unsigned int spti = fpti*nSpts2D + fptj*nSpts1D + i;
-              unsigned int sptj = fpti*nSpts2D + fptj*nSpts1D + j;
-              LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(i, j) * dFdU_spts(ele, vari, varj, 0, sptj) +
-                oppDivE_spts1D(0, i, j) * dFcdUL + oppDivE_spts1D(1, i, j) * dFcdUR;
+              unsigned int spti = fi*nSpts2D + fj*nSpts1D + si;
+              unsigned int sptj = fi*nSpts2D + fj*nSpts1D + sj;
+              LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(si, sj) * dFdU_spts(ele, vari, varj, 0, sptj) +
+                oppDivE_spts1D(0, si, sj) * dFcdUL + oppDivE_spts1D(1, si, sj) * dFcdUR;
 
               /* eta-direction */
-              spti = fpti*nSpts2D + i*nSpts1D + fptj;
-              sptj = fpti*nSpts2D + j*nSpts1D + fptj;
-              LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(i, j) * dFdU_spts(ele, vari, varj, 1, sptj) +
-                oppDivE_spts1D(0, i, j) * dFcdUF + oppDivE_spts1D(1, i, j) * dFcdUBk;
+              spti = fi*nSpts2D + si*nSpts1D + fj;
+              sptj = fi*nSpts2D + sj*nSpts1D + fj;
+              LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(si, sj) * dFdU_spts(ele, vari, varj, 1, sptj) +
+                oppDivE_spts1D(0, si, sj) * dFcdUF + oppDivE_spts1D(1, si, sj) * dFcdUBk;
 
               /* zeta-direction */
-              spti = i*nSpts2D + fpti*nSpts1D + fptj;
-              sptj = j*nSpts2D + fpti*nSpts1D + fptj;
-              LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(i, j) * dFdU_spts(ele, vari, varj, 2, sptj) +
-                oppDivE_spts1D(0, i, j) * dFcdUB + oppDivE_spts1D(1, i, j) * dFcdUT;
+              spti = si*nSpts2D + fi*nSpts1D + fj;
+              sptj = sj*nSpts2D + fi*nSpts1D + fj;
+              LHS(ele, varj, sptj, vari, spti) += oppD_spts1D(si, sj) * dFdU_spts(ele, vari, varj, 2, sptj) +
+                oppDivE_spts1D(0, si, sj) * dFcdUB + oppDivE_spts1D(1, si, sj) * dFcdUT;
             }
         }
     }
@@ -528,37 +528,37 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
     const unsigned int vari = varjvari % nVars;
 
     /* Note: dFcddU follows idx_fpts */
-    // TODO: Construct reverse data structure (i.e. 3D: (fpti, fptj) -> fpt)
+    // TODO: Construct reverse data structure (i.e. 3D: (fi, fj) -> fpt)
     if (nDims == 2)
     {
       /* Multiply like terms */
-      for (unsigned int fpt = 0; fpt < nSpts1D; fpt++)
-        for (unsigned int i = 0; i < nSpts1D; i++)
-          for (unsigned int j = 0; j < nSpts1D; j++)
+      for (unsigned int fi = 0; fi < nSpts1D; fi++)
+        for (unsigned int si = 0; si < nSpts1D; si++)
+          for (unsigned int sj = 0; sj < nSpts1D; sj++)
           {
             /* xi-direction */
             double val = 0.0;
             for (unsigned int dimj = 0; dimj < nDims; dimj++)
               for (unsigned int vark = 0; vark < nVars; vark++)
               {
-                const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, nSpts1D + fpt);
-                const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts1D - fpt-1);
+                const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, nSpts1D + fi);
+                const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts1D - fi-1);
 
                 const bool diag = (vark == varj); 
-                const double dUcdUR = dUcdU(ele, vark, varj, nSpts1D + fpt);
-                const double dUcdUL = dUcdU(ele, vark, varj, 4*nSpts1D - fpt-1);
+                const double dUcdUR = dUcdU(ele, vark, varj, nSpts1D + fi);
+                const double dUcdUL = dUcdU(ele, vark, varj, 4*nSpts1D - fi-1);
 
-                for (unsigned int k = 0; k < nSpts1D; k++)
+                for (unsigned int sk = 0; sk < nSpts1D; sk++)
                 {
-                  const unsigned int sptk = fpt * nSpts1D + k;
-                  val += (oppD_spts1D(i, k) * dFddU_spts(ele, 0, dimj, vari, vark, sptk) +
-                    oppDivE_spts1D(0, i, k) * dFcddUL + oppDivE_spts1D(1, i, k) * dFcddUR) *
+                  const unsigned int sptk = fi * nSpts1D + sk;
+                  val += (oppD_spts1D(si, sk) * dFddU_spts(ele, 0, dimj, vari, vark, sptk) +
+                    oppDivE_spts1D(0, si, sk) * dFcddUL + oppDivE_spts1D(1, si, sk) * dFcddUR) *
                     inv_jaco_spts(0, sptk, dimj, ele) / jaco_det_spts(sptk, ele) *
-                    (diag*oppD_spts1D(k, j) + oppDE_spts1D(0, k, j) * dUcdUL + oppDE_spts1D(1, k, j) * dUcdUR);
+                    (diag*oppD_spts1D(sk, sj) + oppDE_spts1D(0, sk, sj) * dUcdUL + oppDE_spts1D(1, sk, sj) * dUcdUR);
                 }
               }
-            unsigned int spti = fpt * nSpts1D + i;
-            unsigned int sptj = fpt * nSpts1D + j;
+            unsigned int spti = fi * nSpts1D + si;
+            unsigned int sptj = fi * nSpts1D + sj;
             LHS(ele, varj, sptj, vari, spti) += val;
 
             /* eta-direction */
@@ -566,24 +566,24 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
             for (unsigned int dimj = 0; dimj < nDims; dimj++)
               for (unsigned int vark = 0; vark < nVars; vark++)
               {
-                const double dFcddUB = dFcddU(ele, 0, dimj, vari, vark, fpt);
-                const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts1D - fpt-1);
+                const double dFcddUB = dFcddU(ele, 0, dimj, vari, vark, fi);
+                const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts1D - fi-1);
 
                 const bool diag = (vark == varj); 
-                const double dUcdUB = dUcdU(ele, vark, varj, fpt);
-                const double dUcdUT = dUcdU(ele, vark, varj, 3*nSpts1D - fpt-1);
+                const double dUcdUB = dUcdU(ele, vark, varj, fi);
+                const double dUcdUT = dUcdU(ele, vark, varj, 3*nSpts1D - fi-1);
 
-                for (unsigned int k = 0; k < nSpts1D; k++)
+                for (unsigned int sk = 0; sk < nSpts1D; sk++)
                 {
-                  const unsigned int sptk = k * nSpts1D + fpt;
-                  val += (oppD_spts1D(i, k) * dFddU_spts(ele, 1, dimj, vari, vark, sptk) +
-                    oppDivE_spts1D(0, i, k) * dFcddUB + oppDivE_spts1D(1, i, k) * dFcddUT) *
+                  const unsigned int sptk = sk * nSpts1D + fi;
+                  val += (oppD_spts1D(si, sk) * dFddU_spts(ele, 1, dimj, vari, vark, sptk) +
+                    oppDivE_spts1D(0, si, sk) * dFcddUB + oppDivE_spts1D(1, si, sk) * dFcddUT) *
                     inv_jaco_spts(1, sptk, dimj, ele) / jaco_det_spts(sptk, ele) *
-                    (diag*oppD_spts1D(k, j) + oppDE_spts1D(0, k, j) * dUcdUB + oppDE_spts1D(1, k, j) * dUcdUT);
+                    (diag*oppD_spts1D(sk, sj) + oppDE_spts1D(0, sk, sj) * dUcdUB + oppDE_spts1D(1, sk, sj) * dUcdUT);
                 }
               }
-            spti = i * nSpts1D + fpt;
-            sptj = j * nSpts1D + fpt;
+            spti = si * nSpts1D + fi;
+            sptj = sj * nSpts1D + fi;
             LHS(ele, varj, sptj, vari, spti) += val;
           }
 
@@ -635,34 +635,34 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
       const unsigned int nSpts2D = nSpts1D * nSpts1D;
 
       /* Multiply like terms */
-      for (unsigned int fpti = 0; fpti < nSpts1D; fpti++)
-        for (unsigned int fptj = 0; fptj < nSpts1D; fptj++)
-          for (unsigned int i = 0; i < nSpts1D; i++)
-            for (unsigned int j = 0; j < nSpts1D; j++)
+      for (unsigned int fi = 0; fi < nSpts1D; fi++)
+        for (unsigned int fj = 0; fj < nSpts1D; fj++)
+          for (unsigned int si = 0; si < nSpts1D; si++)
+            for (unsigned int sj = 0; sj < nSpts1D; sj++)
             {
               /* xi-direction */
               double val = 0.0;
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
                 for (unsigned int vark = 0; vark < nVars; vark++)
                 {
-                  const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 2*nSpts2D + fpti*nSpts1D + fptj);
-                  const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
+                  const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 2*nSpts2D + fi*nSpts1D + fj);
+                  const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
 
                   const bool diag = (vark == varj); 
-                  const double dUcdUL = dUcdU(ele, vark, varj, 2*nSpts2D + fpti*nSpts1D + fptj);
-                  const double dUcdUR = dUcdU(ele, vark, varj, 3*nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
+                  const double dUcdUL = dUcdU(ele, vark, varj, 2*nSpts2D + fi*nSpts1D + fj);
+                  const double dUcdUR = dUcdU(ele, vark, varj, 3*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
 
-                  for (unsigned int k = 0; k < nSpts1D; k++)
+                  for (unsigned int sk = 0; sk < nSpts1D; sk++)
                   {
-                    const unsigned int sptk = fpti*nSpts2D + fptj*nSpts1D + k;
-                    val += (oppD_spts1D(i, k) * dFddU_spts(ele, 0, dimj, vari, vark, sptk) +
-                      oppDivE_spts1D(0, i, k) * dFcddUL + oppDivE_spts1D(1, i, k) * dFcddUR) *
+                    const unsigned int sptk = fi*nSpts2D + fj*nSpts1D + sk;
+                    val += (oppD_spts1D(si, sk) * dFddU_spts(ele, 0, dimj, vari, vark, sptk) +
+                      oppDivE_spts1D(0, si, sk) * dFcddUL + oppDivE_spts1D(1, si, sk) * dFcddUR) *
                       inv_jaco_spts(0, sptk, dimj, ele) / jaco_det_spts(sptk, ele) *
-                      (diag*oppD_spts1D(k, j) + oppDE_spts1D(0, k, j) * dUcdUL + oppDE_spts1D(1, k, j) * dUcdUR);
+                      (diag*oppD_spts1D(sk, sj) + oppDE_spts1D(0, sk, sj) * dUcdUL + oppDE_spts1D(1, sk, sj) * dUcdUR);
                   }
                 }
-              unsigned int spti = fpti*nSpts2D + fptj*nSpts1D + i;
-              unsigned int sptj = fpti*nSpts2D + fptj*nSpts1D + j;
+              unsigned int spti = fi*nSpts2D + fj*nSpts1D + si;
+              unsigned int sptj = fi*nSpts2D + fj*nSpts1D + sj;
               LHS(ele, varj, sptj, vari, spti) += val;
 
               /* eta-direction */
@@ -670,24 +670,24 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
                 for (unsigned int vark = 0; vark < nVars; vark++)
                 {
-                  const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
-                  const double dFcddUBk = dFcddU(ele, 0, dimj, vari, vark, 5*nSpts2D + fpti*nSpts1D + fptj);
+                  const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dFcddUBk = dFcddU(ele, 0, dimj, vari, vark, 5*nSpts2D + fi*nSpts1D + fj);
 
                   const bool diag = (vark == varj); 
-                  const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
-                  const double dUcdUBk = dUcdU(ele, vark, varj, 5*nSpts2D + fpti*nSpts1D + fptj);
+                  const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dUcdUBk = dUcdU(ele, vark, varj, 5*nSpts2D + fi*nSpts1D + fj);
 
-                  for (unsigned int k = 0; k < nSpts1D; k++)
+                  for (unsigned int sk = 0; sk < nSpts1D; sk++)
                   {
-                    const unsigned int sptk = fpti*nSpts2D + k*nSpts1D + fptj;
-                    val += (oppD_spts1D(i, k) * dFddU_spts(ele, 1, dimj, vari, vark, sptk) +
-                      oppDivE_spts1D(0, i, k) * dFcddUF + oppDivE_spts1D(1, i, k) * dFcddUBk) *
+                    const unsigned int sptk = fi*nSpts2D + sk*nSpts1D + fj;
+                    val += (oppD_spts1D(si, sk) * dFddU_spts(ele, 1, dimj, vari, vark, sptk) +
+                      oppDivE_spts1D(0, si, sk) * dFcddUF + oppDivE_spts1D(1, si, sk) * dFcddUBk) *
                       inv_jaco_spts(1, sptk, dimj, ele) / jaco_det_spts(sptk, ele) *
-                      (diag*oppD_spts1D(k, j) + oppDE_spts1D(0, k, j) * dUcdUF + oppDE_spts1D(1, k, j) * dUcdUBk);
+                      (diag*oppD_spts1D(sk, sj) + oppDE_spts1D(0, sk, sj) * dUcdUF + oppDE_spts1D(1, sk, sj) * dUcdUBk);
                   }
                 }
-              spti = fpti*nSpts2D + i*nSpts1D + fptj;
-              sptj = fpti*nSpts2D + j*nSpts1D + fptj;
+              spti = fi*nSpts2D + si*nSpts1D + fj;
+              sptj = fi*nSpts2D + sj*nSpts1D + fj;
               LHS(ele, varj, sptj, vari, spti) += val;
 
               /* zeta-direction */
@@ -695,24 +695,24 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
                 for (unsigned int vark = 0; vark < nVars; vark++)
                 {
-                  const double dFcddUB = dFcddU(ele, 0, dimj, vari, vark, fpti*nSpts1D + fptj);
-                  const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
+                  const double dFcddUB = dFcddU(ele, 0, dimj, vari, vark, fi*nSpts1D + fj);
+                  const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
 
                   const bool diag = (vark == varj); 
-                  const double dUcdUB = dUcdU(ele, vark, varj, fpti*nSpts1D + fptj);
-                  const double dUcdUT = dUcdU(ele, vark, varj, nSpts2D + fpti*nSpts1D + (nSpts1D - fptj-1));
+                  const double dUcdUB = dUcdU(ele, vark, varj, fi*nSpts1D + fj);
+                  const double dUcdUT = dUcdU(ele, vark, varj, nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
 
-                  for (unsigned int k = 0; k < nSpts1D; k++)
+                  for (unsigned int sk = 0; sk < nSpts1D; sk++)
                   {
-                    const unsigned int sptk = k*nSpts2D + fpti*nSpts1D + fptj;
-                    val += (oppD_spts1D(i, k) * dFddU_spts(ele, 2, dimj, vari, vark, sptk) +
-                      oppDivE_spts1D(0, i, k) * dFcddUB + oppDivE_spts1D(1, i, k) * dFcddUT) *
+                    const unsigned int sptk = sk*nSpts2D + fi*nSpts1D + fj;
+                    val += (oppD_spts1D(si, sk) * dFddU_spts(ele, 2, dimj, vari, vark, sptk) +
+                      oppDivE_spts1D(0, si, sk) * dFcddUB + oppDivE_spts1D(1, si, sk) * dFcddUT) *
                       inv_jaco_spts(2, sptk, dimj, ele) / jaco_det_spts(sptk, ele) *
-                      (diag*oppD_spts1D(k, j) + oppDE_spts1D(0, k, j) * dUcdUB + oppDE_spts1D(1, k, j) * dUcdUT);
+                      (diag*oppD_spts1D(sk, sj) + oppDE_spts1D(0, sk, sj) * dUcdUB + oppDE_spts1D(1, sk, sj) * dUcdUT);
                   }
                 }
-              spti = i*nSpts2D + fpti*nSpts1D + fptj;
-              sptj = j*nSpts2D + fpti*nSpts1D + fptj;
+              spti = si*nSpts2D + fi*nSpts1D + fj;
+              sptj = sj*nSpts2D + fi*nSpts1D + fj;
               LHS(ele, varj, sptj, vari, spti) += val;
             }
 
@@ -849,186 +849,6 @@ void compute_KPF_Jac_grad_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double
   else if (nDims == 3)
     compute_KPF_Jac_grad<3><<<blocks, threads>>>(LHS, oppD_spts1D, oppDivE_spts1D, oppDE_spts1D,
         dUcdU, dFddU_spts, dFcddU, inv_jaco_spts, jaco_det_spts, nSpts1D, nVars, nEles);
-}
-
-template<unsigned int nDims>
-__global__
-void compute_KPF_Jac_gradN(mdvector_gpu<double> LHS, mdvector_gpu<double> oppDivE_spts1D, 
-    mdvector_gpu<double> oppDE_spts1D, mdvector_gpu<double> dUcdU, mdvector_gpu<double> dFcddU, 
-    mdview_gpu<double> inv_jacoN_spts, mdview_gpu<double> jacoN_det_spts, 
-    mdvector_gpu<unsigned int> eleID_in, mdvector_gpu<int> ele2eleN, mdvector_gpu<int> face2faceN, 
-    mdvector_gpu<int> fpt2fptN, unsigned int startEle, unsigned int nFptsPerFace, 
-    unsigned int nFaces, unsigned int nSpts1D, unsigned int nVars, unsigned int nEles)
-{
-  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
-
-  for (unsigned int elevarjvari = tidx; elevarjvari < nEles*nVars*nVars; elevarjvari += gridDim.x * blockDim.x)
-  {
-    const unsigned int ele = elevarjvari / (nVars*nVars);
-    const unsigned int eleID = eleID_in(ele + startEle);
-
-    const unsigned int varjvari = elevarjvari % (nVars*nVars);
-    const unsigned int varj = varjvari / nVars;
-    const unsigned int vari = varjvari % nVars;
-
-    /* Note: dFcddU follows idx_fpts */
-    // TODO: Construct reverse data structure (i.e. 3D: (fpti, fptj) -> fpt)
-    if (nDims == 2)
-    {
-      for (unsigned int fpt = 0; fpt < nSpts1D; fpt++)
-      {
-        const unsigned int fptR = nSpts1D - fpt-1;
-
-        /* Compute neighbor contributions */
-        // TODO: Cleanup this section
-        /* Bottom */
-        double dFcdUB = 0;
-        unsigned int face = 0;
-        int eleNID = ele2eleN(face, eleID);
-        if (eleNID != -1)
-        {
-          /* Determine neighbor's bias and outward dimension on each face */
-          // TODO: This could be done as a preprocessing step
-          const unsigned int faceN = face2faceN(face, eleID);
-          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
-          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 1 : 0;
-          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
-
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            /* Compute inner product */
-            double val = 0.0;
-            for (unsigned int k = 0; k < nSpts1D; k++)
-            {
-              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
-              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
-              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
-            }
-            dFcdUB += dFcddU(ele, 1, dimj, vari, varj, fpt) * val * dUcdU(ele, varj, varj, fpt);
-          }
-        }
-
-        /* Right */
-        double dFcdUR = 0;
-        face = 1;
-        eleNID = ele2eleN(face, eleID);
-        if (eleNID != -1)
-        {
-          /* Determine neighbor's bias and outward dimension on each face */
-          // TODO: This could be done as a preprocessing step
-          const unsigned int faceN = face2faceN(face, eleID);
-          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
-          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 1 : 0;
-          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
-
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            /* Compute inner product */
-            double val = 0.0;
-            for (unsigned int k = 0; k < nSpts1D; k++)
-            {
-              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
-              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
-              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
-            }
-            dFcdUR += dFcddU(ele, 1, dimj, vari, varj, nSpts1D + fpt) * val * dUcdU(ele, varj, varj, nSpts1D + fpt);
-          }
-        }
-
-        /* Top */
-        double dFcdUT = 0;
-        face = 2;
-        eleNID = ele2eleN(face, eleID);
-        if (eleNID != -1)
-        {
-          /* Determine neighbor's bias and outward dimension on each face */
-          // TODO: This could be done as a preprocessing step
-          const unsigned int faceN = face2faceN(face, eleID);
-          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
-          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 0 : 1;
-          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
-
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            /* Compute inner product */
-            double val = 0.0;
-            for (unsigned int k = 0; k < nSpts1D; k++)
-            {
-              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
-              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
-              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
-            }
-            dFcdUT += dFcddU(ele, 1, dimj, vari, varj, 3*nSpts1D - fpt-1) * val * dUcdU(ele, varj, varj, 3*nSpts1D - fpt-1);
-          }
-        }
-
-        /* Left */
-        double dFcdUL = 0;
-        face = 3;
-        eleNID = ele2eleN(face, eleID);
-        if (eleNID != -1)
-        {
-          /* Determine neighbor's bias and outward dimension on each face */
-          // TODO: This could be done as a preprocessing step
-          const unsigned int faceN = face2faceN(face, eleID);
-          const unsigned int bias = (faceN == 0 || faceN == 3) ? 0 : 1;
-          const unsigned int rev  = (faceN == 0 || faceN == 1) ? 0 : 1;
-          const unsigned int dimN = (faceN == 1 || faceN == 3) ? 0 : 1;
-
-          for (unsigned int dimj = 0; dimj < nDims; dimj++)
-          {
-            /* Compute inner product */
-            double val = 0.0;
-            for (unsigned int k = 0; k < nSpts1D; k++)
-            {
-              const unsigned int fptN = (rev  == 1) ? fptR : fpt;
-              const unsigned int sptk = (dimN == 0) ? fptN*nSpts1D + k : k*nSpts1D + fptN;
-              val += oppDE_spts1D(bias, k, k) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
-            }
-            dFcdUL += dFcddU(ele, 1, dimj, vari, varj, 4*nSpts1D - fpt-1) * val * dUcdU(ele, varj, varj, 4*nSpts1D - fpt-1);
-          }
-        }
-
-        /* Fill LHS */
-        // TODO: This is actually the same as KPF_Jac, move there?
-        for (unsigned int i = 0; i < nSpts1D; i++)
-          for (unsigned int j = 0; j < nSpts1D; j++)
-          {
-            /* xi-direction */
-            unsigned int spti = fpt * nSpts1D + i;
-            unsigned int sptj = fpt * nSpts1D + j;
-            LHS(ele, varj, sptj, vari, spti) += oppDivE_spts1D(0, i, j) * dFcdUL + oppDivE_spts1D(1, i, j) * dFcdUR;
-
-            /* eta-direction */
-            spti = i * nSpts1D + fpt;
-            sptj = j * nSpts1D + fpt;
-            LHS(ele, varj, sptj, vari, spti) += oppDivE_spts1D(0, i, j) * dFcdUB + oppDivE_spts1D(1, i, j) * dFcdUT;
-
-          }
-      }
-    }
-    __syncthreads(); /* To avoid divergence */
-  }
-}
-
-void compute_KPF_Jac_gradN_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &oppDivE_spts1D, 
-    mdvector_gpu<double> &oppDE_spts1D, mdvector_gpu<double> &dUcdU, mdvector_gpu<double> &dFcddU, 
-    mdview_gpu<double> &inv_jacoN_spts, mdview_gpu<double> &jacoN_det_spts, 
-    mdvector_gpu<unsigned int> &eleID, mdvector_gpu<int> &ele2eleN, mdvector_gpu<int> &face2faceN, 
-    mdvector_gpu<int> &fpt2fptN, unsigned int startEle, unsigned int nFptsPerFace, unsigned int nFaces, 
-    unsigned int nSpts1D, unsigned int nVars, unsigned int nEles, unsigned int nDims)
-{
-  dim3 threads(192);
-  dim3 blocks(std::min((nEles*nVars*nVars + threads.x - 1) / threads.x, MAX_GRID_DIM));
-
-  if (nDims == 2)
-    compute_KPF_Jac_gradN<2><<<blocks, threads>>>(LHS, oppDivE_spts1D, oppDE_spts1D, dUcdU, dFcddU, 
-        inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN, startEle, nFptsPerFace, 
-        nFaces, nSpts1D, nVars, nEles);
-  else if (nDims == 3)
-    compute_KPF_Jac_gradN<3><<<blocks, threads>>>(LHS, oppDivE_spts1D, oppDE_spts1D, dUcdU, dFcddU, 
-        inv_jacoN_spts, jacoN_det_spts, eleID, ele2eleN, face2faceN, fpt2fptN, startEle, nFptsPerFace, 
-        nFaces, nSpts1D, nVars, nEles);
 }
 
 
@@ -1577,6 +1397,39 @@ void compute_dFdU_wrapper(mdvector_gpu<double> &dFdU_spts, mdvector_gpu<double> 
       compute_dFdU<5, 3, EulerNS><<<blocks, threads>>>(dFdU_spts, dFddU_spts, U_spts, dU_spts, inv_jaco_spts, nSpts, nEles, AdvDiff_A,
           AdvDiff_D, gamma, prandtl, mu, viscous);
   }
+}
+
+__global__
+void compute_KPF_dFcdU_gradN(mdvector_gpu<double> dFcdU, mdvector_gpu<double> dFcddU,
+    mdvector_gpu<double> ddUdUc, mdvector_gpu<double> dUcdU, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nEles, unsigned int nDims)
+{
+  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
+
+  for (unsigned int ele = tidx; ele < nEles; ele += gridDim.x * blockDim.x)
+  {
+    for (unsigned int vari = 0; vari < nVars; vari++)
+      for (unsigned int varj = 0; varj < nVars; varj++)
+        for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        {
+          double val = 0.0;
+          for (unsigned int dimj = 0; dimj < nDims; dimj++)
+            val += dFcddU(ele, 1, dimj, vari, varj, fpt) * ddUdUc(ele, dimj, fpt) * dUcdU(ele, varj, varj, fpt);
+          dFcdU(ele, vari, varj, fpt) += val;
+        }
+
+    __syncthreads(); /* To avoid divergence */
+  }
+}
+
+void compute_KPF_dFcdU_gradN_wrapper(mdvector_gpu<double> &dFcdU, mdvector_gpu<double> &dFcddU,
+    mdvector_gpu<double> &ddUdUc, mdvector_gpu<double> &dUcdU, unsigned int nFpts, 
+    unsigned int nVars, unsigned int nEles, unsigned int nDims)
+{
+  dim3 threads(192, 1);
+  dim3 blocks(std::min((nEles + threads.x - 1) / threads.x, MAX_GRID_DIM), 1);
+
+  compute_KPF_dFcdU_gradN<<<blocks, threads>>>(dFcdU, dFcddU, ddUdUc, dUcdU, nFpts, nVars, nEles, nDims);
 }
 
 
