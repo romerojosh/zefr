@@ -1097,7 +1097,7 @@ void Elements::setup_ddUdUc()
     {
       for (unsigned int fi = 0; fi < nSpts1D; fi++)
       {
-        unsigned int fpt = face * nFptsPerFace + fi;
+        unsigned int fpt = face*nFptsPerFace + fi;
         for (unsigned int sk = 0; sk < nSpts1D; sk++)
         {
           switch(face)
@@ -1119,6 +1119,36 @@ void Elements::setup_ddUdUc()
     }
     else if (etype == HEX)
     {
+      for (unsigned int fi = 0; fi < nSpts1D; fi++)
+      {
+        for (unsigned int fj = 0; fj < nSpts1D; fj++)
+        {
+          unsigned int fpt = face*nFptsPerFace + fi*nSpts1D + fj;
+          for (unsigned int sk = 0; sk < nSpts1D; sk++)
+          {
+            switch(face)
+            {
+              case 0: /* Bottom face */
+                fpt2spts(fpt, sk) = sk*nFptsPerFace + fi*nSpts1D + fj; break;
+
+              case 1: /* Top face */
+                fpt2spts(fpt, sk) = sk*nFptsPerFace + fi*nSpts1D + (nSpts1D-fj-1); break;
+
+              case 2: /* Left face */
+                fpt2spts(fpt, sk) = fi*nFptsPerFace + fj*nSpts1D + sk; break;
+
+              case 3: /* Right face */
+                fpt2spts(fpt, sk) = fi*nFptsPerFace + (nSpts1D-fj-1)*nSpts1D + sk; break;
+
+              case 4: /* Front face */
+                fpt2spts(fpt, sk) = fi*nFptsPerFace + sk*nSpts1D + (nSpts1D-fj-1); break;
+
+              case 5: /* Back face */
+                fpt2spts(fpt, sk) = fi*nFptsPerFace + sk*nSpts1D + fj; break;
+            }
+          }
+        }
+      }
     }
     else
       ThrowException("fpt2spts should only be setup for QUAD or HEX!")
@@ -1162,6 +1192,32 @@ void Elements::setup_ddUdUc()
       }
       else if (etype == HEX)
       {
+        /* Determine neighbor's LR state and outward dimension on each face */
+        int faceN = geo->face2faceN(face, eleID);
+        unsigned int LR = (faceN == 0 || faceN == 2 || faceN == 4) ? 0 : 1;
+        unsigned int dimN = (faceN == 2 || faceN == 3) ? 0 : ((faceN == 4 || faceN == 5) ? 1 : 2);
+
+        /* Compute inner product on each fpt */
+        for (unsigned int fi = 0; fi < nSpts1D; fi++)
+        {
+          for (unsigned int fj = 0; fj < nSpts1D; fj++)
+          {
+            unsigned int fpt = face*nFptsPerFace + fi*nSpts1D + fj;
+            int fptN = geo->fpt2fptN(fpt, eleID);
+
+            /* Compute inner product */
+            for (unsigned int dimj = 0; dimj < nDims; dimj++)
+            {
+              double val = 0.0;
+              for (unsigned int sk = 0; sk < nSpts1D; sk++)
+              {
+                unsigned int sptk = fpt2spts(fptN, sk);
+                val += oppDE_spts1D(LR, sk, sk) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
+              }
+              ddUdUc(ele, dimj, fpt) = val;
+            }
+          }
+        }
       }
       else
         ThrowException("ddUdUc should only be setup for QUAD or HEX!")

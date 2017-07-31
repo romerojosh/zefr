@@ -435,8 +435,8 @@ void compute_KPF_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D,
       {
         const double dFcdUB = dFcdU(ele, vari, varj, fi);
         const double dFcdUR = dFcdU(ele, vari, varj, nSpts1D + fi);
-        const double dFcdUT = dFcdU(ele, vari, varj, 3*nSpts1D - fi-1);
-        const double dFcdUL = dFcdU(ele, vari, varj, 4*nSpts1D - fi-1);
+        const double dFcdUT = dFcdU(ele, vari, varj, 3*nSpts1D-fi-1);
+        const double dFcdUL = dFcdU(ele, vari, varj, 4*nSpts1D-fi-1);
         for (unsigned int si = 0; si < nSpts1D; si++)
           for (unsigned int sj = 0; sj < nSpts1D; sj++)
           {
@@ -462,10 +462,10 @@ void compute_KPF_Jac(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_spts1D,
         for (unsigned int fj = 0; fj < nSpts1D; fj++)
         {
           const double dFcdUB  = dFcdU(ele, vari, varj, fi*nSpts1D + fj);
-          const double dFcdUT  = dFcdU(ele, vari, varj, nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+          const double dFcdUT  = dFcdU(ele, vari, varj, nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
           const double dFcdUL  = dFcdU(ele, vari, varj, 2*nSpts2D + fi*nSpts1D + fj);
-          const double dFcdUR  = dFcdU(ele, vari, varj, 3*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
-          const double dFcdUF  = dFcdU(ele, vari, varj, 4*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+          const double dFcdUR  = dFcdU(ele, vari, varj, 3*nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
+          const double dFcdUF  = dFcdU(ele, vari, varj, 4*nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
           const double dFcdUBk = dFcdU(ele, vari, varj, 5*nSpts2D + fi*nSpts1D + fj);
 
           for (unsigned int si = 0; si < nSpts1D; si++)
@@ -542,11 +542,11 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
               for (unsigned int vark = 0; vark < nVars; vark++)
               {
                 const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, nSpts1D + fi);
-                const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts1D - fi-1);
+                const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts1D-fi-1);
 
                 const bool diag = (vark == varj); 
                 const double dUcdUR = dUcdU(ele, vark, varj, nSpts1D + fi);
-                const double dUcdUL = dUcdU(ele, vark, varj, 4*nSpts1D - fi-1);
+                const double dUcdUL = dUcdU(ele, vark, varj, 4*nSpts1D-fi-1);
 
                 for (unsigned int sk = 0; sk < nSpts1D; sk++)
                 {
@@ -567,11 +567,11 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
               for (unsigned int vark = 0; vark < nVars; vark++)
               {
                 const double dFcddUB = dFcddU(ele, 0, dimj, vari, vark, fi);
-                const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts1D - fi-1);
+                const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts1D-fi-1);
 
                 const bool diag = (vark == varj); 
                 const double dUcdUB = dUcdU(ele, vark, varj, fi);
-                const double dUcdUT = dUcdU(ele, vark, varj, 3*nSpts1D - fi-1);
+                const double dUcdUT = dUcdU(ele, vark, varj, 3*nSpts1D-fi-1);
 
                 for (unsigned int sk = 0; sk < nSpts1D; sk++)
                 {
@@ -602,14 +602,14 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
                 {
                   const double dFcddUB = dFcddU(ele, 0, dimj, vari, vark, xii);
                   const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, nSpts1D + etai);
-                  const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts1D - xii-1);
-                  const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts1D - etai-1);
+                  const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts1D-xii-1);
+                  const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts1D-etai-1);
 
                   const bool diag = (vark == varj); 
                   const double dUcdUB = dUcdU(ele, vark, varj, xij);
                   const double dUcdUR = dUcdU(ele, vark, varj, nSpts1D + etaj);
-                  const double dUcdUT = dUcdU(ele, vark, varj, 3*nSpts1D - xij-1);
-                  const double dUcdUL = dUcdU(ele, vark, varj, 4*nSpts1D - etaj-1);
+                  const double dUcdUT = dUcdU(ele, vark, varj, 3*nSpts1D-xij-1);
+                  const double dUcdUL = dUcdU(ele, vark, varj, 4*nSpts1D-etaj-1);
 
                   val += 
                     (oppD_spts1D(xii, xij) * dFddU_spts(ele, 0, dimj, vari, vark, sptij) +
@@ -646,11 +646,11 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
                 for (unsigned int vark = 0; vark < nVars; vark++)
                 {
                   const double dFcddUL = dFcddU(ele, 0, dimj, vari, vark, 2*nSpts2D + fi*nSpts1D + fj);
-                  const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dFcddUR = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
 
                   const bool diag = (vark == varj); 
                   const double dUcdUL = dUcdU(ele, vark, varj, 2*nSpts2D + fi*nSpts1D + fj);
-                  const double dUcdUR = dUcdU(ele, vark, varj, 3*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dUcdUR = dUcdU(ele, vark, varj, 3*nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
 
                   for (unsigned int sk = 0; sk < nSpts1D; sk++)
                   {
@@ -670,11 +670,11 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
                 for (unsigned int vark = 0; vark < nVars; vark++)
                 {
-                  const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
                   const double dFcddUBk = dFcddU(ele, 0, dimj, vari, vark, 5*nSpts2D + fi*nSpts1D + fj);
 
                   const bool diag = (vark == varj); 
-                  const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
                   const double dUcdUBk = dUcdU(ele, vark, varj, 5*nSpts2D + fi*nSpts1D + fj);
 
                   for (unsigned int sk = 0; sk < nSpts1D; sk++)
@@ -696,11 +696,11 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
                 for (unsigned int vark = 0; vark < nVars; vark++)
                 {
                   const double dFcddUB = dFcddU(ele, 0, dimj, vari, vark, fi*nSpts1D + fj);
-                  const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dFcddUT = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
 
                   const bool diag = (vark == varj); 
                   const double dUcdUB = dUcdU(ele, vark, varj, fi*nSpts1D + fj);
-                  const double dUcdUT = dUcdU(ele, vark, varj, nSpts2D + fi*nSpts1D + (nSpts1D - fj-1));
+                  const double dUcdUT = dUcdU(ele, vark, varj, nSpts2D + fi*nSpts1D + (nSpts1D-fj-1));
 
                   for (unsigned int sk = 0; sk < nSpts1D; sk++)
                   {
@@ -731,14 +731,14 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
                   for (unsigned int vark = 0; vark < nVars; vark++)
                   {
                     const double dFcddUL  = dFcddU(ele, 0, dimj, vari, vark, 2*nSpts2D + zetak*nSpts1D + etai);
-                    const double dFcddUR  = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + zetak*nSpts1D + (nSpts1D - etai-1));
-                    const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + zetak*nSpts1D + (nSpts1D - xii-1));
+                    const double dFcddUR  = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + zetak*nSpts1D + (nSpts1D-etai-1));
+                    const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + zetak*nSpts1D + (nSpts1D-xii-1));
                     const double dFcddUBk = dFcddU(ele, 0, dimj, vari, vark, 5*nSpts2D + zetak*nSpts1D + xii);
 
                     const bool diag = (vark == varj); 
                     const double dUcdUL  = dUcdU(ele, vark, varj, 2*nSpts2D + zetak*nSpts1D + etaj);
-                    const double dUcdUR  = dUcdU(ele, vark, varj, 3*nSpts2D + zetak*nSpts1D + (nSpts1D - etaj-1));
-                    const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + zetak*nSpts1D + (nSpts1D - xij-1));
+                    const double dUcdUR  = dUcdU(ele, vark, varj, 3*nSpts2D + zetak*nSpts1D + (nSpts1D-etaj-1));
+                    const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + zetak*nSpts1D + (nSpts1D-xij-1));
                     const double dUcdUBk = dUcdU(ele, vark, varj, 5*nSpts2D + zetak*nSpts1D + xij);
 
                     val += 
@@ -766,15 +766,15 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
                   for (unsigned int vark = 0; vark < nVars; vark++)
                   {
                     const double dFcddUB  = dFcddU(ele, 0, dimj, vari, vark, zetak*nSpts1D + xii);
-                    const double dFcddUT  = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + zetak*nSpts1D + (nSpts1D - xii-1));
+                    const double dFcddUT  = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + zetak*nSpts1D + (nSpts1D-xii-1));
                     const double dFcddUL  = dFcddU(ele, 0, dimj, vari, vark, 2*nSpts2D + etai*nSpts1D + zetak);
-                    const double dFcddUR  = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + etai*nSpts1D + (nSpts1D - zetak-1));
+                    const double dFcddUR  = dFcddU(ele, 0, dimj, vari, vark, 3*nSpts2D + etai*nSpts1D + (nSpts1D-zetak-1));
 
                     const bool diag = (vark == varj); 
                     const double dUcdUB  = dUcdU(ele, vark, varj, zetak*nSpts1D + xij);
-                    const double dUcdUT  = dUcdU(ele, vark, varj, nSpts2D + zetak*nSpts1D + (nSpts1D - xij-1));
+                    const double dUcdUT  = dUcdU(ele, vark, varj, nSpts2D + zetak*nSpts1D + (nSpts1D-xij-1));
                     const double dUcdUL  = dUcdU(ele, vark, varj, 2*nSpts2D + etaj*nSpts1D + zetak);
-                    const double dUcdUR  = dUcdU(ele, vark, varj, 3*nSpts2D + etaj*nSpts1D + (nSpts1D - zetak-1));
+                    const double dUcdUR  = dUcdU(ele, vark, varj, 3*nSpts2D + etaj*nSpts1D + (nSpts1D-zetak-1));
 
                     val += 
                       (oppD_spts1D(xii, xij) * dFddU_spts(ele, 0, dimj, vari, vark, sptij) +
@@ -801,14 +801,14 @@ void compute_KPF_Jac_grad(mdvector_gpu<double> LHS, mdvector_gpu<double> oppD_sp
                   for (unsigned int vark = 0; vark < nVars; vark++)
                   {
                     const double dFcddUB  = dFcddU(ele, 0, dimj, vari, vark, xii*nSpts1D + zetak);
-                    const double dFcddUT  = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + xii*nSpts1D + (nSpts1D - zetak-1));
-                    const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + etai*nSpts1D + (nSpts1D - zetak-1));
+                    const double dFcddUT  = dFcddU(ele, 0, dimj, vari, vark, nSpts2D + xii*nSpts1D + (nSpts1D-zetak-1));
+                    const double dFcddUF  = dFcddU(ele, 0, dimj, vari, vark, 4*nSpts2D + etai*nSpts1D + (nSpts1D-zetak-1));
                     const double dFcddUBk = dFcddU(ele, 0, dimj, vari, vark, 5*nSpts2D + etai*nSpts1D + zetak);
 
                     const bool diag = (vark == varj); 
                     const double dUcdUB  = dUcdU(ele, vark, varj, xij*nSpts1D + zetak);
-                    const double dUcdUT  = dUcdU(ele, vark, varj, nSpts2D + xij*nSpts1D + (nSpts1D - zetak-1));
-                    const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + etaj*nSpts1D + (nSpts1D - zetak-1));
+                    const double dUcdUT  = dUcdU(ele, vark, varj, nSpts2D + xij*nSpts1D + (nSpts1D-zetak-1));
+                    const double dUcdUF  = dUcdU(ele, vark, varj, 4*nSpts2D + etaj*nSpts1D + (nSpts1D-zetak-1));
                     const double dUcdUBk = dUcdU(ele, vark, varj, 5*nSpts2D + etaj*nSpts1D + zetak);
 
                     val += 
