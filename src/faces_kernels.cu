@@ -1232,18 +1232,6 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
       if (iblank[fpt] == 0)
         return;
 
-    /* Setting sign of beta (from HiFiLES) */
-    //if (nDims == 2)
-    //{
-    //  if (norm(0, fpt) + norm(1, fpt) < 0.0)
-    //    beta = -beta;
-    //}
-    //else if (nDims == 3)
-    //{
-    //  if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
-    //    beta = -beta;
-    //}
-
     beta *= flip_beta(fpt);
 
     if (LDG_bias(fpt) == 0)
@@ -1530,17 +1518,6 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     double dUR[nVars][nDims] = {{}};
     char LDG_bias_ = LDG_bias(fpt);
 
-    /* Setting sign of beta (from HiFiLES) */
-    //if (nDims == 2)
-    //{
-    //  if (norm[0] + norm[1] < 0.0)
-    //    beta = -beta;
-    //}
-    //else if (nDims == 3)
-    //{
-    //  if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
-    //    beta = -beta;
-    //}
     beta *= flip_beta(fpt);
 
     if (LDG_bias_ == 0)
@@ -1871,11 +1848,12 @@ void LDG_dFdU(double UL[nVars], double UR[nVars], double dUL[nVars][nDims], doub
 
 template<unsigned int nVars, unsigned int nDims, unsigned int equation>
 __global__ 
-void compute_common_dFdU(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> dFcdU, mdview_gpu<double> dUcdU, mdview_gpu<double> dFcddU,
-    mdvector_gpu<double> dUbdU, mdvector_gpu<double> ddUbddU, mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, 
-    mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias,  
-    mdvector_gpu<double> dA_in, double AdvDiff_D, double gamma, double rus_k, double mu, double prandtl, double beta, double tau, 
-    unsigned int startFpt, unsigned int endFpt, bool viscous)
+void compute_common_dFdU(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu<double> dFcdU, 
+    mdview_gpu<double> dUcdU, mdview_gpu<double> dFcddU, mdvector_gpu<double> dUbdU, mdvector_gpu<double> ddUbddU, 
+    mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, mdvector_gpu<double> norm_gfpts, 
+    mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias, 
+    mdvector_gpu<double> dA_in, double AdvDiff_D, double gamma, double rus_k, double mu, double prandtl, 
+    double beta, double tau, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<char> flip_beta)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -1925,17 +1903,7 @@ void compute_common_dFdU(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu
     double dFcddUR[nDims][nVars][nVars] = {0};
     char LDG_bias_ = LDG_bias(fpt);
 
-    /* Setting sign of beta (from HiFiLES) */
-    if (nDims == 2)
-    {
-      if (norm[0] + norm[1] < 0.0)
-        beta = -beta;
-    }
-    else if (nDims == 3)
-    {
-      if (norm[0] + norm[1] + sqrt(2.) * norm[2] < 0.0)
-        beta = -beta;
-    }
+    beta *= flip_beta(fpt);
 
     /* Get left and right state gradients */
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -2002,11 +1970,12 @@ void compute_common_dFdU(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu
     }
 }
 
-void compute_common_dFdU_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU, mdview_gpu<double> &dFcdU, mdview_gpu<double> &dUcdU, mdview_gpu<double> &dFcddU,
-    mdvector_gpu<double> &dUbdU, mdvector_gpu<double> &ddUbddU, mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, 
-    mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias,  
-    mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, double rus_k, double mu, double prandtl, double beta, double tau, 
-    unsigned int nVars, unsigned int nDims, unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool viscous)
+void compute_common_dFdU_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU, mdview_gpu<double> &dFcdU, 
+    mdview_gpu<double> &dUcdU, mdview_gpu<double> &dFcddU, mdvector_gpu<double> &dUbdU, mdvector_gpu<double> &ddUbddU, 
+    mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
+    mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, 
+    double rus_k, double mu, double prandtl, double beta, double tau, unsigned int nVars, unsigned int nDims, 
+    unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<char> &flip_beta)
 {
   unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
@@ -2015,18 +1984,18 @@ void compute_common_dFdU_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU, 
   {
     if (nDims == 2)
       compute_common_dFdU<1, 2, AdvDiff><<<blocks, threads>>>(U, dU, dFcdU, dUcdU, dFcddU, dUbdU, ddUbddU, P, AdvDiff_A, norm, 
-          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous);
+          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous, flip_beta);
     else
       compute_common_dFdU<1, 3, AdvDiff><<<blocks, threads>>>(U, dU, dFcdU, dUcdU, dFcddU, dUbdU, ddUbddU, P, AdvDiff_A, norm, 
-          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous);
+          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous, flip_beta);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       compute_common_dFdU<4, 2, EulerNS><<<blocks, threads>>>(U, dU, dFcdU, dUcdU, dFcddU, dUbdU, ddUbddU, P, AdvDiff_A, norm, 
-          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous);
+          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous, flip_beta);
     else
       compute_common_dFdU<5, 3, EulerNS><<<blocks, threads>>>(U, dU, dFcdU, dUcdU, dFcddU, dUbdU, ddUbddU, P, AdvDiff_A, norm, 
-          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous);
+          waveSp, rus_bias, LDG_bias, dA, AdvDiff_D, gamma, rus_k, mu, prandtl, beta, tau, startFpt, endFpt, viscous, flip_beta);
   }
 }

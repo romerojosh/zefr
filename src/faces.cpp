@@ -1394,20 +1394,6 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
       double beta = geo->flip_beta(fpt)*input->ldg_b;
 
-
-      ///* Setting sign of beta (from HiFiLES) */
-      //if (nDims == 2)
-      //{
-      //  if (norm(0, fpt) + norm(1, fpt) < 0.0)
-      //    beta = -beta;
-      //}
-      //else if (nDims == 3)
-      //{
-      //  if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
-      //    beta = -beta;
-      //}
-
-
       /* Get left and right state variables */
       /* If interior, allow use of beta factor */
       if (LDG_bias(fpt) == 0)
@@ -1418,41 +1404,41 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
         if (beta == 0.5)
         {
           for (unsigned int n = 0; n < nVars; n++)
-            UR[n] = U_ldg(1, n, fpt);
+            UR[n] = U(1, n, fpt);
         }
         else if (beta == -0.5)
         {
           for (unsigned int n = 0; n < nVars; n++)
-            UL[n] = U_ldg(0, n, fpt);
+            UL[n] = U(0, n, fpt);
         }
         else
         {
           for (unsigned int n = 0; n < nVars; n++)
           {
-            UL[n] = U_ldg(0, n, fpt); UR[n] = U_ldg(1, n, fpt);
+            UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
           }
         }
 
         for (unsigned int n = 0; n < nVars; n++)
         {
-          double UL = U_ldg(0, n, fpt); double UR = U_ldg(1, n, fpt);
-
-           Ucomm(0, n, fpt) = 0.5*(UL + UR) - beta*(UL - UR);
-           Ucomm(1, n, fpt) = 0.5*(UL + UR) - beta*(UL - UR);
+          double UC = 0.5*(UL[n] + UR[n]) - beta*(UL[n] - UR[n]);
+          Ucomm(0, n, fpt) = UC;
+          Ucomm(1, n, fpt) = UC;
         }
       }
       /* If on (non-periodic) boundary, set right state as common (strong) */
       else
       {
+        double UR[nVars] = {};
+        for (unsigned int n = 0; n < nVars; n++)
+          UR[n] = U(1, n, fpt);
+
         for (unsigned int n = 0; n < nVars; n++)
         {
-          double UR = U_ldg(1, n, fpt);
-
-          Ucomm(0, n, fpt) = UR;
-          Ucomm(1, n, fpt) = UR;
+          Ucomm(0, n, fpt) = UR[n];
+          Ucomm(1, n, fpt) = UR[n];
         }
       }
-
     }
 #endif
 
@@ -1505,18 +1491,6 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
       iflag = true;
 
     double beta = geo->flip_beta(fpt)*input->ldg_b;
-
-    ///* Setting sign of beta (from HiFiLES) */
-    //if (nDims == 2)
-    //{
-    //  if (norm(0, fpt) + norm(1, fpt) < 0.0)
-    //    beta = -beta;
-    //}
-    //else if (nDims == 3)
-    //{
-    //  if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
-    //    beta = -beta;
-    //}
 
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
@@ -1859,18 +1833,7 @@ void Faces::LDG_dFdU(unsigned int startFpt, unsigned int endFpt)
   {
     if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
 
-    /* Setting sign of beta (from HiFiLES) */
-    double beta = input->ldg_b;
-    if (nDims == 2)
-    {
-      if (norm(0, fpt) + norm(1, fpt) < 0.0)
-        beta = -beta;
-    }
-    else if (nDims == 3)
-    {
-      if (norm(0, fpt) + norm(1, fpt) + sqrt(2.) * norm(2, fpt) < 0.0)
-        beta = -beta;
-    }
+    double beta = geo->flip_beta(fpt)*input->ldg_b;
 
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
@@ -2082,7 +2045,7 @@ void Faces::compute_common_dFdU(unsigned int startFpt, unsigned int endFpt)
 #ifdef _GPU
     compute_common_dFdU_wrapper(U_d, dU_d, dFcdU_d, dUcdU_d, dFcddU_d, dUbdU_d, ddUbddU_d, P_d, input->AdvDiff_A_d, norm_d, 
         waveSp_d, rus_bias_d, LDG_bias_d, dA_d, input->AdvDiff_D, input->gamma, input->rus_k, input->mu, input->prandtl, 
-        input->ldg_b, input->ldg_tau, nVars, nDims, input->equation, startFpt, endFpt, input->viscous);
+        input->ldg_b, input->ldg_tau, nVars, nDims, input->equation, startFpt, endFpt, input->viscous, geo->flip_beta_d);
 
     check_error();
 #endif
