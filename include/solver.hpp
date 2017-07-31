@@ -97,8 +97,10 @@ class FRSolver
 
     /* Viscous implicit jacoN data for MPI boundaries */
 #ifdef _MPI
-    mdvector<double> inv_jacoN_spts_mpibnd;
-    mdvector<double> jacoN_det_spts_mpibnd;
+    mdvector<double> inv_jacoN_spts_mpibnd, jacoN_det_spts_mpibnd;
+#ifdef _GPU
+    mdvector_gpu<double> inv_jacoN_spts_mpibnd_d, jacoN_det_spts_mpibnd_d;
+#endif
 #endif
 
 #ifdef _GPU
@@ -137,7 +139,7 @@ class FRSolver
 
     /* Routines for implicit method */
     void set_fpt_adjacency();
-    void set_jacoN_views();
+    void setup_jacoN_views();
     void compute_dRdU();
     void compute_LHS_LU();
     void compute_LHS_inverse();
@@ -204,6 +206,7 @@ class FRSolver
     Zefr *ZEFR;
 #endif
 
+    void init_grid_motion(double time);
     void move(double time, bool update_iblank = false);
     void rigid_body_update(unsigned int stage);
 

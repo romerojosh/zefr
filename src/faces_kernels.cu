@@ -1516,9 +1516,12 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
   rusanov_flux<nVars, nDims, equation>(UL, UR, Fc, V, PL, PR, norm, waveSp_gfpts(fpt),
       AdvDiff_A.data(), Vgn, gamma, rus_k, rus_bias(fpt));
 
-  //if (fpt >= nFpts_int) P(0, fpt) = PL; // Write out pressure on boundary only
-  P(0, fpt) = PL;
-  P(1, fpt) = PR;
+  if (equation == EulerNS)
+  {
+    //if (fpt >= nFpts_int) P(0, fpt) = PL; // Write out pressure on boundary only
+    P(0, fpt) = PL;
+    P(1, fpt) = PR;
+  }
 
   if (viscous)
   {
@@ -1901,8 +1904,12 @@ void compute_common_dFdU(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu
         dURdUL[vari][varj] = dUbdU(vari, varj, fpt);
 
   /* Compute convective contribution to common dFdU */
-  double PL = P(0, fpt);
-  double PR = P(1, fpt);
+  double PL, PR;
+  if (equation == EulerNS)
+  {
+    PL = P(0, fpt);
+    PR = P(1, fpt);
+  }
   rusanov_dFdU<nVars, nDims, equation>(UL, UR, dURdUL, dFcdUL, dFcdUR, 
       PL, PR, norm, waveSp_gfpts(fpt), AdvDiff_A.data(), gamma, rus_k, 
       rus_bias(fpt));

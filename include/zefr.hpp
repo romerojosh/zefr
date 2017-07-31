@@ -94,9 +94,9 @@ public:
   void get_extra_geo_data(int &nFaceTypes, int& nvert_face, int& nFaces_type,
                           int*& f2v, int*& f2c, int*& c2f, int*& iblank_face,
                           int*& iblank_cell, int& nOver, int*& overFaces,
-                          int& nMpiFaces, int*& mpiFaces, int*& procR,
-                          int*& faceIdR, double*& grid_vel, double*& offset,
-                          double*& Rmat);
+                          int& nWall, int*& wallFaces, int& nMpiFaces,
+                          int*& mpiFaces, int*& procR, int*& faceIdR,
+                          double*& grid_vel, double*& offset, double*& Rmat);
 
   void get_gpu_geo_data(double*& coord_nodes, double*& coord_eles,
                         int*& iblank_cell, int*& iblank_face);

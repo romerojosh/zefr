@@ -238,22 +238,43 @@ InputStruct read_input_file(std::string inputfile)
   {
     input.implicit_method = true;
 
-    /* Pseudo Timestepping */
-    read_param(f, "pseudo_time", input.pseudo_time, false);
-    read_param(f, "dtau_ratio", input.dtau_ratio, 1.0);
-    if (input.pseudo_time)
-    {
-      read_param(f, "adapt_dtau", input.adapt_dtau, false);
-      read_param(f, "dtau_ratio_max", input.dtau_ratio_max, 1.0);
-      read_param(f, "dtau_growth_rate", input.dtau_growth_rate, 0.0);
-    }
-
     /* Compute residual Jacobian using finite difference approximation */
     read_param(f, "FDA_Jacobian", input.FDA_Jacobian, false);
 
+    /* Form Jacobians based on Kronecker product formulation */
+    // Note: only valid for quad and hex elements
+    read_param(f, "KPF_Jacobian", input.KPF_Jacobian, false);
+
+    /* Freeze Jacobian */
+    // Note: frequency based on n_steps
+    if (input.dt_scheme == "Steady")
+      input.Jfreeze_freq = 1;
+    else
+      read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
+
+    /* Pseudo Timestepping */
+    // Note: based on physical time
+    read_param(f, "pseudo_time", input.pseudo_time, false);
+    if (input.pseudo_time)
+    {
+      read_param(f, "dtau_ratio", input.dtau_ratio, 1.0);
+
+      read_param(f, "adapt_dtau", input.adapt_dtau, false);
+      if (input.adapt_dtau)
+      {
+        read_param(f, "dtau_ratio_max", input.dtau_ratio_max, 1.0);
+        read_param(f, "dtau_growth_rate", input.dtau_growth_rate, 0.0);
+      }
+    }
+
+    /* Newton Steps */
+    read_param(f, "iterNM_max", input.iterNM_max, (unsigned int) 1);
+    if (input.implicit_steady)
+      input.n_steps = input.iterNM_max;
+
     /* Block iterative method */
     read_param(f, "iterative_method", str, std::string("JAC"));
-    read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
+    read_param(f, "iterBM_max", input.iterBM_max, (unsigned int) 100);
     read_param(f, "backsweep", input.backsweep, false);
     read_param(f, "report_conv_freq", input.report_conv_freq, (unsigned int) 0);
     if (str == "JAC")
@@ -283,7 +304,15 @@ InputStruct read_input_file(std::string inputfile)
 
     /* Restrictions */
     if (input.equation == EulerNS && input.viscous && !input.fix_vis)
-      ThrowException("Viscous implicit Jacobians with Sutherland's law not available!"); 
+      ThrowException("Viscous implicit Jacobians with Sutherland's law not available!");
+#ifdef _CPU
+    if (input.KPF_Jacobian)
+      ThrowException("Implicit KPF Jacobians only implemented on GPU!");
+#endif
+#ifdef _GPU
+    if (input.FDA_Jacobian)
+      ThrowException("Implicit FDA Jacobians only implemented on CPU!");
+#endif
   }
 
   read_param(f, "overset", input.overset, false);

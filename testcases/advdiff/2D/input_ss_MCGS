@@ -14,32 +14,29 @@ source   1
 spt_type Legendre
 
 # Timestepping:
-n_steps 20000
+n_steps 1
 res_tol 1e-11
-dt_scheme MCGS     (Euler, RK44, RK54, MCGS)
+dt_scheme Steady     (Euler, RK44, RK54, MCGS)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  1e5
 CFL_type 2
 CFL	  1e5
 
-# CFL Adaptation
-adapt_CFL 0
-CFL_max 1e5
-CFL_ratio 2.0
-
 # Implicit
-SER 0
-stream_mode 0
+KPF_Jacobian 1
+iterNM_max 1
+iterative_method MCGS
+nColors 2
+iterBM_max 100000
 backsweep 0
-Jfreeze_freq 100000
-nColors 1
-n_LHS_blocks 4
+linear_solver INV
+report_conv_freq 200
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix ss_32x32_MCGS
 write_freq    2000
-report_freq   200
+report_freq   0
 res_type      1
 force_freq    0
 error_freq    0

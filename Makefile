@@ -18,7 +18,7 @@ endif
 
 CXXFLAGS = -std=c++11 -Wno-unknown-pragmas #-fstack-protector-all
 CCFLAGS = -std=c99 -w
-CUFLAGS = -std=c++11 --default-stream per-thread
+CUFLAGS = -std=c++11 --default-stream per-thread $(EXTRA_CUFLAGS)
 WARN_ON = -Wall -Wextra -Wconversion
 WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
 

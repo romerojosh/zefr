@@ -14,9 +14,9 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 100000
+n_steps 100
 res_tol 1e-11
-dt_scheme Steady      (Euler, RK44, RK54, Steady)
+dt_scheme Steady      (Euler, RK44, RK54, MCGS)
 dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
 dt	  0.01
 CFL	  1.0
@@ -31,11 +31,13 @@ dtau_ratio_max 1e5
 dtau_growth_rate 1.0
 
 # Implicit
+KPF_Jacobian 1
+iterNM_max 100
 iterative_method MCGS
 nColors 2
-Jfreeze_freq 100
+iterBM_max 100
 backsweep 0
-linear_solver LU
+linear_solver INV
 report_conv_freq 100
 
 restart 0
@@ -44,7 +46,7 @@ restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix naca_eul_MCGS
-write_freq    100000
+write_freq    100
 report_freq   0
 res_type      1
 force_freq    10
