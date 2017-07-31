@@ -1404,18 +1404,18 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
         if (beta == 0.5)
         {
           for (unsigned int n = 0; n < nVars; n++)
-            UR[n] = U(1, n, fpt);
+            UR[n] = U_ldg(1, n, fpt);
         }
         else if (beta == -0.5)
         {
           for (unsigned int n = 0; n < nVars; n++)
-            UL[n] = U(0, n, fpt);
+            UL[n] = U_ldg(0, n, fpt);
         }
         else
         {
           for (unsigned int n = 0; n < nVars; n++)
           {
-            UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
+            UL[n] = U_ldg(0, n, fpt); UR[n] = U_ldg(1, n, fpt);
           }
         }
 
@@ -1431,7 +1431,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
       {
         double UR[nVars] = {};
         for (unsigned int n = 0; n < nVars; n++)
-          UR[n] = U(1, n, fpt);
+          UR[n] = U_ldg(1, n, fpt);
 
         for (unsigned int n = 0; n < nVars; n++)
         {
