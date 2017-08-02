@@ -103,20 +103,20 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   if (input->implicit_method)
   {
     /* Data structures for constructing the implicit Jacobian */
-    dFdU_spts.assign({nEles, nVars, nVars, nDims, nSpts});
-    dFcdU.assign({nEles, nVars, nVars, nFpts});
+    dFdU_spts.assign({nDims, nSpts, nVars, nVars, nEles});
+    dFcdU.assign({nFpts, nVars, nVars, nEles});
 
     if (input->viscous)
     {
-      dUcdU.assign({nEles, nVars, nVars, nFpts}, 0);
+      dUcdU.assign({nFpts, nVars, nVars, nEles}, 0);
 
       /* Note: nDimsi: Fx, Fy // nDimsj: dUdx, dUdy */
-      dFddU_spts.assign({nEles, nDims, nDims, nVars, nVars, nSpts});
-      dFcddU.assign({nEles, 2, nDims, nVars, nVars, nFpts});
+      dFddU_spts.assign({nDims, nDims, nSpts, nVars, nVars, nEles});
+      dFcddU.assign({2, nDims, nFpts, nVars, nVars, nEles});
 
       if (input->KPF_Jacobian)
       {
-        ddUdUc.assign({nEles, nDims, nFpts}, 0);
+        ddUdUc.assign({nFpts, nDims, nEles}, 0);
       }
     }
 
@@ -1186,7 +1186,7 @@ void Elements::setup_ddUdUc()
               unsigned int sptk = fpt2spts(fptN, sk);
               val += oppDE_spts1D(LR, sk, sk) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
             }
-            ddUdUc(ele, dimj, fpt) = val;
+            ddUdUc(fpt, dimj, ele) = val;
           }
         }
       }
@@ -1214,7 +1214,7 @@ void Elements::setup_ddUdUc()
                 unsigned int sptk = fpt2spts(fptN, sk);
                 val += oppDE_spts1D(LR, sk, sk) * inv_jacoN_spts(face, dimN, sptk, dimj, ele) / jacoN_det_spts(face, sptk, ele);
               }
-              ddUdUc(ele, dimj, fpt) = val;
+              ddUdUc(fpt, dimj, ele) = val;
             }
           }
         }
@@ -1731,7 +1731,7 @@ void Elements::compute_local_dRdU()
         /* Compute Jacobian at flux points */
         for (unsigned int spti = 0; spti < nSpts; spti++)
           for (unsigned int fptj = 0; fptj < nFpts; fptj++)
-            CtempSF(spti, fptj) = oppDiv_fpts(spti, fptj) * dFcdU(ele, vari, varj, fptj);
+            CtempSF(spti, fptj) = oppDiv_fpts(spti, fptj) * dFcdU(fptj, vari, varj, ele);
 
         for (unsigned int spti = 0; spti < nSpts; spti++)
           for (unsigned int sptj = 0; sptj < nSpts; sptj++)
@@ -1746,7 +1746,7 @@ void Elements::compute_local_dRdU()
         for (unsigned int dim = 0; dim < nDims; dim++)
           for (unsigned int spti = 0; spti < nSpts; spti++)
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-              LHS(ele, vari, spti, varj, sptj) += oppD(dim, spti, sptj) * dFdU_spts(ele, vari, varj, dim, sptj);
+              LHS(ele, vari, spti, varj, sptj) += oppD(dim, spti, sptj) * dFdU_spts(dim, sptj, vari, varj, ele);
       }
 
     /* Compute viscous element local Jacobians */
@@ -1759,7 +1759,7 @@ void Elements::compute_local_dRdU()
           /* Compute solution gradient Jacobians in reference space */
           for (unsigned int fpti = 0; fpti < nFpts; fpti++)
             for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-              CtempFS(fpti, sptj) = dUcdU(ele, vari, varj, fpti) * oppE(fpti, sptj);
+              CtempFS(fpti, sptj) = dUcdU(fpti, vari, varj, ele) * oppE(fpti, sptj);
 
           for (unsigned int dim = 0; dim < nDims; dim++)
           {
@@ -1804,7 +1804,7 @@ void Elements::compute_local_dRdU()
               for (unsigned int vark = 0; vark < nVars; vark++)
                 for (unsigned int spti = 0; spti < nSpts; spti++)
                   for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-                    CdFddU0(dimi, vari, varj, spti, sptj) += dFddU_spts(ele, dimi, dimj, vari, vark, spti) * Cvisc0(dimj, vark, varj, spti, sptj);
+                    CdFddU0(dimi, vari, varj, spti, sptj) += dFddU_spts(dimi, dimj, spti, vari, vark, ele) * Cvisc0(dimj, vark, varj, spti, sptj);
 
       for (unsigned int dim = 0; dim < nDims; dim++)
         for (unsigned int vari = 0; vari < nVars; vari++)
@@ -1827,7 +1827,7 @@ void Elements::compute_local_dRdU()
               for (unsigned int fpti = 0; fpti < nFpts; fpti++)
                 for (unsigned int sptj = 0; sptj < nSpts; sptj++)
                   for (unsigned int sptk = 0; sptk < nSpts; sptk++)
-                    CdFcddU0(vari, varj, fpti, sptj) += dFcddU(ele, 0, dim, vari, vark, fpti) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
+                    CdFcddU0(vari, varj, fpti, sptj) += dFcddU(0, dim, fpti, vari, vark, ele) * oppE(fpti, sptk) * Cvisc0(dim, vark, varj, sptk, sptj);
 
       /* Add center contribution to Neighbor gradient */
       unsigned int eleID = geo->eleID[etype](ele + startEle);
@@ -1854,7 +1854,7 @@ void Elements::compute_local_dRdU()
               while (geo->fpt2fptN(fpt, eleID) != (int)fptN) fpt++;
               //unsigned int fpt = geo->fpt2fptN(fptN, eleNID);
 
-              CtempFSN(fpti, sptj) = dUcdU(ele, var, var, fpt) * oppE(fpt, sptj);
+              CtempFSN(fpti, sptj) = dUcdU(fpt, var, var, ele) * oppE(fpt, sptj);
             }
 
           for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1896,7 +1896,7 @@ void Elements::compute_local_dRdU()
                   {
                     unsigned int fpt = face * nFptsPerFace + fpti;
                     int fptN = geo->fpt2fptN(fpt, eleID);
-                    CdFcddU0(vari, varj, fpt, sptj) += dFcddU(ele, 1, dim, vari, varj, fpt) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
+                    CdFcddU0(vari, varj, fpt, sptj) += dFcddU(1, dim, fpt, vari, varj, ele) * oppE(fptN, sptk) * CviscN(dim, varj, sptk, sptj);
                   }
       }
 
@@ -2029,7 +2029,7 @@ void Elements::compute_dFdU()
       for (unsigned int vari = 0; vari < nVars; vari++)
         for (unsigned int varj = 0; varj < nVars; varj++)
           for (unsigned int dim = 0; dim < nDims; dim++)
-            dFdU_spts(ele, vari, varj, dim, spt) = tdFdU[vari][varj][dim];
+            dFdU_spts(dim, spt, vari, varj, ele) = tdFdU[vari][varj][dim];
 
       if(input->viscous)
       {
@@ -2047,7 +2047,7 @@ void Elements::compute_dFdU()
           for (unsigned int varj = 0; varj < nVars; varj++)
             for (unsigned int dimi = 0; dimi < nDims; dimi++)
               for (unsigned int dimj = 0; dimj < nDims; dimj++)
-                dFddU_spts(ele, dimi, dimj, vari, varj, spt) = tdFddU[vari][varj][dimi][dimj];
+                dFddU_spts(dimi, dimj, spt, vari, varj, ele) = tdFddU[vari][varj][dimi][dimj];
       }
     }
   }

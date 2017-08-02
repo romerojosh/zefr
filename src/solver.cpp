@@ -2083,30 +2083,30 @@ void FRSolver::setup_views()
         /* Set pointers for internal faces for implicit */
         if (input->implicit_method)
         {
-          dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(ele, 0, 0, fpt);
+          dFcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcdU(fpt, 0, 0, ele);
           dFcdU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(1);
           dFcdU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcdU.get_stride(2);
 #ifdef _GPU
-          dFcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_ptr(ele, 0, 0, fpt);
+          dFcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_ptr(fpt, 0, 0, ele);
           dFcdU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_stride(1);
           dFcdU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dFcdU_d.get_stride(2);
 #endif
 
           if (input->viscous)
           {
-            dUcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dUcdU(ele, 0, 0, fpt);
-            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(ele, 0, 0, 0, 0, fpt);
+            dUcdU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dUcdU(fpt, 0, 0, ele);
+            dFcddU_base_ptrs(gfpt + slot * geo.nGfpts) = &e->dFcddU(0, 0, fpt, 0, 0, ele);
             dFcddU_strides(0, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(1);
             dFcddU_strides(1, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(2);
-            dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(3);
-            dFcddU_strides(3, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(4);
+            dFcddU_strides(2, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(4);
+            dFcddU_strides(3, gfpt + slot * geo.nGfpts) = e->dFcddU.get_stride(5);
 #ifdef _GPU
-            dUcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dUcdU_d.get_ptr(ele, 0, 0, fpt);
-            dFcddU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_ptr(ele, 0, 0, 0, 0, fpt);
+            dUcdU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dUcdU_d.get_ptr(fpt, 0, 0, ele);
+            dFcddU_base_ptrs_d(gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_ptr(0, 0, fpt, 0, 0, ele);
             dFcddU_strides_d(0, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(1);
             dFcddU_strides_d(1, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(2);
-            dFcddU_strides_d(2, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(3);
-            dFcddU_strides_d(3, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(4);
+            dFcddU_strides_d(2, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(4);
+            dFcddU_strides_d(3, gfpt + slot * geo.nGfpts) = e->dFcddU_d.get_stride(5);
 #endif
           }
         }
