@@ -2437,15 +2437,15 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
   auto &As = shape_spts(0,0);
   auto &Cs = coord_spts(0,0,0);
 
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, ms, n, k,
-              1.0, &As, k, &B, k, 0.0, &Cs, ms);
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ms, n, k,
+              1.0, &As, k, &B, n, 0.0, &Cs, n);
 
   /* Setup physical coordinates at flux points */
   auto &Af = shape_fpts(0,0);
   auto &Cf = coord_fpts(0,0,0);
 
-  cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, mf, n, k,
-              1.0, &Af, k, &B, k, 0.0, &Cf, mf);
+  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, mf, n, k,
+              1.0, &Af, k, &B, n, 0.0, &Cf, n);
 
   /* Setup physical coordinates at flux points [in faces class] */
   for (unsigned int dim = 0; dim < nDims; dim++)
