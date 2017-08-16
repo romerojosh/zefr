@@ -3610,12 +3610,15 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     }
     if (key == "omega")
     {
-      geo.omega.assign({3});
-      ss >> tmp >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
+      if (geo.omega.size() != 3)
+      {
+        geo.omega.assign({3});
+        ss >> tmp >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
 
-      geo.qdot.assign({4});
-      for (int i = 0; i < 3; i++)
-        geo.qdot(i+1) = 0.5*geo.omega(i);
+        geo.qdot.assign({4});
+        for (int i = 0; i < 3; i++)
+          geo.qdot(i+1) = 0.5*geo.omega(i);
+      }
     }
 
     ss.str(""); ss.clear();
