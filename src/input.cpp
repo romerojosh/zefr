@@ -268,9 +268,13 @@ InputStruct read_input_file(std::string inputfile)
     }
 
     /* Newton Steps */
-    read_param(f, "iterNM_max", input.iterNM_max, (unsigned int) 1);
     if (input.implicit_steady)
-      input.n_steps = input.iterNM_max;
+    {
+      read_param(f, "iterNM_max", input.iterNM_max, (unsigned int) 0);
+      if (input.iterNM_max > 0) input.n_steps = input.iterNM_max;
+    }
+    else
+      read_param(f, "iterNM_max", input.iterNM_max, (unsigned int) 1);
 
     /* Block iterative method */
     read_param(f, "iterative_method", str, std::string("JAC"));

@@ -41,7 +41,7 @@ linear_solver INV
 report_conv_freq 100
 
 restart 0
-restart_file naca_eul_MCGS/naca_eul_MCGS_000002000.vtu
+restart_file naca_eul_MCGS/naca_eul_MCGS_000000010.vtu
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
