@@ -2244,14 +2244,14 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   if (input->implicit_method)
   {
     if (input->implicit_steady)
-      report_conv_freq = input->report_conv_freq;
+      report_NMconv_freq = input->report_NMconv_freq;
     else
     {
       unsigned int iter = (current_iter - restart_iter)+1;
       if (input->report_freq != 0 && (iter%input->report_freq == 0 || iter == input->n_steps || iter == 1))
-        report_conv_freq = input->report_conv_freq;
+        report_NMconv_freq = input->report_NMconv_freq;
       else
-        report_conv_freq = 0;
+        report_NMconv_freq = 0;
     }
   }
 
@@ -2885,7 +2885,8 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
 
 #ifdef _GPU
       /* If running on GPU, copy out RHS for residual */
-      if (report_conv_freq != 0 && (iterBM%report_conv_freq == 0 || iterBM == input->iterBM_max || iterNM*iterBM == 1))
+      if (report_NMconv_freq != 0 && (iterNM%report_NMconv_freq == 0 || iterNM == input->iterNM_max || iterNM == 1) && 
+        (iterBM%input->report_BMconv_freq == 0 || iterBM == input->iterBM_max || iterNM*iterBM == 1))
       {
         /* MCGS: Copy RHS for a given color */
         std::vector<std::shared_ptr<Elements>> elesObjs;
@@ -2916,7 +2917,8 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     }
 
     /* Write residual to convergence file */
-    if (report_conv_freq != 0 && (iterBM%report_conv_freq == 0 || iterBM == input->iterBM_max || iterNM*iterBM == 1))
+    if (report_NMconv_freq != 0 && (iterNM%report_NMconv_freq == 0 || iterNM == input->iterNM_max || iterNM == 1) && 
+      (iterBM%input->report_BMconv_freq == 0 || iterBM == input->iterBM_max || iterNM*iterBM == 1))
       report_RHS(stage, iterNM, iterBM);
   }
   POP_NVTX_RANGE;

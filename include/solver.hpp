@@ -91,7 +91,7 @@ class FRSolver
     int prev_color = 0;
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
     mdvector<unsigned int> ele2elesObj;
-    unsigned int report_conv_freq;
+    unsigned int report_NMconv_freq;
     std::ofstream conv_file;
     std::chrono::high_resolution_clock::time_point timer1;
 

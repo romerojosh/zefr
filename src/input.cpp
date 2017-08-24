@@ -276,11 +276,14 @@ InputStruct read_input_file(std::string inputfile)
     else
       read_param(f, "iterNM_max", input.iterNM_max, (unsigned int) 1);
 
+    read_param(f, "report_NMconv_freq", input.report_NMconv_freq, (unsigned int) 0);
+
     /* Block iterative method */
     read_param(f, "iterative_method", str, std::string("JAC"));
     read_param(f, "iterBM_max", input.iterBM_max, (unsigned int) 100);
     read_param(f, "backsweep", input.backsweep, false);
-    read_param(f, "report_conv_freq", input.report_conv_freq, (unsigned int) 0);
+    read_param(f, "report_BMconv_freq", input.report_BMconv_freq, (unsigned int) 0);
+
     if (str == "JAC")
       input.iterative_method = JAC;
     else if (str == "MCGS")
@@ -290,6 +293,9 @@ InputStruct read_input_file(std::string inputfile)
     }
     else
       ThrowException("Iterative method not recognized!");
+
+    if (input.report_NMconv_freq > 0 && input.report_BMconv_freq == 0)
+      input.report_BMconv_freq = input.iterBM_max;
 
     /* Block Linear Solver */
     read_param(f, "linear_solver", str, std::string("LU"));
