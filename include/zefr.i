@@ -1,5 +1,8 @@
 %module zefr
 
+%include "typemaps.i"
+%include "global.i"
+
 // -----------------------------------------------------------------------------
 // Header files required by any of the following C++ code
 // -----------------------------------------------------------------------------
@@ -14,7 +17,10 @@
 #define DEFAULT_COMM 0
 #endif
 
+#include "zefrPyGlobals.h"
 #include "zefr_interface.hpp"
+
+//extern int zefrInit(const char *fileName, int comm);
 %}
 
 // -----------------------------------------------------------------------------
@@ -43,6 +49,24 @@
 // <-- Additional C++ definitions [anything that would normally go in a .cpp]
 %}
 
+// ---------------------------------------------
+// FUNCTIONS TO CONVERT POINTERS TO NUMPY ARRAYS 
+// ---------------------------------------------
+%inline %{
+void convert_to_npdarray(double* data, int _size)
+{
+  dataSizePy = _size;
+  dataPy = data;
+}
+
+void convert_to_npiarray(int* data, int _size)
+{
+  dataSizePy = _size;
+  idataPy = data;
+}
+%}
+
+
 // -----------------------------------------------------------------------------
 // Additional Python functions to add to module
 // [can use any functions/variables declared above]
@@ -51,4 +75,11 @@
 %pythoncode
 %{
 # Python functions here
+%}
+
+%include "zefrPyGlobals.h"
+
+%init
+%{
+  import_array();
 %}
