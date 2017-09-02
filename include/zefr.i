@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------------
 %header
 %{
+#include <numpy/arrayobject.h>
 #ifdef _MPI
 #include <mpi.h>
 #define _mpi_comm MPI_Comm

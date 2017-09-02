@@ -1,15 +1,13 @@
 #ifndef included_pyGlobals
 #define included_pyGlobals
 
-#include "zefr.hpp"
+int ngrids;
+int nlocal;
+double simtime;
+int simstep;
 
-extern int ngrids;
-extern int nlocal;
-extern double time;
-extern int step;
-
-extern int dataSizePy;
-extern double *dataPy;
-extern int *idataPy;
+int dataSizePy;
+double *dataPy;
+int *idataPy;
 
 #endif
