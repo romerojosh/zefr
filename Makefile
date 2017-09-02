@@ -141,7 +141,7 @@ endif
 SOBJS = $(OBJS) $(BINDIR)/zefr_interface.o
 SWIG_OBJ = $(BINDIR)/zefr_swig.o
 SWIG_TARGET = $(BINDIR)/_zefr.so
-SWIG_INCS = -I$(strip $(PYTHON_INC_DIR))/ -I$(strip $(MPI4PY_INC_DIR))/
+SWIG_INCS = -I$(strip $(PYTHON_INC_DIR))/ -I$(strip $(MPI4PY_INC_DIR))/ -I$(strip $(NUMPY_INC_DIR))/
 SWIG_LIBS = 
 WRAP_TARGET = $(BINDIR)/zefrWrap
 

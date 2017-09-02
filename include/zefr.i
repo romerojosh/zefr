@@ -20,8 +20,6 @@
 
 #include "zefrPyGlobals.h"
 #include "zefr_interface.hpp"
-
-//extern int zefrInit(const char *fileName, int comm);
 %}
 
 // -----------------------------------------------------------------------------
@@ -54,13 +52,13 @@
 // FUNCTIONS TO CONVERT POINTERS TO NUMPY ARRAYS 
 // ---------------------------------------------
 %inline %{
-void convert_to_npdarray(double* data, int _size)
+void convert_to_np_darray(double* data, int _size)
 {
   dataSizePy = _size;
   dataPy = data;
 }
 
-void convert_to_npiarray(int* data, int _size)
+void convert_to_np_iarray(int* data, int _size)
 {
   dataSizePy = _size;
   idataPy = data;
@@ -75,7 +73,23 @@ void convert_to_npiarray(int* data, int _size)
 
 %pythoncode
 %{
-# Python functions here
+# Returns a numpy array given a double* and an int
+import numpy as np
+
+def dptrToArray(data, _size):
+    convert_to_np_darray(data,_size)
+    if _size == 0:
+      return np.array([],'d')
+    else:
+      return _zefr.cvar.dataPy
+
+# Returns a numpy array given an int* and an int
+def iptrToArray(data, _size):
+    convert_to_np_iarray(data,_size)
+    if _size == 0:
+      return np.array([],'i')
+    else:
+      return _zefr.cvar.idataPy
 %}
 
 %include "zefrPyGlobals.h"
