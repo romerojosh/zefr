@@ -25,6 +25,7 @@ inputFile = "input_sphere"
 if len(sys.argv) == 2:
     inputFile = sys.argv[1]
 elif len(sys.argv) > 2:
+    inputFile = sys.argv[1]
     nGrids = len(sys.argv) - 2
     nRanksGrid = []
     rankSum = 0
@@ -45,14 +46,11 @@ gridRank = gridComm.Get_rank()
 gridSize = gridComm.Get_size()
 
 # -------------- Setup the ZEFR solver object; process the grids ----------------
-if len(sys.argv) < 2:
-    inputFile = "input_sphere"
-else:
-    inputFile = sys.argv[1]
 zefr.initialize(gridComm,inputFile,nGrids,GridID)
 
 z = zefr.get_zefr_object()
 inp = z.get_input()
+data = z.get_data()
 
 if nGrids > 1:
     tg.tioga_init_(Comm)

@@ -72,6 +72,9 @@ public:
   //! Call "do_step()" n times
   void do_n_steps(int n);
 
+  //! Run one full time step, including any filtering or multigrid operations
+  void do_rk_stage(int iter, int stage);
+
   // Functions to write data to file and/or terminal
   void write_residual(void);
   void write_solution(void);
@@ -82,6 +85,10 @@ public:
 
   // Other Misc. Functions
   InputStruct &get_input(void) { return input; }
+
+  DataStruct &get_data(void) { return simData; }
+
+  void get_forces(void);
 
   /* ==== Overset-Related Functions ==== */
 
@@ -156,6 +163,7 @@ private:
   // Basic ZEFR Solver Objects
   std::shared_ptr<FRSolver> solver;
   InputStruct input;
+  DataStruct simData;
   std::shared_ptr<PMGrid> pmg;
   GeoStruct *geo;
 

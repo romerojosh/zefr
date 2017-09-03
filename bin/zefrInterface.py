@@ -1,11 +1,11 @@
 #! /usr/bin/env python
 #
-# File: turnssolution.py
-# Authors: Jayanarayanan Sitaraman
-# Last Modified: 1/31/06
+# File: zefrInterface.py
+# Authors: Jacob Crabill
+# Last Modified: 9/02/2017
 
 
-__version__ = "1.03"
+__version__ = "1.00"
 
 # ==================================================================
 # Standard Python modules
@@ -20,7 +20,7 @@ import types
 #sys.path.append(os.path.abspath(os.getenv('PYTHONPATH')))
 #sys.path.append(os.path.abspath(os.getenv('PYTHONPATH')+'/numpy'))
 
-import numpy
+import numpy as np
 
 # Try to import the MPI.COMM_WORLD.module
 try:
@@ -34,12 +34,16 @@ except ImportError:
 try:
     import zefr
 except ImportError:
-    print "Import Error: ZEFR solver module"
+    print("Import Error: ZEFR solver module")
 
 class zefrSolver:
 
-    def __init__(self,startfile,gridID):
-        self.nGrids = 2 # TODO
+    def __init__(self,startfile,gridID,nGrids):
+        if not os.path.isfile(startfile):
+          print('Error: ZEFR input file',startfile,'not found in path')
+          raise
+
+        self.nGrids = nGrids
         self.ID = gridID
         self.inpfile=startfile
 
@@ -51,146 +55,196 @@ class zefrSolver:
         self.gridRank = gridComm.Get_rank()
         self.gridSize = gridComm.Get_size()
 
-        zefr.initialize(self.gridComm,startfile,self.nGrids,gridID)
+        # Create the directory where all ZEFR IO will occur
+        if self.gridRank == 0 and os.path.isdir('zefr') == False:
+          os.mkdir('zefr')
+
+        zefr.initialize(self.gridComm,startfile,nGrids,gridID)
 
         # scaling for solver variable [i.e. non-dimensionalization]
-        self.scale=numpy.array([1.,1.,1.,1.,1.],'d')
+        self.scale = np.array([1.,1.,1.,1.,1.],'d')
 
         self.z = zefr.get_zefr_object()
         self.inp = self.z.get_input()
-        self.name='zefr'
-
-    def runStep(self,nstep,ncyc):
-        os.chdir('zefr') # All ZEFR data stored in a sub-folder
-        # One Runge-Kutta time step here
-        #self.z.do_step()
-
-        for i in range(0,ncyc):
-            runSubSteps(ntime,i,ncyc)
-            os.chdir('..')
-
-    def runSubSteps(self,ntime,ncyc):
-        os.chdir('zefr')
-        # Note:
-        # ntime = iter [global time step #]
-        # ncyc = stage [RK stage #]
-        # Run one RK stage here
-        self.z.do_rk_stage(ntime,ncyc)
+        self.simdata = self.z.get_data()
+        self.name = 'zefr'
 
         os.chdir('..')
-        #return self.rsp,self.loads
+
+    # Run one full time step
+    def runStep(self,iter,nstages):
+        os.chdir('zefr')
+
+        #self.z.do_step(nstages)
+        for i in range(0,nstages):
+            runSubSteps(iter,i,nstages)
+
+        os.chdir('..')
+
+    # Run one RK stage
+    def runSubSteps(self,iter,stage):
+        os.chdir('zefr')
+
+        self.z.do_rk_stage(iter,stage)
+
+        os.chdir('..')
 
     def sifInitialize(self,properties,conditions):
         os.chdir('zefr') 
-        rinf=properties['rinf']
-        ainf=properties['ainf']
-        self.ainf=ainf
+
+        rinf = properties['rinf']
+        ainf = properties['ainf']
+
+        gridScale = conditions['meshRefLength']
+        Reref = conditions['reyNumber']
+        Lref = conditions['reyRefLength']
+        Mref = conditions['refMach']
+
+        self.inp.rho_fs = rinf
+        self.inp.L_fs = conditions['reyRefLength']
+
         # All conditions come in as SI units - take care of non-dim here
-        if conditions['timeacc']=='yes':
-            dt=ainf*conditions['dt']/conditions['meshRefLength']
-        else:
-            dt=1. 
-        alpha=conditions['alpha']
-        beta=conditions['beta']
-        mach_fs=conditions['Mach']
-        self.restart='no'
-        if conditions['from_restart']=='yes':
-            self.restart='yes'
-            self.restartStep=conditions['restartstep']
+        dt = ainf * conditions['dt'] / gridScale
+        mach_fs = conditions['Mach']
+        self.restart = 'no'
+        if conditions['from_restart'] == 'yes':
+            self.inp.restart = 'true'
+            self.inp.restartIter = conditions['restartstep']
 
-        gridScale=conditions['meshRefLength']
-        Re=conditions['reyNumber']/conditions['reyRefLength']*gridScale/conditions['refMach']*(mach_fs)
-        self.forceDim=0.5*rinf*(refMach*ainf*gridScale)**2
-        self.momDim=self.forceDim*gridScale
+        Re = (Reref/Lref) * gridScale / Mref * (mach_fs)
+        self.forceDim = 0.5 * rinf * (refMach*ainf*gridScale)**2
+        self.momDim = self.forceDim * gridScale
 
-        turns.sifinit(dt,Re,mach_fs,alpha,beta)
+        # Have ZEFR do any additional setup on input parameters
+        zefr.sifinit(dt,Re,mach_fs)
             
-        self.scale=numpy.array([1./rinf,
-                                1./(rinf*ainf),
-                                1./(rinf*ainf),
-                                1./(rinf*ainf),
-                                1./(rinf*ainf*ainf),1.],'d')
+        self.scale = np.array([1./rinf,
+                               1./(rinf*ainf),
+                               1./(rinf*ainf),
+                               1./(rinf*ainf),
+                               1./(rinf*ainf*ainf),1.],'d')
 
         os.chdir('..')
 
     def getForcesAndMoments(self):
-        bodyForce=turns.params_global.bodyForce.copy()
-        bodyForce[:3]=bodyForce[:3]*self.forceDim
-        bodyForce[3:]=bodyForce[3:]*self.momDim
+        self.z.get_forces()
+        bodyForce = np.array(dptrToArray(self.simdata.forces))
+        bodyForce[:3] = bodyForce[:3]*self.forceDim
+        bodyForce[3:] = bodyForce[3:]*self.momDim
         return bodyForce
                         
     # sifInit called first to setup solver input
     def initData(self):
-        os.chdir('turns')
-        turns.initdata()
+        os.chdir('zefr')
 
-        [xNB,iNB,qNB,index]=self.getMeshPoints()
-                
-        # Get geo data from ZEFR and pass into TIOGA
+        # TODO: modify ZEFR so callbacks aren't needed yet? 
+        # TODO: Or should I get callbacks here or in sifInit?
+
+        # Setup the ZEFR solver 
+        self.z.setup_solver()
+
+        # Get all relevant geometry and solver data
         geo = zefr.get_basic_geo_data()   # Basic geometry/connectivity data
         geoAB = zefr.get_extra_geo_data() # Geo data for AB method
         cbs = zefr.get_callback_funcs()   # Callback functions for high-order/AB method
+        simdata = self.simdata
 
-        # TODO: implement converter functions [cptr to 1D numpy array]
-        # [For 2D/3D arrays, can call reshape() after the fact]
-        size = geo.nnodes*geo.ndims
-        #dims = [geo.nnodes, geo.ndims]
-        xyz = zefr.convert_to_npdarray(geo.xyz, size) #, dims) 
-        size = geo.ncells*geo.nvert
-        c2v = zefr.convert_to_npiarray(geo.c2v, size) 
+        # -----------------------------------------------------------------------
+        # Turn all pointers from ZEFR into (single-element) lists of numpy arrays
+        # (For 2D/3D arrays, can call reshape() after the fact)
+        # -----------------------------------------------------------------------
+        ndims = 3
+        nfields = simdata.nfields
+        nspts = simdata.nspts
+        ncells = geo.nCells_type
+        nfaces = geoAB.nFaces_type
+        nnodes = geo.nnodes
+        nvert = geo.nvert_cell
+        nvertf = getAB.nvert_face
+        nfaces = geoAB.nFaces_type
 
-        # NOTE: ALL of these arrays should be turned into numpy arrays
-        self.gridData={'gridtype':'unstructured',
-                       'tetConn':'None',
-                       'pyraConn':'None',
-                       'prismConn':'None',
-                       'hexaConn':geo.c2v,
-                       'bodyTag':self.btag,
-                       'wallnode':geo.wallNodes,
-                       'obcnode':geo.overNodes,
-                       'grid-coordinates':geo.xyz,
-                       'q-variables':self.q,
-                       'iblanking':geo.iblank,
-                       'scaling':self.scale,
-                       'face2cell',geoAB.f2c,
-                       'cell2face',geoAB.c2f,
-                       'iblank-face',geoAB.iblank_face,
-                       'iblank-cell',geoAB.iblank_cell,
-                       'ofaces',geoAB.overFaces,
-                       'mfaces',geoAB.mpiFaces,
-                       'right-proc',geoAB.procR,
-                       'right-id',geoAB.mpiFidR,
-                       'nvert-face',geoAB.nvert_face,
-                       'faceConn',geoAB.f2v}
-                       #'iblkHasNBHole':0,
-                       #'istor':'row'}
-                       #'fsicoord':self.fsicoord,
-                       #'fsiforce':self.fsiforce,
-                       #'fsitag':self.fsitag}  
+        # Wrap all geometry data
+        xyz = [zefr.dptrToArray(geo.xyz, nnodes*ndims)]
+        c2v = [zefr.iptrToArray(geo.c2v, ncells*nvert)]
+        wallNodes = [zefr.iptrToArray(geo.wallNodes, geo.nwall)]
+        overNodes = [zefr.iptrToArray(geo.overNodes, geo.nover)]
+
+        iblank = [zefr.iptrToArray(geo.iblank, nnodes)]
+        iblank_cell = [zefr.iptrToArray(geoAB.iblank_cell, ncells)]
+        iblank_face = [zefr.iptrToArray(geoAB.iblank_face, nfaces)]
+        f2v = [zefr.iptrToArray(geoAB.f2v, nfaces*nvertf)]
+        c2f = [zefr.iptrToArray(geoAB.c2f, ncells*(2**ndims))]
+        f2c = [zefr.iptrToArray(geoAB.f2c, nfaces*2)]
+
+        overFaces = [zefr.iptrToArray(geoAB.overFaces, geoAB.nOverFaces)]
+        wallFaces = [zefr.iptrToArray(geoAB.wallFaces, geoAB.nWallFaces)]
+        mpiFaces = [zefr.iptrToArray(geoAB.mpiFaces, geoAB.nMpiFaces)]
+        procR = [zefr.iptrToArray(geoAB.procR, geo.nMpiFaces)]
+        mpiFidR = [zefr.iptrToArray(geoAB.mpiFidR, geo.nMpiFaces)]
+
+        # Wrap relevant solution data
+        q = [zefr.dptrToArray(simdata.u_spts, ncells*nspts*nfields)]
+
+        dq = []
+        if self.inp.viscous:
+          dq.append(zefr.dptrToArray(simdata.dq_spts, ncells*nspts*ndims*nfields))
+
+        self.gridData = {'gridtype' : 'unstructured',
+                         'tetConn' : 'None',
+                         'pyraConn' : 'None',
+                         'prismConn' : 'None',
+                         'hexaConn' : c2v,
+                         'bodyTag' : [geo.btag],
+                         'wallnode' : wallNodes,
+                         'obcnode' : overNodes,
+                         'grid-coordinates' : xyz,
+                         'q-variables' : q,
+                         'dq-variables' : dq,
+                         'iblanking' : iblank,
+                         'scaling' : [self.scale],
+                         'face2cell' : f2c,
+                         'cell2face' : c2f,
+                         'iblank-face' : iblank_face,
+                         'iblank-cell' : iblank_cell,
+                         'ofaces' : overFaces,
+                         'wfaces' : wallFaces,
+                         'mfaces' : mpiFaces,
+                         'right-proc' : procR,
+                         'right-id' : mpiFidR,
+                         'nvert-face' : [geoAB.nvert_face],
+                         'faceConn' : f2v}
+                         #'iblkHasNBHole':0,
+                         #'istor':'row'}
+                         #'fsicoord':self.fsicoord,
+                         #'fsiforce':self.fsiforce,
+                         #'fsitag':self.fsitag}  
 
         if self.inp.motion:
-            self.gridData.append({'gridVel',geoAB.grid_vel,
-                'rigidOffset',geoAB.offset,
-                'rigidRotMat',geoAB.Rmat})
+            gridVel = [zefr.dptrToArray(geoAB.grid_vel, nnodes*ndims)]
+            offset = [zefr.dptrToArray(geoAB.offset, ndims)]
+            Rmat = [zefr.dptrToArray(geoAB.Rmat, ndims*ndims)]
+
+            self.gridData.update({'gridVel',grid_vel,
+                'rigidOffset',offset,
+                'rigidRotMat',Rmat})
 
         self.oldCallbacks = {'nodesPerCell',cbs.get_nodes_per_cell,
-                'receptorNodes',cbs.get_receptor_nodes,
-                'donorInclusionTest',cbs.donor_inclusion_test,
-                'donorFrac',cbs.donor_frac,
-                'convertToModal',cbs.convert_to_modal}
+            'receptorNodes',cbs.get_receptor_nodes,
+            'donorInclusionTest',cbs.donor_inclusion_test,
+            'donorFrac',cbs.donor_frac,
+            'convertToModal',cbs.convert_to_modal}
 
         self.callbacks = {'nodesPerFace',cbs.get_nodse_per_face,
-                'faceNodes',cbs.get_face_nodes,
-                'get_q_spt',cbs.get_q_spt,
-                'get_q_fpt',cbs.get_q_fpt,
-                'get_grad_spt',cbs.get_grad_spt,
-                'get_grad_fpt',cbs.get_grad_fpt,
-                'q_spts',cbs.get_q_spts,
-                'dq_spts',cbs.get_dq_spts}
-
+            'faceNodes',cbs.get_face_nodes,
+            'get_q_spt',cbs.get_q_spt,
+            'get_q_fpt',cbs.get_q_fpt,
+            'get_grad_spt',cbs.get_grad_spt,
+            'get_grad_fpt',cbs.get_grad_fpt,
+            'q_spts',cbs.get_q_spts,
+            'dq_spts',cbs.get_dq_spts}
 
         if self.useGPU:
-            self.callbacks.append({'donorDataDevice',cbs.donor_data_from_device,
+            self.callbacks.update({'donorDataDevice',cbs.donor_data_from_device,
                 'fringeDataToDevice',cbs.fringe_data_to_device,
                 'unblankToDevice',cbs.unblank_data_to_device,
                 'faceNodesGPU',cbs.get_face_nodes_gpu,
@@ -198,113 +252,40 @@ class zefrSolver:
                 'q_spts_d',cbs.get_q_spts_d,
                 'dq_spts_d',cbs.get_dq_spts_d})
 
-            GpuGeo geoGpu = zefr::get_gpu_geo_data();
-            self.gridData.append({'nodesGPU',geoGpu.coord_nodes,
+            geoGpu = zefr.get_gpu_geo_data();
+            self.gridData.update({'nodesGPU',geoGpu.coord_nodes,
                 'eleCoordsGPU',geoGpu.coord_eles,
                 'iblankCellGPU',geoGpu.iblank_cell,
-                'iblankFaceGPU',geoGpu.iblank_cell})
+                'iblankFaceGPU',geoGpu.iblank_face})
 
         os.chdir('..')
     
     def writePlotData(self,istep):
-        self.writeData(istep)
+        os.chdir('zefr')
+        self.z.write_solution()
+        os.chdir('..')
 
     def writeRestartData(self,istep):
-        os.chdir('turns')
+        os.chdir('zefr')
+        self.z.write_solution()
         os.chdir('..')
 
     # HELIOS can provide grid velocities
     def setGridSpeeds_maneuver(self,MeshMotionData):
-        self.vx=-MeshMotionData['aircraftTranslation'][0]/self.ainf
-        self.vy=-MeshMotionData['aircraftTranslation'][1]/self.ainf
-        self.vz=-MeshMotionData['aircraftTranslation'][2]/self.ainf
-        if MPI.COMM_WORLD.Get_rank()==0:
-            print "gust speed from turns :",self.vx,self.vy,self.vz
+        self.vx = -MeshMotionData['aircraftTranslation'][0]/self.ainf
+        self.vy = -MeshMotionData['aircraftTranslation'][1]/self.ainf
+        self.vz = -MeshMotionData['aircraftTranslation'][2]/self.ainf
+        if MPI.COMM_WORLD.Get_rank() == 0:
+            print("gust speed from turns :",self.vx,self.vy,self.vz)
 
-    def deformPart1(self):
-        if self.nopart1==0:
-            turns.warpmeshpart1()
-        else:
-            self.nopart1=0
-            if self.use_unstruct=='true':
-                turns.setiblankstoone(self.iblank[0])
-                    
-    def deformPart2(self):
-        if self.use_unstruct=='true':
-            turns.setcoorddata(self.x[0])
-            turns.warpmeshpart2()
+    def deformPart1(self,iter,stage):
+        self.z.move_grid(iter,stage)
+        pass
+
+    def deformPart2(self,iter,stage):
+        self.z.move_grid(iter,stage)
+        pass
 
     def finish(self,step):
-        istep=0
+        istep = 0
         self.writeRestartData(step)
-        # Jay add
-            
-    # FOR REFERENCE
-    def initUnstruct(self):
-        #
-        # create unstructred grid data structure
-        #
-        turns.convertunstruct()
-        self.tetConn=[]
-        self.pyraConn=[]
-        self.prismConn=[]
-        self.x=[]
-        self.q=[]
-        self.iblank=[]
-        self.hexaConn=[]
-        self.wbcnode=[]
-        self.obcnode=[]
-        self.bodytags=[]
-        self.fsicoord=[]
-        self.fsitag=[]
-        self.fsiforce=[]
-        self.tetConn.append(numpy.array([[],[],[],[]],'i'))
-        self.pyraConn.append(numpy.array([[],[],[],[],[]],'i'))
-        self.prismConn.append(numpy.array([[],[],[],[],[],[]],'i'))
-
-        i=1
-        nnodes,ncells,nwbc,nobc,gridtype = turns.getdimturns(i)
-
-        if (gridtype==0):
-            if (nwbc > 0 ) :
-                x,ndc8,obc,wbc,bodytags = turns.getpart(i,nwbc,nobc,nnodes,ncells)
-                self.wbcnode.append(wbc)
-                self.obcnode.append(obc)
-            else:
-                x,ndc8,obc,bodytags = turns.getpart1(i,nobc,nnodes,ncells)
-                self.wbcnode.append(numpy.array([],'i'))                
-                self.obcnode.append(obc)                
-                        
-        q,iblank=turns.getiblanksq(i,nnodes)
-        turns.getqdata(q)
-        self.q.append(q)
-        self.iblank.append(iblank)
-        self.x.append(x)
-        self.hexaConn.append(ndc8)
-        self.bodytags.append(bodytags)
-        self.fsicoord.append(turns.fsimod.xxout)
-        self.fsiforce.append(turns.fsimod.fxout)
-        self.fsitag.append(turns.fsimod.ftag)
-        nfsi=turns.fsimod.xxout.shape[0]/3
-        fsiout=numpy.reshape(turns.fsimod.xxout,(nfsi,3))
-        #print "myrank, bodytag=",MPI.COMM_WORLD.Get_rank(),bodytags[0]
-        #turnsio.write_arrayT('fsi_coord'+str(MPI.COMM_WORLD.Get_rank()),fsiout)
-                                     
-
-        self.unstData={'gridtype':'unstructured',
-                       'tetConn':self.tetConn,
-                       'pyraConn':self.pyraConn,
-                       'prismConn':self.prismConn,
-                       'hexaConn':self.hexaConn,
-                       'bodyTag':self.bodytags,
-                       'wallnode':self.wbcnode,
-                       'obcnode':self.obcnode,
-                       'grid-coordinates':self.x,
-                       'q-variables':self.q,
-                       'iblanking':self.iblank,
-                       'scaling':self.scale,
-                       'iblkHasNBHole':0,
-                       'istor':'row',
-                       'fsicoord':self.fsicoord,
-                       'fsiforce':self.fsiforce,
-                       'fsitag':self.fsitag}

@@ -1,0 +1,13 @@
+# Master input file for HELIOS-compatible ZEFR
+zefrInput  input_sphere
+rinf   1.00
+ainf   1.00
+meshRefLength  1.0
+reyNumber      1000.0
+reyRefLength   1.0
+dt             .001
+Mach           .2
+from_restart   no
+
+nsteps  100
+nstages 5

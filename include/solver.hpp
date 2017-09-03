@@ -160,6 +160,7 @@ class FRSolver
 
     //! Standard explicit (diagonal) Runge-Kutta update loop
     void step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+    void step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop
     void step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
@@ -174,6 +175,7 @@ class FRSolver
 #ifdef _GPU
     void update(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());

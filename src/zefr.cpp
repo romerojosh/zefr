@@ -366,6 +366,13 @@ void Zefr::setup_solver(void)
 
   solver->grid_time = -1;
   solver->init_grid_motion(solver->flow_time);
+  
+  // For easy access in Python
+  simData.nspts = solver->eles->nSpts;
+  simData.nfields = solver->eles->nVars;
+  simData.u_spts = solver->eles->U_spts.data();
+  if (input.viscous)
+    simData.du_spts = solver->eles->dU_spts.data();
 }
 
 void Zefr::restart_solution(void)
@@ -387,6 +394,19 @@ void Zefr::do_step(void)
   }
 
   input.iter++;
+}
+
+void Zefr::do_rk_stage(int iter, int stage)
+{
+  input.iter = iter;
+
+  solver->step_RK_stage(stage);
+
+  if (stage == input.nStages-1)
+  {
+    solver->filter_solution();
+    input.iter++;
+  }
 }
 
 void Zefr::do_n_steps(int n)
@@ -413,6 +433,19 @@ void Zefr::write_solution(void)
 void Zefr::write_forces(void)
 {
   solver->report_forces(force_file);
+}
+
+void Zefr::get_forces(void)
+{
+  std::array<double, 3> force = {0,0,0};
+  std::array<double, 3> moment = {0,0,0};
+  solver->compute_moments(force, moment);
+
+  for (int i = 0; i < geo->nDims; i++)
+  {
+    simData.forces[i] = force[i];
+    simData.forces[i+3] = moment[i];
+  }
 }
 
 void Zefr::write_error(void)
