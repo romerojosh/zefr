@@ -128,7 +128,7 @@ class zefrSolver:
 
     def getForcesAndMoments(self):
         self.z.get_forces()
-        bodyForce = np.array(dptrToArray(self.simdata.forces))
+        bodyForce = np.array(ptrToArray(self.simdata.forces))
         bodyForce[:3] = bodyForce[:3]*self.forceDim
         bodyForce[3:] = bodyForce[3:]*self.momDim
         return bodyForce
@@ -164,30 +164,30 @@ class zefrSolver:
         nfaces = geoAB.nFaces_type
 
         # Wrap all geometry data
-        xyz = [zefr.dptrToArray(geo.xyz, nnodes*ndims)]
-        c2v = [zefr.iptrToArray(geo.c2v, ncells*nvert)]
-        wallNodes = [zefr.iptrToArray(geo.wallNodes, geo.nwall)]
-        overNodes = [zefr.iptrToArray(geo.overNodes, geo.nover)]
+        xyz = [zefr.ptrToArray(geo.xyz, nnodes*ndims)]
+        c2v = [zefr.ptrToArray(geo.c2v, ncells*nvert)]
+        wallNodes = [zefr.ptrToArray(geo.wallNodes, geo.nwall)]
+        overNodes = [zefr.ptrToArray(geo.overNodes, geo.nover)]
 
-        iblank = [zefr.iptrToArray(geo.iblank, nnodes)]
-        iblank_cell = [zefr.iptrToArray(geoAB.iblank_cell, ncells)]
-        iblank_face = [zefr.iptrToArray(geoAB.iblank_face, nfaces)]
-        f2v = [zefr.iptrToArray(geoAB.f2v, nfaces*nvertf)]
-        c2f = [zefr.iptrToArray(geoAB.c2f, ncells*(2**ndims))]
-        f2c = [zefr.iptrToArray(geoAB.f2c, nfaces*2)]
+        iblank = [zefr.ptrToArray(geo.iblank, nnodes)]
+        iblank_cell = [zefr.ptrToArray(geoAB.iblank_cell, ncells)]
+        iblank_face = [zefr.ptrToArray(geoAB.iblank_face, nfaces)]
+        f2v = [zefr.ptrToArray(geoAB.f2v, nfaces*nvertf)]
+        c2f = [zefr.ptrToArray(geoAB.c2f, ncells*(2**ndims))]
+        f2c = [zefr.ptrToArray(geoAB.f2c, nfaces*2)]
 
-        overFaces = [zefr.iptrToArray(geoAB.overFaces, geoAB.nOverFaces)]
-        wallFaces = [zefr.iptrToArray(geoAB.wallFaces, geoAB.nWallFaces)]
-        mpiFaces = [zefr.iptrToArray(geoAB.mpiFaces, geoAB.nMpiFaces)]
-        procR = [zefr.iptrToArray(geoAB.procR, geo.nMpiFaces)]
-        mpiFidR = [zefr.iptrToArray(geoAB.mpiFidR, geo.nMpiFaces)]
+        overFaces = [zefr.ptrToArray(geoAB.overFaces, geoAB.nOverFaces)]
+        wallFaces = [zefr.ptrToArray(geoAB.wallFaces, geoAB.nWallFaces)]
+        mpiFaces = [zefr.ptrToArray(geoAB.mpiFaces, geoAB.nMpiFaces)]
+        procR = [zefr.ptrToArray(geoAB.procR, geo.nMpiFaces)]
+        mpiFidR = [zefr.ptrToArray(geoAB.mpiFidR, geo.nMpiFaces)]
 
         # Wrap relevant solution data
-        q = [zefr.dptrToArray(simdata.u_spts, ncells*nspts*nfields)]
+        q = [zefr.ptrToArray(simdata.u_spts, ncells*nspts*nfields)]
 
         dq = []
         if self.inp.viscous:
-          dq.append(zefr.dptrToArray(simdata.dq_spts, ncells*nspts*ndims*nfields))
+          dq.append(zefr.ptrToArray(simdata.dq_spts, ncells*nspts*ndims*nfields))
 
         self.gridData = {'gridtype' : 'unstructured',
                          'tetConn' : 'None',
@@ -220,9 +220,9 @@ class zefrSolver:
                          #'fsitag':self.fsitag}  
 
         if self.inp.motion:
-            gridVel = [zefr.dptrToArray(geoAB.grid_vel, nnodes*ndims)]
-            offset = [zefr.dptrToArray(geoAB.offset, ndims)]
-            Rmat = [zefr.dptrToArray(geoAB.Rmat, ndims*ndims)]
+            gridVel = [zefr.ptrToArray(geoAB.grid_vel, nnodes*ndims)]
+            offset = [zefr.ptrToArray(geoAB.offset, ndims)]
+            Rmat = [zefr.ptrToArray(geoAB.Rmat, ndims*ndims)]
 
             self.gridData.update({'gridVel',grid_vel,
                 'rigidOffset',offset,

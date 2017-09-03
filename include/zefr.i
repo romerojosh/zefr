@@ -1,8 +1,5 @@
 %module zefr
 
-%include "typemaps.i"
-%include "global.i"
-
 // -----------------------------------------------------------------------------
 // Header files required by any of the following C++ code
 // -----------------------------------------------------------------------------
@@ -18,8 +15,12 @@
 #define DEFAULT_COMM 0
 #endif
 
-#include "zefrPyGlobals.h"
 #include "zefr_interface.hpp"
+%}
+
+%init
+%{
+  import_array();
 %}
 
 // -----------------------------------------------------------------------------
@@ -48,20 +49,53 @@
 // <-- Additional C++ definitions [anything that would normally go in a .cpp]
 %}
 
-// ---------------------------------------------
-// FUNCTIONS TO CONVERT POINTERS TO NUMPY ARRAYS 
-// ---------------------------------------------
-%inline %{
-void convert_to_np_darray(double* data, int _size)
+// --------------------------------------------------------
+// FUNCTIONS TO CONVERT POINTERS TO NUMPY ARRAYS (AND BACK)
+// --------------------------------------------------------
+%inline
+%{
+PyObject* ptrToArray(float* data, int n)
 {
-  dataSizePy = _size;
-  dataPy = data;
+  npy_intp dims[1] = {n};
+  return PyArray_SimpleNewFromData(1,dims,NPY_FLOAT,(void*)data);
 }
 
-void convert_to_np_iarray(int* data, int _size)
+PyObject* ptrToArray(double* data, int n)
 {
-  dataSizePy = _size;
-  idataPy = data;
+  npy_intp dims[1] = {n};
+  return PyArray_SimpleNewFromData(1,dims,NPY_DOUBLE,(void*)data);
+}
+
+PyObject* ptrToArray(int* data, int n)
+{
+  npy_intp dims[1] = {n};
+  return PyArray_SimpleNewFromData(1,dims,NPY_INT,(void*)data);
+}
+
+PyObject* ptrToArray(unsigned int* data, int n)
+{
+  npy_intp dims[1] = {n};
+  return PyArray_SimpleNewFromData(1,dims,NPY_UINT,(void*)data);
+}
+
+double* arrayToDblPtr(PyObject* arr)
+{
+  return (double *)(((PyArrayObject *)arr)->data);
+}
+
+float* arrayToFloatPtr(PyObject* arr)
+{
+  return (float *)(((PyArrayObject *)arr)->data);
+}
+
+int* arrayToIntPtr(PyObject* arr)
+{
+  return (int *)(((PyArrayObject *)arr)->data);
+}
+
+unsigned int* arrayToUintPtr(PyObject* arr)
+{
+  return (unsigned int *)(((PyArrayObject *)arr)->data);
 }
 %}
 
@@ -73,28 +107,5 @@ void convert_to_np_iarray(int* data, int _size)
 
 %pythoncode
 %{
-# Returns a numpy array given a double* and an int
-import numpy as np
 
-def dptrToArray(data, _size):
-    convert_to_np_darray(data,_size)
-    if _size == 0:
-      return np.array([],'d')
-    else:
-      return _zefr.cvar.dataPy
-
-# Returns a numpy array given an int* and an int
-def iptrToArray(data, _size):
-    convert_to_np_iarray(data,_size)
-    if _size == 0:
-      return np.array([],'i')
-    else:
-      return _zefr.cvar.idataPy
-%}
-
-%include "zefrPyGlobals.h"
-
-%init
-%{
-  import_array();
 %}
