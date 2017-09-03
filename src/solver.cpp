@@ -175,7 +175,10 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   /* Setup fpt adjacency for viscous implicit Jacobians */
   if (input->implicit_method && input->viscous)
+  {
+    if (input->rank == 0) std::cout << "Setting up fpt adjacency..." << std::endl;
     set_fpt_adjacency();
+  }
 
   /* Write Low Rank Approximation rank */
 #ifdef _CPU
@@ -212,11 +215,13 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
   if (input->implicit_method && input->viscous)
   {
     /* Setup jacoN views for viscous implicit Jacobians */
+    if (input->rank == 0) std::cout << "Setting up jacoN views..." << std::endl;
     setup_jacoN_views();
 
     /* Setup ddUdUc for viscous KPF implicit Jacobians */
     if (input->KPF_Jacobian)
     {
+      if (input->rank == 0) std::cout << "Setting up KPF Jacobian operators..." << std::endl;
       for (auto e : elesObjs)
         e->setup_ddUdUc();
 
