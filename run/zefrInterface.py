@@ -22,6 +22,11 @@ import types
 
 import numpy as np
 
+CONVERT_DIR = '/home/jcrabill/zefr/external/'
+sys.path.append(CONVERT_DIR)
+
+from convert import *
+
 # Try to import the MPI.COMM_WORLD.module
 try:
     from mpi4py import MPI
@@ -52,8 +57,8 @@ class zefrSolver:
         nproc = Comm.Get_size()
 
         self.gridComm = Comm.Split(gridID,rank)
-        self.gridRank = gridComm.Get_rank()
-        self.gridSize = gridComm.Get_size()
+        self.gridRank = self.gridComm.Get_rank()
+        self.gridSize = self.gridComm.Get_size()
 
         # Create the directory where all ZEFR IO will occur
         if self.gridRank == 0 and os.path.isdir('zefr') == False:
@@ -69,8 +74,6 @@ class zefrSolver:
         self.simdata = self.z.get_data()
         self.name = 'zefr'
 
-        os.chdir('..')
-
     # Run one full time step
     def runStep(self,iter,nstages):
         os.chdir('zefr')
@@ -82,15 +85,16 @@ class zefrSolver:
         os.chdir('..')
 
     # Run one RK stage
-    def runSubSteps(self,iter,stage):
-        os.chdir('zefr')
+    def runSubStepStart(self,iter,stage):
+        self.z.do_rk_stage_start(iter,stage)
 
-        self.z.do_rk_stage(iter,stage)
-
-        os.chdir('..')
+    def runSubStepFinish(self,iter,stage):
+        self.z.do_rk_stage_finish(iter,stage)
 
     def sifInitialize(self,properties,conditions):
         os.chdir('zefr') 
+
+        self.useGpu = properties['use-gpu']
 
         rinf = properties['rinf']
         ainf = properties['ainf']
@@ -104,7 +108,7 @@ class zefrSolver:
         self.inp.L_fs = conditions['reyRefLength']
 
         # All conditions come in as SI units - take care of non-dim here
-        dt = ainf * conditions['dt'] / gridScale
+        self.dt = ainf * conditions['dt'] / gridScale
         mach_fs = conditions['Mach']
         self.restart = 'no'
         if conditions['from_restart'] == 'yes':
@@ -112,11 +116,11 @@ class zefrSolver:
             self.inp.restartIter = conditions['restartstep']
 
         Re = (Reref/Lref) * gridScale / Mref * (mach_fs)
-        self.forceDim = 0.5 * rinf * (refMach*ainf*gridScale)**2
+        self.forceDim = 0.5 * rinf * (Mref*ainf*gridScale)**2
         self.momDim = self.forceDim * gridScale
 
         # Have ZEFR do any additional setup on input parameters
-        zefr.sifinit(dt,Re,mach_fs)
+        #zefr.sifinit(dt,Re,mach_fs)
             
         self.scale = np.array([1./rinf,
                                1./(rinf*ainf),
@@ -160,36 +164,39 @@ class zefrSolver:
         nfaces = geoAB.nFaces_type
         nnodes = geo.nnodes
         nvert = geo.nvert_cell
-        nvertf = getAB.nvert_face
+        nvertf = geoAB.nvert_face
         nfaces = geoAB.nFaces_type
 
         # Wrap all geometry data
-        xyz = [zefr.ptrToArray(geo.xyz, nnodes*ndims)]
-        c2v = [zefr.ptrToArray(geo.c2v, ncells*nvert)]
-        wallNodes = [zefr.ptrToArray(geo.wallNodes, geo.nwall)]
-        overNodes = [zefr.ptrToArray(geo.overNodes, geo.nover)]
+        # NOTE: numpy arrays are row-major (last dim contiguous)
+        xyz = [ptrToArray(geo.xyz, nnodes, ndims)]
+        c2v = [ptrToArray(geo.c2v, ncells, nvert)]
+        wallNodes = [ptrToArray(geo.wallNodes, geo.nwall)]
+        overNodes = [ptrToArray(geo.overNodes, geo.nover)]
 
-        iblank = [zefr.ptrToArray(geo.iblank, nnodes)]
-        iblank_cell = [zefr.ptrToArray(geoAB.iblank_cell, ncells)]
-        iblank_face = [zefr.ptrToArray(geoAB.iblank_face, nfaces)]
-        f2v = [zefr.ptrToArray(geoAB.f2v, nfaces*nvertf)]
-        c2f = [zefr.ptrToArray(geoAB.c2f, ncells*(2**ndims))]
-        f2c = [zefr.ptrToArray(geoAB.f2c, nfaces*2)]
+        iblank = [ptrToArray(geo.iblank, nnodes)]
+        iblank_cell = [ptrToArray(geoAB.iblank_cell, ncells)]
+        iblank_face = [ptrToArray(geoAB.iblank_face, nfaces)]
+        f2v = [ptrToArray(geoAB.f2v, nfaces, nvertf)]
+        c2f = [ptrToArray(geoAB.c2f, ncells, (2**ndims))]
+        f2c = [ptrToArray(geoAB.f2c, nfaces, 2)]
 
-        overFaces = [zefr.ptrToArray(geoAB.overFaces, geoAB.nOverFaces)]
-        wallFaces = [zefr.ptrToArray(geoAB.wallFaces, geoAB.nWallFaces)]
-        mpiFaces = [zefr.ptrToArray(geoAB.mpiFaces, geoAB.nMpiFaces)]
-        procR = [zefr.ptrToArray(geoAB.procR, geo.nMpiFaces)]
-        mpiFidR = [zefr.ptrToArray(geoAB.mpiFidR, geo.nMpiFaces)]
+        overFaces = [ptrToArray(geoAB.overFaces, geoAB.nOverFaces)]
+        wallFaces = [ptrToArray(geoAB.wallFaces, geoAB.nWallFaces)]
+        mpiFaces = [ptrToArray(geoAB.mpiFaces, geoAB.nMpiFaces)]
+        procR = [ptrToArray(geoAB.procR, geoAB.nMpiFaces)]
+        mpiFidR = [ptrToArray(geoAB.mpiFidR, geoAB.nMpiFaces)]
 
         # Wrap relevant solution data
-        q = [zefr.ptrToArray(simdata.u_spts, ncells*nspts*nfields)]
+        # NOTE: for GPU, solution is padded to 128 bytes using nElesPad
+        q = [ptrToArray(simdata.u_spts, nspts,nfields,ncells)]
 
         dq = []
         if self.inp.viscous:
-          dq.append(zefr.ptrToArray(simdata.dq_spts, ncells*nspts*ndims*nfields))
+          dq.append(ptrToArray(simdata.dq_spts, ndims,nspts,nfields,ncells))
 
         self.gridData = {'gridtype' : 'unstructured',
+                         'gridCutType' : geo.gridType,
                          'tetConn' : 'None',
                          'pyraConn' : 'None',
                          'prismConn' : 'None',
@@ -206,11 +213,11 @@ class zefrSolver:
                          'cell2face' : c2f,
                          'iblank-face' : iblank_face,
                          'iblank-cell' : iblank_cell,
-                         'ofaces' : overFaces,
-                         'wfaces' : wallFaces,
-                         'mfaces' : mpiFaces,
-                         'right-proc' : procR,
-                         'right-id' : mpiFidR,
+                         'overset-faces' : overFaces,
+                         'wall-faces' : wallFaces,
+                         'mpi-faces' : mpiFaces,
+                         'mpi-right-proc' : procR,
+                         'mpi-right-id' : mpiFidR,
                          'nvert-face' : [geoAB.nvert_face],
                          'faceConn' : f2v}
                          #'iblkHasNBHole':0,
@@ -220,49 +227,65 @@ class zefrSolver:
                          #'fsitag':self.fsitag}  
 
         if self.inp.motion:
-            gridVel = [zefr.ptrToArray(geoAB.grid_vel, nnodes*ndims)]
-            offset = [zefr.ptrToArray(geoAB.offset, ndims)]
-            Rmat = [zefr.ptrToArray(geoAB.Rmat, ndims*ndims)]
+            gridVel = [ptrToArray(geoAB.grid_vel, nnodes,ndims)]
+            offset = [ptrToArray(geoAB.offset, ndims)]
+            Rmat = [ptrToArray(geoAB.Rmat, ndims,ndims)]
 
-            self.gridData.update({'gridVel',grid_vel,
-                'rigidOffset',offset,
-                'rigidRotMat',Rmat})
+            self.gridData.update({'gridVel':grid_vel,
+                'rigidOffset':offset,
+                'rigidRotMat':Rmat})
 
-        self.oldCallbacks = {'nodesPerCell',cbs.get_nodes_per_cell,
-            'receptorNodes',cbs.get_receptor_nodes,
-            'donorInclusionTest',cbs.donor_inclusion_test,
-            'donorFrac',cbs.donor_frac,
-            'convertToModal',cbs.convert_to_modal}
+        self.callbacks = {}
 
-        self.callbacks = {'nodesPerFace',cbs.get_nodse_per_face,
-            'faceNodes',cbs.get_face_nodes,
-            'get_q_spt',cbs.get_q_spt,
-            'get_q_fpt',cbs.get_q_fpt,
-            'get_grad_spt',cbs.get_grad_spt,
-            'get_grad_fpt',cbs.get_grad_fpt,
-            'q_spts',cbs.get_q_spts,
-            'dq_spts',cbs.get_dq_spts}
+        #self.oldCallbacks = {'nodesPerCell': cbs.get_nodes_per_cell,
+        self.callbacks.update({'nodesPerCell': cbs.get_nodes_per_cell,
+            'receptorNodes': cbs.get_receptor_nodes,
+            'donorInclusionTest': cbs.donor_inclusion_test,
+            'donorFrac': cbs.donor_frac,
+            'convertToModal': cbs.convert_to_modal})
 
-        if self.useGPU:
-            self.callbacks.update({'donorDataDevice',cbs.donor_data_from_device,
-                'fringeDataToDevice',cbs.fringe_data_to_device,
-                'unblankToDevice',cbs.unblank_data_to_device,
-                'faceNodesGPU',cbs.get_face_nodes_gpu,
-                'cellNodesGPU',cbs.get_cell_nodes_gpu,
-                'q_spts_d',cbs.get_q_spts_d,
-                'dq_spts_d',cbs.get_dq_spts_d})
+        self.callbacks.update({'nodesPerFace': cbs.get_nodes_per_face,
+            'faceNodes': cbs.get_face_nodes,
+            'get_q_spt': cbs.get_q_spt,
+            'get_q_fpt': cbs.get_q_fpt,
+            'get_dq_spt': cbs.get_grad_spt,
+            'get_dq_fpt': cbs.get_grad_fpt,
+            'get_q_spts': cbs.get_q_spts,
+            'get_dq_spts': cbs.get_dq_spts})
+
+        if self.useGpu:
+            self.callbacks.update({'donorDataDevice': cbs.donor_data_from_device,
+                'fringeDataToDevice': cbs.fringe_data_to_device,
+                'unblankToDevice': cbs.unblank_data_to_device,
+                'faceNodesGPU': cbs.get_face_nodes_gpu,
+                'cellNodesGPU': cbs.get_cell_nodes_gpu,
+                'q_spts_d': cbs.get_q_spts_d,
+                'dq_spts_d': cbs.get_dq_spts_d,
+                'nWeightsGPU': cbs.get_n_weights,
+                'weightsGPU': cbs.donor_frac_gpu})
 
             geoGpu = zefr.get_gpu_geo_data();
-            self.gridData.update({'nodesGPU',geoGpu.coord_nodes,
-                'eleCoordsGPU',geoGpu.coord_eles,
-                'iblankCellGPU',geoGpu.iblank_cell,
-                'iblankFaceGPU',geoGpu.iblank_face})
+            self.gridData.update({'nodesGPU': geoGpu.coord_nodes,
+                'eleCoordsGPU': geoGpu.coord_eles,
+                'iblankCellGPU': geoGpu.iblank_cell,
+                'iblankFaceGPU': geoGpu.iblank_face})
+
+            cuStream = self.z.get_tg_stream_handle()
+            cuEvent = self.z.get_tg_event_handle()
+            self.gridData.update({'cuStream': cuStream, 'cuEvent': cuEvent})
 
         os.chdir('..')
+
+        return (self.gridData, self.callbacks)
     
+    def reportResidual(self,istep):
+        os.chdir('zefr')
+        self.z.report_residual()
+        os.chdir('..')
+
     def writePlotData(self,istep):
         os.chdir('zefr')
-        self.z.write_solution()
+        self.z.write_residual()
         os.chdir('..')
 
     def writeRestartData(self,istep):
@@ -278,13 +301,17 @@ class zefrSolver:
         if MPI.COMM_WORLD.Get_rank() == 0:
             print("gust speed from turns :",self.vx,self.vy,self.vz)
 
-    def deformPart1(self,iter,stage):
-        self.z.move_grid(iter,stage)
-        pass
+    def deformPart1(self,time,iter):
+        self.z.move_grid_next(time+self.dt)
 
-    def deformPart2(self,iter,stage):
+    def deformPart2(self,time,iter):
+        self.z.move_grid(time)
+
+    def moveGrid(self,iter,stage):
         self.z.move_grid(iter,stage)
-        pass
+
+    def updateBlankingGpu(self):
+        self.z.update_iblank_gpu()
 
     def finish(self,step):
         istep = 0

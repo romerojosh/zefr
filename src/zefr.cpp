@@ -409,6 +409,26 @@ void Zefr::do_rk_stage(int iter, int stage)
   }
 }
 
+void Zefr::do_rk_stage_start(int iter, int stage)
+{
+  input.iter = iter;
+
+  solver->step_RK_stage_start(stage);
+}
+
+void Zefr::do_rk_stage_finish(int iter, int stage)
+{
+  input.iter = iter;
+
+  solver->step_RK_stage_finish(stage);
+
+  if (stage == input.nStages-1)
+  {
+    solver->filter_solution();
+    input.iter++;
+  }
+}
+
 void Zefr::do_n_steps(int n)
 {
   for (int i = 0; i < n; i++)
@@ -754,10 +774,10 @@ void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
                                void (*unblank_part_1)(void), void (*unblank_part_2)(int),
                                void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int))
 {
-  tg_preprocess = preprocess;
-  tg_process_connectivity = connect;
+  tg_preprocess = preprocess; //! UNUSED
+  tg_process_connectivity = connect; //! UNUSED
   tg_point_connectivity = point_connect;
-  tg_set_iter_iblanks = iter_iblanks;
+  tg_set_iter_iblanks = iter_iblanks; //! UNUSED
   unblank_1 = unblank_part_1;
   unblank_2 = unblank_part_2;
   overset_interp_send = dataUpdate_send;
@@ -767,6 +787,22 @@ void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
 void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* off, int nDims))
 {
   tg_update_transform = setTransform;
+}
+
+void Zefr::move_grid_next(double time)
+{
+  solver->move_grid_next(time);
+}
+
+void Zefr::move_grid(double time)
+{
+  solver->move_grid_now(time);
+}
+
+void Zefr::move_grid(int iter, int stage)
+{
+  double time = solver->prev_time + solver->rk_c(stage) * solver->eles->dt(0);
+  solver->move_grid_now(time);
 }
 
 void* Zefr::get_tg_stream_handle(void)

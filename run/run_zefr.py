@@ -1,30 +1,44 @@
 import sys
 import os
-import yaml
 
 TIOGA_DIR = '/home/jcrabill/tioga/bin/'
 ZEFR_DIR = '/home/jcrabill/zefr/bin/'
+CONVERT_DIR = '/home/jcrabill/zefr/external/'
+sys.path.append(TIOGA_DIR)
+sys.path.append(ZEFR_DIR)
+sys.path.append(CONVERT_DIR)
+
+TIOGA_DIR = '/home/jcrabill/tioga/run/'
+ZEFR_DIR = '/home/jcrabill/zefr/run/'
 sys.path.append(TIOGA_DIR)
 sys.path.append(ZEFR_DIR)
 
 from mpi4py import MPI
 import numpy as np
 
+from convert import *
 from zefrInterface import zefrSolver
-import tioga as tg
+from tiogaInterface import Tioga
 
 Comm = MPI.COMM_WORLD
 rank = Comm.Get_rank()
-nproc = Comm.get_size()
+nproc = Comm.Get_size()
 
 # ------------------------------------------------------------
 # Parse our input
 # ------------------------------------------------------------
 
+if len(sys.argv) < 2:
+    print("Usage:")
+    print("  {0} <inputfile> <nRankGrid1> <nRankGrid2> ...".format(sys.argv[0]))
+    exit
+
+nGrids = 1
+gridID = 0
+inputFile = sys.argv[1]
+
 # Split our run into the various grids
-if len(sys.argv) == 2:
-    inputFile = sys.argv[1]
-elif len(sys.argv) > 2:
+if len(sys.argv) > 2:
     nGrids = len(sys.argv) - 2
     nRanksGrid = []
     rankSum = 0
@@ -49,10 +63,13 @@ with open(inputFile) as f:
     for line in f:
         line = line.strip().split()
         if len(line) == 2 and not str(line[0]).startswith('#'):
-            parameters[line[0]] = line[1]
+            try:
+                parameters[line[0]] = float(line[1])
+            except:
+                parameters[line[0]] = line[1]
 
 expected_conditions = ['meshRefLength','reyNumber','reyRefLength','refMach',
-    'reyRefLength','dt','Mach','from_restart']
+    'reyRefLength','dt','Mach','from_restart','moving-grid']
 
 conditions = {}
 for cond in expected_conditions:
@@ -71,56 +88,116 @@ except:
   print('ZEFR input file ("zefrInput") not given in',inputFile)
 
 ZEFR = zefrSolver(zefrInput,gridID,nGrids)
+TIOGA = Tioga(gridID,nGrids)
 
 # TODO: refactor ZEFR so that TIOGA can be called only here :(
 
-nSteps = parameters['nsteps']
-nStages = parameters['nstages']
+dt = parameters['dt']
 
-repFreq = parameters['report-freq']
-plotFreq = parameters['plot-freq']
-forceFreq = parameters['force-freq']
+nSteps = int(parameters['nsteps'])
+nStages = int(parameters['nstages'])
 
-# TODO: pass callbacks into TIOGA; do preprocessing
+moving = parameters['moving-grid'] == 1
+viscous = parameters['viscous'] == 1
 
-ZEFR.initData()
+try:
+    repFreq = int(parameters['report-freq'])
+except:
+    repFreq = 0
+    print('Parameter report-freq not found; disabling residual reporting.')
+
+try:
+    plotFreq = int(parameters['plot-freq'])
+except:
+    plotFreq = 0
+    print('Parameter plot-freq not found; disabling plotting.')
+
+try:
+    forceFreq = int(parameters['force-freq'])
+except:
+    forceFreq = 0
+    print('Parameter force-freq not found; disabling force calculation.')
+
+# Process high-level simulation inputs
+ZEFR.sifInitialize(parameters, conditions)
+TIOGA.sifInitialize(parameters, conditions)
+
+# Setup the ZEFR solver - read the grid, initialize the solution, etc.
+gridData, callbacks = ZEFR.initData()
+
+# Setup TIOGA - give it the grid and callback info needed for connectivity
+TIOGA.initData(ZEFR.gridData, ZEFR.callbacks)
+
+# ------------------------------------------------------------
+# Grid Preprocessing
+# ------------------------------------------------------------
+TIOGA.preprocess()
+TIOGA.performConnectivity()
+
+# ------------------------------------------------------------
+# Restarting (if requested)
+# ------------------------------------------------------------
+if parameters['from_restart'] == 'yes':
+    iter = parameters['restart-iter']
+    time = parameters['restart-time']
+    ZEFR.restart(iter,time)
+    if parameters['moving-grid']:
+        ZEFR.deformPart1(time+dt,iter)
+        TIOGA.unblankPart1()
+        ZEFR.deformPart2(time,iter)
+        TIOGA.unblankPart2()
+
+        if parameters['use-gpu']:
+            ZEFR.updateBlankingGpu()
+else:
+    iter = 0
+    time = 0.0
+
+ZEFR.writePlotData(iter)
 
 # ------------------------------------------------------------
 # Run the simulation
 # ------------------------------------------------------------
-for i in range(0,nSteps):
+for i in range(iter,nSteps):
     # Do unblanking here 
     # (move to t+dt, hole cut, move to t, hole cut, union on iblank)
     #ZEFR.moveGrid(i,nStages-1)
-    ZEFR.deformPart1(i,nStages-1)
-    tg.unblankPart1()
-    ZEFR.deformPart2(i,0)
-    tg.unblankPart2() # Set final iblank & do point connectivity
+    if moving:
+        ZEFR.deformPart1(time+dt,i)
+        TIOGA.unblankPart1()
+        ZEFR.deformPart2(time,i)
+        TIOGA.unblankPart2() # Set final iblank & do point connectivity
+
+    TIOGA.performPointConnectivity()
 
     for j in range(0,nStages):
         # Move grids
         if j != 0:
             ZEFR.moveGrid(i,j)
-            tg.doPointConnectivity()
+            TIOGA.performPointConnectivity()
 
         # Interpolate solution
-        tg.interpolate_u()
+        TIOGA.exchangeSolution()
 
         # Calculate first part of residual, up to corrected gradient
-        ZEFR.runSubStep(i,j)
+        ZEFR.runSubStepStart(i,j)
   
         # Interpolated gradient
-        tg.interpolate_du()
+        if viscous:
+            TIOGA.exchangeGradient()
 
         # Finish residual calculation and RK stage advancement
         # (Should include rigid_body_update() if doing 6DOF from ZEFR)
-        ZEFR.runSubStep(i,j)
+        ZEFR.runSubStepFinish(i,j)
 
-    if i % repFreq == 0:
+    time += dt
+
+    if repFreq > 0 and i % repFreq == 0:
         ZEFR.reportResidual()
-    if i % plotFreq == 0:
+    if plotFreq > 0 and i % plotFreq == 0:
         ZEFR.writePlotData()
-    if i % forceFreq == 0:
+    if forceFreq > 0 and i % forceFreq == 0:
         forces = ZEFR.getForcesAndMoments()
         if rank == 0:
             print('Iter {0}: Forces {1}'.format(i,forces))
+

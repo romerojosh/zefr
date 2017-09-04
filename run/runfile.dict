@@ -1,4 +1,9 @@
 # Master input file for HELIOS-compatible ZEFR
+ndims    3
+nfields  5
+moving-grid  0
+viscous      1
+
 zefrInput  input_sphere
 rinf   1.00
 ainf   1.00
@@ -7,7 +12,13 @@ reyNumber      1000.0
 reyRefLength   1.0
 dt             .001
 Mach           .2
+refMach        .2
 from_restart   no
 
 nsteps  100
 nstages 5
+
+report-freq   100
+plot-freq     500
+
+use-gpu  0

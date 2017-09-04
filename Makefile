@@ -141,6 +141,8 @@ endif
 SOBJS = $(OBJS) $(BINDIR)/zefr_interface.o
 SWIG_OBJ = $(BINDIR)/zefr_swig.o
 SWIG_TARGET = $(BINDIR)/_zefr.so
+CONVERT_OBJ = external/convert_swig.o
+CONVERT_TARGET = external/_convert.so
 SWIG_INCS = -I$(strip $(PYTHON_INC_DIR))/ -I$(strip $(MPI4PY_INC_DIR))/ -I$(strip $(NUMPY_INC_DIR))/
 SWIG_LIBS = 
 WRAP_TARGET = $(BINDIR)/zefrWrap
@@ -156,8 +158,9 @@ swig: FLAGS += -D_BUILD_LIB
 swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC $(SWIG_INCS)
 swig: INCS += -I$(TIOGA_INC_DIR)/
 swig: CUFLAGS += -Xcompiler -fPIC
-swig: $(SOBJS) $(SWIG_OBJ)
+swig: $(SOBJS) $(SWIG_OBJ) $(CONVERT_OBJ)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) $(SWIG_INCS) -shared -o $(SWIG_TARGET) $(SOBJS) $(SWIG_OBJ) $(LIBS) $(SWIG_LIBS)
+	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) $(SWIG_INCS) -shared -o $(CONVERT_TARGET) $(CONVERT_OBJ)
 	
 # Build Zefr as a static library
 .PHONY: static

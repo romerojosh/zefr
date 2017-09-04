@@ -75,6 +75,11 @@ public:
   //! Run one full time step, including any filtering or multigrid operations
   void do_rk_stage(int iter, int stage);
 
+  //! Perform residual computation up to corrected gradient for overset interp
+  void do_rk_stage_start(int iter, int stage);
+  //! Finish residual computation & RK stage after overset gradient interp
+  void do_rk_stage_finish(int iter, int stage);
+
   // Functions to write data to file and/or terminal
   void write_residual(void);
   void write_solution(void);
@@ -148,6 +153,15 @@ public:
                            void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int));
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
+
+  //! Move grid to an estimate of the position at t^{n+1} for overset unblanking
+  void move_grid_next(double time);
+
+  //! Move grid to given flow time
+  void move_grid(double time);
+
+  //! Move grid to the flow time specified by the iteration and RK stage
+  void move_grid(int iter, int stage);
 
   void* get_tg_stream_handle(void);
   void* get_tg_event_handle(void);

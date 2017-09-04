@@ -154,6 +154,8 @@ class FRSolver
     void setup(_mpi_comm comm_in, _mpi_comm comm_world = DEFAULT_COMM);
     void restart_solution(void);
     void compute_residual(unsigned int stage, int color = -1);
+    void compute_residual_start(unsigned int stage, int color = -1);
+    void compute_residual_finish(unsigned int stage, int color = -1);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
     void update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
@@ -161,6 +163,8 @@ class FRSolver
     //! Standard explicit (diagonal) Runge-Kutta update loop
     void step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
     void step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+    void step_RK_stage_start(int stage);
+    void step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop
     void step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
@@ -176,6 +180,8 @@ class FRSolver
     void update(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_RK_stage_start(int stage);
+    void step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
@@ -210,6 +216,8 @@ class FRSolver
 
     void init_grid_motion(double time);
     void move(double time, bool update_iblank = false);
+    void move_grid_now(double time);
+    void move_grid_next(double time);
     void rigid_body_update(unsigned int stage);
 
     /* Wrappers for the callback functions for overset interpolation */

@@ -130,10 +130,10 @@ print('ncells = ',ncells)
 
 geo = zefr.get_basic_geo_data()   # Basic geometry/connectivity data
 geoAB = zefr.get_extra_geo_data() # Geo data for AB method
-xyz = zefr.ptrToArray(geo.xyz, 3*geo.nnodes)
-xyz = zefr.ptrToArray(geo.xyz, 3*geo.nnodes)
+xyz = zefr.ptrToArray(geo.xyz, geo.nnodes, 3)
+xyz = zefr.ptrToArray(geo.xyz, geo.nnodes, 3)
 overFaces = zefr.ptrToArray(geoAB.overFaces, geoAB.nOverFaces)
-c2f = zefr.ptrToArray(geoAB.c2f, ncells*6)
+c2f = zefr.ptrToArray(geoAB.c2f, ncells, 6)
 print('c2f', type(c2f), c2f.dtype, c2f.shape)
 print('xyz', type(xyz), xyz.dtype, xyz.shape)
 print('overFaces', type(overFaces), overFaces.shape)
@@ -142,13 +142,17 @@ print(xyz)
 print(overFaces)
 
 # Test the other way around: numpy array to C pointer
-xyzptr = zefr.arrayToDblPtr(xyz)
-print('xyzptr',type(xyzptr),xyzptr)
-print('org_xyzptr',type(geo.xyz),geo.xyz)
+#xyzptr = zefr.arrayToDblPtr(xyz)
+#print('xyzptr',type(xyzptr),xyzptr)
+#print('org_xyzptr',type(geo.xyz),geo.xyz)
 
-c2fptr = zefr.arrayToIntPtr(c2f)
-print('c2fptr',type(c2fptr),c2fptr)
-print('org_c2fptr',type(geoAB.c2f),geoAB.c2f)
+#c2fptr = zefr.arrayToIntPtr(c2f)
+#print('c2fptr',type(c2fptr),c2fptr)
+#print('org_c2fptr',type(geoAB.c2f),geoAB.c2f)
+
+# Test reshaping
+np.reshape(c2f, (ncells,6))
+print(c2f.shape)
 
 # ------------------------------- Run the solver -------------------------------
 z.write_solution()

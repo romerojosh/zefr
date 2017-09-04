@@ -5,7 +5,6 @@
 // -----------------------------------------------------------------------------
 %header
 %{
-#include <numpy/arrayobject.h>
 #ifdef _MPI
 #include <mpi.h>
 #define _mpi_comm MPI_Comm
@@ -16,11 +15,6 @@
 #endif
 
 #include "zefr_interface.hpp"
-%}
-
-%init
-%{
-  import_array();
 %}
 
 // -----------------------------------------------------------------------------
@@ -48,57 +42,6 @@
 %{
 // <-- Additional C++ definitions [anything that would normally go in a .cpp]
 %}
-
-// --------------------------------------------------------
-// FUNCTIONS TO CONVERT POINTERS TO NUMPY ARRAYS (AND BACK)
-// --------------------------------------------------------
-%inline
-%{
-PyObject* ptrToArray(float* data, int n)
-{
-  npy_intp dims[1] = {n};
-  return PyArray_SimpleNewFromData(1,dims,NPY_FLOAT,(void*)data);
-}
-
-PyObject* ptrToArray(double* data, int n)
-{
-  npy_intp dims[1] = {n};
-  return PyArray_SimpleNewFromData(1,dims,NPY_DOUBLE,(void*)data);
-}
-
-PyObject* ptrToArray(int* data, int n)
-{
-  npy_intp dims[1] = {n};
-  return PyArray_SimpleNewFromData(1,dims,NPY_INT,(void*)data);
-}
-
-PyObject* ptrToArray(unsigned int* data, int n)
-{
-  npy_intp dims[1] = {n};
-  return PyArray_SimpleNewFromData(1,dims,NPY_UINT,(void*)data);
-}
-
-double* arrayToDblPtr(PyObject* arr)
-{
-  return (double *)(((PyArrayObject *)arr)->data);
-}
-
-float* arrayToFloatPtr(PyObject* arr)
-{
-  return (float *)(((PyArrayObject *)arr)->data);
-}
-
-int* arrayToIntPtr(PyObject* arr)
-{
-  return (int *)(((PyArrayObject *)arr)->data);
-}
-
-unsigned int* arrayToUintPtr(PyObject* arr)
-{
-  return (unsigned int *)(((PyArrayObject *)arr)->data);
-}
-%}
-
 
 // -----------------------------------------------------------------------------
 // Additional Python functions to add to module
