@@ -155,6 +155,7 @@ class FRSolver
     void restart_solution(void);
     void compute_residual(unsigned int stage, int color = -1);
     void compute_residual_start(unsigned int stage, int color = -1);
+    void compute_residual_mid(unsigned int stage, int color = -1);
     void compute_residual_finish(unsigned int stage, int color = -1);
     void add_source(unsigned int stage, unsigned int startEle, unsigned int endEle);
 #ifdef _CPU
@@ -164,6 +165,7 @@ class FRSolver
     void step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
     void step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
     void step_RK_stage_start(int stage);
+    void step_RK_stage_mid(int stage);
     void step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop

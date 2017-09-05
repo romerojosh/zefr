@@ -121,13 +121,13 @@ struct DataStruct
   double forces[6];
 
   int nspts;
-  int nfields;;
-  double* u_spts;
-  double* du_spts;
-//#ifdef _GPU
-//  double* u_spts_d;
-//  double* du_spts_d;
-//#endif
+  int nfields;
+  double* u_spts = NULL;
+  double* du_spts = NULL;
+#ifdef _GPU
+  double* u_spts_d;
+  double* du_spts_d;
+#endif
 };
 
 struct InputStruct

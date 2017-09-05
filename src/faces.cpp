@@ -1277,6 +1277,10 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
     {
       UL[n] = U(0, n, fpt); UR[n] = U(1, n, fpt);
     }
+    /// DEBUGGING
+//    if (input->grank==0 && fpt >= geo->nGfpts_int) //geo->iblank_face(geo->fpt2face[fpt]) == FRINGE)
+//    if ((std::abs(UL[0]-1.) > .75 || std::abs(UR[0]-1.) > .75))
+//      printf("Rank %d: UL/UR[%d] rho,E = %f, %f; %f, %f\n",input->grank,fpt,UL[0],UL[4],UR[0],UR[4]);
 
     double eig = 0;
     double Vgn = 0;
@@ -1377,6 +1381,9 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         Fcomm(1, n, fpt) = -F * dA(1, fpt);
       }
     }
+
+    if (input->grank==0 && fpt >= geo->nGfpts_int)
+      printf("%d: Fcomm = %f, %f\n",fpt,Fcomm(0,0,fpt),Fcomm(0,4,fpt));
   }
 }
 
@@ -1439,6 +1446,9 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
           Ucomm(1, n, fpt) = UR[n];
         }
       }
+
+      if (input->grank==0 && fpt>=geo->nGfpts_int && geo->gfpt2bnd(fpt - geo->nGfpts_int) == OVERSET)
+        printf("%d: UL = %f, %f; Ucomm = %f, %f\n",fpt,UL[0],UL[0],Ucomm(0,0,fpt),Ucomm(0,4,fpt));
     }
 #endif
 

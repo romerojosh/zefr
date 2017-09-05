@@ -90,8 +90,6 @@ except:
 ZEFR = zefrSolver(zefrInput,gridID,nGrids)
 TIOGA = Tioga(gridID,nGrids)
 
-# TODO: refactor ZEFR so that TIOGA can be called only here :(
-
 dt = parameters['dt']
 
 nSteps = int(parameters['nsteps'])
@@ -104,18 +102,21 @@ try:
     repFreq = int(parameters['report-freq'])
 except:
     repFreq = 0
+    parameters['report-freq'] = 0
     print('Parameter report-freq not found; disabling residual reporting.')
 
 try:
     plotFreq = int(parameters['plot-freq'])
 except:
     plotFreq = 0
+    parameters['plot-freq'] = 0
     print('Parameter plot-freq not found; disabling plotting.')
 
 try:
     forceFreq = int(parameters['force-freq'])
 except:
     forceFreq = 0
+    parameters['force-freq'] = 0
     print('Parameter force-freq not found; disabling force calculation.')
 
 # Process high-level simulation inputs
@@ -138,7 +139,7 @@ TIOGA.performConnectivity()
 # Restarting (if requested)
 # ------------------------------------------------------------
 if parameters['from_restart'] == 'yes':
-    iter = parameters['restart-iter']
+    initIter = parameters['restartstep']
     time = parameters['restart-time']
     ZEFR.restart(iter,time)
     if parameters['moving-grid']:
@@ -150,38 +151,42 @@ if parameters['from_restart'] == 'yes':
         if parameters['use-gpu']:
             ZEFR.updateBlankingGpu()
 else:
-    iter = 0
+    initIter = 0
     time = 0.0
+
+iter = initIter
 
 ZEFR.writePlotData(iter)
 
 # ------------------------------------------------------------
 # Run the simulation
 # ------------------------------------------------------------
-for i in range(iter,nSteps):
+for i in range(iter+1,nSteps+1):
     # Do unblanking here 
     # (move to t+dt, hole cut, move to t, hole cut, union on iblank)
-    #ZEFR.moveGrid(i,nStages-1)
     if moving:
         ZEFR.deformPart1(time+dt,i)
         TIOGA.unblankPart1()
         ZEFR.deformPart2(time,i)
-        TIOGA.unblankPart2() # Set final iblank & do point connectivity
+        TIOGA.unblankPart2()        # Set final iblank & do unblanking if needed
 
-    TIOGA.performPointConnectivity()
+        TIOGA.performPointConnectivity()
 
-    for j in range(0,nStages):
+    for j in range(0,1):
         # Move grids
-        if j != 0:
+        if moving and j != 0:
             ZEFR.moveGrid(i,j)
             TIOGA.performPointConnectivity()
+
+        # Have ZEFR extrapolate solution so it won't overwrite interpolated data
+        ZEFR.runSubStepStart(i,j)
 
         # Interpolate solution
         TIOGA.exchangeSolution()
 
         # Calculate first part of residual, up to corrected gradient
-        ZEFR.runSubStepStart(i,j)
-  
+        ZEFR.runSubStepMid(i,j)
+
         # Interpolated gradient
         if viscous:
             TIOGA.exchangeGradient()
@@ -192,12 +197,14 @@ for i in range(iter,nSteps):
 
     time += dt
 
-    if repFreq > 0 and i % repFreq == 0:
-        ZEFR.reportResidual()
-    if plotFreq > 0 and i % plotFreq == 0:
-        ZEFR.writePlotData()
-    if forceFreq > 0 and i % forceFreq == 0:
+    if repFreq > 0 and (i % repFreq == 0 or i == nSteps or i == initIter+1):
+        ZEFR.reportResidual(i)
+    if plotFreq > 0 and (i % plotFreq == 0 or i == nSteps):
+        ZEFR.writePlotData(i)
+    if forceFreq > 0 and (i % forceFreq == 0 or i == nSteps):
+        ZEFR.computeForces(i)
         forces = ZEFR.getForcesAndMoments()
         if rank == 0:
             print('Iter {0}: Forces {1}'.format(i,forces))
 
+print(" ***************** DONE ***************** ")

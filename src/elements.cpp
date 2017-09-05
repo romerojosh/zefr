@@ -1296,7 +1296,9 @@ void Elements::compute_dU_spts()
       0.0, &C, nEles * nVars);
 
 #endif
-
+  if (input->grank==0)
+    for (int i = 0; i < nEles; i++) /// DEBUGGING
+      printf("%d: GradU-spts(%d)[%d][rhoE] = %f\n",input->grank,0,i,dU_spts(0,4,i));
 #ifdef _GPU
   auto *A = oppD_d.get_ptr(0, 0, 0);
   auto *B = U_spts_d.get_ptr(0, 0, 0);
@@ -1326,7 +1328,9 @@ void Elements::compute_dU_fpts()
       1.0, &C, nEles * nVars);
 
 #endif
-
+  if (input->grank==0)
+    for (int i = 0; i < nEles; i++) /// DEBUGGING
+      printf("%d: GradU-fpts(%d)[%d][rhoE] = %f\n",input->grank,0,i,dU_spts(0,4,i));
 #ifdef _GPU
   auto *A = oppD_fpts_d.get_ptr(0, 0, 0);
   auto *B = Ucomm_d.get_ptr(0, 0, 0);
@@ -1354,7 +1358,9 @@ void Elements::compute_divF_spts(unsigned int stage)
   cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
         nSpts * nDims, 1.0, &A, nSpts * nDims, &B, nEles * nVars, 0.0, &C, nEles * nVars);
 #endif
-
+  if (input->grank==0)
+    for (int i = 0; i < nEles; i++) /// DEBUGGING
+      printf("%d: divF-spts(%d)[%d][rhoE] = %f\n",input->grank,stage,i,divF_spts(stage,0,4,i));
 #ifdef _GPU
 
   auto *A = oppDiv_d.get_ptr(0, 0, 0);
@@ -1382,6 +1388,8 @@ void Elements::compute_divF_fpts(unsigned int stage)
       nFpts, 1.0, &A, nFpts, &B, nEles * nVars, 1.0, &C, nEles * nVars);
 #endif
 
+//  for (int i = 0; i < nEles; i++) /// DEBUGGING
+//    printf("%d: divF(%d)[%d][rhoE] = %f\n",input->grank,stage,i,divF_spts(stage,0,4,i));
 #ifdef _GPU
   /* Compute contribution to derivative from common solution at flux points */
   auto *A = oppDiv_fpts_d.get_ptr(0, 0);

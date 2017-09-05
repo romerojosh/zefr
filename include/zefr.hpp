@@ -60,6 +60,9 @@ public:
   //! Read input file and set basic run parameters
   void read_input(const char *inputfile);
 
+  //! Re-apply parameters in InputStruct that may have been changed in Python
+  void init_inputs(void);
+
   //! Perform preprocessing and prepare to run case
   void setup_solver(void);
 
@@ -75,8 +78,10 @@ public:
   //! Run one full time step, including any filtering or multigrid operations
   void do_rk_stage(int iter, int stage);
 
-  //! Perform residual computation up to corrected gradient for overset interp
+  //! Do the first part of an RK stage, up to extrapolate_u
   void do_rk_stage_start(int iter, int stage);
+  //! Perform residual computation up to corrected gradient for overset interp
+  void do_rk_stage_mid(int iter, int stage);
   //! Finish residual computation & RK stage after overset gradient interp
   void do_rk_stage_finish(int iter, int stage);
 

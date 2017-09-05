@@ -64,7 +64,7 @@ class zefrSolver:
         if self.gridRank == 0 and os.path.isdir('zefr') == False:
           os.mkdir('zefr')
 
-        zefr.initialize(self.gridComm,startfile,nGrids,gridID)
+        zefr.initialize(self.gridComm,startfile,nGrids,gridID,Comm)
 
         # scaling for solver variable [i.e. non-dimensionalization]
         self.scale = np.array([1.,1.,1.,1.,1.],'d')
@@ -88,6 +88,9 @@ class zefrSolver:
     def runSubStepStart(self,iter,stage):
         self.z.do_rk_stage_start(iter,stage)
 
+    def runSubStepMid(self,iter,stage):
+        self.z.do_rk_stage_mid(iter,stage)
+
     def runSubStepFinish(self,iter,stage):
         self.z.do_rk_stage_finish(iter,stage)
 
@@ -95,6 +98,20 @@ class zefrSolver:
         os.chdir('zefr') 
 
         self.useGpu = properties['use-gpu']
+        self.nStages = int(properties['nstages'])
+
+        self.inp.nStages = self.nStages
+        self.inp.motion = properties['moving-grid']
+        self.inp.viscous = properties['viscous']
+
+        self.inp.write_freq = int(properties['plot-freq'])
+        self.inp.report_freq = int(properties['report-freq'])
+        self.inp.force_freq = int(properties['force-freq'])
+
+        self.inp.restart = False
+        if properties['from_restart'] == 'yes':
+            self.inp.restart = True;
+            self.inp.restart_iter = properties['restartstep']
 
         rinf = properties['rinf']
         ainf = properties['ainf']
@@ -104,23 +121,24 @@ class zefrSolver:
         Lref = conditions['reyRefLength']
         Mref = conditions['refMach']
 
-        self.inp.rho_fs = rinf
-        self.inp.L_fs = conditions['reyRefLength']
+        self.inp.dt = conditions['dt']
+
+        #self.inp.Re_fs = Reref
+        #self.inp.rho_fs = rinf
+        #self.inp.L_fs = conditions['reyRefLength']
 
         # All conditions come in as SI units - take care of non-dim here
         self.dt = ainf * conditions['dt'] / gridScale
         mach_fs = conditions['Mach']
-        self.restart = 'no'
-        if conditions['from_restart'] == 'yes':
-            self.inp.restart = 'true'
-            self.inp.restartIter = conditions['restartstep']
 
         Re = (Reref/Lref) * gridScale / Mref * (mach_fs)
         self.forceDim = 0.5 * rinf * (Mref*ainf*gridScale)**2
         self.momDim = self.forceDim * gridScale
 
+
+
         # Have ZEFR do any additional setup on input parameters
-        #zefr.sifinit(dt,Re,mach_fs)
+        self.z.init_inputs()
             
         self.scale = np.array([1./rinf,
                                1./(rinf*ainf),
@@ -129,13 +147,6 @@ class zefrSolver:
                                1./(rinf*ainf*ainf),1.],'d')
 
         os.chdir('..')
-
-    def getForcesAndMoments(self):
-        self.z.get_forces()
-        bodyForce = np.array(ptrToArray(self.simdata.forces))
-        bodyForce[:3] = bodyForce[:3]*self.forceDim
-        bodyForce[3:] = bodyForce[3:]*self.momDim
-        return bodyForce
                         
     # sifInit called first to setup solver input
     def initData(self):
@@ -151,7 +162,7 @@ class zefrSolver:
         geo = zefr.get_basic_geo_data()   # Basic geometry/connectivity data
         geoAB = zefr.get_extra_geo_data() # Geo data for AB method
         cbs = zefr.get_callback_funcs()   # Callback functions for high-order/AB method
-        simdata = self.simdata
+        simdata = self.simdata            # Access to forces, solution/gradient data
 
         # -----------------------------------------------------------------------
         # Turn all pointers from ZEFR into (single-element) lists of numpy arrays
@@ -193,7 +204,7 @@ class zefrSolver:
 
         dq = []
         if self.inp.viscous:
-          dq.append(ptrToArray(simdata.dq_spts, ndims,nspts,nfields,ncells))
+          dq.append(ptrToArray(simdata.du_spts, ndims,nspts,nfields,ncells))
 
         self.gridData = {'gridtype' : 'unstructured',
                          'gridCutType' : geo.gridType,
@@ -280,18 +291,30 @@ class zefrSolver:
     
     def reportResidual(self,istep):
         os.chdir('zefr')
-        self.z.report_residual()
+        self.z.write_residual()
         os.chdir('..')
 
     def writePlotData(self,istep):
         os.chdir('zefr')
-        self.z.write_residual()
+        self.z.write_solution()
         os.chdir('..')
 
     def writeRestartData(self,istep):
         os.chdir('zefr')
         self.z.write_solution()
         os.chdir('..')
+
+    def computeForces(self,istep):
+        os.chdir('zefr')
+        self.z.write_forces()
+        os.chdir('..')
+
+    def getForcesAndMoments(self):
+        self.z.get_forces()
+        bodyForce = np.array(ptrToArray(self.simdata.forces))
+        bodyForce[:3] = bodyForce[:3]*self.forceDim
+        bodyForce[3:] = bodyForce[3:]*self.momDim
+        return bodyForce
 
     # HELIOS can provide grid velocities
     def setGridSpeeds_maneuver(self,MeshMotionData):
