@@ -19,6 +19,6 @@ nsteps  500
 nstages 4
 
 report-freq   10
-plot-freq     50
+plot-freq     100
 
 use-gpu  0

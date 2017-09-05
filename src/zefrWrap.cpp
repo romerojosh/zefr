@@ -82,7 +82,22 @@ int main(int argc, char *argv[])
   for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
     runTime.startTimer();
-    z->do_step();
+
+    for (int stage = 0; stage < inp.nStages; stage++)
+    {
+      z->do_rk_stage_start(iter,stage);
+
+      tioga_dataupdate_ab(5, 0);
+
+      z->do_rk_stage_mid(iter,stage);
+
+      if (inp.viscous)
+        tioga_dataupdate_ab(5, 1);
+
+      z->do_rk_stage_finish(iter,stage);
+    }
+
+    //z->do_step();
     runTime.stopTimer();
 
     if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
@@ -121,14 +136,14 @@ void initialize_overset(Zefr* z, InputStruct& inp)
 
   inp.overset = 1;
 
-  if (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS)
-    z->set_rigid_body_callbacks(tioga_set_transform);
+  //if (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS)
+  //  z->set_rigid_body_callbacks(tioga_set_transform);
 
   /* NOTE: tioga_dataUpdate is being called from within ZEFR, to accomodate
    * both multi-stage RK time stepping + viscous cases with gradient interp */
-  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
+  /*z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
       tioga_do_point_connectivity, tioga_set_iter_iblanks, tioga_unblank_part_1,
-      tioga_unblank_part_2, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
+      tioga_unblank_part_2, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);*/
 }
 
 void setup_overset_data(Zefr* z, InputStruct& inp)
