@@ -210,6 +210,12 @@ $(BINDIR)/%_swig.cpp: include/%.i include/*.hpp
 $(BINDIR)/%_swig.o: $(BINDIR)/%_swig.cpp
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
 
+external/%_swig.cpp: external/%.i
+	$(SWIG) $(FLAGS) $(INCS) $(SWIG_INCS) -o $@ $<
+
+external/%_swig.o: external/%_swig.cpp
+	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
+
 clean:
 	rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(BINDIR)/*.so $(BINDIR)/zefr.pyc $(BINDIR)/zefr.py
 

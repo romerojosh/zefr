@@ -1738,7 +1738,7 @@ void FRSolver::compute_residual_finish(unsigned int stage, int color)
     elesObjs = elesObjsBC[prev_color];
   else
     elesObjs = this->elesObjs;
-printf("Rank %d: mFptsInt = %d, nFptsBnd = %d, startFptMpi = %d\n",input->grank,geo.nGfpts_int,geo.nGfpts_bnd,startFptMpi);
+
   /* Compute common interface flux at non-MPI flux points */
   faces->compute_common_F(startFpt, endFpt);
 
@@ -5968,8 +5968,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
             res[n] += e->divF_spts(0, spt, n, ele) * e->divF_spts(0, spt, n, ele)
                 / (e->jaco_det_spts(spt, ele) * e->jaco_det_spts(spt, ele));
 
-//          if ( std::isnan(e->divF_spts(0, spt, n, ele)))
-          if (std::isnan(res[n])) /// DEBUGGING
+          if (std::isnan(res[n]))
           {
             std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << ", var " << n << std::endl;
             for (int i = 0; i < std::min(8,(int)e->nNodes); i++)

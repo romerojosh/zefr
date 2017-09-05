@@ -15,10 +15,10 @@ Mach           .2
 refMach        .2
 from_restart   no
 
-nsteps  1
+nsteps  500
 nstages 4
 
-report-freq   0
+report-freq   10
 plot-freq     50
 
 use-gpu  0

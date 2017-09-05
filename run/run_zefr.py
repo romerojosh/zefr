@@ -1,17 +1,27 @@
 import sys
 import os
 
-TIOGA_DIR = '/home/jcrabill/tioga/bin/'
-ZEFR_DIR = '/home/jcrabill/zefr/bin/'
+TIOGA_BIN_DIR = '/home/jcrabill/tioga/bin/'
+TIOGA_RUN_DIR = '/home/jcrabill/tioga/run/'
+ZEFR_BIN_DIR = '/home/jcrabill/zefr/bin/'
+ZEFR_RUN_DIR = '/home/jcrabill/zefr/run/'
 CONVERT_DIR = '/home/jcrabill/zefr/external/'
-sys.path.append(TIOGA_DIR)
-sys.path.append(ZEFR_DIR)
+sys.path.append(TIOGA_BIN_DIR)
+sys.path.append(TIOGA_RUN_DIR)
+sys.path.append(ZEFR_BIN_DIR)
+sys.path.append(ZEFR_RUN_DIR)
 sys.path.append(CONVERT_DIR)
 
-TIOGA_DIR = '/home/jcrabill/tioga/run/'
-ZEFR_DIR = '/home/jcrabill/zefr/run/'
-sys.path.append(TIOGA_DIR)
-sys.path.append(ZEFR_DIR)
+TIOGA_BIN_DIR = '/home/jacob/tioga/bin/'
+TIOGA_RUN_DIR = '/home/jacob/tioga/run/'
+ZEFR_BIN_DIR = '/home/jacob/zefr/bin/'
+ZEFR_RUN_DIR = '/home/jacob/zefr/run/'
+CONVERT_DIR = '/home/jacob/zefr/external/'
+sys.path.append(TIOGA_BIN_DIR)
+sys.path.append(TIOGA_RUN_DIR)
+sys.path.append(ZEFR_BIN_DIR)
+sys.path.append(ZEFR_RUN_DIR)
+sys.path.append(CONVERT_DIR)
 
 from mpi4py import MPI
 import numpy as np
@@ -76,7 +86,8 @@ for cond in expected_conditions:
     try:
         conditions[cond] = parameters[cond]
     except:
-        print('Condition',cond,'not given in',inputFile)
+        if rank == 0:
+            print('Condition',cond,'not given in',inputFile)
 
 # ------------------------------------------------------------
 # Begin setting up TIOGA and the ZEFR solvers
@@ -103,21 +114,24 @@ try:
 except:
     repFreq = 0
     parameters['report-freq'] = 0
-    print('Parameter report-freq not found; disabling residual reporting.')
+    if rank == 0:
+        print('Parameter report-freq not found; disabling residual reporting.')
 
 try:
     plotFreq = int(parameters['plot-freq'])
 except:
     plotFreq = 0
     parameters['plot-freq'] = 0
-    print('Parameter plot-freq not found; disabling plotting.')
+    if rank == 0:
+        print('Parameter plot-freq not found; disabling plotting.')
 
 try:
     forceFreq = int(parameters['force-freq'])
 except:
     forceFreq = 0
     parameters['force-freq'] = 0
-    print('Parameter force-freq not found; disabling force calculation.')
+    if rank == 0:
+        print('Parameter force-freq not found; disabling force calculation.')
 
 # Process high-level simulation inputs
 ZEFR.sifInitialize(parameters, conditions)
@@ -172,7 +186,7 @@ for i in range(iter+1,nSteps+1):
 
         TIOGA.performPointConnectivity()
 
-    for j in range(0,1):
+    for j in range(0,nStages):
         # Move grids
         if moving and j != 0:
             ZEFR.moveGrid(i,j)
@@ -207,4 +221,5 @@ for i in range(iter+1,nSteps+1):
         if rank == 0:
             print('Iter {0}: Forces {1}'.format(i,forces))
 
-print(" ***************** DONE ***************** ")
+if rank == 0:
+    print(" ***************** RUN COMPLETE ***************** ")
