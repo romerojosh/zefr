@@ -5588,6 +5588,9 @@ void FRSolver::report_forces(std::ofstream &f)
       e->dU_fpts = e->dU_fpts_d;
   }
   faces->P = faces->P_d;
+
+  if (input->motion)
+    faces->norm = faces->norm_d;
 #endif
 
   std::string prefix = input->output_prefix;
