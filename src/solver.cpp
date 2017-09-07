@@ -3533,15 +3533,15 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
     {
       if (!sourceBT.count(e->etype))
       {
-        RK_update_finish_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
+        RK_update_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
                                  rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
                                  input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
       }
       else
       {
-        RK_update_source_finish_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
-                                        rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
-                                        input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+        RK_update_source_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
+                                 rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+                                 input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
       }
     }
     check_error();
@@ -3621,13 +3621,13 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
     {
       if (!sourceBT.count(e->etype))
       {
-        RK_update_finish_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
+        RK_update_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
             rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
             input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
       }
       else
       {
-        RK_update_source_finish_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
+        RK_update_source_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
             rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
             input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
       }
