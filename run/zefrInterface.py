@@ -242,7 +242,7 @@ class zefrSolver:
             offset = [ptrToArray(geoAB.offset, ndims)]
             Rmat = [ptrToArray(geoAB.Rmat, ndims,ndims)]
 
-            self.gridData.update({'gridVel':grid_vel,
+            self.gridData.update({'gridVel':gridVel,
                 'rigidOffset':offset,
                 'rigidRotMat':Rmat})
 
