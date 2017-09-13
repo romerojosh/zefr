@@ -613,7 +613,7 @@ void Tris::modify_sensor()
   nodes(0, 2) = -1.0; nodes(1, 2) = 1.0; 
   nodes(0, 3) = -1.0; nodes(1, 3) = 1.0; 
 
-  int nSpts2D = nSpts1D * nSpts1D;
+  unsigned int nSpts2D = nSpts1D * nSpts1D;
   mdvector<double> loc_spts_quad({nSpts2D, nDims}, 0);
 
   for (unsigned int spt = 0; spt < nSpts2D; spt++)

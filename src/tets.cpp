@@ -731,7 +731,7 @@ void Tets::modify_sensor()
   nodes(0, 6) = -1.0; nodes(1, 6) = -1.0;  nodes(2, 6) = 1.0;
   nodes(0, 7) = -1.0; nodes(1, 7) = -1.0;  nodes(2, 7) = 1.0;
 
-  int nSpts3D = nSpts1D * nSpts1D * nSpts1D;
+  unsigned int nSpts3D = nSpts1D * nSpts1D * nSpts1D;
   mdvector<double> loc_spts_hex({nSpts3D, nDims}, 0);
 
   for (unsigned int spt = 0; spt < nSpts3D; spt++)

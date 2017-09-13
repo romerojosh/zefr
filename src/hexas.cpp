@@ -526,7 +526,7 @@ void Hexas::setup_PMG(int pro_order, int res_order)
     std::vector<mdvector<double>> opps(pro_order + 1);
 
     /* Form operator by sequential multiplication of single order prolongation operators */
-    for (int P = pro_order; P > order; P--)
+    for (unsigned int P = pro_order; P > order; P--)
     {
       opps[P].assign({(P+1) * (P+1) * (P+1), P * P * P}, 0);
 
@@ -555,7 +555,7 @@ void Hexas::setup_PMG(int pro_order, int res_order)
       }
     }
 
-    for (int P = pro_order; P > order + 1; P--)
+    for (unsigned int P = pro_order; P > order + 1; P--)
     {
       mdvector<double> opp({nSpts_pro, (P-1) * (P-1) * (P-1)});
 
@@ -578,7 +578,7 @@ void Hexas::setup_PMG(int pro_order, int res_order)
     std::vector<mdvector<double>> opps(order + 1);
 
     /* Form operator by sequential multiplication of single order restriction operators */
-    for (int P = res_order; P < order; P++)
+    for (unsigned int P = res_order; P < order; P++)
     {
       opps[P].assign({(P+1) * (P+1) * (P+1), (P+2) * (P+2) * (P+2)}, 0);
 
@@ -608,7 +608,7 @@ void Hexas::setup_PMG(int pro_order, int res_order)
       }
     }
 
-    for (int P = res_order; P < order - 1; P++)
+    for (unsigned int P = res_order; P < order - 1; P++)
     {
       mdvector<double> opp({nSpts_res, (P+3) * (P+3) * (P+3)});
 

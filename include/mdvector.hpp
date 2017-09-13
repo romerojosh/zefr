@@ -68,13 +68,13 @@ class mdvector
     ~mdvector();
     mdvector(const mdvector<T> &orig);
     mdvector<T>& operator= (const mdvector<T> &orig);
-    mdvector(std::vector<unsigned int> dims, T value = T(), bool pinned = false);
+    mdvector(const std::vector<unsigned int> dims, T value = T(), bool pinned = false);
 
     //! Setup operator
-    void assign(std::vector<unsigned int> dims, T value = T(), bool pinned = false);
+    void assign(const std::vector<unsigned int> dims, T value = T(), bool pinned = false);
 
     //! Setup operator (set size if needed, w/o initializing data)
-    void resize(std::vector<unsigned int> dims);
+    void resize(const std::vector<unsigned int> dims);
 
     //! Push back operator (for compatibility)
     void push_back(T value); 
@@ -145,7 +145,7 @@ template <typename T>
 mdvector<T>::mdvector(){};
 
 template <typename T>
-mdvector<T>::mdvector(std::vector<unsigned int> dims, T value, bool pinned)
+mdvector<T>::mdvector(const std::vector<unsigned int> dims, T value, bool pinned)
 {
   this->assign(dims, value, pinned);
 }
@@ -200,7 +200,7 @@ mdvector<T>::~mdvector()
 }
 
 template <typename T>
-void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pinned)
+void mdvector<T>::assign(const std::vector<unsigned int> dims, T value, bool pinned)
 {
   nDims = (int)dims.size();
 
@@ -245,7 +245,7 @@ void mdvector<T>::assign(std::vector<unsigned int> dims, T value, bool pinned)
 }
 
 template <typename T>
-void mdvector<T>::resize(std::vector<unsigned int> dims)
+void mdvector<T>::resize(const std::vector<unsigned int> dims)
 {
   nDims = (int)dims.size();
 

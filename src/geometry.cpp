@@ -1095,8 +1095,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   geo.mpiLocF.resize(0);
 #endif
   geo.fpt2face.assign(unique_faces.size() * nFptsPerFace, -1);
-  geo.face2fpts.assign({nFptsPerFace, unique_faces.size()}, -1);
-  geo.face2eles.assign({unique_faces.size(), 2}, -1);
+  geo.face2fpts.assign({nFptsPerFace, (unsigned)unique_faces.size()}, -1);
+  geo.face2eles.assign({(unsigned)unique_faces.size(), 2}, -1);
   
   if (geo.nDims == 2)
   {
@@ -1108,7 +1108,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   }
 
 #ifdef _BUILD_LIB
-    geo.face2nodes.assign({unique_faces.size(), geo.nNdFaceCurved}, -1);
+    geo.face2nodes.assign({(unsigned)unique_faces.size(), geo.nNdFaceCurved}, -1);
 #endif
 
   std::set<int> overPts, wallPts;
@@ -2180,7 +2180,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       geo.nNdFaceCurved = sqrt(geo.nNodes);
     }
 
-    mdvector<double> tmp_nodes({dims[0],dims[1],dims[2]});
+    mdvector<double> tmp_nodes({(unsigned)dims[0],(unsigned)dims[1],(unsigned)dims[2]});
 
     DS.read(tmp_nodes.data(), PredType::NATIVE_DOUBLE);
 
@@ -2215,8 +2215,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
     // Setup map to new node listing
     double tol = 1e-10;
-    int idx = sortind[0];
-    int n_nodes = 0;
+    unsigned int idx = sortind[0];
+    unsigned int n_nodes = 0;
     point pti = point(&temp_coords(idx,0), geo.nDims);
     std::vector<int> nodemap(geo.nNodes, -1);
     nodemap[idx] = n_nodes;
@@ -2662,7 +2662,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   //geo.mpiRotR.resize(geo.nMpiFaces); // NOTE: only required for blocked-style [per-face] MPI communication pattern
   for (auto &p2 : geo.send_ranks)
   {
-    int nFaces = geo.mpi_conn[p2].size();
+    unsigned int nFaces = geo.mpi_conn[p2].size();
 
     mdvector<double> face_pt({geo.nDims, 2*nFaces});
     std::vector<int> rot_tag(nFaces, 0);

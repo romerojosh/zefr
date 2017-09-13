@@ -727,7 +727,7 @@ mdvector<double> symm_pts_tri(std::vector<double> a3, std::vector<double> a21, s
   auto n21 = a21.size();
   auto n111 = a111.size();
 
-  int nPts = n3 + n21 * 3 + n111 * 6;
+  unsigned int nPts = n3 + n21 * 3 + n111 * 6;
 
   mdvector<double> pts({nPts, 2}, 0);
 
