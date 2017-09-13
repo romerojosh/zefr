@@ -3490,18 +3490,18 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
   hid_t string_type = H5Tcopy (H5T_C_S1);
   H5Tset_size (string_type, H5T_VARIABLE);
 
-  int nEles = e->nEles;
-  int nVars = e->nVars;
+  unsigned int nEles = e->nEles;
+  unsigned int nVars = e->nVars;
 #ifdef _GPU
-  int nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+  unsigned int nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
 #else
-  int nElesPad = nEles;
+  unsigned int nElesPad = nEles;
 #endif
 
   if (dims[2] != nEles || dims[1] != nVars)
     ThrowException("Size of solution data set does not match that from mesh.");
 
-  int nSpts = dims[0];
+  unsigned int nSpts = dims[0];
 
   if (input->overset)
   {
@@ -4339,13 +4339,13 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
   prefix += "_Grid" + std::to_string(input->gridID);
 
   // Prep the index lists [to grab data from a face of an ele]
-  int nDims = geo.nDims;
-  int nPts1D = order+3;
-  int nPtsFace = nPts1D;
+  unsigned int nDims = geo.nDims;
+  unsigned int nPts1D = order+3;
+  unsigned int nPtsFace = nPts1D;
   if (nDims==3) nPtsFace *= nPts1D;
-  int nSubCells = nPts1D - 1;
+  unsigned int nSubCells = nPts1D - 1;
   if (nDims==3) nSubCells *= nSubCells;
-  int nFacesEle = geo.nFacesPerEleBT[e->etype];
+  unsigned int nFacesEle = geo.nFacesPerEleBT[e->etype];
 
   mdvector<int> index_map({nFacesEle, nPtsFace});
 
@@ -4765,13 +4765,13 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   if (input->overset) prefix += "_Grid" + std::to_string(input->gridID);
 
   // Prep the index lists [to grab data from a face of an ele]
-  int nDims = geo.nDims;
-  int nPts1D = order+1;
-  int nPtsFace = nPts1D;
+  unsigned int nDims = geo.nDims;
+  unsigned int nPts1D = order+1;
+  unsigned int nPtsFace = nPts1D;
   if (nDims==3) nPtsFace *= nPts1D;
-  int nSubCells = nPts1D - 1;
+  unsigned int nSubCells = nPts1D - 1;
   if (nDims==3) nSubCells *= nSubCells;
-  int nFacesEle = geo.nFacesPerEleBT[e->etype];
+  unsigned int nFacesEle = geo.nFacesPerEleBT[e->etype];
 
   mdvector<int> index_map({nFacesEle, nPtsFace});
 

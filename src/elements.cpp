@@ -398,7 +398,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
     else /* nDims == 3 */
     {
-      int nFptsPerFace = nSpts1D * nSpts1D;
+      unsigned int nFptsPerFace = nSpts1D * nSpts1D;
       mdvector<double> fpts1({3, nFptsPerFace});
       mdvector<double> fpts2({3, nFptsPerFace});
       std::vector<std::vector<uint>> sortind1(3);
@@ -1020,7 +1020,7 @@ void Elements::setup_filter()
   // additional multiplication by interpolation operator to "collapsed" tensor product solution points, done later.
   if (nDims == 2) // Quads, Tris
   {
-    int nSpts2D = nSpts1D * nSpts1D;
+    unsigned int nSpts2D = nSpts1D * nSpts1D;
     oppS.assign({nDims * nSpts2D, nSpts2D});
 
     // xi lines
@@ -1037,8 +1037,8 @@ void Elements::setup_filter()
   } 
   else // Hexes, Tets
   {
-    int nSpts2D = nSpts1D * nSpts1D;
-    int nSpts3D = nSpts1D * nSpts1D * nSpts1D;
+    unsigned int nSpts2D = nSpts1D * nSpts1D;
+    unsigned int nSpts3D = nSpts1D * nSpts1D * nSpts1D;
     oppS.assign({nDims * nSpts3D, nSpts3D});
 
     // xi lines

@@ -6,6 +6,10 @@ endif
 
 CXX = g++
 CC = gcc
+ifeq ($(strip $(INTEL)),YES)
+	CXX = icpc
+	CC = icc
+endif
 AR = ar -rvs
 ifeq ($(CU),)
   CU = nvcc
@@ -72,13 +76,17 @@ INCS = -I$(strip $(BLAS_INC_DIR))
 
 # Setting MPI/METIS flags
 ifeq ($(strip $(MPI)),YES)
-	CXX = mpicxx
-	FLAGS += -D_MPI
-	INCS += -I$(strip $(METIS_INC_DIR))/ -I$(strip $(MPI_INC_DIR))/
-	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
-ifneq ($(MPI_LIB_DIR),)
-	LIBS += -L$(MPI_LIB_DIR)/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
+ifeq ($(strip $(INTEL)),YES)
+	CXX = mpiicpc -cxx=icpc
+else
+	CXX = g++
 endif
+	FLAGS += -D_MPI
+	INCS += -I$(strip $(MPI_INC_DIR))/ -I$(strip $(METIS_INC_DIR))/
+ifneq ($(MPI_LIB_DIR),)
+	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
+endif
+	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
 endif
 
 # Setting HDF5 flags
