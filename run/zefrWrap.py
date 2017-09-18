@@ -1,11 +1,16 @@
 import sys
 import os
-TIOGA_DIR = '/home/jcrabill/tioga/src/'
+TIOGA_DIR = '/home/jcrabill/tioga/bin/'
 ZEFR_DIR = '/home/jcrabill/zefr/bin/'
 sys.path.append(TIOGA_DIR)
 sys.path.append(ZEFR_DIR)
+#TIOGA_DIR = '/home/jacob/tioga/bin/'
+#ZEFR_DIR = '/home/jacob/zefr/bin/'
+#sys.path.append(TIOGA_DIR)
+#sys.path.append(ZEFR_DIR)
 
 from mpi4py import MPI
+import numpy as np
 import zefr
 
 Comm = MPI.COMM_WORLD
@@ -14,12 +19,13 @@ nproc = Comm.Get_size()
 
 # To run an overset case, set the number of grids here,
 # and specify the grid-to-rank association
-nGrids = 1
+nGrids = 2
 inputFile = "input_sphere"
 
 if len(sys.argv) == 2:
     inputFile = sys.argv[1]
 elif len(sys.argv) > 2:
+    inputFile = sys.argv[1]
     nGrids = len(sys.argv) - 2
     nRanksGrid = []
     rankSum = 0
@@ -40,14 +46,11 @@ gridRank = gridComm.Get_rank()
 gridSize = gridComm.Get_size()
 
 # -------------- Setup the ZEFR solver object; process the grids ----------------
-if len(sys.argv) < 2:
-    inputFile = "input_sphere"
-else:
-    inputFile = sys.argv[1]
 zefr.initialize(gridComm,inputFile,nGrids,GridID)
 
 z = zefr.get_zefr_object()
 inp = z.get_input()
+data = z.get_data()
 
 if nGrids > 1:
     tg.tioga_init_(Comm)
@@ -56,7 +59,8 @@ if nGrids > 1:
 
     z.set_tioga_callbacks(tg.tioga_preprocess_grids_, 
         tg.tioga_performconnectivity_, tg.tioga_do_point_connectivity,
-        tg.tioga_set_iter_iblanks, tg.tioga_dataupdate_ab_send, tg.tioga_dataupdate_ab_recv)
+        tg.tioga_set_iter_iblanks, tg.tioga_unblank_part_1, tg.tioga_unblank_part_2,
+        tg.tioga_dataupdate_ab_send, tg.tioga_dataupdate_ab_recv)
 
     if inp.motion_type == zefr.RIGID_BODY or inp.motion_type == zefr.CIRCULAR_TRANS:
         z.set_rigid_body_callbacks(tg.tioga_set_transform)
@@ -76,10 +80,11 @@ if nGrids > 1:
     
     tg.tioga_setcelliblank_(geoAB.iblank_cell)
     
-    tg.tioga_register_face_data_(geoAB.f2c,geoAB.c2f,geoAB.iblank_face,
-        geoAB.nOverFaces,geoAB.nMpiFaces,geoAB.overFaces,geoAB.mpiFaces,
-        geoAB.procR,geoAB.mpiFidR,geoAB.nFaceTypes,geoAB.nvert_face,
-        geoAB.nFaces_type,geoAB.f2v);
+    tg.tioga_register_face_data_(geo.gridType, geoAB.f2c, geoAB.c2f,
+        geoAB.iblank_face, geoAB.nOverFaces, geoAB.nWallFaces, 
+        geoAB.nMpiFaces, geoAB.overFaces, geoAB.wallFaces,
+        geoAB.mpiFaces, geoAB.procR, geoAB.mpiFidR, geoAB.nFaceTypes, 
+        geoAB.nvert_face, geoAB.nFaces_type, geoAB.f2v);
   
     tg.tioga_set_highorder_callback_(cbs.get_nodes_per_cell,
         cbs.get_receptor_nodes, cbs.donor_inclusion_test,
@@ -117,6 +122,37 @@ if nGrids > 1:
 
     if zefr.use_gpus():
         z.update_iblank_gpu()
+
+# ----------------------- TESTING HELIOS COMPATIBILITY LAYER ----------------------- 
+
+ncells = geo.nCells_type
+print('ncells = ',ncells)
+
+geo = zefr.get_basic_geo_data()   # Basic geometry/connectivity data
+geoAB = zefr.get_extra_geo_data() # Geo data for AB method
+xyz = zefr.ptrToArray(geo.xyz, geo.nnodes, 3)
+xyz = zefr.ptrToArray(geo.xyz, geo.nnodes, 3)
+overFaces = zefr.ptrToArray(geoAB.overFaces, geoAB.nOverFaces)
+c2f = zefr.ptrToArray(geoAB.c2f, ncells, 6)
+print('c2f', type(c2f), c2f.dtype, c2f.shape)
+print('xyz', type(xyz), xyz.dtype, xyz.shape)
+print('overFaces', type(overFaces), overFaces.shape)
+print(c2f)
+print(xyz)
+print(overFaces)
+
+# Test the other way around: numpy array to C pointer
+#xyzptr = zefr.arrayToDblPtr(xyz)
+#print('xyzptr',type(xyzptr),xyzptr)
+#print('org_xyzptr',type(geo.xyz),geo.xyz)
+
+#c2fptr = zefr.arrayToIntPtr(c2f)
+#print('c2fptr',type(c2fptr),c2fptr)
+#print('org_c2fptr',type(geoAB.c2f),geoAB.c2f)
+
+# Test reshaping
+np.reshape(c2f, (ncells,6))
+print(c2f.shape)
 
 # ------------------------------- Run the solver -------------------------------
 z.write_solution()

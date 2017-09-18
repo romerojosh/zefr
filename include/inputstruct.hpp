@@ -114,6 +114,22 @@ public:
   }
 };
 
+/*! Structure to make useful simulation data easily available 
+ *  from Python interface layer */
+struct DataStruct
+{
+  double forces[6];
+
+  int nspts;
+  int nfields;
+  double* u_spts = NULL;
+  double* du_spts = NULL;
+#ifdef _GPU
+  double* u_spts_d;
+  double* du_spts_d;
+#endif
+};
+
 struct InputStruct
 {
   unsigned int equation, dt_type, CFL_type, ic_type, nDims, nQpts1D, n_steps, order;

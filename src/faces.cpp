@@ -1377,6 +1377,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
         Fcomm(1, n, fpt) = -F * dA(1, fpt);
       }
     }
+
   }
 }
 

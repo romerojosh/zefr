@@ -265,6 +265,7 @@ typedef struct point Vec3;
 
 InputStruct read_input_file(std::string inputfile);
 void apply_nondim(InputStruct &input);
+void initialize_inputs(InputStruct &input);
 
 /* Function to read parameter from input file. Throws exception if parameter 
  * is not found. */
