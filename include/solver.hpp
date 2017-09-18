@@ -85,6 +85,9 @@ class FRSolver
     mdvector<double> q_ini, q_til; //! Grid rotation vector
     mdvector<double> qdot_ini, qdot_til; //! Grid rotation vector
 
+    /* --- Averaging & Statistics --- */
+    double tavg_prev_time = 0.;
+
     /* Implicit method parameters */
     typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
     unsigned int nCounter;
@@ -180,6 +183,8 @@ class FRSolver
     void step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif
 
+    void accumulate_time_averages(void);
+
     void write_solution(const std::string &_prefix);
     void write_solution_pyfr(const std::string &_prefix);
     void write_surfaces(const std::string &_prefix);
@@ -187,6 +192,7 @@ class FRSolver
     void write_LHS(const std::string &_prefix);
     void write_RHS(const std::string &_prefix);
     void write_color();
+    void write_averages(const std::string &_prefix);
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_RHS(unsigned int stage, unsigned int iterNM, unsigned int iter);
     void report_forces(std::ofstream &f);

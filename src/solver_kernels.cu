@@ -1629,6 +1629,54 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
 }
 
 __global__
+void accumulate_time_averages(mdvector_gpu<double> tavg_acc, mdvector_gpu<double> tavg_prev,
+    mdvector_gpu<double> tavg_curr, mdvector_gpu<double> U_spts, double prev_time,
+    double curr_time, double gamma, int nSpts, int nVars, int nDims, int nEles)
+{
+  const int ele = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
+  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
+
+  if (ele >= nEles || spt >= nSpts) return;
+
+  double rho = U_spts(spt,0,ele);
+  double rhoU = U_spts(spt,1,ele);
+  double rhoV = U_spts(spt,2,ele);
+  double rhoW = U_spts(spt,3,ele);
+  double rhoE = U_spts(spt,4,ele);
+
+  // Conservative Variables
+  tavg_curr(spt,0,ele) = rho;
+  tavg_curr(spt,1,ele) = rhoU;
+  tavg_curr(spt,2,ele) = rhoV;
+  tavg_curr(spt,3,ele) = rhoW;
+  tavg_curr(spt,4,ele) = rhoE;
+
+  // Velocities
+  tavg_curr(spt,5,ele) = rhoU/rho;
+  tavg_curr(spt,6,ele) = rhoV/rho;
+  tavg_curr(spt,7,ele) = rhoW/rho;
+
+  // Pressure
+  tavg_curr(spt,8,ele) = (gamma-1.0) *
+      (rhoE - 0.5*(rhoU*rhoU + rhoV*rhoV + rhoW*rhoW) / rho);
+
+  double fac = 0.5 * (curr_time - prev_time);
+  for (int i = 0; i < nVars+nDims+1; i++)
+    tavg_acc(spt, i, ele) += fac * (tavg_prev(spt,i,ele) + tavg_curr(spt,i,ele));
+}
+
+void accumulate_time_averages_wrapper(mdvector_gpu<double> &tavg_acc, mdvector_gpu<double> &tavg_prev,
+    mdvector_gpu<double> &tavg_curr, mdvector_gpu<double> &U_spts, double prev_time,
+    double curr_time, double gamma, int nSpts, int nVars, int nDims, int nEles)
+{
+  int threads = 192;
+  int blocks = (nEles * nSpts + threads - 1) / threads;
+
+  accumulate_time_averages<<<blocks,threads>>>(tavg_acc,tavg_prev,tavg_curr,U_spts,
+      prev_time,curr_time,gamma,nSpts,nVars,nDims,nEles);
+}
+
+__global__
 void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvector_gpu<double> Vg,
     MotionVars params, unsigned int nNodes, unsigned int nDims, int motion_type, double time, int gridID = 0)
 {
@@ -1785,8 +1833,8 @@ __global__
 void estimate_point_positions_spts(mdvector_gpu<double> coord_spts,
     mdvector_gpu<double> vel_spts, double dt, unsigned int nSpts, unsigned int nEles)
 {
-  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
-  const int ele = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
+  const int ele = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
+  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
 
   if (spt >= nSpts) return;
 

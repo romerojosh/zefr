@@ -178,6 +178,18 @@ int main(int argc, char* argv[])
     input.iter++;
     input.time = solver.get_current_time();
 
+    if (input.tavg)
+    {
+      bool do_accum = (n%input.tavg_freq == 0);
+      bool do_write = (n%input.write_tavg_freq == 0 || n == input.n_steps);
+
+      if (do_accum || do_write)
+        solver.accumulate_time_averages();
+
+      if (do_write)
+        solver.write_averages(input.output_prefix);
+    }
+
     /* Write output if required */
     if (input.report_freq != 0 && (n%input.report_freq == 0 || n == input.n_steps || n == 1))
     {
@@ -255,8 +267,6 @@ Zefr::Zefr(void)
     std::cout << R"(                              save the wind." -Victor Hugo  )" << std::endl;
     std::cout << std::endl;
   }
-
-  solver = NULL;
 
 #ifdef _GPU
   initialize_cuda();
@@ -408,6 +418,21 @@ void Zefr::write_solution(void)
     solver->write_surfaces(input.output_prefix);
   if (input.write_pyfr)
     solver->write_solution_pyfr(input.output_prefix);
+
+  if (input.tavg)
+    write_averages();
+}
+
+void Zefr::update_averages(void)
+{
+  if (input.tavg)
+    solver->accumulate_time_averages();
+}
+
+void Zefr::write_averages(void)
+{
+  if (input.tavg)
+    solver->write_averages(input.output_prefix);
 }
 
 void Zefr::write_forces(void)

@@ -207,6 +207,10 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
     mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
     double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace);
 
+void accumulate_time_averages_wrapper(mdvector_gpu<double> &tavg_acc, mdvector_gpu<double> &tavg_prev,
+    mdvector_gpu<double> &tavg_curr, mdvector_gpu<double> &U_spts, double prev_time, double curr_time,
+    double gamma, int nSpts, int nVars, int nDims, int nEles);
+
 void move_grid_wrapper(mdvector_gpu<double> &coords,
     mdvector_gpu<double>& coords_0, mdvector_gpu<double> &Vg, MotionVars &params,
     unsigned int nNodes, unsigned int nDims, int motion_type, double time,

@@ -154,6 +154,19 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "force_freq", input.force_freq, (unsigned int) 0);
   read_param(f, "error_freq", input.error_freq, (unsigned int) 0);
   read_param(f, "turb_stat_freq", input.turb_stat_freq, (unsigned int) 0);
+  read_param(f, "write_tavg_freq", input.write_tavg_freq, (unsigned int) 0);
+  read_param(f, "tavg_freq", input.tavg_freq, (unsigned int) 100);
+  if (input.write_tavg_freq > 0 && input.tavg_freq > 0)
+  {
+    input.tavg = true;
+  }
+  else
+  {
+    input.write_tavg_freq = 0;
+    input.tavg_freq = 0;
+    input.tavg = false;
+  }
+
   read_param(f, "test_case", input.test_case, (unsigned int) 0);
   read_param(f, "err_field", input.err_field, (unsigned int) 0);
   read_param(f, "nQpts1D", input.nQpts1D, (unsigned int)5);

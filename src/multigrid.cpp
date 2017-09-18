@@ -70,7 +70,7 @@ void PMGrid::setup(InputStruct *input, FRSolver &solver, _mpi_comm comm_in)
     else
       e->setup_PMG(order, input->mg_levels[1]);
   }
-  grids.push_back(nullptr); // Placeholder spot in grids array
+  grids.emplace_back(); // Placeholder spot in grids array
 
   /* Instantiate coarse grid solvers */
   for (int n = 1; n < nLevels; n++)

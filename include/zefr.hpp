@@ -78,6 +78,9 @@ public:
   void write_forces(void);
   void write_error(void);
 
+  void update_averages(void);
+  void write_averages(void);
+
   void write_wall_time(void);
 
   // Other Misc. Functions

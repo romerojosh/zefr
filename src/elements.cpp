@@ -99,6 +99,15 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   U_ini.assign({nSpts, nVars, nElesPad});
   dt.assign({nEles}, input->dt);
 
+  /* Allocate memory for calculating time-avereaged statistics */
+  if (input->tavg)
+  {
+    // Arrays for accumulating time averages using trapezoidal integration
+    tavg_acc.assign({nSpts, nVars+nDims+1, nElesPad});
+    tavg_prev.assign({nSpts, nVars+nDims+1, nElesPad});
+    tavg_curr.assign({nSpts, nVars+nDims+1, nElesPad});
+  }
+
   /* Allocate memory for implicit method data structures */
   if (input->implicit_method)
   {

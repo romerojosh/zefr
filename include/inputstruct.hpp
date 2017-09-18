@@ -151,6 +151,9 @@ struct InputStruct
   std::string restart_case;
   bool catch_signals = false;
   bool write_LHS, write_RHS;
+  bool tavg;  //! Collect time-averaged quantities
+  unsigned int tavg_freq; //! Frequency at which to accumulate time-averaged quantities
+  unsigned int write_tavg_freq; //! Frequency at which to dump time-averaged quantities
 
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp, full_6dof;

@@ -149,6 +149,9 @@ class Elements
     /* Output data structures */
     mdvector<unsigned int> ppt_connect;
 
+    /* Averaging and Statistics */
+    mdvector<double> tavg_acc, tavg_prev, tavg_curr;
+
 #ifdef _GPU
     /* GPU data */
     mdvector_gpu<double> oppE_d, oppD_d, oppD_fpts_d, oppDiv_d, oppDiv_fpts_d;
@@ -202,6 +205,9 @@ class Elements
     mdvector_gpu<int> unblankIDs_d;
     mdvector_gpu<double> cellCoords_d;
     mdvector_gpu<double> loc_spts_1D_d;
+
+    /* Averaging and Statisctics */
+    mdvector_gpu<double> tavg_acc_d, tavg_prev_d, tavg_curr_d;
 #endif
 
     void set_coords(std::shared_ptr<Faces> faces);

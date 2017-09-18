@@ -212,6 +212,12 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
   setup_views(); // Note: This function allocates addtional GPU memory for views
 
+  if (input->tavg)
+  {
+    tavg_prev_time = flow_time;
+    accumulate_time_averages();
+  }
+
   if (input->implicit_method && input->viscous)
   {
     /* Setup jacoN views for viscous implicit Jacobians */
@@ -272,6 +278,12 @@ void FRSolver::restart_solution(void)
   for (auto e : elesObjs)
    e->U_spts_d = e->U_spts;
 #endif
+
+  if (input->tavg)
+  {
+    tavg_prev_time = flow_time;
+    accumulate_time_averages();
+  }
   
   // Update grid to current status based on restart file if needed
   if (input->motion)
@@ -1233,6 +1245,15 @@ void FRSolver::solver_data_to_device()
           e->LHSinv_ptrs(ele) = e->LHSinv_d.data() + ele * (N * N);
         e->LHSinv_ptrs_d = e->LHSinv_ptrs;
       }
+    }
+
+    /* -- Averaging and Statistics -- */
+
+    if (input->tavg)
+    {
+      e->tavg_acc_d = e->tavg_acc;
+      e->tavg_prev_d = e->tavg_prev;
+      e->tavg_curr_d = e->tavg_curr;
     }
   }
 
@@ -4321,6 +4342,293 @@ void FRSolver::write_color()
   f.close();
 }
 
+void FRSolver::write_averages(const std::string &_prefix)
+{
+  if (elesObjs.size() > 1)
+    ThrowException("PyFR write not supported for mixed element grids.");
+
+  auto e = elesObjs[0];
+
+#ifdef _GPU
+    e->tavg_acc = e->tavg_acc_d;
+#endif
+
+  std::string prefix = _prefix + "-tavg";
+
+  if (input->overset) prefix += "-G" + std::to_string(input->gridID);
+
+  unsigned int iter = current_iter;
+  if (input->p_multi)
+    iter = iter / input->mg_steps[0];
+
+  std::string filename = input->output_prefix + "/" + prefix + "-" + std::to_string(iter) + ".pyfrs";
+
+  if (input->gridID == 0 && input->rank == 0)
+    std::cout << "Writing data to file " << filename << std::endl;
+
+  std::stringstream ss;
+
+  // Create a dataspace and datatype for a std::string
+  DataSpace dspace(H5S_SCALAR);
+  hid_t string_type = H5Tcopy (H5T_C_S1);
+  H5Tset_size (string_type, H5T_VARIABLE);
+
+  // Setup config and stats strings
+
+  /* --- Config String --- */
+  ss.str(""); ss.clear();
+  ss << "[constants]" << std::endl;
+  ss << "gamma = 1.4" << std::endl;
+  ss << std::endl;
+
+  ss << "[solver]" << std::endl;
+  ss << "system = ";
+  if (input->equation == EulerNS)
+  {
+    if (input->viscous)
+      ss << "navier-stokes" << std::endl;
+    else
+      ss << "euler" << std::endl;
+  }
+  else if (input->equation == AdvDiff)
+  {
+    if (input->viscous)
+      ss << "advection-diffusion" << std::endl;
+    else
+      ss << "advection" << std::endl;
+  }
+  ss << "order = " << input->order << std::endl;
+  if (input->overset)
+  {
+    ss << "overset = true" << std::endl;
+  }
+  ss << std::endl;
+
+  if (geo.nDims == 2)
+    ss << "[solver-elements-quad]" << std::endl;
+  else
+    ss << "[solver-elements-hex]" << std::endl;
+  ss << "soln-pts = gauss-legendre" << std::endl;
+  ss << std::endl;
+
+  std::string config = ss.str();
+
+  /* --- Stats String --- */
+  ss.str(""); ss.clear();
+  ss << "[data]" << std::endl;
+  if (input->equation == EulerNS)
+  {
+    ss << "fields = avg-rho,avg-rhou,avg-rhov,";
+    if (geo.nDims == 3)
+      ss << "avg-rhoW,";
+    ss << "avg-E,avg-vx,avg-vy,";
+    if (geo.nDims == 3)
+      ss << "avg-vz,";
+    ss << "avg-P" << std::endl;
+  }
+  else if (input->equation == AdvDiff)
+  {
+    ss << "fields = u" << std::endl;
+  }
+  ss << "prefix = tavg" << std::endl;
+  ss << std::endl;
+
+  ss << "[solver-time-integrator]" << std::endl;
+  ss << "tstart = " << restart_time << std::endl;
+  ss << "tend = " << flow_time << std::endl;
+  ss << "tcurr = " << flow_time << std::endl;
+  //ss << "wall-time = " << input->??"
+  ss << std::endl;
+
+  std::string stats = ss.str();
+
+  int nEles = e->nEles;
+  int nElesPad = e->nElesPad;
+  int nVars = e->nVars + e->nDims + 1;
+  int nSpts = e->nSpts;
+
+  // Normalize the accumulated data
+  for (int spt = 0; spt < nSpts; spt++)
+    for (int n = 0; n < nVars; n++)
+      for (int ele = 0; ele < nEles; ele++)
+        e->tavg_curr(spt,n,ele) = e->tavg_acc(spt,n,ele) / (flow_time - restart_time);
+
+#ifdef _MPI
+  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
+  std::vector<std::vector<double>> data_p(input->nRanks);
+  std::vector<std::vector<int>> iblank_p(input->nRanks);
+  if (input->overset && input->rank == 0)
+  {
+    iblank_p[0].resize(nEles);
+    for (int ele = 0; ele < nEles; ele++)
+      iblank_p[0][ele] = geo.iblank_cell(ele);
+  }
+
+  /* --- Gather all the data onto Rank 0 for writing --- */
+
+  std::vector<int> nEles_p(input->nRanks);
+  MPI_Allgather(&nEles, 1, MPI_INT, nEles_p.data(), 1, MPI_INT, geo.myComm);
+
+  for (int p = 1; p < input->nRanks; p++)
+  {
+    int nEles = nEles_p[p];
+    int nElesPad = nEles;
+#ifdef _GPU
+    nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#endif
+    int size = nElesPad * nSpts * nVars;
+
+    if (input->rank == 0)
+    {
+      data_p[p].resize(size);
+      MPI_Status status;
+      MPI_Recv(data_p[p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
+
+      if (input->overset)
+      {
+        iblank_p[p].resize(nEles);
+        MPI_Status status2;
+        MPI_Recv(iblank_p[p].data(), nEles, MPI_INT, p, 0, geo.myComm, &status2);
+      }
+    }
+    else
+    {
+      if (p == input->rank)
+      {
+        MPI_Send(e->tavg_curr.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+
+        if (input->overset)
+        {
+          MPI_Send(geo.iblank_cell.data(), nEles, MPI_INT, 0, 0, geo.myComm);
+        }
+      }
+    }
+
+    MPI_Barrier(geo.myComm);
+  }
+
+  /* --- Write Data to File (on Rank 0) --- */
+
+  if (input->rank == 0)
+  {
+    H5File file(filename, H5F_ACC_TRUNC);
+
+    // Write out all the data
+    DataSet dset = file.createDataSet("config", string_type, dspace);
+    dset.write(config, string_type, dspace);
+    dset.close();
+
+    dset = file.createDataSet("stats", string_type, dspace);
+    dset.write(stats, string_type, dspace);
+    dset.close();
+
+    // Write mesh ID
+    dset = file.createDataSet("mesh_uuid", string_type, dspace);
+    dset.write(geo.mesh_uuid, string_type, dspace);
+    dset.close();
+
+    dspace.close();
+
+    std::string sol_prefix = "tavg_";
+    sol_prefix += (geo.nDims == 2) ? "quad" : "hex";
+    sol_prefix += "_p";
+    for (int p = 0; p < input->nRanks; p++)
+    {
+      nEles = nEles_p[p];
+#ifdef _GPU
+      nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#else
+      nElesPad = nEles;
+#endif
+
+      hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+      hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+      // Create a dataspace for the solution, using a hyperslab to ignore padding
+      DataSpace dspaceU(3, dimsU);
+#ifdef _GPU
+      hsize_t count[3] = {1,1,1};
+      hsize_t start[3] = {0,0,0};
+      hsize_t stride[3] = {1,1,1};
+      hsize_t block[3] = {nSpts, nVars, nEles};
+      dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
+      // Create a dataspace for the actual dataset
+      DataSpace dspaceF(3, dimsF);
+
+      std::string solname = sol_prefix + std::to_string(p);
+      dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
+      if (p == 0)
+        dset.write(e->tavg_curr.data(), PredType::NATIVE_DOUBLE, dspaceU);
+      else
+        dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+      dspaceU.close();
+      dset.close();
+
+      // Write out iblank as separate DataSet with same naming convention as soln
+      if (input->overset)
+      {
+        hsize_t dims[1] = {nEles};
+        DataSpace dspaceI(1, dims);
+        std::string iname = "iblank_";
+        iname += (geo.nDims == 2) ? "quad" : "hex";
+        iname += "_p" + std::to_string(p);
+        // NOTE: be aware of C++ 32-bit int vs. HDF5 8-bit int
+        dset = file.createDataSet(iname, PredType::NATIVE_INT8, dspaceI);
+        dset.write(iblank_p[p].data(), PredType::NATIVE_INT, dspaceI);
+        dset.close();
+      }
+    }
+  }
+#else
+  /* --- Write Data to File --- */
+
+  H5File file(filename, H5F_ACC_TRUNC);
+
+  DataSet dset = file.createDataSet("config", string_type, dspace);
+  dset.write(config, string_type, dspace);
+  dset.close();
+
+  dset = file.createDataSet("stats", string_type, dspace);
+  dset.write(stats, string_type, dspace);
+  dset.close();
+
+  // Write mesh ID
+  dset = file.createDataSet("mesh_uuid", string_type, dspace);
+  dset.write(geo.mesh_uuid, string_type, dspace);
+  dset.close();
+
+  dspace.close();
+
+  hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+  hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+  // Create a dataspace for the solution, using a hyperslab to ignore padding
+  DataSpace dspaceU(3, dimsU);
+#ifdef _GPU
+  hsize_t count[3] = {1,1,1};
+  hsize_t start[3] = {0,0,0};
+  hsize_t stride[3] = {1,1,1};
+  hsize_t block[3] = {nSpts, nVars, nEles};
+  dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
+  // Create a dataspace for the actual dataset
+  DataSpace dspaceF(3, dimsF);
+
+  std::string solname = "tavg_";
+  solname += (geo.nDims == 2) ? "quad" : "hex";
+  solname += "_p" + std::to_string(input->rank);
+  dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
+  dset.write(e->tavg_curr.data(), PredType::NATIVE_DOUBLE, dspaceU);
+  dset.close();
+#endif
+
+}
+
+
 void FRSolver::write_overset_boundary(const std::string &_prefix)
 {
   if (!input->overset) ThrowException("Overset surface export must have overset grid.");
@@ -6314,6 +6622,69 @@ void FRSolver::report_turbulent_stats(std::ofstream &f)
     f << keng << " " << enst << std::endl;
   }
 
+}
+
+void FRSolver::accumulate_time_averages(void)
+{
+#ifdef _CPU
+  double fac = 0.5*(flow_time - tavg_prev_time);
+
+  for (auto e : elesObjs)
+  {
+    unsigned int nVars = e->nVars;
+    unsigned int nDims = e->nDims;
+    for (unsigned spt = 0; spt < e->nSpts; spt++)
+    {
+      for (unsigned ele = 0; ele < e->nEles; ele++)
+      {
+        double rho = e->U_spts(spt,0,ele);
+        double rhoU = e->U_spts(spt,1,ele);
+        double rhoV = e->U_spts(spt,2,ele);
+        double rhoW = e->U_spts(spt,3,ele);
+        double rhoE = e->U_spts(spt,nDims+1,ele);
+
+        double u = rhoU / rho;
+        double v = rhoV / rho;
+        double w = rhoW / rho;
+
+        double P = (input->gamma - 1.) * (rhoE - 0.5* rho * (u*u + v*v + w*w));
+
+        // Collect conservative variables
+        for (unsigned int i = 0; i < nVars; i++)
+          e->tavg_curr(spt, i, ele) = e->U_spts(spt, i, ele);
+
+        // Collect velocities
+        e->tavg_curr(spt, nVars+0, ele) = u;
+        e->tavg_curr(spt, nVars+1, ele) = v;
+        e->tavg_curr(spt, nVars+2, ele) = w;
+
+        // Pressure
+        e->tavg_curr(spt, nVars+nDims, ele) = P;
+
+        // Accumulate
+        for (int i = 0; i < nVars+nDims+1; i++)
+          e->tavg_acc(spt, i, ele) += fac * (e->tavg_prev(spt, i, ele) + e->tavg_curr(spt, i, ele));
+      }
+    }
+
+    e->tavg_prev = e->tavg_curr;
+  }
+
+#endif
+
+#ifdef _GPU
+  for (auto e : elesObjs)
+  {
+    accumulate_time_averages_wrapper(e->tavg_acc_d,e->tavg_prev_d,e->tavg_curr_d,e->U_spts_d,
+        tavg_prev_time,flow_time,input->gamma,e->nSpts,e->nVars,e->nDims,e->nEles);
+
+    cudaDeviceSynchronize();
+    check_error();
+    device_copy(e->tavg_prev_d, e->tavg_curr_d, e->tavg_curr_d.max_size());
+  }
+#endif
+
+  tavg_prev_time = flow_time;
 }
 
 void FRSolver::filter_solution()
