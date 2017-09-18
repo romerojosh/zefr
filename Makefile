@@ -79,7 +79,7 @@ ifeq ($(strip $(MPI)),YES)
 ifeq ($(strip $(INTEL)),YES)
 	CXX = mpiicpc -cxx=icpc
 else
-	CXX = g++
+	CXX = mpicxx
 endif
 	FLAGS += -D_MPI
 	INCS += -I$(strip $(MPI_INC_DIR))/ -I$(strip $(METIS_INC_DIR))/
