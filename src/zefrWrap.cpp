@@ -83,22 +83,42 @@ int main(int argc, char *argv[])
   {
     runTime.startTimer();
 
-    for (int stage = 0; stage < inp.nStages; stage++)
+    if (inp.dt_scheme != "LSRK")
     {
-      z->do_rk_stage_start(iter,stage);
+      // Can use the new-style method [no callbacks within ZEFR]
+      for (int stage = 0; stage < inp.nStages; stage++)
+      {
+        z->do_rk_stage_start(iter,stage);
 
-      tioga_dataupdate_ab(5, 0);
+        tioga_dataupdate_ab(5, 0);
 
-      z->do_rk_stage_mid(iter,stage);
+        z->do_rk_stage_mid(iter,stage);
 
-      if (inp.viscous)
-        tioga_dataupdate_ab(5, 1);
+        if (inp.viscous)
+          tioga_dataupdate_ab(5, 1);
 
-      z->do_rk_stage_finish(iter,stage);
+        z->do_rk_stage_finish(iter,stage);
+      }
+    }
+    else
+    {
+      // Adaptive time stepping -> stick to previous method
+      z->do_step();
     }
 
-    //z->do_step();
     runTime.stopTimer();
+
+    if (inp.tavg)
+    {
+      bool do_accum = (iter%inp.tavg_freq == 0 or iter == inp.initIter+1);
+      bool do_write = (iter%inp.write_tavg_freq == 0 || iter == inp.n_steps);
+
+      if (do_accum || do_write)
+        z->update_averages();
+
+      if (do_write)
+        z->write_averages();
+    }
 
     if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
       z->write_residual();
@@ -136,14 +156,17 @@ void initialize_overset(Zefr* z, InputStruct& inp)
 
   inp.overset = 1;
 
-  //if (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS)
-  //  z->set_rigid_body_callbacks(tioga_set_transform);
+  /*! NOTE: The following 2 functions are not required [in fact, discouraged]
+   *  when using the new HELIOS-compatible Python layer */
+
+  if (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS)
+    z->set_rigid_body_callbacks(tioga_set_transform);
 
   /* NOTE: tioga_dataUpdate is being called from within ZEFR, to accomodate
    * both multi-stage RK time stepping + viscous cases with gradient interp */
-  /*z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
+  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
       tioga_do_point_connectivity, tioga_set_iter_iblanks, tioga_unblank_part_1,
-      tioga_unblank_part_2, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);*/
+      tioga_unblank_part_2, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
 }
 
 void setup_overset_data(Zefr* z, InputStruct& inp)

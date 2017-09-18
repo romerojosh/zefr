@@ -5,7 +5,11 @@
 nDims    3
 meshfile sphere_hex.coarse.msh
 overset  true
-overset_grids  sphere_hex.coarse.msh  box2.coarse.msh
+# Tiny grids for debugging
+#overset_grids  sphere_hex.coarse.msh  box2.coarse.msh
+# More typical level of loading for performance metrics
+overset_grids  sphere_hex.msh  box2.msh
+overset_grid_type  1  0
 
 # =============================================================
 # Boundary Conditions
@@ -23,13 +27,13 @@ mesh_bound  sphere  wall_ns_adi
 # =============================================================
 # Solver:
 equation  EulerNS    (AdvDiff, EulerNS)
-order     1
+order     2
 viscous   1
 motion    0
 
 # Timestepping:
-n_steps    100
-dt_scheme  RK44      (Euler, RK44, RKj)
+n_steps    1000
+dt_scheme  LSRK      (Euler, RK44, RK54, LSRK (adaptive), RKj)
 res_tol    1e-11
 dt_type    0         (0 = Supplied, 1 = Global, 2 = Local)
 dt	   0.0002
@@ -45,17 +49,19 @@ restart_iter 5
 # Plotting/Output Options
 # =============================================================
 # Note: You can suppress output by setting freq to zero. 
-output_prefix  Sphere
-write_freq     100
-plot_surfaces  1
-plot_overset   0
-write_pyfr     1
-write_paraview 1
-report_freq    100
-res_type       1
-force_freq     0
-error_freq     0
-nQpts1D        0
+output_prefix   Sphere
+write_freq      100
+plot_surfaces   0
+plot_overset    0
+write_pyfr      1
+write_paraview  1
+write_tavg_freq 500
+tavg_freq       50
+report_freq     100
+res_type        1
+force_freq      0
+error_freq      0
+nQpts1D         0
 
 # ====================================================
 # Moving-Grid Parameters
@@ -69,11 +75,9 @@ moveAx  1.884955
 moveAy  0.9424777
 moveAz  1.884955
 
-# For 'Ping-Pong' Taylor-Green: do 10 complete periods
-# of motion within time range of interest (~169s)
-moveFx  .1 .0591607978
-moveFy  .0 .1183215957
-moveFz  .0 .0591607978
+moveFx  .0591607978
+moveFy  .1183215957
+moveFz  .0591607978
 
 # Set rotation of inner grid w/o translation
 wx0  .05

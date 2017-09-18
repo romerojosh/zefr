@@ -1718,6 +1718,12 @@ void FRSolver::compute_residual_mid(unsigned int stage, int color)
 
   if (input->viscous)
   {
+#ifdef _BUILD_LIB
+    // Wait for completion of corrected *and transformed* gradient before sending
+    if (input->overset)
+      event_record_wait_pair(3, 0, 3);
+#endif
+
     /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
     for (auto e : elesObjs)
       e->extrapolate_dU();
@@ -1764,6 +1770,12 @@ void FRSolver::compute_residual_finish(unsigned int stage, int color)
     elesObjs = elesObjsBC[prev_color];
   else
     elesObjs = this->elesObjs;
+
+#ifdef _BUILD_LIB
+  // Wait for updated data on GPU before moving on to common_F
+  if (input->overset)
+    event_record_wait_pair(2, 3, 0);
+#endif
 
   /* Compute common interface flux at non-MPI flux points */
   faces->compute_common_F(startFpt, endFpt);
@@ -3448,22 +3460,19 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
 
 void FRSolver::step_RK_stage_start(int stage)
 {
-#ifdef _CPU
   if (input->nStages > 1 && stage == 0)
   {
+#ifdef _CPU
     for (auto e : elesObjs)
       e->U_ini = e->U_spts;
-  }
 #endif
 
 #ifdef _GPU
-  if (input->nStages > 1 && stage == 0)
-  {
     for (auto e : elesObjs)
       device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
     check_error();
-  }
 #endif
+  }
 
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
@@ -3664,6 +3673,153 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
 
     current_iter++;
   }
+}
+
+#ifdef _CPU
+void FRSolver::step_LSRK_stage_start(int stage)
+#endif
+#ifdef _GPU
+void FRSolver::step_LSRK_stage_start(int stage)
+#endif
+{
+  /* NOTE: this implementation is not the 'true' low-storage implementation
+   * since we are using an additional array 'U_til' instead of swapping
+   * pointers at each stage */
+
+  if (stage == 0)
+  {
+    // Copy current solution into "U_ini" ['rold' in PyFR]
+#ifdef _CPU
+    for (auto e : elesObjs)
+    {
+      e->U_ini = e->U_spts;
+      e->U_til = e->U_spts;
+      e->rk_err.fill(0.0);
+    }
+#endif
+
+#ifdef _GPU
+    for (auto e : elesObjs)
+    {
+      device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
+      device_copy(e->U_til_d, e->U_spts_d, e->U_spts_d.max_size());
+      device_fill(e->rk_err_d, e->rk_err_d.max_size());
+
+      // Get current delta t [dt(0)] (updated on GPU)
+      copy_from_device(e->dt.data(), e->dt_d.data(), 1);
+    }
+
+    check_error();
+#endif
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      x_ini = geo.x_cg;        x_til = geo.x_cg;
+      v_ini = geo.vel_cg;      v_til = geo.vel_cg;
+      q_ini = geo.q;           q_til = geo.q;
+      qdot_ini = geo.qdot;     qdot_til = geo.qdot;
+    }
+  }
+
+  PUSH_NVTX_RANGE("ONE_STAGE",6);
+  flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+  compute_residual_start(0);
+}
+
+#ifdef _CPU
+void FRSolver::step_LSRK_stage_finish(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+#endif
+#ifdef _GPU
+void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+#endif
+{
+  flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+  compute_residual_finish(0);
+
+  rigid_body_update(stage);
+
+  double ai = (stage < rk_alpha.size()) ? rk_alpha(stage) : 0;
+  double bi = rk_beta(stage);
+  double bhi = rk_bhat(stage);
+
+#ifdef _CPU
+  // Update Error
+  for (auto e : elesObjs)
+  {
+    for (unsigned int n = 0; n < e->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
+              e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+        }
+      }
+    }
+
+    // Update solution registers
+    if (stage < input->nStages - 1)
+    {
+      for (unsigned int n = 0; n < e->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - ai * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+
+            e->U_til(spt, n, ele) = e->U_spts(spt, n, ele) - (bi - ai) * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+          }
+        }
+      }
+    }
+    else
+    {
+      for (unsigned int n = 0; n < e->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - bi * e->dt(0) /
+                e->jaco_det_spts(spt, ele) * e->divF_spts(0, spt, n, ele);
+          }
+        }
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  for (auto e : elesObjs)
+  {
+    if (!sourceBT.count(e->etype))
+    {
+      LSRK_update_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d, e->divF_spts_d,
+          e->jaco_det_spts_d, e->dt(0), ai, bi, bhi, e->nSpts, e->nEles,
+          e->nVars, stage, input->nStages, input->overset, geo.iblank_cell_d.data());
+    }
+    else
+    {
+      LSRK_update_source_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d,
+          e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt(0), ai, bi, bhi,
+          e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->overset,
+          geo.iblank_cell_d.data());
+    }
+  }
+  check_error();
+#endif
+  POP_NVTX_RANGE;
+
+  flow_time = prev_time + elesObjs[0]->dt(0);
 }
 
 
@@ -5024,7 +5180,7 @@ void FRSolver::write_averages(const std::string &_prefix)
   std::string filename = input->output_prefix + "/" + prefix + "-" + std::to_string(iter) + ".pyfrs";
 
   if (input->gridID == 0 && input->rank == 0)
-    std::cout << "Writing data to file " << filename << std::endl;
+    std::cout << "Writing time averages to file " << filename << std::endl;
 
   std::stringstream ss;
 
@@ -5094,9 +5250,12 @@ void FRSolver::write_averages(const std::string &_prefix)
   ss << std::endl;
 
   ss << "[solver-time-integrator]" << std::endl;
+  ss << "tcurr = " << flow_time << std::endl;
+  ss << std::endl;
+
+  ss << "[tavg]" << std::endl;
   ss << "tstart = " << restart_time << std::endl;
   ss << "tend = " << flow_time << std::endl;
-  ss << "tcurr = " << flow_time << std::endl;
   //ss << "wall-time = " << input->??"
   ss << std::endl;
 

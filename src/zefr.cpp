@@ -431,17 +431,26 @@ void Zefr::do_rk_stage(int iter, int stage)
 
 void Zefr::do_rk_stage_start(int iter, int stage)
 {
-  solver->step_RK_stage_start(stage);
+  if (input.dt_scheme == "RK54" || input.dt_scheme == "LSRK")
+    solver->step_LSRK_stage_start(stage);
+  else
+    solver->step_RK_stage_start(stage);
 }
 
 void Zefr::do_rk_stage_mid(int iter, int stage)
 {
+  if (input.dt_scheme == "RK54" || input.dt_scheme == "LSRK")
+    stage = 0; // Low-storage RK method has just 1 register for residual
+
   solver->step_RK_stage_mid(stage);
 }
 
 void Zefr::do_rk_stage_finish(int iter, int stage)
 {
-  solver->step_RK_stage_finish(stage);
+  if (input.dt_scheme == "RK54" || input.dt_scheme == "LSRK")
+    solver->step_LSRK_stage_finish(stage);
+  else
+    solver->step_RK_stage_finish(stage);
 
   if (stage == input.nStages-1)
   {
@@ -471,9 +480,6 @@ void Zefr::write_solution(void)
     solver->write_surfaces(input.output_prefix);
   if (input.write_pyfr)
     solver->write_solution_pyfr(input.output_prefix);
-
-  if (input.tavg)
-    write_averages();
 }
 
 void Zefr::update_averages(void)
@@ -812,14 +818,17 @@ void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
                                void (*unblank_part_1)(void), void (*unblank_part_2)(int),
                                void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int))
 {
-//  tg_preprocess = preprocess; //! UNUSED
-//  tg_process_connectivity = connect; //! UNUSED
-//  tg_point_connectivity = point_connect;
-//  tg_set_iter_iblanks = iter_iblanks; //! UNUSED
-//  unblank_1 = unblank_part_1;
-//  unblank_2 = unblank_part_2;
-//  overset_interp_send = dataUpdate_send;
-//  overset_interp_recv = dataUpdate_recv;
+  /*! NOTE: All of these callbacks are not required [in fact, discouraged]
+   *  when using the new HELIOS-compatible Python layer */
+
+  tg_preprocess = preprocess; //! UNUSED
+  tg_process_connectivity = connect; //! UNUSED
+  tg_point_connectivity = point_connect;
+  tg_set_iter_iblanks = iter_iblanks; //! UNUSED
+  unblank_1 = unblank_part_1;
+  unblank_2 = unblank_part_2;
+  overset_interp_send = dataUpdate_send;
+  overset_interp_recv = dataUpdate_recv;
 }
 
 void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* off, int nDims))
