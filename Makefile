@@ -235,3 +235,11 @@ external/%_swig.o: external/%_swig.cpp
 clean:
 	rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(BINDIR)/*.so $(BINDIR)/zefr.pyc $(BINDIR)/zefr.py
 
+# Specific dependancy-tracking build rules
+$(BINDIR)/gimmik_cpu.o: $(SRCDIR)/gimmik_cpu.c include/gimmik.h
+	$(CC) $(INCS) -c -o $@ $< $(FLAGS) $(CCFLAGS) -fopenmp
+
+ifeq ($(strip $(ARCH)),GPU)
+$(BINDIR)/gimmik_gpu.o: $(SRCDIR)/gimmik_gpu.cu include/gimmik.h
+	$(CU) $(INCS) -c -o $@ $< $(FLAGS) $(CUFLAGS)
+endif

@@ -148,6 +148,7 @@ void Faces::apply_bcs()
   std::array<double, 3> VL, VR, VG;
 
   /* Loop over boundary flux points */
+#pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
     if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
@@ -529,6 +530,7 @@ void Faces::apply_bcs_dU()
 {
 #ifdef _CPU
   /* Apply boundaries to solution derivative */
+#pragma omp parallel for
   for (unsigned int fpt = geo->nGfpts_int; fpt < geo->nGfpts_int + geo->nGfpts_bnd; fpt++)
   {
     if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
@@ -1268,6 +1270,7 @@ void Faces::rusanov_flux(unsigned int startFpt, unsigned int endFpt)
   double UR[nVars];
   double V[nDims] = {0.0}; // Grid velocity - only updated if moving grid
 
+#pragma omp parallel for private(FL,FR,UL,UR) firstprivate(V)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
@@ -1389,6 +1392,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
   if (input->fvisc_type == LDG)
   {
 #ifdef _CPU
+#pragma omp parallel for
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
       if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
@@ -1482,6 +1486,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
   double UR[nVars];
   double Fc[nVars];
 
+#pragma omp parallel for private(UL,UR,Fc) firstprivate(tau)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
     if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE)

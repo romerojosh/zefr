@@ -2678,12 +2678,15 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
     {
       if (!sourceBT.count(e->etype))
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
               if (input->dt_type != 2)
               {
                 e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
@@ -2696,15 +2699,19 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
               }
             }
           }
+        }
       }
       else
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
               if (input->dt_type != 2)
               {
                 e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
@@ -2717,6 +2724,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
               }
             }
           }
+        }
       }
     }
 #endif
@@ -2778,11 +2786,15 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
       {
         if (!sourceBT.count(e->etype))
         {
-          for (unsigned int n = 0; n < e->nVars; n++)
-            for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            for (unsigned int n = 0; n < e->nVars; n++)
             {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+              for (unsigned int ele = 0; ele < e->nEles; ele++)
+              {
+                if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
                 if (input->dt_type != 2)
                 {
                   e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
@@ -2793,16 +2805,21 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
                   e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt, ele) *
                       e->divF_spts(stage, spt, n, ele);
                 }
+              }
             }
+          }
         }
         else
         {
-          for (unsigned int n = 0; n < e->nVars; n++)
-            for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            for (unsigned int n = 0; n < e->nVars; n++)
             {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+              for (unsigned int ele = 0; ele < e->nEles; ele++)
               {
+                if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
                 if (input->dt_type != 2)
                 {
                   e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
@@ -2815,6 +2832,7 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
                 }
               }
             }
+          }
         }
       }
     }
@@ -2857,13 +2875,14 @@ void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>>
 #ifdef _CPU
   for (auto e : elesObjs)
   {
-    for (uint n = 0; n < e->nVars; n++)
+    for (uint spt = 0; spt < e->nSpts; spt++)
     {
-      for (uint ele = 0; ele < e->nEles; ele++)
+      for (uint n = 0; n < e->nVars; n++)
       {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        for (uint spt = 0; spt < e->nSpts; spt++)
+#pragma omp parallel for simd reduction(max:max_err)
+        for (uint ele = 0; ele < e->nEles; ele++)
         {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
           double err = std::abs(e->rk_err(spt, n, ele)) /
               (input->atol + input->rtol * std::max( std::abs(e->U_spts(spt, n, ele)), std::abs(e->U_ini(spt, n, ele)) ));
           max_err = std::max(max_err, err);
@@ -3011,13 +3030,16 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     // Update Error
     for (auto e : elesObjs)
     {
-      for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+      for (unsigned int spt = 0; spt < e->nSpts; spt++)
       {
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int n = 0; n < e->nVars; n++)
         {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
             e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
                 e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
           }
@@ -3027,13 +3049,16 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       // Update solution registers
       if (stage < input->nStages - 1)
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
               e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - ai * e->dt(0) /
                   e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
 
@@ -3045,13 +3070,16 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       }
       else
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
               e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - bi * e->dt(0) /
                   e->jaco_det_spts(spt, ele) * e->divF_spts(0, spt, n, ele);
             }
@@ -3317,12 +3345,16 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
     {
       if (!sourceBT.count(e->etype))
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
               if (input->dt_type != 2)
               {
                 e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
@@ -3335,15 +3367,20 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
               }
             }
           }
+        }
       }
       else
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
               if (input->dt_type != 2)
               {
                 e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
@@ -3356,6 +3393,7 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
               }
             }
           }
+        }
       }
     }
 #endif
@@ -3417,11 +3455,16 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
       {
         if (!sourceBT.count(e->etype))
         {
-          for (unsigned int n = 0; n < e->nVars; n++)
-            for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            for (unsigned int n = 0; n < e->nVars; n++)
             {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+              for (unsigned int ele = 0; ele < e->nEles; ele++)
+              {
+                if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
                 if (input->dt_type != 2)
                 {
                   e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
@@ -3432,16 +3475,22 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
                   e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt, ele) *
                       e->divF_spts(stage, spt, n, ele);
                 }
+              }
             }
+          }
         }
         else
         {
-          for (unsigned int n = 0; n < e->nVars; n++)
-            for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            for (unsigned int n = 0; n < e->nVars; n++)
             {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+              for (unsigned int ele = 0; ele < e->nEles; ele++)
               {
+                if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
                 if (input->dt_type != 2)
                 {
                   e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
@@ -3454,6 +3503,7 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
                 }
               }
             }
+          }
         }
       }
     }
@@ -3541,12 +3591,16 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
     {
       if (!sourceBT.count(e->etype))
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
               if (input->dt_type != 2)
               {
                 e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
@@ -3559,15 +3613,20 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
               }
             }
           }
+        }
       }
       else
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
             {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
               if (input->dt_type != 2)
               {
                 e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
@@ -3580,6 +3639,7 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
               }
             }
           }
+        }
       }
     }
 #endif
@@ -3633,11 +3693,16 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
       {
         if (!sourceBT.count(e->etype))
         {
-          for (unsigned int n = 0; n < e->nVars; n++)
-            for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            for (unsigned int n = 0; n < e->nVars; n++)
             {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+              for (unsigned int ele = 0; ele < e->nEles; ele++)
+              {
+                if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
                 if (input->dt_type != 2)
                 {
                   e->U_spts(spt, n, ele) -= rk_beta(rkstage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
@@ -3648,16 +3713,22 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
                   e->U_spts(spt, n, ele) -= rk_beta(rkstage) * e->dt(ele) / e->jaco_det_spts(spt, ele) *
                       e->divF_spts(rkstage, spt, n, ele);
                 }
+              }
             }
+          }
         }
         else
         {
-          for (unsigned int n = 0; n < e->nVars; n++)
-            for (unsigned int ele = 0; ele < e->nEles; ele++)
+#pragma omp parallel for collapse(2)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            for (unsigned int n = 0; n < e->nVars; n++)
             {
-              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+              for (unsigned int ele = 0; ele < e->nEles; ele++)
               {
+                if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
                 if (input->dt_type != 2)
                 {
                   e->U_spts(spt, n, ele) -= rk_beta(rkstage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
@@ -3670,6 +3741,7 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
                 }
               }
             }
+          }
         }
       }
     }
@@ -3772,13 +3844,16 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
   // Update Error
   for (auto e : elesObjs)
   {
-    for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+    for (unsigned int spt = 0; spt < e->nSpts; spt++)
     {
-      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int n = 0; n < e->nVars; n++)
       {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
           e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
               e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
         }
@@ -3788,13 +3863,16 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
     // Update solution registers
     if (stage < input->nStages - 1)
     {
-      for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+      for (unsigned int spt = 0; spt < e->nSpts; spt++)
       {
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int n = 0; n < e->nVars; n++)
         {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
             e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - ai * e->dt(0) /
                 e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
 
@@ -3806,13 +3884,16 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
     }
     else
     {
-      for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+      for (unsigned int spt = 0; spt < e->nSpts; spt++)
       {
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int n = 0; n < e->nVars; n++)
         {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+#pragma omp simd
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
             e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - bi * e->dt(0) /
                 e->jaco_det_spts(spt, ele) * e->divF_spts(0, spt, n, ele);
           }
@@ -6445,13 +6526,14 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
   std::vector<double> res(elesObjs[0]->nVars,0.0);
   for (auto e : elesObjs)
   {
-    for (unsigned int n = 0; n < e->nVars; n++)
+    for (unsigned int spt = 0; spt < e->nSpts; spt++)
     {
-      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int n = 0; n < e->nVars; n++)
       {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
         {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+
           if (input->res_type == 0)
             res[n] = std::max(res[n], std::abs(e->divF_spts(0, spt, n, ele)
                                                / e->jaco_det_spts(spt, ele)));
