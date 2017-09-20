@@ -56,7 +56,13 @@ endif
 ifeq ($(strip $(OPENMP)),YES)
 	CXXFLAGS += -fopenmp
 	CUFLAGS += -Xcompiler -fopenmp
+	CCFLAGS += -fopenmp
 	FLAGS += -D_OMP
+endif
+
+ifeq ($(strip $(GIMMIK)),NO)
+	CXXFLAGS += -D_NO_GIMMIK
+	CUFLAGS += -D_NO_GIMMIK
 endif
 
 # Setting BLAS flags
@@ -139,8 +145,7 @@ BINDIR = $(CURDIR)/bin
 SWIGDIR = $(CURDIR)/swig_bin
 
 TARGET = zefr
-OBJS = $(BINDIR)/elements.o $(BINDIR)/faces.o $(BINDIR)/funcs.o $(BINDIR)/geometry.o $(BINDIR)/hexas.o $(BINDIR)/input.o $(BINDIR)/multigrid.o $(BINDIR)/points.o $(BINDIR)/polynomials.o $(BINDIR)/quads.o $(BINDIR)/solver.o $(BINDIR)/tets.o $(BINDIR)/tris.o $(BINDIR)/filter.o  $(BINDIR)/zefr.o 
-#$(BINDIR)/gimmik_cpu.o
+OBJS = $(BINDIR)/elements.o $(BINDIR)/faces.o $(BINDIR)/funcs.o $(BINDIR)/geometry.o $(BINDIR)/hexas.o $(BINDIR)/input.o $(BINDIR)/multigrid.o $(BINDIR)/points.o $(BINDIR)/polynomials.o $(BINDIR)/quads.o $(BINDIR)/solver.o $(BINDIR)/tets.o $(BINDIR)/tris.o $(BINDIR)/filter.o  $(BINDIR)/zefr.o $(BINDIR)/gimmik_cpu.o
 
 ifeq ($(strip $(ARCH)),GPU)
 	OBJS += $(BINDIR)/elements_kernels.o $(BINDIR)/faces_kernels.o $(BINDIR)/solver_kernels.o  $(BINDIR)/filter_kernels.o $(BINDIR)/gimmik_gpu.o

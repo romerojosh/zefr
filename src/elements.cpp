@@ -1242,9 +1242,8 @@ void Elements::extrapolate_U()
   auto &B = U_spts(0, 0, 0);
   auto &C = U_fpts(0, 0, 0);
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-        nSpts, 1.0, &A, nSpts, &B, nEles * nVars, 0.0, &C, nEles * nVars);
-
+  gimmik_mm_cpu(nFpts, nElesPad * nVars, nSpts, 1.0, &A, nSpts, &B, nElesPad * nVars,
+      0.0, &C, nElesPad * nVars, oppE_id);
 #endif
 
 #ifdef _GPU
@@ -1270,8 +1269,8 @@ void Elements::extrapolate_dU()
     auto &B = dU_spts(dim, 0, 0, 0);
     auto &C = dU_fpts(dim, 0, 0, 0);
 
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nFpts, nEles * nVars,
-        nSpts, 1.0, &A, nSpts, &B, nEles * nVars, 0.0, &C, nEles * nVars);
+    gimmik_mm_cpu(nFpts, nElesPad * nVars, nSpts, 1.0, &A, nSpts, &B, nElesPad * nVars,
+        0.0, &C, nElesPad * nVars, oppE_id);
   }
 #endif
 
@@ -1300,10 +1299,8 @@ void Elements::compute_dU_spts()
   auto &B = U_spts(0, 0, 0);
   auto &C = dU_spts(0, 0, 0, 0);
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts * nDims, 
-      nEles * nVars, nSpts, 1.0, &A, nSpts, &B, nEles * nVars, 
-      0.0, &C, nEles * nVars);
-
+  gimmik_mm_cpu(nSpts * nDims, nElesPad * nVars, nSpts, 1.0, &A, nSpts, &B, nElesPad * nVars,
+      0.0, &C, nElesPad * nVars, oppD_id);
 #endif
 
 #ifdef _GPU
@@ -1330,10 +1327,8 @@ void Elements::compute_dU_fpts()
   auto &B = Ucomm(0, 0, 0);
   auto &C = dU_spts(0, 0, 0, 0);
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts * nDims, 
-      nEles * nVars, nFpts, 1.0, &A, nFpts, &B, nEles * nVars, 
-      1.0, &C, nEles * nVars);
-
+  gimmik_mm_cpu(nSpts * nDims, nElesPad * nVars, nFpts, 1.0, &A, nFpts, &B, nElesPad * nVars,
+      1.0, &C, nElesPad * nVars, oppD_fpts_id);
 #endif
 
 #ifdef _GPU
@@ -1360,8 +1355,8 @@ void Elements::compute_divF_spts(unsigned int stage)
   auto &B = F_spts(0, 0, 0, 0);
   auto &C = divF_spts(stage, 0, 0, 0);
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-        nSpts * nDims, 1.0, &A, nSpts * nDims, &B, nEles * nVars, 0.0, &C, nEles * nVars);
+  gimmik_mm_cpu(nSpts, nElesPad * nVars, nSpts * nDims, 1.0, &A, nSpts * nDims, &B, nElesPad * nVars,
+      0.0, &C, nElesPad * nVars, oppDiv_id);
 #endif
 
 #ifdef _GPU
@@ -1387,8 +1382,8 @@ void Elements::compute_divF_fpts(unsigned int stage)
   auto &B = Fcomm(0, 0, 0);
   auto &C = divF_spts(stage, 0, 0, 0);
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-      nFpts, 1.0, &A, nFpts, &B, nEles * nVars, 1.0, &C, nEles * nVars);
+  gimmik_mm_cpu(nSpts, nElesPad * nVars, nFpts, 1.0, &A, nFpts, &B, nElesPad * nVars,
+      1.0, &C, nElesPad * nVars, oppDiv_fpts_id);
 #endif
 
 #ifdef _GPU
@@ -1445,8 +1440,8 @@ void Elements::compute_dU_spts_via_divF(unsigned int dim)
   auto &B = F_spts(0, 0, 0, 0);
   auto &C = dU_spts(dim, 0, 0, 0);
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-        nSpts * nDims, 1.0, &A, nSpts * nDims, &B, nEles * nVars, 0.0, &C, nEles * nVars);
+  gimmik_mm_cpu(nSpts, nElesPad * nVars, nSpts * nDims, 1.0, &A, nSpts * nDims, &B, nElesPad * nVars,
+      0.0, &C, nElesPad * nVars, oppDiv_id);
 #endif
 
 #ifdef _GPU
@@ -1471,8 +1466,8 @@ void Elements::compute_dU_fpts_via_divF(unsigned int dim)
   auto &B = Fcomm(0, 0, 0);
   auto &C = dU_spts(dim, 0, 0, 0);
 
-  cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, nSpts, nEles * nVars,
-      nFpts, 1.0, &A, nFpts, &B, nEles * nVars, 1.0, &C, nEles * nVars);
+  gimmik_mm_cpu(nSpts, nElesPad * nVars, nFpts, 1.0, &A, nFpts, &B, nElesPad * nVars,
+      1.0, &C, nElesPad * nVars, oppDiv_fpts_id);
 #endif
 
 #ifdef _GPU

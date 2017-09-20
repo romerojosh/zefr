@@ -30,6 +30,8 @@ SOURCES += \
     src/funcs_kernels.cu \
     src/solver_kernels.cu \
     src/filter_kernels.cu \
+    src/gimmik_gpu.cu \
+    src/gimmik_cpu.c \
     src/zefr_interface.cpp \
     src/zefrWrap.cpp \
     src/filter.cpp \
