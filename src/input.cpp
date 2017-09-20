@@ -497,3 +497,26 @@ void apply_nondim(InputStruct &input)
   input.T_fs = 1.0;
   input.R = input.R_ref;
 }
+
+//! Apply any changes to input parameters from external wrapping layer
+void initialize_inputs(InputStruct &input)
+{
+  switch (input.nStages)
+  {
+    case 1:
+      input.dt_scheme = "Euler"; break;
+    case 4:
+      input.dt_scheme = "RK44"; break;
+    case 5:
+      input.dt_scheme = "RK54"; break;
+  }
+
+  input.implicit_method = false;
+  input.implicit_steady = false;
+  input.dt_type = 0;
+
+  input.initIter = input.iter;
+
+  if (input.viscous && input.equation == EulerNS)
+    apply_nondim(input);
+}

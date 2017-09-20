@@ -60,6 +60,9 @@ public:
   //! Read input file and set basic run parameters
   void read_input(const char *inputfile);
 
+  //! Re-apply parameters in InputStruct that may have been changed in Python
+  void init_inputs(void);
+
   //! Perform preprocessing and prepare to run case
   void setup_solver(void);
 
@@ -71,6 +74,16 @@ public:
 
   //! Call "do_step()" n times
   void do_n_steps(int n);
+
+  //! Run one full time step, including any filtering or multigrid operations
+  void do_rk_stage(int iter, int stage);
+
+  //! Do the first part of an RK stage, up to extrapolate_u
+  void do_rk_stage_start(int iter, int stage);
+  //! Perform residual computation up to corrected gradient for overset interp
+  void do_rk_stage_mid(int iter, int stage);
+  //! Finish residual computation & RK stage after overset gradient interp
+  void do_rk_stage_finish(int iter, int stage);
 
   // Functions to write data to file and/or terminal
   void write_residual(void);
@@ -85,6 +98,10 @@ public:
 
   // Other Misc. Functions
   InputStruct &get_input(void) { return input; }
+
+  DataStruct &get_data(void) { return simData; }
+
+  void get_forces(void);
 
   /* ==== Overset-Related Functions ==== */
 
@@ -145,6 +162,15 @@ public:
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
 
+  //! Move grid to an estimate of the position at t^{n+1} for overset unblanking
+  void move_grid_next(double time);
+
+  //! Move grid to given flow time
+  void move_grid(double time);
+
+  //! Move grid to the flow time specified by the iteration and RK stage
+  void move_grid(int iter, int stage);
+
   void* get_tg_stream_handle(void);
   void* get_tg_event_handle(void);
 
@@ -159,6 +185,7 @@ private:
   // Basic ZEFR Solver Objects
   std::shared_ptr<FRSolver> solver;
   InputStruct input;
+  DataStruct simData;
   std::shared_ptr<PMGrid> pmg;
   GeoStruct *geo;
 

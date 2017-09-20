@@ -82,8 +82,43 @@ int main(int argc, char *argv[])
   for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
     runTime.startTimer();
-    z->do_step();
+
+    if (inp.dt_scheme != "LSRK")
+    {
+      // Can use the new-style method [no callbacks within ZEFR]
+      for (int stage = 0; stage < inp.nStages; stage++)
+      {
+        z->do_rk_stage_start(iter,stage);
+
+        tioga_dataupdate_ab(5, 0);
+
+        z->do_rk_stage_mid(iter,stage);
+
+        if (inp.viscous)
+          tioga_dataupdate_ab(5, 1);
+
+        z->do_rk_stage_finish(iter,stage);
+      }
+    }
+    else
+    {
+      // Adaptive time stepping -> stick to previous method
+      z->do_step();
+    }
+
     runTime.stopTimer();
+
+    if (inp.tavg)
+    {
+      bool do_accum = (iter%inp.tavg_freq == 0 or iter == inp.initIter+1);
+      bool do_write = (iter%inp.write_tavg_freq == 0 || iter == inp.n_steps);
+
+      if (do_accum || do_write)
+        z->update_averages();
+
+      if (do_write)
+        z->write_averages();
+    }
 
     if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
       z->write_residual();
@@ -120,6 +155,9 @@ void initialize_overset(Zefr* z, InputStruct& inp)
   tioga_init_(MPI_COMM_WORLD);
 
   inp.overset = 1;
+
+  /*! NOTE: The following 2 functions are not required [in fact, discouraged]
+   *  when using the new HELIOS-compatible Python layer */
 
   if (inp.motion_type == RIGID_BODY || inp.motion_type == CIRCULAR_TRANS)
     z->set_rigid_body_callbacks(tioga_set_transform);

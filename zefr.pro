@@ -36,7 +36,8 @@ SOURCES += \
     src/zefrWrap.cpp \
     src/filter.cpp \
     src/tris.cpp \
-    src/tets.cpp
+    src/tets.cpp \
+    include/global.i
 
 HEADERS += \
     include/elements_kernels.h \
@@ -63,10 +64,15 @@ HEADERS += \
     include/filter_kernels.h \
     include/flux.hpp \
     include/tris.hpp \
-    include/tets.hpp
+    include/tets.hpp \
+    include/gimmik.h \
+    include/zefrPyGlobals.h
 
 DISTFILES += \
     include/zefr.i \
-    bin/zefrWrap.py \
-    Makefile
+    run/zefrWrap.py \
+    Makefile \
+    run/runfile.dict \
+    run/run_zefr.py \
+    run/zefrInterface.py
 

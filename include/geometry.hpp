@@ -152,6 +152,7 @@ struct GeoStruct
   mdvector<double> Jmat; //! Inertia tensor in body coords
   mdvector<double> Jinv; //! Inverse of inertia tensor in body coords
   mdvector<double> x_cg, vel_cg; //! Position and linear velocity of body frame
+  mdvector<double> tmp_x_cg, tmp_Rmat; //! Temporary data structures for unblank procedure
   mdvector<double> dx_cg;
   mdvector<double> q, qdot; //! Rotation quaternion of body frame (and derivative)
   mdvector<double> Rmat;    //! Matrix form of rotation quaternion

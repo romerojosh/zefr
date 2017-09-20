@@ -1574,6 +1574,240 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
 }
 
+void FRSolver::compute_residual_start(unsigned int stage, int color)
+{
+#ifdef _BUILD_LIB
+  // Record event for start of compute_res (solution up-to-date for calculation)
+  if (input->overset)
+    event_record_wait_pair(2, 0, 3);
+#endif
+
+  /* MCGS: Extrapolate solution on the previous color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (color > -1)
+    elesObjs = elesObjsBC[prev_color];
+  else
+    elesObjs = this->elesObjs;
+
+  /* Extrapolate solution to flux points */
+  for (auto e : elesObjs)
+    e->extrapolate_U();
+
+  /* If "squeeze" stabilization enabled, apply  it */
+  if (input->squeeze)
+  {
+    for (auto e : elesObjs)
+    {
+      e->compute_Uavg();
+      e->poly_squeeze();
+    }
+  }
+
+  // Wait for completion of extrapolated solution before packing MPI buffers
+  event_record_wait_pair(0, 0, 1);
+
+#ifdef _MPI
+  /* Commence sending U data to other processes */
+  faces->send_U_data();
+#endif
+
+  /* Apply boundary conditions to state variables */
+  faces->apply_bcs();
+
+  if (input->viscous && !input->grad_via_div)
+  {
+    /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
+    for (auto e : elesObjs)
+      e->compute_dU_spts();
+  }
+}
+
+void FRSolver::compute_residual_mid(unsigned int stage, int color)
+{
+  unsigned int startFpt = 0; unsigned int endFpt = geo.nGfpts;
+
+#ifdef _MPI
+  endFpt = geo.nGfpts_int + geo.nGfpts_bnd;
+  unsigned int startFptMpi = endFpt;
+#endif
+
+  /* MCGS: Extrapolate solution on the previous color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (color > -1)
+    elesObjs = elesObjsBC[prev_color];
+  else
+    elesObjs = this->elesObjs;
+
+  /* MCGS: Compute, transform and extrapolate gradient on all colors */
+  if (color > -1)
+  {
+    if (input->viscous)
+      elesObjs = this->elesObjs;
+    else
+      elesObjs = elesObjsBC[color];
+  }
+
+#ifdef _MPI
+  /* Commence sending U data to other processes */
+  faces->send_U_data();
+#endif
+
+  /* Apply boundary conditions to state variables */
+  faces->apply_bcs();
+
+  if (input->viscous)
+  {
+    // gradient computation from divergence
+    if (input->grad_via_div)
+    {
+      /* Compute common interface solution and convective flux at non-MPI flux points */
+      faces->compute_common_U(startFpt, endFpt);
+
+      for (unsigned int dim = 0; dim < geo.nDims; dim++)
+      {
+        // Compute unit advection flux at solution points with wavespeed along dim
+        for (auto e : elesObjs)
+          e->compute_unit_advF(dim);
+
+        // Compute solution point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
+        for (auto e : elesObjs)
+          e->compute_dU_spts_via_divF(dim);
+      }
+
+#ifdef _MPI
+      /* Receieve U data */
+      faces->recv_U_data();
+
+      /* Complete computation on remaining flux points */
+      faces->compute_common_U(startFptMpi, geo.nGfpts);
+#endif
+
+      for (unsigned int dim = 0; dim < geo.nDims; dim++)
+      {
+        // Convert common U to common normal advection flux
+        for (auto e : elesObjs)
+          e->common_U_to_F(dim);
+
+        // Compute flux point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
+        for (auto e : elesObjs)
+          e->compute_dU_fpts_via_divF(dim);
+      }
+    }
+    else
+    {
+      /* Compute common interface solution and convective flux at non-MPI flux points */
+      faces->compute_common_U(startFpt, endFpt);
+
+#ifdef _MPI
+      /* Receieve U data */
+      faces->recv_U_data();
+
+      /* Complete computation on remaining flux points */
+      faces->compute_common_U(startFptMpi, geo.nGfpts);
+#endif
+
+      /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
+      for (auto e : elesObjs)
+        e->compute_dU_fpts();
+    }
+  }
+
+  /* Compute flux at solution points */
+  for (auto e : elesObjs)
+    e->compute_F();
+
+  if (input->viscous)
+  {
+#ifdef _BUILD_LIB
+    // Wait for completion of corrected *and transformed* gradient before sending
+    if (input->overset)
+      event_record_wait_pair(3, 0, 3);
+#endif
+
+    /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
+    for (auto e : elesObjs)
+      e->extrapolate_dU();
+
+    // Wait for completion of extrapolated gradient before packing MPI buffers
+    event_record_wait_pair(0, 0, 1);
+
+#ifdef _BUILD_LIB
+    if (input->overset)
+      event_record_wait_pair(4, 0, 3);
+#endif
+
+#ifdef _MPI
+    /* Commence sending gradient data to other processes */
+    faces->send_dU_data();
+#endif
+
+    /* Apply boundary conditions to the gradient */
+    faces->apply_bcs_dU();
+
+    /* MCGS: Compute residual on current color */
+    if (color > -1)
+      elesObjs = elesObjsBC[color];
+  }
+
+  /* Compute solution point contribution to divergence of flux */
+  for (auto e : elesObjs)
+    e->compute_divF_spts(stage);
+}
+
+
+void FRSolver::compute_residual_finish(unsigned int stage, int color)
+{
+  unsigned int startFpt = 0; unsigned int endFpt = geo.nGfpts;
+
+#ifdef _MPI
+  endFpt = geo.nGfpts_int + geo.nGfpts_bnd;
+  unsigned int startFptMpi = endFpt;
+#endif
+
+  /* MCGS: Extrapolate solution on the previous color */
+  std::vector<std::shared_ptr<Elements>> elesObjs;
+  if (color > -1)
+    elesObjs = elesObjsBC[prev_color];
+  else
+    elesObjs = this->elesObjs;
+
+#ifdef _BUILD_LIB
+  // Wait for updated data on GPU before moving on to common_F
+  if (input->overset)
+    event_record_wait_pair(2, 3, 0);
+#endif
+
+  /* Compute common interface flux at non-MPI flux points */
+  faces->compute_common_F(startFpt, endFpt);
+
+#ifdef _MPI
+  if (!input->viscous)
+  {
+    /* Receive solution data */
+    faces->recv_U_data();
+  }
+  else
+  {
+    /* Receive gradient data */
+    faces->recv_dU_data();
+  }
+
+  /* Complete computation of fluxes */
+  faces->compute_common_F(startFptMpi, geo.nGfpts);
+#endif
+
+  /* Compute flux point contribution to divergence of flux */
+  for (auto e : elesObjs)
+    e->compute_divF_fpts(stage);
+
+  /* Add source term (if required) */
+  if (input->source)
+  {
+    for (auto e : elesObjs)
+      e->add_source(stage, flow_time);
+  }
+}
+
 void FRSolver::compute_dRdU()
 {
   if (!input->FDA_Jacobian)
@@ -3007,6 +3241,588 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 #endif
 }
 
+#ifdef _CPU
+void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+#endif
+#ifdef _GPU
+void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+#endif
+{
+#ifdef _CPU
+  if (input->nStages > 1 && stage == 0)
+  {
+    for (auto e : elesObjs)
+      e->U_ini = e->U_spts;
+  }
+#endif
+
+#ifdef _GPU
+  if (input->nStages > 1 && stage == 0)
+  {
+    for (auto e : elesObjs)
+      device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
+    check_error();
+  }
+#endif
+
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? input->nStages : input->nStages - 1;
+
+  if (stage < nSteps)
+  {
+    /* Main stage loop. Complete for Jameson-style RK timestepping */
+    flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+    move(flow_time);
+
+    compute_residual(stage);
+
+    rigid_body_update(stage);
+
+    /* If in first stage, compute stable timestep */
+    if (stage == 0)
+    {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+    }
+
+#ifdef _CPU
+    for (auto e : elesObjs)
+    {
+      if (!sourceBT.count(e->etype))
+      {
+        for (unsigned int n = 0; n < e->nVars; n++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            {
+              if (input->dt_type != 2)
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(stage, spt, n, ele);
+              }
+              else
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(stage, spt, n, ele);
+              }
+            }
+          }
+      }
+      else
+      {
+        for (unsigned int n = 0; n < e->nVars; n++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            {
+              if (input->dt_type != 2)
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt, ele) * (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+              }
+              else
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt, ele) * (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+              }
+            }
+          }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? input->nStages + 1 : input->nStages;
+
+    for (auto e : elesObjs)
+    {
+      if (!sourceBT.count(e->etype))
+      {
+        RK_update_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
+                          rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+                          input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+      }
+      else
+      {
+        RK_update_source_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
+                                 rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+                                 input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+      }
+    }
+    check_error();
+#endif
+  }
+
+  /* Final stage combining residuals for full Butcher table style RK timestepping*/
+  if (stage == nSteps && input->dt_scheme != "RKj")
+  {
+    flow_time = prev_time + rk_c(input->nStages-1) * elesObjs[0]->dt(0);
+
+    move(flow_time);
+
+    compute_residual(input->nStages-1);
+
+    rigid_body_update(input->nStages-1);
+
+    if (input->nStages > 1)
+    {
+#ifdef _CPU
+      for (auto e : elesObjs)
+        e->U_spts = e->U_ini;
+#endif
+#ifdef _GPU
+      for (auto e : elesObjs)
+        device_copy(e->U_spts_d, e->U_ini_d, e->U_spts_d.max_size());
+#endif
+    }
+    else if (input->dt_type != 0)
+    {
+      compute_element_dt();
+    }
+
+#ifdef _CPU
+    for (auto e : elesObjs)
+    {
+      for (unsigned int stage = 0; stage < input->nStages; stage++)
+      {
+        if (!sourceBT.count(e->etype))
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+                if (input->dt_type != 2)
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
+                      e->divF_spts(stage, spt, n, ele);
+                }
+                else
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt, ele) *
+                      e->divF_spts(stage, spt, n, ele);
+                }
+            }
+        }
+        else
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              {
+                if (input->dt_type != 2)
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
+                      (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+                }
+                else
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(stage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
+                      (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+                }
+              }
+            }
+        }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    for (auto e : elesObjs)
+    {
+      if (!sourceBT.count(e->etype))
+      {
+        RK_update_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
+                          rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+                          input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
+      }
+      else
+      {
+        RK_update_source_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
+                                 rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+                                 input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
+      }
+    }
+
+    check_error();
+#endif
+  }
+
+}
+
+void FRSolver::step_RK_stage_start(int stage)
+{
+  if (input->nStages > 1 && stage == 0)
+  {
+#ifdef _CPU
+    for (auto e : elesObjs)
+      e->U_ini = e->U_spts;
+#endif
+
+#ifdef _GPU
+    for (auto e : elesObjs)
+      device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
+    check_error();
+#endif
+  }
+
+  /* Main stage loop. Complete for Jameson-style RK timestepping */
+  flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+  compute_residual_start(stage);
+}
+
+void FRSolver::step_RK_stage_mid(int stage)
+{
+  compute_residual_mid(stage);
+}
+
+#ifdef _CPU
+void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+#endif
+#ifdef _GPU
+void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+#endif
+{
+  unsigned int nSteps = (input->dt_scheme == "RKj") ? input->nStages : input->nStages - 1;
+
+  flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+  compute_residual_finish(stage);
+
+  rigid_body_update(stage);
+
+  if (stage < nSteps)
+  {
+    /* If in first stage, compute stable timestep */
+    if (stage == 0)
+    {
+      // TODO: Revisit this as it is kind of expensive.
+      if (input->dt_type != 0)
+      {
+        compute_element_dt();
+      }
+    }
+
+#ifdef _CPU
+    for (auto e : elesObjs)
+    {
+      if (!sourceBT.count(e->etype))
+      {
+        for (unsigned int n = 0; n < e->nVars; n++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            {
+              if (input->dt_type != 2)
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(stage, spt, n, ele);
+              }
+              else
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt, ele) * e->divF_spts(stage, spt, n, ele);
+              }
+            }
+          }
+      }
+      else
+      {
+        for (unsigned int n = 0; n < e->nVars; n++)
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            {
+              if (input->dt_type != 2)
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(0) /
+                    e->jaco_det_spts(spt, ele) * (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+              }
+              else
+              {
+                e->U_spts(spt, n, ele) = e->U_ini(spt, n, ele) - rk_alpha(stage) * e->dt(ele) /
+                    e->jaco_det_spts(spt, ele) * (e->divF_spts(stage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+              }
+            }
+          }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    /* Increase last_stage if using RKj timestepping to bypass final stage branch in kernel. */
+    unsigned int last_stage = (input->dt_scheme == "RKj") ? input->nStages + 1 : input->nStages;
+
+    for (auto e : elesObjs)
+    {
+      if (!sourceBT.count(e->etype))
+      {
+        RK_update_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
+                                 rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+                                 input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+      }
+      else
+      {
+        RK_update_source_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
+                                 rk_alpha_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+                                 input->equation, stage, last_stage, false, input->overset, geo.iblank_cell_d.data());
+      }
+    }
+    check_error();
+#endif
+  }
+
+  /* Final stage combining residuals for full Butcher table style RK timestepping*/
+  else if (stage == nSteps && input->dt_scheme != "RKj")
+  {
+    if (input->nStages > 1)
+    {
+#ifdef _CPU
+      for (auto e : elesObjs)
+        e->U_spts = e->U_ini;
+#endif
+#ifdef _GPU
+      for (auto e : elesObjs)
+        device_copy(e->U_spts_d, e->U_ini_d, e->U_spts_d.max_size());
+#endif
+    }
+    else if (input->dt_type != 0)
+    {
+      compute_element_dt();
+    }
+
+#ifdef _CPU
+    for (auto e : elesObjs)
+    {
+      for (unsigned int rkstage = 0; rkstage < input->nStages; rkstage++)
+      {
+        if (!sourceBT.count(e->etype))
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+                if (input->dt_type != 2)
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(rkstage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
+                      e->divF_spts(rkstage, spt, n, ele);
+                }
+                else
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(rkstage) * e->dt(ele) / e->jaco_det_spts(spt, ele) *
+                      e->divF_spts(rkstage, spt, n, ele);
+                }
+            }
+        }
+        else
+        {
+          for (unsigned int n = 0; n < e->nVars; n++)
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+              for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              {
+                if (input->dt_type != 2)
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(rkstage) * e->dt(0) / e->jaco_det_spts(spt, ele) *
+                      (e->divF_spts(rkstage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+                }
+                else
+                {
+                  e->U_spts(spt, n, ele) -= rk_beta(rkstage) * e->dt(ele) / e->jaco_det_spts(spt,ele) *
+                      (e->divF_spts(rkstage, spt, n, ele) + sourceBT.at(e->etype)(spt, n, ele));
+                }
+              }
+            }
+        }
+      }
+    }
+#endif
+
+#ifdef _GPU
+    for (auto e : elesObjs)
+    {
+      if (!sourceBT.count(e->etype))
+      {
+        RK_update_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d,
+            rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+            input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
+      }
+      else
+      {
+        RK_update_source_wrapper(e->U_spts_d, e->U_spts_d, e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt_d,
+            rk_beta_d, input->dt_type, e->nSpts, e->nEles, e->nVars, e->nDims,
+            input->equation, 0, input->nStages, true, input->overset, geo.iblank_cell_d.data());
+      }
+    }
+
+    check_error();
+#endif
+
+    current_iter++;
+  }
+}
+
+#ifdef _CPU
+void FRSolver::step_LSRK_stage_start(int stage)
+#endif
+#ifdef _GPU
+void FRSolver::step_LSRK_stage_start(int stage)
+#endif
+{
+  /* NOTE: this implementation is not the 'true' low-storage implementation
+   * since we are using an additional array 'U_til' instead of swapping
+   * pointers at each stage */
+
+  if (stage == 0)
+  {
+    // Copy current solution into "U_ini" ['rold' in PyFR]
+#ifdef _CPU
+    for (auto e : elesObjs)
+    {
+      e->U_ini = e->U_spts;
+      e->U_til = e->U_spts;
+      e->rk_err.fill(0.0);
+    }
+#endif
+
+#ifdef _GPU
+    for (auto e : elesObjs)
+    {
+      device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
+      device_copy(e->U_til_d, e->U_spts_d, e->U_spts_d.max_size());
+      device_fill(e->rk_err_d, e->rk_err_d.max_size());
+
+      // Get current delta t [dt(0)] (updated on GPU)
+      copy_from_device(e->dt.data(), e->dt_d.data(), 1);
+    }
+
+    check_error();
+#endif
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      x_ini = geo.x_cg;        x_til = geo.x_cg;
+      v_ini = geo.vel_cg;      v_til = geo.vel_cg;
+      q_ini = geo.q;           q_til = geo.q;
+      qdot_ini = geo.qdot;     qdot_til = geo.qdot;
+    }
+  }
+
+  PUSH_NVTX_RANGE("ONE_STAGE",6);
+  flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+  compute_residual_start(0);
+}
+
+#ifdef _CPU
+void FRSolver::step_LSRK_stage_finish(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+#endif
+#ifdef _GPU
+void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+#endif
+{
+  flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
+  compute_residual_finish(0);
+
+  rigid_body_update(stage);
+
+  double ai = (stage < rk_alpha.size()) ? rk_alpha(stage) : 0;
+  double bi = rk_beta(stage);
+  double bhi = rk_bhat(stage);
+
+#ifdef _CPU
+  // Update Error
+  for (auto e : elesObjs)
+  {
+    for (unsigned int n = 0; n < e->nVars; n++)
+    {
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
+              e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+        }
+      }
+    }
+
+    // Update solution registers
+    if (stage < input->nStages - 1)
+    {
+      for (unsigned int n = 0; n < e->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - ai * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+
+            e->U_til(spt, n, ele) = e->U_spts(spt, n, ele) - (bi - ai) * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+          }
+        }
+      }
+    }
+    else
+    {
+      for (unsigned int n = 0; n < e->nVars; n++)
+      {
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+          {
+            e->U_spts(spt, n, ele) = e->U_til(spt, n, ele) - bi * e->dt(0) /
+                e->jaco_det_spts(spt, ele) * e->divF_spts(0, spt, n, ele);
+          }
+        }
+      }
+    }
+  }
+#endif
+
+#ifdef _GPU
+  for (auto e : elesObjs)
+  {
+    if (!sourceBT.count(e->etype))
+    {
+      LSRK_update_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d, e->divF_spts_d,
+          e->jaco_det_spts_d, e->dt(0), ai, bi, bhi, e->nSpts, e->nEles,
+          e->nVars, stage, input->nStages, input->overset, geo.iblank_cell_d.data());
+    }
+    else
+    {
+      LSRK_update_source_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d,
+          e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt(0), ai, bi, bhi,
+          e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->overset,
+          geo.iblank_cell_d.data());
+    }
+  }
+  check_error();
+#endif
+  POP_NVTX_RANGE;
+
+  flow_time = prev_time + elesObjs[0]->dt(0);
+}
+
+
 void FRSolver::compute_element_dt()
 {
 #ifdef _CPU
@@ -4364,7 +5180,7 @@ void FRSolver::write_averages(const std::string &_prefix)
   std::string filename = input->output_prefix + "/" + prefix + "-" + std::to_string(iter) + ".pyfrs";
 
   if (input->gridID == 0 && input->rank == 0)
-    std::cout << "Writing data to file " << filename << std::endl;
+    std::cout << "Writing time averages to file " << filename << std::endl;
 
   std::stringstream ss;
 
@@ -4434,9 +5250,12 @@ void FRSolver::write_averages(const std::string &_prefix)
   ss << std::endl;
 
   ss << "[solver-time-integrator]" << std::endl;
+  ss << "tcurr = " << flow_time << std::endl;
+  ss << std::endl;
+
+  ss << "[tavg]" << std::endl;
   ss << "tstart = " << restart_time << std::endl;
   ss << "tend = " << flow_time << std::endl;
-  ss << "tcurr = " << flow_time << std::endl;
   //ss << "wall-time = " << input->??"
   ss << std::endl;
 
@@ -6718,6 +7537,7 @@ void FRSolver::init_grid_motion(double time)
 
   grid_time = time;
 }
+
 void FRSolver::move(double time, bool update_iblank)
 {
   if (!input->motion) return;
@@ -6806,7 +7626,6 @@ void FRSolver::move(double time, bool update_iblank)
 #endif // _BUILD_LIB
   }
 
-
   if (input->motion_type != RIGID_BODY)
   {
 #ifdef _CPU
@@ -6863,6 +7682,135 @@ void FRSolver::move(double time, bool update_iblank)
     PUSH_NVTX_RANGE("TG-PT-CONN",3);
     ZEFR->tg_point_connectivity();
     POP_NVTX_RANGE;
+  }
+#endif
+
+  grid_time = time;
+}
+
+void FRSolver::move_grid_next(double time)
+{
+  if (!input->motion || !input->overset) return;
+
+#ifdef _BUILD_LIB
+  // Guess grid position at end of time step and perform blanking procedure
+  geo.tmp_x_cg = geo.x_cg;
+  geo.tmp_Rmat = geo.Rmat;
+  double dt = elesObjs[0]->dt(0);
+
+  for (unsigned int d = 0; d < geo.nDims; d++)
+    geo.x_cg(d) += dt * geo.vel_cg(d);
+
+  if (input->motion_type == RIGID_BODY)
+  {
+    Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
+    Quat qdot(geo.qdot(0),geo.qdot(1),geo.qdot(2),geo.qdot(3));
+
+    q.normalize();
+    for (unsigned int i = 0; i < 4; i++)
+      q[i] += qdot[i] * dt;
+
+    geo.Rmat = getRotationMatrix(q);
+
+#ifdef _CPU
+    // Update grid position based on rigid-body motion: CG offset + rotation
+    for (unsigned int i = 0; i < geo.nNodes; i++)
+      for (unsigned int d = 0; d < geo.nDims; d++)
+        geo.coord_nodes(i,d) = geo.x_cg(d);
+
+    auto &A = geo.coords_init;
+    auto &B = geo.Rmat;  /// TODO: double-check orientation
+    auto &C = geo.coord_nodes;
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo.nNodes, geo.nDims, geo.nDims,
+                1.0, A.data(), A.ldim(), B.data(), B.ldim(), 1.0, C.data(), C.ldim());
+#endif
+
+#ifdef _GPU
+    geo.x_cg_d = geo.x_cg;
+    geo.Rmat_d = geo.Rmat;
+
+    update_nodes_rigid_wrapper(geo.coords_init_d, geo.coord_nodes_d, geo.Rmat_d,
+                               geo.x_cg_d, geo.nNodes, geo.nDims);
+
+    copy_coords_ele_wrapper(eles->nodes_d, geo.coord_nodes_d,
+                            geo.ele2nodesBT_d[HEX], eles->nNodes, eles->nNodes, eles->nDims);
+#endif
+  }
+  else
+  {
+#ifdef _CPU
+    for (unsigned int nd = 0; nd < geo.nNodes; nd++)
+      for (unsigned int dim = 0; dim < geo.nDims; dim++)
+        geo.coord_nodes(nd,dim) += geo.grid_vel_nodes(nd,dim) * dt;
+#endif
+
+#ifdef _GPU
+    geo.x_cg_d = geo.x_cg;
+
+    estimate_point_positions_nodes_wrapper(geo.coord_nodes_d,
+                                           geo.grid_vel_nodes_d,dt,geo.nNodes,geo.nDims);
+#endif
+  }
+
+#ifdef _GPU
+  geo.coord_nodes = geo.coord_nodes_d;
+#endif
+#endif // _BUILD_LIB
+}
+
+
+void FRSolver::move_grid_now(double time)
+{
+  if (!input->motion) return;
+
+  // Reset position & orientation to original values
+  geo.x_cg = geo.tmp_x_cg;
+  geo.Rmat = geo.tmp_Rmat;
+#ifdef _GPU
+  geo.x_cg_d = geo.x_cg;
+  geo.Rmat_d = geo.Rmat;
+#endif
+
+  if (input->motion_type != RIGID_BODY)
+  {
+#ifdef _CPU
+    move_grid(input, geo, time);
+#endif
+#ifdef _GPU
+    move_grid_wrapper(geo.coord_nodes_d, geo.coords_init_d, geo.grid_vel_nodes_d,
+                      motion_vars, geo.nNodes, geo.nDims, input->motion_type, time, geo.gridID);
+    check_error();
+#endif
+  }
+
+  for (auto e : elesObjs)
+    e->move(faces);
+
+#ifdef _BUILD_LIB
+  // Update the overset connectivity to the new grid positions
+  if (input->overset)
+  {
+    if (input->motion_type == CIRCULAR_TRANS || input->motion_type == RIGID_BODY)
+    {
+      if (input->motion_type == CIRCULAR_TRANS)
+      {
+        geo.x_cg.assign({3},0.0);
+
+        if (input->gridID == 0)
+        {
+          geo.x_cg(0) = input->moveAx*sin(2.*pi*input->moveFx*time);
+          geo.x_cg(1) = input->moveAy*(1-cos(2.*pi*input->moveFy*time));
+          if (geo.nDims == 3)
+            geo.x_cg(2) = -input->moveAz*sin(2.*pi*input->moveFz*time);
+        }
+        geo.tmp_x_cg = geo.x_cg;
+      }
+    }
+
+#ifdef _GPU
+    geo.coord_nodes = geo.coord_nodes_d;
+#endif
   }
 #endif
 
@@ -7073,6 +8021,8 @@ void FRSolver::rigid_body_update(unsigned int stage)
       for (unsigned int k = 0; k < 3; k++)
         geo.Wmat(i,j) += geo.Rmat(i,k) * W(k,j);
 
+  geo.tmp_x_cg = geo.x_cg;
+  geo.tmp_Rmat = geo.Rmat;
 #ifdef _GPU
   geo.x_cg_d = geo.x_cg;
   geo.vel_cg_d = geo.vel_cg;
