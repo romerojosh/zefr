@@ -127,7 +127,7 @@ class Elements
     mdview<double> inv_jacoN_spts, jacoN_det_spts;
 
     /* Element structures for implicit method */
-    mdvector<double> LHS, LHSinv, RHS, deltaU;
+    mdvector<double> LHS, LHSinv, RHS, deltaU, U_iniNM;
 #ifdef _CPU
     unsigned int svd_rank;
     std::vector<Eigen::PartialPivLU<Eigen::MatrixXd>> LU_ptrs;
@@ -195,7 +195,7 @@ class Elements
     mdview_gpu<double> inv_jacoN_spts_d, jacoN_det_spts_d;
 
     /* Element structures for implicit method */
-    mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d;
+    mdvector_gpu<double> LHS_d, LHSinv_d, RHS_d, deltaU_d, U_iniNM_d;
     mdvector_gpu<double*> LHS_ptrs_d, LHSinv_ptrs_d, RHS_ptrs_d, deltaU_ptrs_d;
     mdvector_gpu<int> LHS_info_d;
 

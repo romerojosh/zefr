@@ -258,20 +258,20 @@ InputStruct read_input_file(std::string inputfile)
     // Note: only valid for quad and hex elements
     read_param(f, "KPF_Jacobian", input.KPF_Jacobian, false);
 
-    /* Freeze Jacobian */
-    // Note: frequency based on n_steps
+    /* Freeze Jacobian across all stages in unsteady simulation */
     if (input.dt_scheme == "Steady")
-      input.Jfreeze_freq = 1;
+      input.freeze_Jacobian = false;
     else
-      read_param(f, "Jfreeze_freq", input.Jfreeze_freq, (unsigned int) 1);
+      read_param(f, "freeze_Jacobian", input.freeze_Jacobian, true);
 
     /* Pseudo Timestepping */
     // Note: based on physical time
     read_param(f, "pseudo_time", input.pseudo_time, false);
     if (input.pseudo_time)
     {
+      // Note: Removing deltaU speeds up convergence from freestream
+      read_param(f, "remove_deltaU", input.remove_deltaU, false);
       read_param(f, "dtau_ratio", input.dtau_ratio, 1.0);
-
       read_param(f, "adapt_dtau", input.adapt_dtau, false);
       if (input.adapt_dtau)
       {
@@ -288,7 +288,6 @@ InputStruct read_input_file(std::string inputfile)
     }
     else
       read_param(f, "iterNM_max", input.iterNM_max, (unsigned int) 1);
-
     read_param(f, "report_NMconv_freq", input.report_NMconv_freq, (unsigned int) 0);
 
     /* Block iterative method */
@@ -296,7 +295,6 @@ InputStruct read_input_file(std::string inputfile)
     read_param(f, "iterBM_max", input.iterBM_max, (unsigned int) 100);
     read_param(f, "backsweep", input.backsweep, false);
     read_param(f, "report_BMconv_freq", input.report_BMconv_freq, (unsigned int) 0);
-
     if (str == "JAC")
       input.iterative_method = JAC;
     else if (str == "MCGS")

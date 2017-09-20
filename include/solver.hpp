@@ -90,10 +90,11 @@ class FRSolver
 
     /* Implicit method parameters */
     typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
-    unsigned int nCounter;
-    int prev_color = 0;
     std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
     mdvector<unsigned int> ele2elesObj;
+    double dtau_ratio;
+    unsigned int nCounter;
+    int prev_color = 0;
     unsigned int report_NMconv_freq;
     std::ofstream conv_file;
     std::chrono::high_resolution_clock::time_point timer1;
@@ -143,6 +144,7 @@ class FRSolver
     /* Routines for implicit method */
     void set_fpt_adjacency();
     void setup_jacoN_views();
+    void compute_LHS(unsigned int stage);
     void compute_dRdU();
     void compute_LHS_LU();
     void compute_LHS_inverse();

@@ -832,6 +832,8 @@ void FRSolver::setup_update()
   else if (input->dt_scheme == "Steady")
   {
     input->nStages = 1;
+    rk_alpha.assign({input->nStages, input->nStages});
+    rk_alpha(0, 0) = 1.0;
   }
   else if (input->dt_scheme == "DIRK34")
   {
@@ -863,6 +865,9 @@ void FRSolver::setup_update()
 
   if (input->implicit_method)
   {
+    if (input->pseudo_time)
+      dtau_ratio = input->dtau_ratio;
+
     if (input->iterative_method == JAC)
       nCounter = 1;
     else if (input->iterative_method == MCGS)
@@ -1206,6 +1211,9 @@ void FRSolver::solver_data_to_device()
 
     if (input->implicit_method)
     {
+      if (input->pseudo_time && !input->remove_deltaU)
+        e->U_iniNM_d = e->U_iniNM;
+
       if (input->KPF_Jacobian)
       {
         e->oppD_spts1D_d = e->oppD_spts1D;
@@ -1808,6 +1816,78 @@ void FRSolver::compute_residual_finish(unsigned int stage, int color)
   }
 }
 
+void FRSolver::compute_LHS(unsigned int stage)
+{
+  /* Compute block diagonal components of residual Jacobian */
+  PUSH_NVTX_RANGE("compute_dRdU",1);
+  compute_dRdU();
+  POP_NVTX_RANGE;
+
+#ifdef _CPU
+  /* Apply stage dt to LHS */
+  if (!input->implicit_steady)
+  {
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        double dt = (input->dt_type != 2) ? e->dt(0) : e->dt(ele);
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+            for (unsigned int varj = 0; varj < e->nVars; varj++)
+              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+              {
+                e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * dt;
+                if (spti == sptj && vari == varj)
+                  e->LHS(ele, vari, spti, varj, sptj) += 1;
+              }
+      }
+  }
+
+  /* Apply pseudo dt to LHS */
+  if (input->pseudo_time)
+  {
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        double dtau = dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele));
+        for (unsigned int vari = 0; vari < e->nVars; vari++)
+          for (unsigned int spti = 0; spti < e->nSpts; spti++)
+            for (unsigned int varj = 0; varj < e->nVars; varj++)
+              for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
+              {
+                e->LHS(ele, vari, spti, varj, sptj) *= dtau;
+                if (spti == sptj && vari == varj)
+                  e->LHS(ele, vari, spti, varj, sptj) += 1;
+              }
+      }
+  }
+#endif
+
+#ifdef _GPU
+  /* Apply stage dt to LHS */
+  if (!input->implicit_steady)
+  {
+    for (auto e : elesObjs)
+      apply_dt_LHS_wrapper(e->LHS_d, e->dt_d, rk_alpha(stage,stage), 
+          input->dt_type, e->nSpts, e->nEles, e->nVars);
+    check_error();
+  }
+
+  /* Apply pseudo dt to LHS */
+  if (input->pseudo_time)
+  {
+    for (auto e : elesObjs)
+      apply_dt_LHS_wrapper(e->LHS_d, e->dt_d, dtau_ratio, 
+          input->dt_type, e->nSpts, e->nEles, e->nVars);
+    check_error();
+  }
+#endif
+
+  /* Write LHS */
+  if (input->write_LHS)
+    write_LHS(input->output_prefix);
+}
+
 void FRSolver::compute_dRdU()
 {
   if (!input->FDA_Jacobian)
@@ -2004,70 +2084,74 @@ void FRSolver::compute_RHS(unsigned int stage, int color)
     elesObjs = this->elesObjs;
 
 #ifdef _CPU
-  if (input->implicit_steady)
-    for (auto e : elesObjs)
-      for (unsigned int ele = 0; ele < e->nEles; ele++)
-        for (unsigned int var = 0; var < e->nVars; var++)
-          for (unsigned int spt = 0; spt < e->nSpts; spt++)
-            e->RHS(ele, var, spt) = -e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          e->RHS(ele, var, spt) = -rk_alpha(0,0) * e->divF_spts(0, spt, var, ele) / e->jaco_det_spts(spt, ele);
+          for (unsigned int s = 1; s <= stage; s++)
+            e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
+        }
 
-  else
+  if (!input->implicit_steady)
   {
     for (auto e : elesObjs)
       for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        double dt = (input->dt_type != 2) ? e->dt(0) : e->dt(ele);
         for (unsigned int var = 0; var < e->nVars; var++)
           for (unsigned int spt = 0; spt < e->nSpts; spt++)
-            e->RHS(ele, var, spt) = -(e->U_spts(spt, var, ele) - e->U_ini(spt, var, ele));
+            e->RHS(ele, var, spt) *= dt;
+      }
 
-      for (auto e : elesObjs)
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-        {
-          double dt = (input->dt_type != 2) ? e->dt(0) : e->dt(ele);
-          for (unsigned int var = 0; var < e->nVars; var++)
-            for (unsigned int spt = 0; spt < e->nSpts; spt++)
-              for (unsigned int s = 0; s <= stage; s++)
-                e->RHS(ele, var, spt) -= rk_alpha(stage, s) * dt * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
-        }
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            e->RHS(ele, var, spt) -= (e->U_spts(spt, var, ele) - e->U_ini(spt, var, ele));
   }
 
   if (input->pseudo_time)
+  {
     for (auto e : elesObjs)
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        double dtau = input->dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele));
+        double dtau = dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele));
         for (unsigned int var = 0; var < e->nVars; var++)
           for (unsigned int spt = 0; spt < e->nSpts; spt++)
             e->RHS(ele, var, spt) *= dtau;
       }
+
+    if (!input->remove_deltaU)
+    {
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int var = 0; var < e->nVars; var++)
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)
+              e->RHS(ele, var, spt) -= (e->U_spts(spt, var, ele) - e->U_iniNM(spt, var, ele));
+    }
+  }
 #endif
 
 #ifdef _GPU
-  if (input->implicit_steady)
+  /* Compute RHS in deltaU (in-place solve) */
+  if (input->linear_solver == LU)
   {
-    /* Compute RHS in deltaU (in-place solve) */
-    if (input->linear_solver == LU)
-      for (auto e : elesObjs)
-        compute_RHS_steady_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->deltaU_d, 
-            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars);
-    else
-      for (auto e : elesObjs)
-        compute_RHS_steady_wrapper(e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, e->RHS_d, 
-            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars);
+    for (auto e : elesObjs)
+      compute_RHS_wrapper(e->U_spts_d, e->U_iniNM_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, 
+          e->dt_d, rk_alpha_d, e->deltaU_d, dtau_ratio, input->implicit_steady, input->pseudo_time, 
+          input->remove_deltaU, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
+    check_error();
   }
-
   else
   {
-    /* Compute RHS in deltaU (in-place solve) */
-    if (input->linear_solver == LU)
-      for (auto e : elesObjs)
-        compute_RHS_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_alpha_d, e->deltaU_d, 
-            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
-    else
-      for (auto e : elesObjs)
-        compute_RHS_wrapper(e->U_spts_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_alpha_d, e->RHS_d, 
-            input->pseudo_time, input->dtau_ratio, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
+    for (auto e : elesObjs)
+      compute_RHS_wrapper(e->U_spts_d, e->U_iniNM_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, 
+          e->dt_d, rk_alpha_d, e->RHS_d, dtau_ratio, input->implicit_steady, input->pseudo_time, 
+          input->remove_deltaU, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
+    check_error();
   }
-  check_error();
 #endif
 }
 
@@ -3009,99 +3093,57 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
 void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
+  if (input->pseudo_time)
+  {
+    /* Store initial U */
+    if (!input->remove_deltaU)
+    {
+#ifdef _CPU
+      for (auto e : elesObjs)
+        e->U_iniNM = e->U_spts;
+#endif
+#ifdef _GPU
+      for (auto e : elesObjs)
+        device_copy(e->U_iniNM_d, e->U_spts_d, e->U_spts_d.max_size());
+      check_error();
+#endif
+    }
+
+    /* Adapt dtau_ratio */
+    if (input->adapt_dtau)
+    {
+      if (iterNM == 1)
+        dtau_ratio = input->dtau_ratio;
+      else
+      {
+        dtau_ratio *= (1.0 + input->dtau_growth_rate);
+        if (dtau_ratio > input->dtau_ratio_max)
+          dtau_ratio = input->dtau_ratio_max;
+      }
+    }
+  }
+
   /* Compute Jacobian */
-  unsigned int iter = (current_iter - restart_iter)+1;
-  if (((iter-1)%input->Jfreeze_freq == 0 && stage == 0) || iterNM > 1)
+  if (!input->freeze_Jacobian || stage == 0 || iterNM > 1)
   {
     PUSH_NVTX_RANGE("compute_Jacobian",0);
+
     /* Compute residual everywhere before computing Jacobian */
     compute_residual(stage);
 
     /* Estimate timestep */
-    if ((!input->implicit_steady || input->pseudo_time) && stage == 0)
+    // TODO: Might need to separate dt and dtau if we need to recompute
+    // local time step at each iterNM for unsteady simulations
+    if ((input->implicit_steady && input->pseudo_time) ||
+        (!input->implicit_steady && stage == 0 && iterNM == 1))
     {
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
         compute_element_dt();
-      
-      /* Set flow time of current stage */
-      if (!input->implicit_steady)
-        flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
     }
 
-    /* Compute block diagonal components of residual Jacobian */
-    PUSH_NVTX_RANGE("compute_dRdU",1);
-    compute_dRdU();
-    POP_NVTX_RANGE;
-
-    /* If unsteady, compute LHS for stage */
-    if (!input->implicit_steady)
-    {
-      /* Apply stage coefficient to LHS */
-#ifdef _CPU
-      for (auto e : elesObjs)
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-        {
-          double dt = (input->dt_type != 2) ? e->dt(0) : e->dt(ele);
-          for (unsigned int vari = 0; vari < e->nVars; vari++)
-            for (unsigned int spti = 0; spti < e->nSpts; spti++)
-              for (unsigned int varj = 0; varj < e->nVars; varj++)
-                for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
-                {
-                  e->LHS(ele, vari, spti, varj, sptj) *= rk_alpha(stage, stage) * dt;
-                  if (spti == sptj && vari == varj)
-                    e->LHS(ele, vari, spti, varj, sptj) += 1;
-                }
-        }
-#endif
-#ifdef _GPU
-      for (auto e : elesObjs)
-        apply_stage_LHS_wrapper(e->LHS_d, e->dt_d, rk_alpha_d, input->dt_type, 
-            e->nSpts, e->nEles, e->nVars, stage);
-      check_error();
-#endif
-    }
-
-    /* Apply pseudo timestepping */
-    if (input->pseudo_time)
-    {
-      /* Adapt dtau_ratio */
-      // FIXME: Restart dtau_ratio
-      if (input->adapt_dtau && iter != 1)
-      {
-        input->dtau_ratio *= (1.0 + input->dtau_growth_rate);
-        if (input->dtau_ratio > input->dtau_ratio_max)
-          input->dtau_ratio = input->dtau_ratio_max;
-      }
-
-      /* Apply pseudo time to LHS */
-#ifdef _CPU
-      for (auto e : elesObjs)
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
-        {
-          double dtau = input->dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele));
-          for (unsigned int vari = 0; vari < e->nVars; vari++)
-            for (unsigned int spti = 0; spti < e->nSpts; spti++)
-              for (unsigned int varj = 0; varj < e->nVars; varj++)
-                for (unsigned int sptj = 0; sptj < e->nSpts; sptj++)
-                {
-                  e->LHS(ele, vari, spti, varj, sptj) *= dtau;
-                  if (spti == sptj && vari == varj)
-                    e->LHS(ele, vari, spti, varj, sptj) += 1;
-                }
-        }
-#endif
-#ifdef _GPU
-      for (auto e : elesObjs)
-        apply_pseudo_time_LHS_wrapper(e->LHS_d, e->dt_d, input->dtau_ratio, 
-            input->dt_type, e->nSpts, e->nEles, e->nVars);
-      check_error();
-#endif
-    }
-
-    /* Write LHS */
-    if (input->write_LHS)
-      write_LHS(input->output_prefix);
+    /* Compute LHS */
+    compute_LHS(stage);
 
     /* Setup linear solver */
     if (input->linear_solver == LU)
@@ -3112,8 +3154,13 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       compute_LHS_SVD();
     else
       ThrowException("Linear solver not recognized!");
+
     POP_NVTX_RANGE;
   }
+
+  /* Set flow time of current stage */
+  if (!input->implicit_steady && iterNM == 1)
+    flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
 
   /* Block Iterative Method */
   PUSH_NVTX_RANGE("Block_iter_method",1);
@@ -3136,34 +3183,11 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
         ThrowException("Iterative method not recognized!");
 
       /* Compute residual */
-      // FIXME: fix iterBM, include counter
       compute_residual(stage, color);
       prev_color = color;
 
       /* Compute RHS */
       compute_RHS(stage, color);
-
-#ifdef _GPU
-      /* If running on GPU, copy out RHS for residual */
-      if (report_NMconv_freq != 0 && (iterNM%report_NMconv_freq == 0 || iterNM == input->iterNM_max || iterNM == 1) && 
-        (iterBM%input->report_BMconv_freq == 0 || iterBM == input->iterBM_max || iterNM*iterBM == 1))
-      {
-        /* MCGS: Copy RHS for a given color */
-        std::vector<std::shared_ptr<Elements>> elesObjs;
-        if (color > -1)
-          elesObjs = elesObjsBC[color];
-        else
-          elesObjs = this->elesObjs;
-
-        /* If LU, RHS in deltaU */
-        if (input->linear_solver == LU)
-          for (auto e : elesObjs)
-            e->RHS = e->deltaU_d;
-        else
-          for (auto e : elesObjs)
-            e->RHS = e->RHS_d;
-      }
-#endif
 
       /* Write RHS */
       if (input->write_RHS)
@@ -3728,7 +3752,7 @@ void FRSolver::step_LSRK_stage_start(int stage)
 }
 
 #ifdef _CPU
-void FRSolver::step_LSRK_stage_finish(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
 void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
@@ -6554,30 +6578,64 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
 void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int iterBM)
 {
-  /* If running on GPU, copy out timestep */
-#ifdef _GPU
-  if (input->pseudo_time)
+  /* Recompute RHS without pseudo time step */
+#ifdef _CPU
+  for (auto e : elesObjs)
+    for (unsigned int ele = 0; ele < e->nEles; ele++)
+      for (unsigned int var = 0; var < e->nVars; var++)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
+        {
+          e->RHS(ele, var, spt) = -rk_alpha(0,0) * e->divF_spts(0, spt, var, ele) / e->jaco_det_spts(spt, ele);
+          for (unsigned int s = 1; s <= stage; s++)
+            e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
+        }
+
+  if (!input->implicit_steady)
+  {
     for (auto e : elesObjs)
-      e->dt = e->dt_d;
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+      {
+        double dt = (input->dt_type != 2) ? e->dt(0) : e->dt(ele);
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            e->RHS(ele, var, spt) *= dt;
+      }
+
+    for (auto e : elesObjs)
+      for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int var = 0; var < e->nVars; var++)
+          for (unsigned int spt = 0; spt < e->nSpts; spt++)
+            e->RHS(ele, var, spt) -= (e->U_spts(spt, var, ele) - e->U_ini(spt, var, ele));
+  }
+#endif
+#ifdef _GPU
+  for (auto e : elesObjs)
+    compute_RHS_wrapper(e->U_spts_d, e->U_iniNM_d, e->U_ini_d, e->divF_spts_d, e->jaco_det_spts_d, 
+        e->dt_d, rk_alpha_d, e->RHS_d, dtau_ratio, input->implicit_steady, 0, 
+        0, input->dt_type, e->nSpts, e->nEles, e->nVars, stage);
+  check_error();
+#endif
+
+  /* If running on GPU, copy out RHS */
+#ifdef _GPU
+  for (auto e : elesObjs)
+    e->RHS = e->RHS_d;
 #endif
 
   std::vector<double> res(elesObjs[0]->nVars, 0.0);
   for (auto e : elesObjs)
     for (unsigned int ele = 0; ele < e->nEles; ele++)
-    {
-      double dtau = input->pseudo_time ? 
-        (input->dtau_ratio * ((input->dt_type != 2) ? e->dt(0) : e->dt(ele))) : 1.0;
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
           if (input->res_type == 0)
-            res[var] = std::max(res[var], std::abs(e->RHS(ele, var, spt) / dtau));
+            res[var] = std::max(res[var], std::abs(e->RHS(ele, var, spt)));
 
           else if (input->res_type == 1)
-            res[var] += std::abs(e->RHS(ele, var, spt) / dtau);
+            res[var] += std::abs(e->RHS(ele, var, spt));
 
           else if (input->res_type == 2)
-            res[var] += (e->RHS(ele, var, spt) * e->RHS(ele, var, spt)) / (dtau*dtau);
+            res[var] += (e->RHS(ele, var, spt) * e->RHS(ele, var, spt));
 
           if (std::isnan(res[var]))
           {
@@ -6592,7 +6650,6 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
             ThrowException("NaN in residual");
           }
         }
-    }
 
   unsigned int nDoF = 0;
   for (auto e : elesObjs)
@@ -6672,11 +6729,11 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
     {
       if (input->dt_type == 2)
       {
-        std::cout << "dtau: " << input->dtau_ratio * minDT << " (min) ";
-        std::cout << input->dtau_ratio * maxDT << " (max)";
+        std::cout << "dtau: " << dtau_ratio * minDT << " (min) ";
+        std::cout << dtau_ratio * maxDT << " (max)";
       }
       else
-        std::cout << "dtau: " << input->dtau_ratio * elesObjs[0]->dt(0);
+        std::cout << "dtau: " << dtau_ratio * elesObjs[0]->dt(0);
     }
     std::cout << std::endl;
     

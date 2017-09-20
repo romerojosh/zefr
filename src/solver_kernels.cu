@@ -1063,51 +1063,8 @@ void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &
 
 
 __global__
-void apply_stage_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt_in, 
-    mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int stage)
-{
-  const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
-  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
-
-  const double rk_a = rk_coeff(stage, stage);
-
-  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
-  {
-    const unsigned int ele = elevarj / nVars;
-    const unsigned int varj = elevarj % nVars;
-
-    const double dt = (dt_type != 2) ? dt_in(0) : dt_in(ele);
-
-    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
-    {
-      const unsigned int vari = varispti / nSpts;
-      const unsigned int spti = varispti % nSpts;
-
-      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-      {
-        LHS(ele, varj, sptj, vari, spti) = rk_a * dt * LHS(ele, varj, sptj, vari, spti) 
-          + (double) (spti == sptj && vari == varj);
-      }
-    }
-
-    __syncthreads(); /* To avoid divergence */
-  }
-}
-
-void apply_stage_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &rk_coeff, unsigned int dt_type, unsigned int nSpts, 
-    unsigned int nEles, unsigned int nVars, unsigned int stage)
-{
-  dim3 threads(32, 6);
-  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
-
-  apply_stage_LHS<<<blocks, threads>>>(LHS, dt, rk_coeff, dt_type, nSpts, nEles, nVars, stage);
-}
-
-__global__
-void apply_pseudo_time_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
-    double dtau_ratio, unsigned int dt_type, unsigned int nSpts, unsigned int nEles,
+void apply_dt_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
+    double coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles,
     unsigned int nVars)
 {
   const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
@@ -1117,7 +1074,7 @@ void apply_pseudo_time_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
   {
     const unsigned int ele = elevarj / nVars;
     const unsigned int varj = elevarj % nVars;
-    const double dtau = dtau_ratio * ((dt_type != 2) ? dt(0) : dt(ele));
+    const double val = coeff * ((dt_type != 2) ? dt(0) : dt(ele));
 
     for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
     {
@@ -1126,7 +1083,7 @@ void apply_pseudo_time_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
 
       for (unsigned int sptj = 0; sptj < nSpts; sptj++)
       {
-        LHS(ele, varj, sptj, vari, spti) = dtau * LHS(ele, varj, sptj, vari, spti) 
+        LHS(ele, varj, sptj, vari, spti) = val * LHS(ele, varj, sptj, vari, spti) 
           + (double) (spti == sptj && vari == varj);
       }
     }
@@ -1135,18 +1092,38 @@ void apply_pseudo_time_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
   }
 }
 
-void apply_pseudo_time_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
-    double dtau_ratio, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
+void apply_dt_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
+    double coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
     unsigned int nVars)
 {
   dim3 threads(32, 6);
   dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
 
-  apply_pseudo_time_LHS<<<blocks, threads>>>(LHS, dt, dtau_ratio, dt_type, nSpts, nEles, nVars);
+  apply_dt_LHS<<<blocks, threads>>>(LHS, dt, coeff, dt_type, nSpts, nEles, nVars);
 }
 
 __global__
-void apply_pseudo_time_RHS(mdvector_gpu<double> dt, mdvector_gpu<double> RHS, double dtau_ratio, 
+void compute_RHS(mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts, 
+    mdvector_gpu<double> rk_coeff, mdvector_gpu<double> RHS, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int stage)
+{
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
+
+  if (spt >= nSpts || ele >= nEles)
+    return;
+
+  const double jaco_det = jaco_det_spts(spt, ele);
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    RHS(ele, var, spt) = -rk_coeff(0,0) * divF(0, spt, var, ele) / jaco_det;
+    for (unsigned int s = 1; s <= stage; s++)
+      RHS(ele, var, spt) -= rk_coeff(stage, s) * divF(s, spt, var, ele) / jaco_det;
+  }
+}
+
+__global__
+void apply_dt_RHS(mdvector_gpu<double> dt, mdvector_gpu<double> RHS, double coeff, 
     unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
@@ -1155,44 +1132,14 @@ void apply_pseudo_time_RHS(mdvector_gpu<double> dt, mdvector_gpu<double> RHS, do
   if (spt >= nSpts || ele >= nEles)
     return;
 
-  double dtau = dtau_ratio * ((dt_type != 2) ? dt(0) : dt(ele));
+  const double val = coeff * ((dt_type != 2) ? dt(0) : dt(ele));
   for (unsigned int var = 0; var < nVars; var++)
-    RHS(ele, var, spt) *= dtau;
+    RHS(ele, var, spt) *= val;
 }
 
 __global__
-void compute_RHS_steady(mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts,
-    mdvector_gpu<double> RHS, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
-{
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
-  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
-
-  if (spt >= nSpts || ele >= nEles)
-    return;
-
-  double jaco_det = jaco_det_spts(spt, ele);
-  for (unsigned int var = 0; var < nVars; var++)
-    RHS(ele, var, spt) = -divF(0, spt, var, ele) / jaco_det;
-}
-
-void compute_RHS_steady_wrapper(mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, 
-    mdvector_gpu<double> &dt, mdvector_gpu<double> &RHS, bool pseudo_time, double dtau_ratio, 
-    unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars)
-{
-  dim3 threads(32, 4);
-  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y - 1)/threads.y);
-
-  compute_RHS_steady<<<blocks, threads>>>(divF, jaco_det_spts, RHS, nSpts, nEles, nVars);
-
-  if (pseudo_time)
-    apply_pseudo_time_RHS<<<blocks, threads>>>(dt, RHS, dtau_ratio, dt_type, nSpts, nEles, nVars);
-}
-
-__global__
-void compute_RHS(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, mdvector_gpu<double> divF, 
-    mdvector_gpu<double> jaco_det_spts, mdvector_gpu<double> dt_in, mdvector_gpu<double> rk_coeff,
-    mdvector_gpu<double> RHS, unsigned int dt_type, unsigned int nSpts, unsigned int nEles, 
-    unsigned int nVars, unsigned int stage)
+void apply_deltaU_RHS(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, mdvector_gpu<double> RHS, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nVars)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
   const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
@@ -1201,28 +1148,33 @@ void compute_RHS(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, mdvect
     return;
 
   for (unsigned int var = 0; var < nVars; var++)
-    RHS(ele, var, spt) = -(U_spts(spt, var, ele) - U_ini(spt, var, ele));
-
-  double dt = (dt_type != 2) ? dt_in(0) : dt_in(ele);
-  double jaco_det = jaco_det_spts(spt, ele);
-  for (unsigned int var = 0; var < nVars; var++)
-    for (unsigned int s = 0; s <= stage; s++)
-      RHS(ele, var, spt) -= rk_coeff(stage, s) * dt * divF(s, spt, var, ele) / jaco_det;
+    RHS(ele, var, spt) -= (U_spts(spt, var, ele) - U_ini(spt, var, ele));
 }
 
-void compute_RHS_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_ini, 
-    mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
-    mdvector_gpu<double> &rk_coeff, mdvector_gpu<double> &RHS, bool pseudo_time, double dtau_ratio, 
-    unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars, unsigned int stage)
+void compute_RHS_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_iniNM, 
+    mdvector_gpu<double> &U_ini, mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, 
+    mdvector_gpu<double> &dt, mdvector_gpu<double> &rk_coeff, mdvector_gpu<double> &RHS, 
+    double dtau_ratio, bool implicit_steady, bool pseudo_time, bool remove_deltaU, 
+    unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
+    unsigned int stage)
 {
   dim3 threads(32, 4);
   dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y - 1)/threads.y);
 
-  compute_RHS<<<blocks, threads>>>(U_spts, U_ini, divF, jaco_det_spts, dt, rk_coeff, RHS, 
-      dt_type, nSpts, nEles, nVars, stage);
+  compute_RHS<<<blocks, threads>>>(divF, jaco_det_spts, rk_coeff, RHS, nSpts, nEles, nVars, stage);
+
+  if (!implicit_steady)
+  {
+    apply_dt_RHS<<<blocks, threads>>>(dt, RHS, 1, dt_type, nSpts, nEles, nVars);
+    apply_deltaU_RHS<<<blocks, threads>>>(U_spts, U_ini, RHS, nSpts, nEles, nVars);
+  }
 
   if (pseudo_time)
-    apply_pseudo_time_RHS<<<blocks, threads>>>(dt, RHS, dtau_ratio, dt_type, nSpts, nEles, nVars);
+  {
+    apply_dt_RHS<<<blocks, threads>>>(dt, RHS, dtau_ratio, dt_type, nSpts, nEles, nVars);
+    if (!remove_deltaU)
+      apply_deltaU_RHS<<<blocks, threads>>>(U_spts, U_iniNM, RHS, nSpts, nEles, nVars);
+  }
 }
 
 __global__

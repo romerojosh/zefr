@@ -197,11 +197,11 @@ struct InputStruct
   /* Implicit Parameters */
   bool implicit_method = false;
   bool implicit_steady = false;
-  bool pseudo_time, adapt_dtau, FDA_Jacobian, KPF_Jacobian;
+  bool pseudo_time, adapt_dtau, FDA_Jacobian, KPF_Jacobian, freeze_Jacobian, remove_deltaU;
   double dtau_ratio, dtau_growth_rate, dtau_ratio_max;
   unsigned int iterative_method = 0;
   unsigned int linear_solver = 0;
-  unsigned int nColors, Jfreeze_freq, iterNM_max, report_NMconv_freq, iterBM_max, report_BMconv_freq;
+  unsigned int nColors, iterNM_max, report_NMconv_freq, iterBM_max, report_BMconv_freq;
   bool backsweep;
   double svd_omg, svd_cutoff;
 

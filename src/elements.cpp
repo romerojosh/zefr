@@ -146,6 +146,8 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 #endif
 
     /* Solver data structures */
+    if (input->pseudo_time && !input->remove_deltaU)
+      U_iniNM.assign({nSpts, nVars, nElesPad});
     LHS.assign({nEles, nVars, nSpts, nVars, nSpts});
     RHS.assign({nEles, nVars, nSpts});
     deltaU.assign({nEles, nVars, nSpts});
