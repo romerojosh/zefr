@@ -110,22 +110,41 @@ InputStruct read_input_file(std::string inputfile)
   else if (input.dt_scheme == "Steady")
   {
     input.nStages = 1;
+    input.implicit_method = true;
     input.implicit_steady = true;
   }
   else if (input.dt_scheme == "DIRK34")
+  {
     input.nStages = 3;
+    input.implicit_method = true;
+  }
+  else if (input.dt_scheme == "ESDIRK3")
+  {
+    input.nStages = 4;
+    input.implicit_method = true;
+  }
+  else if (input.dt_scheme == "ESDIRK4")
+  {
+    input.nStages = 6;
+    input.implicit_method = true;
+  }
   else
     ThrowException("Unknown dt_scheme");
 
-  // NOTE: to reduce time step size (generally speaking), reduce atol and rtol
-  read_param(f, "err_atol", input.atol, 0.00001);
-  read_param(f, "err_rtol", input.rtol, 0.00001);
-  read_param(f, "pi_alpha", input.pi_alpha, 0.7);
-  read_param(f, "pi_beta", input.pi_beta, 0.4);
+  read_param(f, "adapt_dt", input.adapt_dt, false);
+  if (input.dt_scheme == "LSRK") input.adapt_dt = true; // TODO: Use adapt_dt
+  if (input.adapt_dt)
+  {
+    // NOTE: to reduce time step size (generally speaking), reduce atol and rtol
+    read_param(f, "err_atol", input.atol, 0.00001);
+    read_param(f, "err_rtol", input.rtol, 0.00001);
+    read_param(f, "pi_alpha", input.pi_alpha, 0.7);
+    read_param(f, "pi_beta", input.pi_beta, 0.4);
 
-  read_param(f, "safety_factor", input.sfact, 0.8);
-  read_param(f, "max_factor", input.maxfac, 2.5);
-  read_param(f, "min_factor", input.minfac, 0.3);
+    read_param(f, "safety_factor", input.sfact, 0.8);
+    read_param(f, "max_factor", input.maxfac, 2.5);
+    read_param(f, "min_factor", input.minfac, 0.3);
+  }
 
   read_param(f, "restart", input.restart, false);
   read_param(f, "restart_file", input.restart_file, std::string(""));
@@ -247,10 +266,8 @@ InputStruct read_input_file(std::string inputfile)
   }
 
   /* Implicit parameters */
-  if (input.dt_scheme == "Steady" || input.dt_scheme == "DIRK34")
+  if (input.implicit_method)
   {
-    input.implicit_method = true;
-
     /* Compute residual Jacobian using finite difference approximation */
     read_param(f, "FDA_Jacobian", input.FDA_Jacobian, false);
 

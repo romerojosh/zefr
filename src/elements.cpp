@@ -93,8 +93,12 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
   {
     divF_spts.assign({1, nSpts, nVars, nElesPad});
     U_til.assign({nSpts, nVars, nElesPad});
-    rk_err.assign({nSpts, nVars, nElesPad});
   }
+
+  // TODO: Use adapt_dt
+  if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54" ||
+      input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
+    rk_err.assign({nSpts, nVars, nElesPad});
 
   U_ini.assign({nSpts, nVars, nElesPad});
   dt.assign({nEles}, input->dt);

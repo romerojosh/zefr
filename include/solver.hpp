@@ -89,15 +89,19 @@ class FRSolver
     double tavg_prev_time = 0.;
 
     /* Implicit method parameters */
-    typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
-    std::vector<std::vector<std::shared_ptr<Elements>>> elesObjsBC;
-    mdvector<unsigned int> ele2elesObj;
-    double dtau_ratio;
-    unsigned int nCounter;
-    int prev_color = 0;
-    unsigned int report_NMconv_freq;
-    std::ofstream conv_file;
-    std::chrono::high_resolution_clock::time_point timer1;
+    typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> 
+      MatrixXdRM;                       // Eigen matrix type used for LHS
+    std::vector<std::vector<std::shared_ptr<Elements>>> 
+      elesObjsBC;                       // elesObj by color
+    mdvector<unsigned int> ele2elesObj; // Map from ele to elesObj
+    unsigned int startStage = 0;        // Starting stage for DIRK
+    double dtau_ratio;                  // Ratio of dtau / dt
+    unsigned int nCounter;              // Number of sweeps in block iteration
+    int prev_color = 0;                 // Previous color
+    unsigned int report_NMconv_freq;    // Report frequency for Newton's Method
+    std::ofstream conv_file;            // File used for convergence output
+    std::chrono::high_resolution_clock::time_point 
+      conv_timer;                       // Convergence timer
 
     /* Viscous implicit jacoN data for MPI boundaries */
 #ifdef _MPI
@@ -108,7 +112,7 @@ class FRSolver
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> rk_alpha_d, rk_beta_d;
+    mdvector_gpu<double> rk_alpha_d, rk_beta_d, rk_bhat_d;
 
     mdvector_gpu<double> nodes_ini_d, nodes_til_d;
     mdvector_gpu<double> x_ini_d, x_til_d;
@@ -169,6 +173,7 @@ class FRSolver
     void step_LSRK_stage_start(int stage);
 #ifdef _CPU
     void update(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
+    void step_adaptive(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Standard explicit (diagonal) Runge-Kutta update loop
     void step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
@@ -178,7 +183,6 @@ class FRSolver
 
     //! Special Low-Storage (2-register) Runge-Kutta update loop
     void step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
-    void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
 
     //! Implicit Steady State update loop
     void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector<double>> &sourceBT = std::map<ELE_TYPE, mdvector<double>>());
@@ -188,12 +192,12 @@ class FRSolver
 #endif
 #ifdef _GPU
     void update(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
+    void step_adaptive(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
-    void step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_Steady(unsigned int stage, unsigned int iterNM, const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
     void step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif

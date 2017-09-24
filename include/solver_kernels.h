@@ -150,6 +150,12 @@ void DIRK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &div
     unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
     unsigned int nStages);
 
+void RK_error_update_wrapper(mdvector_gpu<double> &rk_err, mdvector_gpu<double> &divF, 
+    mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_beta, mdvector_gpu<double> &rk_bhat, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    unsigned int nStages);
+
 double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err, uint nSpts,
     uint nEles, uint nVars, double atol, double rtol, _mpi_comm comm_in,

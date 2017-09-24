@@ -824,10 +824,6 @@ void FRSolver::setup_update()
       for (int j = 0; j < i-1; j++)
         rk_c(i) += rk_beta(j);
     }
-    expa = input->pi_alpha / 4.; // 4 := order of time-stepping scheme
-    expb = input->pi_beta / 4.;
-    prev_err = 1.;
-
   }
   else if (input->dt_scheme == "Steady")
   {
@@ -840,27 +836,124 @@ void FRSolver::setup_update()
     input->nStages = 3;
     double alp = 2.0 * std::cos(M_PI / 18.0) / std::sqrt(3.0);
 
-    rk_alpha.assign({input->nStages, input->nStages});
-    rk_alpha(0, 0) = (1.0 + alp) / 2.0;
-    rk_alpha(1, 0) = -alp / 2.0;
-    rk_alpha(1, 1) = (1.0 + alp) / 2.0;
-    rk_alpha(2, 0) = 1.0 + alp;
-    rk_alpha(2, 1) = -(1.0 + 2.0*alp);
-    rk_alpha(2, 2) = (1.0 + alp) / 2.0;
-
-    rk_c.assign({input->nStages});
-    rk_c(0) = (1.0 + alp) / 2.0;
-    rk_c(1) = 1.0 / 2.0;
-    rk_c(2) = (1.0 - alp) / 2.0;
+    rk_alpha.assign({input->nStages, input->nStages},0);
+    rk_alpha(0,0) = (1.0 + alp) / 2.0;
+    rk_alpha(1,0) = -alp / 2.0;
+    rk_alpha(1,1) = (1.0 + alp) / 2.0;
+    rk_alpha(2,0) = 1.0 + alp;
+    rk_alpha(2,1) = -(1.0 + 2.0*alp);
+    rk_alpha(2,2) = (1.0 + alp) / 2.0;
 
     rk_beta.assign({input->nStages});
     rk_beta(0) = 1.0 / (6.0*alp*alp);
     rk_beta(1) = 1.0 - 1.0 / (3.0*alp*alp);
     rk_beta(2) = 1.0 / (6.0*alp*alp);
+
+    rk_c.assign({input->nStages});
+    rk_c(0) = (1.0 + alp) / 2.0;
+    rk_c(1) = 1.0 / 2.0;
+    rk_c(2) = (1.0 - alp) / 2.0;
+  }
+  else if (input->dt_scheme == "ESDIRK3")
+  {
+    input->nStages = 4; // Explicit first stage
+    startStage = 1;
+
+    double gamma = 1767732205903. / 4055673282236.;
+    rk_alpha.assign({input->nStages, input->nStages},0);
+    rk_alpha(1,0) = gamma;
+    rk_alpha(1,1) = gamma;
+    rk_alpha(2,2) = gamma;
+    rk_alpha(3,3) = gamma;
+    rk_alpha(2,0) =  2746238789719. / 10658868560708.;
+    rk_alpha(2,1) =  -640167445237. / 6845629431997.;
+    rk_alpha(3,0) =  1471266399579. / 7840856788654.;
+    rk_alpha(3,1) = -4482444167858. / 7529755066697.;
+    rk_alpha(3,2) = 11266239266428. / 11593286722821.;
+
+    rk_beta.assign({input->nStages});
+    for (unsigned int s = 0; s < input->nStages; s++)
+      rk_beta(s) = rk_alpha(input->nStages-1,s);
+
+    rk_bhat.assign({input->nStages});
+    rk_bhat(0) =   2756255671327. / 12835298489170.;
+    rk_bhat(1) = -10771552573575. / 22201958757719.;
+    rk_bhat(2) =   9247589265047. / 10645013368117.;
+    rk_bhat(3) =   2193209047091. / 5459859503100.;
+
+    rk_c.assign({input->nStages},0);
+    rk_c(1) = 2. * gamma;
+    rk_c(2) = 3. / 5.;
+    rk_c(3) = 1.;
+  }
+  else if (input->dt_scheme == "ESDIRK4")
+  {
+    input->nStages = 6; // Explicit first stage
+    startStage = 1;
+
+    double gamma = 1. / 4.;
+    rk_alpha.assign({input->nStages, input->nStages},0);
+    rk_alpha(1,0) = gamma;
+    rk_alpha(1,1) = gamma;
+    rk_alpha(2,2) = gamma;
+    rk_alpha(3,3) = gamma;
+    rk_alpha(4,4) = gamma;
+    rk_alpha(5,5) = gamma;
+    rk_alpha(2,0) =        8611. / 62500.;
+    rk_alpha(2,1) =       -1743. / 31250;
+    rk_alpha(3,0) =     5012029. / 34652500.;
+    rk_alpha(3,1) =     -654441. / 2922500.;
+    rk_alpha(3,2) =      174375. / 388108.;
+    rk_alpha(4,0) = 15267082809. / 155376265600.;
+    rk_alpha(4,1) =   -71443401. / 120774400.;
+    rk_alpha(4,2) =   730878875. / 902184768.;
+    rk_alpha(4,3) =     2285395. / 8070912.;
+    rk_alpha(5,0) =       82889. / 524892.;
+    rk_alpha(5,1) =           0.;
+    rk_alpha(5,2) =       15625. / 83664.;
+    rk_alpha(5,3) =       69875. / 102672.;
+    rk_alpha(5,4) =       -2260. / 8211.;
+
+    rk_beta.assign({input->nStages});
+    for (unsigned int s = 0; s < input->nStages; s++)
+      rk_beta(s) = rk_alpha(input->nStages-1,s);
+
+    rk_bhat.assign({input->nStages});
+    rk_bhat(0) = 4586570599. / 29645900160.;
+    rk_bhat(1) =          0.;
+    rk_bhat(2) =  178811875. / 945068544.;
+    rk_bhat(3) =  814220225. / 1159782912.;
+    rk_bhat(4) =   -3700637. / 11593932.;
+    rk_bhat(5) =      61727. / 225920.;
+
+    rk_c.assign({input->nStages},0);
+    rk_c(1) = 2. * gamma;
+    rk_c(2) = 83. / 250.;
+    rk_c(3) = 31. / 50.;
+    rk_c(4) = 17. / 20.;
+    rk_c(5) = 1.;
   }
   else
   {
     ThrowException("dt_scheme not recognized!");
+  }
+
+  if (input->adapt_dt)
+  {
+    // Order of time stepping scheme
+    double p;
+    if (input->dt_scheme == "LSRK")
+      p = 4;
+    else if (input->dt_scheme == "ESDIRK3")
+      p = 3;
+    else if (input->dt_scheme == "ESDIRK4")
+      p = 4;
+    else
+      ThrowException("Embedded pairs not implemented for this dt_scheme!");
+
+    expa = input->pi_alpha / p;
+    expb = input->pi_beta / p;
+    prev_err = 1.;
   }
 
   if (input->implicit_method)
@@ -1168,8 +1261,9 @@ void FRSolver::solver_data_to_device()
       e->dU_fpts_d = e->dU_fpts;
     }
     
-
-    if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54")
+    // TODO: Use adapt_dt
+    if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54" ||
+        input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
     {
       e->U_til_d = e->U_til;
       e->rk_err_d = e->rk_err;
@@ -1364,6 +1458,8 @@ void FRSolver::solver_data_to_device()
 
   rk_alpha_d = rk_alpha;
   rk_beta_d = rk_beta;
+  if (input->adapt_dt)
+    rk_bhat_d = rk_bhat;
 
 #ifdef _MPI
   /* MPI data */
@@ -2089,7 +2185,7 @@ void FRSolver::compute_RHS(unsigned int stage, int color)
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
-          e->RHS(ele, var, spt) = -rk_alpha(0,0) * e->divF_spts(0, spt, var, ele) / e->jaco_det_spts(spt, ele);
+          e->RHS(ele, var, spt) = -rk_alpha(stage,0) * e->divF_spts(0, spt, var, ele) / e->jaco_det_spts(spt, ele);
           for (unsigned int s = 1; s <= stage; s++)
             e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
         }
@@ -2604,15 +2700,15 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   // Update grid to start of time step (if not already done so at previous step)
   move(flow_time, true);
 
-  if (input->dt_scheme == "LSRK")
+  if (input->adapt_dt)
   {
-    step_adaptive_LSRK(sourceBT);
+    step_adaptive(sourceBT);
   }
   else
   {
     if (input->dt_scheme == "Steady")
       step_Steady(0, current_iter+1, sourceBT);
-    else if (input->dt_scheme == "DIRK34")
+    else if (input->dt_scheme == "DIRK34" || input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
       step_DIRK(sourceBT);
     else if (input->dt_scheme == "RK54")
       step_LSRK(sourceBT);
@@ -2625,6 +2721,117 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   current_iter++;
 }
 
+
+#ifdef _CPU
+void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
+#endif
+#ifdef _GPU
+void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
+#endif
+{
+  if (input->dt_scheme == "LSRK")
+    step_LSRK(sourceBT);
+  else if (input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
+    step_DIRK(sourceBT);
+  else
+    ThrowException("Embedded pairs not implemented for this dt_scheme!");
+
+  // Calculate error (infinity norm of RK error) and scaling factor for dt
+  double max_err = 0;
+#ifdef _CPU
+  for (auto e : elesObjs)
+  {
+    for (uint spt = 0; spt < e->nSpts; spt++)
+    {
+      for (uint n = 0; n < e->nVars; n++)
+      {
+#pragma omp parallel for simd reduction(max:max_err)
+        for (uint ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          double err = std::abs(e->rk_err(spt, n, ele)) /
+              (input->atol + input->rtol * std::max( std::abs(e->U_spts(spt, n, ele)), std::abs(e->U_ini(spt, n, ele)) ));
+          max_err = std::max(max_err, err);
+        }
+      }
+    }
+  }
+
+
+#ifdef _MPI
+  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, worldComm);
+#endif
+
+  // Determine the time step scaling factor and the new time step
+  double fac = pow(max_err, -expa) * pow(prev_err, expb);
+  fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
+
+  for (auto e : elesObjs)
+    e->dt(0) *= fac;
+#endif
+
+#ifdef _GPU
+  max_err = 0.0;
+  for (auto e : elesObjs)
+  {
+
+    double err = get_rk_error_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->nSpts, e->nEles,
+        e->nVars, input->atol, input->rtol, worldComm, input->overset, geo.iblank_cell_d.data());
+
+    err = std::isnan(err) ? INFINITY : err; // convert NaNs to "large" error
+
+    max_err = std::max(max_err, err);
+  }
+
+  for (auto e : elesObjs)
+  {
+    set_adaptive_dt_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->dt_d, e->dt(0),
+        e->nSpts, e->nEles, e->nVars, input->atol, input->rtol, expa, expb,
+        input->minfac, input->maxfac, input->sfact, max_err, prev_err, worldComm, input->overset,
+        geo.iblank_cell_d.data());
+  }
+#endif
+
+  if (elesObjs[0]->dt(0) < 1e-14)
+    ThrowException("dt approaching 0 - quitting simulation");
+
+  if (max_err < 1.)
+  {
+    // Accept the time step and continue on
+    prev_err = max_err;
+  }
+  else
+  {
+    // Reject step - reset solution back to beginning of time step
+    flow_time = prev_time;
+#ifdef _CPU
+    for (auto e : elesObjs)
+      e->U_spts = e->U_ini;
+#endif
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      geo.vel_cg = v_ini;
+      geo.x_cg = x_ini;
+      geo.q = q_ini;
+      geo.qdot = qdot_ini;
+    }
+
+#ifdef _GPU
+    for (auto e : elesObjs)
+      device_copy(e->U_spts_d, e->U_ini_d, e->U_ini_d.max_size());
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      device_copy(geo.x_cg_d, x_ini_d, x_ini_d.max_size());
+      device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
+    }
+#endif
+
+    // Try again with new dt
+    step_adaptive(sourceBT);
+  }
+}
 
 #ifdef _CPU
 void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
@@ -2862,112 +3069,6 @@ void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 }
 
 #ifdef _CPU
-void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
-#endif
-#ifdef _GPU
-void FRSolver::step_adaptive_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
-#endif
-{
-  step_LSRK(sourceBT);
-
-  // Calculate error (infinity norm of RK error) and scaling factor for dt
-  double max_err = 0;
-#ifdef _CPU
-  for (auto e : elesObjs)
-  {
-    for (uint spt = 0; spt < e->nSpts; spt++)
-    {
-      for (uint n = 0; n < e->nVars; n++)
-      {
-#pragma omp parallel for simd reduction(max:max_err)
-        for (uint ele = 0; ele < e->nEles; ele++)
-        {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
-          double err = std::abs(e->rk_err(spt, n, ele)) /
-              (input->atol + input->rtol * std::max( std::abs(e->U_spts(spt, n, ele)), std::abs(e->U_ini(spt, n, ele)) ));
-          max_err = std::max(max_err, err);
-        }
-      }
-    }
-  }
-
-
-#ifdef _MPI
-  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, worldComm);
-#endif
-
-  // Determine the time step scaling factor and the new time step
-  double fac = pow(max_err, -expa) * pow(prev_err, expb);
-  fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
-
-  for (auto e : elesObjs)
-    e->dt(0) *= fac;
-#endif
-
-#ifdef _GPU
-  max_err = 0.0;
-  for (auto e : elesObjs)
-  {
-
-    double err = get_rk_error_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->nSpts, e->nEles,
-        e->nVars, input->atol, input->rtol, worldComm, input->overset, geo.iblank_cell_d.data());
-
-    err = std::isnan(err) ? INFINITY : err; // convert NaNs to "large" error
-
-    max_err = std::max(max_err, err);
-  }
-
-  for (auto e : elesObjs)
-  {
-    set_adaptive_dt_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->dt_d, e->dt(0),
-        e->nSpts, e->nEles, e->nVars, input->atol, input->rtol, expa, expb,
-        input->minfac, input->maxfac, input->sfact, max_err, prev_err, worldComm, input->overset,
-        geo.iblank_cell_d.data());
-  }
-#endif
-
-  if (elesObjs[0]->dt(0) < 1e-14)
-    ThrowException("dt approaching 0 - quitting simulation");
-
-  if (max_err < 1.)
-  {
-    // Accept the time step and continue on
-    prev_err = max_err;
-  }
-  else
-  {
-    // Reject step - reset solution back to beginning of time step
-    flow_time = prev_time;
-#ifdef _CPU
-    for (auto e : elesObjs)
-      e->U_spts = e->U_ini;
-#endif
-
-    if (input->motion_type == RIGID_BODY)
-    {
-      geo.vel_cg = v_ini;
-      geo.x_cg = x_ini;
-      geo.q = q_ini;
-      geo.qdot = qdot_ini;
-    }
-
-#ifdef _GPU
-    for (auto e : elesObjs)
-      device_copy(e->U_spts_d, e->U_ini_d, e->U_ini_d.max_size());
-
-    if (input->motion_type == RIGID_BODY)
-    {
-      device_copy(geo.x_cg_d, x_ini_d, x_ini_d.max_size());
-      device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
-    }
-#endif
-
-    // Try again with new dt
-    step_adaptive_LSRK(sourceBT);
-  }
-}
-
-#ifdef _CPU
 void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
 #ifdef _GPU
@@ -2998,7 +3099,6 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     // Get current delta t [dt(0)] (updated on GPU)
     copy_from_device(e->dt.data(), e->dt_d.data(), 1);
   }
-  
   check_error();
 #endif
 
@@ -3152,7 +3252,7 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
   }
 
   /* Compute Jacobian */
-  if (!input->freeze_Jacobian || stage == 0 || iterNM > 1)
+  if (!input->freeze_Jacobian || stage == startStage || iterNM > 1)
   {
     PUSH_NVTX_RANGE("compute_Jacobian",0);
 
@@ -3163,7 +3263,7 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     // TODO: Might need to separate dt and dtau if we need to recompute
     // local time step at each iterNM for unsteady simulations
     if ((input->implicit_steady && input->pseudo_time) ||
-        (!input->implicit_steady && stage == 0 && iterNM == 1))
+        (!input->implicit_steady && stage == startStage && iterNM == 1))
     {
       // TODO: Revisit this as it is kind of expensive.
       if (input->dt_type != 0)
@@ -3246,28 +3346,52 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 #ifdef _CPU
   for (auto e : elesObjs)
     e->U_ini = e->U_spts;
+
+  if (input->adapt_dt)
+    for (auto e : elesObjs)
+      e->rk_err.fill(0.0);
 #endif
 
 #ifdef _GPU
   for (auto e : elesObjs)
+  {
     device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
+    copy_from_device(e->dt.data(), e->dt_d.data(), 1);
+  }
+
+  if (input->adapt_dt)
+    for (auto e : elesObjs)
+      device_fill(e->rk_err_d, e->rk_err_d.max_size());
   check_error();
 #endif
 
+  /* ESDIRK: Explicit first stage */
+  if (input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
+    compute_residual(0);
+
   /* Main stage loop */
-  for (unsigned int stage = 0; stage < input->nStages; stage++)
+  for (unsigned int stage = startStage; stage < input->nStages; stage++)
   {
     /* Newton's Method */
     for (unsigned int iterNM = 1; (iterNM <= input->iterNM_max) && (res_max > input->res_tol); iterNM++)
       step_Steady(stage, iterNM, sourceBT);
-    //compute_residual(stage);
   }
 
 #ifdef _CPU
+  /* Update error */
+  if (input->adapt_dt)
+    for (unsigned int stage = 0; stage < input->nStages; stage++)
+      for (auto e : elesObjs)
+        for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int var = 0; var < e->nVars; var++)
+            for (unsigned int spt = 0; spt < e->nSpts; spt++)A
+              e->rk_err(spt, var, ele) -= (rk_beta(stage) - rk_bhat(stage)) * e->dt(0) * 
+                e->divF_spts(stage, spt, var, ele) / e->jaco_det_spts(spt, ele);
+
   for (auto e : elesObjs)
     e->U_spts = e->U_ini;
 
-  /* Sum all stages */
+  /* Update solution */
   for (unsigned int stage = 0; stage < input->nStages; stage++)
     for (auto e : elesObjs)
       for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -3282,6 +3406,11 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 #endif
 
 #ifdef _GPU
+  if (input->adapt_dt)
+    for (auto e : elesObjs)
+      RK_error_update_wrapper(e->rk_err_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_beta_d, rk_bhat_d, 
+          e->nSpts, e->nEles, e->nVars, e->nDims, input->equation, input->nStages);
+  
   for (auto e : elesObjs)
     device_copy(e->U_spts_d, e->U_ini_d, e->U_spts_d.max_size());
 
@@ -3291,6 +3420,8 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 
   check_error();
 #endif
+
+  flow_time = prev_time + elesObjs[0]->dt(0);
 }
 
 #ifdef _CPU
@@ -6667,7 +6798,7 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
       for (unsigned int var = 0; var < e->nVars; var++)
         for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
-          e->RHS(ele, var, spt) = -rk_alpha(0,0) * e->divF_spts(0, spt, var, ele) / e->jaco_det_spts(spt, ele);
+          e->RHS(ele, var, spt) = -rk_alpha(stage,0) * e->divF_spts(0, spt, var, ele) / e->jaco_det_spts(spt, ele);
           for (unsigned int s = 1; s <= stage; s++)
             e->RHS(ele, var, spt) -= rk_alpha(stage, s) * e->divF_spts(s, spt, var, ele) / e->jaco_det_spts(spt, ele);
         }
@@ -6783,7 +6914,7 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
     if (input->res_type == 2)
       std::transform(res.begin(), res.end(), res.begin(), (double(*)(double)) std::sqrt);
 
-    if ((stage+1) * iterNM * iterBM == 1)
+    if (stage == startStage && iterNM * iterBM == 1)
     {
       std::cout << std::endl;
       if (!input->implicit_steady)
@@ -6823,7 +6954,7 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
     if (!input->implicit_steady)
       conv_file << current_iter+1 << " " << stage << " ";
     auto timer2 = std::chrono::high_resolution_clock::now();
-    auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(timer2-this->timer1);
+    auto current_runtime = std::chrono::duration_cast<std::chrono::duration<double>>(timer2-this->conv_timer);
     conv_file << iterNM << " " << iterBM << " " << std::scientific << current_runtime.count() << " ";
     for (auto val : res)
       conv_file << val / nDoF << " ";
@@ -8249,7 +8380,7 @@ void FRSolver::set_conv_file(std::chrono::high_resolution_clock::time_point t1)
     this->conv_file.open(input->output_prefix + "/" + input->output_prefix + "_conv.dat", std::ios::app);
   else
     this->conv_file.open(input->output_prefix + "/" + input->output_prefix + "_conv.dat");
-  this->timer1 = t1;
+  this->conv_timer = t1;
 }
 
 double FRSolver::get_current_time(void)

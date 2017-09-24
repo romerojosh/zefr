@@ -802,8 +802,9 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
 
 template <unsigned int nVars>
 __global__
-void DIRK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> divF, const mdvector_gpu<double> jaco_det_spts, 
-    const mdvector_gpu<double> dt_in, const mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, 
+void DIRK_update(mdvector_gpu<double> U_spts, const mdvector_gpu<double> divF, 
+    const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> dt_in, 
+    const mdvector_gpu<double> rk_coeff, unsigned int dt_type, unsigned int nSpts, 
     unsigned int nEles, unsigned int nStages)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
@@ -852,6 +853,62 @@ void DIRK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &div
     else
       DIRK_update<5><<<blocks, threads>>>(U_spts, divF, jaco_det_spts, dt, 
           rk_coeff, dt_type, nSpts, nEles, nStages);
+  }
+}
+
+template <unsigned int nVars>
+__global__
+void RK_error_update(mdvector_gpu<double> rk_err, const mdvector_gpu<double> divF, 
+    const mdvector_gpu<double> jaco_det_spts, const mdvector_gpu<double> dt_in, 
+    const mdvector_gpu<double> rk_beta, const mdvector_gpu<double> rk_bhat, 
+    unsigned int nSpts, unsigned int nEles, unsigned int nStages)
+{
+  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
+  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
+
+  if (ele >= nEles || spt >= nSpts)
+    return;
+
+  double dt = dt_in(0);
+
+  //for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    double fac = dt / jaco_det_spts(spt,ele);
+    double sum[nVars] = {0.0};
+    for (unsigned int stage = 0; stage < nStages; stage++)
+    {
+      double coeff = rk_beta(stage) - rk_bhat(stage);
+      for (unsigned int var = 0; var < nVars; var++)
+        sum[var] -= coeff * fac * divF(stage, spt, var, ele);
+    }
+
+    for (unsigned int var = 0; var < nVars; var++)
+      rk_err(spt, var, ele) += sum[var];
+  }
+}
+
+void RK_error_update_wrapper(mdvector_gpu<double> &rk_err, mdvector_gpu<double> &divF, 
+    mdvector_gpu<double> &jaco_det_spts, mdvector_gpu<double> &dt, 
+    mdvector_gpu<double> &rk_beta, mdvector_gpu<double> &rk_bhat, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int nDims, unsigned int equation, 
+    unsigned int nStages)
+{
+  //unsigned int threads = 128;
+  //unsigned int blocks = (nEles + threads - 1)/ threads;
+  dim3 threads(32, 4);
+  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
+
+  if (equation == AdvDiff)
+    RK_error_update<1><<<blocks, threads>>>(rk_err, divF, jaco_det_spts, dt, 
+        rk_beta, rk_bhat, nSpts, nEles, nStages);
+  else if (equation == EulerNS)
+  {
+    if (nDims == 2)
+      RK_error_update<4><<<blocks, threads>>>(rk_err, divF, jaco_det_spts, dt, 
+          rk_beta, rk_bhat, nSpts, nEles, nStages);
+    else
+      RK_error_update<5><<<blocks, threads>>>(rk_err, divF, jaco_det_spts, dt, 
+          rk_beta, rk_bhat, nSpts, nEles, nStages);
   }
 }
 
@@ -1116,7 +1173,7 @@ void compute_RHS(mdvector_gpu<double> divF, mdvector_gpu<double> jaco_det_spts,
   const double jaco_det = jaco_det_spts(spt, ele);
   for (unsigned int var = 0; var < nVars; var++)
   {
-    RHS(ele, var, spt) = -rk_coeff(0,0) * divF(0, spt, var, ele) / jaco_det;
+    RHS(ele, var, spt) = -rk_coeff(stage,0) * divF(0, spt, var, ele) / jaco_det;
     for (unsigned int s = 1; s <= stage; s++)
       RHS(ele, var, spt) -= rk_coeff(stage, s) * divF(s, spt, var, ele) / jaco_det;
   }
