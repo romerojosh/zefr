@@ -431,7 +431,7 @@ void Zefr::do_rk_stage(int iter, int stage)
 
 void Zefr::do_rk_stage_start(int iter, int stage)
 {
-  if (input.dt_scheme == "RK54" || input.dt_scheme == "LSRK")
+  if (input.dt_scheme == "RK54")
     solver->step_LSRK_stage_start(stage);
   else
     solver->step_RK_stage_start(stage);
@@ -439,7 +439,7 @@ void Zefr::do_rk_stage_start(int iter, int stage)
 
 void Zefr::do_rk_stage_mid(int iter, int stage)
 {
-  if (input.dt_scheme == "RK54" || input.dt_scheme == "LSRK")
+  if (input.dt_scheme == "RK54")
     stage = 0; // Low-storage RK method has just 1 register for residual
 
   solver->step_RK_stage_mid(stage);
@@ -447,7 +447,7 @@ void Zefr::do_rk_stage_mid(int iter, int stage)
 
 void Zefr::do_rk_stage_finish(int iter, int stage)
 {
-  if (input.dt_scheme == "RK54" || input.dt_scheme == "LSRK")
+  if (input.dt_scheme == "RK54")
     solver->step_LSRK_stage_finish(stage);
   else
     solver->step_RK_stage_finish(stage);

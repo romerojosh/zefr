@@ -192,7 +192,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
       for (unsigned int j = 0; j < 3; j++)
         geo.Jinv(i,j) /= det;
 
-    if (input->dt_scheme != "LSRK" && input->dt_scheme != "RK54")
+    if (input->dt_scheme != "RK54")
     {
       // Assign storage for stage residuals
       geo.q_res.assign({input->nStages,4});

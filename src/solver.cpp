@@ -793,7 +793,7 @@ void FRSolver::setup_update()
 
     rk_c = rk_alpha;
   }
-  else if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54")
+  else if (input->dt_scheme == "RK54")
   {
     input->nStages = 5;
     rk_alpha.assign({input->nStages - 1});
@@ -854,7 +854,7 @@ void FRSolver::setup_update()
     rk_c(1) = 1.0 / 2.0;
     rk_c(2) = (1.0 - alp) / 2.0;
   }
-  else if (input->dt_scheme == "ESDIRK3")
+  else if (input->dt_scheme == "ESDIRK43")
   {
     input->nStages = 4; // Explicit first stage
     startStage = 1;
@@ -886,7 +886,7 @@ void FRSolver::setup_update()
     rk_c(2) = 3. / 5.;
     rk_c(3) = 1.;
   }
-  else if (input->dt_scheme == "ESDIRK4")
+  else if (input->dt_scheme == "ESDIRK64")
   {
     input->nStages = 6; // Explicit first stage
     startStage = 1;
@@ -942,11 +942,11 @@ void FRSolver::setup_update()
   {
     // Order of time stepping scheme
     double p;
-    if (input->dt_scheme == "LSRK")
+    if (input->dt_scheme == "RK54")
       p = 4;
-    else if (input->dt_scheme == "ESDIRK3")
+    else if (input->dt_scheme == "ESDIRK43")
       p = 3;
-    else if (input->dt_scheme == "ESDIRK4")
+    else if (input->dt_scheme == "ESDIRK64")
       p = 4;
     else
       ThrowException("Embedded pairs not implemented for this dt_scheme!");
@@ -1257,14 +1257,12 @@ void FRSolver::solver_data_to_device()
       e->Ucomm_d = e->Ucomm;
       e->dU_fpts_d = e->dU_fpts;
     }
-    
-    // TODO: Use adapt_dt
-    if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54" ||
-        input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
-    {
+
+    if (input->dt_scheme == "RK54")
       e->U_til_d = e->U_til;
+    
+    if (input->adapt_dt)
       e->rk_err_d = e->rk_err;
-    }
 
     //TODO: Temporary fix. Need to remove usage of jaco_spts_d from all kernels.
     if (input->motion)
@@ -2711,7 +2709,7 @@ void FRSolver::update(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
   {
     if (input->dt_scheme == "Steady")
       step_Steady(0, current_iter+1, sourceBT);
-    else if (input->dt_scheme == "DIRK34" || input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
+    else if (input->dt_scheme == "DIRK34" || input->dt_scheme == "ESDIRK43" || input->dt_scheme == "ESDIRK64")
       step_DIRK(sourceBT);
     else if (input->dt_scheme == "RK54")
       step_LSRK(sourceBT);
@@ -2732,9 +2730,9 @@ void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector<double>> &sourceB
 void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceBT)
 #endif
 {
-  if (input->dt_scheme == "LSRK")
+  if (input->dt_scheme == "RK54")
     step_LSRK(sourceBT);
-  else if (input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
+  else if (input->dt_scheme == "ESDIRK43" || input->dt_scheme == "ESDIRK64")
     step_DIRK(sourceBT);
   else
     ThrowException("Embedded pairs not implemented for this dt_scheme!");
@@ -3088,8 +3086,10 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
   {
     e->U_ini = e->U_spts;
     e->U_til = e->U_spts;
-    e->rk_err.fill(0.0);
   }
+  if (input->adapt_dt)
+    for (auto e : elesObjs)
+      e->rk_err.fill(0.0);
 #endif
 
 #ifdef _GPU
@@ -3097,11 +3097,15 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
   {
     device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
     device_copy(e->U_til_d, e->U_spts_d, e->U_spts_d.max_size());
-    device_fill(e->rk_err_d, e->rk_err_d.max_size());
     
     // Get current delta t [dt(0)] (updated on GPU)
     copy_from_device(e->dt.data(), e->dt_d.data(), 1);
   }
+
+  if (input->adapt_dt)
+    for (auto e : elesObjs)
+      device_fill(e->rk_err_d, e->rk_err_d.max_size());
+
   check_error();
 #endif
 
@@ -3131,25 +3135,31 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 
 #ifdef _CPU
     // Update Error
-    for (auto e : elesObjs)
+    if (input->adapt_dt)
     {
-#pragma omp parallel for collapse(2)
-      for (unsigned int spt = 0; spt < e->nSpts; spt++)
+      for (auto e : elesObjs)
       {
-        for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+        for (unsigned int spt = 0; spt < e->nSpts; spt++)
         {
-#pragma omp simd
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          for (unsigned int n = 0; n < e->nVars; n++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+#pragma omp simd
+            for (unsigned int ele = 0; ele < e->nEles; ele++)
+            {
+              if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
-            e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
-                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+              e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
+                  e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+            }
           }
         }
       }
+    }
 
-      // Update solution registers
+    // Update solution registers
+    for (auto e : elesObjs)
+    {
       if (stage < input->nStages - 1)
       {
 #pragma omp parallel for collapse(2)
@@ -3199,14 +3209,15 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       {
         LSRK_update_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d, e->divF_spts_d,
             e->jaco_det_spts_d, e->dt(0), ai, bi, bhi, e->nSpts, e->nEles,
-            e->nVars, stage, input->nStages, input->overset, geo.iblank_cell_d.data());
+            e->nVars, stage, input->nStages, input->adapt_dt, input->overset, 
+            geo.iblank_cell_d.data());
       }
       else
       {
         LSRK_update_source_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d,
             e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt(0), ai, bi, bhi,
-            e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->overset,
-            geo.iblank_cell_d.data());
+            e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->adapt_dt, 
+            input->overset, geo.iblank_cell_d.data());
       }
     }
     check_error();
@@ -3366,7 +3377,7 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 #endif
 
   /* ESDIRK: Explicit first stage */
-  if (input->dt_scheme == "ESDIRK3" || input->dt_scheme == "ESDIRK4")
+  if (input->dt_scheme == "ESDIRK43" || input->dt_scheme == "ESDIRK64")
     compute_residual(0);
 
   /* Main stage loop */
@@ -3408,8 +3419,8 @@ void FRSolver::step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
 #ifdef _GPU
   if (input->adapt_dt)
     for (auto e : elesObjs)
-      RK_error_update_wrapper(e->rk_err_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_beta_d, rk_bhat_d, 
-          e->nSpts, e->nEles, e->nVars, e->nDims, input->equation, input->nStages);
+      RK_error_update_wrapper(e->rk_err_d, e->divF_spts_d, e->jaco_det_spts_d, e->dt_d, rk_beta_d, 
+          rk_bhat_d, e->nSpts, e->nEles, e->nVars, e->nDims, input->equation, input->nStages);
   
   for (auto e : elesObjs)
     device_copy(e->U_spts_d, e->U_ini_d, e->U_spts_d.max_size());
@@ -8219,7 +8230,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
   // ---- Update x, v, q, qdot ----
 
-  if (input->dt_scheme == "LSRK" || input->dt_scheme == "RK54")
+  if (input->dt_scheme == "RK54")
   {
     if (stage < input->nStages - 1)
     {

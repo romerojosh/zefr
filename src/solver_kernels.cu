@@ -657,7 +657,7 @@ void LSRK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
     mdvector_gpu<double> rk_err, const mdvector_gpu<double> divF,
     const mdvector_gpu<double> jaco_det_spts, double dt, double ai, double bi,
     double bhi, unsigned int nSpts, unsigned int nEles, unsigned int stage,
-    unsigned int nStages, bool overset = false, int* iblank = NULL)
+    unsigned int nStages, bool adapt_dt, bool overset = false, int* iblank = NULL)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
   const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
@@ -670,8 +670,9 @@ void LSRK_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
 
   double fac = dt / jaco_det_spts(spt,ele);
 
-  for (unsigned int var = 0; var < nVars; var++)
-    rk_err(spt, var, ele) -= (bi - bhi) * fac * divF(0, spt, var, ele);
+  if (adapt_dt)
+    for (unsigned int var = 0; var < nVars; var++)
+      rk_err(spt, var, ele) -= (bi - bhi) * fac * divF(0, spt, var, ele);
 
   if (stage < nStages - 1)
   {
@@ -696,8 +697,8 @@ void LSRK_update_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_til, mdvector_gpu<double> &rk_err,
     mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, double dt,
     double ai, double bi, double bhi, unsigned int nSpts, unsigned int nEles,
-    unsigned int nVars, unsigned int stage, unsigned int nStages, bool overset,
-    int* iblank)
+    unsigned int nVars, unsigned int stage, unsigned int nStages, bool adapt_dt, 
+    bool overset, int* iblank)
 {
   dim3 threads(32, 4);
   dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
@@ -706,20 +707,20 @@ void LSRK_update_wrapper(mdvector_gpu<double> &U_spts,
   {
     case 1:
       LSRK_update<1><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
-          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, overset,
-          iblank);
+          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, adapt_dt, 
+          overset, iblank);
       break;
 
     case 4:
       LSRK_update<4><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
-          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, overset,
-          iblank);
+          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, adapt_dt, 
+          overset, iblank);
       break;
 
     case 5:
       LSRK_update<5><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
-          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, overset,
-          iblank);
+          jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages, adapt_dt, 
+          overset, iblank);
       break;
 
     default:
@@ -735,7 +736,7 @@ void LSRK_source_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
     mdvector_gpu<double> rk_err, mdvector_gpu<double> divF,
     mdvector_gpu<double> source, mdvector_gpu<double> jaco_det_spts, double dt,
     double ai, double bi, double bhi, unsigned int nSpts, unsigned int nEles,
-    unsigned int stage, unsigned int nStages, bool overset = false,
+    unsigned int stage, unsigned int nStages, bool adapt_dt, bool overset = false,
     int* iblank = NULL)
 {
   const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
@@ -749,9 +750,10 @@ void LSRK_source_update(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_til,
 
   double fac = dt / jaco_det_spts(spt,ele);
 
-  for (unsigned int var = 0; var < nVars; var ++)
-    rk_err(spt, var, ele) -= (bi - bhi) * fac *
-        (divF(0, spt, var, ele) + source(spt, var, ele));
+  if (adapt_dt)
+    for (unsigned int var = 0; var < nVars; var ++)
+      rk_err(spt, var, ele) -= (bi - bhi) * fac *
+          (divF(0, spt, var, ele) + source(spt, var, ele));
 
   if (stage != nStages - 1)
   {
@@ -777,7 +779,8 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &divF, const mdvector_gpu<double> &source,
     mdvector_gpu<double> &jaco_det_spts, double dt, double ai, double bi,
     double bhi, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int stage, unsigned int nStages, bool overset, int* iblank)
+    unsigned int stage, unsigned int nStages, bool adapt_dt, bool overset, 
+    int* iblank)
 {
   dim3 threads(32, 4);
   dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
@@ -787,19 +790,19 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
     case 1:
       LSRK_source_update<1><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
           source, jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages,
-          overset, iblank);
+          adapt_dt, overset, iblank);
       break;
 
     case 4:
       LSRK_source_update<4><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
           source, jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages,
-          overset, iblank);
+          adapt_dt, overset, iblank);
       break;
 
     case 5:
       LSRK_source_update<5><<<blocks, threads>>>(U_spts, U_til, rk_err, divF,
           source, jaco_det_spts, dt, ai, bi, bhi, nSpts, nEles, stage, nStages,
-          overset, iblank);
+          adapt_dt, overset, iblank);
       break;
 
     default:

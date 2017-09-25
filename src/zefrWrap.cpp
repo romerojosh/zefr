@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
   {
     runTime.startTimer();
 
-    if (inp.dt_scheme != "LSRK")
+    if (!inp.adapt_dt)
     {
       // Can use the new-style method [no callbacks within ZEFR]
       for (int stage = 0; stage < inp.nStages; stage++)

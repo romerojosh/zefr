@@ -105,8 +105,6 @@ InputStruct read_input_file(std::string inputfile)
     input.nStages = 5;
   else if (input.dt_scheme == "RKj")
     input.nStages = 4;
-  else if (input.dt_scheme == "LSRK")
-    input.nStages = 5;
   else if (input.dt_scheme == "Steady")
   {
     input.nStages = 1;
@@ -118,12 +116,12 @@ InputStruct read_input_file(std::string inputfile)
     input.nStages = 3;
     input.implicit_method = true;
   }
-  else if (input.dt_scheme == "ESDIRK3")
+  else if (input.dt_scheme == "ESDIRK43")
   {
     input.nStages = 4;
     input.implicit_method = true;
   }
-  else if (input.dt_scheme == "ESDIRK4")
+  else if (input.dt_scheme == "ESDIRK64")
   {
     input.nStages = 6;
     input.implicit_method = true;
@@ -132,7 +130,6 @@ InputStruct read_input_file(std::string inputfile)
     ThrowException("Unknown dt_scheme");
 
   read_param(f, "adapt_dt", input.adapt_dt, false);
-  if (input.dt_scheme == "LSRK") input.adapt_dt = true; // TODO: Use adapt_dt
   if (input.adapt_dt)
   {
     // NOTE: to reduce time step size (generally speaking), reduce atol and rtol

@@ -134,7 +134,7 @@ void LSRK_update_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_til, mdvector_gpu<double>& rk_err,
     mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, double dt,
     double ai, double bi, double bhi, unsigned int nSpts, unsigned int nEles,
-    unsigned int nVars, unsigned int stage, unsigned int nStages,
+    unsigned int nVars, unsigned int stage, unsigned int nStages, bool adapt_dt,
     bool overset = false, int* iblank = NULL);
 
 void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
@@ -142,7 +142,7 @@ void LSRK_update_source_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &divF, const mdvector_gpu<double> &source,
     mdvector_gpu<double> &jaco_det_spts, double dt, double ai, double bi,
     double bhi, unsigned int nSpts, unsigned int nEles, unsigned int nVars,
-    unsigned int stage, unsigned int nStages, bool overset = false,
+    unsigned int stage, unsigned int nStages, bool adapt_dt, bool overset = false,
     int* iblank = NULL);
 
 void DIRK_update_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &divF, 
