@@ -150,8 +150,12 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 #endif
 
     /* Solver data structures */
-    if (input->pseudo_time && !input->remove_deltaU)
-      U_iniNM.assign({nSpts, nVars, nElesPad});
+    if (input->pseudo_time)
+    {
+      dtau.assign({nEles}, input->dtau);
+      if (!input->remove_deltaU)
+        U_iniNM.assign({nSpts, nVars, nElesPad});
+    }
     LHS.assign({nEles, nVars, nSpts, nVars, nSpts});
     RHS.assign({nEles, nVars, nSpts});
     deltaU.assign({nEles, nVars, nSpts});
@@ -384,7 +388,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
     }
   }
 
-  if (input->dt_type != 0 && input->CFL_type == 2)
+  if (input->CFL_type == 2 || input->CFL_tau_type == 2)
   {
     /* Allocate memory for tensor-line reference lengths */
     h_ref.assign({nFpts, nEles});
@@ -2414,7 +2418,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
     calc_normals_wrapper(faces->norm_d, faces->dA_d, inv_jaco_fpts_d, tnorm_d,
                          geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nFpts, nEles, nDims);
 
-    if (input->dt_type != 0 && input->CFL_type == 2)
+    if (input->CFL_type == 2 || input->CFL_tau_type == 2)
       update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
   }
 
@@ -2472,7 +2476,7 @@ void Elements::update_point_coords(std::shared_ptr<Faces> faces)
     }
   }
 
-  if (input->dt_type != 0 && input->CFL_type == 2)
+  if (input->CFL_type == 2 || input->CFL_tau_type == 2)
   {
     /* Compute tensor-line lengths */
     for (unsigned int ele = 0; ele < nEles; ele++)

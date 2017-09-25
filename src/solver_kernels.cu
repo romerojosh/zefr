@@ -253,6 +253,15 @@ void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val)
   check_error();
 }
 
+double device_min(mdvector_gpu<double> &vec, unsigned int size)
+{
+  /* Get min using thrust (pretty slow) */
+  thrust::device_ptr<double> vec_ptr = thrust::device_pointer_cast(vec.data());
+  thrust::device_ptr<double> min_ptr = thrust::min_element(vec_ptr, vec_ptr + size);
+  check_error();
+  return min_ptr[0];
+}
+
 void cublasDGEMM_wrapper(int M, int N, int K, const double alpha, const double* A, 
     int lda, const double* B, int ldb, const double beta, double *C, int ldc, unsigned int stream)
 {
@@ -1080,41 +1089,27 @@ void compute_element_dt(mdvector_gpu<double> dt, const mdvector_gpu<double> wave
   }
 }
 
-void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, mdvector_gpu<double> &diffCo_gfpts,
-    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
-    mdvector_gpu<double> &h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, unsigned int dt_type, unsigned int CFL_type,
-    unsigned int nFpts, unsigned int nEles, unsigned int nDims, unsigned int startEle, _mpi_comm comm_in, bool overset,
-    int* iblank)
+void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, 
+    mdvector_gpu<double> &diffCo_gfpts, mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, 
+    mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
+    mdvector_gpu<double> &h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, 
+    unsigned int CFL_type, unsigned int nFpts, unsigned int nEles, unsigned int nDims, 
+    unsigned int startEle, bool overset, int* iblank)
 {
   unsigned int threads = 128;
   unsigned int blocks = (nEles + threads - 1) / threads;
 
   if (nDims == 2)
   {
-    compute_element_dt<2><<<blocks, threads>>>(dt, waveSp_gfpts, diffCo_gfpts, dA, fpt2gfpt, fpt2gfpt_slot, weights_fpts, vol, h_ref,
-        nFptsPerFace, CFL, beta, order, CFL_type, nFpts, nEles, startEle);
+    compute_element_dt<2><<<blocks, threads>>>(dt, waveSp_gfpts, diffCo_gfpts, dA, fpt2gfpt, 
+        fpt2gfpt_slot, weights_fpts, vol, h_ref, nFptsPerFace, CFL, beta, order, CFL_type, 
+        nFpts, nEles, startEle);
   }
   else
   {
-    compute_element_dt<3><<<blocks, threads>>>(dt, waveSp_gfpts, diffCo_gfpts, dA, fpt2gfpt, fpt2gfpt_slot, weights_fpts, vol, h_ref,
-        nFptsPerFace, CFL, beta, order, CFL_type, nFpts, nEles, startEle, overset, iblank);
-  }
-
-  if (dt_type == 1)
-  {
-    /* Get min dt using thrust (pretty slow) */
-    thrust::device_ptr<double> dt_ptr = thrust::device_pointer_cast(dt.data());
-    thrust::device_ptr<double> min_ptr = thrust::min_element(dt_ptr, dt_ptr + nEles);
-
-#ifdef _MPI
-    double min_dt = min_ptr[0];
-    MPI_Allreduce(MPI_IN_PLACE, &min_dt, 1, MPI_DOUBLE, MPI_MIN, comm_in);
-    dt_ptr[0] = min_dt;
-#else
-    dt_ptr[0] = min_ptr[0];
-    //thrust::copy(min_ptr, min_ptr+1, dt_ptr);
-#endif
-
+    compute_element_dt<3><<<blocks, threads>>>(dt, waveSp_gfpts, diffCo_gfpts, dA, fpt2gfpt, 
+        fpt2gfpt_slot, weights_fpts, vol, h_ref, nFptsPerFace, CFL, beta, order, CFL_type, 
+        nFpts, nEles, startEle, overset, iblank);
   }
 }
 
@@ -1210,10 +1205,10 @@ void apply_deltaU_RHS(mdvector_gpu<double> U_spts, mdvector_gpu<double> U_ini, m
 
 void compute_RHS_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_iniNM, 
     mdvector_gpu<double> &U_ini, mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, 
-    mdvector_gpu<double> &dt, mdvector_gpu<double> &rk_coeff, mdvector_gpu<double> &RHS, 
-    double dtau_ratio, bool implicit_steady, bool pseudo_time, bool remove_deltaU, 
-    unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
-    unsigned int stage)
+    mdvector_gpu<double> &dt, mdvector_gpu<double> &dtau, mdvector_gpu<double> &rk_coeff, 
+    mdvector_gpu<double> &RHS, double dtau_ratio, bool implicit_steady, bool pseudo_time, 
+    bool remove_deltaU, unsigned int dt_type, unsigned int dtau_type, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int stage)
 {
   dim3 threads(32, 4);
   dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y - 1)/threads.y);
@@ -1228,7 +1223,7 @@ void compute_RHS_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_i
 
   if (pseudo_time)
   {
-    apply_dt_RHS<<<blocks, threads>>>(dt, RHS, dtau_ratio, dt_type, nSpts, nEles, nVars);
+    apply_dt_RHS<<<blocks, threads>>>(dtau, RHS, dtau_ratio, dtau_type, nSpts, nEles, nVars);
     if (!remove_deltaU)
       apply_deltaU_RHS<<<blocks, threads>>>(U_spts, U_iniNM, RHS, nSpts, nEles, nVars);
   }

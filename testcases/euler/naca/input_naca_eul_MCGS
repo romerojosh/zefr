@@ -16,15 +16,13 @@ spt_type Legendre
 # Timestepping:
 n_steps 100
 res_tol 1e-11
-dt_scheme Steady      (Euler, RK44, RK54, MCGS)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.01
-CFL	  1.0
+dt_scheme Steady
 
 # Pseudo Timestepping
 pseudo_time 1
 remove_deltaU 1
-dtau_ratio 3.0
+dtau_type 2
+CFL_tau 3.0
 
 # Adapt dtau
 adapt_dtau 1

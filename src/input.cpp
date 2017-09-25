@@ -89,11 +89,11 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "tfinal", input.tfinal, 1e15);
   read_param(f, "res_tol", input.res_tol, 0.0);
   read_param(f, "dt_scheme", input.dt_scheme);
-  read_param(f, "dt", input.dt);
-  read_param(f, "dt_type", input.dt_type);
+  read_param(f, "dt", input.dt, 0.0);
+  read_param(f, "dt_type", input.dt_type, (unsigned int) 0);
   if (input.dt_type != 0)
   {
-    read_param(f, "CFL", input.CFL);
+    read_param(f, "CFL", input.CFL, 1.0);
     read_param(f, "CFL_type", input.CFL_type, (unsigned int) 1);
   }
 
@@ -282,13 +282,21 @@ InputStruct read_input_file(std::string inputfile)
       read_param(f, "freeze_Jacobian", input.freeze_Jacobian, true);
 
     /* Pseudo Timestepping */
-    // Note: based on physical time
     read_param(f, "pseudo_time", input.pseudo_time, false);
     if (input.pseudo_time)
     {
-      // Note: Removing deltaU speeds up convergence from freestream
+      read_param(f, "dtau", input.dtau, 1.0);
+      read_param(f, "dtau_type", input.dtau_type, (unsigned int) 0);
+      if (input.dtau_type != 0)
+      {
+        read_param(f, "CFL_tau", input.CFL_tau, 1.0);
+        read_param(f, "CFL_tau_type", input.CFL_tau_type, (unsigned int) 1);
+      }
+
+      // Note: Removing deltaU sometimes speeds up convergence
       read_param(f, "remove_deltaU", input.remove_deltaU, false);
-      read_param(f, "dtau_ratio", input.dtau_ratio, 1.0);
+
+      // Exponential growth rate
       read_param(f, "adapt_dtau", input.adapt_dtau, false);
       if (input.adapt_dtau)
       {

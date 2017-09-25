@@ -72,6 +72,7 @@ void device_copy(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigne
 void device_add(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 void device_subtract(mdvector_gpu<double> &vec1, mdvector_gpu<double> &vec2, unsigned int size);
 void device_fill(mdvector_gpu<double> &vec, unsigned int size, double val = 0.);
+double device_min(mdvector_gpu<double> &vec, unsigned int size);
 
 void sync_stream(unsigned int stream);
 void event_record(unsigned int event, unsigned int stream);
@@ -168,11 +169,12 @@ double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
     double minfac, double maxfac, double sfact, double max_err, double prev_err,
     _mpi_comm comm_in, bool overset = false, int* iblank = NULL);
 
-void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, mdvector_gpu<double> &diffCo_gfpts,
-    mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
-    mdvector_gpu<double> &h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, unsigned int dt_type, unsigned int CFL_type,
-    unsigned int nFpts, unsigned int nEles, unsigned int nDims, unsigned int startEle, _mpi_comm comm_in,
-    bool overset = false, int* iblank = NULL);
+void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, 
+    mdvector_gpu<double> &diffCo_gfpts, mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, 
+    mdvector_gpu<char> &fpt2gfpt_slot, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &vol, 
+    mdvector_gpu<double> &h_ref, unsigned int nFptsPerFace, double CFL, double beta, int order, 
+    unsigned int CFL_type, unsigned int nFpts, unsigned int nEles, unsigned int nDims, 
+    unsigned int startEle, bool overset = false, int* iblank = NULL);
 
 
 void apply_dt_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
@@ -181,10 +183,10 @@ void apply_dt_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
 
 void compute_RHS_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &U_iniNM, 
     mdvector_gpu<double> &U_ini, mdvector_gpu<double> &divF, mdvector_gpu<double> &jaco_det_spts, 
-    mdvector_gpu<double> &dt, mdvector_gpu<double> &rk_coeff, mdvector_gpu<double> &RHS, 
-    double dtau_ratio, bool implicit_steady, bool pseudo_time, bool remove_deltaU, 
-    unsigned int dt_type, unsigned int nSpts, unsigned int nEles, unsigned int nVars, 
-    unsigned int stage);
+    mdvector_gpu<double> &dt, mdvector_gpu<double> &dtau, mdvector_gpu<double> &rk_coeff, 
+    mdvector_gpu<double> &RHS, double dtau_ratio, bool implicit_steady, bool pseudo_time, 
+    bool remove_deltaU, unsigned int dt_type, unsigned int dtau_type, unsigned int nSpts, 
+    unsigned int nEles, unsigned int nVars, unsigned int stage);
 
 void compute_U_wrapper(mdvector_gpu<double> &U_spts, mdvector_gpu<double> &deltaU, unsigned int nSpts, unsigned int nEles, unsigned int nVars);
 

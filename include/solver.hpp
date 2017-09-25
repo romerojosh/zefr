@@ -95,7 +95,7 @@ class FRSolver
       elesObjsBC;                       // elesObj by color
     mdvector<unsigned int> ele2elesObj; // Map from ele to elesObj
     unsigned int startStage = 0;        // Starting stage for DIRK
-    double dtau_ratio;                  // Ratio of dtau / dt
+    double dtau_ratio = 1.0;            // Ratio of dtau / dt
     unsigned int nCounter;              // Number of sweeps in block iteration
     int prev_color = 0;                 // Previous color
     unsigned int report_NMconv_freq;    // Report frequency for Newton's Method
@@ -138,7 +138,7 @@ class FRSolver
     void solver_data_to_device();
 #endif
 
-    void compute_element_dt();
+    void compute_element_dt(bool pseudo_flag = false);
 
 #ifdef _GPU
     // For moving grids, to pass parameters to CUDA kernels more easily

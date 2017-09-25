@@ -132,7 +132,7 @@ struct DataStruct
 
 struct InputStruct
 {
-  unsigned int equation, dt_type, CFL_type, ic_type, nDims, nQpts1D, n_steps, order;
+  unsigned int equation, dt_type, CFL_type = 0, ic_type, nDims, nQpts1D, n_steps, order;
   unsigned int report_freq, write_freq, force_freq, turb_stat_freq, res_type, error_freq, test_case, err_field, FMG_vcycles;
   std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
   bool viscous, p_multi, restart, fix_vis, squeeze, source, grad_via_div, disable_nondim, adapt_dt;
@@ -195,12 +195,11 @@ struct InputStruct
   std::map<std::string,std::string> meshBounds; //! Mapping from mesh-file names to Zefr BC's
 
   /* Implicit Parameters */
-  bool implicit_method = false;
-  bool implicit_steady = false;
+  bool implicit_method = false, implicit_steady = false;
   bool pseudo_time, adapt_dtau, FDA_Jacobian, KPF_Jacobian, freeze_Jacobian, remove_deltaU;
-  double dtau_ratio, dtau_growth_rate, dtau_ratio_max;
-  unsigned int iterative_method = 0;
-  unsigned int linear_solver = 0;
+  double dtau, CFL_tau, dtau_ratio_max, dtau_growth_rate;
+  unsigned int dtau_type, CFL_tau_type = 0;
+  unsigned int iterative_method = 0, linear_solver = 0;
   unsigned int nColors, iterNM_max, report_NMconv_freq, iterBM_max, report_BMconv_freq;
   bool backsweep;
   double svd_omg, svd_cutoff;
