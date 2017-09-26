@@ -2454,9 +2454,9 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 {
   if (nFringe == 0) return;
 
-  U_fringe.resize({geo->nFptsPerFace, nFringe, nVars});
-  fringe_fpts.resize({geo->nFptsPerFace, nFringe});
-  fringe_side.resize({geo->nFptsPerFace, nFringe});
+  U_fringe.resize({geo->nFptsPerFace, (uint)nFringe, nVars});
+  fringe_fpts.resize({geo->nFptsPerFace, (uint)nFringe});
+  fringe_side.resize({geo->nFptsPerFace, (uint)nFringe});
   for (int face = 0; face < nFringe; face++)
   {
     unsigned int side = 0;
@@ -2501,7 +2501,7 @@ void Faces::fringe_grad_to_device(int nFringe)
 
   if (nFringe == 0) return;
 
-  dU_fringe.resize({geo->nFptsPerFace, nFringe, nVars, nDims});
+  dU_fringe.resize({geo->nFptsPerFace, (uint)nFringe, nVars, nDims});
 
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
@@ -2532,12 +2532,12 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 {
   if (nFringe == 0) return;
 
-  U_fringe_d.assign({nFringe, geo->nFptsPerFace, nVars}, data, 3);
+  U_fringe_d.assign({(uint)nFringe, geo->nFptsPerFace, nVars}, data, 3);
 
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
   {
-    fringe_fpts.resize({geo->nFptsPerFace, nFringe});
-    fringe_side.resize({geo->nFptsPerFace, nFringe});
+    fringe_fpts.resize({geo->nFptsPerFace, (uint)nFringe});
+    fringe_side.resize({geo->nFptsPerFace, (uint)nFringe});
     for (int face = 0; face < nFringe; face++)
     {
       unsigned int side = 0;
@@ -2552,8 +2552,8 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
       }
     }
 
-    fringe_fpts_d.set_size({geo->nFptsPerFace, nFringe});
-    fringe_side_d.set_size({geo->nFptsPerFace, nFringe});
+    fringe_fpts_d.set_size({geo->nFptsPerFace, (uint)nFringe});
+    fringe_side_d.set_size({geo->nFptsPerFace, (uint)nFringe});
 
     fringe_fpts_d = fringe_fpts;
     fringe_side_d = fringe_side;
@@ -2574,7 +2574,7 @@ void Faces::fringe_grad_to_device(int nFringe, double *data)
 
   if (nFringe == 0) return;
 
-  dU_fringe_d.assign({nFringe, geo->nFptsPerFace, nDims, nVars}, data, 3);
+  dU_fringe_d.assign({(uint)nFringe, geo->nFptsPerFace, nDims, nVars}, data, 3);
 
   unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
       nFringe,geo->nFptsPerFace,nVars,nDims,3);
@@ -2586,7 +2586,7 @@ void Faces::get_face_coords(int* fringeIDs, int nFringe, int* nPtsFace, double* 
 {
   if (nFringe == 0) return;
 
-  fringeGFpts.resize({nFringe, geo->nFptsPerFace});
+  fringeGFpts.resize({(uint)nFringe, geo->nFptsPerFace});
   for (int face = 0; face < nFringe; face++)
     for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
       fringeGFpts(face,fpt) = geo->face2fpts(fpt, fringeIDs[face]);
@@ -2595,7 +2595,7 @@ void Faces::get_face_coords(int* fringeIDs, int nFringe, int* nPtsFace, double* 
   fringeGFpts_d = fringeGFpts;
 
   //fringeIDs_d.assign({nFaces}, faceIDs);
-  fringeCoords_d.set_size({nFringe,geo->nFptsPerFace,nDims});
+  fringeCoords_d.set_size({(uint)nFringe,geo->nFptsPerFace,nDims});
 
   pack_fringe_coords_wrapper(fringeGFpts_d, fringeCoords_d, coord_d, nFringe, geo->nFptsPerFace, nDims);
 

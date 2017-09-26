@@ -142,7 +142,7 @@ class Elements
     _mpi_comm myComm;
 
     mdvector<double> U_donors, dU_donors;
-    int nDonors = 0;
+    unsigned int nDonors = 0;
     int *donorIDs_d = NULL;
     std::vector<int> donorIDs;
 

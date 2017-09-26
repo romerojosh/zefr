@@ -2765,7 +2765,7 @@ void Elements::get_interp_weights(double* rst, double* weights, int& nweights, i
 void Elements::get_interp_weights_gpu(int* cellIDs, int nFringe, double* rst, double* weights)
 {
   if (loc_spts_1D_d.size() != loc_spts_1D.size())
-    loc_spts_1D_d.assign({loc_spts_1D.size()}, loc_spts_1D.data());
+    loc_spts_1D_d.assign({(uint)loc_spts_1D.size()}, loc_spts_1D.data());
 
   get_nodal_basis_wrapper(cellIDs, rst, weights, loc_spts_1D_d.data(), nFringe, nSpts, nSpts1D, 3);
 }
@@ -2779,7 +2779,7 @@ void Elements::donor_u_from_device(int* donorIDs_in, int nDonors_in)
     if (nDonors > 0)
       free_device_data(donorIDs_d);
 
-    nDonors = nDonors_in;
+    nDonors = (uint)nDonors_in;
 
     U_donors.resize({nSpts,nDonors,nVars});
     U_donors_d.set_size(U_donors);
@@ -2866,10 +2866,10 @@ void Elements::unblank_u_to_device(int *cellIDs, int nCells, double *data)
 {
   if (nCells == 0) return;
 
-  U_unblank_d.assign({nCells, nSpts, nVars}, data, 3);
+  U_unblank_d.assign({(uint)nCells, nSpts, nVars}, data, 3);
 
   if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
-    unblankIDs_d.assign({nCells}, cellIDs, 3);
+    unblankIDs_d.assign({(uint)nCells}, cellIDs, 3);
 
   unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,nCells,nSpts,nVars,3);
 
@@ -2880,9 +2880,9 @@ void Elements::get_cell_coords(int* cellIDs, int nCells, int* nPtsCell, double* 
 {
   if (nCells == 0) return;
 
-  unblankIDs_d.assign({nCells}, cellIDs); /// TODO: check this w/ unblanking...
+  unblankIDs_d.assign({(uint)nCells}, cellIDs); /// TODO: check this w/ unblanking...
 
-  cellCoords_d.set_size({nCells,nSpts,nDims});
+  cellCoords_d.set_size({(uint)nCells,nSpts,nDims});
 
   pack_cell_coords_wrapper(unblankIDs_d, cellCoords_d, coord_spts_d, nCells, nSpts, nDims); /// TODO: async?
 
