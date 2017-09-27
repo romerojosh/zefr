@@ -372,50 +372,20 @@ __global__
 void DgemvBatched_noAlpha_noBeta(const int M, const int N, const double** Aarray, int lda, const double** xarray, int incx,
     double** yarray, int incy, int batchCount)
 {
-  const unsigned int tidx = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+  if (i >= M)
+    return;
 
   for (unsigned int batch = blockDim.y * blockIdx.y + threadIdx.y; batch < batchCount; batch += gridDim.y * blockDim.y)
   {
-    /*
-    // HACK: if N == M
-    __shared__ double xvals[600];
-    for (unsigned int j = tidx; j < N; j += blockDim.x)
-      xvals[j + threadIdx.y*100] = xarray[batch][j * incx];
+    double sum = 0.0;
+    for (unsigned int j = 0; j < N; j++)
+      sum += Aarray[batch][i + j*lda] * xarray[batch][j * incx];
 
-    __syncthreads(); // To avoid divergence
+    yarray[batch][i * incy] = sum;
 
-    double sum[4] = {0};
-    for (unsigned int col = 0; col < N; col++)
-    {
-      unsigned int i = 0;
-      for (unsigned int row = tidx; row < M; row += blockDim.x)
-      {
-        sum[i] += Aarray[batch][row + col*lda] * xvals[col + threadIdx.y*100];
-        i++;
-      }
-    }
-
-    unsigned int i = 0;
-    for (unsigned int row = tidx; row < M; row += blockDim.x)
-    {
-      yarray[batch][row * incy] = sum[i];
-      i++;
-    }
-    */
-
-    for (unsigned int i = tidx; i < M; i += blockDim.x)
-    { 
-      double sum = 0.0;
-      for (unsigned int j = 0; j < N; j++)
-      {
-        //sum += Aarray[batch][i + j*lda] * xvals[j + threadIdx.y*100];
-        sum += Aarray[batch][i + j*lda] * xarray[batch][j * incx];
-      }
-
-      yarray[batch][i * incy] = sum;
-    }
-
-    __syncthreads(); // To avoid divergence
+    __syncthreads(); /* To avoid divergence */
   }
 }
 
@@ -423,7 +393,7 @@ void DgemvBatched_wrapper(const int M, const int N, const double alpha, const do
     const double beta, double** yarray, int incy, int batchCount)
 {
   dim3 threads(32, 6);
-  dim3 blocks(1, std::min((batchCount + threads.y - 1)/threads.y, MAX_GRID_DIM));
+  dim3 blocks((M + threads.x - 1)/threads.x, std::min((batchCount + threads.y - 1)/threads.y, MAX_GRID_DIM));
 
   if (alpha == 1.0 && beta == 0.0)
     DgemvBatched_noAlpha_noBeta<<<blocks, threads>>>(M, N, Aarray, lda, xarray, incx, yarray, incy, batchCount);
@@ -1122,28 +1092,26 @@ void apply_dt_LHS(mdvector_gpu<double> LHS, mdvector_gpu<double> dt,
     double coeff, unsigned int dt_type, unsigned int nSpts, unsigned int nEles,
     unsigned int nVars)
 {
+  const unsigned int nVarsSpts2 = nVars * nSpts * nVars * nSpts;
   const unsigned int tidx = blockIdx.x * blockDim.x  + threadIdx.x;
-  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
 
-  for (unsigned int elevarj = tidy; elevarj < nEles * nVars; elevarj += gridDim.y * blockDim.y)
+  if (tidx >= nVarsSpts2)
+    return;
+
+  const unsigned int spti = tidx % nSpts;
+  const unsigned int vari = (tidx / nSpts) % nVars;
+  const unsigned int sptj = (tidx / (nVars * nSpts)) % nSpts;
+  const unsigned int varj = (tidx / (nSpts * nVars * nSpts)) % nVars;
+
+  const unsigned int tidy = blockIdx.y * blockDim.y  + threadIdx.y;
+  for (unsigned int ele = tidy; ele < nEles; ele += gridDim.y * blockDim.y)
   {
-    const unsigned int ele = elevarj / nVars;
-    const unsigned int varj = elevarj % nVars;
     const double val = coeff * ((dt_type != 2) ? dt(0) : dt(ele));
 
-    for (unsigned int varispti = tidx; varispti < nSpts * nVars; varispti += blockDim.x)
-    {
-      const unsigned int vari = varispti / nSpts;
-      const unsigned int spti = varispti % nSpts;
+    LHS(ele, varj, sptj, vari, spti) = val * LHS(ele, varj, sptj, vari, spti) 
+      + (double) (spti == sptj && vari == varj);
 
-      for (unsigned int sptj = 0; sptj < nSpts; sptj++)
-      {
-        LHS(ele, varj, sptj, vari, spti) = val * LHS(ele, varj, sptj, vari, spti) 
-          + (double) (spti == sptj && vari == varj);
-      }
-    }
-
-    __syncthreads(); /* To avoid divergence */
+    __syncthreads(); // To avoid divergence
   }
 }
 
@@ -1152,7 +1120,8 @@ void apply_dt_LHS_wrapper(mdvector_gpu<double> &LHS, mdvector_gpu<double> &dt,
     unsigned int nVars)
 {
   dim3 threads(32, 6);
-  dim3 blocks(1, std::min((nVars * nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
+  dim3 blocks((nVars*nSpts*nVars*nSpts + threads.x - 1)/threads.x, 
+      std::min((nEles + threads.y - 1) / threads.y, MAX_GRID_DIM));
 
   apply_dt_LHS<<<blocks, threads>>>(LHS, dt, coeff, dt_type, nSpts, nEles, nVars);
 }
