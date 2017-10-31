@@ -162,12 +162,8 @@ double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
     uint nEles, uint nVars, double atol, double rtol, _mpi_comm comm_in,
     bool overset = false, int* iblank = NULL);
 
-double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
-    mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err,
-    mdvector_gpu<double> &dt_in, double& dt_out, uint nSpts, uint nEles,
-    uint nVars, double atol, double rtol, double expa, double expb,
-    double minfac, double maxfac, double sfact, double max_err, double prev_err,
-    _mpi_comm comm_in, bool overset = false, int* iblank = NULL);
+double set_adaptive_dt_wrapper(mdvector_gpu<double> &dt_in, double& dt_out, double expa, double expb,
+    double minfac, double maxfac, double sfact, double max_dt, double max_err, double prev_err);
 
 void compute_element_dt_wrapper(mdvector_gpu<double> &dt, mdvector_gpu<double> &waveSp_gfpts, 
     mdvector_gpu<double> &diffCo_gfpts, mdvector_gpu<double> &dA, mdvector_gpu<int> &fpt2gfpt, 

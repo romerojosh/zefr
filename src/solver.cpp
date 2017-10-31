@@ -2768,14 +2768,16 @@ void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector_gpu<double>> &sou
   fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
 
   for (auto e : elesObjs)
+  {
     e->dt(0) *= fac;
+    e->dt(0) = std::min(e->dt(0), input->max_dt);
+  }
 #endif
 
 #ifdef _GPU
   max_err = 0.0;
   for (auto e : elesObjs)
   {
-
     double err = get_rk_error_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->nSpts, e->nEles,
         e->nVars, input->atol, input->rtol, worldComm, input->overset, geo.iblank_cell_d.data());
 
@@ -2786,10 +2788,8 @@ void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector_gpu<double>> &sou
 
   for (auto e : elesObjs)
   {
-    set_adaptive_dt_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->dt_d, e->dt(0),
-        e->nSpts, e->nEles, e->nVars, input->atol, input->rtol, expa, expb,
-        input->minfac, input->maxfac, input->sfact, max_err, prev_err, worldComm, input->overset,
-        geo.iblank_cell_d.data());
+    set_adaptive_dt_wrapper(e->dt_d, e->dt(0), expa, expb, input->minfac, input->maxfac, 
+        input->sfact, input->max_dt, max_err, prev_err);
   }
 #endif
 
@@ -3209,14 +3209,14 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
       {
         LSRK_update_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d, e->divF_spts_d,
             e->jaco_det_spts_d, e->dt(0), ai, bi, bhi, e->nSpts, e->nEles,
-            e->nVars, stage, input->nStages, input->adapt_dt, input->overset, 
+            e->nVars, stage, input->nStages, input->adapt_dt, input->overset,
             geo.iblank_cell_d.data());
       }
       else
       {
         LSRK_update_source_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d,
             e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt(0), ai, bi, bhi,
-            e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->adapt_dt, 
+            e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->adapt_dt,
             input->overset, geo.iblank_cell_d.data());
       }
     }
@@ -4248,6 +4248,14 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
     ThrowException("PyFR write not supported for mixed element grids.");
 
   auto e = elesObjs[0];
+
+  /* --- Apply polynomial squeezing if requested --- */
+
+  if (input->squeeze)
+  {
+    e->compute_Uavg();
+    e->poly_squeeze();
+  }
 
 #ifdef _GPU
     e->U_spts = e->U_spts_d;

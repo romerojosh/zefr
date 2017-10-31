@@ -965,22 +965,16 @@ double get_rk_error_wrapper(mdvector_gpu<double> &U_spts,
   return err_ptr[0];
 }
 
-double set_adaptive_dt_wrapper(mdvector_gpu<double> &U_spts,
-    mdvector_gpu<double> &U_ini, mdvector_gpu<double> &rk_err,
-    mdvector_gpu<double> &dt_in, double &dt_out, uint nSpts, uint nEles,
-    uint nVars, double atol, double rtol, double expa, double expb,
-    double minfac, double maxfac, double sfact, double max_err, double prev_err,
-    _mpi_comm comm_in, bool overset, int* iblank)
+double set_adaptive_dt_wrapper(mdvector_gpu<double> &dt_in, double &dt_out,
+    double expa, double expb, double minfac, double maxfac, double sfact,
+    double max_dt, double max_err, double prev_err)
 {
-  //double max_err = get_rk_error_wrapper(U_spts, U_ini, rk_err, nSpts, nEles,
-  //    nVars, atol, rtol, comm_in, overset, iblank);
-
   // Determine the time step scaling factor and the new time step
   double fac = pow(max_err, -expa) * pow(prev_err, expb);
   fac = std::min(maxfac, std::max(minfac, sfact*fac));
 
   thrust::device_ptr<double> dt_ptr = thrust::device_pointer_cast(dt_in.data());
-  dt_ptr[0] *= fac;
+  dt_ptr[0] = std::min(fac*dt_ptr[0], max_dt);
 
   dt_out = dt_ptr[0]; // Set value on CPU for other uses
 

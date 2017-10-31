@@ -159,6 +159,7 @@ struct InputStruct
   unsigned int nStages;
   double pi_alpha, pi_beta;     //! PI-controller valuse
   double sfact, maxfac, minfac; //! delta-t adjustment factors
+  double max_dt;
   double atol, rtol;
 
   /* --- I/O --- */

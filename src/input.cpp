@@ -141,6 +141,8 @@ InputStruct read_input_file(std::string inputfile)
     read_param(f, "safety_factor", input.sfact, 0.8);
     read_param(f, "max_factor", input.maxfac, 2.5);
     read_param(f, "min_factor", input.minfac, 0.3);
+
+    read_param(f, "max_dt", input.max_dt, 100.);
   }
 
   read_param(f, "restart", input.restart, false);
