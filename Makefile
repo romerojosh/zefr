@@ -63,6 +63,7 @@ endif
 ifeq ($(strip $(GIMMIK)),NO)
 	CXXFLAGS += -D_NO_GIMMIK
 	CUFLAGS += -D_NO_GIMMIK
+	CCFLAGS += -D_NO_GIMMIK
 endif
 
 # Setting BLAS flags
@@ -172,6 +173,7 @@ $(TARGET): $(OBJS)
 .PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
 swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC $(SWIG_INCS)
+swig: CCFLAGS += -fPIC
 swig: INCS += -I$(TIOGA_INC_DIR)/
 swig: CUFLAGS += -Xcompiler -fPIC
 swig: $(SOBJS) $(SWIG_OBJ) $(CONVERT_OBJ)
@@ -182,6 +184,7 @@ swig: $(SOBJS) $(SWIG_OBJ) $(CONVERT_OBJ)
 .PHONY: static
 static: FLAGS += -D_BUILD_LIB
 static: CXXFLAGS += -fPIC
+static: CCFLAGS += -fPIC
 static: CUFLAGS += -Xcompiler -fPIC
 static: $(SOBJS)
 	$(AR) $(BINDIR)/libzefr.a $(SOBJS)
@@ -190,6 +193,7 @@ static: $(SOBJS)
 .PHONY: shared
 shared: FLAGS += -D_BUILD_LIB
 shared: CXXFLAGS += -fPIC
+shared: CCFLAGS += -fPIC
 shared: CUFLAGS += -Xcompiler -fPIC
 shared: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
@@ -237,7 +241,7 @@ clean:
 
 # Specific dependancy-tracking build rules
 $(BINDIR)/gimmik_cpu.o: $(SRCDIR)/gimmik_cpu.c include/gimmik.h
-	$(CC) $(INCS) -c -o $@ $< $(FLAGS) $(CCFLAGS) -fopenmp
+	$(CC) $(INCS) -c -o $@ $< $(FLAGS) $(CCFLAGS)
 
 ifeq ($(strip $(ARCH)),GPU)
 $(BINDIR)/gimmik_gpu.o: $(SRCDIR)/gimmik_gpu.cu include/gimmik.h

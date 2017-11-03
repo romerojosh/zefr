@@ -326,8 +326,8 @@ void Zefr::read_input(const char *inputfile)
 
   if (nGrids > 1)
     input.overset = 1;
-  else
-    input.overset = 0;
+  //else
+  //  input.overset = 0;
 
   if (input.overset)
   {

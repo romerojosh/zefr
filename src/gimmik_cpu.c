@@ -1,5 +1,6 @@
 #include "cblas.h"
 
+#ifndef _NO_GIMMIK
 void
 gimmik_mm_cpu_16172623015900852230_b0(int ncol,
          const double* restrict b, int ldb,
@@ -9133,3 +9134,27 @@ void gimmik_mm_cpu(int m, int n, int k, const double alpha,
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
   }
 }
+#endif
+
+#ifdef _NO_GIMMIK
+void gimmik_mm_cpu(int m, int n, int k, const double alpha,
+        const double* restrict a, int lda,
+        const double* restrict b, int ldb,
+        const double beta, const double* restrict c, int ldc,
+        unsigned long id)
+{
+
+  if (beta == 0.0)
+  {
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+  }
+  else if (beta == 1.0)
+  {
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+  }
+  else
+  {
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+  }
+}
+#endif
