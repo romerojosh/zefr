@@ -2,7 +2,9 @@
 nDims    3
 overset  true
 meshfile P3/hex16.pyfrm
-overset_grids  hex10_in.pyfrm  hex16.pyfrm
+#overset_grids  hex10_in.pyfrm  P3/hex16_out.pyfrm
+#overset_grids  hex24.pyfrm  P3/hex52.pyfrm
+overset_grids  hex36_in.pyfrm  P3/hex52.pyfrm
 overset_grid_type      1  0  # 0: background grid, 1: grid with geometry
 #overset_grids  hex20_in.pyfrm  P3/hex32_out.pyfrm
 
@@ -11,21 +13,22 @@ mesh_bound  periodic  periodic
 mesh_bound  overset   overset
 
 # Solver:
-order    4
+order    0
 equation EulerNS    (AdvDiff, EulerNS)
 viscous  1
 motion   1
 spt_type Legendre
 
 # Timestepping:
-n_steps   5000
-dt_scheme LSRK      (Euler, RK44, RK54)
+n_steps   5
+dt_scheme RK54      (Euler, RK44, RK54)
+adapt_dt  1
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-dt        0.003
+dt        0.0001
 res_tol   1e-12
 
 # Restarting
-restart  1
+restart  0
 restart_type 2
 restart_case TG-Rot-2
 restart_iter 600
@@ -40,9 +43,9 @@ err_rtol  1e-6
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix  TG-Rot-2
-write_freq     200
-write_pyfr     1
-write_paraview 1
+write_freq     000
+write_pyfr     0
+write_paraview 0
 plot_surfaces  0
 plot_overset   0
 report_freq    100

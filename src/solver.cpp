@@ -3941,7 +3941,8 @@ void FRSolver::step_LSRK_stage_start(int stage)
     {
       device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
       device_copy(e->U_til_d, e->U_spts_d, e->U_spts_d.max_size());
-      device_fill(e->rk_err_d, e->rk_err_d.max_size());
+      if (input->adapt_dt)
+        device_fill(e->rk_err_d, e->rk_err_d.max_size());
 
       // Get current delta t [dt(0)] (updated on GPU)
       copy_from_device(e->dt.data(), e->dt_d.data(), 1);
@@ -3983,21 +3984,24 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
   double bhi = rk_bhat(stage);
 
 #ifdef _CPU
-  // Update Error
   for (auto e : elesObjs)
   {
-#pragma omp parallel for collapse(2)
-    for (unsigned int spt = 0; spt < e->nSpts; spt++)
+    // Update Error
+    if (input->adapt_dt)
     {
-      for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+      for (unsigned int spt = 0; spt < e->nSpts; spt++)
       {
-#pragma omp simd
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int n = 0; n < e->nVars; n++)
         {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+#pragma omp simd
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
-          e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
-              e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+            e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+          }
         }
       }
     }
@@ -7901,6 +7905,7 @@ void FRSolver::move(double time, bool update_iblank)
 
   if (update_iblank && input->overset)
   {
+    PUSH_NVTX_RANGE("MoveGrid", 0);
 #ifdef _BUILD_LIB
     // Guess grid position at end of time step and perform blanking procedure
     auto xcg = geo.x_cg;
@@ -7967,6 +7972,7 @@ void FRSolver::move(double time, bool update_iblank)
 #endif
 
     ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+    POP_NVTX_RANGE;
 
     PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
     ZEFR->unblank_1();
@@ -7982,6 +7988,7 @@ void FRSolver::move(double time, bool update_iblank)
 #endif // _BUILD_LIB
   }
 
+  PUSH_NVTX_RANGE("MoveGrid", 0);
   if (input->motion_type != RIGID_BODY)
   {
 #ifdef _CPU
@@ -7996,6 +8003,7 @@ void FRSolver::move(double time, bool update_iblank)
 
   for (auto e : elesObjs)
     e->move(faces);
+  POP_NVTX_RANGE;
 
 #ifdef _BUILD_LIB
   // Update the overset connectivity to the new grid positions
@@ -8032,7 +8040,9 @@ void FRSolver::move(double time, bool update_iblank)
       ZEFR->unblank_2(faces->nVars);
       POP_NVTX_RANGE;
 
+      PUSH_NVTX_RANGE("Iblank2GPU", 6);
       ZEFR->update_iblank_gpu();
+      POP_NVTX_RANGE;
     }
 
     PUSH_NVTX_RANGE("TG-PT-CONN",3);
