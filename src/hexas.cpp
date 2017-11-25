@@ -509,6 +509,71 @@ double Hexas::calc_d_nodal_basis_fpts(unsigned int fpt,
 
 }
 
+mdvector<double> Hexas::get_face_nodes(unsigned int P)
+{
+  /// TODO
+}
+
+mdvector<double> Hexas::get_face_weights(unsigned int P)
+{
+  /// TODO
+}
+
+void Hexas::project_face_point(int face, const double* loc, double* ploc)
+{
+  switch(face)
+  {
+    case 0: /* Bottom face */
+      ploc[0] = loc[0];
+      ploc[1] = loc[1];
+      ploc[2] = -1.0;
+      break;
+
+    case 1: /* Top face */
+      ploc[0] = loc[0];
+      ploc[1] = loc[1];
+      ploc[2] = 1.0;
+      break;
+
+    case 2: /* Left face */
+      ploc[0] = -1.0;
+      ploc[1] = loc[0];
+      ploc[2] = loc[1];
+      break;
+
+    case 3: /* Right face */
+      ploc[0] = 1.0;
+      ploc[1] = loc[0];
+      ploc[2] = loc[1];
+      break;
+
+    case 4: /* Front face */
+      ploc[0] = loc[0];
+      ploc[1] = -1.0;
+      ploc[2] = loc[1];
+      break;
+
+    case 5: /* Back face */
+      ploc[0] = loc[0];
+      ploc[1] = 1.0;
+      ploc[2] = loc[1];
+      break;
+  }
+}
+
+double Hexas::calc_nodal_face_basis(unsigned int pt, double *loc)
+{
+  int i = pt % nFptsPerFace;
+  int j = pt / nFptsPerFace;
+
+  return Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]); /// CHECK
+}
+
+double Hexas::calc_orthonormal_basis(unsigned int mode, double *loc)
+{
+  return Legendre3D(order, loc[0], loc[1], loc[2], mode); /// CHECK
+}
+
 void Hexas::setup_PMG(int pro_order, int res_order)
 {
   unsigned int nSpts_pro_1D = pro_order + 1;

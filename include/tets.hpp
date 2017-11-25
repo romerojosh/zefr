@@ -33,6 +33,9 @@
 class Tets: public Elements 
 {
   private:
+    mdvector<double> vandTri, inv_vandTri;  // Vandermonde for face (tri) basis [for FR correction function]
+    mdvector<double> loc_fpts_2D;
+
     void set_locs();
     void set_normals(std::shared_ptr<Faces> faces);
     void set_oppRestart(unsigned int order_restart, bool use_shape = false);
@@ -51,6 +54,15 @@ class Tets: public Elements
     double calc_d_nodal_basis_fpts(unsigned int fpt,
                                    const std::vector<double> &loc,
                                    unsigned int dim);
+
+    mdvector<double> get_face_nodes(unsigned int P);
+    mdvector<double> get_face_weights(unsigned int P);
+
+    void project_face_point(int face, const double* loc, double* ploc);
+
+    double calc_nodal_face_basis(unsigned int pt, double *loc);
+
+    double calc_orthonormal_basis(unsigned int mode, double *loc);
 
   public:
     Tets(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order = -1);

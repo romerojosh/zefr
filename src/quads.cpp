@@ -598,4 +598,67 @@ void Quads::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
   }
 }
 
+mdvector<double> Quads::get_face_nodes(unsigned int P)
+{
+  auto vpts = Gauss_Legendre_pts(P+1);  // Given polynomial order; need N
+
+  mdvector<double> pts({P+1});
+
+  for (int i = 0; i < P+1; i++)
+    pts(i) = vpts[i];
+
+  return pts;
+}
+
+mdvector<double> Quads::get_face_weights(unsigned int P)
+{
+  auto vwts = Gauss_Legendre_weights(P+1);  // Given polynomial order; need N
+
+  mdvector<double> wts({P+1});
+
+  for (int i = 0; i < P+1; i++)
+    wts(i) = vwts[i];
+
+  return wts;
+}
+
+void Quads::project_face_point(int face, const double* loc, double* ploc)
+{
+  switch(face)
+  {
+    case 0: /* Bottom face */
+      ploc[0] = loc[0];
+      ploc[1] = -1.0;
+      break;
+
+    case 1: /* Right face */
+      ploc[0] = 1.0;
+      ploc[1] = loc[0];
+      break;
+
+    case 2: /* Top face */
+      ploc[0] = loc[0];
+      ploc[1] = 1.0;
+      break;
+
+    case 3: /* Left face */
+      ploc[0] = -1.0;
+      ploc[1] = loc[0];
+      break;
+  }
+}
+
+double Quads::calc_nodal_face_basis(unsigned int pt, double *loc)
+{
+  int i = pt % nFptsPerFace;
+
+  return Lagrange(loc_spts_1D, i, loc[0]); /// CHECK
+}
+
+double Quads::calc_orthonormal_basis(unsigned int mode, double *loc)
+{
+  return Legendre2D(order, loc[0], loc[1], mode); /// CHECK
+}
+
+
 void Quads::modify_sensor(){ /* Do nothing */ }

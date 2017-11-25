@@ -53,7 +53,7 @@ void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 #else
   nElesPad = nEles; //TODO: Padding for CPU
 #endif
-
+printf("Begging setup for element type: %d\n",etype);
   set_locs();
   set_shape();
   set_coords(faces);
@@ -554,6 +554,15 @@ void Elements::setup_FR()
       oppE(fpt,spt) = calc_nodal_basis(spt, loc);
     }
   }
+  std::cout << std::endl;
+  std::cout << "oppE:" << std::endl;
+  oppE.print();
+
+  // This is also correct for tets...
+  /*cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nFpts,nSpts,nSpts,1.0,obasis.data(),nSpts,inv_vand.data(),nSpts,0.0,oppE.data(),nSpts);
+  std::cout << std::endl;
+  std::cout << "oppE-2:" << std::endl;
+  oppE.print();*/
 
   /* Setup differentiation operator (oppD) for solution points */
   /* Note: Can set up for standard FR eventually. Trying to keep things simple.. */
@@ -570,6 +579,8 @@ void Elements::setup_FR()
       }
     }
   }
+  std::cout << "oppD:" << std::endl;
+  oppD.print();
 
   /* Setup differentiation operator (oppD_fpts) for flux points (DFR Specific)*/
   for (unsigned int dim = 0; dim < nDims; dim++)
@@ -632,6 +643,76 @@ void Elements::setup_FR()
       }
     }
   }
+
+#ifndef _RT_TETS
+  /* Setup correction operator */
+
+  if (etype == TRI || etype == TET)
+  {
+    int QOrder = (etype == TET) ? 7 : order;
+    auto pts = get_face_nodes(QOrder);
+    auto wts = get_face_weights(QOrder);
+    int npts = pts.get_dim(0);
+
+    // Evaluate solution basis on a face at the quadrature points
+    mdvector<double> fbasis_qpts({npts, nFptsPerFace});
+    for (int j = 0; j < npts; j++)
+    {
+      for (int i = 0; i < nFptsPerFace; i++)
+      {
+        double loc[2] = {pts(j,0), pts(j,1)};
+        fbasis_qpts(j,i) = calc_nodal_face_basis(i, loc);
+      }
+    }
+
+    // Evaluate the orthonormal solution basis at the quadrature points
+    mdvector<double> ubasis_qpts({nFaces, npts, nSpts});
+    for (int i = 0; i < nFaces; i++)
+    {
+      for (int j = 0; j < npts; j++)
+      {
+        for (int spt = 0; spt < nSpts; spt++)
+        {
+          double pt[3];
+          project_face_point(i, &pts(j,0), pt);
+
+          ubasis_qpts(i,j,spt) = calc_orthonormal_basis(spt, pt);
+        }
+      }
+    }
+
+    mdvector<double> gbasis({nFpts,nSpts});
+    for (int fpt = 0; fpt < nFpts; fpt++)
+    {
+      int F = fpt / nFptsPerFace;
+      int k = fpt % nFptsPerFace;
+      for (int spt = 0; spt < nSpts; spt++)
+      {
+        for (int i = 0; i < npts; i++)
+        {
+          gbasis(fpt,spt) += wts(i) * fbasis_qpts(i,k) * ubasis_qpts(F,i,spt);
+        }
+      }
+    }
+
+    mdvector<double> obasis({nSpts,nSpts});
+    for (int i = 0; i < nSpts; i++)
+    {
+      for (int spt = 0; spt < nSpts; spt++)
+      {
+        obasis(i,spt) = calc_orthonormal_basis(spt, &loc_spts(i,0));
+      }
+    }
+
+    opp_corr.assign({nFpts,nSpts});
+    cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasTrans,nFpts,nSpts,nSpts,1.0,
+                gbasis.data(),nSpts,obasis.data(),nSpts,0.0,opp_corr.data(),nSpts);
+
+
+    std::cout << "oppCorr:" << std::endl;
+    opp_corr.print();
+  }
+#endif
 
 #ifndef _NO_GIMMIK
   /* Setup operator ids for GiMMiK (ids = 0 by default to disable gimmik) */

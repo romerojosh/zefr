@@ -32,6 +32,7 @@
 #include <array>
 #include <cassert>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <memory>
 
@@ -133,6 +134,8 @@ class mdvector
     T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4) const;
     T& operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5);
     T operator()(unsigned int idx0, unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4, unsigned int idx5) const;
+
+    void print(void);
 
 #ifdef _GPU
     //! Assignment (copy from GPU)
@@ -508,6 +511,20 @@ mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
   return *this;
 }
 #endif
+
+
+template <typename T>
+void mdvector<T>::print(void)
+{
+  for (int i = 0; i < dims[0]; i++)
+  {
+    for (int j = 0; j < dims[1]-1; j++)
+    {
+      std::cout << std::setw(10) << this->operator ()(i,j) << ", ";
+    }
+    std::cout << std::setw(10) << this->operator ()(i,dims[1]-1) << std::endl;
+  }
+}
 
 /* mdview class to allow indirect data access from faces */
 // NOTE: Assumes index in last place used for slot always, and thus

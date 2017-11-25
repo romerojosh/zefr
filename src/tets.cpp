@@ -61,14 +61,22 @@ Tets::Tets(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned 
   if (order == -1)
   {
     nSpts = (input->order + 1) * (input->order + 2) * (input->order + 3) / 6;
+#ifdef _RT_TETS
     nFptsPerFace = (input->order + 2) * (input->order + 3) / 2;
+#else
+    nFptsPerFace = (input->order + 1) * (input->order + 2) / 2;
+#endif
     nSpts1D = input->order + 1; //nSpts1D only used for filter matrix setup
     this->order = input->order;
   }
   else
   {
     nSpts = (order + 1) * (order + 2) * (order + 3) / 6;
+#ifdef _RT_TETS
     nFptsPerFace = (order + 2) * (order + 3) / 2;
+#else
+    nFptsPerFace = (order + 1) * (order + 2) / 2;
+#endif
     nSpts1D = order + 1; 
     this->order = order;
   }
@@ -96,21 +104,28 @@ void Tets::set_locs()
   /* Allocate memory for point location structures */
   loc_qpts.assign({nQpts,nDims}); 
 
-  mdvector<double> loc_fpts_2D; 
   /* Get positions of points in 1D and 2D */
   if (input->spt_type == "Legendre")
   {
+#ifdef _RT_TETS
    loc_spts_1D = Gauss_Legendre_pts(order + 1); // loc_spts_1D used when generating filter matrices only 
    loc_fpts_2D = WS_Tri_pts(order + 1);
+#else
+    loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only
+    loc_fpts_2D = WS_Tri_pts(order);
+#endif
   }
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
+#ifdef _RT_TETS
   auto weights_fpts_2D = WS_Tri_weights(order + 1);
+#else
+  auto weights_fpts_2D = WS_Tri_weights(order);
+#endif
   weights_fpts.assign({nFptsPerFace});
   for (unsigned int fpt = 0; fpt < nFptsPerFace; fpt++)
     weights_fpts(fpt) = weights_fpts_2D(fpt);
-
 
   /* Setup solution point locations and quadrature weights */
   loc_spts = WS_Tet_pts(order);
@@ -155,46 +170,32 @@ void Tets::set_locs()
   }
   
   /* Setup plot point locations */
-  auto loc_ppts_1D = Shape_pts(order); unsigned int nPpts1D = loc_ppts_1D.size();
+  //auto loc_ppts_1D = Shape_pts(order); unsigned int nPpts1D = loc_ppts_1D.size();
   //auto loc_ppts_1D = Shape_pts(1); unsigned int nPpts1D = loc_ppts_1D.size();
   loc_ppts.assign({nPpts,nDims});
 
   unsigned int ppt = 0;
-//  for (unsigned int i = 0; i < nPpts1D; i++)
-//  {
-//    for (unsigned int j = 0; j < nPpts1D - i; j++)
-//    {
-//      for (unsigned int k = 0; k < nPpts1D - i - j; k++)
-//      {
-//        loc_ppts(ppt,0) = loc_ppts_1D[k];
-//        loc_ppts(ppt,1) = loc_ppts_1D[j];
-//        loc_ppts(ppt,2) = loc_ppts_1D[i];
-//        ppt++;
-//      }
-//    }
-//  }
 
-/* Modified from HiFiLES */
-for(int k = 0; k < order+1; k++)
-{
-  for(int j = 0; j < order+1-k; j++)
+  /* Modified from HiFiLES */
+  for(int k = 0; k < order+1; k++)
   {
-    for(int i = 0; i < order+1-k-j; i++)
+    for(int j = 0; j < order+1-k; j++)
     {
-      ppt = (order+1)*(order+2)*(order+3)/6 - (order+1-k)*(order+2-k)*(order+3-k)/6 +
-        j*(order+1-k)-(j-1)*j/2 + i;
+      for(int i = 0; i < order+1-k-j; i++)
+      {
+        ppt = (order+1)*(order+2)*(order+3)/6 - (order+1-k)*(order+2-k)*(order+3-k)/6 +
+            j*(order+1-k)-(j-1)*j/2 + i;
 
-      loc_ppts(ppt, 0) = -1.0+(2.0*i/(order));
-      loc_ppts(ppt, 1) = -1.0+(2.0*j/(order));
-      loc_ppts(ppt, 2) = -1.0+(2.0*k/(order));
+        loc_ppts(ppt, 0) = -1.0+(2.0*i/(order));
+        loc_ppts(ppt, 1) = -1.0+(2.0*j/(order));
+        loc_ppts(ppt, 2) = -1.0+(2.0*k/(order));
+      }
     }
   }
-}
 
   /* Setup gauss quadrature point locations and weights (fixed to 84 point Shunn-Hamm rule) */
   loc_qpts = WS_Tet_pts(6);
   weights_qpts = WS_Tet_weights(6);
-
 }
 
 void Tets::set_normals(std::shared_ptr<Faces> faces)
@@ -248,7 +249,8 @@ void Tets::set_vandermonde_mats()
 
   inv_vand.assign({nSpts, nSpts}); 
   vand.inverse(inv_vand);
-
+std::cout << "inv_vand:" <<  std::endl;
+  inv_vand.print();
   /* Set vandermonde for Raviart-Thomas monomial basis over combined solution and flux point set*/
   vandRT.assign({3*nSpts+nFpts, 3*nSpts+nFpts}, 0.0);
 
@@ -296,6 +298,19 @@ void Tets::set_vandermonde_mats()
 
   inv_vandRT.assign({3*nSpts + nFpts, 3*nSpts * nFpts}); 
   vandRT.inverse(inv_vandRT);
+
+#ifndef _RT_TETS
+  vandTri.assign({nFptsPerFace, nFptsPerFace});
+
+  for (unsigned int i = 0; i < nFptsPerFace; i++)
+    for (unsigned int j = 0; j < nFptsPerFace; j++)
+    {
+      vandTri(i,j) = Dubiner2D(order, loc_fpts_2D(i, 0), loc_fpts_2D(i, 1), j);
+    }
+
+  inv_vandTri.assign({nFptsPerFace, nFptsPerFace});
+  vandTri.inverse(inv_vandTri);
+#endif
 }
 
 void Tets::set_oppRestart(unsigned int order_restart, bool use_shape)
@@ -352,7 +367,6 @@ void Tets::set_oppRestart(unsigned int order_restart, bool use_shape)
 
 double Tets::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)
 {
-
   double val = 0.0;
   for (unsigned int i = 0; i < nSpts; i++)
   {
@@ -389,6 +403,7 @@ void Tets::calc_nodal_basis(double *loc, double* basis)
 double Tets::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
+#ifdef _RT_TETS
 
   double val = 0.0;
   int mode;
@@ -400,6 +415,16 @@ double Tets::calc_d_nodal_basis_spts(unsigned int spt,
     val += inv_vandRT(mode, i) * divRTMonomial3D(order + 1, loc[0], loc[1], loc[2], i);
   }
 
+#else
+
+  double val = 0.0;
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    val += inv_vand(i, spt) * dDubiner3D(order, loc[0], loc[1], loc[2], dim, i);
+  }
+
+#endif
+
   return val;
 
 }
@@ -407,11 +432,13 @@ double Tets::calc_d_nodal_basis_spts(unsigned int spt,
 double Tets::calc_d_nodal_basis_fr(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
-
   double val = 0.0;
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    val += inv_vand(i, spt) * dDubiner3D(order, loc[0], loc[1], loc[2], dim, i);
+  }
 
   return val;
-
 }
 
 double Tets::calc_d_nodal_basis_fpts(unsigned int fpt,
@@ -436,6 +463,64 @@ double Tets::calc_d_nodal_basis_fpts(unsigned int fpt,
 
   return val;
 
+}
+
+mdvector<double> Tets::get_face_nodes(unsigned int P)
+{
+  return WS_Tri_pts(P);
+}
+
+mdvector<double> Tets::get_face_weights(unsigned int P)
+{
+  return WS_Tri_weights(P);
+}
+
+void Tets::project_face_point(int face, const double* loc, double* ploc)
+{
+  switch(face)
+  {
+    case 0: /* Rear (xi-eta plane) */
+      ploc[0] = loc[0];
+      ploc[1] = loc[1];
+      ploc[2] = -1.0;
+      break;
+
+    case 1: /* Angled Face */
+      ploc[0] = loc[0];
+      ploc[1] = loc[1];
+      ploc[2] = -(loc[0] + loc[1] + 1);
+      break;
+
+    case 2: /* Left (eta-zeta plane) */
+      ploc[0] = -1.0;
+      ploc[1] = loc[0];
+      ploc[2] = loc[1];
+      break;
+
+    case 3: /* Bottom (xi-zeta plane) */
+      ploc[0] = loc[0];
+      ploc[1] = -1.0;
+      ploc[2] = loc[1];
+      break;
+  }
+}
+
+double Tets::calc_nodal_face_basis(unsigned int pt, double *loc)
+{
+  //if (pt > inv_vandTri.get_dim(1)) printf("baaad!  %d, %d\n",inv_vandTri.get_dim(0),inv_vandTri.get_dim(1));
+  //printf("dims = %d, %d; nFptsFace = %d\n",inv_vandTri.get_dim(0),inv_vandTri.get_dim(1),nFptsPerFace); /// DEBUGGING
+  double val = 0.0;
+  for (unsigned int i = 0; i < nFptsPerFace; i++)
+  {
+    val += inv_vandTri(i, pt) * Dubiner2D(order, loc[0], loc[1], i);
+  }
+
+  return val;
+}
+
+double Tets::calc_orthonormal_basis(unsigned int mode, double *loc)
+{
+  return Dubiner3D(order, loc[0], loc[1], loc[2], mode);
 }
 
 void Tets::setup_PMG(int pro_order, int res_order)

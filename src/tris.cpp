@@ -100,8 +100,13 @@ void Tris::set_locs()
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
   {
+#ifdef _RT_TETS
    loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only 
    loc_fpts_1D = Gauss_Legendre_pts(order+2);
+#else
+    loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only
+    loc_fpts_1D = Gauss_Legendre_pts(order+1);
+#endif
   }
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
@@ -387,6 +392,62 @@ double Tris::calc_d_nodal_basis_fpts(unsigned int fpt,
 
   return val;
 
+}
+
+
+mdvector<double> Tris::get_face_nodes(unsigned int P)
+{
+  auto vpts = Gauss_Legendre_pts(P+1);  // Given polynomial order; need N
+
+  mdvector<double> pts({P+1});
+
+  for (int i = 0; i < P+1; i++)
+    pts(i) = vpts[i];
+
+  return pts;
+}
+
+mdvector<double> Tris::get_face_weights(unsigned int P)
+{
+  auto vwts = Gauss_Legendre_weights(P+1);  // Given polynomial order; need N
+
+  mdvector<double> wts({P+1});
+
+  for (int i = 0; i < P+1; i++)
+    wts(i) = vwts[i];
+
+  return wts;
+}
+
+void Tris::project_face_point(int face, const double* loc, double* ploc)
+{
+  switch(face)
+  {
+    case 0: /* Bottom edge */
+      ploc[0] = loc[0];
+      ploc[1] = -1.0;
+      break;
+
+    case 1: /* Hypotenuse */
+      ploc[0] = -loc[0];
+      ploc[1] = loc[0];
+      break;
+
+    case 2: /* Left edge */
+      ploc[0] = -1.0;
+      ploc[1] = loc[0];
+      break;
+  }
+}
+
+double Tris::calc_nodal_face_basis(unsigned int pt, double *loc)
+{
+  return Lagrange(loc_spts_1D, loc[0], pt); /// CHECK
+}
+
+double Tris::calc_orthonormal_basis(unsigned int mode, double *loc)
+{
+  return Dubiner2D(order, loc[0], loc[1], mode);
 }
 
 void Tris::setup_PMG(int pro_order, int res_order)
