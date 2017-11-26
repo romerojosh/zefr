@@ -216,6 +216,7 @@ void Quads::set_normals(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for normals */
   tnorm.assign({nFpts,nDims});
+  tdA.assign({nFpts}, 1.0);
 
   /* Setup parent-space (transformed) normals at flux points */
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)

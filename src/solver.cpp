@@ -350,8 +350,10 @@ void FRSolver::create_elesObj(ELE_TYPE etype, unsigned int elesObjID, unsigned i
   }
   else if (etype == TRI)
   {
+#ifdef _RT_TETS
     if (input->viscous and !input->grad_via_div)
       ThrowException("Need to enable grad_via_div to use triangles for viscous problems!");
+#endif
 
      elesObjs.push_back(std::make_shared<Tris>(&geo, input, elesObjID, startEle, endEle, order));
   }
@@ -359,8 +361,10 @@ void FRSolver::create_elesObj(ELE_TYPE etype, unsigned int elesObjID, unsigned i
      elesObjs.push_back(std::make_shared<Hexas>(&geo, input, elesObjID, startEle, endEle, order));
   else if (etype == TET)
   {
+#ifdef _RT_TETS
     if (input->viscous and !input->grad_via_div)
       ThrowException("Need to enable grad_via_div to use tetrahedra for viscous problems!");
+#endif
 
      elesObjs.push_back(std::make_shared<Tets>(&geo, input, elesObjID, startEle, endEle, order));
   }
@@ -1104,11 +1108,13 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       /* Setup extrapolation operator from equistant restart points */
       for (auto e : elesObjs)
       {
+#ifdef _RT_TETS
         if (e->etype == QUAD and geo.nElesBT.count(TRI)) // to deal with increased quad order with mixed grids
         {
           e->set_oppRestart(order_restart + 1, true);
         }
         else
+#endif
           e->set_oppRestart(order_restart, true);
 
         nRpts = e->oppRestart.get_dim(1);

@@ -555,7 +555,7 @@ void Elements::setup_FR()
     }
   }
   std::cout << std::endl;
-  std::cout << "oppE:" << std::endl;
+  std::cout << "oppE:" << std::endl;  /// DEBUGGING
   oppE.print();
 
   // This is also correct for tets...
@@ -579,7 +579,8 @@ void Elements::setup_FR()
       }
     }
   }
-  std::cout << "oppD:" << std::endl;
+  std::cout << std::endl;
+  std::cout << "oppD:" << std::endl; /// DEBUGGING
   oppD.print();
 
   /* Setup differentiation operator (oppD_fpts) for flux points (DFR Specific)*/
@@ -645,11 +646,11 @@ void Elements::setup_FR()
   }
 
 #ifndef _RT_TETS
-  /* Setup correction operator */
+  /* Setup operator for divergence of the correction function [PyFR: 'M3'] */
 
   if (etype == TRI || etype == TET)
   {
-    int QOrder = (etype == TET) ? 7 : order;
+    int QOrder = (nDims == 3) ? 7 : nFptsPerFace;
     auto pts = get_face_nodes(QOrder);
     auto wts = get_face_weights(QOrder);
     int npts = pts.get_dim(0);
@@ -660,7 +661,8 @@ void Elements::setup_FR()
     {
       for (int i = 0; i < nFptsPerFace; i++)
       {
-        double loc[2] = {pts(j,0), pts(j,1)};
+        double* loc = (nDims == 3) ? &pts(j,0) : &pts(j);
+
         fbasis_qpts(j,i) = calc_nodal_face_basis(i, loc);
       }
     }
@@ -673,15 +675,16 @@ void Elements::setup_FR()
       {
         for (int spt = 0; spt < nSpts; spt++)
         {
+          double* loc = (nDims == 3) ? &pts(j,0) : &pts(j);
           double pt[3];
-          project_face_point(i, &pts(j,0), pt);
+          project_face_point(i, loc, pt);
 
           ubasis_qpts(i,j,spt) = calc_orthonormal_basis(spt, pt);
         }
       }
     }
 
-    mdvector<double> gbasis({nFpts,nSpts});
+    mdvector<double> gbasis({nSpts,nFpts});
     for (int fpt = 0; fpt < nFpts; fpt++)
     {
       int F = fpt / nFptsPerFace;
@@ -690,7 +693,7 @@ void Elements::setup_FR()
       {
         for (int i = 0; i < npts; i++)
         {
-          gbasis(fpt,spt) += wts(i) * fbasis_qpts(i,k) * ubasis_qpts(F,i,spt);
+          gbasis(spt,fpt) += wts(i) * fbasis_qpts(i,k) * ubasis_qpts(F,i,spt);
         }
       }
     }
@@ -704,13 +707,36 @@ void Elements::setup_FR()
       }
     }
 
-    opp_corr.assign({nFpts,nSpts});
-    cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasTrans,nFpts,nSpts,nSpts,1.0,
-                gbasis.data(),nSpts,obasis.data(),nSpts,0.0,opp_corr.data(),nSpts);
+    // PyFR's 'M3'
+    oppDiv_fpts.assign({nSpts,nFpts});
+    cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nSpts,nFpts,nSpts,1.0,
+                obasis.data(),nSpts,gbasis.data(),nFpts,0.0,oppDiv_fpts.data(),nFpts);
 
 
-    std::cout << "oppCorr:" << std::endl;
-    opp_corr.print();
+    std::cout << std::endl;
+    std::cout << "oppCorr:" << std::endl; /// DEBUGGING
+    oppDiv_fpts.print();
+
+    // Extrapolate discontinuous normal flux [PyFR: 'M2']
+    mdvector<double> oppEFn({nFpts,nDims,nSpts});
+    for (int fpt = 0; fpt < nFpts; fpt++)
+    {
+      for (int dim = 0; dim < nDims; dim++)
+      {
+        for (int spt = 0; spt < nSpts; spt++)
+        {
+          oppEFn(fpt,dim,spt) = tnorm(fpt,dim) * oppE(fpt,spt); //tdA(fpt) *
+        }
+      }
+    }
+    std::cout << std::endl;
+    std::cout << "oppEFn:" << std::endl; /// DEBUGGING
+    oppEFn.print();
+
+    // Get the FR version of 'oppDiv_fpts': 'M1 - M3*M2' or 'oppE - oppCorr*oppEFn'
+    //oppDiv = oppD;
+    cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nSpts,nDims*nSpts,nFpts,-1.0,
+                oppDiv_fpts.data(),nFpts,oppEFn.data(),nDims*nSpts,1.0,oppDiv.data(),nSpts*nDims);
   }
 #endif
 

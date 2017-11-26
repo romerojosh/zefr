@@ -202,6 +202,7 @@ void Tets::set_normals(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for normals */
   tnorm.assign({nFpts,nDims});
+  tdA.assign({nFpts});
 
   /* Setup parent-space (transformed) normals at flux points */
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -212,24 +213,28 @@ void Tets::set_normals(std::shared_ptr<Faces> faces)
         tnorm(fpt,0) = 0.0;
         tnorm(fpt,1) = 0.0;
         tnorm(fpt,2) = -1.0;
+        tdA(fpt) = 1.0;
         break;
 
       case 1: /* Angled Face */
         tnorm(fpt,0) = 1.0/std::sqrt(3);
         tnorm(fpt,1) = 1.0/std::sqrt(3);
         tnorm(fpt,2) = 1.0/std::sqrt(3);
+        tdA(fpt) = std::sqrt(3);
         break;
 
       case 2: /* Left */
         tnorm(fpt,0) = -1.0;
-        tnorm(fpt,1) = 0.0; 
-        tnorm(fpt,2) = 0.0; 
+        tnorm(fpt,1) = 0.0;
+        tnorm(fpt,2) = 0.0;
+        tdA(fpt) = 1.0;
         break;
 
       case 3: /* Bottom */
         tnorm(fpt,0) = 0.0;
-        tnorm(fpt,1) = -1.0; 
-        tnorm(fpt,2) = 0.0; 
+        tnorm(fpt,1) = -1.0;
+        tnorm(fpt,2) = 0.0;
+        tdA(fpt) = 1.0;
         break;
 
     }

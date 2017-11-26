@@ -61,14 +61,22 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned 
   if (order == -1)
   {
     nSpts = (input->order + 1) * (input->order + 2) / 2;
+#ifdef _RT_TETS
     nFptsPerFace = input->order + 2;
+#else
+    nFptsPerFace = input->order + 1;
+#endif
     nSpts1D = input->order + 1; //nSpts1D only used for filter matrix setup
     this->order = input->order;
   }
   else
   {
     nSpts = (order + 1) * (order + 2) / 2;
+#ifdef _RT_TETS
     nFptsPerFace = order + 2;
+#else
+    nFptsPerFace = order + 1;
+#endif
     nSpts1D = order + 1; 
     this->order = order;
   }
@@ -100,11 +108,10 @@ void Tris::set_locs()
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
   {
+    loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only
 #ifdef _RT_TETS
-   loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only 
    loc_fpts_1D = Gauss_Legendre_pts(order+2);
 #else
-    loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only
     loc_fpts_1D = Gauss_Legendre_pts(order+1);
 #endif
   }
@@ -175,6 +182,7 @@ void Tris::set_normals(std::shared_ptr<Faces> faces)
 {
   /* Allocate memory for normals */
   tnorm.assign({nFpts,nDims});
+  tdA.assign({nFpts});
 
   /* Setup parent-space (transformed) normals at flux points */
   for (unsigned int fpt = 0; fpt < nFpts; fpt++)
@@ -183,15 +191,21 @@ void Tris::set_normals(std::shared_ptr<Faces> faces)
     {
       case 0: /* Bottom edge */
         tnorm(fpt,0) = 0.0;
-        tnorm(fpt,1) = -1.0; break;
+        tnorm(fpt,1) = -1.0;
+        tdA(fpt) = 1.0;
+        break;
 
       case 1: /* Hypotenuse */
         tnorm(fpt,0) = std::sqrt(2)/2;
-        tnorm(fpt,1) = std::sqrt(2)/2; break;
+        tnorm(fpt,1) = std::sqrt(2)/2;
+        tdA(fpt) = std::sqrt(2);
+        break;
 
       case 2: /* Left edge */
         tnorm(fpt,0) = -1.0;
-        tnorm(fpt,1) = 0.0; break;
+        tnorm(fpt,1) = 0.0;
+        tdA(fpt) = 1.0;
+        break;
 
     }
   }
@@ -329,23 +343,24 @@ void Tris::calc_nodal_basis(double *loc, double* basis)
 double Tris::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
-
   double val = 0.0;
-  int mode;
 
-  if (dim == 0)
-  {
-    mode = spt;
-  }
-  else
-  {
-    mode = spt + nSpts;
-  }
+#ifdef _RT_TETS
+  int mode = spt + dim * nSpts;
 
   for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
   {
     val += inv_vandRT(mode, i) * divRTMonomial2D(order + 1, loc[0], loc[1], i);
   }
+
+#else
+
+  for (unsigned int i = 0; i < nSpts; i++)
+  {
+    val += inv_vand(i, spt) * dDubiner2D(order, loc[0], loc[1], dim, i);
+  }
+
+#endif
 
   return val;
 
@@ -354,20 +369,13 @@ double Tris::calc_d_nodal_basis_spts(unsigned int spt,
 double Tris::calc_d_nodal_basis_fr(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
-
   double val = 0.0;
-
-  if (dim == 0)
+  for (unsigned int i = 0; i < nSpts; i++)
   {
-      val = 0.0;
-  }
-  else
-  {
-      val = 0.0;
+    val += inv_vand(i, spt) * dDubiner2D(order, loc[0], loc[1], dim, i);
   }
 
   return val;
-
 }
 
 double Tris::calc_d_nodal_basis_fpts(unsigned int fpt,

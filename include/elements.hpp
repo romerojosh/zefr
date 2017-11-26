@@ -67,7 +67,7 @@ class Elements
     mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes, loc_qpts;
     mdvector<unsigned int> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;
     std::vector<double> loc_spts_1D, loc_nodes_1D, loc_qpts_1D, loc_DFR_1D;
-    mdvector<double> tnorm; 
+    mdvector<double> tnorm, tdA;
     mdvector<double> norm_fpts, dA_fpts; // Only allocated if grad_via_div enabled 
     mdvector<double> shape_spts, shape_fpts, shape_ppts, shape_qpts;
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
@@ -104,7 +104,7 @@ class Elements
     mdvector<double> F_spts, F_fpts;
     mdvector<double> Fcomm, Ucomm;
     mdvector<double> dU_spts, dU_fpts, dU_qpts, divF_spts;
-    mdvector<double> opp_corr; // For FR tris/tets
+    mdvector<double> oppCorr; // For FR tris/tets
 
     /* Multigrid operators */
     mdvector<double> oppPro, oppRes;

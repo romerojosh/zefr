@@ -516,13 +516,31 @@ mdvector<T>&  mdvector<T>::operator= (mdvector_gpu<T> &vec)
 template <typename T>
 void mdvector<T>::print(void)
 {
-  for (int i = 0; i < dims[0]; i++)
+  if (nDims == 2)
   {
-    for (int j = 0; j < dims[1]-1; j++)
+    for (int i = 0; i < dims[0]; i++)
     {
-      std::cout << std::setw(10) << this->operator ()(i,j) << ", ";
+      for (int j = 0; j < dims[1]-1; j++)
+      {
+        std::cout << std::setw(9) << std::fixed << std::setprecision(6) << this->operator ()(i,j) << ", ";
+      }
+      std::cout << std::setw(9) << std::fixed << std::setprecision(6) << this->operator ()(i,dims[1]-1) << std::endl;
     }
-    std::cout << std::setw(10) << this->operator ()(i,dims[1]-1) << std::endl;
+  }
+  else if (nDims == 3)
+  {
+    for (int i = 0; i < dims[0]; i++)
+    {
+      for (int j = 0; j < dims[1]; j++)
+      {
+        for (int k = 0; k < dims[2]-1; k++)
+        {
+          std::cout << std::setw(9) << std::fixed << std::setprecision(6) << this->operator ()(i,j,k) << ", ";
+        }
+        std::cout << std::setw(9) << std::fixed << std::setprecision(6) << this->operator ()(i,j,dims[2]-1) << std::endl;
+      }
+      std::cout << std::endl;
+    }
   }
 }
 

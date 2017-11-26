@@ -89,10 +89,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
 
   if (format == GMSH)
   {
-    if (geo.ele_set.count(TRI))
-      setup_global_fpts(input, geo, order + 1); // triangles require P+2 flux points on faces
-    else
-      setup_global_fpts(input, geo, order);
+    setup_global_fpts(input, geo, order);
   }
   else
   {
@@ -999,12 +996,22 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     ThrowException("Improper value for nDims - should be 2 or 3.");
 
   unsigned int nFptsPerFace = (order + 1);
+
+#ifdef _RT_TETS
+    if (geo.ele_set.count(TRI))
+      nFptsPerFace++; // triangles require P+2 flux points on faces
+#endif
+
   if (geo.nDims == 3)
   {
     if (geo.ele_set.count(HEX))
       nFptsPerFace *= (order + 1);
     else if (geo.ele_set.count(TET))
+#ifdef _RT_TETS
       nFptsPerFace = (order + 2) * (order + 3) / 2;
+#else
+      nFptsPerFace = (order + 1) * (order + 2) / 2;
+#endif
   }
 
   unsigned int nVars = 1;
@@ -1430,6 +1437,8 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       }
     }
   }
+
+  printf("Geo.nFaces = %d, nGfpts_int = %d, nGfpts = %d\n",geo.nFaces,geo.nGfpts_int,geo.nGfpts);
 }
 
 void setup_element_colors(InputStruct *input, GeoStruct &geo)
@@ -2484,7 +2493,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   if (geo.nDims != 2 && geo.nDims != 3)
     ThrowException("Improper value for nDims - should be 2 or 3.");
 
-  ELE_TYPE etype = (geo.nDims == 2) ? QUAD : HEX;
+  ELE_TYPE etype = (geo.nDims == 2) ? QUAD : HEX;  /// TODO: tri/tet!
 
   unsigned int nFptsPerFace = (order + 1);
   if (geo.nDims == 3)
