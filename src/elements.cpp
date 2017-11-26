@@ -721,6 +721,14 @@ void Elements::setup_FR()
     // oppCorr = oppDiv_fpts;
     cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nSpts,nDims*nSpts,nFpts,-1.0,
                 oppDiv_fpts.data(),nFpts,oppEFn.data(),nDims*nSpts,1.0,oppDiv.data(),nSpts*nDims);
+
+    /* --- Viscous Operators --- */
+
+    // Operator to correct gradient at spts from common solution at fpts
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+          oppD_fpts(dim, spt, fpt) = oppDiv_fpts(spt,fpt) * tnorm(fpt,dim);
   }
 #endif
 
