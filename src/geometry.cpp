@@ -997,11 +997,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
   unsigned int nFptsPerFace = (order + 1);
 
-#ifdef _RT_TETS
-    if (geo.ele_set.count(TRI))
-      nFptsPerFace++; // triangles require P+2 flux points on faces
-#endif
-
   if (geo.nDims == 3)
   {
     if (geo.ele_set.count(HEX))
@@ -1011,6 +1006,13 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       nFptsPerFace = (order + 2) * (order + 3) / 2;
 #else
       nFptsPerFace = (order + 1) * (order + 2) / 2;
+#endif
+  }
+  else
+  {
+#ifdef _RT_TETS
+    if (geo.ele_set.count(TRI))
+      nFptsPerFace++; // triangles require P+2 flux points on faces
 #endif
   }
 
@@ -1437,8 +1439,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       }
     }
   }
-
-  printf("Geo.nFaces = %d, nGfpts_int = %d, nGfpts = %d\n",geo.nFaces,geo.nGfpts_int,geo.nGfpts);
 }
 
 void setup_element_colors(InputStruct *input, GeoStruct &geo)

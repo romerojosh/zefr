@@ -254,8 +254,7 @@ void Tets::set_vandermonde_mats()
 
   inv_vand.assign({nSpts, nSpts}); 
   vand.inverse(inv_vand);
-std::cout << "inv_vand:" <<  std::endl;
-  inv_vand.print();
+
   /* Set vandermonde for Raviart-Thomas monomial basis over combined solution and flux point set*/
   vandRT.assign({3*nSpts+nFpts, 3*nSpts+nFpts}, 0.0);
 

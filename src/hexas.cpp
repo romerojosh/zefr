@@ -430,6 +430,8 @@ void Hexas::calc_nodal_basis(double *loc, double* basis)
 double Hexas::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
+#ifndef _FR_HEXAS
+
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
   unsigned int i = idx_spts(spt,0) + 1;
@@ -450,6 +452,29 @@ double Hexas::calc_d_nodal_basis_spts(unsigned int spt,
   {
     val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]) * Lagrange_d1(loc_DFR_1D, k, loc[2]);
   }
+
+#else
+  // Use FR hexahedrons
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+  unsigned int k = idx_spts(spt,2);
+
+  double val = 0.0;
+
+  if (dim == 0)
+  {
+    val = Lagrange_d1(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]) * Lagrange(loc_spts_1D, k, loc[2]);
+  }
+  else if (dim == 1)
+  {
+    val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange_d1(loc_spts_1D, j, loc[1]) * Lagrange(loc_spts_1D, k, loc[2]);
+  }
+  else
+  {
+    val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]) * Lagrange_d1(loc_spts_1D, k, loc[2]);
+  }
+
+#endif
 
   return val;
 
@@ -512,12 +537,41 @@ double Hexas::calc_d_nodal_basis_fpts(unsigned int fpt,
 
 mdvector<double> Hexas::get_face_nodes(unsigned int P)
 {
-  /// TODO
+  mdvector<double> loc_pts({(P+1)*(P+1),nDims});
+
+  auto loc_pts_1D = Gauss_Legendre_pts(P+1);
+
+  unsigned int pt = 0;
+  for (unsigned int i = 0; i < P+1; i++)
+  {
+    for (unsigned int j = 0; j < P+1; j++)
+    {
+      loc_pts(pt,0) = loc_pts_1D[j];
+      loc_pts(pt,1) = loc_pts_1D[i];
+      pt++;
+    }
+  }
+
+  return loc_pts;
 }
 
 mdvector<double> Hexas::get_face_weights(unsigned int P)
 {
-  /// TODO
+  mdvector<double> wts_pts({(P+1)*(P+1)});
+
+  auto weights_spts_1D = Gauss_Legendre_weights(P+1);
+
+  unsigned int pt = 0;
+  for (unsigned int i = 0; i < P+1; i++)
+  {
+    for (unsigned int j = 0; j < P+1; j++)
+    {
+      wts_pts(pt) = weights_spts_1D[i] * weights_spts_1D[j];
+      pt++;
+    }
+  }
+
+  return wts_pts;
 }
 
 void Hexas::project_face_point(int face, const double* loc, double* ploc)
@@ -531,7 +585,7 @@ void Hexas::project_face_point(int face, const double* loc, double* ploc)
       break;
 
     case 1: /* Top face */
-      ploc[0] = loc[0];
+      ploc[0] = -loc[0];
       ploc[1] = loc[1];
       ploc[2] = 1.0;
       break;
@@ -544,12 +598,12 @@ void Hexas::project_face_point(int face, const double* loc, double* ploc)
 
     case 3: /* Right face */
       ploc[0] = 1.0;
-      ploc[1] = loc[0];
+      ploc[1] = -loc[0];
       ploc[2] = loc[1];
       break;
 
     case 4: /* Front face */
-      ploc[0] = loc[0];
+      ploc[0] = -loc[0];
       ploc[1] = -1.0;
       ploc[2] = loc[1];
       break;
@@ -564,8 +618,8 @@ void Hexas::project_face_point(int face, const double* loc, double* ploc)
 
 double Hexas::calc_nodal_face_basis(unsigned int pt, double *loc)
 {
-  int i = pt % nFptsPerFace;
-  int j = pt / nFptsPerFace;
+  int i = pt % nSpts1D;
+  int j = pt / nSpts1D;
 
   return Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]); /// CHECK
 }

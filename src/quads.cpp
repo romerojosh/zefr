@@ -332,6 +332,8 @@ void Quads::calc_nodal_basis(double *loc, double* basis)
 double Quads::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
+#ifndef _FR_HEXAS
+
   /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
    * boundary points for DFR) */
   unsigned int i = idx_spts(spt,0) + 1;
@@ -350,6 +352,27 @@ double Quads::calc_d_nodal_basis_spts(unsigned int spt,
 
   return val;
 
+#else
+
+  /* Get indices for Lagrange polynomial evaluation (shifted due to inclusion of
+   * boundary points for DFR) */
+  unsigned int i = idx_spts(spt,0);
+  unsigned int j = idx_spts(spt,1);
+
+  double val = 0.0;
+
+  if (dim == 0)
+  {
+      val = Lagrange_d1(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
+  }
+  else
+  {
+      val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange_d1(loc_spts_1D, j, loc[1]);
+  }
+
+  return val;
+
+#endif
 }
 
 double Quads::calc_d_nodal_basis_fr(unsigned int spt,
@@ -638,27 +661,27 @@ void Quads::project_face_point(int face, const double* loc, double* ploc)
       break;
 
     case 2: /* Top face */
-      ploc[0] = loc[0];
+      ploc[0] = -loc[0];
       ploc[1] = 1.0;
       break;
 
     case 3: /* Left face */
       ploc[0] = -1.0;
-      ploc[1] = loc[0];
+      ploc[1] = -loc[0];
       break;
   }
 }
 
 double Quads::calc_nodal_face_basis(unsigned int pt, double *loc)
 {
-  int i = pt % nFptsPerFace;
+  int i = pt % nSpts1D;
 
-  return Lagrange(loc_spts_1D, i, loc[0]); /// CHECK
+  return Lagrange(loc_spts_1D, i, loc[0]);
 }
 
 double Quads::calc_orthonormal_basis(unsigned int mode, double *loc)
 {
-  return Legendre2D(order, loc[0], loc[1], mode); /// CHECK
+  return Legendre2D(order, loc[0], loc[1], mode);
 }
 
 

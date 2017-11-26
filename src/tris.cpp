@@ -443,7 +443,7 @@ void Tris::project_face_point(int face, const double* loc, double* ploc)
 
     case 2: /* Left edge */
       ploc[0] = -1.0;
-      ploc[1] = loc[0];
+      ploc[1] = -loc[0];
       break;
   }
 }
