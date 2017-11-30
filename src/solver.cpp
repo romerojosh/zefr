@@ -7254,6 +7254,9 @@ void FRSolver::report_error(std::ofstream &f)
         double y = e->coord_qpts(qpt, 1, ele);
         double z = (geo.nDims == 2) ? 0.0 : e->coord_qpts(qpt, 2, ele);
 
+        /* Vincent et al. vortex: skip error from outside 4 by 4 box */
+        if (input->test_case == 3 && (std::abs(x) > 2.0 || std::abs(y) > 2.0)) continue;
+
         /* Compute true solution and derivatives */
         U_true = compute_U_true(x, y, z, flow_time, n, input);
 
