@@ -661,12 +661,12 @@ void Elements::setup_FR()
     {
       for (int j = 0; j < npts; j++)
       {
+        double* loc = (nDims == 3) ? &pts(j,0) : &pts(j);
+        double pt[3];
+        project_face_point(i, loc, pt);
+
         for (int spt = 0; spt < nSpts; spt++)
         {
-          double* loc = (nDims == 3) ? &pts(j,0) : &pts(j);
-          double pt[3];
-          project_face_point(i, loc, pt);
-
           ubasis_qpts(i,j,spt) = calc_orthonormal_basis(spt, pt);
         }
       }
@@ -686,23 +686,10 @@ void Elements::setup_FR()
       }
     }
 
-    mdvector<double> obasis({nSpts,nSpts});
-    for (int i = 0; i < nSpts; i++)
-    {
-      for (int spt = 0; spt < nSpts; spt++)
-      {
-        for (unsigned int d = 0; d < nDims; d++)
-          loc[d] = loc_spts(i, d);
-
-        obasis(i,spt) = calc_orthonormal_basis(spt, &loc[0]);
-      }
-    }
-
-    // PyFR's 'M3'
+    // Correction Operator: PyFR's 'M3'
     oppDiv_fpts.assign({nSpts,nFpts});
     cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nSpts,nFpts,nSpts,1.0,
-                obasis.data(),nSpts,gbasis.data(),nFpts,0.0,oppDiv_fpts.data(),nFpts);
-
+                vand.data(),nSpts,gbasis.data(),nFpts,0.0,oppDiv_fpts.data(),nFpts);
 
     // Extrapolate discontinuous normal flux [PyFR: 'M2']
     mdvector<double> oppEFn({nFpts,nDims,nSpts});
@@ -712,12 +699,12 @@ void Elements::setup_FR()
       {
         for (int spt = 0; spt < nSpts; spt++)
         {
-          oppEFn(fpt,dim,spt) = tnorm(fpt,dim) * oppE(fpt,spt); //tdA(fpt) *
+          oppEFn(fpt,dim,spt) = tnorm(fpt,dim) * oppE(fpt,spt);
         }
       }
     }
 
-    // Get the FR version of 'oppDiv': 'M1 - M3*M2' or 'oppE - oppCorr*oppEFn'
+    // Get the FR version of 'oppDiv': 'M1 - M3*M2' or 'oppDiv - oppCorr*oppEFn'
     // oppCorr = oppDiv_fpts;
     cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nSpts,nDims*nSpts,nFpts,-1.0,
                 oppDiv_fpts.data(),nFpts,oppEFn.data(),nDims*nSpts,1.0,oppDiv.data(),nSpts*nDims);
@@ -729,6 +716,10 @@ void Elements::setup_FR()
       for (unsigned int fpt = 0; fpt < nFpts; fpt++)
         for (unsigned int spt = 0; spt < nSpts; spt++)
           oppD_fpts(dim, spt, fpt) = oppDiv_fpts(spt,fpt) * tnorm(fpt,dim);
+
+    // Get the FR version of 'oppD': 'M4 - M6*M0' or 'oppD - oppD_fpts*oppE'
+    cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nSpts*nDims,nSpts,nFpts,-1.0,
+                oppD_fpts.data(),nFpts,oppE.data(),nSpts,1.0,oppD.data(),nSpts);
   }
 #endif
 

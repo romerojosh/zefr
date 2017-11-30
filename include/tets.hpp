@@ -60,9 +60,9 @@ class Tets: public Elements
 
     void project_face_point(int face, const double* loc, double* ploc);
 
-    double calc_nodal_face_basis(unsigned int pt, double *loc);
+    double calc_nodal_face_basis(unsigned int pt, const double *loc);
 
-    double calc_orthonormal_basis(unsigned int mode, double *loc);
+    double calc_orthonormal_basis(unsigned int mode, const double *loc);
 
   public:
     Tets(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order = -1);

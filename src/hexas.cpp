@@ -616,7 +616,7 @@ void Hexas::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Hexas::calc_nodal_face_basis(unsigned int pt, double *loc)
+double Hexas::calc_nodal_face_basis(unsigned int pt, const double *loc)
 {
   int i = pt % nSpts1D;
   int j = pt / nSpts1D;
@@ -624,7 +624,7 @@ double Hexas::calc_nodal_face_basis(unsigned int pt, double *loc)
   return Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]); /// CHECK
 }
 
-double Hexas::calc_orthonormal_basis(unsigned int mode, double *loc)
+double Hexas::calc_orthonormal_basis(unsigned int mode, const double *loc)
 {
   return Legendre3D(order, loc[0], loc[1], loc[2], mode); /// CHECK
 }

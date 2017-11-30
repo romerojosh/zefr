@@ -672,14 +672,14 @@ void Quads::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Quads::calc_nodal_face_basis(unsigned int pt, double *loc)
+double Quads::calc_nodal_face_basis(unsigned int pt, const double *loc)
 {
   int i = pt % nSpts1D;
 
   return Lagrange(loc_spts_1D, i, loc[0]);
 }
 
-double Quads::calc_orthonormal_basis(unsigned int mode, double *loc)
+double Quads::calc_orthonormal_basis(unsigned int mode, const double *loc)
 {
   return Legendre2D(order, loc[0], loc[1], mode);
 }

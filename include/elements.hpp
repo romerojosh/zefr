@@ -244,8 +244,8 @@ class Elements
 
     virtual void project_face_point(int face, const double* loc, double* ploc) = 0;
 
-    virtual double calc_nodal_face_basis(unsigned int pt, double *loc) = 0;
-    virtual double calc_orthonormal_basis(unsigned int mode, double *loc) = 0;
+    virtual double calc_nodal_face_basis(unsigned int pt, const double *loc) = 0;
+    virtual double calc_orthonormal_basis(unsigned int mode, const double *loc) = 0;
 
   public:
     void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);

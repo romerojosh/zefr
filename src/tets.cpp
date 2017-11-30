@@ -154,8 +154,8 @@ void Tets::set_locs()
 
         case 2: /* Left (eta-zeta plane) */
           loc_fpts(fpt,0) = -1.0;
-          loc_fpts(fpt,1) = loc_fpts_2D(j, 0);
-          loc_fpts(fpt,2) = loc_fpts_2D(j, 1);
+          loc_fpts(fpt,1) = loc_fpts_2D(j, 1);
+          loc_fpts(fpt,2) = loc_fpts_2D(j, 0);
           break;
 
         case 3: /* Bottom (xi-zeta plane) */
@@ -497,8 +497,8 @@ void Tets::project_face_point(int face, const double* loc, double* ploc)
 
     case 2: /* Left (eta-zeta plane) */
       ploc[0] = -1.0;
-      ploc[1] = loc[0];
-      ploc[2] = loc[1];
+      ploc[1] = loc[1];
+      ploc[2] = loc[0];
       break;
 
     case 3: /* Bottom (xi-zeta plane) */
@@ -509,10 +509,8 @@ void Tets::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Tets::calc_nodal_face_basis(unsigned int pt, double *loc)
+double Tets::calc_nodal_face_basis(unsigned int pt, const double *loc)
 {
-  //if (pt > inv_vandTri.get_dim(1)) printf("baaad!  %d, %d\n",inv_vandTri.get_dim(0),inv_vandTri.get_dim(1));
-  //printf("dims = %d, %d; nFptsFace = %d\n",inv_vandTri.get_dim(0),inv_vandTri.get_dim(1),nFptsPerFace); /// DEBUGGING
   double val = 0.0;
   for (unsigned int i = 0; i < nFptsPerFace; i++)
   {
@@ -522,7 +520,7 @@ double Tets::calc_nodal_face_basis(unsigned int pt, double *loc)
   return val;
 }
 
-double Tets::calc_orthonormal_basis(unsigned int mode, double *loc)
+double Tets::calc_orthonormal_basis(unsigned int mode, const double *loc)
 {
   return Dubiner3D(order, loc[0], loc[1], loc[2], mode);
 }

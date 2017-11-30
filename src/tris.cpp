@@ -448,12 +448,12 @@ void Tris::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Tris::calc_nodal_face_basis(unsigned int pt, double *loc)
+double Tris::calc_nodal_face_basis(unsigned int pt, const double *loc)
 {
   return Lagrange(loc_spts_1D, loc[0], pt); /// CHECK
 }
 
-double Tris::calc_orthonormal_basis(unsigned int mode, double *loc)
+double Tris::calc_orthonormal_basis(unsigned int mode, const double *loc)
 {
   return Dubiner2D(order, loc[0], loc[1], mode);
 }
