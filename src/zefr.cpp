@@ -528,10 +528,8 @@ void Zefr::write_wall_time(void)
 
 void Zefr::get_basic_geo_data(int& btag, int& gType, int& nnodes, double*& xyz,
     int*& iblank, int& nwall, int& nover, int*& wallNodes, int*& overNodes,
-    int& nCellTypes, int &nvert_cell, int &nCells_type, int*& c2v)
+    int& nCellTypes, int*& nvert_cell, int*& nCells_type, int**& c2v)
 {
-  auto etype = solver->elesObjs[0]->etype;
-
   btag = myGrid;
   gType = gridType;
   nnodes = geo->nNodes;
@@ -541,27 +539,61 @@ void Zefr::get_basic_geo_data(int& btag, int& gType, int& nnodes, double*& xyz,
   nover = geo->nOver;
   wallNodes = geo->wallNodes.data();
   overNodes = geo->overNodes.data();
-  nCellTypes = 1;
-  nvert_cell = geo->nNodesPerEleBT[etype];
-  nCells_type = geo->nEles;
-  c2v = (int *)&geo->ele2nodesBT[etype](0,0);
+  nCellTypes = geo->ele_types.size();
+
+  geo->nv_ptr.resize(nCellTypes);
+  geo->nc_ptr.resize(nCellTypes);
+  geo->c2v_ptr.resize(nCellTypes);
+
+  for (int i = 0; i < nCellTypes; i++)
+  {
+    ELE_TYPE etype = (ELE_TYPE)geo->ele_types(i);
+    geo->nv_ptr[i] = geo->nNodesPerEleBT[etype];
+    geo->nc_ptr[i] = geo->nElesBT[etype];
+    geo->c2v_ptr[i] = geo->ele2nodesBT[etype].data();
+  }
+
+  nvert_cell = geo->nv_ptr.data();
+  nCells_type = geo->nc_ptr.data();
+  c2v = geo->c2v_ptr.data();
 }
 
-void Zefr::get_extra_geo_data(int& nFaceTypes, int& nvert_face, int& nFaces_type,
-                              int*& f2v, int*& f2c, int*& c2f, int*& iblank_face,
+void Zefr::get_extra_geo_data(int& nFaceTypes, int*& faceTypes, int*& cellTypes,
+                              int*& nvert_face, int*& nFaces_type,
+                              int**& f2v, int*& f2c, int**& c2f, int*& iblank_face,
                               int*& iblank_cell, int &nOver, int*& overFaces,
                               int &nWall, int*& wallFaces, int &nMpiFaces,
                               int*& mpiFaces, int*& procR, int*& faceIdR,
                               double*& grid_vel, double*& offset, double*& Rmat)
 {
-  auto etype = solver->elesObjs[0]->etype;
+  nFaceTypes = geo->face_types.size();
+  faceTypes = geo->face_types.data();
+  cellTypes = geo->ele_types.data();
 
-  nFaceTypes = 1;
-  nvert_face = geo->nNdFaceCurved;
-  nFaces_type = geo->nFaces;
-  f2v = (int *)geo->face2nodes.data();
+  nvert_face = geo->nNode_face.data();
+
+  geo->nf_ptr.resize(nFaceTypes);
+  geo->f2v_ptr.resize(nFaceTypes);
+  geo->c2f_ptr.resize(geo->ele_types.size());
+
+  for (int i = 0; i < nFaceTypes; i++)
+  {
+    ELE_TYPE ftype = (ELE_TYPE)geo->face_types(i);
+    geo->nf_ptr[i] = geo->nFacesBT[ftype];
+    geo->f2v_ptr[i] = geo->face2nodes[(ELE_TYPE)ftype].data();
+  }
+
+  for (int i = 0; i < geo->ele_types.size(); i++)
+  {
+    ELE_TYPE etype = (ELE_TYPE)geo->ele_types(i);
+    geo->c2f_ptr[i] = geo->ele2face[etype].data();
+  }
+
+  nFaces_type = geo->nf_ptr.data();
+  f2v = geo->f2v_ptr.data();
+  c2f = geo->c2f_ptr.data();
+
   f2c = geo->face2eles.data();
-  c2f = geo->ele2face.data();
   iblank_face = geo->iblank_face.data();
   iblank_cell = geo->iblank_cell.data();
   nOver = geo->overFaceList.size();
@@ -659,32 +691,53 @@ double *Zefr::get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, i
 #endif
 }
 
-void Zefr::get_nodes_per_cell(int &nNodes)
+void Zefr::get_nodes_per_cell(int cellID, int &nNodes)
 {
-  nNodes = (int)solver->elesObjs[0]->nSpts;
+  auto etype = geo->eleType(cellID);
+  for (auto eles : solver->elesObjs)
+  {
+    if (eles->etype == etype)
+    {
+      nNodes = (int)eles->nSpts;
+
+      break;
+    }
+  }
 }
 
-void Zefr::get_nodes_per_face(int& nNodes)
+void Zefr::get_nodes_per_face(int faceID, int& nNodes)
 {
-  nNodes = (int)geo->nFptsPerFace;
+  nNodes = (int)geo->nFptsPerFace[geo->faceType(faceID)];
 }
 
 void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 {
-  nNodes = (int)solver->elesObjs[0]->nSpts;
+  auto etype = geo->eleType(cellID);
 
-  for (int spt = 0; spt < nNodes; spt++)
-    for (int dim = 0; dim < geo->nDims; dim++)
-      xyz[3*spt+dim] = solver->elesObjs[0]->coord_spts(spt, dim, cellID);
+  for (auto eles : solver->elesObjs)
+  {
+    if (eles->etype == etype)
+    {
+      nNodes = (int)eles->nSpts;
+
+      for (int spt = 0; spt < nNodes; spt++)
+        for (int dim = 0; dim < geo->nDims; dim++)
+          xyz[3*spt+dim] = eles->coord_spts(spt, dim, cellID);
+
+      break;
+    }
+  }
 }
 
 void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 {
-  nNodes = (int)geo->nFptsPerFace;
+  auto ftype = geo->faceType(faceID);
+
+  nNodes = (int)geo->nFptsPerFace[ftype];
 
   for (int fpt = 0; fpt < nNodes; fpt++)
   {
-    int gfpt = geo->face2fpts(fpt, faceID);
+    int gfpt = geo->face2fpts[ftype](fpt, faceID); /// TODO: faceID -> type-local_fid
     for (int dim = 0; dim < geo->nDims; dim++)
       xyz[3*fpt+dim] = solver->faces->coord(dim, gfpt); /// TODO: do I need to swap?
   }
@@ -700,13 +753,33 @@ void Zefr::get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *x
 void Zefr::get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *xyz)
 {
 #ifdef _GPU
-  solver->elesObjs[0]->get_cell_coords(cellIDs,nCells,nPtsCell,xyz);
+  auto etype = geo->eleType(cellID);  /// TODO: something like done in faces
+
+  for (auto eles : solver->elesObjs)
+  {
+    if (eles->etype == etype)
+    {
+      eles->get_cell_coords(cellIDs,nCells,nPtsCell,xyz);
+
+      break;
+    }
+  }
 #endif
 }
 
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
-  passFlag = solver->elesObjs[0]->getRefLoc(cellID,xyz,rst);
+  auto etype = geo->eleType(cellID);
+
+  for (auto eles : solver->elesObjs)
+  {
+    if (eles->etype == etype)
+    {
+      passFlag = eles->getRefLoc(cellID,xyz,rst);
+
+      break;
+    }
+  }
 }
 
 void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
@@ -714,12 +787,30 @@ void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
 {
   /* NOTE: inode is not used, and cellID is irrelevant when all cells are
    * identical (tensor-product, one polynomial order) */
-  solver->elesObjs[0]->get_interp_weights(rst,weights,nweights,buffsize);
+  auto etype = geo->eleType(cellID);
+
+  for (auto eles : solver->elesObjs)
+  {
+    if (eles->etype == etype)
+    {
+      eles->get_interp_weights(rst,weights,nweights,buffsize);
+
+      break;
+    }
+  }
 }
 
 int Zefr::get_n_weights(int cellID)
 {
-  return (int)solver->elesObjs[0]->nSpts;
+  auto etype = geo->eleType(cellID);
+
+  for (auto eles : solver->elesObjs)
+  {
+    if (eles->etype == etype)
+    {
+      return (int)eles->nSpts;
+    }
+  }
 }
 
 void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights)
@@ -729,6 +820,7 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
 
   /* NOTE: inode is not used, and cellID is irrelevant when all cells are
    * identical (tensor-product, one polynomial order) */
+  /// TODO: eletype
   solver->elesObjs[0]->get_interp_weights_gpu(cellIDs,nFringe,rst,weights);
 #endif
 }
@@ -762,6 +854,7 @@ void Zefr::update_iblank_gpu(void)
 void Zefr::donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
 {
 #ifdef _GPU
+  /// TODO: eletype
   if (gradFlag == 0)
     solver->elesObjs[0]->donor_u_from_device(donorIDs, nDonors);
   else
@@ -780,7 +873,7 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
     if (gradFlag == 0)
       solver->faces->fringe_u_to_device(fringeIDs, nFringe, data);
     else
-      solver->faces->fringe_grad_to_device(nFringe, data);
+      solver->faces->fringe_grad_to_device(fringeIDs, nFringe, data);
   }
   else
   {
@@ -789,7 +882,7 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
     if (gradFlag == 0)
       solver->faces->fringe_u_to_device(fringeIDs, nFringe);
     else
-      solver->faces->fringe_grad_to_device(nFringe);
+      solver->faces->fringe_grad_to_device(fringeIDs, nFringe);
   }
 
   check_error();
@@ -799,6 +892,7 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
 void Zefr::unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
 {
 #ifdef _GPU
+  /// TODO: eletype
   if (gradFlag == 0)
     solver->elesObjs[0]->unblank_u_to_device(fringeIDs, nFringe, data);
 //  else

@@ -129,10 +129,10 @@ ExtraGeo get_extra_geo_data(void)
 {
   ExtraGeo geo;
 
-  ZEFR->get_extra_geo_data(geo.nFaceTypes,geo.nvert_face,geo.nFaces_type,
-      geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,geo.iblank_cell,geo.nOverFaces,
-      geo.overFaces,geo.nWallFaces,geo.wallFaces,geo.nMpiFaces,geo.mpiFaces,
-      geo.procR,geo.mpiFidR,geo.grid_vel,geo.offset,geo.Rmat);
+  ZEFR->get_extra_geo_data(geo.nFaceTypes,geo.faceTypes,geo.cellTypes,
+      geo.nvert_face,geo.nFaces_type,geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,
+      geo.iblank_cell,geo.nOverFaces,geo.overFaces,geo.nWallFaces,geo.wallFaces,
+      geo.nMpiFaces,geo.mpiFaces,geo.procR,geo.mpiFidR,geo.grid_vel,geo.offset,geo.Rmat);
 
   return geo;
 }
@@ -185,12 +185,12 @@ CallbackFuncs get_callback_funcs(void)
 
 void get_nodes_per_cell(int* cellID, int* nNodes)
 {
-  ZEFR->get_nodes_per_cell(*nNodes);
+  ZEFR->get_nodes_per_cell(*cellID, *nNodes);
 }
 
 void get_nodes_per_face(int* faceID, int* nNodes)
 {
-  ZEFR->get_nodes_per_face(*nNodes);
+  ZEFR->get_nodes_per_face(*faceID, *nNodes);
 }
 
 void get_receptor_nodes(int* cellID, int* nNodes, double* xyz)

@@ -200,10 +200,12 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 #endif
 
 void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,3> &tot_moment,
-    mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double> &P_fpts, mdvector_gpu<double> &coord, mdvector_gpu<double>& x_cg,
-    mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<char> &fpt2bnd,
-    mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
-    double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims, int start_fpt, int nFaces, int nFptsPerFace);
+    mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double> &P_fpts,
+    mdvector_gpu<double> &coord, mdvector_gpu<double>& x_cg, mdvector_gpu<double> &norm,
+    mdvector_gpu<double> &dA, mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face,
+    mdvector_gpu<double> &moment_face, double gamma, double rt, double c_sth, double mu,
+    bool viscous, bool fix_vis, int nVars, int nDims, int nFaces, mdvector_gpu<int> faceList,
+    mdvector_gpu<int> face2fpts, int nFptsPerFace);
 
 void accumulate_time_averages_wrapper(mdvector_gpu<double> &tavg_acc, mdvector_gpu<double> &tavg_prev,
     mdvector_gpu<double> &tavg_curr, mdvector_gpu<double> &U_spts, double prev_time, double curr_time,

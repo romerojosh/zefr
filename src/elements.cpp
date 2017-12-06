@@ -315,7 +315,7 @@ void Elements::set_coords(std::shared_ptr<Faces> faces)
   /* Setup positions of all element's shape nodes in one array */
   if (input->meshfile.find(".pyfr") != std::string::npos)
   {
-    nodes = geo->ele_nodes; /// TODO: setup for Gmsh grids as well
+    nodes = geo->ele_nodes[etype]; /// TODO: setup for Gmsh grids as well
   }
   else
   {

@@ -108,11 +108,12 @@ public:
   // Geometry Access Functions
   void get_basic_geo_data(int &btag, int& gType, int &nnodes, double *&xyz, int *&iblank,
                           int &nwall, int &nover, int *&wallNodes, int *&overNodes,
-                          int &nCellTypes, int &nvert_cell, int &nCells_type,
-                          int *&c2v);
+                          int &nCellTypes, int*& nvert_cell, int*& nCells_type,
+                          int**& c2v);
 
-  void get_extra_geo_data(int &nFaceTypes, int& nvert_face, int& nFaces_type,
-                          int*& f2v, int*& f2c, int*& c2f, int*& iblank_face,
+  void get_extra_geo_data(int &nFaceTypes, int*& faceTypes, int*& cellTypes,
+                          int*& nvert_face, int*& nFaces_type,
+                          int**& f2v, int*& f2c, int**& c2f, int*& iblank_face,
                           int*& iblank_cell, int& nOver, int*& overFaces,
                           int& nWall, int*& wallFaces, int& nMpiFaces,
                           int*& mpiFaces, int*& procR, int*& faceIdR,
@@ -130,8 +131,8 @@ public:
   double *get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
 
   // Callback Functions for TIOGA
-  void get_nodes_per_cell(int& nNodes);
-  void get_nodes_per_face(int& nNodes);
+  void get_nodes_per_cell(int cellID, int& nNodes);
+  void get_nodes_per_face(int faceID, int& nNodes);
   void get_receptor_nodes(int cellID, int& nNodes, double* xyz);
   void get_face_nodes(int faceID, int& nNodes, double* xyz);
   void donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst);

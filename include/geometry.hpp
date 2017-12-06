@@ -54,15 +54,24 @@ struct GeoStruct
 {
   /* Maps to organize geometry data by element type */
   std::set<ELE_TYPE> ele_set; // Set of element types discovered in mesh
-  std::map<ELE_TYPE, mdvector<unsigned int>> eleID; // unique ID of element across all element types
-  mdvector<ELE_TYPE> eleType; // element type by unique ID; 
+  mdvector<int> ele_types; // List of element types in mesh
+  std::set<ELE_TYPE> face_set;
+  mdvector<int> face_types; // List of face types in mesh
+  std::map<ELE_TYPE, int> nFacesBT;    //! # of faces per face type
+  mdvector<int> nNode_face;   //! List of # of nodes per face, by type
+  std::map<ELE_TYPE, mdvector<unsigned int>> eleID;  // unique ID of element across all element types
+  std::map<ELE_TYPE, mdvector<unsigned int>> faceID; // unique ID of face across all face types
+  mdvector<ELE_TYPE> eleType;  // element type by unique ID;
+  mdvector<ELE_TYPE> faceType; // face type by unique ID
   std::map<ELE_TYPE, unsigned int> nElesBT;
   std::map<ELE_TYPE, unsigned int> nFacesPerEleBT;
   std::map<ELE_TYPE, unsigned int> nNodesPerEleBT;
   std::map<ELE_TYPE, unsigned int> nNodesPerFaceBT;
   std::map<ELE_TYPE, unsigned int> nCornerNodesBT;
   std::map<ELE_TYPE, unsigned int> nFptsPerFaceBT;
+  std::map<ELE_TYPE, unsigned int> nFptsPerEleBT;
   std::map<ELE_TYPE, mdvector<int>> ele2nodesBT;
+  std::map<ELE_TYPE, std::vector<ELE_TYPE>> eleFaceTypesBT;
   std::map<ELE_TYPE, std::vector<std::vector<unsigned int>>> face_nodesBT;
   std::map<ELE_TYPE, mdvector<int>> fpt2gfptBT;
   std::map<ELE_TYPE, mdvector<char>> fpt2gfpt_slotBT;
@@ -70,22 +79,28 @@ struct GeoStruct
 
   unsigned int nEles = 0; 
   unsigned int nBnds = 0;
-  unsigned int nDims, nNodes, nFaces, nFptsPerFace, nNodesPerFace;
+  unsigned int nDims, nNodes, nFaces;
+  std::map<ELE_TYPE, unsigned int> nFptsPerFace, nNodesPerFace;
   unsigned int nGfpts, nGfpts_int, nGfpts_bnd;
   unsigned int nGfpts_mpi = 0;
   bool per_bnd_flag = false;
 
-  unsigned int nNdFaceCurved; /// # of nodes per face, including edge and interior nodes
-  mdvector<int> faceNodesCurved;
+  std::map<ELE_TYPE, unsigned int> nNdFaceCurved; /// # of nodes per face, including edge and interior nodes
+  std::map<ELE_TYPE, mdvector<int>> faceNodesCurved;
 
   /* Connectivity Data */
-  mdvector<int> ele2face, face2nodes, face2eles, face2eles_idx;
+  mdvector<int> face2eles, face2eles_idx;
+  std::map<ELE_TYPE, mdvector<int>> ele2face, face2nodes;
+  std::vector<int*> c2v_ptr, f2v_ptr, c2f_ptr;
+  std::vector<int> nf_ptr, nv_ptr, nc_ptr;
 
   std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
   mdvector<char> gfpt2bnd;
   std::map<std::vector<unsigned int>, int> bnd_faces;
+  std::map<std::vector<unsigned int>, ELE_TYPE> bnd_face_type;
   std::map<std::vector<unsigned int>, std::vector<unsigned int>> per_bnd_pairs;
-  mdvector<double> ele_nodes, coord_nodes;
+  std::map<ELE_TYPE, mdvector<double>> ele_nodes;
+  mdvector<double> coord_nodes;
 
   mdvector<double> grid_vel_nodes, coords_init;
 
@@ -93,6 +108,7 @@ struct GeoStruct
   mdvector<int> ele2eleN, face2faceN, fpt2fptN;
 #ifdef _GPU
   std::map<ELE_TYPE, mdvector_gpu<unsigned int>> eleID_d;
+  std::map<ELE_TYPE, mdvector_gpu<unsigned int>> faceID_d;
   mdvector_gpu<int> ele2eleN_d, face2faceN_d, fpt2fptN_d;
 #endif
 
@@ -108,6 +124,8 @@ struct GeoStruct
   std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
   std::map<std::vector<unsigned int>, unsigned int> face2bnd;
   std::vector<std::vector<unsigned int>> boundFaces; //! List of face IDs for each mesh-defined boundary
+  std::vector<std::vector<ELE_TYPE>> boundFaceTypes; //! List of face types for each boundary face
+  mdvector<int> wallFaces;
 
   //! --- New additions for PyFR format (consider re-organizing) ---
   mdvector<face_con> face_list;
@@ -118,7 +136,7 @@ struct GeoStruct
 #endif
   std::string mesh_uuid, config, stats;
 
-  std::vector<int> pyfr2zefr_face, zefr2pyfr_face;
+  std::map<ELE_TYPE, std::vector<int>> pyfr2zefr_face, zefr2pyfr_face;
 
   _mpi_comm myComm;
 #ifdef _MPI
@@ -139,6 +157,7 @@ struct GeoStruct
     mdvector_gpu<char> gfpt2bnd_d;
     mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
     mdvector_gpu<char> flip_beta_d;
+    mdvector_gpu<int> faceType_d;
 #ifdef _MPI
   std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
 #endif
@@ -169,11 +188,10 @@ struct GeoStruct
 
   unsigned int nBndFaces, nIntFaces, nOverFaces;
   std::vector<std::vector<unsigned int>> bndPts;   //! List of points on each boundary
-///    mdvector<int> c2f, f2c, c2c;            //! Cell-to-face and face-to-cell conncectivity
   std::vector<std::vector<unsigned int>> faceList; //! Ordered list of faces matching c2f / f2c
   std::map<std::vector<unsigned int>, unsigned int> nodes_to_face; //! Map from face nodes to face ID
   std::vector<int> fpt2face; //! fpt index to face index
-  mdvector<int> face2fpts; //! Face index to fpt indices
+  std::map<ELE_TYPE, mdvector<int>> face2fpts; //! Face index to fpt indices
 
   std::vector<int> iblank_node; //! iblank values for nodes, cells, faces
   mdvector<int> iblank_cell, iblank_face;
@@ -194,6 +212,15 @@ struct GeoStruct
 
   mdvector_gpu<double> x_cg_d, vel_cg_d, q_d, qdot_d, Rmat_d, omega_d;
   mdvector_gpu<double> dx_cg_d, dRmat_d, Wmat_d;
+
+#endif
+
+  // Additional vars for computing forces/moments on mixed grids
+  std::map<ELE_TYPE, mdvector<int>> wallFacesBT;
+
+#ifdef _GPU
+  std::map<ELE_TYPE, mdvector_gpu<int>> face2fpts_d;
+  std::map<ELE_TYPE, mdvector_gpu<int>> wallFacesBT_d;
 #endif
 
   unsigned int nGrids;  //! Number of distinct overset grids
@@ -205,6 +232,7 @@ struct GeoStruct
 };
 
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in);
+void setup_etypes(GeoStruct &geo);
 void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo);
 void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo);
 void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input);

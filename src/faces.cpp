@@ -2400,7 +2400,8 @@ void Faces::recv_dU_data()
 void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
 {
   /* U : nFpts x nVars x 2 */
-  int i = geo->face2fpts(fpt, faceID);
+  auto ftype = geo->faceType(faceID);
+  int i = geo->face2fpts[ftype](fpt, faceID);
   int ic1 = geo->face2eles(faceID,0);
   int ic2 = geo->face2eles(faceID,1);
 
@@ -2422,7 +2423,8 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
 double& Faces::get_u_fpt(int faceID, int fpt, int var)
 {
   /* U : nFpts x nVars x 2 */
-  int i = geo->face2fpts(fpt, faceID);
+  auto ftype = geo->faceType(faceID);
+  int i = geo->face2fpts[ftype](fpt, faceID);
   int ic1 = geo->face2eles(faceID,0);
   int ic2 = geo->face2eles(faceID,1);
 
@@ -2438,7 +2440,8 @@ double& Faces::get_u_fpt(int faceID, int fpt, int var)
 double& Faces::get_grad_fpt(int faceID, int fpt, int var, int dim)
 {
   /* U : nFpts x nVars x 2 */
-  int i = geo->face2fpts(fpt, faceID);
+  auto ftype = geo->faceType(faceID);
+  int i = geo->face2fpts[ftype](fpt, faceID);
   int ic1 = geo->face2eles(faceID,0);
   int ic2 = geo->face2eles(faceID,1);
 
@@ -2449,52 +2452,80 @@ double& Faces::get_grad_fpt(int faceID, int fpt, int var, int dim)
   return dU(side,dim,var,i);
 }
 
-#ifdef _GPU
+#if defined(_GPU) && defined(_BUILD_LIB)
 void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 {
   if (nFringe == 0) return;
 
-  U_fringe.resize({geo->nFptsPerFace, (uint)nFringe, nVars});
-  fringe_fpts.resize({geo->nFptsPerFace, (uint)nFringe});
-  fringe_side.resize({geo->nFptsPerFace, (uint)nFringe});
+  for (auto ftype : geo->face_set)
+    nfringe_type[ftype] = 0;
+
+  for (int i = 0; i < nFringe; i++)
+    nfringe_type[geo->faceType(fringeIDs[i])]++;
+
+  for (auto ftype : geo->face_set)
+  {
+    U_fringe[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype], nVars});
+    fringe_fpts[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
+    fringe_side[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
+  }
+
+  for (auto ftype : geo->face_set)
+    nfringe_type[ftype] = 0;
+
   for (int face = 0; face < nFringe; face++)
   {
+    int fid = fringeIDs[face];
+    ELE_TYPE ftype = geo->faceType(fid);
+
     unsigned int side = 0;
-    int ic1 = geo->face2eles(fringeIDs[face],0);
+    int ic1 = geo->face2eles(fid,0);
     if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
       side = 1;
 
-    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
     {
-      fringe_fpts(fpt,face) = geo->face2fpts(fpt, fringeIDs[face]);
-      fringe_side(fpt,face) = side;
+      fringe_fpts[ftype](fpt,nfringe_type[ftype]) = geo->face2fpts[ftype](fpt, fid);
+      fringe_side[ftype](fpt,nfringe_type[ftype]) = side;
     }
+
+    nfringe_type[ftype]++;
   }
 
   for (unsigned int var = 0; var < nVars; var++)
   {
+    std::map<ELE_TYPE, unsigned int> loc_fid;
+    for (auto ftype : geo->face_set)
+      loc_fid[ftype] = 0;
+
     for (unsigned int face = 0; face < nFringe; face++)
     {
-      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+      ELE_TYPE ftype = geo->faceType(fringeIDs[face]);
+      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
       {
-        unsigned int gfpt = fringe_fpts(fpt,face);
-        unsigned int side = fringe_side(fpt,face);
-        U_fringe(fpt,face,var) = U(side,var,gfpt);
+        unsigned int gfpt = fringe_fpts[ftype](fpt,face);
+        unsigned int side = fringe_side[ftype](fpt,face);
+        U_fringe[ftype](fpt,loc_fid[ftype],var) = U(side,var,gfpt);
       }
+
+      loc_fid[ftype]++;
     }
   }
 
-  U_fringe_d = U_fringe;
-  fringe_fpts_d = fringe_fpts;
-  fringe_side_d = fringe_side;
+  for (auto ftype : geo->face_set)
+  {
+    U_fringe_d[ftype] = U_fringe[ftype];
+    fringe_fpts_d[ftype] = fringe_fpts[ftype];
+    fringe_side_d[ftype] = fringe_side[ftype];
 
-  unpack_fringe_u_wrapper(U_fringe_d,U_d,U_ldg_d,fringe_fpts_d,fringe_side_d,nFringe,
-      geo->nFptsPerFace,nVars,3);
+    unpack_fringe_u_wrapper(U_fringe_d[ftype],U_d,U_ldg_d,fringe_fpts_d[ftype],
+        fringe_side_d[ftype],nfringe_type[ftype],geo->nFptsPerFace[ftype],nVars,3);
+  }
 
   check_error();
 }
 
-void Faces::fringe_grad_to_device(int nFringe)
+void Faces::fringe_grad_to_device(int* fringeIDs, int nFringe)
 {
   /* NOTE: Expecting that fringe_u_to_device has already been called for the
    * same set of fringe faces */
@@ -2567,7 +2598,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
   check_error();
 }
 
-void Faces::fringe_grad_to_device(int nFringe, double *data)
+void Faces::fringe_grad_to_device(int* fringeIDs, int nFringe, double *data)
 {
   /* NOTE: Expecting that fringe_u_to_device has already been called for the
    * same set of fringe faces */

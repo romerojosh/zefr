@@ -408,12 +408,15 @@ void FRSolver::orient_fpts()
   }
 
   /* Get consistent coupling via fuzzysort */
-  for (unsigned int f = 0; f < geo.nGfpts_int/geo.nFptsPerFace; f++)
+  unsigned int shift = 0;
+  for (unsigned int ff = 0; ff < geo.nIntFaces; ff++)
   {
-    unsigned int shift = f * geo.nFptsPerFace;
+    auto ftype = geo.faceType(ff);
 
-    fuzzysort_ind(fpt_coords_L, idxL.data() + shift, geo.nFptsPerFace, geo.nDims);
-    fuzzysort_ind(fpt_coords_R, idxR.data() + shift, geo.nFptsPerFace, geo.nDims);
+    fuzzysort_ind(fpt_coords_L, idxL.data() + shift, geo.nFptsPerFace[ftype], geo.nDims);
+    fuzzysort_ind(fpt_coords_R, idxR.data() + shift, geo.nFptsPerFace[ftype], geo.nDims);
+
+    shift += geo.nFptsPerFace[ftype];
   }
 
   /* Sort again to make left face index access coalesced memory */
@@ -442,7 +445,7 @@ void FRSolver::orient_fpts()
     auto fpt2gfptBT_copy = geo.fpt2gfptBT[etype];
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
     {
-      for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * geo.nFptsPerFace; fpt++)
+      for (unsigned int fpt = 0; fpt < geo.nFptsPerEleBT[etype]; fpt++)
       {
         int slot = geo.fpt2gfpt_slotBT[etype](fpt,ele);
         int gfpt_old = fpt2gfptBT_copy(fpt, ele);
@@ -464,13 +467,14 @@ void FRSolver::orient_fpts()
   auto face2fpts_copy = geo.face2fpts;
   for (int ff = 0; ff < geo.nFaces; ff++)
   {
-    for (int fpt = 0; fpt < geo.nFptsPerFace; fpt++)
+    auto ftype = geo.faceType(ff);
+    for (int fpt = 0; fpt < geo.nFptsPerFace[ftype]; fpt++)
     {
-      int gfpt_old = face2fpts_copy(fpt, ff);
+      int gfpt_old = face2fpts_copy[ftype](fpt, ff); /// TODO: local face ID
       if (gfpt_old >= geo.nGfpts_int) continue;
 
       int gfpt_new = idxL[gfpt_old];
-      geo.face2fpts(fpt, ff) = gfpt_new;
+      geo.face2fpts[ftype](fpt, ff) = gfpt_new; /// TODO: local face ID
       geo.fpt2face[gfpt_new] = ff;
     }
   }
@@ -479,11 +483,16 @@ void FRSolver::orient_fpts()
   /* For MPI, just use coupling from fuzzysort directly */
   for (auto &entry : geo.fpt_buffer_map)
   {
+    int rank2 = entry.first;
     auto &fpts = entry.second;
-    for (unsigned int f = 0; f < fpts.size()/geo.nFptsPerFace; f++)
+    auto &faceIds = geo.face_buffer_map[rank2];
+
+    unsigned int shift = 0;
+    for (int ff = 0; ff < faceIds.size(); ff++)
     {
-      unsigned int shift = f * geo.nFptsPerFace;
-      fuzzysort_ind(fpt_coords_L, fpts.data() + shift, geo.nFptsPerFace, geo.nDims);
+      auto ftype = geo.faceType(faceIds(ff));
+      fuzzysort_ind(fpt_coords_L, fpts.data() + shift, geo.nFptsPerFace[ftype], geo.nDims);
+      shift += geo.nFptsPerFace[ftype];
     }
   }
 #endif
@@ -494,15 +503,15 @@ void FRSolver::set_fpt_adjacency()
 {
   /* Sizing fpt2fptN */
   if (geo.nDims == 2)
-    geo.fpt2fptN.assign({geo.nFacesPerEleBT[QUAD] * geo.nFptsPerFace, geo.nEles}, -1);
+    geo.fpt2fptN.assign({geo.nFptsPerEleBT[QUAD], geo.nEles}, -1);
   else
-    geo.fpt2fptN.assign({geo.nFacesPerEleBT[HEX] * geo.nFptsPerFace, geo.nEles}, -1);
+    geo.fpt2fptN.assign({geo.nFptsPerEleBT[HEX], geo.nEles}, -1);
 
   /* Construct gfpt2fpt connectivity */
   mdvector<unsigned int> gfpt2fpt({2, geo.nGfpts}, -1);
   for (auto etype : geo.ele_set)
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
-      for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * geo.nFptsPerFace; fpt++)
+      for (unsigned int fpt = 0; fpt < geo.nFptsPerEleBT[etype]; fpt++)
       {
         int gfpt = geo.fpt2gfptBT[etype](fpt,ele);
         int slot = geo.fpt2gfpt_slotBT[etype](fpt,ele);
@@ -512,7 +521,7 @@ void FRSolver::set_fpt_adjacency()
   /* Construct fpt2fptN connectivity */
   for (auto etype : geo.ele_set)
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++)
-      for (unsigned int fpt = 0; fpt < geo.nFacesPerEleBT[etype] * geo.nFptsPerFace; fpt++)
+      for (unsigned int fpt = 0; fpt < geo.nFptsPerEleBT[etype]; fpt++)
       {
         unsigned int eleID = geo.eleID[etype](ele);
         int gfpt = geo.fpt2gfptBT[etype](fpt,ele);
@@ -669,12 +678,13 @@ void FRSolver::setup_jacoN_views()
     /* Set pointers for jacoN */
     for (unsigned int ele = 0; ele < eles->nEles; ele++)
     {
+      auto etype = eles->etype;
       unsigned int eleID = geo.eleID[eles->etype](ele + eles->startEle);
       for (unsigned int face = 0; face < eles->nFaces; face++)
       {
 #ifdef _MPI
         /* Element neighbor is on another rank */
-        int faceID = geo.ele2face(eleID, face);
+        int faceID = geo.ele2face[etype](eleID, face);
         int mpiFace = findFirst(geo.mpiFaces, faceID);
         if (mpiFace > -1)
         {
@@ -983,7 +993,7 @@ void FRSolver::setup_output()
 #ifdef _MPI
     MPI_Barrier(worldComm);
 #endif
-       
+
   for (auto e : elesObjs)
     e->setup_ppt_connectivity();
 }
@@ -1214,6 +1224,12 @@ void FRSolver::solver_data_to_device()
 
     if (input->implicit_method && input->viscous && !input->KPF_Jacobian)
       geo.eleID_d[etype] = geo.eleID[etype];
+  }
+
+  for (auto ftype : geo.face_set)
+  {
+    geo.face2fpts_d[ftype] = geo.face2fpts[ftype];
+    geo.wallFacesBT_d[ftype] = geo.wallFacesBT[ftype];
   }
 
   if (input->implicit_method && input->viscous && !input->KPF_Jacobian)
@@ -5944,22 +5960,26 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
 
   for (unsigned int ff = 0; ff < geo.nFaces; ff++)
   {
+    auto ftype = geo.faceType(ff);
     if (geo.iblank_face(ff) == FRINGE)
     {
       int ic1 = geo.face2eles(ff,0);
       int ic2 = geo.face2eles(ff,1);
+      ELE_TYPE etype;
       if (geo.iblank_cell(ic1) == NORMAL)
       {
         eleList.push_back(ic1);
+        etype = geo.eleType(ic1);
       }
       else if (ic2 > 0 && geo.iblank_cell(ic2) == NORMAL)
       {
         eleList.push_back(ic2);
+        etype = geo.eleType(ic2);
       }
 
       for (int i = 0; i < nFacesEle; i++)
       {
-        if (geo.ele2face(eleList.back(),i) == ff)
+        if (geo.ele2face[etype](eleList.back(),i) == ff)
         {
           indList.push_back(i);
           break;
@@ -6411,13 +6431,14 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     {
       // Load data from each face on boundary
       int ele = geo.face2eles(ff,0);
+      auto etype = geo.eleType(ele);
 
       if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
       int j = -1;
       for (int i = 0; i < nFacesEle; i++)
       {
-        if (geo.ele2face(ele, i) == ff)
+        if (geo.ele2face[etype](ele, i) == ff)
         {
           j = i;
           break;
@@ -7334,176 +7355,183 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
 
   bool write_cp = (cp_file != NULL && cp_file->is_open());
 
-  unsigned int count = 0;
   /* Loop over boundary faces */
-  for (unsigned int fpt = geo.nGfpts_int; fpt < geo.nGfpts_int + geo.nGfpts_bnd; fpt++)
+  for (int bnd = 0; bnd < geo.nBounds; bnd++)
   {
     /* Get boundary ID */
-    unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
-    unsigned int idx = count % geo.nFptsPerFace;
+    int bnd_id = geo.bnd_ids[bnd];
 
-    if (bnd_id == SLIP_WALL || bnd_id == ISOTHERMAL_NOSLIP || bnd_id == ISOTHERMAL_NOSLIP_MOVING || 
+    if (bnd_id == SLIP_WALL || bnd_id == ISOTHERMAL_NOSLIP || bnd_id == ISOTHERMAL_NOSLIP_MOVING ||
         bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* On wall boundary */
     {
-      /* Get pressure */
-      double PL = faces->P(0, fpt);
-
-      if (write_cp)
+      for (auto ff : geo.boundFaces[bnd])
       {
-        /* Write CP distrubtion to file */
-        double CP = (PL - input->P_fs) * fac;
-        for(unsigned int dim = 0; dim < geo.nDims; dim++)
-          *cp_file << std::scientific << faces->coord(dim, fpt) << " ";
-        *cp_file << std::scientific << CP << std::endl;
-      }
-
-      /* Sum inviscid force contributions */
-      for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      {
-        //TODO: need to fix quadrature weights for mixed element cases!
-        force_conv[dim] += elesObjs[0]->weights_fpts(idx) * PL *
-          faces->norm(dim, fpt) * faces->dA(0, fpt);
-      }
-
-      if (input->viscous)
-      {
-        if (geo.nDims == 2)
+        //int fid = geo.face2local /// TODO
+        auto ftype = geo.faceType(ff);
+        for (int idx = 0; idx < geo.nFptsPerFace[ftype]; idx++)
         {
-          /* Setting variables for convenience */
-          /* States */
-          double rho = faces->U(0, 0, fpt);
-          double momx = faces->U(0, 1, fpt);
-          double momy = faces->U(0, 2, fpt);
-          double e = faces->U(0, 3, fpt);
+          unsigned int fpt = geo.face2fpts[ftype](idx, ff); /// TODO: local fid
 
-          double u = momx / rho;
-          double v = momy / rho;
-          double e_int = e / rho - 0.5 * (u*u + v*v);
+          /* Get pressure */
+          double PL = faces->P(0, fpt);
 
-          /* Gradients */
-          double rho_dx = faces->dU(0, 0, 0, fpt);
-          double momx_dx = faces->dU(0, 0, 1, fpt);
-          double momy_dx = faces->dU(0, 0, 2, fpt);
-
-          double rho_dy = faces->dU(0, 1, 0, fpt);
-          double momx_dy = faces->dU(0, 1, 1, fpt);
-          double momy_dy = faces->dU(0, 1, 2, fpt);
-
-          /* Set viscosity */
-          double mu;
-          if (input->fix_vis)
+          if (write_cp)
           {
-            mu = input->mu;
-          }
-          /* If desired, use Sutherland's law */
-          else
-          {
-            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
-                input->c_sth);
+            /* Write CP distrubtion to file */
+            double CP = (PL - input->P_fs) * fac;
+            for(unsigned int dim = 0; dim < geo.nDims; dim++)
+              *cp_file << std::scientific << faces->coord(dim, fpt) << " ";
+            *cp_file << std::scientific << CP << std::endl;
           }
 
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-
-          double dv_dx = (momy_dx - rho_dx * v) / rho;
-          double dv_dy = (momy_dy - rho_dy * v) / rho;
-
-          double diag = (du_dx + dv_dy) / 3.0;
-
-          double tauxx = 2.0 * mu * (du_dx - diag);
-          double tauxy = mu * (du_dy + dv_dx);
-          double tauyy = 2.0 * mu * (dv_dy - diag);
-
-          /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
-          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
-
-          //TODO: need to fix quadrature weights for mixed element cases!
+          /* Sum inviscid force contributions */
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
-              faces->dA(0, fpt);
-
-        }
-        else if (geo.nDims == 3)
-        {
-          /* Setting variables for convenience */
-          /* States */
-          double rho = faces->U(0, 0, fpt);
-          double momx = faces->U(0, 1, fpt);
-          double momy = faces->U(0, 2, fpt);
-          double momz = faces->U(0, 3, fpt);
-          double e = faces->U(0, 4, fpt);
-
-          double u = momx / rho;
-          double v = momy / rho;
-          double w = momz / rho;
-          double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
-
-           /* Gradients */
-          double rho_dx = faces->dU(0, 0, 0, fpt);
-          double momx_dx = faces->dU(0, 0, 1, fpt);
-          double momy_dx = faces->dU(0, 0, 2, fpt);
-          double momz_dx = faces->dU(0, 0, 3, fpt);
-
-          double rho_dy = faces->dU(0, 1, 0, fpt);
-          double momx_dy = faces->dU(0, 1, 1, fpt);
-          double momy_dy = faces->dU(0, 1, 2, fpt);
-          double momz_dy = faces->dU(0, 1, 3, fpt);
-
-          double rho_dz = faces->dU(0, 2, 0, fpt);
-          double momx_dz = faces->dU(0, 2, 1, fpt);
-          double momy_dz = faces->dU(0, 2, 2, fpt);
-          double momz_dz = faces->dU(0, 2, 3, fpt);
-
-          /* Set viscosity */
-          double mu;
-          if (input->fix_vis)
           {
-            mu = input->mu;
-          }
-          /* If desired, use Sutherland's law */
-          else
-          {
-            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
-                input->c_sth);
+            /// TODO: need to fix quadrature weights for mixed element cases!
+            force_conv[dim] += elesObjs[0]->weights_fpts(idx) * PL *
+                faces->norm(dim, fpt) * faces->dA(0, fpt);
           }
 
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-          double du_dz = (momx_dz - rho_dz * u) / rho;
+          if (input->viscous)
+          {
+            if (geo.nDims == 2)
+            {
+              /* Setting variables for convenience */
+              /* States */
+              double rho = faces->U(0, 0, fpt);
+              double momx = faces->U(0, 1, fpt);
+              double momy = faces->U(0, 2, fpt);
+              double e = faces->U(0, 3, fpt);
 
-          double dv_dx = (momy_dx - rho_dx * v) / rho;
-          double dv_dy = (momy_dy - rho_dy * v) / rho;
-          double dv_dz = (momy_dz - rho_dz * v) / rho;
+              double u = momx / rho;
+              double v = momy / rho;
+              double e_int = e / rho - 0.5 * (u*u + v*v);
 
-          double dw_dx = (momz_dx - rho_dx * w) / rho;
-          double dw_dy = (momz_dy - rho_dy * w) / rho;
-          double dw_dz = (momz_dz - rho_dz * w) / rho;
+              /* Gradients */
+              double rho_dx = faces->dU(0, 0, 0, fpt);
+              double momx_dx = faces->dU(0, 0, 1, fpt);
+              double momy_dx = faces->dU(0, 0, 2, fpt);
 
-          double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+              double rho_dy = faces->dU(0, 1, 0, fpt);
+              double momx_dy = faces->dU(0, 1, 1, fpt);
+              double momy_dy = faces->dU(0, 1, 2, fpt);
 
-          double tauxx = 2.0 * mu * (du_dx - diag);
-          double tauyy = 2.0 * mu * (dv_dy - diag);
-          double tauzz = 2.0 * mu * (dw_dz - diag);
-          double tauxy = mu * (du_dy + dv_dx);
-          double tauxz = mu * (du_dz + dw_dx);
-          double tauyz = mu * (dv_dz + dw_dy);
+              /* Set viscosity */
+              double mu;
+              if (input->fix_vis)
+              {
+                mu = input->mu;
+              }
+              /* If desired, use Sutherland's law */
+              else
+              {
+                double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+                mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
+                                                                                 input->c_sth);
+              }
 
-          /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
-          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
-          taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
+              double du_dx = (momx_dx - rho_dx * u) / rho;
+              double du_dy = (momx_dy - rho_dy * u) / rho;
 
-          //TODO: need to fix quadrature weights for mixed element cases!
-          for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
-              faces->dA(0, fpt);
+              double dv_dx = (momy_dx - rho_dx * v) / rho;
+              double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+              double diag = (du_dx + dv_dy) / 3.0;
+
+              double tauxx = 2.0 * mu * (du_dx - diag);
+              double tauxy = mu * (du_dy + dv_dx);
+              double tauyy = 2.0 * mu * (dv_dy - diag);
+
+              /* Get viscous normal stress */
+              taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
+              taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
+
+              //TODO: need to fix quadrature weights for mixed element cases!
+              for (unsigned int dim = 0; dim < geo.nDims; dim++)
+                force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
+                    faces->dA(0, fpt);
+
+            }
+            else if (geo.nDims == 3)
+            {
+              /* Setting variables for convenience */
+              /* States */
+              double rho = faces->U(0, 0, fpt);
+              double momx = faces->U(0, 1, fpt);
+              double momy = faces->U(0, 2, fpt);
+              double momz = faces->U(0, 3, fpt);
+              double e = faces->U(0, 4, fpt);
+
+              double u = momx / rho;
+              double v = momy / rho;
+              double w = momz / rho;
+              double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
+
+              /* Gradients */
+              double rho_dx = faces->dU(0, 0, 0, fpt);
+              double momx_dx = faces->dU(0, 0, 1, fpt);
+              double momy_dx = faces->dU(0, 0, 2, fpt);
+              double momz_dx = faces->dU(0, 0, 3, fpt);
+
+              double rho_dy = faces->dU(0, 1, 0, fpt);
+              double momx_dy = faces->dU(0, 1, 1, fpt);
+              double momy_dy = faces->dU(0, 1, 2, fpt);
+              double momz_dy = faces->dU(0, 1, 3, fpt);
+
+              double rho_dz = faces->dU(0, 2, 0, fpt);
+              double momx_dz = faces->dU(0, 2, 1, fpt);
+              double momy_dz = faces->dU(0, 2, 2, fpt);
+              double momz_dz = faces->dU(0, 2, 3, fpt);
+
+              /* Set viscosity */
+              double mu;
+              if (input->fix_vis)
+              {
+                mu = input->mu;
+              }
+              /* If desired, use Sutherland's law */
+              else
+              {
+                double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+                mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
+                                                                                 input->c_sth);
+              }
+
+              double du_dx = (momx_dx - rho_dx * u) / rho;
+              double du_dy = (momx_dy - rho_dy * u) / rho;
+              double du_dz = (momx_dz - rho_dz * u) / rho;
+
+              double dv_dx = (momy_dx - rho_dx * v) / rho;
+              double dv_dy = (momy_dy - rho_dy * v) / rho;
+              double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+              double dw_dx = (momz_dx - rho_dx * w) / rho;
+              double dw_dy = (momz_dy - rho_dy * w) / rho;
+              double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+              double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+
+              double tauxx = 2.0 * mu * (du_dx - diag);
+              double tauyy = 2.0 * mu * (dv_dy - diag);
+              double tauzz = 2.0 * mu * (dw_dz - diag);
+              double tauxy = mu * (du_dy + dv_dx);
+              double tauxz = mu * (du_dz + dw_dx);
+              double tauyz = mu * (dv_dz + dw_dy);
+
+              /* Get viscous normal stress */
+              taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
+              taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
+              taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
+
+              //TODO: need to fix quadrature weights for mixed element cases!
+              for (unsigned int dim = 0; dim < geo.nDims; dim++)
+                force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
+                    faces->dA(0, fpt);
+            }
+
+          }
         }
-
       }
-      count++;
     }
   }
 }
@@ -7520,181 +7548,188 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
   int c1[3] = {1,2,0}; // Cross-product index maps
   int c2[3] = {2,0,1};
 
-  unsigned int count = 0;
   /* Loop over boundary faces */
-  for (unsigned int fpt = geo.nGfpts_int; fpt < geo.nGfpts_int + geo.nGfpts_bnd; fpt++)
+  for (int bnd = 0; bnd < geo.nBounds; bnd++)
   {
     /* Get boundary ID */
-    unsigned int bnd_id = geo.gfpt2bnd(fpt - geo.nGfpts_int);
-    unsigned int idx = count % geo.nFptsPerFace;
+    int bnd_id = geo.bnd_ids[bnd];
 
-    if (bnd_id == SLIP_WALL || bnd_id == ISOTHERMAL_NOSLIP || bnd_id == ISOTHERMAL_NOSLIP_MOVING || 
+    if (bnd_id == SLIP_WALL || bnd_id == ISOTHERMAL_NOSLIP || bnd_id == ISOTHERMAL_NOSLIP_MOVING ||
         bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* On wall boundary */
     {
-      /* Get pressure */
-      double PL = faces->P(0, fpt);
-
-      /* Sum inviscid force contributions */
-      //TODO: need to fix quadrature weights for mixed element cases!
-      for (unsigned int dim = 0; dim < geo.nDims; dim++)
-        force[dim] = elesObjs[0]->weights_fpts(idx) * PL *
-          faces->norm(dim, fpt) * faces->dA(0, fpt);
-
-      if (input->viscous)
+      for (auto ff : geo.boundFaces[bnd])
       {
-        if (geo.nDims == 2)
+        //int fid = geo.face2local /// TODO
+        auto ftype = geo.faceType(ff);
+        for (int idx = 0; idx < geo.nFptsPerFace[ftype]; idx++)
         {
-          /* Setting variables for convenience */
-          /* States */
-          double rho = faces->U(0, 0, fpt);
-          double momx = faces->U(0, 1, fpt);
-          double momy = faces->U(0, 2, fpt);
-          double e = faces->U(0, 3, fpt);
+          unsigned int fpt = geo.face2fpts[ftype](idx, ff); /// TODO: local fid
 
-          double u = momx / rho;
-          double v = momy / rho;
-          double e_int = e / rho - 0.5 * (u*u + v*v);
+          /* Get pressure */
+          double PL = faces->P(0, fpt);
 
-          /* Gradients */
-          double rho_dx = faces->dU(0, 0, 0, fpt);
-          double momx_dx = faces->dU(0, 0, 1, fpt);
-          double momy_dx = faces->dU(0, 0, 2, fpt);
+          /* Sum inviscid force contributions */
+          /// TODO: need to fix quadrature weights for mixed element cases!  (geo->weights_fpts[ftype]?)
+          for (unsigned int dim = 0; dim < geo.nDims; dim++)
+            force[dim] = elesObjs[0]->weights_fpts(idx) * PL *
+                faces->norm(dim, fpt) * faces->dA(0, fpt);
 
-          double rho_dy = faces->dU(0, 1, 0, fpt);
-          double momx_dy = faces->dU(0, 1, 1, fpt);
-          double momy_dy = faces->dU(0, 1, 2, fpt);
-
-          /* Set viscosity */
-          double mu;
-          if (input->fix_vis)
+          if (input->viscous)
           {
-            mu = input->mu;
+            if (geo.nDims == 2)
+            {
+              /* Setting variables for convenience */
+              /* States */
+              double rho = faces->U(0, 0, fpt);
+              double momx = faces->U(0, 1, fpt);
+              double momy = faces->U(0, 2, fpt);
+              double e = faces->U(0, 3, fpt);
+
+              double u = momx / rho;
+              double v = momy / rho;
+              double e_int = e / rho - 0.5 * (u*u + v*v);
+
+              /* Gradients */
+              double rho_dx = faces->dU(0, 0, 0, fpt);
+              double momx_dx = faces->dU(0, 0, 1, fpt);
+              double momy_dx = faces->dU(0, 0, 2, fpt);
+
+              double rho_dy = faces->dU(0, 1, 0, fpt);
+              double momx_dy = faces->dU(0, 1, 1, fpt);
+              double momy_dy = faces->dU(0, 1, 2, fpt);
+
+              /* Set viscosity */
+              double mu;
+              if (input->fix_vis)
+              {
+                mu = input->mu;
+              }
+              /* If desired, use Sutherland's law */
+              else
+              {
+                double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+                mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
+                                                                                 input->c_sth);
+              }
+
+              double du_dx = (momx_dx - rho_dx * u) / rho;
+              double du_dy = (momx_dy - rho_dy * u) / rho;
+
+              double dv_dx = (momy_dx - rho_dx * v) / rho;
+              double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+              double diag = (du_dx + dv_dy) / 3.0;
+
+              double tauxx = 2.0 * mu * (du_dx - diag);
+              double tauxy = mu * (du_dy + dv_dx);
+              double tauyy = 2.0 * mu * (dv_dy - diag);
+
+              /* Get viscous normal stress */
+              taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
+              taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
+
+              //TODO: need to fix quadrature weights for mixed element cases!
+              for (unsigned int dim = 0; dim < geo.nDims; dim++)
+                force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] * faces->dA(0, fpt);
+            }
+            else if (geo.nDims == 3)
+            {
+              /* Setting variables for convenience */
+              /* States */
+              double rho = faces->U(0, 0, 0);
+              double momx = faces->U(0, 1, 0);
+              double momy = faces->U(0, 2, 0);
+              double momz = faces->U(0, 3, 0);
+              double e = faces->U(0, 4, 0);
+
+              double u = momx / rho;
+              double v = momy / rho;
+              double w = momz / rho;
+              double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
+
+              /* Gradients */
+              double rho_dx = faces->dU(0, 0, 0, fpt);
+              double momx_dx = faces->dU(0, 0, 1, fpt);
+              double momy_dx = faces->dU(0, 0, 2, fpt);
+              double momz_dx = faces->dU(0, 0, 3, fpt);
+
+              double rho_dy = faces->dU(0, 1, 0, fpt);
+              double momx_dy = faces->dU(0, 1, 1, fpt);
+              double momy_dy = faces->dU(0, 1, 2, fpt);
+              double momz_dy = faces->dU(0, 1, 3, fpt);
+
+              double rho_dz = faces->dU(0, 2, 0, fpt);
+              double momx_dz = faces->dU(0, 2, 1, fpt);
+              double momy_dz = faces->dU(0, 2, 2, fpt);
+              double momz_dz = faces->dU(0, 2, 3, fpt);
+
+              /* Set viscosity */
+              double mu;
+              if (input->fix_vis)
+              {
+                mu = input->mu;
+              }
+              /* If desired, use Sutherland's law */
+              else
+              {
+                double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
+                mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
+                                                                                 input->c_sth);
+              }
+
+              double du_dx = (momx_dx - rho_dx * u) / rho;
+              double du_dy = (momx_dy - rho_dy * u) / rho;
+              double du_dz = (momx_dz - rho_dz * u) / rho;
+
+              double dv_dx = (momy_dx - rho_dx * v) / rho;
+              double dv_dy = (momy_dy - rho_dy * v) / rho;
+              double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+              double dw_dx = (momz_dx - rho_dx * w) / rho;
+              double dw_dy = (momz_dy - rho_dy * w) / rho;
+              double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+              double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+
+              double tauxx = 2.0 * mu * (du_dx - diag);
+              double tauyy = 2.0 * mu * (dv_dy - diag);
+              double tauzz = 2.0 * mu * (dw_dz - diag);
+              double tauxy = mu * (du_dy + dv_dx);
+              double tauxz = mu * (du_dz + dw_dx);
+              double tauyz = mu * (dv_dz + dw_dy);
+
+              /* Get viscous normal stress */
+              taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
+              taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
+              taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
+
+              //TODO: need to fix quadrature weights for mixed element cases!
+              for (unsigned int dim = 0; dim < geo.nDims; dim++)
+                force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
+                    faces->dA(0, fpt);
+            }
+
           }
-          /* If desired, use Sutherland's law */
+
+          // Add fpt's contribution to total force and moment
+          for (unsigned int d = 0; d < geo.nDims; d++)
+            tot_force[d] += force[d];
+
+          if (geo.nDims == 3)
+          {
+            for (unsigned int d = 0; d < geo.nDims; d++)
+              tot_moment[d] += (faces->coord(c1[d], fpt) - geo.x_cg(c1[d])) * force[c2[d]]
+                  - (faces->coord(c2[d], fpt) - geo.x_cg(c2[d])) * force[c1[d]];
+          }
           else
           {
-            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
-                input->c_sth);
+            // Only a 'z' component in 2D
+            tot_moment[2] += (faces->coord(0, fpt) - geo.x_cg(0)) * force[1]
+                - (faces->coord(1, fpt) - geo.x_cg(1)) * force[0];
           }
 
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-
-          double dv_dx = (momy_dx - rho_dx * v) / rho;
-          double dv_dy = (momy_dy - rho_dy * v) / rho;
-
-          double diag = (du_dx + dv_dy) / 3.0;
-
-          double tauxx = 2.0 * mu * (du_dx - diag);
-          double tauxy = mu * (du_dy + dv_dx);
-          double tauyy = 2.0 * mu * (dv_dy - diag);
-
-          /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
-          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
-
-          //TODO: need to fix quadrature weights for mixed element cases!
-          for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] * faces->dA(0, fpt);
         }
-        else if (geo.nDims == 3)
-        {
-          /* Setting variables for convenience */
-          /* States */
-          double rho = faces->U(0, 0, 0);
-          double momx = faces->U(0, 1, 0);
-          double momy = faces->U(0, 2, 0);
-          double momz = faces->U(0, 3, 0);
-          double e = faces->U(0, 4, 0);
-
-          double u = momx / rho;
-          double v = momy / rho;
-          double w = momz / rho;
-          double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
-
-           /* Gradients */
-          double rho_dx = faces->dU(0, 0, 0, fpt);
-          double momx_dx = faces->dU(0, 0, 1, fpt);
-          double momy_dx = faces->dU(0, 0, 2, fpt);
-          double momz_dx = faces->dU(0, 0, 3, fpt);
-
-          double rho_dy = faces->dU(0, 1, 0, fpt);
-          double momx_dy = faces->dU(0, 1, 1, fpt);
-          double momy_dy = faces->dU(0, 1, 2, fpt);
-          double momz_dy = faces->dU(0, 1, 3, fpt);
-
-          double rho_dz = faces->dU(0, 2, 0, fpt);
-          double momx_dz = faces->dU(0, 2, 1, fpt);
-          double momy_dz = faces->dU(0, 2, 2, fpt);
-          double momz_dz = faces->dU(0, 2, 3, fpt);
-
-          /* Set viscosity */
-          double mu;
-          if (input->fix_vis)
-          {
-            mu = input->mu;
-          }
-          /* If desired, use Sutherland's law */
-          else
-          {
-            double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-            mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
-                input->c_sth);
-          }
-
-          double du_dx = (momx_dx - rho_dx * u) / rho;
-          double du_dy = (momx_dy - rho_dy * u) / rho;
-          double du_dz = (momx_dz - rho_dz * u) / rho;
-
-          double dv_dx = (momy_dx - rho_dx * v) / rho;
-          double dv_dy = (momy_dy - rho_dy * v) / rho;
-          double dv_dz = (momy_dz - rho_dz * v) / rho;
-
-          double dw_dx = (momz_dx - rho_dx * w) / rho;
-          double dw_dy = (momz_dy - rho_dy * w) / rho;
-          double dw_dz = (momz_dz - rho_dz * w) / rho;
-
-          double diag = (du_dx + dv_dy + dw_dz) / 3.0;
-
-          double tauxx = 2.0 * mu * (du_dx - diag);
-          double tauyy = 2.0 * mu * (dv_dy - diag);
-          double tauzz = 2.0 * mu * (dw_dz - diag);
-          double tauxy = mu * (du_dy + dv_dx);
-          double tauxz = mu * (du_dz + dw_dx);
-          double tauyz = mu * (dv_dz + dw_dy);
-
-          /* Get viscous normal stress */
-          taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
-          taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
-          taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
-
-          //TODO: need to fix quadrature weights for mixed element cases!
-          for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
-              faces->dA(0, fpt);
-        }
-
       }
-
-      // Add fpt's contribution to total force and moment
-      for (unsigned int d = 0; d < geo.nDims; d++)
-        tot_force[d] += force[d];
-
-      if (geo.nDims == 3)
-      {
-        for (unsigned int d = 0; d < geo.nDims; d++)
-          tot_moment[d] += (faces->coord(c1[d], fpt) - geo.x_cg(c1[d])) * force[c2[d]]
-              - (faces->coord(c2[d], fpt) - geo.x_cg(c2[d])) * force[c1[d]];
-      }
-      else
-      {
-        // Only a 'z' component in 2D
-        tot_moment[2] += (faces->coord(0, fpt) - geo.x_cg(0)) * force[1]
-            - (faces->coord(1, fpt) - geo.x_cg(1)) * force[0];
-      }
-
-      count++;
     }
   }
 }
@@ -8193,10 +8228,22 @@ void FRSolver::rigid_body_update(unsigned int stage)
     compute_moments(force,torque);
 #endif
 #ifdef _GPU
-    compute_moments_wrapper(force,torque,faces->U_d,faces->dU_d,faces->P_d,faces->coord_d,geo.x_cg_d,faces->norm_d,
-        faces->dA_d,geo.gfpt2bnd_d,eles->weights_fpts_d,force_d,moment_d,input->gamma,input->rt,
-        input->c_sth,input->mu,input->viscous,input->fix_vis,eles->nVars,eles->nDims,geo.nGfpts_int,
-        geo.nBndFaces,geo.nFptsPerFace);
+    for (auto &flist : geo.wallFacesBT_d)
+    {
+      std::array<double,3> forceBT = {0,0,0}, torqueBT = {0,0,0};
+      auto ftype = flist.first;
+      compute_moments_wrapper(forceBT,torqueBT,faces->U_d,faces->dU_d,faces->P_d,
+          faces->coord_d,geo.x_cg_d,faces->norm_d,faces->dA_d,eles->weights_fpts_d,
+          force_d,moment_d,input->gamma,input->rt,input->c_sth,input->mu,
+          input->viscous,input->fix_vis,eles->nVars,eles->nDims,flist.second.size(),
+          flist.second,geo.face2fpts_d[ftype],geo.nFptsPerFace[ftype]);
+
+      for (int d = 0; d < 3; d++)
+      {
+        force[d] += forceBT[d];
+        torque[d] += torqueBT[d];
+      }
+    }
 #endif
 
 #ifdef _MPI

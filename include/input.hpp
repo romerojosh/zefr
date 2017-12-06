@@ -50,7 +50,7 @@ enum FC_TYPE {
 };
 
 enum ELE_TYPE {
-  TRI, QUAD, TET, HEX, PRI, PYR
+  LINE, TRI, QUAD, TET, HEX, PRI, PYR
 };
 
 /*! Enumeration for original, mesh-file-defined face type */

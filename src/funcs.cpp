@@ -38,6 +38,11 @@ static std::map<int, std::vector<int>> gmsh_maps_quad;
 static std::map<int, std::vector<int>> ijk_maps_quad;
 static std::map<int, std::vector<int>> ijk_maps_hex;
 
+static std::map<int, std::vector<int>> gmsh_maps_tet;
+static std::map<int, std::vector<int>> gmsh_maps_tri;
+static std::map<int, std::vector<int>> ijk_maps_tri;
+static std::map<int, std::vector<int>> ijk_maps_tet;
+
 double compute_U_init(double x, double y, double z, unsigned int var, const InputStruct *input)
 {
    
@@ -808,6 +813,102 @@ mdvector<double> identityMatrix(unsigned int N)
   for (unsigned int i = 0; i < N; i++)
     mat(i,i) = 1;
   return mat;
+}
+
+std::vector<int> gmsh_to_pyfr_tri(unsigned int nNodes)
+{
+  if (ijk_maps_tri.count(nNodes))
+    return ijk_maps_tri[nNodes];
+
+  std::vector<int> gmsh_to_pyfr(nNodes,0);
+
+  switch (nNodes)
+  {
+    case 3:
+      gmsh_to_pyfr = {0,1,2};
+      break;
+
+    case 6:
+      gmsh_to_pyfr = {0, 2, 5, 1, 4, 3};
+      break;
+
+    case 10:
+      gmsh_to_pyfr = {0, 3, 9, 1, 2, 6, 8, 7, 4, 5};
+      break;
+
+    case 15:
+      gmsh_to_pyfr = {0, 4, 14, 1, 2, 3, 8, 11, 13, 12, 9, 5, 6, 7, 10};
+      break;
+
+    case 21:
+      gmsh_to_pyfr = {0, 5, 20, 1, 2, 3, 4, 10, 14, 17, 19, 18, 15,
+                     11, 6, 7, 8, 9, 13, 16, 12};
+      break;
+
+    default:
+      ThrowException("PyFR/Gmsh node map not implemented for this nNodes.\n"
+         "See https://github.com/vincentlab/PyFR/blob/develop/pyfr/readers/nodemaps.py");
+  }
+
+  ijk_maps_tri[nNodes] = gmsh_to_pyfr;
+
+  return gmsh_to_pyfr;
+}
+
+std::vector<int> gmsh_to_pyfr_tet(unsigned int nNodes)
+{
+  if (ijk_maps_tet.count(nNodes))
+    return ijk_maps_tet[nNodes];
+
+  std::vector<int> gmsh_to_pyfr(nNodes,0);
+
+  switch (nNodes)
+  {
+    case 4:
+      gmsh_to_pyfr = {0,1,2,3};
+      break;
+
+    case 10:
+      gmsh_to_pyfr = {0, 2, 5, 9, 1, 4, 3, 6, 8, 7};
+      break;
+
+    case 20:
+      gmsh_to_pyfr = {0, 3, 9, 19, 1, 2, 6, 8, 7, 4, 16, 10, 18, 15,
+                     17, 12, 5, 11, 13, 14};
+      break;
+
+    case 35:
+      gmsh_to_pyfr = {0, 4, 14, 34, 1, 2, 3, 8, 11, 13, 12, 9, 5, 31,
+                     25, 15, 33, 30, 24, 32, 27, 18, 6, 10, 7, 16,
+                     17, 26, 19, 28, 22, 29, 21, 23, 20};
+      break;
+
+    case 56:
+      gmsh_to_pyfr = {0, 5, 20, 55, 1, 2, 3, 4, 10, 14, 17, 19, 18,
+                     15, 11, 6, 52, 46, 36, 21, 54, 51, 45, 35, 53,
+                     48, 39, 25, 7, 16, 9, 12, 13, 8, 22, 24, 47,
+                     23, 38, 37, 26, 49, 33, 40, 43, 30, 50, 29, 34,
+                     42, 32, 44, 27, 28, 31, 41};
+      break;
+
+    case 84:
+      gmsh_to_pyfr = {0, 6, 27, 83, 1, 2, 3, 4, 5, 12, 17, 21, 24,
+                      26, 25, 22, 18, 13, 7, 80, 74, 64, 49, 28, 82,
+                      79, 73, 63, 48, 81, 76, 67, 53, 33, 8, 23, 11,
+                      14, 19, 20, 16, 10, 9, 15, 29, 32, 75, 30, 31,
+                      52, 66, 65, 50, 51, 34, 77, 46, 54, 68, 71, 61,
+                      43, 39, 58, 78, 38, 47, 70, 57, 42, 45, 62, 72,
+                      60, 35, 37, 44, 69, 36, 41, 40, 55, 59, 56};
+      break;
+
+    default:
+      ThrowException("PyFR/Gmsh node map not implemented for this nNodes.\n"
+         "See https://github.com/vincentlab/PyFR/blob/develop/pyfr/readers/nodemaps.py");
+  }
+
+  ijk_maps_tet[nNodes] = gmsh_to_pyfr;
+
+  return gmsh_to_pyfr;
 }
 
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)

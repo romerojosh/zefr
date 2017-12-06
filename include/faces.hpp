@@ -150,11 +150,13 @@ class Faces
 #endif
 
 #ifdef _GPU
-    mdvector_gpu<double> U_fringe_d, dU_fringe_d;
-    mdvector_gpu<unsigned int> fringe_fpts_d, fringe_side_d;
+    std::map<ELE_TYPE, mdvector_gpu<double>> U_fringe_d, dU_fringe_d;
+    std::map<ELE_TYPE, mdvector_gpu<unsigned int>> fringe_fpts_d, fringe_side_d;
 
-    mdvector<double> U_fringe, dU_fringe;
-    mdvector<unsigned int> fringe_fpts, fringe_side;
+    std::map<ELE_TYPE, mdvector<double>> U_fringe, dU_fringe;
+    std::map<ELE_TYPE, mdvector<unsigned int>> fringe_fpts, fringe_side;
+
+    std::map<ELE_TYPE, unsigned int> nfringe_type;
 
     mdvector_gpu<unsigned int> fringeGFpts_d;
     mdvector_gpu<double> fringeCoords_d;
@@ -175,11 +177,11 @@ class Faces
     double& get_u_fpt(int faceID, int fpt, int var);
     double& get_grad_fpt(int faceID, int fpt, int var, int dim);
 
-#ifdef _GPU
+#if defined(_GPU) && defined(_BUILD_LIB)
     void fringe_u_to_device(int* fringeIDs, int nFringe);
     void fringe_u_to_device(int* fringeIDs, int nFringe, double* data);
-    void fringe_grad_to_device(int nFringe);
-    void fringe_grad_to_device(int nFringe, double* data);
+    void fringe_grad_to_device(int* fringeIDs, int nFringe);
+    void fringe_grad_to_device(int* fringeIDs, int nFringe, double* data);
     void get_face_coords(int* fringeIDs, int nFringe, int* nPtsFace, double* xyz);
 #endif
 };

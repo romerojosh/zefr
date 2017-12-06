@@ -218,6 +218,8 @@ std::vector<int> structured_to_gmsh_hex(unsigned int nNodes);
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes);
 std::vector<int> gmsh_to_structured_hex(unsigned int nNodes);
 
+std::vector<int> gmsh_to_pyfr_tri(unsigned int nNodes);
+std::vector<int> gmsh_to_pyfr_tet(unsigned int nNodes);
 
 template<typename T>
 std::vector<uint> sort_ind(const std::vector<T> &data, const std::vector<uint> &inds)

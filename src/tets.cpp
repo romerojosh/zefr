@@ -146,10 +146,10 @@ void Tets::set_locs()
           loc_fpts(fpt,2) = -1.0;
           break;
 
-        case 1: /* Angled Face */
+        case 1: /* Bottom (xi-zeta plane) */
           loc_fpts(fpt,0) = loc_fpts_2D(j, 0);
-          loc_fpts(fpt,1) = loc_fpts_2D(j, 1);
-          loc_fpts(fpt,2) = -(loc_fpts_2D(j,0) + loc_fpts_2D(j,1) + 1);
+          loc_fpts(fpt,1) = -1.0;
+          loc_fpts(fpt,2) = loc_fpts_2D(j, 1);
           break;
 
         case 2: /* Left (eta-zeta plane) */
@@ -158,10 +158,10 @@ void Tets::set_locs()
           loc_fpts(fpt,2) = loc_fpts_2D(j, 0);
           break;
 
-        case 3: /* Bottom (xi-zeta plane) */
+        case 3: /* Angled Face */
           loc_fpts(fpt,0) = loc_fpts_2D(j, 0);
-          loc_fpts(fpt,1) = -1.0;
-          loc_fpts(fpt,2) = loc_fpts_2D(j, 1);
+          loc_fpts(fpt,1) = loc_fpts_2D(j, 1);
+          loc_fpts(fpt,2) = -(loc_fpts_2D(j,0) + loc_fpts_2D(j,1) + 1);
           break;
       }
 
@@ -209,18 +209,18 @@ void Tets::set_normals(std::shared_ptr<Faces> faces)
   {
     switch(fpt/nFptsPerFace)
     {
-      case 0: /* Rear */
+      case 0: /* Bottom */
         tnorm(fpt,0) = 0.0;
         tnorm(fpt,1) = 0.0;
         tnorm(fpt,2) = -1.0;
         tdA(fpt) = 1.0;
         break;
 
-      case 1: /* Angled Face */
-        tnorm(fpt,0) = 1.0/std::sqrt(3);
-        tnorm(fpt,1) = 1.0/std::sqrt(3);
-        tnorm(fpt,2) = 1.0/std::sqrt(3);
-        tdA(fpt) = std::sqrt(3);
+      case 1: /* Front */
+        tnorm(fpt,0) = 0.0;
+        tnorm(fpt,1) = -1.0;
+        tnorm(fpt,2) = 0.0;
+        tdA(fpt) = 1.0;
         break;
 
       case 2: /* Left */
@@ -230,13 +230,12 @@ void Tets::set_normals(std::shared_ptr<Faces> faces)
         tdA(fpt) = 1.0;
         break;
 
-      case 3: /* Bottom */
-        tnorm(fpt,0) = 0.0;
-        tnorm(fpt,1) = -1.0;
-        tnorm(fpt,2) = 0.0;
-        tdA(fpt) = 1.0;
+      case 3: /* Angled Face */
+        tnorm(fpt,0) = 1.0/std::sqrt(3);
+        tnorm(fpt,1) = 1.0/std::sqrt(3);
+        tnorm(fpt,2) = 1.0/std::sqrt(3);
+        tdA(fpt) = std::sqrt(3);
         break;
-
     }
   }
 }
@@ -489,10 +488,10 @@ void Tets::project_face_point(int face, const double* loc, double* ploc)
       ploc[2] = -1.0;
       break;
 
-    case 1: /* Angled Face */
+    case 1: /* Bottom (xi-zeta plane) */
       ploc[0] = loc[0];
-      ploc[1] = loc[1];
-      ploc[2] = -(loc[0] + loc[1] + 1);
+      ploc[1] = -1.0;
+      ploc[2] = loc[1];
       break;
 
     case 2: /* Left (eta-zeta plane) */
@@ -501,10 +500,10 @@ void Tets::project_face_point(int face, const double* loc, double* ploc)
       ploc[2] = loc[0];
       break;
 
-    case 3: /* Bottom (xi-zeta plane) */
+    case 3: /* Angled Face */
       ploc[0] = loc[0];
-      ploc[1] = -1.0;
-      ploc[2] = loc[1];
+      ploc[1] = loc[1];
+      ploc[2] = -(loc[0] + loc[1] + 1);
       break;
   }
 }

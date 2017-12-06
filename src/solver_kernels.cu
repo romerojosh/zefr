@@ -1364,18 +1364,17 @@ void unpack_dU_wrapper(mdvector_gpu<double> &U_rbuffs, mdvector_gpu<unsigned int
 
 __global__
 void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<double> P, mdvector_gpu<double> coord,
-    mdvector_gpu<double> x_cg, mdvector_gpu<double> norm, mdvector_gpu<double> dA, mdvector_gpu<char> fpt2bnd,
+    mdvector_gpu<double> x_cg, mdvector_gpu<double> norm, mdvector_gpu<double> dA,
     mdvector_gpu<double> weights, mdvector_gpu<double> force, mdvector_gpu<double> moment,
-    double gamma, double rt, double c_sth, double mu_in, bool viscous, bool fix_vis, int nDims, int start_fpt,
-    int nFaces, int nFptsPerFace)
+    double gamma, double rt, double c_sth, double mu_in, bool viscous, bool fix_vis, int nDims,
+    int nFaces, mdvector_gpu<int> faceIDs, mdvector_gpu<int> face2fpts, int nFptsPerFace)
 {
   const unsigned int face = blockDim.x * blockIdx.x + threadIdx.x;
 
   if (face >= nFaces)
     return;
 
-  const unsigned int face_start = face * nFptsPerFace + start_fpt;
-  const unsigned int bnd_start = face * nFptsPerFace;
+  const unsigned int fid = faceIDs(face);
 
   const int c1[3] = {1,2,0}; // For cross-products
   const int c2[3] = {2,0,1};
@@ -1384,199 +1383,179 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
   double tot_force[3] = {0,0,0};
   double tot_moment[3] = {0,0,0};
 
-  unsigned int bnd_id = fpt2bnd(bnd_start);
-
-  switch (bnd_id)
+  for (int fpt = 0; fpt < nFptsPerFace; fpt++) /// TODO: NO MORE FACE ORDERING?
   {
-    // All wall boundary conditions
-    case SLIP_WALL:
-    case ISOTHERMAL_NOSLIP:
-    case ISOTHERMAL_NOSLIP_MOVING:
-    case ADIABATIC_NOSLIP:
-    case ADIABATIC_NOSLIP_MOVING:
+    double tmp_force[3] = {0,0,0};
+    int gfpt = face2fpts(fpt, fid);
+
+    /* Get pressure */
+    double PL = P(gfpt, 0);
+
+    /* Sum inviscid force contributions */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      tmp_force[dim] = weights(fpt) * PL * norm(dim, gfpt) * dA(0, gfpt);
+
+    if (viscous)
     {
-      for (int fpt = 0; fpt < nFptsPerFace; fpt++) /// TODO: NO MORE FACE ORDERING?
+      if (nDims == 2)
       {
-        double tmp_force[3] = {0,0,0};
-        int gfpt = face_start + fpt;
-//        int lfpt = bnd_start + fpt;
+        /* Setting variables for convenience */
+        /* States */
+        double rho = U(0, 0, gfpt);
+        double momx = U(0, 1, gfpt);
+        double momy = U(0, 2, gfpt);
+        double e = U(0, 3, gfpt);
 
-        /* Get pressure */
-        double PL = P(gfpt, 0);
+        double u = momx / rho;
+        double v = momy / rho;
+        double e_int = e / rho - 0.5 * (u*u + v*v);
 
-        /* Sum inviscid force contributions */
-        for (unsigned int dim = 0; dim < nDims; dim++)
-          tmp_force[dim] = weights(fpt) * PL * norm(dim, gfpt) * dA(0, gfpt);
+        /* Gradients */
+        double rho_dx = dU(0, 0, 0, gfpt);
+        double momx_dx = dU(0, 0, 1, gfpt);
+        double momy_dx = dU(0, 0, 2, gfpt);
 
-        if (viscous)
+        double rho_dy = dU(0, 1, 0, gfpt);
+        double momx_dy = dU(0, 1, 1, gfpt);
+        double momy_dy = dU(0, 1, 2, gfpt);
+
+        /* Set viscosity */
+        double mu;
+        if (fix_vis)
         {
-          if (nDims == 2)
-          {
-            /* Setting variables for convenience */
-            /* States */
-            double rho = U(0, 0, gfpt);
-            double momx = U(0, 1, gfpt);
-            double momy = U(0, 2, gfpt);
-            double e = U(0, 3, gfpt);
-
-            double u = momx / rho;
-            double v = momy / rho;
-            double e_int = e / rho - 0.5 * (u*u + v*v);
-
-            /* Gradients */
-            double rho_dx = dU(0, 0, 0, gfpt);
-            double momx_dx = dU(0, 0, 1, gfpt);
-            double momy_dx = dU(0, 0, 2, gfpt);
-
-            double rho_dy = dU(0, 1, 0, gfpt);
-            double momx_dy = dU(0, 1, 1, gfpt);
-            double momy_dy = dU(0, 1, 2, gfpt);
-
-            /* Set viscosity */
-            double mu;
-            if (fix_vis)
-            {
-              mu = mu_in;
-            }
-            /* If desired, use Sutherland's law */
-            else
-            {
-              double rt_ratio = (gamma - 1.0) * e_int / (rt);
-              mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
-            }
-
-            double du_dx = (momx_dx - rho_dx * u) / rho;
-            double du_dy = (momx_dy - rho_dy * u) / rho;
-
-            double dv_dx = (momy_dx - rho_dx * v) / rho;
-            double dv_dy = (momy_dy - rho_dy * v) / rho;
-
-            double diag = (du_dx + dv_dy) / 3.0;
-
-            double tauxx = 2.0 * mu * (du_dx - diag);
-            double tauxy = mu * (du_dy + dv_dx);
-            double tauyy = 2.0 * mu * (dv_dy - diag);
-
-            /* Get viscous normal stress */
-            taun[0] = tauxx * norm(0, gfpt) + tauxy * norm(1, gfpt);
-            taun[1] = tauxy * norm(0, gfpt) + tauyy * norm(1, gfpt);
-
-            for (unsigned int dim = 0; dim < nDims; dim++)
-              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(0, gfpt);
-          }
-          else if (nDims == 3)
-          {
-            /* Setting variables for convenience */
-            /* States */
-            double rho = U(0, 0, gfpt);
-            double momx = U(0, 1, gfpt);
-            double momy = U(0, 2, gfpt);
-            double momz = U(0, 3, gfpt);
-            double e = U(0, 4, gfpt);
-
-            double u = momx / rho;
-            double v = momy / rho;
-            double w = momz / rho;
-            double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
-
-            /* Gradients */
-            double rho_dx = dU(0, 0, 0, gfpt);
-            double momx_dx = dU(0, 0, 1, gfpt);
-            double momy_dx = dU(0, 0, 2, gfpt);
-            double momz_dx = dU(0, 0, 3, gfpt);
-
-            double rho_dy = dU(0, 1, 0, gfpt);
-            double momx_dy = dU(0, 1, 1, gfpt);
-            double momy_dy = dU(0, 1, 2, gfpt);
-            double momz_dy = dU(0, 1, 3, gfpt);
-
-            double rho_dz = dU(0, 2, 0, gfpt);
-            double momx_dz = dU(0, 2, 1, gfpt);
-            double momy_dz = dU(0, 2, 2, gfpt);
-            double momz_dz = dU(0, 2, 3, gfpt);
-
-            /* Set viscosity */
-            double mu;
-            if (fix_vis)
-            {
-              mu = mu_in;
-            }
-            /* If desired, use Sutherland's law */
-            else
-            {
-              double rt_ratio = (gamma - 1.0) * e_int / (rt);
-              mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
-            }
-
-            double du_dx = (momx_dx - rho_dx * u) / rho;
-            double du_dy = (momx_dy - rho_dy * u) / rho;
-            double du_dz = (momx_dz - rho_dz * u) / rho;
-
-            double dv_dx = (momy_dx - rho_dx * v) / rho;
-            double dv_dy = (momy_dy - rho_dy * v) / rho;
-            double dv_dz = (momy_dz - rho_dz * v) / rho;
-
-            double dw_dx = (momz_dx - rho_dx * w) / rho;
-            double dw_dy = (momz_dy - rho_dy * w) / rho;
-            double dw_dz = (momz_dz - rho_dz * w) / rho;
-
-            double diag = (du_dx + dv_dy + dw_dz) / 3.0;
-
-            double tauxx = 2.0 * mu * (du_dx - diag);
-            double tauyy = 2.0 * mu * (dv_dy - diag);
-            double tauzz = 2.0 * mu * (dw_dz - diag);
-            double tauxy = mu * (du_dy + dv_dx);
-            double tauxz = mu * (du_dz + dw_dx);
-            double tauyz = mu * (dv_dz + dw_dy);
-
-            /* Get viscous normal stress */
-            taun[0] = tauxx * norm(0, gfpt) + tauxy * norm(1, gfpt) + tauxz * norm(2, gfpt);
-            taun[1] = tauxy * norm(0, gfpt) + tauyy * norm(1, gfpt) + tauyz * norm(2, gfpt);
-            taun[3] = tauxz * norm(0, gfpt) + tauyz * norm(1, gfpt) + tauzz * norm(2, gfpt);
-
-            for (unsigned int dim = 0; dim < nDims; dim++)
-              tmp_force[dim] -= weights(fpt) * taun[dim] * dA(0, gfpt);
-          }
+          mu = mu_in;
         }
-
-        // Add fpt's contribution to total force and moment
-        for (unsigned int d = 0; d < nDims; d++)
-          tot_force[d] += tmp_force[d];
-
-        if (nDims == 3)
-        {
-          for (unsigned int d = 0; d < nDims; d++)
-            tot_moment[d] += (coord(c1[d], gfpt)-x_cg(c1[d])) * tmp_force[c2[d]] - (coord(c2[d], gfpt)-x_cg(c2[d])) * tmp_force[c1[d]];
-        }
+        /* If desired, use Sutherland's law */
         else
         {
-          // Only a 'z' component in 2D
-          tot_moment[2] += (coord(0,gfpt)-x_cg(0)) * tmp_force[1] - (coord(1,gfpt)-x_cg(1)) * tmp_force[0];
+          double rt_ratio = (gamma - 1.0) * e_int / (rt);
+          mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
         }
-      }
 
-      // Write final sum for face to global memory
-      for (int d = 0; d < nDims; d++)
+        double du_dx = (momx_dx - rho_dx * u) / rho;
+        double du_dy = (momx_dy - rho_dy * u) / rho;
+
+        double dv_dx = (momy_dx - rho_dx * v) / rho;
+        double dv_dy = (momy_dy - rho_dy * v) / rho;
+
+        double diag = (du_dx + dv_dy) / 3.0;
+
+        double tauxx = 2.0 * mu * (du_dx - diag);
+        double tauxy = mu * (du_dy + dv_dx);
+        double tauyy = 2.0 * mu * (dv_dy - diag);
+
+        /* Get viscous normal stress */
+        taun[0] = tauxx * norm(0, gfpt) + tauxy * norm(1, gfpt);
+        taun[1] = tauxy * norm(0, gfpt) + tauyy * norm(1, gfpt);
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          tmp_force[dim] -= weights(fpt) * taun[dim] * dA(0, gfpt);
+      }
+      else if (nDims == 3)
       {
-        force(face,d) = tot_force[d];
-        moment(face,d) = tot_moment[d];
-      }
+        /* Setting variables for convenience */
+        /* States */
+        double rho = U(0, 0, gfpt);
+        double momx = U(0, 1, gfpt);
+        double momy = U(0, 2, gfpt);
+        double momz = U(0, 3, gfpt);
+        double e = U(0, 4, gfpt);
 
-      break;
+        double u = momx / rho;
+        double v = momy / rho;
+        double w = momz / rho;
+        double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
+
+        /* Gradients */
+        double rho_dx = dU(0, 0, 0, gfpt);
+        double momx_dx = dU(0, 0, 1, gfpt);
+        double momy_dx = dU(0, 0, 2, gfpt);
+        double momz_dx = dU(0, 0, 3, gfpt);
+
+        double rho_dy = dU(0, 1, 0, gfpt);
+        double momx_dy = dU(0, 1, 1, gfpt);
+        double momy_dy = dU(0, 1, 2, gfpt);
+        double momz_dy = dU(0, 1, 3, gfpt);
+
+        double rho_dz = dU(0, 2, 0, gfpt);
+        double momx_dz = dU(0, 2, 1, gfpt);
+        double momy_dz = dU(0, 2, 2, gfpt);
+        double momz_dz = dU(0, 2, 3, gfpt);
+
+        /* Set viscosity */
+        double mu;
+        if (fix_vis)
+        {
+          mu = mu_in;
+        }
+        /* If desired, use Sutherland's law */
+        else
+        {
+          double rt_ratio = (gamma - 1.0) * e_int / (rt);
+          mu = mu_in * std::pow(rt_ratio,1.5) * (1. + c_sth) / (rt_ratio + c_sth);
+        }
+
+        double du_dx = (momx_dx - rho_dx * u) / rho;
+        double du_dy = (momx_dy - rho_dy * u) / rho;
+        double du_dz = (momx_dz - rho_dz * u) / rho;
+
+        double dv_dx = (momy_dx - rho_dx * v) / rho;
+        double dv_dy = (momy_dy - rho_dy * v) / rho;
+        double dv_dz = (momy_dz - rho_dz * v) / rho;
+
+        double dw_dx = (momz_dx - rho_dx * w) / rho;
+        double dw_dy = (momz_dy - rho_dy * w) / rho;
+        double dw_dz = (momz_dz - rho_dz * w) / rho;
+
+        double diag = (du_dx + dv_dy + dw_dz) / 3.0;
+
+        double tauxx = 2.0 * mu * (du_dx - diag);
+        double tauyy = 2.0 * mu * (dv_dy - diag);
+        double tauzz = 2.0 * mu * (dw_dz - diag);
+        double tauxy = mu * (du_dy + dv_dx);
+        double tauxz = mu * (du_dz + dw_dx);
+        double tauyz = mu * (dv_dz + dw_dy);
+
+        /* Get viscous normal stress */
+        taun[0] = tauxx * norm(0, gfpt) + tauxy * norm(1, gfpt) + tauxz * norm(2, gfpt);
+        taun[1] = tauxy * norm(0, gfpt) + tauyy * norm(1, gfpt) + tauyz * norm(2, gfpt);
+        taun[3] = tauxz * norm(0, gfpt) + tauyz * norm(1, gfpt) + tauzz * norm(2, gfpt);
+
+        for (unsigned int dim = 0; dim < nDims; dim++)
+          tmp_force[dim] -= weights(fpt) * taun[dim] * dA(0, gfpt);
+      }
     }
 
-    default:
-      // Not a wall boundary - ignore
-      break;
+    // Add fpt's contribution to total force and moment
+    for (unsigned int d = 0; d < nDims; d++)
+      tot_force[d] += tmp_force[d];
+
+    if (nDims == 3)
+    {
+      for (unsigned int d = 0; d < nDims; d++)
+        tot_moment[d] += (coord(c1[d], gfpt)-x_cg(c1[d])) * tmp_force[c2[d]] - (coord(c2[d], gfpt)-x_cg(c2[d])) * tmp_force[c1[d]];
+    }
+    else
+    {
+      // Only a 'z' component in 2D
+      tot_moment[2] += (coord(0,gfpt)-x_cg(0)) * tmp_force[1] - (coord(1,gfpt)-x_cg(1)) * tmp_force[0];
+    }
+  }
+
+  // Write final sum for face to global memory
+  for (int d = 0; d < nDims; d++)
+  {
+    force(face,d) = tot_force[d];
+    moment(face,d) = tot_moment[d];
   }
 }
 
 void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,3> &tot_moment,
     mdview_gpu<double> &U_fpts, mdview_gpu<double> &dU_fpts, mdvector_gpu<double>& P_fpts, mdvector_gpu<double> &coord,
-    mdvector_gpu<double> &x_cg, mdvector_gpu<double> &norm, mdvector_gpu<double> &dA, mdvector_gpu<char> &fpt2bnd,
+    mdvector_gpu<double> &x_cg, mdvector_gpu<double> &norm, mdvector_gpu<double> &dA,
     mdvector_gpu<double> &weights_fpts, mdvector_gpu<double> &force_face, mdvector_gpu<double> &moment_face,
     double gamma, double rt, double c_sth, double mu, bool viscous, bool fix_vis, int nVars, int nDims,
-    int start_fpt, int nFaces, int nFptsPerFace)
+    int nFaces, mdvector_gpu<int> faceList, mdvector_gpu<int> face2fpts, int nFptsPerFace)
 {
   int threads = 192;
   int blocks = (nFaces + threads - 1) / threads;
@@ -1584,8 +1563,8 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
   if (nVars < 4) // Only applicable to Euler / Navier-Stokes
     return;
 
-  compute_moments<<<blocks, threads>>>(U_fpts,dU_fpts,P_fpts,coord,x_cg,norm,dA,fpt2bnd,weights_fpts,
-      force_face,moment_face,gamma,rt,c_sth,mu,viscous,fix_vis,nDims,start_fpt,nFaces,nFptsPerFace);
+  compute_moments<<<blocks, threads>>>(U_fpts,dU_fpts,P_fpts,coord,x_cg,norm,dA,weights_fpts,
+      force_face,moment_face,gamma,rt,c_sth,mu,viscous,fix_vis,nDims,nFaces,faceList,face2fpts,nFptsPerFace);
 
   for (int d = 0; d < nDims; d++)
   {
