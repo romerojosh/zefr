@@ -61,6 +61,8 @@ struct GeoStruct
   mdvector<int> nNode_face;   //! List of # of nodes per face, by type
   std::map<ELE_TYPE, mdvector<unsigned int>> eleID;  // unique ID of element across all element types
   std::map<ELE_TYPE, mdvector<unsigned int>> faceID; // unique ID of face across all face types
+  mdvector<unsigned int> faceID_type;
+  mdvector<unsigned int> eleID_type;
   mdvector<ELE_TYPE> eleType;  // element type by unique ID;
   mdvector<ELE_TYPE> faceType; // face type by unique ID
   std::map<ELE_TYPE, unsigned int> nElesBT;

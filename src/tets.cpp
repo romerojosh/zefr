@@ -81,6 +81,7 @@ Tets::Tets(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned 
     this->order = order;
   }
 
+  nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = nFptsPerFace * nFaces;
   nPpts = nSpts;
   
@@ -468,12 +469,12 @@ double Tets::calc_d_nodal_basis_fpts(unsigned int fpt,
 
 }
 
-mdvector<double> Tets::get_face_nodes(unsigned int P)
+mdvector<double> Tets::get_face_nodes(unsigned int face, unsigned int P)
 {
   return WS_Tri_pts(P);
 }
 
-mdvector<double> Tets::get_face_weights(unsigned int P)
+mdvector<double> Tets::get_face_weights(unsigned int face, unsigned int P)
 {
   return WS_Tri_weights(P);
 }
@@ -508,7 +509,7 @@ void Tets::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Tets::calc_nodal_face_basis(unsigned int pt, const double *loc)
+double Tets::calc_nodal_face_basis(unsigned int face, unsigned int pt, const double *loc)
 {
   double val = 0.0;
   for (unsigned int i = 0; i < nFptsPerFace; i++)

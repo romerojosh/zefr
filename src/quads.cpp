@@ -75,6 +75,7 @@ Quads::Quads(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigne
   }
 
   nFptsPerFace = nSpts1D;
+  nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = nSpts1D * nFaces;
   nPpts = nSpts;
   
@@ -622,7 +623,7 @@ void Quads::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
   }
 }
 
-mdvector<double> Quads::get_face_nodes(unsigned int P)
+mdvector<double> Quads::get_face_nodes(unsigned int face, unsigned int P)
 {
   auto vpts = Gauss_Legendre_pts(P+1);  // Given polynomial order; need N
 
@@ -634,7 +635,7 @@ mdvector<double> Quads::get_face_nodes(unsigned int P)
   return pts;
 }
 
-mdvector<double> Quads::get_face_weights(unsigned int P)
+mdvector<double> Quads::get_face_weights(unsigned int face, unsigned int P)
 {
   auto vwts = Gauss_Legendre_weights(P+1);  // Given polynomial order; need N
 
@@ -672,7 +673,7 @@ void Quads::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Quads::calc_nodal_face_basis(unsigned int pt, const double *loc)
+double Quads::calc_nodal_face_basis(unsigned int face, unsigned int pt, const double *loc)
 {
   int i = pt % nSpts1D;
 

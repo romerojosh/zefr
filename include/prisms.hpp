@@ -17,8 +17,8 @@
  * along with ZEFR.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef quads_hpp
-#define quads_hpp
+#ifndef prisms_hpp
+#define prisms_hpp
 
 #include <memory>
 #include <string>
@@ -30,29 +30,30 @@
 #include "input.hpp"
 #include "solver.hpp"
 
-class Quads: public Elements 
+class Prisms: public Elements
 {
   private:
+    mdvector<double> vandTri, inv_vandTri;  // Vandermonde for face (tri) basis [for FR correction function]
+    mdvector<double> loc_fpts_2D;
+
     void set_locs();
     void set_normals(std::shared_ptr<Faces> faces);
     void set_oppRestart(unsigned int order_restart, bool use_shape = false);
     void set_vandermonde_mats();
 
     void calc_shape(mdvector<double> &shape_val, const double* loc);
-    void calc_d_shape(mdvector<double> &dshap_val, const double* loc);
+    void calc_d_shape(mdvector<double> &dshape_val, const double* loc);
 
     double calc_nodal_basis(unsigned int spt,
                             const std::vector<double> &loc);
     double calc_nodal_basis(unsigned int spt, double *loc);
-    void calc_nodal_basis(double *loc, double* basis);
+    void calc_nodal_basis(double* loc, double* basis);
     double calc_d_nodal_basis_spts(unsigned int spt,
                                    const std::vector<double> &loc,
                                    unsigned int dim);
     double calc_d_nodal_basis_fpts(unsigned int fpt,
                                    const std::vector<double> &loc,
                                    unsigned int dim);
-
-    void modify_sensor();
 
     mdvector<double> get_face_nodes(unsigned int face, unsigned int P);
     mdvector<double> get_face_weights(unsigned int face, unsigned int P);
@@ -63,14 +64,19 @@ class Quads: public Elements
 
     double calc_orthonormal_basis(unsigned int mode, const double *loc);
 
+    mdvector<double> weights_fptsTri, weights_fptsQuad;
+    unsigned int nFptsQuad, nFptsTri;
+    unsigned int nSpts1D, nSpts2D;
+
   public:
-    Quads(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order = -1);
+    Prisms(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order = -1);
 
     void setup_PMG(int pro_order, int res_order);
     void setup_ppt_connectivity();
 
     double calc_d_nodal_basis_fr(unsigned int spt, const std::vector<double>& loc, unsigned int dim);
 
+    void modify_sensor();
 };
 
-#endif /* quads_hpp */
+#endif /* prisms_hpp */

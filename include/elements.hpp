@@ -63,6 +63,7 @@ class Elements
     unsigned int nFaces, nNodes;
     unsigned int nSubelements, nNodesPerSubelement;
     mdvector<double> coord_spts, coord_fpts, coord_ppts, coord_qpts;
+    std::vector<int> nFpts_face;
 
     mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes, loc_qpts;
     mdvector<unsigned int> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;
@@ -239,12 +240,12 @@ class Elements
 
     virtual void modify_sensor() = 0;
 
-    virtual mdvector<double> get_face_nodes(unsigned int P) = 0;
-    virtual mdvector<double> get_face_weights(unsigned int P) = 0;
+    virtual mdvector<double> get_face_nodes(unsigned int face, unsigned int P) = 0;
+    virtual mdvector<double> get_face_weights(unsigned int face, unsigned int P) = 0;
 
     virtual void project_face_point(int face, const double* loc, double* ploc) = 0;
 
-    virtual double calc_nodal_face_basis(unsigned int pt, const double *loc) = 0;
+    virtual double calc_nodal_face_basis(unsigned int face, unsigned int pt, const double *loc) = 0;
     virtual double calc_orthonormal_basis(unsigned int mode, const double *loc) = 0;
 
   public:

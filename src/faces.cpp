@@ -39,7 +39,6 @@ Faces::Faces(GeoStruct *geo, InputStruct *input, _mpi_comm comm_in)
   this->geo = geo;
   nFpts = geo->nGfpts;
   myComm = comm_in;
-
 }
 
 void Faces::setup(unsigned int nDims, unsigned int nVars)

@@ -76,6 +76,7 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigne
   }
 
   nFptsPerFace = nSpts1D * nSpts1D;
+  nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = (nSpts1D * nSpts1D) * nFaces;
   nPpts = nSpts;
   
@@ -535,7 +536,7 @@ double Hexas::calc_d_nodal_basis_fpts(unsigned int fpt,
 
 }
 
-mdvector<double> Hexas::get_face_nodes(unsigned int P)
+mdvector<double> Hexas::get_face_nodes(unsigned int face, unsigned int P)
 {
   mdvector<double> loc_pts({(P+1)*(P+1),nDims});
 
@@ -555,7 +556,7 @@ mdvector<double> Hexas::get_face_nodes(unsigned int P)
   return loc_pts;
 }
 
-mdvector<double> Hexas::get_face_weights(unsigned int P)
+mdvector<double> Hexas::get_face_weights(unsigned int face, unsigned int P)
 {
   mdvector<double> wts_pts({(P+1)*(P+1)});
 
@@ -616,17 +617,17 @@ void Hexas::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Hexas::calc_nodal_face_basis(unsigned int pt, const double *loc)
+double Hexas::calc_nodal_face_basis(unsigned int face, unsigned int pt, const double *loc)
 {
   int i = pt % nSpts1D;
   int j = pt / nSpts1D;
 
-  return Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]); /// CHECK
+  return Lagrange(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
 }
 
 double Hexas::calc_orthonormal_basis(unsigned int mode, const double *loc)
 {
-  return Legendre3D(order, loc[0], loc[1], loc[2], mode); /// CHECK
+  return Legendre3D(order, loc[0], loc[1], loc[2], mode);
 }
 
 void Hexas::setup_PMG(int pro_order, int res_order)

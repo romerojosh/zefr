@@ -81,6 +81,7 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned 
     this->order = order;
   }
 
+  nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = nFptsPerFace * nFaces;
   nPpts = nSpts;
   
@@ -403,7 +404,7 @@ double Tris::calc_d_nodal_basis_fpts(unsigned int fpt,
 }
 
 
-mdvector<double> Tris::get_face_nodes(unsigned int P)
+mdvector<double> Tris::get_face_nodes(unsigned int face, unsigned int P)
 {
   auto vpts = Gauss_Legendre_pts(P+1);  // Given polynomial order; need N
 
@@ -415,7 +416,7 @@ mdvector<double> Tris::get_face_nodes(unsigned int P)
   return pts;
 }
 
-mdvector<double> Tris::get_face_weights(unsigned int P)
+mdvector<double> Tris::get_face_weights(unsigned int face, unsigned int P)
 {
   auto vwts = Gauss_Legendre_weights(P+1);  // Given polynomial order; need N
 
@@ -448,7 +449,7 @@ void Tris::project_face_point(int face, const double* loc, double* ploc)
   }
 }
 
-double Tris::calc_nodal_face_basis(unsigned int pt, const double *loc)
+double Tris::calc_nodal_face_basis(unsigned int face, unsigned int pt, const double *loc)
 {
   return Lagrange(loc_spts_1D, loc[0], pt); /// CHECK
 }

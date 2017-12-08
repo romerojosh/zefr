@@ -634,55 +634,57 @@ void Elements::setup_FR()
   }
 
 #ifndef _RT_TETS
-  /* Setup operator for divergence of the correction function [PyFR: 'M3'] */
-
-  if (etype == TRI || etype == TET)
+  if (etype != HEX && etype != QUAD)
   {
-    int QOrder = (etype == TET) ? 7 : order;
-    auto pts = get_face_nodes(QOrder);
-    auto wts = get_face_weights(QOrder);
-    int npts = pts.get_dim(0);
+    /* Setup operator for divergence of the correction function [PyFR: 'M3'] */
+    mdvector<double> gbasis({nSpts,nFpts});
 
-    // Evaluate solution basis on a face at the quadrature points
-    mdvector<double> fbasis_qpts({npts, nFptsPerFace});
-    for (int j = 0; j < npts; j++)
+    unsigned int fpt = 0;
+    for (int F = 0; F < nFaces; F++)
     {
-      for (int i = 0; i < nFptsPerFace; i++)
-      {
-        double* loc = (nDims == 3) ? &pts(j,0) : &pts(j);
+      auto ftype = geo->eleFaceTypesBT[etype][F];
+      int QOrder = (ftype == TRI) ? 7 : order;
+      auto pts = get_face_nodes(F, QOrder);
+      auto wts = get_face_weights(F, QOrder);
+      int npts = pts.get_dim(0);
 
-        fbasis_qpts(j,i) = calc_nodal_face_basis(i, loc);
-      }
-    }
-
-    // Evaluate the orthonormal solution basis at the quadrature points
-    mdvector<double> ubasis_qpts({nFaces, npts, nSpts});
-    for (int i = 0; i < nFaces; i++)
-    {
+      // Evaluate solution basis on a face at the quadrature points
+      mdvector<double> fbasis_qpts({npts, nFpts_face[F]});
       for (int j = 0; j < npts; j++)
       {
-        double* loc = (nDims == 3) ? &pts(j,0) : &pts(j);
+        for (int i = 0; i < nFpts_face[F]; i++)
+        {
+          double* loc = (nDims == 3) ? &pts(j,0) : &pts(j);
+
+          fbasis_qpts(j,i) = calc_nodal_face_basis(F, i, loc);
+        }
+      }
+
+      // Evaluate the orthonormal solution basis at the quadrature points
+      mdvector<double> ubasis_qpts({npts, nSpts});
+      for (int i = 0; i < npts; i++)
+      {
+        double* loc = (nDims == 3) ? &pts(i,0) : &pts(i);
         double pt[3];
-        project_face_point(i, loc, pt);
+        project_face_point(F, loc, pt);
 
         for (int spt = 0; spt < nSpts; spt++)
         {
-          ubasis_qpts(i,j,spt) = calc_orthonormal_basis(spt, pt);
+          ubasis_qpts(i,spt) = calc_orthonormal_basis(spt, pt);
         }
       }
-    }
 
-    mdvector<double> gbasis({nSpts,nFpts});
-    for (int fpt = 0; fpt < nFpts; fpt++)
-    {
-      int F = fpt / nFptsPerFace;
-      int k = fpt % nFptsPerFace;
-      for (int spt = 0; spt < nSpts; spt++)
+      for (int k = 0; k < nFpts_face[F]; k++)
       {
-        for (int i = 0; i < npts; i++)
+        for (int spt = 0; spt < nSpts; spt++)
         {
-          gbasis(spt,fpt) += wts(i) * fbasis_qpts(i,k) * ubasis_qpts(F,i,spt);
+          for (int i = 0; i < npts; i++)
+          {
+            gbasis(spt,fpt) += wts(i) * fbasis_qpts(i,k) * ubasis_qpts(i,spt);
+          }
         }
+
+        fpt++;
       }
     }
 

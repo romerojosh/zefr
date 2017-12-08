@@ -52,12 +52,12 @@ class Tris: public Elements
                                    const std::vector<double> &loc,
                                    unsigned int dim);
 
-    mdvector<double> get_face_nodes(unsigned int P);
-    mdvector<double> get_face_weights(unsigned int P);
+    mdvector<double> get_face_nodes(unsigned int face, unsigned int P);
+    mdvector<double> get_face_weights(unsigned int face, unsigned int P);
 
     void project_face_point(int face, const double* loc, double* ploc);
 
-    double calc_nodal_face_basis(unsigned int pt, const double *loc);
+    double calc_nodal_face_basis(unsigned int face, unsigned int pt, const double *loc);
 
     double calc_orthonormal_basis(unsigned int mode, const double *loc);
 

@@ -43,6 +43,9 @@ static std::map<int, std::vector<int>> gmsh_maps_tri;
 static std::map<int, std::vector<int>> ijk_maps_tri;
 static std::map<int, std::vector<int>> ijk_maps_tet;
 
+static std::map<int, std::vector<int>> gmsh_maps_pri;
+static std::map<int, std::vector<int>> ijk_maps_pri;
+
 double compute_U_init(double x, double y, double z, unsigned int var, const InputStruct *input)
 {
    
@@ -193,6 +196,10 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
         }
       }
 
+    }
+    else
+    {
+      ThrowException("Unknown test case ID!");
     }
   }
   else
@@ -815,7 +822,7 @@ mdvector<double> identityMatrix(unsigned int N)
   return mat;
 }
 
-std::vector<int> gmsh_to_pyfr_tri(unsigned int nNodes)
+std::vector<int> gmsh_to_structured_tri(unsigned int nNodes)
 {
   if (ijk_maps_tri.count(nNodes))
     return ijk_maps_tri[nNodes];
@@ -855,7 +862,7 @@ std::vector<int> gmsh_to_pyfr_tri(unsigned int nNodes)
   return gmsh_to_pyfr;
 }
 
-std::vector<int> gmsh_to_pyfr_tet(unsigned int nNodes)
+std::vector<int> gmsh_to_structured_tet(unsigned int nNodes)
 {
   if (ijk_maps_tet.count(nNodes))
     return ijk_maps_tet[nNodes];
@@ -909,6 +916,72 @@ std::vector<int> gmsh_to_pyfr_tet(unsigned int nNodes)
   ijk_maps_tet[nNodes] = gmsh_to_pyfr;
 
   return gmsh_to_pyfr;
+}
+
+
+std::vector<int> gmsh_to_structured_pri(unsigned int nNodes)
+{
+  if (ijk_maps_pri.count(nNodes))
+    return ijk_maps_pri[nNodes];
+
+  std::vector<int> gmsh_to_ijk(nNodes,0);
+
+  switch (nNodes)
+  {
+    case 6:
+      gmsh_to_ijk = {0,1,2,3,4,5};
+      break;
+
+    case 18:
+      gmsh_to_ijk = {0, 2, 5, 12, 14, 17, 1, 3, 6, 4, 8, 11, 13, 15,
+                     16, 7, 9, 10};
+      break;
+
+    case 40:
+      gmsh_to_ijk = {0, 3, 9, 30, 33, 39, 1, 2, 4, 7, 10, 20, 6, 8,
+                     13, 23, 19, 29, 31, 32, 34, 37, 36, 38, 5, 35,
+                     11, 12, 22, 21, 14, 24, 27, 17, 16, 18, 28, 26,
+                     15, 25};
+      break;
+
+    case 75:
+      gmsh_to_ijk = {0, 4, 14, 60, 64, 74, 1, 2, 3, 5, 9, 12, 15,
+                     30, 45, 8, 11, 13, 19, 34, 49, 29, 44, 59, 61,
+                     62, 63, 65, 69, 72, 68, 71, 73, 6, 10, 7, 66,
+                     67, 70, 16, 18, 48, 46, 17, 33, 47, 31, 32, 20,
+                     50, 57, 27, 35, 54, 42, 24, 39, 23, 28, 58, 53,
+                     26, 43, 56, 38, 41, 21, 51, 36, 22, 52, 37, 25,
+                     55, 40};
+      break;
+
+    case 126:
+      gmsh_to_ijk = {0, 5, 20, 105, 110, 125, 1, 2, 3, 4, 6, 11,
+                     15, 18, 21, 42, 63, 84, 10, 14, 17, 19, 26,
+                     47, 68, 89, 41, 62, 83, 104, 106, 107, 108,
+                     109, 111, 116, 120, 123, 115, 119, 122, 124,
+                     7, 16, 9, 12, 13, 8, 112, 114, 121, 113, 118,
+                     117, 22, 25, 88, 85, 23, 24, 46, 67, 87, 86,
+                     64, 43, 44, 45, 66, 65, 27, 90, 102, 39, 48,
+                     69, 95, 99, 81, 60, 36, 32, 53, 74, 78, 57,
+                     31, 40, 103, 94, 35, 38, 61, 82, 101, 98, 73,
+                     52, 56, 59, 80, 77, 28, 91, 49, 70, 30, 93,
+                     51, 72, 37, 100, 58, 79, 29, 92, 50, 71, 34,
+                     97, 55, 76, 33, 96, 54, 75};
+      break;
+
+    default:
+      ThrowException("PyFR/Gmsh node map not implemented for this nNodes.\n"
+         "See https://github.com/vincentlab/PyFR/blob/develop/pyfr/readers/nodemaps.py");
+  }
+
+  ijk_maps_pri[nNodes] = gmsh_to_ijk;
+
+  return gmsh_to_ijk;
+}
+
+std::vector<int> structured_to_gmsh_pri(unsigned int nNodes)
+{
+  return reverse_map(gmsh_to_structured_pri(nNodes));
 }
 
 std::vector<int> gmsh_to_structured_quad(unsigned int nNodes)
@@ -1248,7 +1321,7 @@ std::vector<int> reverse_map(const std::vector<int> &map1)
 {
   auto map2 = map1;
   for (int i = 0; i < map1.size(); i++)
-    map2[i] = findFirst(map1, i);
+    map2[map1[i]] = i;
 
   return map2;
 }

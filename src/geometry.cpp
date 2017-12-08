@@ -552,6 +552,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     {
       geo.nFacesPerEleBT[HEX] = 6; geo.nCornerNodesBT[HEX] = 8;
       geo.nFacesPerEleBT[TET] = 4; geo.nCornerNodesBT[TET] = 4;
+      geo.nFacesPerEleBT[PRI] = 5; geo.nCornerNodesBT[PRI] = 6;
 
       switch(val)
       {
@@ -571,6 +572,15 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.nNdFaceCurved[QUAD] = 4;
           geo.nNodesPerEleBT[HEX] = 8; break;
 
+        /* Linear Prism */
+        case 6:
+          geo.ele_set.insert(PRI);
+          geo.nEles++;
+          geo.nElesBT[PRI]++;
+          geo.nNdFaceCurved[TRI] = 3;
+          geo.nNdFaceCurved[QUAD] = 4;
+          geo.nNodesPerEleBT[PRI] = 6; break;
+
         /* Quadratic Tet */
         case 11:
           geo.ele_set.insert(TET);
@@ -587,6 +597,24 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           geo.nNdFaceCurved[QUAD] = 9;
           geo.nNodesPerEleBT[HEX] = 27;
           break;
+
+        /* Quadratic Prism */
+        case 13:
+          geo.ele_set.insert(PRI);
+          geo.nEles++;
+          geo.nElesBT[PRI]++;
+          geo.nNdFaceCurved[TRI] = 6;
+          geo.nNdFaceCurved[QUAD] = 9;
+          geo.nNodesPerEleBT[PRI] = 18; break;
+
+        /* Cubic Prism */
+        case 90:
+          geo.ele_set.insert(PRI);
+          geo.nEles++;
+          geo.nElesBT[PRI]++;
+          geo.nNdFaceCurved[TRI] = 10;
+          geo.nNdFaceCurved[QUAD] = 16;
+          geo.nNodesPerEleBT[PRI] = 40; break;
 
         /* Tricubic Hex */
         case 92:
@@ -775,6 +803,19 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           }
           geo.nElesBT[HEX]++; break;
         }
+
+          /* Process tetrahedral elements */
+          case 6:  /* Linear Pri */
+          case 13:  /* Quadratic Pri */
+          case 90:  /* Quadratic Pri */
+          {
+            unsigned int ele = geo.nElesBT[PRI];
+            for (unsigned int nd = 0; nd < geo.nNodesPerEleBT[PRI]; nd++)
+            {
+              f >> geo.ele2nodesBT[PRI](ele,nd);
+            }
+            geo.nElesBT[PRI]++; break;
+          }
 
         default:
           ThrowException("Unrecognized element type detected!"); break;
@@ -1301,12 +1342,15 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   for (auto ftype : geo.face_set)
   {
     geo.face2fpts[ftype].assign({nFptsPerFace[ftype], (unsigned)unique_faces[ftype].size()}, -1);
+    geo.faceID[ftype].assign({unique_faces[ftype].size()}, -1);
+    geo.nFacesBT[ftype] = 0;
   }
 
   int nf = 0;
   for (auto flist : unique_faces)
     nf += flist.second.size();
 
+  geo.faceID_type.assign({nf}, -1);
   geo.faceType.assign({nf});
   geo.face2eles.assign({(unsigned)nf, 2}, -1);
 
@@ -1369,15 +1413,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 
         if(!face_fpts.count(face))
         {
-          geo.ele2face[etype](geo.eleID[etype](ele), n) = geo.nFaces;
+          geo.ele2face[etype](ele, n) = geo.nFaces;
           geo.face2eles(geo.nFaces, 0) = geo.eleID[etype](ele);
-//#ifdef _BUILD_LIB
-//          if (etype == HEX)
-//          {
-            for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
-              geo.face2nodes[ftype](geo.nFaces, j) = geo.ele2nodesBT[etype](geo.eleID[etype](ele), geo.faceNodesCurved[etype](n,j));
-//          }
-//#endif
+
+          for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
+            geo.face2nodes[ftype](geo.nFacesBT[ftype], j) = geo.ele2nodesBT[etype](ele, geo.faceNodesCurved[etype](n,j));
 
           /* Check if face is on boundary */
           if (geo.bnd_faces.count(face) and geo.bnd_faces[face] != PERIODIC)
@@ -1393,28 +1433,24 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
             bndface2fpts[face] = fpts;
             
             /* Create lists of all wall- and overset-boundary nodes */
-//#ifdef _BUILD_LIB
-//            if (input->overset)
-//            {
-              if (bcType == OVERSET)
-              {
-                for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
-                  overPts.insert(geo.face2nodes[ftype](geo.nFaces, j));
-                overFaces.insert(geo.nFaces);
-              }
-              else if (bcType == SLIP_WALL ||
-                       bcType == ISOTHERMAL_NOSLIP ||
-                       bcType == ISOTHERMAL_NOSLIP_MOVING ||
-                       bcType == ADIABATIC_NOSLIP ||
-                       bcType == ADIABATIC_NOSLIP_MOVING ||
-                       bcType == SYMMETRY)
-              {
-                for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
-                  wallPts.insert(geo.face2nodes[ftype](geo.nFaces, j));
-                wallFaces.insert(geo.nFaces);
-              }
-//            }
-//#endif
+            if (bcType == OVERSET)
+            {
+              for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
+                overPts.insert(geo.face2nodes[ftype](geo.nFacesBT[ftype], j));
+              overFaces.insert(geo.nFaces);
+            }
+            else if (bcType == SLIP_WALL ||
+                     bcType == ISOTHERMAL_NOSLIP ||
+                     bcType == ISOTHERMAL_NOSLIP_MOVING ||
+                     bcType == ADIABATIC_NOSLIP ||
+                     bcType == ADIABATIC_NOSLIP_MOVING ||
+                     bcType == SYMMETRY)
+            {
+              for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
+                wallPts.insert(geo.face2nodes[ftype](geo.nFacesBT[ftype], j));
+              wallFaces.insert(geo.nFaces);
+            }
+
             int bnd = geo.face2bnd[face];
             geo.boundFaces[bnd].push_back(geo.nFaces);
             geo.boundFaceTypes[bnd].push_back(ftype);
@@ -1467,18 +1503,21 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
           }
 
           for (int j = 0; j < nFptsPerFace[ftype]; j++)
-            geo.face2fpts[ftype](j, geo.nFaces) = fpts[j];
+            geo.face2fpts[ftype](j, geo.nFacesBT[ftype]) = fpts[j];
 
           geo.faceList.push_back(face);
           geo.nodes_to_face[face] = geo.nFaces;
           geo.faceType(geo.nFaces) = ftype;
+          geo.faceID[ftype](geo.nFacesBT[ftype]) = geo.nFaces;
+          geo.faceID_type(geo.nFaces) = geo.nFacesBT[ftype];
           geo.nFaces++;
+          geo.nFacesBT[ftype]++;
         }
         /* If face has already been encountered, must assign existing global flux points */
         else
         {
           int ff = geo.nodes_to_face[face];
-          geo.ele2face[etype](geo.eleID[etype](ele), n) = ff;
+          geo.ele2face[etype](ele, n) = ff;
           geo.face2eles(ff, 1) = geo.eleID[etype](ele);
 
           auto fpts = face_fpts[face];
@@ -1499,27 +1538,22 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     }
   }
 
-//#ifdef _BUILD_LIB
-//  if (input->overset)
-//  {
-    geo.nWall = wallPts.size();
-    geo.nOver = overPts.size();
-    geo.wallNodes.resize(0);
-    geo.overNodes.resize(0);
-    geo.overFaceList.resize(0);
-    geo.overFaceList.reserve(overFaces.size());
-    geo.wallFaceList.resize(0);
-    geo.wallFaceList.reserve(wallFaces.size());
-    geo.wallNodes.reserve(geo.nWall);
-    geo.overNodes.reserve(geo.nOver);
-    for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
-    for (auto &pt:overPts) geo.overNodes.push_back(pt);
-    for (auto &fid:overFaces)
-      geo.overFaceList.push_back(fid);
-    for (auto &fid:wallFaces)
-      geo.wallFaceList.push_back(fid);
-//  }
-//#endif
+  geo.nWall = wallPts.size();
+  geo.nOver = overPts.size();
+  geo.wallNodes.resize(0);
+  geo.overNodes.resize(0);
+  geo.overFaceList.resize(0);
+  geo.overFaceList.reserve(overFaces.size());
+  geo.wallFaceList.resize(0);
+  geo.wallFaceList.reserve(wallFaces.size());
+  geo.wallNodes.reserve(geo.nWall);
+  geo.overNodes.reserve(geo.nOver);
+  for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
+  for (auto &pt:overPts) geo.overNodes.push_back(pt);
+  for (auto &fid:overFaces)
+    geo.overFaceList.push_back(fid);
+  for (auto &fid:wallFaces)
+    geo.wallFaceList.push_back(fid);
 
   /* Process MPI faces, if needed */
 #ifdef _MPI
@@ -1639,13 +1673,6 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #else
   geo.nGfpts = gfpt_bnd;
 #endif
-
-  /* Determine number of faces per face type */
-  for (auto ftype : geo.face_set)
-    geo.nFacesBT[ftype] = 0;
-
-  for (int ff = 0; ff < geo.nFaces; ff++)
-    geo.nFacesBT[geo.faceType(ff)]++;
 
   for (auto etype : geo.ele_set)
   {
@@ -2362,13 +2389,15 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   const std::string tricon = "spt_tri_p" + std::to_string(input->rank);
   const std::string tetcon = "spt_tet_p" + std::to_string(input->rank);
   const std::string pricon = "spt_pri_p" + std::to_string(input->rank);
+  const std::string pyrcon = "spt_pyr_p" + std::to_string(input->rank);
   const std::string hexcon = "spt_hex_p" + std::to_string(input->rank);
 
   std::map<std::string, ELE_TYPE> ele_str_map;
   ele_str_map["tri"]  = TRI;
   ele_str_map["quad"] = QUAD;
   ele_str_map["tet"]  = TET;
-  ele_str_map["PRI"]  = PRI;
+  ele_str_map["pri"]  = PRI;
+  ele_str_map["pyr"]  = PYR;
   ele_str_map["hex"]  = HEX;
 
   // Figure out # of dimensions
@@ -2385,6 +2414,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       etype = TET;
     else if (name == pricon)
       etype = PRI;
+    else if(name == pyrcon)
+      etype = PYR;
     else if(name == hexcon)
       etype = HEX;
     else
@@ -2402,9 +2433,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       ThrowException("Cannot read element nodes from PyFR mesh file - wrong data type.");
 
     geo.nDims = dims[2];
-
-    if (geo.nEles > 0)
-      ThrowException("Mixed element grids from PyFR format not currently supported!");
 
     geo.nNodesPerEleBT[etype] = dims[0];
     geo.nNodes = geo.nEles * geo.nNodesPerEleBT[etype];
@@ -2426,7 +2454,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     }
     else if (etype == QUAD)
     {
-      geo.nNdFaceCurved[LINE] = sqrt(geo.nNodes);
+      geo.nNdFaceCurved[LINE] = sqrt(geo.nNodesPerEleBT[etype]);
     }
     else if (etype == TRI)
     {
@@ -2440,6 +2468,9 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
         case 10:
           geo.nNdFaceCurved[LINE] = 4; break;
+
+        default:
+          ThrowException("Shape orders > 3 not implemented for triangle grids");
       }
     }
     else if (etype == TET)
@@ -2449,11 +2480,14 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
         case 4:
           geo.nNdFaceCurved[TRI] = 3; break;
 
-        case 9:
+        case 10:
           geo.nNdFaceCurved[TRI] = 6; break;
 
         case 20:
           geo.nNdFaceCurved[TRI] = 10; break;
+
+        default:
+          ThrowException("Shape orders > 3 not implemented for tet grids");
       }
     }
     else if (etype == PRI)
@@ -2474,6 +2508,9 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
           geo.nNdFaceCurved[TRI] = 10;
           geo.nNdFaceCurved[QUAD] = 16;
           break;
+
+        default:
+          ThrowException("Shape orders > 3 not implemented for prism grids");
       }
     }
 
@@ -2489,13 +2526,15 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     switch (etype)
     {
       case TRI:
-        ndmap = gmsh_to_pyfr_tri(geo.nNodesPerEleBT[etype]); break;
+        ndmap = gmsh_to_structured_tri(geo.nNodesPerEleBT[etype]); break;
       case QUAD:
         ndmap = gmsh_to_structured_quad(geo.nNodesPerEleBT[etype]); break;
       case HEX:
         ndmap = gmsh_to_structured_hex(geo.nNodesPerEleBT[etype]); break;
       case TET:
-        ndmap = gmsh_to_pyfr_tet(geo.nNodesPerEleBT[etype]); break;
+        ndmap = gmsh_to_structured_tet(geo.nNodesPerEleBT[etype]); break;
+      case PRI:
+        ndmap = gmsh_to_structured_pri(geo.nNodesPerEleBT[etype]); break;
     }
 
     // Re-order nodes to ZEFR format
@@ -2509,9 +2548,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   // Collect total array of all nodes in mesh
   geo.nNodes = 0;
   for (auto etype : geo.ele_set)
-  {
     geo.nNodes += geo.nElesBT[etype] * geo.nNodesPerEleBT[etype];
-  }
 
   mdvector<double> temp_coords({geo.nNodes, geo.nDims});
 
@@ -2627,8 +2664,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.pyfr2zefr_face[TET] = {0,1,2,3};
   geo.zefr2pyfr_face[TET] = {0,1,2,3};
 
-  geo.pyfr2zefr_face[PRI] = {0,1,2,3};
-  geo.zefr2pyfr_face[PRI] = {0,1,2,3};
+  geo.pyfr2zefr_face[PRI] = {0,1,2,4,3};
+  geo.zefr2pyfr_face[PRI] = {0,1,2,4,3};
 
   for (auto ftype : geo.face_set)
     geo.nFacesBT[ftype] = 0;
@@ -2797,18 +2834,30 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.faceType.resize({geo.nFaces});
 
   // Finish setting up ele-to-face / face-to-ele connectivity
-//#ifdef _BUILD_LIB
+
   set_face_nodes(geo);
-//#endif
 
   for (auto etype : geo.ele_set)
+  {
     geo.ele2face[etype].assign({geo.nElesBT[etype], geo.nFacesPerEleBT[etype]});
+    geo.nElesBT[etype] = 0;
+  }
+
+  geo.eleID_type.assign({geo.nEles}, -1);
+  for (int ele = 0; ele < geo.nEles; ele++)
+  {
+    geo.eleID_type(ele) = geo.nElesBT[geo.eleType(ele)]++;
+  }
 
   geo.face2eles.assign({geo.nFaces, 2}, -1);
-//#ifdef _BUILD_LIB
+  geo.faceID_type.assign({geo.nFaces}, -1);
   for (auto ftype : geo.face_set)
+  {
     geo.face2nodes[ftype].assign({geo.nFacesBT[ftype], geo.nNdFaceCurved[ftype]}, -1);
-//#endif
+    geo.faceID[ftype].assign({geo.nFacesBT[ftype]}, -1);
+    geo.nFacesBT[ftype] = 0;
+  }
+
   for (int f = 0; f < geo.nIntFaces; f++)
   {
     auto &f1 = geo.face_list(0,f);
@@ -2818,14 +2867,18 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     ELE_TYPE ftype = geo.eleFaceTypesBT[etype1][f1.loc_f];
     geo.faceType(f) = ftype;
     geo.ele2face[etype1](f1.ic, f1.loc_f) = f;
-    geo.ele2face[etype2](f2.ic, f2.loc_f) = f;  /// TODO: global/local IDs...
+    geo.ele2face[etype2](f2.ic, f2.loc_f) = f;
     geo.face2eles(f, 0) = f1.ic;
     geo.face2eles(f, 1) = f2.ic;
-//#ifdef _BUILD_LIB
+
     // Connectivity only used in conjunction with TIOGA
     for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
-      geo.face2nodes[ftype](f,j) = geo.ele2nodesBT[etype1](f1.ic, geo.faceNodesCurved[etype1](f1.loc_f, j));
-//#endif
+      geo.face2nodes[ftype](geo.nFacesBT[ftype],j) = geo.ele2nodesBT[etype1](f1.ic, geo.faceNodesCurved[etype1](f1.loc_f, j));
+
+
+    geo.faceID[ftype](geo.nFacesBT[ftype]) = f;
+    geo.faceID_type(f) = geo.nFacesBT[ftype];
+    geo.nFacesBT[ftype]++;
   }
 
   int fid = geo.nIntFaces;
@@ -2837,19 +2890,24 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       ELE_TYPE etype = ele_str_map[std::string(f.c_type)];
       ELE_TYPE ftype = geo.eleFaceTypesBT[etype][f.loc_f];
       geo.faceType(fid) = ftype;
-      geo.ele2face[etype](f.ic, f.loc_f) = fid;  /// TODO: global/local IDs...
+      geo.ele2face[etype](f.ic, f.loc_f) = fid;
       geo.face2eles(fid, 0) = f.ic;
-//#ifdef _BUILD_LIB
+
       // Connectivity only used in conjunction with TIOGA
       for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
-        geo.face2nodes[ftype](fid,j) = geo.ele2nodesBT[etype](f.ic, geo.faceNodesCurved[etype](f.loc_f,j));
-//#endif
+        geo.face2nodes[ftype](geo.nFacesBT[ftype],j) = geo.ele2nodesBT[etype](f.ic, geo.faceNodesCurved[etype](f.loc_f,j));
+
+      geo.faceID[ftype](geo.nFacesBT[ftype]) = fid;
+      geo.faceID_type(fid) = geo.nFacesBT[ftype];
+      geo.nFacesBT[ftype]++;
+
       fid++;
     }
   }
 
 #ifdef _MPI
   fid = geo.nIntFaces + geo.nBndFaces;
+  geo.mpiFaces.resize(0);
   for (auto &p : geo.send_ranks)
   {
     for (int ff = 0; ff < geo.mpi_conn[p].size(); ff++)
@@ -2858,8 +2916,18 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
       ELE_TYPE etype = ele_str_map[std::string(f.c_type)];
       ELE_TYPE ftype = geo.eleFaceTypesBT[etype][f.loc_f];
       geo.faceType(fid) = ftype;
-      geo.ele2face[etype](f.ic, f.loc_f) = fid;  /// TODO: global/local IDs...
+      geo.ele2face[etype](f.ic, f.loc_f) = fid;
       geo.face2eles(fid, 0) = f.ic;
+
+      // Connectivity only used in conjunction with TIOGA
+      for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
+        geo.face2nodes[ftype](geo.nFacesBT[ftype],j) = geo.ele2nodesBT[etype](f.ic, geo.faceNodesCurved[etype](f.loc_f,j));
+
+      geo.mpiFaces.push_back(fid);
+      geo.faceID[ftype](geo.nFacesBT[ftype]) = fid;
+      geo.faceID_type(fid) = geo.nFacesBT[ftype];
+      geo.nFacesBT[ftype]++;
+
       fid++;
     }
   }
@@ -2964,7 +3032,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   ele_str_map["tri"]  = TRI;
   ele_str_map["quad"] = QUAD;
   ele_str_map["tet"]  = TET;
-  ele_str_map["PRI"]  = PRI;
+  ele_str_map["pri"]  = PRI;
   ele_str_map["hex"]  = HEX;
 
   // Counter for total global flux points so far
@@ -2998,7 +3066,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
       geo.fpt2gfpt_slotBT[etypeL](fpt0L + fpt, eL) = 0;
       geo.fpt2gfpt_slotBT[etypeR](fpt0R + nfpts - fpt - 1, eR) = 1;
 
-      geo.face2fpts[ftype](fpt, ff) = gfpt; /// TODO: Map global face ID to type-specific face ID and back
+      geo.face2fpts[ftype](fpt, geo.faceID_type(ff)) = gfpt;
       geo.fpt2face[gfpt] = ff;
       gfpt++;
     }
@@ -3035,60 +3103,50 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         geo.fpt2gfpt_slotBT[etype](fpt0 + fpt, ele) = 0;
 
         geo.gfpt2bnd(gfpt_bnd) = geo.bnd_ids[bnd];
-        geo.face2fpts[ftype](fpt, fid) = gfpt; /// TODO: fid -> loc_fid
+        geo.face2fpts[ftype](fpt, geo.faceID_type(fid)) = gfpt;
         geo.fpt2face[gfpt] = fid;
         gfpt_bnd++;
         gfpt++;
       }
 
       // Create lists of all wall- and overset-boundary nodes
-//#ifdef _BUILD_LIB
-//      if (input->overset)
-//      {
-        int bcType = geo.bnd_ids[bnd];
-        if (bcType == OVERSET)
-        {
-          for (int j = 0; j < geo.nNdFaceCurved[etype]; j++)
-            overPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved[etype](n, j)));
+      int bcType = geo.bnd_ids[bnd];
+      if (bcType == OVERSET)
+      {
+        for (int j = 0; j < geo.nNdFaceCurved[etype]; j++)
+          overPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved[etype](n, j)));
 
-          geo.overFaceList.push_back(fid);
-        }
-        else if (bcType == SLIP_WALL ||
-                 bcType == ISOTHERMAL_NOSLIP ||
-                 bcType == ISOTHERMAL_NOSLIP_MOVING ||
-                 bcType == ADIABATIC_NOSLIP ||
-                 bcType == ADIABATIC_NOSLIP_MOVING ||
-                 bcType == SYMMETRY)
-        {
-          for (int j = 0; j < geo.nNdFaceCurved[etype]; j++)
-            wallPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved[etype](n, j)));
+        geo.overFaceList.push_back(fid);
+      }
+      else if (bcType == SLIP_WALL ||
+               bcType == ISOTHERMAL_NOSLIP ||
+               bcType == ISOTHERMAL_NOSLIP_MOVING ||
+               bcType == ADIABATIC_NOSLIP ||
+               bcType == ADIABATIC_NOSLIP_MOVING ||
+               bcType == SYMMETRY)
+      {
+        for (int j = 0; j < geo.nNdFaceCurved[etype]; j++)
+          wallPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved[etype](n, j)));
 
-          geo.wallFaceList.push_back(fid);
-        }
-//      }
-//#endif
+        geo.wallFaceList.push_back(fid);
+      }
 
       fid++;
     }
   }
 
-//#ifdef _BUILD_LIB
-//  if (input->overset)
-//  {
-    geo.nWall = wallPts.size();
-    geo.nOver = overPts.size();
-    geo.wallNodes.resize(0);
-    geo.overNodes.resize(0);
-    geo.wallNodes.reserve(geo.nWall);
-    geo.overNodes.reserve(geo.nOver);
-    for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
-    for (auto &pt:overPts) geo.overNodes.push_back(pt);
-    std::sort(geo.overFaceList.begin(),geo.overFaceList.end());
-    geo.overFaceList.erase( std::unique(geo.overFaceList.begin(),geo.overFaceList.end()), geo.overFaceList.end() );
-    std::sort(geo.wallFaceList.begin(),geo.wallFaceList.end());
-    geo.wallFaceList.erase( std::unique(geo.wallFaceList.begin(),geo.wallFaceList.end()), geo.wallFaceList.end() );
-//  }
-//#endif
+  geo.nWall = wallPts.size();
+  geo.nOver = overPts.size();
+  geo.wallNodes.resize(0);
+  geo.overNodes.resize(0);
+  geo.wallNodes.reserve(geo.nWall);
+  geo.overNodes.reserve(geo.nOver);
+  for (auto &pt:wallPts) geo.wallNodes.push_back(pt);
+  for (auto &pt:overPts) geo.overNodes.push_back(pt);
+  std::sort(geo.overFaceList.begin(),geo.overFaceList.end());
+  geo.overFaceList.erase( std::unique(geo.overFaceList.begin(),geo.overFaceList.end()), geo.overFaceList.end() );
+  std::sort(geo.wallFaceList.begin(),geo.wallFaceList.end());
+  geo.wallFaceList.erase( std::unique(geo.wallFaceList.begin(),geo.wallFaceList.end()), geo.wallFaceList.end() );
 
 #ifdef _MPI
   unsigned int mpiFace = geo.nIntFaces + geo.nBndFaces;
@@ -3151,7 +3209,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
           geo.fpt2gfpt_slotBT[etype](fpt0 + fpt, ele) = 0;
 
           geo.fpt_buffer_map[p2].push_back(gfpt);
-          geo.face2fpts[ftype](fpt, mpiFace) = gfpt;
+          geo.face2fpts[ftype](fpt, geo.faceID_type(mpiFace)) = gfpt;
           geo.fpt2face[gfpt] = mpiFace;
           gfpt++;
         }
@@ -3190,7 +3248,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
         {
           geo.fpt2gfptBT[etype](fpt0 + fpt, ele) = gfpt;
           geo.fpt2gfpt_slotBT[etype](fpt0 + fpt, ele) = 0;
-          geo.face2fpts[ftype](fpt, mpiFace) = gfpt;
+          geo.face2fpts[ftype](fpt, geo.faceID_type(mpiFace)) = gfpt;
           geo.fpt2face[gfpt] = mpiFace;
           fpts[fpt] = gfpt;
           gfpt++;

@@ -41,6 +41,7 @@ extern "C" {
 #include "quads.hpp"
 #include "input.hpp"
 #include "mdvector.hpp"
+#include "prisms.hpp"
 #include "tets.hpp"
 #include "tris.hpp"
 #include "solver.hpp"
@@ -368,6 +369,8 @@ void FRSolver::create_elesObj(ELE_TYPE etype, unsigned int elesObjID, unsigned i
 
      elesObjs.push_back(std::make_shared<Tets>(&geo, input, elesObjID, startEle, endEle, order));
   }
+  else if (etype == PRI)
+     elesObjs.push_back(std::make_shared<Prisms>(&geo, input, elesObjID, startEle, endEle, order));
 }
 
 void FRSolver::orient_fpts()
@@ -467,14 +470,15 @@ void FRSolver::orient_fpts()
   auto face2fpts_copy = geo.face2fpts;
   for (int ff = 0; ff < geo.nFaces; ff++)
   {
+    int fidBT = geo.faceID_type(ff);
     auto ftype = geo.faceType(ff);
     for (int fpt = 0; fpt < geo.nFptsPerFace[ftype]; fpt++)
     {
-      int gfpt_old = face2fpts_copy[ftype](fpt, ff); /// TODO: local face ID
+      int gfpt_old = face2fpts_copy[ftype](fpt, fidBT);
       if (gfpt_old >= geo.nGfpts_int) continue;
 
       int gfpt_new = idxL[gfpt_old];
-      geo.face2fpts[ftype](fpt, ff) = gfpt_new; /// TODO: local face ID
+      geo.face2fpts[ftype](fpt, fidBT) = gfpt_new;
       geo.fpt2face[gfpt_new] = ff;
     }
   }
@@ -680,11 +684,12 @@ void FRSolver::setup_jacoN_views()
     {
       auto etype = eles->etype;
       unsigned int eleID = geo.eleID[eles->etype](ele + eles->startEle);
+      unsigned int eleBT = ele + eles->startEle;
       for (unsigned int face = 0; face < eles->nFaces; face++)
       {
 #ifdef _MPI
         /* Element neighbor is on another rank */
-        int faceID = geo.ele2face[etype](eleID, face);
+        int faceID = geo.ele2face[etype](eleBT, face);
         int mpiFace = findFirst(geo.mpiFaces, faceID);
         if (mpiFace > -1)
         {
@@ -5265,6 +5270,10 @@ void FRSolver::write_solution(const std::string &_prefix)
           binary_write(f, (char) 10);
         else if (e->etype == HEX)
           binary_write(f, (char) 12);
+        else if (e->etype == PRI)
+          binary_write(f, (char) 13);
+        else if (e->etype == PYR)
+          binary_write(f, (char) 14);
       }
     }
   }
