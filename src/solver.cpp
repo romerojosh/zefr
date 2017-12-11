@@ -1235,6 +1235,7 @@ void FRSolver::solver_data_to_device()
   {
     geo.face2fpts_d[ftype] = geo.face2fpts[ftype];
     geo.wallFacesBT_d[ftype] = geo.wallFacesBT[ftype];
+    geo.weights_fpts_d[ftype] = geo.weights_fpts[ftype];
   }
 
   if (input->implicit_method && input->viscous && !input->KPF_Jacobian)
@@ -7375,11 +7376,11 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
     {
       for (auto ff : geo.boundFaces[bnd])
       {
-        //int fid = geo.face2local /// TODO
+        int fid = geo.faceID_type(ff);
         auto ftype = geo.faceType(ff);
         for (int idx = 0; idx < geo.nFptsPerFace[ftype]; idx++)
         {
-          unsigned int fpt = geo.face2fpts[ftype](idx, ff); /// TODO: local fid
+          unsigned int fpt = geo.face2fpts[ftype](idx, fid);
 
           /* Get pressure */
           double PL = faces->P(0, fpt);
@@ -7396,8 +7397,7 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           /* Sum inviscid force contributions */
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
           {
-            /// TODO: need to fix quadrature weights for mixed element cases!
-            force_conv[dim] += elesObjs[0]->weights_fpts(idx) * PL *
+            force_conv[dim] += geo.weights_fpts[ftype](idx) * PL *
                 faces->norm(dim, fpt) * faces->dA(0, fpt);
           }
 
@@ -7455,9 +7455,8 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
               taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
               taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
 
-              //TODO: need to fix quadrature weights for mixed element cases!
               for (unsigned int dim = 0; dim < geo.nDims; dim++)
-                force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
+                force_visc[dim] -= geo.weights_fpts[ftype](idx) * taun[dim] *
                     faces->dA(0, fpt);
 
             }
@@ -7532,9 +7531,8 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
               taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
               taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
-              //TODO: need to fix quadrature weights for mixed element cases!
               for (unsigned int dim = 0; dim < geo.nDims; dim++)
-                force_visc[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
+                force_visc[dim] -= geo.weights_fpts[ftype](idx) * taun[dim] *
                     faces->dA(0, fpt);
             }
 
@@ -7568,11 +7566,11 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
     {
       for (auto ff : geo.boundFaces[bnd])
       {
-        //int fid = geo.face2local /// TODO
+        int fid = geo.faceID_type(ff);
         auto ftype = geo.faceType(ff);
         for (int idx = 0; idx < geo.nFptsPerFace[ftype]; idx++)
         {
-          unsigned int fpt = geo.face2fpts[ftype](idx, ff); /// TODO: local fid
+          unsigned int fpt = geo.face2fpts[ftype](idx, fid);
 
           /* Get pressure */
           double PL = faces->P(0, fpt);
@@ -7580,7 +7578,7 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
           /* Sum inviscid force contributions */
           /// TODO: need to fix quadrature weights for mixed element cases!  (geo->weights_fpts[ftype]?)
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
-            force[dim] = elesObjs[0]->weights_fpts(idx) * PL *
+            force[dim] = geo.weights_fpts[ftype](idx) * PL *
                 faces->norm(dim, fpt) * faces->dA(0, fpt);
 
           if (input->viscous)
@@ -7637,9 +7635,8 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
               taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
               taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
 
-              //TODO: need to fix quadrature weights for mixed element cases!
               for (unsigned int dim = 0; dim < geo.nDims; dim++)
-                force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] * faces->dA(0, fpt);
+                force[dim] -= geo.weights_fpts[ftype](idx) * taun[dim] * faces->dA(0, fpt);
             }
             else if (geo.nDims == 3)
             {
@@ -7712,9 +7709,8 @@ void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<doubl
               taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
               taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
 
-              //TODO: need to fix quadrature weights for mixed element cases!
               for (unsigned int dim = 0; dim < geo.nDims; dim++)
-                force[dim] -= elesObjs[0]->weights_fpts(idx) * taun[dim] *
+                force[dim] -= geo.weights_fpts[ftype](idx) * taun[dim] *
                     faces->dA(0, fpt);
             }
 
@@ -8242,7 +8238,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
       std::array<double,3> forceBT = {0,0,0}, torqueBT = {0,0,0};
       auto ftype = flist.first;
       compute_moments_wrapper(forceBT,torqueBT,faces->U_d,faces->dU_d,faces->P_d,
-          faces->coord_d,geo.x_cg_d,faces->norm_d,faces->dA_d,eles->weights_fpts_d,
+          faces->coord_d,geo.x_cg_d,faces->norm_d,faces->dA_d,geo.weights_fpts_d[ftype],
           force_d,moment_d,input->gamma,input->rt,input->c_sth,input->mu,
           input->viscous,input->fix_vis,eles->nVars,eles->nDims,flist.second.size(),
           flist.second,geo.face2fpts_d[ftype],geo.nFptsPerFace[ftype]);

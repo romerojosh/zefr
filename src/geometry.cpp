@@ -40,6 +40,7 @@
 #include "geometry.hpp"
 #include "macros.hpp"
 #include "mdvector.hpp"
+#include "points.hpp"
 
 #ifndef _NO_HDF5
 #include "H5Cpp.h"
@@ -486,14 +487,14 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         /* Linear quad/tri */
         case 2:
           geo.ele_set.insert(TRI);
-          geo.nEles++; 
+          geo.nEles++;
           geo.nElesBT[TRI]++;
           geo.nNdFaceCurved[LINE] = 2;
           geo.nNodesPerEleBT[TRI] = 3; break;
 
         case 3:
           geo.ele_set.insert(QUAD);
-          geo.nEles++; 
+          geo.nEles++;
           geo.nElesBT[QUAD]++;
           geo.nNdFaceCurved[LINE] = 2;
           geo.nNodesPerEleBT[QUAD] = 4; break;
@@ -501,14 +502,14 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         /* Biquadratic quad/tri */
         case 9:
           geo.ele_set.insert(TRI);
-          geo.nEles++; 
+          geo.nEles++;
           geo.nElesBT[TRI]++;
           geo.nNdFaceCurved[LINE] = 3;
           geo.nNodesPerEleBT[TRI] = 6; break;
 
         case 10:
           geo.ele_set.insert(QUAD);
-          geo.nEles++; 
+          geo.nEles++;
           geo.nElesBT[QUAD]++;
           geo.nNdFaceCurved[LINE] = 3;
           geo.nNodesPerEleBT[QUAD] = 9; break;
@@ -516,7 +517,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         /* Bicubic quad */
         case 36:
           geo.ele_set.insert(QUAD);
-          geo.nEles++; 
+          geo.nEles++;
           geo.nElesBT[QUAD]++;
           geo.nNdFaceCurved[LINE] = 4;
           geo.nNodesPerEleBT[QUAD] = 16; break;
@@ -524,7 +525,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         /* Biquartic quad */
         case 37:
           geo.ele_set.insert(QUAD);
-          geo.nEles++; 
+          geo.nEles++;
           geo.nElesBT[QUAD]++;
           geo.nNdFaceCurved[LINE] = 5;
           geo.nNodesPerEleBT[QUAD] = 25; break;
@@ -532,7 +533,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
         /* Biquintic quad */
         case 38:
           geo.ele_set.insert(QUAD);
-          geo.nEles++; 
+          geo.nEles++;
           geo.nElesBT[QUAD]++;
           geo.nNdFaceCurved[LINE] = 6;
           geo.nNodesPerEleBT[QUAD] = 36; break;
@@ -715,7 +716,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     f >> vint >> ele_type;
 
     unsigned int nTags;
-    f >> nTags; 
+    f >> nTags;
 
     for (unsigned int n = 0; n < nTags ; n++)
       f >> vint;
@@ -755,7 +756,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
           {
             f >> geo.ele2nodesBT[QUAD](ele,nd);
           }
-          geo.nElesBT[QUAD]++; 
+          geo.nElesBT[QUAD]++;
           break;
         }
 
@@ -824,11 +825,13 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     }
 
 
-    std::getline(f,line); 
+    std::getline(f,line);
   }
 
   /* Correct node values to be 0-indexed. Also assign global eleIDs. */
+
   unsigned int eleID = 0;
+  geo.eleID_type.assign({geo.nEles}, -1);
   geo.eleType.assign({geo.nEles});
   for (auto etype : geo.ele_set)
   {
@@ -840,6 +843,7 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       }
       geo.eleID[etype](ele) = eleID;
       geo.eleType(eleID) = etype;
+      geo.eleID_type(eleID) = ele;
 
       eleID++;
     }
@@ -877,7 +881,7 @@ void read_boundary_faces(std::ifstream &f, GeoStruct &geo)
         case 26: /* 4-node Line */
         case 27: /* 5-node Line */
         case 28: /* 6-node Line */
-          f >> face[0] >> face[1]; 
+          f >> face[0] >> face[1];
           std::getline(f,line); break;
 
         default:
@@ -1225,24 +1229,49 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     switch (ftype)
     {
       case LINE:
+      {
 #ifdef _RT_TETS
         nFptsPerFace[ftype] = order + 2; // triangles require P+2 flux points on faces
+        auto wts = Gauss_Legendre_pts(order + 2);
+        geo.weights_fpts[ftype].assign({wts.size()});
+        for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #else
         nFptsPerFace[ftype] = order + 1;
+        auto wts = Gauss_Legendre_pts(order + 1);
+        geo.weights_fpts[ftype].assign({wts.size()});
+        for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #endif
         break;
+      }
 
       case TRI:
+      {
 #ifdef _RT_TETS
         nFptsPerFace[ftype] = (order + 2) * (order + 3) / 2;
+        geo.weights_fpts[ftype] = WS_Tri_weights(order+1);
 #else
         nFptsPerFace[ftype] = (order + 1) * (order + 2) / 2;
+        geo.weights_fpts[ftype] = WS_Tri_weights(order);
 #endif
         break;
+      }
 
       case QUAD:
+      {
         nFptsPerFace[ftype] = (order + 1) * (order + 1);
+
+        auto weights_1D = Gauss_Legendre_weights(order+1);
+
+        geo.weights_fpts[ftype].assign({(order + 1) * (order + 1)});
+        for (int i = 0; i < order+1; i++)
+          for (int j = 0; j < order+1; j++)
+            geo.weights_fpts[ftype](i*(order+1)+j) = weights_1D[i] * weights_1D[j];
+
         break;
+      }
+
+      default:
+        ThrowException("Unknown face type encountered [Error in PyFR mesh reading?]");
     }
   }
 
@@ -1564,7 +1593,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   /* Loop over MPI faces (skipping periodic MPI faces in this loop) */
   for (const auto &face : mpi_faces_to_process)
   {
-    if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC) continue; 
+    if (geo.bnd_faces.count(face) and geo.bnd_faces[face] == PERIODIC) continue;
     auto ranks = geo.mpi_faces[face];
     int sendRank = *std::min_element(ranks.begin(), ranks.end());
     int recvRank = *std::max_element(ranks.begin(), ranks.end());
@@ -1876,11 +1905,11 @@ void shuffle_data_by_color(GeoStruct &geo)
     geo.nElesPerColorBT[etype].assign(geo.nColors, 0);
     geo.rangePerColorBT[etype].assign(geo.nColors + 1, 0);
 
-    geo.rangePerColorBT[etype][1] = color2elesBT[etype][0].size(); 
-    geo.nElesPerColorBT[etype][0] = color2elesBT[etype][0].size(); 
+    geo.rangePerColorBT[etype][1] = color2elesBT[etype][0].size();
+    geo.nElesPerColorBT[etype][0] = color2elesBT[etype][0].size();
     for (unsigned int color = 1; color < geo.nColors; color++)
     {
-      geo.rangePerColorBT[etype][color+1] = geo.rangePerColorBT[etype][color] + color2elesBT[etype][color].size(); 
+      geo.rangePerColorBT[etype][color+1] = geo.rangePerColorBT[etype][color] + color2elesBT[etype][color].size();
       geo.nElesPerColorBT[etype][color] = geo.rangePerColorBT[etype][color+1] - geo.rangePerColorBT[etype][color];
     }
   }
@@ -2009,13 +2038,13 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   options[METIS_OPTION_NCUTS] = 5;
 
   /* Form eptr and eind arrays */
-  std::vector<int> eptr(geo.nEles + 1); 
+  std::vector<int> eptr(geo.nEles + 1);
 
   unsigned int nInds = 0;
   for (auto etype : geo.ele_set)
     nInds += geo.nElesBT[etype] * geo.nCornerNodesBT[etype];
 
-  std::vector<int> eind(nInds); 
+  std::vector<int> eind(nInds);
   std::vector<int> vwgt(geo.nEles, 1);
   std::set<unsigned int> nodes;
   std::vector<unsigned int> face;
@@ -2115,7 +2144,7 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
     geo.nEles += (unsigned int) myElesBT[etype].size();
 
     // remove etype if no elements of type in this partition
-    if (geo.nElesBT[etype] == 0) geo.ele_set.erase(etype); 
+    if (geo.nElesBT[etype] == 0) geo.ele_set.erase(etype);
   }
 
   /* Reduce connectivity to contain only partition local elements. Also reindex eleIDs and eleTypes. */
@@ -2952,24 +2981,46 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
     switch (ftype)
     {
       case LINE:
+      {
 #ifdef _RT_TETS
         nFptsPerFace[ftype] = order + 2; // triangles require P+2 flux points on faces
+        auto wts = Gauss_Legendre_pts(order + 2);
+        geo.weights_fpts[ftype].assign({wts.size()});
+        for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #else
         nFptsPerFace[ftype] = order + 1;
+        auto wts = Gauss_Legendre_pts(order + 1);
+        geo.weights_fpts[ftype].assign({wts.size()});
+        for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #endif
         break;
+      }
 
       case TRI:
+      {
 #ifdef _RT_TETS
         nFptsPerFace[ftype] = (order + 2) * (order + 3) / 2;
+        geo.weights_fpts[ftype] = WS_Tri_weights(order+1);
 #else
         nFptsPerFace[ftype] = (order + 1) * (order + 2) / 2;
+        geo.weights_fpts[ftype] = WS_Tri_weights(order);
 #endif
         break;
+      }
 
       case QUAD:
+      {
         nFptsPerFace[ftype] = (order + 1) * (order + 1);
+
+        auto weights_1D = Gauss_Legendre_weights(order+1);
+
+        geo.weights_fpts[ftype].assign({(order + 1) * (order + 1)});
+        for (int i = 0; i < order+1; i++)
+          for (int j = 0; j < order+1; j++)
+            geo.weights_fpts[ftype](i*(order+1)+j) = weights_1D[i] * weights_1D[j];
+
         break;
+      }
 
       default:
         ThrowException("Unknown face type encountered [Error in PyFR mesh reading?]");

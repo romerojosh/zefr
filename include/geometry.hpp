@@ -72,6 +72,7 @@ struct GeoStruct
   std::map<ELE_TYPE, unsigned int> nCornerNodesBT;
   std::map<ELE_TYPE, unsigned int> nFptsPerFaceBT;
   std::map<ELE_TYPE, unsigned int> nFptsPerEleBT;
+  std::map<ELE_TYPE, mdvector<double>> weights_fpts;
   std::map<ELE_TYPE, mdvector<int>> ele2nodesBT;
   std::map<ELE_TYPE, std::vector<ELE_TYPE>> eleFaceTypesBT;
   std::map<ELE_TYPE, std::vector<std::vector<unsigned int>>> face_nodesBT;
@@ -111,6 +112,7 @@ struct GeoStruct
 #ifdef _GPU
   std::map<ELE_TYPE, mdvector_gpu<unsigned int>> eleID_d;
   std::map<ELE_TYPE, mdvector_gpu<unsigned int>> faceID_d;
+  std::map<ELE_TYPE, mdvector_gpu<double>> weights_fpts_d;
   mdvector_gpu<int> ele2eleN_d, face2faceN_d, fpt2fptN_d;
 #endif
 

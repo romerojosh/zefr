@@ -634,12 +634,30 @@ void Zefr::get_gpu_geo_data(double*& coord_nodes, double*& coord_eles,
 
 double Zefr::get_u_spt(int ele, int spt, int var)
 {
-  return solver->elesObjs[0]->U_spts(spt, var, ele);
+  auto etype = geo->ele_type(ele);
+  int eleBT = geo->eleID_type(ele);
+
+  for (auto &e : solver->elesObjs)
+  {
+    if (e->etype == etype)
+    {
+      return e->U_spts(spt, var, eleBT);
+    }
+  }
 }
 
 double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
 {
-  return solver->elesObjs[0]->dU_spts(dim, spt, var, ele);
+  auto etype = geo->ele_type(ele);
+  int eleBT = geo->eleID_type(ele);
+
+  for (auto &e : solver->elesObjs)
+  {
+    if (e->etype == etype)
+    {
+      return e->dU_spts(dim, spt, var, eleBT);
+    }
+  }
 }
 
 double *Zefr::get_u_spts(int &ele_stride, int &spt_stride, int &var_stride)
@@ -713,6 +731,7 @@ void Zefr::get_nodes_per_face(int faceID, int& nNodes)
 void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 {
   auto etype = geo->eleType(cellID);
+  int ele = geo->eleID_type(etype);
 
   for (auto eles : solver->elesObjs)
   {
@@ -722,7 +741,7 @@ void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 
       for (int spt = 0; spt < nNodes; spt++)
         for (int dim = 0; dim < geo->nDims; dim++)
-          xyz[3*spt+dim] = eles->coord_spts(spt, dim, cellID);
+          xyz[3*spt+dim] = eles->coord_spts(spt, dim, ele);
 
       break;
     }
@@ -737,9 +756,9 @@ void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 
   for (int fpt = 0; fpt < nNodes; fpt++)
   {
-    int gfpt = geo->face2fpts[ftype](fpt, faceID); /// TODO: faceID -> type-local_fid
+    int gfpt = geo->face2fpts[ftype](fpt, geo->faceID_type(faceID));
     for (int dim = 0; dim < geo->nDims; dim++)
-      xyz[3*fpt+dim] = solver->faces->coord(dim, gfpt); /// TODO: do I need to swap?
+      xyz[3*fpt+dim] = solver->faces->coord(dim, gfpt);
   }
 }
 
