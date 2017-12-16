@@ -6865,7 +6865,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     f << std::endl;
 
     /* Store maximum residual */
-    res_max = res[0] / nDoF;
+    res_max = res[input->res_field] / nDoF;
   }
 
 #ifdef _MPI
@@ -7051,7 +7051,7 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
     conv_file << std::endl;
 
     /* Store maximum residual */
-    res_max = res[0] / nDoF;
+    res_max = res[input->res_field] / nDoF;
   }
 
 #ifdef _MPI
