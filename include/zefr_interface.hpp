@@ -35,6 +35,7 @@ struct BasicGeo
   int *overNodes;   //! List of overset-boundary nodes
   int nCellTypes;   //! # of different cell types (hex, tet, prism, etc.) [1 for now]
   int *nvert_cell;  //! # of nodes per cell for each cell type
+  int *nface_cell;  //! # of faces per cell for each cell type
   int *nCells_type; //! # of cells for each cell type
   int **c2v;         //! Cell-to-vertex connectivity (one cell type)
 };
@@ -86,10 +87,10 @@ struct CallbackFuncs
                      double* weights, double* rst, int* buffsize);
   void (*convert_to_modal)(int *cellID, int *nSpts, double *q_in, int *npts,
                            int *index_out, double *q_out);
-  double* (*get_q_spts)(int &ele_stride, int &spt_stride, int &var_stride);
-  double* (*get_dq_spts)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
-  double* (*get_q_spts_d)(int &ele_stride, int &spt_stride, int &var_stride);
-  double* (*get_dq_spts_d)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+  double* (*get_q_spts)(int &ele_stride, int &spt_stride, int &var_stride, int etype);
+  double* (*get_dq_spts)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype);
+  double* (*get_q_spts_d)(int &ele_stride, int &spt_stride, int &var_stride, int etype);
+  double* (*get_dq_spts_d)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype);
   double (*get_q_spt)(int cellID, int spt, int var);
   double (*get_grad_spt)(int cellID, int spt, int dim, int var);
   double& (*get_q_fpt)(int faceID, int fpt, int var);
@@ -140,10 +141,10 @@ CallbackFuncs get_callback_funcs(void);
 
 double get_q_spt(int ele, int spt, int var);
 double get_grad_spt(int ele, int spt, int dim, int var);
-double *get_q_spts(int &ele_stride, int &spt_stride, int &var_stride);
-double *get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
-double *get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride);
-double *get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+double *get_q_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype = 0);
+double *get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);
+double *get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int etype = 0);
+double *get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);
 double *get_q_fpts(void);
 
 /* ==== Callback Function Wrappers ==== */

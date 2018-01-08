@@ -76,6 +76,7 @@ class FRSolver
     /* --- Adaptive time-stepping stuff --- */
     double prev_err;        //! RK error estimate for previous step
     double expa, expb;
+    unsigned int rejected_steps = 0;
 
     /* --- Rigid-Body Motion --- */
     mdvector<double> x_ini, x_til;         //! Position of body CG

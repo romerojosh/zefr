@@ -682,24 +682,20 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     geo.face_set.insert(TRI);
   }
 
-  geo.ele_types.assign({geo.ele_set.size()});
   geo.face_types.assign({geo.face_set.size()});
   geo.nNode_face.assign({geo.face_set.size()});
 
   f.seekg(pos);
 
   /* Allocate memory for element connectivity */
-  int n = 0;
   for (auto etype : geo.ele_set) 
   {
     geo.ele2nodesBT[etype].assign({geo.nElesBT[etype], geo.nNodesPerEleBT[etype]});
     geo.eleID[etype].assign({geo.nElesBT[etype]});
     geo.nElesBT[etype] = 0; // zero out ele by type count to use for indexing
-    geo.ele_types(n) = etype;
-    n++;
   }
 
-  n = 0;
+  int n = 0;
   for (auto ftype : geo.face_set)
   {
     geo.face_types(n) = ftype;
@@ -1056,11 +1052,11 @@ void set_face_nodes(GeoStruct &geo)
     }
     else if (etype == QUAD)
     {
-
+      /// TODO
     }
     else if (etype == TRI)
     {
-
+      /// TODO
     }
     else if (etype == PRI)
     {
@@ -2660,18 +2656,10 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.face_set.insert(TRI);
   }
 
-  geo.ele_types.assign({geo.ele_set.size()});
   geo.face_types.assign({geo.face_set.size()});
   geo.nNode_face.assign({geo.face_set.size()});
 
   int n = 0;
-  for (auto etype : geo.ele_set)
-  {
-    geo.ele_types(n) = etype;
-    n++;
-  }
-
-  n = 0;
   for (auto ftype : geo.face_set)
   {
     geo.face_types(n) = ftype;

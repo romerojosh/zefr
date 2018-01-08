@@ -239,7 +239,7 @@ void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
     unsigned int nSpts, unsigned int nVars, int stream = -1);
 
 void pack_fringe_coords_wrapper(mdvector_gpu<unsigned int> &fringe_fpts, mdvector_gpu<double> &xyz,
-    mdvector_gpu<double> &coord_fpts, int nFaces, int nFpts, int nDims, int stream = -1);
+    mdvector_gpu<double> &coord_fpts, int nPts, int nDims, int stream = -1);
 
 void pack_cell_coords_wrapper(mdvector_gpu<int> &cellIDs, mdvector_gpu<double> &xyz,
     mdvector_gpu<double> &coord_spts, int nCells, int nSpts, int nDims, int stream = -1);

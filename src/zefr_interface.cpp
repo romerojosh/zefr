@@ -75,7 +75,7 @@ BasicGeo get_basic_geo_data(void)
 
   ZEFR->get_basic_geo_data(geo.btag,geo.gridType,geo.nnodes,geo.xyz,geo.iblank,geo.nwall,
                            geo.nover,geo.wallNodes,geo.overNodes,geo.nCellTypes,
-                           geo.nvert_cell,geo.nCells_type,geo.c2v);
+                           geo.nvert_cell,geo.nface_cell,geo.nCells_type,geo.c2v);
 
   return geo;
 }
@@ -100,24 +100,24 @@ double& get_grad_fpt(int face, int fpt, int dim, int var)
   return ZEFR->get_grad_fpt(face,fpt,dim,var);
 }
 
-double* get_q_spts(int &ele_stride, int &spt_stride, int &var_stride)
+double* get_q_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype)
 {
-  return ZEFR->get_u_spts(ele_stride, spt_stride, var_stride);
+  return ZEFR->get_u_spts(ele_stride, spt_stride, var_stride, etype);
 }
 
-double* get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+double* get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype)
 {
-  return ZEFR->get_du_spts(ele_stride, spt_stride, var_stride, dim_stride);
+  return ZEFR->get_du_spts(ele_stride, spt_stride, var_stride, dim_stride, etype);
 }
 
-double* get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
+double* get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int etype)
 {
-  return ZEFR->get_u_spts_d(ele_stride, spt_stride, var_stride);
+  return ZEFR->get_u_spts_d(ele_stride, spt_stride, var_stride, etype);
 }
 
-double* get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+double* get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype)
 {
-  return ZEFR->get_du_spts_d(ele_stride, spt_stride, var_stride, dim_stride);
+  return ZEFR->get_du_spts_d(ele_stride, spt_stride, var_stride, dim_stride, etype);
 }
 
 double* get_q_fpts(void)

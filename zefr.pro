@@ -37,6 +37,7 @@ SOURCES += \
     src/filter.cpp \
     src/tris.cpp \
     src/tets.cpp \
+    src/prisms.cpp \
     include/global.i
 
 HEADERS += \
@@ -65,6 +66,7 @@ HEADERS += \
     include/flux.hpp \
     include/tris.hpp \
     include/tets.hpp \
+    include/prisms.hpp \
     include/gimmik.h \
     include/zefrPyGlobals.h
 

@@ -109,6 +109,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
   /* Create eles objects */
   unsigned int elesObjID = 0;
   ele2elesObj.assign({geo.nEles});
+  geo.ele_types.assign({geo.ele_set.size()});
   if (input->iterative_method == MCGS)
   {
     for (auto etype : geo.ele_set)
@@ -124,6 +125,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
           unsigned int eleID = geo.eleID[etype](ele);
           ele2elesObj(eleID) = elesObjID;
         }
+        geo.ele_types(elesObjID) = etype;
         elesObjID++;
       }
 
@@ -148,6 +150,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
         unsigned int eleID = geo.eleID[etype](ele);
         ele2elesObj(eleID) = elesObjID;
       }
+      geo.ele_types(elesObjID) = etype;
       elesObjID++;
     }
   }
@@ -2856,6 +2859,8 @@ void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector_gpu<double>> &sou
       device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
     }
 #endif
+
+    rejected_steps++;
 
     // Try again with new dt
     step_adaptive(sourceBT);

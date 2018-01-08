@@ -528,7 +528,7 @@ void Zefr::write_wall_time(void)
 
 void Zefr::get_basic_geo_data(int& btag, int& gType, int& nnodes, double*& xyz,
     int*& iblank, int& nwall, int& nover, int*& wallNodes, int*& overNodes,
-    int& nCellTypes, int*& nvert_cell, int*& nCells_type, int**& c2v)
+    int& nCellTypes, int*& nvert_cell, int*& nface_cell, int*& nCells_type, int**& c2v)
 {
   btag = myGrid;
   gType = gridType;
@@ -543,6 +543,7 @@ void Zefr::get_basic_geo_data(int& btag, int& gType, int& nnodes, double*& xyz,
 
   geo->nv_ptr.resize(nCellTypes);
   geo->nc_ptr.resize(nCellTypes);
+  geo->ncf_ptr.resize(nCellTypes);
   geo->c2v_ptr.resize(nCellTypes);
 
   for (int i = 0; i < nCellTypes; i++)
@@ -550,10 +551,12 @@ void Zefr::get_basic_geo_data(int& btag, int& gType, int& nnodes, double*& xyz,
     ELE_TYPE etype = (ELE_TYPE)geo->ele_types(i);
     geo->nv_ptr[i] = geo->nNodesPerEleBT[etype];
     geo->nc_ptr[i] = geo->nElesBT[etype];
+    geo->ncf_ptr[i] = geo->nFacesPerEleBT[etype];
     geo->c2v_ptr[i] = geo->ele2nodesBT[etype].data();
   }
 
   nvert_cell = geo->nv_ptr.data();
+  nface_cell = geo->ncf_ptr.data();
   nCells_type = geo->nc_ptr.data();
   c2v = geo->c2v_ptr.data();
 }
@@ -634,75 +637,67 @@ void Zefr::get_gpu_geo_data(double*& coord_nodes, double*& coord_eles,
 
 double Zefr::get_u_spt(int ele, int spt, int var)
 {
-  auto etype = geo->ele_type(ele);
   int eleBT = geo->eleID_type(ele);
-
-  for (auto &e : solver->elesObjs)
-  {
-    if (e->etype == etype)
-    {
-      return e->U_spts(spt, var, eleBT);
-    }
-  }
+  return solver->elesObjs[solver->ele2elesObj(ele)]->U_spts(spt, var, eleBT);
 }
 
 double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
 {
-  auto etype = geo->ele_type(ele);
   int eleBT = geo->eleID_type(ele);
-
-  for (auto &e : solver->elesObjs)
-  {
-    if (e->etype == etype)
-    {
-      return e->dU_spts(dim, spt, var, eleBT);
-    }
-  }
+  return solver->elesObjs[solver->ele2elesObj(ele)]->U_spts(dim, spt, var, eleBT);
 }
 
-double *Zefr::get_u_spts(int &ele_stride, int &spt_stride, int &var_stride)
+double *Zefr::get_u_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype)
 {
-  ele_stride = 1;
-  var_stride = solver->elesObjs[0]->nElesPad;
-  spt_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars;
+  auto e = solver->elesObjs[etype];
 
-  return solver->elesObjs[0]->U_spts.data();
+  ele_stride = 1;
+  var_stride = e->nElesPad;
+  spt_stride = e->nElesPad * e->nVars;
+
+  return e->U_spts.data();
 }
 
-double *Zefr::get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+double *Zefr::get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype)
 {
-  ele_stride = 1;
-  var_stride = solver->elesObjs[0]->nEles;
-  spt_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars;
-  dim_stride = solver->elesObjs[0]->nEles * solver->elesObjs[0]->nVars * solver->elesObjs[0]->nSpts;
+  auto e = solver->elesObjs[etype];
 
-  return solver->elesObjs[0]->dU_spts.data();
+  ele_stride = 1;
+  var_stride = e->nEles;
+  spt_stride = e->nEles * e->nVars;
+  dim_stride = e->nEles * e->nVars * e->nSpts;
+
+  return e->dU_spts.data();
 }
 
 
-double *Zefr::get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride)
+double *Zefr::get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int etype)
 {
 #ifdef _GPU
-  ele_stride = 1;
-  var_stride = solver->elesObjs[0]->nElesPad;
-  spt_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars;
+  auto e = solver->elesObjs[etype];
 
-  return solver->elesObjs[0]->U_spts_d.data();
+  ele_stride = 1;
+  var_stride = e->nElesPad;
+  spt_stride = e->nElesPad * e->nVars;
+
+  return e->U_spts_d.data();
 #endif
 #ifdef _CPU
   ThrowException("Should not be calling get_u_spts_d - ZEFR not compiled for GPUs!");
 #endif
 }
 
-double *Zefr::get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride)
+double *Zefr::get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype)
 {
 #ifdef _GPU
-  ele_stride = 1;
-  var_stride = solver->elesObjs[0]->nElesPad;
-  spt_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars;
-  dim_stride = solver->elesObjs[0]->nElesPad * solver->elesObjs[0]->nVars * solver->elesObjs[0]->nSpts;
+  auto e = solver->elesObjs[etype];
 
-  return solver->elesObjs[0]->dU_spts_d.data();
+  ele_stride = 1;
+  var_stride = e->nEles;
+  spt_stride = e->nEles * e->nVars;
+  dim_stride = e->nEles * e->nVars * e->nSpts;
+
+  return e->dU_spts_d.data();
 #endif
 #ifdef _CPU
   ThrowException("Should not be calling get_du_spts_d - ZEFR not compiled for GPUs!");
@@ -711,16 +706,7 @@ double *Zefr::get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, i
 
 void Zefr::get_nodes_per_cell(int cellID, int &nNodes)
 {
-  auto etype = geo->eleType(cellID);
-  for (auto eles : solver->elesObjs)
-  {
-    if (eles->etype == etype)
-    {
-      nNodes = (int)eles->nSpts;
-
-      break;
-    }
-  }
+  nNodes = solver->elesObjs[solver->ele2elesObj(cellID)]->nSpts;
 }
 
 void Zefr::get_nodes_per_face(int faceID, int& nNodes)
@@ -730,33 +716,26 @@ void Zefr::get_nodes_per_face(int faceID, int& nNodes)
 
 void Zefr::get_receptor_nodes(int cellID, int& nNodes, double* xyz)
 {
-  auto etype = geo->eleType(cellID);
-  int ele = geo->eleID_type(etype);
+  auto e = solver->elesObjs[solver->ele2elesObj(cellID)];
+  int ele = geo->eleID_type(cellID);
 
-  for (auto eles : solver->elesObjs)
-  {
-    if (eles->etype == etype)
-    {
-      nNodes = (int)eles->nSpts;
+  nNodes = (int)e->nSpts;
 
-      for (int spt = 0; spt < nNodes; spt++)
-        for (int dim = 0; dim < geo->nDims; dim++)
-          xyz[3*spt+dim] = eles->coord_spts(spt, dim, ele);
-
-      break;
-    }
-  }
+  for (int spt = 0; spt < nNodes; spt++)
+    for (int dim = 0; dim < geo->nDims; dim++)
+      xyz[3*spt+dim] = e->coord_spts(spt, dim, ele);
 }
 
 void Zefr::get_face_nodes(int faceID, int &nNodes, double* xyz)
 {
   auto ftype = geo->faceType(faceID);
+  int fid = geo->faceID_type(faceID);
 
   nNodes = (int)geo->nFptsPerFace[ftype];
 
   for (int fpt = 0; fpt < nNodes; fpt++)
   {
-    int gfpt = geo->face2fpts[ftype](fpt, geo->faceID_type(faceID));
+    int gfpt = geo->face2fpts[ftype](fpt, fid);
     for (int dim = 0; dim < geo->nDims; dim++)
       xyz[3*fpt+dim] = solver->faces->coord(dim, gfpt);
   }
@@ -772,33 +751,63 @@ void Zefr::get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *x
 void Zefr::get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *xyz)
 {
 #ifdef _GPU
-  auto etype = geo->eleType(cellID);  /// TODO: something like done in faces
+  std::map<ELE_TYPE, unsigned int> ncell_type;
+  std::map<ELE_TYPE, std::vector<int>> cells_type;
+  std::map<ELE_TYPE, std::vector<double>> coords_type;
+
+  for (auto etype : geo->ele_set)
+    ncell_type[etype] = 0;
+
+  for (int i = 0; i < nCells; i++)
+  {
+    auto eles = solver->elesObjs[solver->ele2elesObj(cellIDs[i])];
+    auto etype = eles->etype;
+    nPtsCell[i] = eles->nSpts;
+    ncell_type[etype]++;
+  }
+
+  for (auto etype : geo->ele_set)
+  {
+    cells_type[etype].resize(ncell_type[etype]);
+    coords_type[etype].resize(ncell_type[etype]*3);
+    ncell_type[etype] = 0;
+  }
+
+  for (int i = 0; i < nCells; i++)
+  {
+    auto etype = geo->eleType(i);
+    cells_type[etype][ncell_type[etype]++] = cellIDs[i];
+  }
 
   for (auto eles : solver->elesObjs)
   {
-    if (eles->etype == etype)
-    {
-      eles->get_cell_coords(cellIDs,nCells,nPtsCell,xyz);
+    auto etype = eles->etype;
 
-      break;
-    }
+    eles->get_cell_coords(cells_type[etype].data(),ncell_type[etype],nPtsCell,coords_type[etype].data());
+  }
+
+  for (auto etype : geo->ele_set)
+    ncell_type[etype] = 0;
+
+  int ind = 0;
+  for (int i = 0; i < nCells; i++)
+  {
+    auto etype = geo->eleType(cellIDs[i]);
+
+    for (int k = 0; k < nPtsCell[i]; k++)
+      for (int d = 0; d < 3; d++)
+        xyz[ind + 3*k + d] = coords_type[etype][3*ncell_type[etype] + d];
+
+    ncell_type[etype]++;
+    ind += nPtsCell[i];
   }
 #endif
 }
 
 void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* rst)
 {
-  auto etype = geo->eleType(cellID);
-
-  for (auto eles : solver->elesObjs)
-  {
-    if (eles->etype == etype)
-    {
-      passFlag = eles->getRefLoc(cellID,xyz,rst);
-
-      break;
-    }
-  }
+  int ele = geo->eleID_type(cellID);
+  passFlag = solver->elesObjs[solver->ele2elesObj(cellID)]->getRefLoc(ele,xyz,rst);
 }
 
 void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
@@ -806,30 +815,12 @@ void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
 {
   /* NOTE: inode is not used, and cellID is irrelevant when all cells are
    * identical (tensor-product, one polynomial order) */
-  auto etype = geo->eleType(cellID);
-
-  for (auto eles : solver->elesObjs)
-  {
-    if (eles->etype == etype)
-    {
-      eles->get_interp_weights(rst,weights,nweights,buffsize);
-
-      break;
-    }
-  }
+  solver->elesObjs[solver->ele2elesObj(cellID)]->get_interp_weights(rst,weights,nweights,buffsize);
 }
 
 int Zefr::get_n_weights(int cellID)
 {
-  auto etype = geo->eleType(cellID);
-
-  for (auto eles : solver->elesObjs)
-  {
-    if (eles->etype == etype)
-    {
-      return (int)eles->nSpts;
-    }
-  }
+  return (int)solver->elesObjs[solver->ele2elesObj(cellID)]->nSpts;
 }
 
 void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights)
@@ -840,7 +831,80 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
   /* NOTE: inode is not used, and cellID is irrelevant when all cells are
    * identical (tensor-product, one polynomial order) */
   /// TODO: eletype
-  solver->elesObjs[0]->get_interp_weights_gpu(cellIDs,nFringe,rst,weights);
+//  solver->elesObjs[0]->get_interp_weights_gpu(cellIDs,nFringe,rst,weights);
+
+
+  std::map<ELE_TYPE, unsigned int> ncell_type;
+  std::map<ELE_TYPE, mdvector<int>> cells_type;
+  std::map<ELE_TYPE, mdvector<double>> weights_type, rst_type;
+  std::map<ELE_TYPE, mdvector_gpu<double>> weights_type_d, rst_type_d;
+
+  for (auto etype : geo->ele_set)
+    ncell_type[etype] = 0;
+
+  for (int i = 0; i < nFringe; i++)
+  {
+    auto etype = geo->eleType(cellIDs[i]);
+    ncell_type[etype]++;
+  }
+
+  for (auto eles : solver->elesObjs)
+  {
+    auto etype = eles->etype;
+    cells_type[etype].assign({ncell_type[etype]});
+    rst_type[etype].assign({ncell_type[etype],3});
+    weights_type[etype].assign({ncell_type[etype],eles->nSpts});
+    weights_type_d[etype].set_size(weights_type[etype]);
+    ncell_type[etype] = 0;
+  }
+
+  for (int i = 0; i < nFringe; i++)
+  {
+    auto etype = geo->eleType(cellIDs[i]);
+
+    int ic = ncell_type[etype];
+    cells_type[etype](ic) = cellIDs[i];
+
+    for (int d = 0; d < 3; d++)
+      rst_type[etype](ic,d) = rst[3*i+d];
+
+    ncell_type[etype]++;
+  }
+
+  for (auto eles : solver->elesObjs)
+  {
+    auto etype = eles->etype;
+
+    rst_type_d[etype] = rst_type[etype];
+
+    mdvector_gpu<int> donors_d;
+    donors_d = cells_type[etype];
+
+    eles->get_interp_weights_gpu(donors_d.data(),ncell_type[etype],
+        rst_type_d[etype].data(),weights_type_d[etype].data());
+
+    weights_type[etype] = weights_type_d[etype];
+    donors_d.free_data();
+    weights_type_d[etype].free_data();
+    rst_type_d[etype].free_data();
+  }
+
+  for (auto etype : geo->ele_set)
+    ncell_type[etype] = 0;
+
+  int ind = 0;
+  for (int i = 0; i < nFringe; i++)
+  {
+    auto eles = solver->elesObjs[solver->ele2elesObj(cellIDs[i])];
+    auto etype = eles->etype;
+    int nSpts = eles->nSpts;
+
+    for (int k = 0; k < nSpts; k++)
+      weights[ind + k] = weights_type[etype](ncell_type[etype],k);
+
+    ncell_type[etype]++;
+    ind += nSpts;
+  }
 #endif
 }
 

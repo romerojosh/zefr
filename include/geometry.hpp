@@ -95,7 +95,7 @@ struct GeoStruct
   mdvector<int> face2eles, face2eles_idx;
   std::map<ELE_TYPE, mdvector<int>> ele2face, face2nodes;
   std::vector<int*> c2v_ptr, f2v_ptr, c2f_ptr;
-  std::vector<int> nf_ptr, nv_ptr, nc_ptr;
+  std::vector<int> nf_ptr, nv_ptr, nc_ptr, ncf_ptr;
 
   std::vector<unsigned int> bnd_ids;  //! List of boundary conditions for each boundary
   mdvector<char> gfpt2bnd;

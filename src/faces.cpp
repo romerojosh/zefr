@@ -2400,7 +2400,8 @@ void Faces::get_U_index(int faceID, int fpt, int& ind, int& stride)
 {
   /* U : nFpts x nVars x 2 */
   auto ftype = geo->faceType(faceID);
-  int i = geo->face2fpts[ftype](fpt, faceID);
+  int fid = geo->faceID_type(faceID);
+  int i = geo->face2fpts[ftype](fpt, fid);
   int ic1 = geo->face2eles(faceID,0);
   int ic2 = geo->face2eles(faceID,1);
 
@@ -2423,7 +2424,8 @@ double& Faces::get_u_fpt(int faceID, int fpt, int var)
 {
   /* U : nFpts x nVars x 2 */
   auto ftype = geo->faceType(faceID);
-  int i = geo->face2fpts[ftype](fpt, faceID);
+  int fid = geo->faceID_type(faceID);
+  int i = geo->face2fpts[ftype](fpt, fid);
   int ic1 = geo->face2eles(faceID,0);
   int ic2 = geo->face2eles(faceID,1);
 
@@ -2440,7 +2442,8 @@ double& Faces::get_grad_fpt(int faceID, int fpt, int var, int dim)
 {
   /* U : nFpts x nVars x 2 */
   auto ftype = geo->faceType(faceID);
-  int i = geo->face2fpts[ftype](fpt, faceID);
+  int fid = geo->faceID_type(faceID);
+  int i = geo->face2fpts[ftype](fpt, fid);
   int ic1 = geo->face2eles(faceID,0);
   int ic2 = geo->face2eles(faceID,1);
 
@@ -2464,7 +2467,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 
   for (auto ftype : geo->face_set)
   {
-    U_fringe[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype], nVars});
+    U_fringe[ftype].resize({nfringe_type[ftype], geo->nFptsPerFace[ftype], nVars});
     fringe_fpts[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
     fringe_side[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
   }
@@ -2476,6 +2479,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
   {
     int fid = fringeIDs[face];
     ELE_TYPE ftype = geo->faceType(fid);
+    int F = nfringe_type[ftype];
 
     unsigned int side = 0;
     int ic1 = geo->face2eles(fid,0);
@@ -2484,8 +2488,8 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
 
     for (unsigned int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
     {
-      fringe_fpts[ftype](fpt,nfringe_type[ftype]) = geo->face2fpts[ftype](fpt, fid);
-      fringe_side[ftype](fpt,nfringe_type[ftype]) = side;
+      fringe_fpts[ftype](fpt,F) = geo->face2fpts[ftype](fpt, geo->faceID[ftype](fid));
+      fringe_side[ftype](fpt,F) = side;
     }
 
     nfringe_type[ftype]++;
@@ -2504,7 +2508,7 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe)
       {
         unsigned int gfpt = fringe_fpts[ftype](fpt,face);
         unsigned int side = fringe_side[ftype](fpt,face);
-        U_fringe[ftype](fpt,loc_fid[ftype],var) = U(side,var,gfpt);
+        U_fringe[ftype](loc_fid[ftype],fpt,var) = U(side,var,gfpt);
       }
 
       loc_fid[ftype]++;
@@ -2531,28 +2535,49 @@ void Faces::fringe_grad_to_device(int* fringeIDs, int nFringe)
 
   if (nFringe == 0) return;
 
-  dU_fringe.resize({geo->nFptsPerFace, (uint)nFringe, nVars, nDims});
+  for (auto ftype : geo->face_set)
+    nfringe_type[ftype] = 0;
 
-  for (unsigned int dim = 0; dim < nDims; dim++)
+  for (int i = 0; i < nFringe; i++)
+    nfringe_type[geo->faceType(fringeIDs[i])]++;
+
+  for (auto ftype : geo->face_set)
   {
-    for (unsigned int var = 0; var < nVars; var++)
+    dU_fringe[ftype].resize({nfringe_type[ftype], geo->nFptsPerFace[ftype], nDims, nVars});
+  }
+
+  for (auto ftype : geo->face_set)
+    nfringe_type[ftype] = 0;
+
+  for (unsigned int face = 0; face < nFringe; face++)
+  {
+    int fid = fringeIDs[face];
+    ELE_TYPE ftype = geo->faceType(fid);
+    int F = nfringe_type[ftype];
+
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int face = 0; face < nFringe; face++)
+      for (unsigned int var = 0; var < nVars; var++)
       {
-        for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+        for (unsigned int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
         {
-          unsigned int gfpt = fringe_fpts(fpt,face);
-          unsigned int side = fringe_side(fpt,face);
-          dU_fringe(fpt,face,var,dim) = dU(side,dim,var,gfpt);
+          unsigned int gfpt = fringe_fpts[ftype](fpt,F);
+          unsigned int side = fringe_side[ftype](fpt,F);
+          dU_fringe[ftype](F,fpt,dim,var) = dU(side,dim,var,gfpt);
         }
       }
     }
+
+    nfringe_type[ftype]++;
   }
 
-  dU_fringe_d = dU_fringe;
+  for (auto ftype : geo->face_set)
+  {
+    dU_fringe_d[ftype] = dU_fringe[ftype];
 
-  unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
-      nFringe,geo->nFptsPerFace,nVars,nDims,3);
+    unpack_fringe_grad_wrapper(dU_fringe_d[ftype],dU_d,fringe_fpts_d[ftype],fringe_side_d[ftype],
+        nfringe_type[ftype],geo->nFptsPerFace[ftype],nVars,nDims,3);
+  }
 
   check_error();
 }
@@ -2562,37 +2587,92 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 {
   if (nFringe == 0) return;
 
-  U_fringe_d.assign({(uint)nFringe, geo->nFptsPerFace, nVars}, data, 3);
+  for (auto ftype : geo->face_set)
+    nfringe_type[ftype] = 0;
 
-  if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
+  for (int i = 0; i < nFringe; i++)
+    nfringe_type[geo->faceType(fringeIDs[i])]++;
+
+  for (auto ftype : geo->face_set)
   {
-    fringe_fpts.resize({geo->nFptsPerFace, (uint)nFringe});
-    fringe_side.resize({geo->nFptsPerFace, (uint)nFringe});
-    for (int face = 0; face < nFringe; face++)
-    {
-      unsigned int side = 0;
-      int ic1 = geo->face2eles(fringeIDs[face],0);
-      if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
-        side = 1;
+    U_fringe[ftype].resize({nfringe_type[ftype], geo->nFptsPerFace[ftype], nVars});
+    fringe_fpts[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
+    fringe_side[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
+  }
 
-      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
+  for (auto ftype : geo->face_set)
+    nfringe_type[ftype] = 0;
+
+  int ind = 0;
+  for (int face = 0; face < nFringe; face++)
+  {
+    int fid = fringeIDs[face];
+    ELE_TYPE ftype = geo->faceType(fid);
+    int F = nfringe_type[ftype];
+
+    for (int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
+    {
+      for (int var = 0; var < nVars; var++)
       {
-        fringe_fpts(fpt,face) = geo->face2fpts(fpt, fringeIDs[face]);
-        fringe_side(fpt,face) = side;
+        U_fringe[ftype](F,fpt,var) = data[ind+fpt*nVars+var];
       }
     }
 
-    fringe_fpts_d.set_size({geo->nFptsPerFace, (uint)nFringe});
-    fringe_side_d.set_size({geo->nFptsPerFace, (uint)nFringe});
-
-    fringe_fpts_d = fringe_fpts;
-    fringe_side_d = fringe_side;
-
-    sync_stream(0);
+    ind += geo->nFptsPerFace[ftype] * nVars;
+    nfringe_type[ftype]++;
   }
 
-  unpack_fringe_u_wrapper(U_fringe_d,U_d,U_ldg_d,fringe_fpts_d,fringe_side_d,nFringe,
-      geo->nFptsPerFace,nVars,3);
+  if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
+  {
+    for (auto &nf : nfringe_type)
+    {
+      auto ftype = nf.first;
+      fringe_fpts[ftype].resize({geo->nFptsPerFace[ftype], (uint)nf.second});
+      fringe_side[ftype].resize({geo->nFptsPerFace[ftype], (uint)nf.second});
+      nf.second = 0;
+    }
+
+    for (int face = 0; face < nFringe; face++)
+    {
+      int fid = fringeIDs[face];
+      ELE_TYPE ftype = geo->faceType(fid);
+      int F = nfringe_type[ftype];
+
+      unsigned int side = 0;
+      int ic1 = geo->face2eles(fid,0);
+      if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
+        side = 1;
+
+      for (unsigned int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
+      {
+        fringe_fpts[ftype](fpt,F) = geo->face2fpts[ftype](fpt, geo->faceID[ftype](fid));
+        fringe_side[ftype](fpt,F) = side;
+      }
+
+      nfringe_type[ftype]++;
+    }
+
+    for (auto ftype : geo->face_set)
+    {
+      fringe_fpts_d[ftype].set_size({geo->nFptsPerFace[ftype], (uint)nfringe_type[ftype]});
+      fringe_side_d[ftype].set_size({geo->nFptsPerFace[ftype], (uint)nfringe_type[ftype]});
+
+      fringe_fpts_d[ftype] = fringe_fpts[ftype];
+      fringe_side_d[ftype] = fringe_side[ftype];
+    }
+  }
+
+  for (auto &UF : U_fringe)
+    U_fringe_d[UF.first] = UF.second;
+
+  sync_stream(0);
+
+  for (auto &UFD : U_fringe_d)
+  {
+    auto ftype = UFD.first;
+    unpack_fringe_u_wrapper(UFD.second,U_d,U_ldg_d,fringe_fpts_d[ftype],
+        fringe_side_d[ftype],nfringe_type[ftype],geo->nFptsPerFace[ftype],nVars,3);
+  }
 
   check_error();
 }
@@ -2604,10 +2684,44 @@ void Faces::fringe_grad_to_device(int* fringeIDs, int nFringe, double *data)
 
   if (nFringe == 0) return;
 
-  dU_fringe_d.assign({(uint)nFringe, geo->nFptsPerFace, nDims, nVars}, data, 3);
+  for (auto ftype : geo->face_set)
+  {
+    dU_fringe[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype], nDims, nVars});
+  }
 
-  unpack_fringe_grad_wrapper(dU_fringe_d,dU_d,fringe_fpts_d,fringe_side_d,
-      nFringe,geo->nFptsPerFace,nVars,nDims,3);
+  for (auto ftype : geo->face_set)
+    nfringe_type[ftype] = 0;
+
+  int ind = 0;
+  for (int face = 0; face < nFringe; face++)
+  {
+    int fid = fringeIDs[face];
+    ELE_TYPE ftype = geo->faceType(fid);
+    int F = nfringe_type[ftype];
+
+    for (int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
+    {
+      for (int dim = 0; dim < nDims; dim++)
+      {
+        for (int var = 0; var < nVars; var++)
+        {
+          dU_fringe[ftype](F,fpt,dim,var) = data[ind + (fpt*nDims + dim)*nVars + var];
+        }
+      }
+    }
+
+    ind += geo->nFptsPerFace[ftype] * nVars * nDims;
+  }
+
+  for (auto du : dU_fringe)
+  {
+    auto ftype = du.first;
+
+    dU_fringe_d[ftype].assign({(uint)nfringe_type[ftype], geo->nFptsPerFace[ftype], nDims, nVars}, du.second.data(), 3);
+
+    unpack_fringe_grad_wrapper(dU_fringe_d[ftype],dU_d,fringe_fpts_d[ftype],
+        fringe_side_d[ftype],nfringe_type[ftype],geo->nFptsPerFace[ftype],nVars,nDims,3);
+  }
 
   check_error();
 }
@@ -2616,18 +2730,31 @@ void Faces::get_face_coords(int* fringeIDs, int nFringe, int* nPtsFace, double* 
 {
   if (nFringe == 0) return;
 
-  fringeGFpts.resize({(uint)nFringe, geo->nFptsPerFace});
+  int npts = 0;
   for (int face = 0; face < nFringe; face++)
-    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace; fpt++)
-      fringeGFpts(face,fpt) = geo->face2fpts(fpt, fringeIDs[face]);
+  {
+    int fid = fringeIDs[face];
+    ELE_TYPE ftype = geo->faceType(fid);
+    npts += geo->nFptsPerFace[ftype];
+  }
+
+  fringeGFpts.resize({npts});
+  int pt = 0;
+  for (int face = 0; face < nFringe; face++)
+  {
+    int fid = fringeIDs[face];
+    auto ftype = geo->faceType(fid);
+
+    for (unsigned int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
+      fringeGFpts(pt++) = geo->face2fpts[ftype](fpt, fringeIDs[face]);
+  }
 
   fringeGFpts_d.set_size(fringeGFpts);
   fringeGFpts_d = fringeGFpts;
 
-  //fringeIDs_d.assign({nFaces}, faceIDs);
-  fringeCoords_d.set_size({(uint)nFringe,geo->nFptsPerFace,nDims});
+  fringeCoords_d.set_size({npts, nDims});
 
-  pack_fringe_coords_wrapper(fringeGFpts_d, fringeCoords_d, coord_d, nFringe, geo->nFptsPerFace, nDims);
+  pack_fringe_coords_wrapper(fringeGFpts_d, fringeCoords_d, coord_d, npts, nDims);
 
   copy_from_device(xyz, fringeCoords_d.data(), fringeCoords_d.size());
 }

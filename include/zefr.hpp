@@ -108,7 +108,7 @@ public:
   // Geometry Access Functions
   void get_basic_geo_data(int &btag, int& gType, int &nnodes, double *&xyz, int *&iblank,
                           int &nwall, int &nover, int *&wallNodes, int *&overNodes,
-                          int &nCellTypes, int*& nvert_cell, int*& nCells_type,
+                          int &nCellTypes, int*& nvert_cell, int*& nface_cell, int*& nCells_type,
                           int**& c2v);
 
   void get_extra_geo_data(int &nFaceTypes, int*& faceTypes, int*& cellTypes,
@@ -125,10 +125,10 @@ public:
   // Solution-data access functions
   double get_u_spt(int ele, int spt, int var);
   double get_grad_spt(int ele, int spt, int dim, int var);
-  double *get_u_spts(int &ele_stride, int &spt_stride, int &var_stride);
-  double *get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
-  double *get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride);
-  double *get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride);
+  double *get_u_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype = 0);
+  double *get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);
+  double *get_u_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int etype = 0);
+  double *get_du_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);
 
   // Callback Functions for TIOGA
   void get_nodes_per_cell(int cellID, int& nNodes);
