@@ -61,6 +61,9 @@ class Tris: public Elements
 
     double calc_orthonormal_basis(unsigned int mode, const double *loc);
 
+    double rst_max_lim(int dim, double *rst);
+    double rst_min_lim(int dim, double *rst);
+
   public:
     Tris(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order = -1);
 

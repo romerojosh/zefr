@@ -857,3 +857,21 @@ void Tets::modify_sensor()
       1.0, temp.data(), nSpts3D, oppEc.data(), nSpts, 0.0, oppS.data(), nSpts);
 
 } 
+
+double Tets::rst_max_lim(int dim, double* rst)
+{
+  switch (dim)
+  {
+    case 0:
+      return std::min(rst[0], 1.0);
+    case 1:
+      return std::min(rst[1], -rst[0]);
+    case 2:
+      return std::min(rst[2], -rst[0]-rst[1]);
+  }
+}
+
+double Tets::rst_min_lim(int dim, double* rst)
+{
+  return std::max(rst[dim], -1.0);
+}

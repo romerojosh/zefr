@@ -3152,7 +3152,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
       int bcType = geo.bnd_ids[bnd];
       if (bcType == OVERSET)
       {
-        for (int j = 0; j < geo.nNdFaceCurved[etype]; j++)
+        for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
           overPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved[etype](n, j)));
 
         geo.overFaceList.push_back(fid);
@@ -3164,7 +3164,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
                bcType == ADIABATIC_NOSLIP_MOVING ||
                bcType == SYMMETRY)
       {
-        for (int j = 0; j < geo.nNdFaceCurved[etype]; j++)
+        for (int j = 0; j < geo.nNdFaceCurved[ftype]; j++)
           wallPts.insert(geo.ele2nodesBT[etype](ele, geo.faceNodesCurved[etype](n, j)));
 
         geo.wallFaceList.push_back(fid);

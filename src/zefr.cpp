@@ -813,8 +813,7 @@ void Zefr::donor_inclusion_test(int cellID, double* xyz, int& passFlag, double* 
 void Zefr::donor_frac(int cellID, int &nweights, int* inode, double* weights,
                       double* rst, int buffsize)
 {
-  /* NOTE: inode is not used, and cellID is irrelevant when all cells are
-   * identical (tensor-product, one polynomial order) */
+  /* NOTE: inode is not used */
   solver->elesObjs[solver->ele2elesObj(cellID)]->get_interp_weights(rst,weights,nweights,buffsize);
 }
 
@@ -827,12 +826,6 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
 {
 #ifdef _GPU
   if (nFringe == 0) return;
-
-  /* NOTE: inode is not used, and cellID is irrelevant when all cells are
-   * identical (tensor-product, one polynomial order) */
-  /// TODO: eletype
-//  solver->elesObjs[0]->get_interp_weights_gpu(cellIDs,nFringe,rst,weights);
-
 
   std::map<ELE_TYPE, unsigned int> ncell_type;
   std::map<ELE_TYPE, mdvector<int>> cells_type;

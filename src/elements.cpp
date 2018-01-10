@@ -2742,6 +2742,17 @@ void Elements::getBoundingBox(int ele, double bbox[6])
   }
 }
 
+void print_nodes(const double* pts, int id, int npts)
+{
+  printf("Points%d = [",id);
+  for (int i = 0; i < npts - 1; i++)
+    printf("%f %f %f;\n",pts[3*i+0],pts[3*i+1],pts[3*i+2]);
+
+  int I = npts-1;
+  printf("%f %f %f];\n",pts[3*I+0],pts[3*I+1],pts[3*I+2]);
+}
+
+
 bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 {
   double xmin, ymin, zmin;
@@ -2828,7 +2839,11 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
 
     norm = dx.norm();
     for (int i = 0; i < 3; i++)
-      rst[i] = std::max(std::min(rst[i]+delta[i],1.),-1.);
+    {
+      rst[i] += delta[i];
+      rst[i] = rst_max_lim(i,rst);
+      rst[i] = rst_min_lim(i,rst);
+    }
 
     if (iter > 1 && norm > .99*norm_prev) // If it's clear we're not converging
       break;

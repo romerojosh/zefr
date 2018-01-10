@@ -64,6 +64,9 @@ class Prisms: public Elements
 
     double calc_orthonormal_basis(unsigned int mode, const double *loc);
 
+    double rst_max_lim(int dim, double *rst);
+    double rst_min_lim(int dim, double *rst);
+
     mdvector<double> weights_fptsTri, weights_fptsQuad;
     unsigned int nFptsQuad, nFptsTri;
     unsigned int nSpts1D, nSpts2D;

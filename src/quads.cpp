@@ -687,3 +687,13 @@ double Quads::calc_orthonormal_basis(unsigned int mode, const double *loc)
 
 
 void Quads::modify_sensor(){ /* Do nothing */ }
+
+double Quads::rst_max_lim(int dim, double* rst)
+{
+  return std::min(rst[dim], 1.0);
+}
+
+double Quads::rst_min_lim(int dim, double* rst)
+{
+  return std::max(rst[dim], -1.0);
+}

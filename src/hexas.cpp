@@ -882,3 +882,13 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
 }
 
 void Hexas::modify_sensor(){ /* Do nothing */ }
+
+double Hexas::rst_max_lim(int dim, double* rst)
+{
+  return std::min(rst[dim], 1.0);
+}
+
+double Hexas::rst_min_lim(int dim, double* rst)
+{
+  return std::max(rst[dim], -1.0);
+}

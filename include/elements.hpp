@@ -248,6 +248,9 @@ class Elements
     virtual double calc_nodal_face_basis(unsigned int face, unsigned int pt, const double *loc) = 0;
     virtual double calc_orthonormal_basis(unsigned int mode, const double *loc) = 0;
 
+    virtual double rst_max_lim(int dim, double* rst) = 0;
+    virtual double rst_min_lim(int dim, double* rst) = 0;
+
   public:
     void setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in);
     void setup_filter();

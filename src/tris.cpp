@@ -577,9 +577,6 @@ void Tris::calc_shape(mdvector<double> &shape_val, const double* loc)
   if (shape_order > 2)
     ThrowException("Triangle with supplied shape_order unsupported!");
 
-  double xi = loc[0]; 
-  double eta = loc[1];
-
   /* Setup shape node locations */
   auto loc_pts_1D = Shape_pts(shape_order); unsigned int nPts1D = loc_pts_1D.size();
   mdvector<double> loc_pts({nNodes, nDims});
@@ -721,3 +718,19 @@ void Tris::modify_sensor()
       1.0, temp.data(), nSpts2D, oppEc.data(), nSpts, 0.0, oppS.data(), nSpts);
 
 } 
+
+double Tris::rst_max_lim(int dim, double* rst)
+{
+  switch (dim)
+  {
+    case 0:
+      return std::min(rst[0], 1.0);
+    case 1:
+      return std::min(rst[1], -rst[0]);
+  }
+}
+
+double Tris::rst_min_lim(int dim, double* rst)
+{
+  return std::max(rst[dim], -1.0);
+}

@@ -798,3 +798,21 @@ void Prisms::modify_sensor()
       1.0, temp.data(), nSpts3D, oppEc.data(), nSpts, 0.0, oppS.data(), nSpts);
 
 } 
+
+double Prisms::rst_max_lim(int dim, double* rst)
+{
+  switch (dim)
+  {
+    case 0:
+      return std::min(rst[0], 1.0);
+    case 1:
+      return std::min(rst[1], -rst[0]);
+    case 2:
+      return std::min(rst[2], 1.0);
+  }
+}
+
+double Prisms::rst_min_lim(int dim, double* rst)
+{
+  return std::max(rst[dim], -1.0);
+}
