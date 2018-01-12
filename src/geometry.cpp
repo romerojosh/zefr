@@ -2464,12 +2464,6 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.nElesBT[etype] = dims[1];
     geo.eleID[etype].assign({dims[1]});
 
-    for (int ele = 0; ele < dims[1]; ele++)
-    {
-      geo.eleID[etype](ele) = geo.nEles + ele;
-      geo.eleType.push_back(etype);
-    }
-
     geo.nEles += dims[1];
 
     if (etype == HEX)
@@ -2569,6 +2563,15 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
           geo.ele_nodes[etype](nd, d, ele) = tmp_nodes(ndmap[nd], ele, d);
   }
 
+  int eleID = 0;
+  geo.eleType.assign({geo.nEles});
+  for (auto etype : geo.ele_set)
+    for (int ele = 0; ele < geo.nElesBT[etype]; ele++)
+    {
+      geo.eleID[etype](ele) = eleID;
+      geo.eleType(eleID) = etype;
+      eleID++;
+    }
 
   // Collect total array of all nodes in mesh
   geo.nNodes = 0;
@@ -2862,9 +2865,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
   geo.eleID_type.assign({geo.nEles}, -1);
   for (int ele = 0; ele < geo.nEles; ele++)
-  {
     geo.eleID_type(ele) = geo.nElesBT[geo.eleType(ele)]++;
-  }
 
   geo.face2eles.assign({geo.nFaces, 2}, -1);
   geo.faceID_type.assign({geo.nFaces}, -1);

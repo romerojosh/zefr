@@ -358,10 +358,10 @@ void Prisms::calc_nodal_basis(double *loc, double* basis)
   {
     unsigned int m1 = i / nSpts2D;
     unsigned int m2 = i % nSpts2D;
-    lag_i[i] = Dubiner2D(order, loc[0], loc[1], m2) * Legendre(m1, loc[2]);
+    lag_i[i] = Dubiner2D(order, loc[0], loc[1], m2) * Legendre(m1, loc[2]) * std::sqrt(m1+.5);
   }
 
-  cblas_dgemv(CblasRowMajor,CblasNoTrans,nSpts,nSpts,1.0,inv_vand.data(),nSpts,
+  cblas_dgemv(CblasRowMajor,CblasTrans,nSpts,nSpts,1.0,inv_vand.data(),nSpts,
               lag_i.data(),1,0.0,basis,1);
 }
 

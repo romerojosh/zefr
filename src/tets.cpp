@@ -400,7 +400,7 @@ void Tets::calc_nodal_basis(double *loc, double* basis)
   for (unsigned int i = 0; i < nSpts; i++)
     lag_i[i] = Dubiner3D(order, loc[0], loc[1], loc[2], i);
 
-  cblas_dgemv(CblasRowMajor,CblasNoTrans,nSpts,nSpts,1.0,inv_vand.data(),nSpts,
+  cblas_dgemv(CblasRowMajor,CblasTrans,nSpts,nSpts,1.0,inv_vand.data(),nSpts,
               lag_i.data(),1,0.0,basis,1);
 }
 
