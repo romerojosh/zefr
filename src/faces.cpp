@@ -2595,9 +2595,9 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
 
   for (auto ftype : geo->face_set)
   {
-    U_fringe[ftype].resize({nfringe_type[ftype], geo->nFptsPerFace[ftype], nVars});
-    fringe_fpts[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
-    fringe_side[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
+    U_fringe[ftype].assign({nfringe_type[ftype], geo->nFptsPerFace[ftype], nVars});
+    fringe_fpts[ftype].assign({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
+    fringe_side[ftype].assign({geo->nFptsPerFace[ftype], nfringe_type[ftype]});
   }
 
   for (auto ftype : geo->face_set)
@@ -2642,7 +2642,6 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
       int ic1 = geo->face2eles(fid,0);
       if (ic1 >= 0 && geo->iblank_cell(ic1) == NORMAL)
         side = 1;
-
       for (unsigned int fpt = 0; fpt < geo->nFptsPerFace[ftype]; fpt++)
       {
         fringe_fpts[ftype](fpt,F) = geo->face2fpts[ftype](fpt, geo->faceID[ftype](fid));
@@ -2662,19 +2661,18 @@ void Faces::fringe_u_to_device(int* fringeIDs, int nFringe, double* data)
     }
   }
 
-  for (auto &UF : U_fringe)
-    U_fringe_d[UF.first] = UF.second;
+  for (auto ftype : geo->face_set)
+    U_fringe_d[ftype].assign({nfringe_type[ftype], geo->nFptsPerFace[ftype], nVars}, U_fringe[ftype].data());
 
   sync_stream(0);
 
-  for (auto &UFD : U_fringe_d)
+  for (auto ftype : geo->face_set)
   {
-    auto ftype = UFD.first;
-    unpack_fringe_u_wrapper(UFD.second,U_d,U_ldg_d,fringe_fpts_d[ftype],
+    if (nfringe_type[ftype] == 0) continue;
+
+    unpack_fringe_u_wrapper(U_fringe_d[ftype],U_d,U_ldg_d,fringe_fpts_d[ftype],
         fringe_side_d[ftype],nfringe_type[ftype],geo->nFptsPerFace[ftype],nVars,3);
   }
-
-  check_error();
 }
 
 void Faces::fringe_grad_to_device(int* fringeIDs, int nFringe, double *data)
@@ -2686,7 +2684,7 @@ void Faces::fringe_grad_to_device(int* fringeIDs, int nFringe, double *data)
 
   for (auto ftype : geo->face_set)
   {
-    dU_fringe[ftype].resize({geo->nFptsPerFace[ftype], nfringe_type[ftype], nDims, nVars});
+    dU_fringe[ftype].resize({nfringe_type[ftype], geo->nFptsPerFace[ftype], nDims, nVars});
   }
 
   for (auto ftype : geo->face_set)
@@ -2711,6 +2709,7 @@ void Faces::fringe_grad_to_device(int* fringeIDs, int nFringe, double *data)
     }
 
     ind += geo->nFptsPerFace[ftype] * nVars * nDims;
+    nfringe_type[ftype]++;
   }
 
   for (auto du : dU_fringe)

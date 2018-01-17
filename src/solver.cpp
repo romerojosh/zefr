@@ -1609,7 +1609,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
       /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
       for (auto e : elesObjs)
         e->compute_dU_spts();
-      
+
       overset_u_recv();
 
       /* Compute common interface solution and convective flux at non-MPI flux points */
@@ -3965,7 +3965,9 @@ void FRSolver::step_LSRK_stage_start(int stage)
     {
       e->U_ini = e->U_spts;
       e->U_til = e->U_spts;
-      e->rk_err.fill(0.0);
+
+      if (input->adapt_dt)
+        e->rk_err.fill(0.0);
     }
 #endif
 
@@ -3974,7 +3976,9 @@ void FRSolver::step_LSRK_stage_start(int stage)
     {
       device_copy(e->U_ini_d, e->U_spts_d, e->U_spts_d.max_size());
       device_copy(e->U_til_d, e->U_spts_d, e->U_spts_d.max_size());
-      device_fill(e->rk_err_d, e->rk_err_d.max_size());
+
+      if (input->adapt_dt)
+        device_fill(e->rk_err_d, e->rk_err_d.max_size());
 
       // Get current delta t [dt(0)] (updated on GPU)
       copy_from_device(e->dt.data(), e->dt_d.data(), 1);
@@ -4019,18 +4023,21 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
   // Update Error
   for (auto e : elesObjs)
   {
-#pragma omp parallel for collapse(2)
-    for (unsigned int spt = 0; spt < e->nSpts; spt++)
+    if (input->adapt_dt)
     {
-      for (unsigned int n = 0; n < e->nVars; n++)
+#pragma omp parallel for collapse(2)
+      for (unsigned int spt = 0; spt < e->nSpts; spt++)
       {
-#pragma omp simd
-        for (unsigned int ele = 0; ele < e->nEles; ele++)
+        for (unsigned int n = 0; n < e->nVars; n++)
         {
-          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+#pragma omp simd
+          for (unsigned int ele = 0; ele < e->nEles; ele++)
+          {
+            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
 
-          e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
-              e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+            e->rk_err(spt, n, ele) -= (bi - bhi) * e->dt(0) /
+                e->jaco_det_spts(spt,ele) * e->divF_spts(0, spt, n, ele);
+          }
         }
       }
     }
@@ -4085,13 +4092,13 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
     {
       LSRK_update_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d, e->divF_spts_d,
           e->jaco_det_spts_d, e->dt(0), ai, bi, bhi, e->nSpts, e->nEles,
-          e->nVars, stage, input->nStages, input->overset, geo.iblank_cell_d.data());
+          e->nVars, stage, input->nStages, input->adapt_dt, input->overset, geo.iblank_cell_d.data());
     }
     else
     {
       LSRK_update_source_wrapper(e->U_spts_d, e->U_til_d, e->rk_err_d,
           e->divF_spts_d, sourceBT.at(e->etype), e->jaco_det_spts_d, e->dt(0), ai, bi, bhi,
-          e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->overset,
+          e->nSpts, e->nEles, e->nVars, stage, input->nStages, input->adapt_dt, input->overset,
           geo.iblank_cell_d.data());
     }
   }

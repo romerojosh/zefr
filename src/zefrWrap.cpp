@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
 
         z->do_rk_stage_mid(iter,stage);
 
-//        if (nGrids > 1 && inp.viscous)
-//          tioga_dataupdate_ab(5, 1);
+        if (nGrids > 1 && inp.viscous)
+          tioga_dataupdate_ab(5, 1);
 
         z->do_rk_stage_finish(iter,stage);
       }

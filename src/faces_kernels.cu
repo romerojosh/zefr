@@ -1558,7 +1558,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
         UR[n] = U_ldg(1, n, fpt); 
     }
 
-    LDG_flux<nVars, nDims, equation>(UL, UR, dUL, dUR, Fc, norm, AdvDiff_D, diffCo(fpt), gamma, 
+    LDG_flux<nVars, nDims, equation>(UL, UR, dUL, dUR, Fc, norm, AdvDiff_D, diffCo(fpt), gamma,
         prandtl, mu, rt, c_sth, fix_vis, LDG_bias_, beta, tau);
   }
 

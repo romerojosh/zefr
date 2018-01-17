@@ -182,27 +182,27 @@ void mdvector_gpu<T>::assign(std::vector<unsigned> dims, T* vec, int stream)
   if (allocated && max_size_ != size_)
     free_data();
 
-  if(!allocated)
+  if (!allocated)
   {
     max_size_ = size_;
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
 
-    strides_h[0] = 1;
-
-    for (int i = 0; i < nDims; i++)
-    {
-      strides_h[i] = 1;
-      for (unsigned int j = nDims - i; j < nDims; j++)
-        strides_h[i] *= dims[j];
-
-      dims_h[i] = dims[i];
-    }
-
-    ldim_ = strides_h[nDims-1];
-
     allocated = true;
   }
+
+  strides_h[0] = 1;
+
+  for (int i = 0; i < nDims; i++)
+  {
+    strides_h[i] = 1;
+    for (unsigned int j = nDims - i; j < nDims; j++)
+      strides_h[i] *= dims[j];
+
+    dims_h[i] = dims[i];
+  }
+
+  ldim_ = strides_h[nDims-1];
 
   copy_to_device(strides, strides_h, 6, stream);
   copy_to_device(values, vec, size_, stream);
@@ -265,10 +265,10 @@ void mdvector_gpu<T>::set_size(std::vector<unsigned int> dims)
     allocate_device_data(values, max_size_);
     allocate_device_data(strides, 6);
 
-    copy_to_device(strides, strides_h, 6);
-
     allocated = true;
   }
+
+  copy_to_device(strides, strides_h, 6);
 }
 
 template <typename T>

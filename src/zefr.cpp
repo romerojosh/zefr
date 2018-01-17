@@ -751,6 +751,8 @@ void Zefr::get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *x
 void Zefr::get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *xyz)
 {
 #ifdef _GPU
+  if (nCells == 0) return;
+
   std::map<ELE_TYPE, unsigned int> ncell_type;
   std::map<ELE_TYPE, std::vector<int>> cells_type;
   std::map<ELE_TYPE, std::vector<double>> coords_type;
@@ -766,10 +768,12 @@ void Zefr::get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *x
     ncell_type[etype]++;
   }
 
-  for (auto etype : geo->ele_set)
+  for (int i = 0; i < geo->ele_types.size(); i++)
   {
+    ELE_TYPE etype = (ELE_TYPE)geo->ele_types(i);
+
     cells_type[etype].resize(ncell_type[etype]);
-    coords_type[etype].resize(ncell_type[etype]*3);
+    coords_type[etype].resize(ncell_type[etype]*solver->elesObjs[i]->nSpts*3);
     ncell_type[etype] = 0;
   }
 
@@ -796,7 +800,7 @@ void Zefr::get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *x
 
     for (int k = 0; k < nPtsCell[i]; k++)
       for (int d = 0; d < 3; d++)
-        xyz[ind + 3*k + d] = coords_type[etype][3*ncell_type[etype] + d];
+        xyz[ind + 3*k + d] = coords_type[etype][3*(nPtsCell[i]*ncell_type[etype] + k) + d];
 
     ncell_type[etype]++;
     ind += nPtsCell[i];
@@ -876,6 +880,8 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
     eles->get_interp_weights_gpu(donors_d.data(),ncell_type[etype],
         rst_type_d[etype].data(),weights_type_d[etype].data());
 
+    sync_stream(3);
+
     weights_type[etype] = weights_type_d[etype];
     donors_d.free_data();
     weights_type_d[etype].free_data();
@@ -920,7 +926,7 @@ void Zefr::update_iblank_gpu(void)
     int face = geo->fpt2face[fpt];
     geo->iblank_fpts(fpt) = geo->iblank_face(face);
   }
-  check_error();
+
   geo->iblank_fpts_d = geo->iblank_fpts;
   geo->iblank_cell_d = geo->iblank_cell;
   geo->iblank_face_d = geo->iblank_face; /// TEMP / DEBUGGING - RETHINK LATER

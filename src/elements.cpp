@@ -2951,7 +2951,7 @@ void Elements::donor_grad_from_device(int* donorIDs_in, int nDonors_in)
         unsigned int ele = donorIDs[donor];
         for (int spt = 0; spt < nSpts; spt++)
         {
-          dU_spts(spt,ele,var,dim) = dU_donors(spt,donor,var,dim);
+          dU_spts(dim,spt,var,ele) = dU_donors(spt,donor,var,dim);
         }
       }
     }
