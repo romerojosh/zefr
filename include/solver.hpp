@@ -63,6 +63,7 @@ class FRSolver
     std::shared_ptr<Faces> faces;
     
     std::vector<std::shared_ptr<Elements>> elesObjs;
+    std::map<ELE_TYPE, std::shared_ptr<Elements>> elesObjsBT;
 
     int current_iter = 0;
     int restart_iter = 0;

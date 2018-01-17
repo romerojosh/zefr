@@ -151,6 +151,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
         ele2elesObj(eleID) = elesObjID;
       }
       geo.ele_types(elesObjID) = etype;
+      elesObjsBT[etype] = elesObjs[elesObjID];
       elesObjID++;
     }
   }
@@ -4284,20 +4285,19 @@ void FRSolver::compute_element_dt(bool pseudo_time)
 
 void FRSolver::write_solution_pyfr(const std::string &_prefix)
 {
-  if (elesObjs.size() > 1)
-    ThrowException("PyFR write not supported for mixed element grids.");
-
-  auto e = elesObjs[0];
-
   /* --- Apply polynomial squeezing if requested --- */
 
   if (input->squeeze)
   {
-    e->compute_Uavg();
-    e->poly_squeeze();
+    for (auto &e : elesObjs)
+    {
+      e->compute_Uavg();
+      e->poly_squeeze();
+    }
   }
 
 #ifdef _GPU
+  for (auto &e : elesObjs)
     e->U_spts = e->U_spts_d;
 #endif
 
@@ -4313,6 +4313,21 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   if (input->gridID == 0 && input->rank == 0)
     std::cout << "Writing data to file " << filename << std::endl;
+
+  int nVars = eles->nVars;
+
+  std::vector<ELE_TYPE> avail_types;
+  if (geo.nDims == 2)
+    avail_types = {TRI,QUAD};
+  if (geo.nDims == 3)
+    avail_types = {TET,PRI,HEX};
+
+  std::map<ELE_TYPE, std::string> et2str;
+  et2str[TRI] = "tri";
+  et2str[QUAD] = "quad";
+  et2str[TET] = "tet";
+  et2str[PRI] = "pri";
+  et2str[HEX] = "hex";
 
   std::stringstream ss;
 
@@ -4352,12 +4367,29 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
   }
   ss << std::endl;
 
-  if (geo.nDims == 2)
-    ss << "[solver-elements-quad]" << std::endl;
-  else
-    ss << "[solver-elements-hex]" << std::endl;
-  ss << "soln-pts = gauss-legendre" << std::endl;
-  ss << std::endl;
+  for (auto etype : avail_types)
+  {
+    ss << "[solver-elements-" << et2str[etype] << "]" << std::endl;
+
+    switch (etype)
+    {
+      case QUAD:
+        ss << "soln-pts = gauss-legendre" << std::endl << std::endl;
+        break;
+      case TRI:
+        ss << "soln-pts = williams-shunn" << std::endl << std::endl;
+        break;
+      case HEX:
+        ss << "soln-pts = gauss-legendre" << std::endl << std::endl;
+        break;
+      case TET:
+        ss << "soln-pts = shunn-ham" << std::endl << std::endl;
+        break;
+      case PRI:
+        ss << "soln-pts = williams-shunn~gauss-legendre" << std::endl << std::endl;
+        break;
+    }
+  }
 
   std::string config = ss.str();
 
@@ -4380,6 +4412,8 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   ss << "[solver-time-integrator]" << std::endl;
   ss << "tcurr = " << flow_time << std::endl;
+  ss << "nsteps = " << current_iter << std::endl;
+  ss << "nrjctsteps = " << rejected_steps << std::endl;
   //ss << "wall-time = " << input->??"
   ss << std::endl;
 
@@ -4418,69 +4452,96 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   std::string stats = ss.str();
 
-  int nEles = e->nEles;
-  int nElesPad = e->nElesPad;
-  int nVars = e->nVars;
-  int nSpts = e->nSpts;
-
 #ifdef _MPI
-  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
-  std::vector<std::vector<double>> data_p(input->nRanks);
-  std::vector<std::vector<int>> iblank_p(input->nRanks);
-  if (input->overset && input->rank == 0)
+  std::map<ELE_TYPE, int> nElesTotBT;
+  std::map<ELE_TYPE, std::vector<int>> nEles_p, nSpts_p;
+  std::map<ELE_TYPE, std::vector<std::vector<double>>> data_p;
+  std::map<ELE_TYPE, std::vector<std::vector<int>>> iblank_p;
+
+  for (auto etype : avail_types)
   {
-    iblank_p[0].resize(nEles);
-    for (int ele = 0; ele < nEles; ele++)
-      iblank_p[0][ele] = geo.iblank_cell(ele);
+    nElesTotBT[etype] = 0;
+    nEles_p[etype].resize(input->nRanks);
+    nSpts_p[etype].resize(input->nRanks);
+    data_p[etype].resize(input->nRanks);
+    iblank_p[etype].resize(input->nRanks);
   }
 
-  /* --- Gather all the data onto Rank 0 for writing --- */
-
-  std::vector<int> nEles_p(input->nRanks);
-  MPI_Allgather(&nEles, 1, MPI_INT, nEles_p.data(), 1, MPI_INT, geo.myComm);
-
-  for (int p = 1; p < input->nRanks; p++)
+  for (auto etype : avail_types)
   {
-    int nEles = nEles_p[p];
-    int nElesPad = nEles;
-#ifdef _GPU
-    nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
-#endif
-    int size = nElesPad * nSpts * nVars;
+    int nElesT = geo.nElesBT[etype];
+    nElesTotBT[etype] += nElesT;
 
-    if (input->rank == 0)
+    int nElesPadT = 0;
+    int nSptsT = 0;
+    std::shared_ptr<Elements> eptr = NULL;
+    if (nElesT > 0)
     {
-      data_p[p].resize(size);
-      MPI_Status status;
-      MPI_Recv(data_p[p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
-
-      if (input->overset)
-      {
-        iblank_p[p].resize(nEles);
-        MPI_Status status2;
-        MPI_Recv(iblank_p[p].data(), nEles, MPI_INT, p, 0, geo.myComm, &status2);
-      }
+      eptr = elesObjsBT[etype];
+      nElesPadT = eptr->nElesPad;
+      nSptsT = eptr->nSpts;
     }
-    else
+
+    if (input->overset)
     {
-      if (p == input->rank)
+      iblank_p[etype][input->rank].resize(nElesT);
+      for (int ele = 0; ele < nElesT; ele++)
+        iblank_p[etype][input->rank][ele] = geo.iblank_cell(geo.eleID[etype](ele));
+    }
+
+    /* --- Gather all the data onto Rank 0 for writing --- */
+
+    MPI_Allgather(&nElesT, 1, MPI_INT, nEles_p[etype].data(), 1, MPI_INT, geo.myComm);
+    MPI_Allgather(&nSptsT, 1, MPI_INT, nSpts_p[etype].data(), 1, MPI_INT, geo.myComm);
+
+    for (int p = 1; p < input->nRanks; p++)
+    {
+      int nEles = nEles_p[etype][p];
+      if (nEles == 0) continue;
+
+      nElesTotBT[etype] += nEles;
+      int nSpts = nSpts_p[etype][p];
+      int nElesPad = nEles;
+#ifdef _GPU
+      nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#endif
+      int size = nElesPad * nSpts * nVars;
+
+      if (input->rank == 0)
       {
-        MPI_Send(e->U_spts.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+        data_p[etype][p].resize(size);
+        MPI_Status status;
+        MPI_Recv(data_p[etype][p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
 
         if (input->overset)
         {
-          MPI_Send(geo.iblank_cell.data(), nEles, MPI_INT, 0, 0, geo.myComm);
+          iblank_p[etype][p].resize(nEles);
+          MPI_Status status2;
+          MPI_Recv(iblank_p[etype][p].data(), nEles, MPI_INT, p, 0, geo.myComm, &status2);
         }
       }
-    }
+      else
+      {
+        if (p == input->rank)
+        {
+          MPI_Send(eptr->U_spts.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
 
-    MPI_Barrier(geo.myComm);
+          if (input->overset)
+          {
+            MPI_Send(iblank_p[etype][p].data(), nEles, MPI_INT, 0, 0, geo.myComm);
+          }
+        }
+      }
+
+      MPI_Barrier(geo.myComm);
+    }
   }
 
-  /* --- Write Data to File (on Rank 0) --- */
 
   if (input->rank == 0)
   {
+    /* --- Write Metadata to File (on Rank 0) --- */
+
     H5File file(filename, H5F_ACC_TRUNC);
 
     // Write out all the data
@@ -4498,57 +4559,70 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
     dset.close();
 
     dspace.close();
+    dset.close();
 
-    std::string sol_prefix = "soln_";
-    sol_prefix += (geo.nDims == 2) ? "quad" : "hex";
-    sol_prefix += "_p";
-    for (int p = 0; p < input->nRanks; p++)
+    /* --- Write Data to File (on Rank 0) --- */
+
+    for (auto etype : avail_types)
     {
-      nEles = nEles_p[p];
-#ifdef _GPU
-      nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
-#else
-      nElesPad = nEles;
-#endif
+      if (nElesTotBT[etype] == 0) continue;
 
-      hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
-      hsize_t dimsF[3] = {nSpts, nVars, nEles};
+      std::shared_ptr<Elements> eptr = NULL;
+      if (geo.nElesBT[etype] > 0)
+        eptr = elesObjsBT[etype];
 
-      // Create a dataspace for the solution, using a hyperslab to ignore padding
-      DataSpace dspaceU(3, dimsU);
-#ifdef _GPU
-      hsize_t count[3] = {1,1,1};
-      hsize_t start[3] = {0,0,0};
-      hsize_t stride[3] = {1,1,1};
-      hsize_t block[3] = {nSpts, nVars, nEles};
-      dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
-#endif
+      std::string sol_prefix = "soln_" + et2str[etype] + "_p";
 
-      // Create a dataspace for the actual dataset
-      DataSpace dspaceF(3, dimsF);
-
-      std::string solname = sol_prefix + std::to_string(p);
-      dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
-      if (p == 0)
-        dset.write(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
-      else
-        dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
-
-      dspaceU.close();
-      dset.close();
-
-      // Write out iblank as separate DataSet with same naming convention as soln
-      if (input->overset)
+      for (int p = 0; p < input->nRanks; p++)
       {
-        hsize_t dims[1] = {nEles};
-        DataSpace dspaceI(1, dims);
-        std::string iname = "iblank_";
-        iname += (geo.nDims == 2) ? "quad" : "hex";
-        iname += "_p" + std::to_string(p);
-        // NOTE: be aware of C++ 32-bit int vs. HDF5 8-bit int
-        dset = file.createDataSet(iname, PredType::NATIVE_INT8, dspaceI);
-        dset.write(iblank_p[p].data(), PredType::NATIVE_INT, dspaceI);
+        int nEles = nEles_p[etype][p];
+        if (nEles == 0) continue;
+
+        int nSpts = nSpts_p[etype][p];
+#ifdef _GPU
+        int nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#else
+        int nElesPad = nEles;
+#endif
+
+        hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+        hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+        // Create a dataspace for the solution, using a hyperslab to ignore padding
+        DataSpace dspaceU(3, dimsU);
+#ifdef _GPU
+        hsize_t count[3] = {1,1,1};
+        hsize_t start[3] = {0,0,0};
+        hsize_t stride[3] = {1,1,1};
+        hsize_t block[3] = {nSpts, nVars, nEles};
+        dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
+        // Create a dataspace for the actual dataset
+        DataSpace dspaceF(3, dimsF);
+
+        std::string solname = sol_prefix + std::to_string(p);
+        DataSet dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
+        if (p == 0)
+          dset.write(eptr->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
+        else
+          dset.write(data_p[etype][p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+        dspaceU.close();
         dset.close();
+
+        // Write out iblank as separate DataSet with same naming convention as soln
+        if (input->overset)
+        {
+          hsize_t dims[1] = {nEles};
+          DataSpace dspaceI(1, dims);
+          std::string iname = "iblank_" + et2str[etype];
+          iname += "_p" + std::to_string(p);
+          // NOTE: be aware of C++ 32-bit int vs. HDF5 8-bit int
+          dset = file.createDataSet(iname, PredType::NATIVE_INT8, dspaceI);
+          dset.write(iblank_p[etype][p].data(), PredType::NATIVE_INT, dspaceI);
+          dset.close();
+        }
       }
     }
   }
@@ -4572,30 +4646,36 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   dspace.close();
 
-  hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
-  hsize_t dimsF[3] = {nSpts, nVars, nEles};
+  for (auto &e : elesObjs)
+  {
+    int nEles = e->nEles;
+    int nElesPad = e->nElesPad;
+    int nSpts = e->nSpts;
 
-  // Create a dataspace for the solution, using a hyperslab to ignore padding
-  DataSpace dspaceU(3, dimsU);
+    hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+    hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+    // Create a dataspace for the solution, using a hyperslab to ignore padding
+    DataSpace dspaceU(3, dimsU);
 #ifdef _GPU
-  hsize_t count[3] = {1,1,1};
-  hsize_t start[3] = {0,0,0};
-  hsize_t stride[3] = {1,1,1};
-  hsize_t block[3] = {nSpts, nVars, nEles};
-  dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+    hsize_t count[3] = {1,1,1};
+    hsize_t start[3] = {0,0,0};
+    hsize_t stride[3] = {1,1,1};
+    hsize_t block[3] = {nSpts, nVars, nEles};
+    dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
 #endif
 
-  // Create a dataspace for the actual dataset
-  DataSpace dspaceF(3, dimsF);
+    // Create a dataspace for the actual dataset
+    DataSpace dspaceF(3, dimsF);
 
-  std::string solname = "soln_";
-  solname += (geo.nDims == 2) ? "quad" : "hex";
-  solname += "_p" + std::to_string(input->rank);
-  dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
-  dset.write(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
-  dset.close();
+    auto etype = e->etype;
+    std::string solname = "soln_" + et2str[etype];
+    solname += "_p" + std::to_string(input->rank);
+    dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
+    dset.write(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU);
+    dset.close();
+  }
 #endif 
-
 }
 
 void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
@@ -5521,12 +5601,8 @@ void FRSolver::write_color()
 
 void FRSolver::write_averages(const std::string &_prefix)
 {
-  if (elesObjs.size() > 1)
-    ThrowException("PyFR write not supported for mixed element grids.");
-
-  auto e = elesObjs[0];
-
 #ifdef _GPU
+  for (auto &e : elesObjs)
     e->tavg_acc = e->tavg_acc_d;
 #endif
 
@@ -5542,6 +5618,21 @@ void FRSolver::write_averages(const std::string &_prefix)
 
   if (input->gridID == 0 && input->rank == 0)
     std::cout << "Writing time averages to file " << filename << std::endl;
+
+  int nVars = eles->nVars + eles->nDims + 1;
+
+  std::vector<ELE_TYPE> avail_types;
+  if (geo.nDims == 2)
+    avail_types = {TRI,QUAD};
+  if (geo.nDims == 3)
+    avail_types = {TET,PRI,HEX};
+
+  std::map<ELE_TYPE, std::string> et2str;
+  et2str[TRI] = "tri";
+  et2str[QUAD] = "quad";
+  et2str[TET] = "tet";
+  et2str[PRI] = "pri";
+  et2str[HEX] = "hex";
 
   std::stringstream ss;
 
@@ -5581,12 +5672,29 @@ void FRSolver::write_averages(const std::string &_prefix)
   }
   ss << std::endl;
 
-  if (geo.nDims == 2)
-    ss << "[solver-elements-quad]" << std::endl;
-  else
-    ss << "[solver-elements-hex]" << std::endl;
-  ss << "soln-pts = gauss-legendre" << std::endl;
-  ss << std::endl;
+  for (auto etype : avail_types)
+  {
+    ss << "[solver-elements-" << et2str[etype] << "]" << std::endl;
+
+    switch (etype)
+    {
+      case QUAD:
+        ss << "soln-pts = gauss-legendre" << std::endl << std::endl;
+        break;
+      case TRI:
+        ss << "soln-pts = williams-shunn" << std::endl << std::endl;
+        break;
+      case HEX:
+        ss << "soln-pts = gauss-legendre" << std::endl << std::endl;
+        break;
+      case TET:
+        ss << "soln-pts = shunn-ham" << std::endl << std::endl;
+        break;
+      case PRI:
+        ss << "soln-pts = williams-shunn~gauss-legendre" << std::endl << std::endl;
+        break;
+    }
+  }
 
   std::string config = ss.str();
 
@@ -5612,6 +5720,8 @@ void FRSolver::write_averages(const std::string &_prefix)
 
   ss << "[solver-time-integrator]" << std::endl;
   ss << "tcurr = " << flow_time << std::endl;
+  ss << "nsteps = " << current_iter << std::endl;
+  ss << "nrjctsteps = " << rejected_steps << std::endl;
   ss << std::endl;
 
   ss << "[tavg]" << std::endl;
@@ -5622,75 +5732,105 @@ void FRSolver::write_averages(const std::string &_prefix)
 
   std::string stats = ss.str();
 
-  int nEles = e->nEles;
-  int nElesPad = e->nElesPad;
-  int nVars = e->nVars + e->nDims + 1;
-  int nSpts = e->nSpts;
-
   // Normalize the accumulated data
-  for (int spt = 0; spt < nSpts; spt++)
-    for (int n = 0; n < nVars; n++)
-      for (int ele = 0; ele < nEles; ele++)
-        e->tavg_curr(spt,n,ele) = e->tavg_acc(spt,n,ele) / (flow_time - restart_time);
-
-#ifdef _MPI
-  // Need to traspose data to match PyFR layout - [spts,vars,eles] in row-major format
-  std::vector<std::vector<double>> data_p(input->nRanks);
-  std::vector<std::vector<int>> iblank_p(input->nRanks);
-  if (input->overset && input->rank == 0)
+  for (auto &e : elesObjs)
   {
-    iblank_p[0].resize(nEles);
-    for (int ele = 0; ele < nEles; ele++)
-      iblank_p[0][ele] = geo.iblank_cell(ele);
+    for (int spt = 0; spt < e->nSpts; spt++)
+      for (int n = 0; n < nVars; n++)
+        for (int ele = 0; ele < e->nEles; ele++)
+          e->tavg_curr(spt,n,ele) = e->tavg_acc(spt,n,ele) / (flow_time - restart_time);
   }
 
-  /* --- Gather all the data onto Rank 0 for writing --- */
+#ifdef _MPI
+  std::map<ELE_TYPE, int> nElesTotBT;
+  std::map<ELE_TYPE, std::vector<int>> nEles_p, nSpts_p;
+  std::map<ELE_TYPE, std::vector<std::vector<double>>> data_p;
+  std::map<ELE_TYPE, std::vector<std::vector<int>>> iblank_p;
 
-  std::vector<int> nEles_p(input->nRanks);
-  MPI_Allgather(&nEles, 1, MPI_INT, nEles_p.data(), 1, MPI_INT, geo.myComm);
-
-  for (int p = 1; p < input->nRanks; p++)
+  for (auto etype : avail_types)
   {
-    int nEles = nEles_p[p];
-    int nElesPad = nEles;
-#ifdef _GPU
-    nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
-#endif
-    int size = nElesPad * nSpts * nVars;
+    nElesTotBT[etype] = 0;
+    nEles_p[etype].resize(input->nRanks);
+    nSpts_p[etype].resize(input->nRanks);
+    data_p[etype].resize(input->nRanks);
+    iblank_p[etype].resize(input->nRanks);
+  }
 
-    if (input->rank == 0)
+  for (auto etype : avail_types)
+  {
+    int nElesT = geo.nElesBT[etype];
+    nElesTotBT[etype] += nElesT;
+
+    int nElesPadT = 0;
+    int nSptsT = 0;
+    std::shared_ptr<Elements> eptr = NULL;
+    if (nElesT > 0)
     {
-      data_p[p].resize(size);
-      MPI_Status status;
-      MPI_Recv(data_p[p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
-
-      if (input->overset)
-      {
-        iblank_p[p].resize(nEles);
-        MPI_Status status2;
-        MPI_Recv(iblank_p[p].data(), nEles, MPI_INT, p, 0, geo.myComm, &status2);
-      }
+      eptr = elesObjsBT[etype];
+      nElesPadT = eptr->nElesPad;
+      nSptsT = eptr->nSpts;
     }
-    else
+
+    if (input->overset)
     {
-      if (p == input->rank)
+      iblank_p[etype][input->rank].resize(nElesT);
+      for (int ele = 0; ele < nElesT; ele++)
+        iblank_p[etype][input->rank][ele] = geo.iblank_cell(geo.eleID[etype](ele));
+    }
+
+    /* --- Gather all the data onto Rank 0 for writing --- */
+
+    MPI_Allgather(&nElesT, 1, MPI_INT, nEles_p[etype].data(), 1, MPI_INT, geo.myComm);
+    MPI_Allgather(&nSptsT, 1, MPI_INT, nSpts_p[etype].data(), 1, MPI_INT, geo.myComm);
+
+    for (int p = 1; p < input->nRanks; p++)
+    {
+      int nEles = nEles_p[etype][p];
+      if (nEles == 0) continue;
+
+      nElesTotBT[etype] += nEles;
+      int nSpts = nSpts_p[etype][p];
+      int nElesPad = nEles;
+#ifdef _GPU
+      nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#endif
+      int size = nElesPad * nSpts * nVars;
+
+      if (input->rank == 0)
       {
-        MPI_Send(e->tavg_curr.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
+        data_p[etype][p].resize(size);
+        MPI_Status status;
+        MPI_Recv(data_p[etype][p].data(), size, MPI_DOUBLE, p, 0, geo.myComm, &status);
 
         if (input->overset)
         {
-          MPI_Send(geo.iblank_cell.data(), nEles, MPI_INT, 0, 0, geo.myComm);
+          iblank_p[etype][p].resize(nEles);
+          MPI_Status status2;
+          MPI_Recv(iblank_p[etype][p].data(), nEles, MPI_INT, p, 0, geo.myComm, &status2);
         }
       }
-    }
+      else
+      {
+        if (p == input->rank)
+        {
+          MPI_Send(eptr->tavg_curr.data(), size, MPI_DOUBLE, 0, 0, geo.myComm);
 
-    MPI_Barrier(geo.myComm);
+          if (input->overset)
+          {
+            MPI_Send(iblank_p[etype][p].data(), nEles, MPI_INT, 0, 0, geo.myComm);
+          }
+        }
+      }
+
+      MPI_Barrier(geo.myComm);
+    }
   }
 
-  /* --- Write Data to File (on Rank 0) --- */
 
   if (input->rank == 0)
   {
+    /* --- Write Metadata to File (on Rank 0) --- */
+
     H5File file(filename, H5F_ACC_TRUNC);
 
     // Write out all the data
@@ -5708,57 +5848,70 @@ void FRSolver::write_averages(const std::string &_prefix)
     dset.close();
 
     dspace.close();
+    dset.close();
 
-    std::string sol_prefix = "tavg_";
-    sol_prefix += (geo.nDims == 2) ? "quad" : "hex";
-    sol_prefix += "_p";
-    for (int p = 0; p < input->nRanks; p++)
+    /* --- Write Data to File (on Rank 0) --- */
+
+    for (auto etype : avail_types)
     {
-      nEles = nEles_p[p];
-#ifdef _GPU
-      nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
-#else
-      nElesPad = nEles;
-#endif
+      if (nElesTotBT[etype] == 0) continue;
 
-      hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
-      hsize_t dimsF[3] = {nSpts, nVars, nEles};
+      std::shared_ptr<Elements> eptr = NULL;
+      if (geo.nElesBT[etype] > 0)
+        eptr = elesObjsBT[etype];
 
-      // Create a dataspace for the solution, using a hyperslab to ignore padding
-      DataSpace dspaceU(3, dimsU);
-#ifdef _GPU
-      hsize_t count[3] = {1,1,1};
-      hsize_t start[3] = {0,0,0};
-      hsize_t stride[3] = {1,1,1};
-      hsize_t block[3] = {nSpts, nVars, nEles};
-      dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
-#endif
+      std::string sol_prefix = "tavg_" + et2str[etype] + "_p";
 
-      // Create a dataspace for the actual dataset
-      DataSpace dspaceF(3, dimsF);
-
-      std::string solname = sol_prefix + std::to_string(p);
-      dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
-      if (p == 0)
-        dset.write(e->tavg_curr.data(), PredType::NATIVE_DOUBLE, dspaceU);
-      else
-        dset.write(data_p[p].data(), PredType::NATIVE_DOUBLE, dspaceU);
-
-      dspaceU.close();
-      dset.close();
-
-      // Write out iblank as separate DataSet with same naming convention as soln
-      if (input->overset)
+      for (int p = 0; p < input->nRanks; p++)
       {
-        hsize_t dims[1] = {nEles};
-        DataSpace dspaceI(1, dims);
-        std::string iname = "iblank_";
-        iname += (geo.nDims == 2) ? "quad" : "hex";
-        iname += "_p" + std::to_string(p);
-        // NOTE: be aware of C++ 32-bit int vs. HDF5 8-bit int
-        dset = file.createDataSet(iname, PredType::NATIVE_INT8, dspaceI);
-        dset.write(iblank_p[p].data(), PredType::NATIVE_INT, dspaceI);
+        int nEles = nEles_p[etype][p];
+        if (nEles == 0) continue;
+
+        int nSpts = nSpts_p[etype][p];
+#ifdef _GPU
+        int nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+#else
+        int nElesPad = nEles;
+#endif
+
+        hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+        hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+        // Create a dataspace for the solution, using a hyperslab to ignore padding
+        DataSpace dspaceU(3, dimsU);
+#ifdef _GPU
+        hsize_t count[3] = {1,1,1};
+        hsize_t start[3] = {0,0,0};
+        hsize_t stride[3] = {1,1,1};
+        hsize_t block[3] = {nSpts, nVars, nEles};
+        dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
+        // Create a dataspace for the actual dataset
+        DataSpace dspaceF(3, dimsF);
+
+        std::string solname = sol_prefix + std::to_string(p);
+        DataSet dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
+        if (p == 0)
+          dset.write(eptr->tavg_curr.data(), PredType::NATIVE_DOUBLE, dspaceU);
+        else
+          dset.write(data_p[etype][p].data(), PredType::NATIVE_DOUBLE, dspaceU);
+
+        dspaceU.close();
         dset.close();
+
+        // Write out iblank as separate DataSet with same naming convention as soln
+        if (input->overset)
+        {
+          hsize_t dims[1] = {nEles};
+          DataSpace dspaceI(1, dims);
+          std::string iname = "iblank_" + et2str[etype];
+          iname += "_p" + std::to_string(p);
+          // NOTE: be aware of C++ 32-bit int vs. HDF5 8-bit int
+          dset = file.createDataSet(iname, PredType::NATIVE_INT8, dspaceI);
+          dset.write(iblank_p[etype][p].data(), PredType::NATIVE_INT, dspaceI);
+          dset.close();
+        }
       }
     }
   }
@@ -5782,28 +5935,35 @@ void FRSolver::write_averages(const std::string &_prefix)
 
   dspace.close();
 
-  hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
-  hsize_t dimsF[3] = {nSpts, nVars, nEles};
+  for (auto &e : elesObjs)
+  {
+    int nEles = e->nEles;
+    int nElesPad = e->nElesPad;
+    int nSpts = e->nSpts;
 
-  // Create a dataspace for the solution, using a hyperslab to ignore padding
-  DataSpace dspaceU(3, dimsU);
+    hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+    hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+    // Create a dataspace for the solution, using a hyperslab to ignore padding
+    DataSpace dspaceU(3, dimsU);
 #ifdef _GPU
-  hsize_t count[3] = {1,1,1};
-  hsize_t start[3] = {0,0,0};
-  hsize_t stride[3] = {1,1,1};
-  hsize_t block[3] = {nSpts, nVars, nEles};
-  dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+    hsize_t count[3] = {1,1,1};
+    hsize_t start[3] = {0,0,0};
+    hsize_t stride[3] = {1,1,1};
+    hsize_t block[3] = {nSpts, nVars, nEles};
+    dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
 #endif
 
-  // Create a dataspace for the actual dataset
-  DataSpace dspaceF(3, dimsF);
+    // Create a dataspace for the actual dataset
+    DataSpace dspaceF(3, dimsF);
 
-  std::string solname = "tavg_";
-  solname += (geo.nDims == 2) ? "quad" : "hex";
-  solname += "_p" + std::to_string(input->rank);
-  dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
-  dset.write(e->tavg_curr.data(), PredType::NATIVE_DOUBLE, dspaceU);
-  dset.close();
+    auto etype = e->etype;
+    std::string solname = "tavg_" + et2str[etype];
+    solname += "_p" + std::to_string(input->rank);
+    dset = file.createDataSet(solname, PredType::NATIVE_DOUBLE, dspaceF);
+    dset.write(e->tavg_curr.data(), PredType::NATIVE_DOUBLE, dspaceU);
+    dset.close();
+  }
 #endif
 
 }
