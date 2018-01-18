@@ -644,7 +644,7 @@ double Zefr::get_u_spt(int ele, int spt, int var)
 double Zefr::get_grad_spt(int ele, int spt, int dim, int var)
 {
   int eleBT = geo->eleID_type(ele);
-  return solver->elesObjs[solver->ele2elesObj(ele)]->U_spts(dim, spt, var, eleBT);
+  return solver->elesObjs[solver->ele2elesObj(ele)]->dU_spts(dim, spt, var, eleBT);
 }
 
 double *Zefr::get_u_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype)

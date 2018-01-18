@@ -2795,9 +2795,11 @@ bool Elements::getRefLoc(int ele, double* xyz, double* rst)
     rst[0] = 0.; rst[1] = 0.; rst[2] = 0.;
   }
 
+  auto &enodes = geo->ele2nodesBT[etype];
+
   for (int nd = 0; nd < nNodes; nd++)
     for (int d = 0; d < 3; d++)
-      tmp_coords(nd,d) = geo->coord_nodes(geo->ele2nodesBT[etype](ele, nd),d);
+      tmp_coords(nd,d) = geo->coord_nodes(enodes(ele, nd),d);
 
   while (norm > tol && iter < iterMax)
   {
