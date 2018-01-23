@@ -1488,19 +1488,33 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for private(UL,UR,Fc) firstprivate(tau)
   for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
   {
-    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE)
+    const int face = geo->fpt2face[fpt];
+    if (input->overset && geo->iblank_face(face) == HOLE)
         continue;
 
-    bool iflag = false;
-    if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == FRINGE)
-      iflag = true;
-
     double beta = geo->flip_beta(fpt)*input->ldg_b;
+
+    // Sidestep need for overset gradient interp
+    char iflag = 0;
+    if (input->overset && geo->iblank_face(face) == FRINGE)
+    {
+      if (geo->iblank_cell(geo->face2eles(face,0)) == NORMAL)
+      {
+        beta = 0.5;
+        iflag = 1;
+      }
+      else
+      {
+        beta = -0.5;
+        iflag = -1;
+      }
+    }
 
     /* Get left and right state variables */
     for (unsigned int n = 0; n < nVars; n++)
     {
-      UL[n] = U_ldg(0, n, fpt); UR[n] = iflag ? U(1, n, fpt) : U_ldg(1, n, fpt);
+      UL[n] = (iflag < 0) ? U(0, n, fpt) : U_ldg(0, n, fpt);
+      UR[n] = (iflag > 0) ? U(1, n, fpt) : U_ldg(1, n, fpt);
     }
 
     double dUL[nVars][nDims] = {{}};
