@@ -1,8 +1,8 @@
 import sys
 import os
 
-TIOGA_BIN_DIR = '/home/jcrabill/tioga/bin/'
-TIOGA_RUN_DIR = '/home/jcrabill/tioga/run/'
+TIOGA_BIN_DIR = '/home/jcrabill/TG_COPY/tioga/bin/'
+TIOGA_RUN_DIR = '/home/jcrabill/TG_COPY/tioga/run/'
 ZEFR_BIN_DIR = '/home/jcrabill/zefr/bin/'
 ZEFR_RUN_DIR = '/home/jcrabill/zefr/run/'
 CONVERT_DIR = '/home/jcrabill/zefr/external/'
@@ -10,7 +10,7 @@ sys.path.append(TIOGA_BIN_DIR)
 sys.path.append(TIOGA_RUN_DIR)
 sys.path.append(ZEFR_BIN_DIR)
 sys.path.append(ZEFR_RUN_DIR)
-sys.path.append(CONVERT_DIR)
+#sys.path.append(CONVERT_DIR)
 
 TIOGA_BIN_DIR = '/home/jacob/tioga/bin/'
 TIOGA_RUN_DIR = '/home/jacob/tioga/run/'
@@ -21,7 +21,7 @@ sys.path.append(TIOGA_BIN_DIR)
 sys.path.append(TIOGA_RUN_DIR)
 sys.path.append(ZEFR_BIN_DIR)
 sys.path.append(ZEFR_RUN_DIR)
-sys.path.append(CONVERT_DIR)
+#sys.path.append(CONVERT_DIR)
 
 from mpi4py import MPI
 import numpy as np

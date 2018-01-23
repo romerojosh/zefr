@@ -77,6 +77,10 @@ BasicGeo get_basic_geo_data(void)
                            geo.nover,geo.wallNodes,geo.overNodes,geo.nCellTypes,
                            geo.nvert_cell,geo.nface_cell,geo.nCells_type,geo.c2v);
 
+  geo.nCellsTot = 0;
+  for (int i = 0; i < geo.nCellTypes; i++)
+    geo.nCellsTot += geo.nCells_type[i];
+
   return geo;
 }
 
@@ -133,6 +137,10 @@ ExtraGeo get_extra_geo_data(void)
       geo.nvert_face,geo.nFaces_type,geo.f2v,geo.f2c,geo.c2f,geo.iblank_face,
       geo.iblank_cell,geo.nOverFaces,geo.overFaces,geo.nWallFaces,geo.wallFaces,
       geo.nMpiFaces,geo.mpiFaces,geo.procR,geo.mpiFidR,geo.grid_vel,geo.offset,geo.Rmat);
+
+  geo.nFacesTot = 0;
+  for (int i = 0; i < geo.nFaceTypes; i++)
+    geo.nFacesTot += geo.nFaces_type[i];
 
   return geo;
 }

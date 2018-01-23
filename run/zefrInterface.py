@@ -171,8 +171,13 @@ class zefrSolver:
         ndims = 3
         nfields = simdata.nfields
         nspts = simdata.nspts
+        netypes = geo.nCellTypes
         ncells = geo.nCells_type
+        ncellsTot = geo.nCellsTot
+        nface = geo.nface_cell
+        nftypes = geoAB.nFaceTypes
         nfaces = geoAB.nFaces_type
+        nfacesTot = geoAB.nFacesTot
         nnodes = geo.nnodes
         nvert = geo.nvert_cell
         nvertf = geoAB.nvert_face
@@ -180,57 +185,103 @@ class zefrSolver:
 
         # Wrap all geometry data
         # NOTE: numpy arrays are row-major (last dim contiguous)
-        xyz = [ptrToArray(geo.xyz, nnodes, ndims)]
-        c2v = [ptrToArray(geo.c2v, ncells, nvert)]
-        wallNodes = [ptrToArray(geo.wallNodes, geo.nwall)]
-        overNodes = [ptrToArray(geo.overNodes, geo.nover)]
+        xyz = ptrToArray(geo.xyz, nnodes, ndims)
 
-        iblank = [ptrToArray(geo.iblank, nnodes)]
-        iblank_cell = [ptrToArray(geoAB.iblank_cell, ncells)]
-        iblank_face = [ptrToArray(geoAB.iblank_face, nfaces)]
-        f2v = [ptrToArray(geoAB.f2v, nfaces, nvertf)]
-        c2f = [ptrToArray(geoAB.c2f, ncells, (2**ndims))]
-        f2c = [ptrToArray(geoAB.f2c, nfaces, 2)]
+        nCells    = ptrToArray(ncells, netypes)
+        nFaces    = ptrToArray(nfaces, nftypes)
+        nVertCell = ptrToArray(nvert, netypes)
+        nFaceCell = ptrToArray(geo.nface_cell, netypes)
 
-        overFaces = [ptrToArray(geoAB.overFaces, geoAB.nOverFaces)]
-        wallFaces = [ptrToArray(geoAB.wallFaces, geoAB.nWallFaces)]
-        mpiFaces = [ptrToArray(geoAB.mpiFaces, geoAB.nMpiFaces)]
-        procR = [ptrToArray(geoAB.procR, geoAB.nMpiFaces)]
-        mpiFidR = [ptrToArray(geoAB.mpiFidR, geoAB.nMpiFaces)]
+        c2v = ptrToArray(geo.c2v, netypes)
+        c2f = ptrToArray(geoAB.c2f, netypes)
+
+        tet2v, pyr2v, pri2v, hex2v = [], [], [], []  # Elements to nodes conn
+        tet2f, pyr2f, pri2f, hex2f = [], [], [], []  # Elements to faces conn
+
+        for i in range(0,netypes):
+            if nVertCell[i] == 4:
+                tet2v = ptrToArray(i, geo.c2v, ncells, nvert)
+                tet2f = ptrToArray(i, geoAB.c2f, ncells, nface)
+            elif nVertCell[i] == 5:
+                pyr2v = ptrToArray(i, geo.c2v, ncells, nvert)
+                pyr2f = ptrToArray(i, geoAB.c2f, ncells, nface)
+            elif nVertCell[i] == 6:
+                pri2v = ptrToArray(i, geo.c2v, ncells, nvert)
+                pri2f = ptrToArray(i, geoAB.c2f, ncells, nface)
+            elif nVertCell[i] == 8:
+                hex2v = ptrToArray(i, geo.c2v, ncells, nvert)
+                hex2f = ptrToArray(i, geoAB.c2f, ncells, nface)
+
+        wallNodes = ptrToArray(geo.wallNodes, geo.nwall)
+        overNodes = ptrToArray(geo.overNodes, geo.nover)
+
+        iblank = ptrToArray(geo.iblank, nnodes)
+        iblank_cell = ptrToArray(geoAB.iblank_cell, ncellsTot)
+        iblank_face = ptrToArray(geoAB.iblank_face, nfacesTot)
+
+        f2v = ptrToArray(geoAB.f2v, nftypes)
+        f2c = ptrToArray(geoAB.f2c, nfacesTot, 2)
+
+        tri2v, quad2v = [], []  # Faces to nodes conn
+        for i in range(0,nftypes):
+            if nVertCell[i] == 3:
+                tet2v = ptrToArray(i, geoAB.f2v, nfaces, nvertf)
+            elif nVertCell[i] == 4:
+                quad2v = ptrToArray(i, geoAB.f2v, nfaces, nvertf)
+
+        overFaces = ptrToArray(geoAB.overFaces, geoAB.nOverFaces)
+        wallFaces = ptrToArray(geoAB.wallFaces, geoAB.nWallFaces)
+        mpiFaces = ptrToArray(geoAB.mpiFaces, geoAB.nMpiFaces)
+        procR = ptrToArray(geoAB.procR, geoAB.nMpiFaces)
+        mpiFidR = ptrToArray(geoAB.mpiFidR, geoAB.nMpiFaces)
 
         # Wrap relevant solution data
         # NOTE: for GPU, solution is padded to 128 bytes using nElesPad
-        q = [ptrToArray(simdata.u_spts, nspts,nfields,ncells)]
-
-        dq = []
-        if self.inp.viscous:
-          dq.append(ptrToArray(simdata.du_spts, ndims,nspts,nfields,ncells))
+        q = netypes*[[]]
+        dq = netypes*[[]]
+        for i in range(0,netypes):
+            q[i] = ptrToArray(i, simdata.u_spts, nspts,nfields,ncells)
+            if self.inp.viscous:
+                dq[i] = ptrToArray(i, simdata.du_spts, ndims,nspts,nfields,ncells)
 
         self.gridData = {'gridtype' : 'unstructured',
-                         'gridCutType' : geo.gridType,
-                         'tetConn' : 'None',
-                         'pyraConn' : 'None',
-                         'prismConn' : 'None',
-                         'hexaConn' : c2v,
+                         'gridCutType' : [geo.gridType],
+                         'c2v'       : [c2v],
+                         'tetConn'   : [tet2v],
+                         'pyraConn'  : [pyr2v],
+                         'prismConn' : [pri2v],
+                         'hexaConn'  : [hex2v],
                          'bodyTag' : [geo.btag],
-                         'wallnode' : wallNodes,
-                         'obcnode' : overNodes,
-                         'grid-coordinates' : xyz,
-                         'q-variables' : q,
-                         'dq-variables' : dq,
-                         'iblanking' : iblank,
+                         'nCellTypes' : [netypes],
+                         'nCellsType' : [nCells],
+                         'nVertCell' : [nVertCell],
+                         'nFaceCell' : [nFaceCell],
+                         'wallnode' : [wallNodes],
+                         'obcnode' : [overNodes],
+                         'grid-coordinates' : [xyz],
+                         'q-variables' : [q],
+                         'dq-variables' : [dq],
+                         'iblanking' : [iblank],
                          'scaling' : [self.scale],
-                         'face2cell' : f2c,
-                         'cell2face' : c2f,
-                         'iblank-face' : iblank_face,
-                         'iblank-cell' : iblank_cell,
-                         'overset-faces' : overFaces,
-                         'wall-faces' : wallFaces,
-                         'mpi-faces' : mpiFaces,
-                         'mpi-right-proc' : procR,
-                         'mpi-right-id' : mpiFidR,
+                         'nFaceTypes' : [nftypes],
+                         'nfaces' : [nFaces],
+                         'face2cell' : [f2c],
+                         'tetFaces'  : [tet2f],
+                         'pyrFaces'  : [pyr2f],
+                         'priFaces'  : [pri2f],
+                         'hexFaces'  : [hex2f],
+                         'cell2face' : [c2f],
+                         'iblank-face' : [iblank_face],
+                         'iblank-cell' : [iblank_cell],
+                         'overset-faces' : [overFaces],
+                         'wall-faces' : [wallFaces],
+                         'mpi-faces' : [mpiFaces],
+                         'mpi-right-proc' : [procR],
+                         'mpi-right-id' : [mpiFidR],
                          'nvert-face' : [geoAB.nvert_face],
-                         'faceConn' : f2v}
+                         'triConn'  : [tri2v],
+                         'quadConn' : [quad2v],
+                         'faceConn' : [f2v]}
                          #'iblkHasNBHole':0,
                          #'istor':'row'}
                          #'fsicoord':self.fsicoord,

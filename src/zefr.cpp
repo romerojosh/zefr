@@ -383,16 +383,19 @@ void Zefr::setup_solver(void)
   solver->init_grid_motion(solver->flow_time);
   
   // For easy access in Python
-  simData.nspts = solver->eles->nSpts;
   simData.nfields = solver->eles->nVars;
-  simData.u_spts = solver->eles->U_spts.data();
-  if (input.viscous)
-    simData.du_spts = solver->eles->dU_spts.data();
+  for (int i = 0; i < geo->ele_types.size(); i++)
+  {
+    simData.nspts[i] = solver->elesObjs[i]->nSpts;
+    simData.u_spts[i] = solver->elesObjs[i]->U_spts.data();
+    if (input.viscous)
+      simData.du_spts[i] = solver->elesObjs[i]->dU_spts.data();
 #ifdef _GPU
-  simData.u_spts_d = solver->eles->U_spts_d.data();
-  if (input.viscous)
-    simData.du_spts_d = solver->eles->dU_spts_d.data();
+    simData.u_spts_d = solver->elesObjs[i]->U_spts_d.data();
+    if (input.viscous)
+      simData.du_spts_d = solver->elesObjs[i]->dU_spts_d.data();
 #endif
+  }
 }
 
 void Zefr::restart_solution(void)

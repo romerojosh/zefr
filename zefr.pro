@@ -68,7 +68,8 @@ HEADERS += \
     include/tets.hpp \
     include/prisms.hpp \
     include/gimmik.h \
-    include/zefrPyGlobals.h
+    include/zefrPyGlobals.h \
+    external/convert.i
 
 DISTFILES += \
     include/zefr.i \

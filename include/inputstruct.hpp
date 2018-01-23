@@ -120,13 +120,13 @@ struct DataStruct
 {
   double forces[6];
 
-  int nspts;
   int nfields;
-  double* u_spts = NULL;
-  double* du_spts = NULL;
+  int nspts[4];  // By element type
+  double* u_spts[4] = {NULL};
+  double* du_spts[4] = {NULL};
 #ifdef _GPU
-  double* u_spts_d;
-  double* du_spts_d;
+  double* u_spts_d[4];
+  double* du_spts_d[4];
 #endif
 };
 
