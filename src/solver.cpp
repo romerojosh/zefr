@@ -4688,11 +4688,6 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
 void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
 {
-  if (elesObjs.size() > 1)
-    ThrowException("PyFR restart not supported for mixed element grids.");
-
-  auto e = elesObjs[0];
-
   std::string filename = restart_file;
 
   if (input->restart_type > 0) // append .pvtu / .vtu to case name
@@ -4754,117 +4749,140 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
   dset.read(geo.stats, dtype, dspace);
   dset.close();
 
+  std::map<ELE_TYPE, std::string> et2str;
+  et2str[TRI] = "tri";
+  et2str[QUAD] = "quad";
+  et2str[TET] = "tet";
+  et2str[PRI] = "pri";
+  et2str[HEX] = "hex";
+
   // Read the solution data
-  std::string solname = "soln_";
-  solname += (geo.nDims == 2) ? "quad" : "hex";
-  solname += "_p" + std::to_string(input->rank); /// TODO: write per rank in parallel...
+  for (auto e : elesObjs)
+  {
+    std::string solname = "soln_";
+    solname += et2str[e->etype];
+    solname += "_p" + std::to_string(input->rank); /// TODO: write per rank in parallel...
 
-  dset = file.openDataSet(solname);
-  auto ds = dset.getSpace();
+    dset = file.openDataSet(solname);
+    auto ds = dset.getSpace();
 
-  hsize_t dims[3];
-  int ds_rank = ds.getSimpleExtentDims(dims);
+    hsize_t dims[3];
+    int ds_rank = ds.getSimpleExtentDims(dims);
 
-  if (ds_rank != 3)
-    ThrowException("Improper DataSpace rank for solution data.");
+    if (ds_rank != 3)
+      ThrowException("Improper DataSpace rank for solution data.");
 
-  // Create a datatype for a std::string
-  hid_t string_type = H5Tcopy (H5T_C_S1);
-  H5Tset_size (string_type, H5T_VARIABLE);
+    // Create a datatype for a std::string
+    hid_t string_type = H5Tcopy (H5T_C_S1);
+    H5Tset_size (string_type, H5T_VARIABLE);
 
-  unsigned int nEles = e->nEles;
-  unsigned int nVars = e->nVars;
+    unsigned int nEles = e->nEles;
+    unsigned int nVars = e->nVars;
 #ifdef _GPU
-  unsigned int nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
+    unsigned int nElesPad = (nEles % 16 == 0) ?  nEles : nEles + (16 - nEles % 16);  // Padded for 128-byte alignment
 #else
-  unsigned int nElesPad = nEles;
+    unsigned int nElesPad = nEles;
 #endif
 
-  if (dims[2] != nEles || dims[1] != nVars)
-    ThrowException("Size of solution data set does not match that from mesh.");
+    if (dims[2] != nEles || dims[1] != nVars)
+      ThrowException("Size of solution data set does not match that from mesh.");
 
-  unsigned int nSpts = dims[0];
+    unsigned int nSpts = dims[0];
 
+    // Create dataspaces to handle reading of data into padded solution storage
+    hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
+    hsize_t dimsF[3] = {nSpts, nVars, nEles};
+
+    DataSpace dspaceU(3, dimsU);
+    DataSpace dspaceF(3, dimsF);
+#ifdef _GPU
+    hsize_t count[3] = {1,1,1};
+    hsize_t start[3] = {0,0,0};
+    hsize_t stride[3] = {1,1,1};
+    hsize_t block[3] = {nSpts, nVars, nEles};
+    dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
+#endif
+
+    if (nSpts == e->nSpts)
+    {
+      e->U_spts.assign({nSpts,nVars,nElesPad});
+      dset.read(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU, dspaceF);
+    }
+    else
+    {
+      if (e->etype != QUAD && e->etype != HEX)
+        ThrowException("TODO: PyFR restart from different order on tets/prisms");
+
+      int restartOrder = (input->nDims == 2)
+          ? (std::sqrt(nSpts)-1) : (std::cbrt(nSpts)-1);
+
+      // Read into temporary storage, in case changing polynomial order
+      mdvector<double> U_restart({nSpts,nVars,nElesPad});
+      dset.read(U_restart.data(), PredType::NATIVE_DOUBLE, dspaceU, dspaceF);
+
+      // Setup extrapolation operator from restart points
+      e->set_oppRestart(restartOrder);
+
+      // Extrapolate values from restart points to solution points
+      auto &A = e->oppRestart(0, 0);
+      auto &B = U_restart(0, 0, 0);
+      auto &C = e->U_spts(0, 0, 0);
+
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
+                  e->nElesPad * e->nVars, nSpts, 1.0, &A, nSpts, &B,
+                  e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
+    }
+
+    dset.close();
+  }
+
+  // Read overset hole blanking
   if (input->overset)
   {
     geo.iblank_cell.assign({geo.nEles}, 1);
 
     // Check for a dataset of iblank
-    std::string iname = "iblank_";
-    iname += (geo.nDims == 2) ? "quad" : "hex";
-    iname += "_p" + std::to_string(input->rank);
+    mdvector<int> iblankBT;
 
-    try
+    for (auto etype : geo.ele_set)
     {
-      DataSet dsetI = file.openDataSet(iname);
-      DataSpace dspaceI = dsetI.getSpace();
-      hsize_t dimsI[1];
-      dspaceI.getSimpleExtentDims(dimsI);
+      std::string iname = "iblank_";
+      iname += et2str[etype];
+      iname += "_p" + std::to_string(input->rank);
 
-      if (dimsI[0] != geo.nEles) ThrowException("Error reading iblank data!");
-
-      dsetI.read(geo.iblank_cell.data(), PredType::NATIVE_INT);
-    }
-    catch (...)
-    {
-      // No iblank dataset found; try looking for an iblank attribute:
-      if (dset.attrExists("iblank"))
+      try
       {
-        Attribute att = dset.openAttribute("iblank");
-        DataSpace dspaceI = att.getSpace();
-        hsize_t dim[1];
-        dspaceI.getSimpleExtentDims(dim);
+        DataSet dsetI = file.openDataSet(iname);
+        DataSpace dspaceI = dsetI.getSpace();
+        hsize_t dimsI[1];
+        dspaceI.getSimpleExtentDims(dimsI);
+        iblankBT.assign({geo.nElesBT[etype]});
 
-        if (geo.nEles <= MAX_H5_ATTR_SIZE && dim[0] != geo.nEles)
-          ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+        if (dimsI[0] != geo.nElesBT[etype]) ThrowException("Error reading iblank data!");
 
-        att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+        dsetI.read(iblankBT.data(), PredType::NATIVE_INT);
+
+        for (int ele = 0; ele < geo.nElesBT[etype]; ele++)
+          geo.iblank_cell(geo.eleID[etype](ele)) = iblankBT(ele);
+      }
+      catch (FileIException error)
+      {
+        // No iblank dataset found; try looking for an iblank attribute:
+        if (dset.attrExists("iblank"))
+        {
+          Attribute att = dset.openAttribute("iblank");
+          DataSpace dspaceI = att.getSpace();
+          hsize_t dim[1];
+          dspaceI.getSimpleExtentDims(dim);
+
+          if (geo.nEles <= MAX_H5_ATTR_SIZE && dim[0] != geo.nEles)
+            ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
+
+          att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
+        }
       }
     }
   }
-
-  // Create dataspaces to handle reading of data into padded solution storage
-  hsize_t dimsU[3] = {nSpts, nVars, nElesPad};
-  hsize_t dimsF[3] = {nSpts, nVars, nEles};
-
-  DataSpace dspaceU(3, dimsU);
-  DataSpace dspaceF(3, dimsF);
-#ifdef _GPU
-  hsize_t count[3] = {1,1,1};
-  hsize_t start[3] = {0,0,0};
-  hsize_t stride[3] = {1,1,1};
-  hsize_t block[3] = {nSpts, nVars, nEles};
-  dspaceU.selectHyperslab(H5S_SELECT_SET, count, start, stride, block);
-#endif
-
-  if (nSpts == e->nSpts)
-  {
-    e->U_spts.assign({nSpts,nVars,nElesPad});
-    dset.read(e->U_spts.data(), PredType::NATIVE_DOUBLE, dspaceU, dspaceF);
-  }
-  else
-  {
-    int restartOrder = (input->nDims == 2)
-                     ? (std::sqrt(nSpts)-1) : (std::cbrt(nSpts)-1);
-
-    // Read into temporary storage, in case changing polynomial order
-    mdvector<double> U_restart({nSpts,nVars,nElesPad});
-    dset.read(U_restart.data(), PredType::NATIVE_DOUBLE, dspaceU, dspaceF);
-
-    // Setup extrapolation operator from restart points
-    e->set_oppRestart(restartOrder);
-
-    // Extrapolate values from restart points to solution points
-    auto &A = e->oppRestart(0, 0);
-    auto &B = U_restart(0, 0, 0);
-    auto &C = e->U_spts(0, 0, 0);
-
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nSpts,
-        e->nElesPad * e->nVars, nSpts, 1.0, &A, nSpts, &B,
-        e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
-  }
-
-  dset.close();
 
   // Process the config / stats string
   std::string str, key, tmp;
