@@ -207,28 +207,28 @@ private:
   _mpi_comm worldComm;
 
   //! Callback function to TIOGA to perform overset interpolation
-  void (*overset_interp)(int nVars, double* U_spts, int gradFlag);
+  void (*overset_interp)(int nVars, double* U_spts, int gradFlag) = NULL;
 
-  void (*overset_interp_send)(int nVars, int gradFlag);
-  void (*overset_interp_recv)(int nVars, int gradFlag);
+  void (*overset_interp_send)(int nVars, int gradFlag) = NULL;
+  void (*overset_interp_recv)(int nVars, int gradFlag) = NULL;
 
   //! Callback function to TIOGA to pre-process the grids
-  void (*tg_preprocess) (void);
+  void (*tg_preprocess) (void) = NULL;
 
   //! Callback function to TIOGA to process connectivity
-  void (*tg_process_connectivity) (void);
+  void (*tg_process_connectivity) (void) = NULL;
 
   //! Callback function to TIOGA to process only point connectivity (don't update blanking)
-  void (*tg_point_connectivity) (void);
+  void (*tg_point_connectivity) (void) = NULL;
 
   //! Callback to TIOGA to update blanking for current iteration
-  void (*tg_set_iter_iblanks) (double dt, int nVars);
+  void (*tg_set_iter_iblanks) (double dt, int nVars) = NULL;
 
   //! Callback to set a new rotation matrix & offset for TIOGA's ADT class
-  void (*tg_update_transform)(double* Rmat, double* offset, int ndim);
+  void (*tg_update_transform)(double* Rmat, double* offset, int ndim) = NULL;
 
-  void (*unblank_1)(void);
-  void (*unblank_2)(int);
+  void (*unblank_1)(void) = NULL;
+  void (*unblank_2)(int) = NULL;
 };
 
 #endif /* _zefr_hpp */

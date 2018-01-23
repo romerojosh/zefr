@@ -317,7 +317,62 @@ void Prisms::set_vandermonde_mats()
 void Prisms::set_oppRestart(unsigned int order_restart, bool use_shape)
 {
   /* Setup restart point locations */
-  /// TODO
+  auto loc_rpts_1D = Shape_pts(order_restart); unsigned int nRpts1D = loc_rpts_1D.size();
+  unsigned int nRpts = (order_restart + 1) * (order_restart + 1) * (order_restart + 2) / 2;
+  unsigned int nRpts2D = (order_restart + 1) * (order_restart + 2) / 2;
+
+  mdvector<double> loc_rpts({nRpts,nDims});
+  unsigned int rpt = 0;
+  for (unsigned int k = 0; k < nRpts1D; k++)
+  {
+    for (unsigned int i = 0; i < nRpts1D; i++)
+    {
+      for (unsigned int j = 0; j < nRpts1D - i; j++)
+      {
+        loc_rpts(rpt,0) = loc_rpts_1D[j];
+        loc_rpts(rpt,1) = loc_rpts_1D[i];
+        loc_rpts(rpt,2) = loc_rpts_1D[k];
+        rpt++;
+      }
+    }
+  }
+
+  /* Setup extrapolation operator from restart points */
+  oppRestart.assign({nSpts, nRpts});
+
+  /* Set vandermonde and inverse for orthonormal Dubiner basis at restart points */
+  mdvector<double> vand_r({nRpts, nRpts});
+
+  for (unsigned int i = 0; i < nRpts; i++)
+  {
+    for (unsigned int j = 0; j < nRpts; j++)
+    {
+      int m1 = j / nRpts2D;
+      int m2 = j % nRpts2D;
+      vand_r(i,j) = Dubiner2D(order_restart, loc_rpts(i, 0), loc_rpts(i, 1), m2) * Legendre(m1, loc_rpts(i,2)) * std::sqrt(m1+.5);
+    }
+  }
+
+  mdvector<double> inv_vand_r({nRpts, nRpts});
+  vand_r.inverse(inv_vand_r);
+
+  /* Compute Lagrange restart basis */
+  for (unsigned int spt = 0; spt < nSpts; spt++)
+  {
+    for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+    {
+      double val = 0.0;
+      for (unsigned int i = 0; i < nRpts; i++)
+      {
+        int m1 = i / nRpts2D;
+        int m2 = i % nRpts2D;
+        val += inv_vand_r(i, rpt) * Dubiner2D(order_restart, loc_spts(spt, 0), loc_spts(spt, 1), m2) * Legendre(m1, loc_spts(i,2)) * std::sqrt(m1+.5);
+      }
+
+      oppRestart(spt, rpt) = val;
+    }
+  }
+
 }
 
 double Prisms::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)

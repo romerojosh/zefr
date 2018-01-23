@@ -153,13 +153,13 @@ TIOGA.performConnectivity()
 # Restarting (if requested)
 # ------------------------------------------------------------
 if parameters['from_restart'] == 'yes':
-    initIter = parameters['restartstep']
+    initIter = int(parameters['restartstep'])
     time = parameters['restart-time']
-    ZEFR.restart(iter,time)
+    ZEFR.restart(initIter)
     if parameters['moving-grid']:
-        ZEFR.deformPart1(time+dt,iter)
+        ZEFR.deformPart1(time+dt,initIter)
         TIOGA.unblankPart1()
-        ZEFR.deformPart2(time,iter)
+        ZEFR.deformPart2(time,initIter)
         TIOGA.unblankPart2()
 
         if parameters['use-gpu']:
@@ -202,8 +202,8 @@ for i in range(iter+1,nSteps+1):
         ZEFR.runSubStepMid(i,j)
 
         # Interpolated gradient
-        if viscous:
-            TIOGA.exchangeGradient()
+#        if viscous:
+#            TIOGA.exchangeGradient()
 
         # Finish residual calculation and RK stage advancement
         # (Should include rigid_body_update() if doing 6DOF from ZEFR)

@@ -10,10 +10,12 @@ ainf   1.00
 meshRefLength  1.0
 reyNumber      200.0
 reyRefLength   1.0
-dt             .0001
+dt             .001
 Mach           .2
 refMach        .2
 from_restart   no
+restartstep    100
+restart-time   .1
 
 nsteps  500
 nstages 4

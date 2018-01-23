@@ -325,7 +325,7 @@ void FRSolver::restart_solution(void)
 #endif
 
 #ifdef _BUILD_LIB
-      if (input->overset)
+      if (input->overset && ZEFR->tg_update_transform != NULL)
         ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
 #endif
     }
@@ -335,7 +335,7 @@ void FRSolver::restart_solution(void)
   else
   {
 #ifdef _BUILD_LIB
-    if (input->overset)
+    if (input->overset && ZEFR->tg_point_connectivity != NULL)
       ZEFR->tg_point_connectivity();
 #endif
   }
@@ -1110,8 +1110,10 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
     if (param == "IBLANK" && input->overset)
     {
       geo.iblank_cell.assign({geo.nEles});
-      for (unsigned int ele = 0; ele < elesObjs[0]->nEles; ele++)
+      for (unsigned int ele = 0; ele < geo.nEles; ele++)
+      {
         f >> geo.iblank_cell(ele);
+      }
     }
     if (param == "grid_velocity")
     {
@@ -1150,9 +1152,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
 
           for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
-            /// TODO: make sure this is setup correctly first [and implement everywhere iblank_cell is used
-            //if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
 
             for (unsigned int rpt = 0; rpt < nRpts; rpt++)
             {
@@ -1182,13 +1182,15 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
       {
         for (auto e : elesObjs)
         {
+          nRpts = e->oppRestart.get_dim(1);
+
           U_restart[e->elesObjID].assign({nRpts, 3, e->nEles});
 
           unsigned int temp;
           binary_read(f, temp);
           for (unsigned int ele = 0; ele < e->nEles; ele++)
           {
-            if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+            if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
 
             for (unsigned int rpt = 0; rpt < nRpts; rpt++)
               for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
@@ -3710,6 +3712,8 @@ void FRSolver::step_RK_stage(int stage, const std::map<ELE_TYPE, mdvector_gpu<do
 
 void FRSolver::step_RK_stage_start(int stage)
 {
+  flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
+
   if (input->nStages > 1 && stage == 0)
   {
 #ifdef _CPU
@@ -3945,6 +3949,9 @@ void FRSolver::step_RK_stage_finish(int stage, const std::map<ELE_TYPE, mdvector
 
     current_iter++;
   }
+
+  flow_time = prev_time + elesObjs[0]->dt(0);
+  prev_time = flow_time;
 }
 
 #ifdef _CPU
@@ -4108,6 +4115,7 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
   POP_NVTX_RANGE;
 
   flow_time = prev_time + elesObjs[0]->dt(0);
+  prev_time = flow_time;
 }
 
 
@@ -5027,7 +5035,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   if (input->overset)
   {
     f << "<!-- IBLANK ";
-    for (unsigned int ic = 0; ic < eles->nEles; ic++)
+    for (unsigned int ic = 0; ic < geo.nEles; ic++)
     {
       f << geo.iblank_cell(ic) << " ";
     }
@@ -5036,34 +5044,34 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   if (input->motion)
   {
+    if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
+    {
+      f << "<!-- X_CG ";
+      for (int d = 0; d < 3; d++)
+        f << std::scientific << std::setprecision(16) << geo.x_cg(d) << " ";
+      f << " -->" << std::endl;
+
+      f << "<!-- V_CG ";
+      for (int d = 0; d < 3; d++)
+        f << std::scientific << std::setprecision(16) << geo.vel_cg(d) << " ";
+      f << " -->" << std::endl;
+
+      if (input->motion_type == RIGID_BODY)
+      {
+        f << "<!-- ROT-Q ";
+        for (int d = 0; d < 4; d++)
+          f << std::scientific << std::setprecision(16) << geo.q(d) << " ";
+        f << " -->" << std::endl;
+
+        f << "<!-- OMEGA ";
+        for (int d = 0; d < 3; d++)
+          f << std::scientific << std::setprecision(16) << geo.omega(d) << " ";
+        f << " -->" << std::endl;
+      }
+    }
+
     for (auto e : elesObjs)
     {
-      if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
-      {
-        f << "<!-- X_CG ";
-        for (int d = 0; d < 3; d++)
-          f << std::scientific << std::setprecision(16) << geo.x_cg(d) << " ";
-        f << " -->" << std::endl;
-
-        f << "<!-- V_CG ";
-        for (int d = 0; d < 3; d++)
-          f << std::scientific << std::setprecision(16) << geo.vel_cg(d) << " ";
-        f << " -->" << std::endl;
-
-        if (input->motion_type == RIGID_BODY)
-        {
-          f << "<!-- ROT-Q ";
-          for (int d = 0; d < 4; d++)
-            f << std::scientific << std::setprecision(16) << geo.q(d) << " ";
-          f << " -->" << std::endl;
-
-          f << "<!-- OMEGA ";
-          for (int d = 0; d < 3; d++)
-            f << std::scientific << std::setprecision(16) << geo.omega(d) << " ";
-          f << " -->" << std::endl;
-        }
-      }
-
       e->update_plot_point_coords();
 #ifdef _GPU
       e->grid_vel_nodes = e->grid_vel_nodes_d;
@@ -5081,8 +5089,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     for (auto e : elesObjs)
     {
       for (int ele = 0; ele < e->nEles; ele++)
-        if (geo.iblank_cell(ele) != NORMAL) nElesBO[e->elesObjID]--;
-//      if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBO[e->elesObjID]--;
+        if (geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) nElesBO[e->elesObjID]--;
     }
   }
 
@@ -5138,7 +5145,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     {
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
           f << filt.sensor[e->etype](ele) << " ";
@@ -5240,7 +5247,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     {
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
           binary_write(f, e->U_ppts(ppt, n, ele));
@@ -5261,7 +5268,7 @@ void FRSolver::write_solution(const std::string &_prefix)
     {
       for (unsigned int ele = 0; ele < e->nEles; ele++)
       {
-        if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+        if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
         for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
         {
           for (unsigned int dim = 0; dim < e->nDims; dim++)
@@ -5284,7 +5291,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
       for (unsigned int ppt = 0; ppt < e->nPpts; ppt++)
       {
         binary_write(f, (float) e->coord_ppts(ppt, 0, ele));
@@ -5309,7 +5316,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
       for (unsigned int subele = 0; subele < e->nSubelements; subele++)
       {
         for (unsigned int i = 0; i < e->nNodesPerSubelement; i++)
@@ -5333,7 +5340,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
       for (unsigned int subele = 0; subele < e->nSubelements; subele++)
       {
         offset += e->nNodesPerSubelement;
@@ -5352,7 +5359,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   {
     for (unsigned int ele = 0; ele < e->nEles; ele++)
     {
-      if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+      if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
       for (unsigned int subele = 0; subele < e->nSubelements; subele++)
       {
         if (e->etype == QUAD)

@@ -111,7 +111,7 @@ class zefrSolver:
         self.inp.restart = False
         if properties['from_restart'] == 'yes':
             self.inp.restart = True;
-            self.inp.restart_iter = properties['restartstep']
+            self.inp.restart_iter = int(properties['restartstep'])
 
         rinf = properties['rinf']
         ainf = properties['ainf']
@@ -340,6 +340,11 @@ class zefrSolver:
 
         return (self.gridData, self.callbacks)
     
+    def restart(self,iter):
+        os.chdir('zefr')
+        self.z.restart_solution()
+        os.chdir('..')
+
     def reportResidual(self,istep):
         os.chdir('zefr')
         self.z.write_residual()
