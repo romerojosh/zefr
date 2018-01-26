@@ -10,18 +10,28 @@ sys.path.append(TIOGA_BIN_DIR)
 sys.path.append(TIOGA_RUN_DIR)
 sys.path.append(ZEFR_BIN_DIR)
 sys.path.append(ZEFR_RUN_DIR)
-#sys.path.append(CONVERT_DIR)
+sys.path.append(CONVERT_DIR)
 
 TIOGA_BIN_DIR = '/home/jacob/tioga/bin/'
 TIOGA_RUN_DIR = '/home/jacob/tioga/run/'
 ZEFR_BIN_DIR = '/home/jacob/zefr/bin/'
 ZEFR_RUN_DIR = '/home/jacob/zefr/run/'
 CONVERT_DIR = '/home/jacob/zefr/external/'
+
+TIOGA_DIR = '/cstor/stanford/gerritsn/users/jcrabill/jay-tg/tioga/'
+ZEFR_DIR = '/cstor/stanford/gerritsn/users/jcrabill/workspace/zefr/'
+
+TIOGA_BIN_DIR = TIOGA_DIR+'/bin'
+TIOGA_RUN_DIR = TIOGA_DIR+'/run'
+ZEFR_BIN_DIR = ZEFR_DIR+'/bin'
+ZEFR_RUN_DIR = ZEFR_DIR+'/run'
+CONVERT_DIR = ZEFR_DIR+'/external/'
+
 sys.path.append(TIOGA_BIN_DIR)
 sys.path.append(TIOGA_RUN_DIR)
 sys.path.append(ZEFR_BIN_DIR)
 sys.path.append(ZEFR_RUN_DIR)
-#sys.path.append(CONVERT_DIR)
+sys.path.append(CONVERT_DIR)
 
 from mpi4py import MPI
 import numpy as np
@@ -98,6 +108,7 @@ try:
 except:
   print('ZEFR input file ("zefrInput") not given in',inputFile)
 
+print(os.getcwd())
 ZEFR = zefrSolver(zefrInput,gridID,nGrids)
 TIOGA = Tioga(gridID,nGrids)
 
@@ -202,8 +213,8 @@ for i in range(iter+1,nSteps+1):
         ZEFR.runSubStepMid(i,j)
 
         # Interpolated gradient
-#        if viscous:
-#            TIOGA.exchangeGradient()
+        #if viscous:
+        #    TIOGA.exchangeGradient()
 
         # Finish residual calculation and RK stage advancement
         # (Should include rigid_body_update() if doing 6DOF from ZEFR)

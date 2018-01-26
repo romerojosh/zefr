@@ -4028,9 +4028,9 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
   double bhi = rk_bhat(stage);
 
 #ifdef _CPU
-  // Update Error
   for (auto e : elesObjs)
   {
+    // Update Error
     if (input->adapt_dt)
     {
 #pragma omp parallel for collapse(2)
@@ -7095,7 +7095,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
     f << std::endl;
 
     /* Store maximum residual */
-    res_max = res[0] / nDoF;
+    res_max = res[input->res_field] / nDoF;
   }
 
 #ifdef _MPI
@@ -7281,7 +7281,7 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
     conv_file << std::endl;
 
     /* Store maximum residual */
-    res_max = res[0] / nDoF;
+    res_max = res[input->res_field] / nDoF;
   }
 
 #ifdef _MPI
@@ -7483,6 +7483,9 @@ void FRSolver::report_error(std::ofstream &f)
         double x = e->coord_qpts(qpt, 0, ele);
         double y = e->coord_qpts(qpt, 1, ele);
         double z = (geo.nDims == 2) ? 0.0 : e->coord_qpts(qpt, 2, ele);
+
+        /* Vincent et al. vortex: skip error from outside 4 by 4 box */
+        if (input->test_case == 3 && (std::abs(x) > 2.0 || std::abs(y) > 2.0)) continue;
 
         /* Compute true solution and derivatives */
         U_true = compute_U_true(x, y, z, flow_time, n, input);
@@ -8144,6 +8147,7 @@ void FRSolver::move(double time, bool update_iblank)
 
   if (update_iblank && input->overset)
   {
+    PUSH_NVTX_RANGE("MoveGrid", 0);
 #ifdef _BUILD_LIB
     // Guess grid position at end of time step and perform blanking procedure
     auto xcg = geo.x_cg;
@@ -8210,6 +8214,7 @@ void FRSolver::move(double time, bool update_iblank)
 #endif
 
     ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
+    POP_NVTX_RANGE;
 
     PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
     ZEFR->unblank_1();
@@ -8225,6 +8230,7 @@ void FRSolver::move(double time, bool update_iblank)
 #endif // _BUILD_LIB
   }
 
+  PUSH_NVTX_RANGE("MoveGrid", 0);
   if (input->motion_type != RIGID_BODY)
   {
 #ifdef _CPU
@@ -8239,6 +8245,7 @@ void FRSolver::move(double time, bool update_iblank)
 
   for (auto e : elesObjs)
     e->move(faces);
+  POP_NVTX_RANGE;
 
 #ifdef _BUILD_LIB
   // Update the overset connectivity to the new grid positions
@@ -8275,7 +8282,9 @@ void FRSolver::move(double time, bool update_iblank)
       ZEFR->unblank_2(faces->nVars);
       POP_NVTX_RANGE;
 
+      PUSH_NVTX_RANGE("Iblank2GPU", 6);
       ZEFR->update_iblank_gpu();
+      POP_NVTX_RANGE;
     }
 
     PUSH_NVTX_RANGE("TG-PT-CONN",3);

@@ -46,9 +46,9 @@ ifeq ($(strip $(DEBUG_LEVEL)),2)
 	CXXFLAGS += -g -O0 #-D_NVTX
 	CUFLAGS += -g -G -O0 #-D_NVTX
 else
-	CCFLAGS += $(RELEASE_FLAGS)
-	CXXFLAGS += $(RELEASE_FLAGS)
-	CUFLAGS += -O3 -use_fast_math
+	CCFLAGS += $(RELEASE_FLAGS) #-D_NVTX
+	CXXFLAGS += $(RELEASE_FLAGS) #-D_NVTX
+	CUFLAGS += -O3 -use_fast_math #-D_NVTX
 endif
 endif
 

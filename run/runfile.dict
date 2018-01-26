@@ -20,7 +20,7 @@ restart-time   .1
 nsteps  500
 nstages 4
 
-report-freq   10
+report-freq   1
 plot-freq     100
 
 use-gpu  0

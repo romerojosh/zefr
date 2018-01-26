@@ -83,6 +83,7 @@ int main(int argc, char *argv[])
   {
     runTime.startTimer();
 
+    PUSH_NVTX_RANGE("ZEFR-TIME-STEP", 0);
     if (!inp.adapt_dt)
     {
       // Can use the new-style method [no callbacks within ZEFR]
@@ -106,6 +107,7 @@ int main(int argc, char *argv[])
       // Adaptive time stepping -> stick to previous method
       z->do_step();
     }
+    POP_NVTX_RANGE;
 
     runTime.stopTimer();
 
@@ -136,9 +138,9 @@ int main(int argc, char *argv[])
 
   CALLGRIND_STOP_INSTRUMENTATION;
 
-  if (nGrids > 1) tg_time.showTime(2);
-  runTime.showTime(2);
-  inp.waitTimer.showTime();
+  //if (nGrids > 1) tg_time.showTime(2);
+  //runTime.showTime(2);
+  //inp.waitTimer.showTime();
 
   zefr::finalize();
 

@@ -77,16 +77,37 @@ double compute_U_init(double x, double y, double z, unsigned int var, const Inpu
   {
     if (input->test_case == 1 || input->test_case == 3)
     {
-      double G = 5.0;
-      double R = 1.;
+      double rho, Vx, Vy, P;
+      if (input->test_case == 1)
+      {
+        double G = 5.0;
+        double R = 1.;
 
-      double f = (1.0 - x*x - y*y)/R;
+        double f = (1.0 - x*x - y*y)/R;
 
-      double rho = std::pow(1.0 - (G * G * (input->gamma - 1.))/(8.0 * input->gamma * 
-                M_PI * M_PI) * std::exp(f), 1.0/(input->gamma - 1.0)); 
-      double Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f);
-      double Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
-      double P = std::pow(rho, input->gamma);
+        rho = std::pow(1.0 - (G * G * (input->gamma - 1.))/(8.0 * input->gamma * 
+                  M_PI * M_PI) * std::exp(f), 1.0/(input->gamma - 1.0)); 
+        Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f);
+        Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
+        P = std::pow(rho, input->gamma);
+      }
+      else if (input->test_case == 3)
+      {
+        /* Vincent et al. Isentropic Euler Vortex */
+        double D = 20.0; // Domain size (e.g. [-D,D] x [-D,D] domain)
+        double G = 13.5; // Vortex strength
+        double M = 0.4;  // Mach number
+        double R = 1.5;  // Vortex radius
+
+        double omg = G / (2.0*M_PI*R);
+        double f = std::exp((1.0 - x*x - y*y) / (2.0*R*R));
+
+        rho = std::pow(1.0 - 0.5*(input->gamma-1.0)*omg*omg*M*M*R*R*f*f, 
+            1.0/(input->gamma-1.0));
+        Vx = -omg*f*y;
+        Vy = 1.0 + omg*f*x;
+        P = 1.0 / (input->gamma*M*M) * std::pow(rho, input->gamma); // Unit entropy
+      }
 
       if (input->nDims == 2)
       {
@@ -242,18 +263,39 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
   }
   else if (input->equation == EulerNS)
   {
-    if (input->test_case != 2)
+    if (input->test_case == 1 || input->test_case == 3)
     {
-      double G = 5.0;
-      double R = 1.;
+      double rho, Vx, Vy, P;
+      if (input->test_case == 1)
+      {
+        double G = 5.0;
+        double R = 1.;
 
-      double f = (1.0 - x*x - y*y)/R;
+        double f = (1.0 - x*x - y*y)/R;
 
-      double rho = std::pow(1.0 - (G * G * (input->gamma - 1.))/(8.0 * input->gamma * 
-                M_PI * M_PI) * std::exp(f), 1.0/(input->gamma - 1.0)); 
-      double Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f);
-      double Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
-      double P = std::pow(rho, input->gamma);
+        rho = std::pow(1.0 - (G * G * (input->gamma - 1.))/(8.0 * input->gamma * 
+                  M_PI * M_PI) * std::exp(f), 1.0/(input->gamma - 1.0)); 
+        Vx = 1.0 - G * y / (2.0*M_PI) * std::exp(0.5 * f);
+        Vy = 1.0 + G * x / (2.0*M_PI) * std::exp(0.5 * f);
+        P = std::pow(rho, input->gamma);
+      }
+      else if (input->test_case == 3)
+      {
+        /* Vincent et al. Isentropic Euler Vortex */
+        double D = 20.0; // Domain size (e.g. [-D,D] x [-D,D] domain)
+        double G = 13.5; // Vortex strength
+        double M = 0.4;  // Mach number
+        double R = 1.5;  // Vortex radius
+
+        double omg = G / (2.0*M_PI*R);
+        double f = std::exp((1.0 - x*x - y*y) / (2.0*R*R));
+
+        rho = std::pow(1.0 - 0.5*(input->gamma-1.0)*omg*omg*M*M*R*R*f*f, 
+            1.0/(input->gamma-1.0));
+        Vx = -omg*f*y;
+        Vy = 1.0 + omg*f*x;
+        P = 1.0 / (input->gamma*M*M) * std::pow(rho, input->gamma); // Unit entropy
+      }
 
       if (input->nDims == 2)
       {
@@ -286,59 +328,56 @@ double compute_U_true(double x, double y, double z, double t, unsigned int var, 
         }
       }
     }
-    else
+    else if (input->test_case == 2)
     {
-      if (input->test_case == 2)
+      /* Couette flow test case */
+      double gamma = input->gamma;
+      double Pr = input->prandtl;
+      double P = input->P_fs;
+      double R = input->R;
+      double Vw = input->V_wall(0);
+      double Tw = input->T_wall;
+      double cp = gamma * R / (gamma - 1);
+
+      double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
+
+      if (input->nDims == 2)
       {
-        /* Couette flow test case */
-        double gamma = input->gamma;
-        double Pr = input->prandtl;
-        double P = input->P_fs;
-        double R = input->R;
-        double Vw = input->V_wall(0);
-        double Tw = input->T_wall;
-        double cp = gamma * R / (gamma - 1);
-
-        double rho = gamma / (gamma - 1) * (2 * P)/(2*cp*Tw + Pr*Vw*Vw * y * (1-y));
-
-        if (input->nDims == 2)
+        switch (var)
         {
-          switch (var)
-          {
-            case 0:
-              val = rho; break;
-            case 1:
-              val = rho * (Vw*y); break;
-            case 2:
-              val = 0.0; break;
-            case 3:
-              val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
-                                             2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
-          }
-        }
-        else
-        {
-          switch (var)
-          {
-            case 0:
-              val = rho; break;
-            case 1:
-              val = rho * (Vw*y); break;
-            case 2:
-              val = 0.0; break;
-            case 3:
-              val =  0.0; break;
-            case 4:
-              val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
-                                             2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
-          }
+          case 0:
+            val = rho; break;
+          case 1:
+            val = rho * (Vw*y); break;
+          case 2:
+            val = 0.0; break;
+          case 3:
+            val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
+                                           2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
         }
       }
-      else if (input->test_case == 4)
+      else
       {
-        /* Taylor-Green Vortex Test Case */
-        ThrowException("Error formula for Taylor-Green Vortex test case not implemented");
+        switch (var)
+        {
+          case 0:
+            val = rho; break;
+          case 1:
+            val = rho * (Vw*y); break;
+          case 2:
+            val = 0.0; break;
+          case 3:
+            val =  0.0; break;
+          case 4:
+            val = P / (gamma - 1) + 0.5 * (gamma / (gamma - 1) *
+                                           2 * P / (2*cp*Tw + Pr * Vw*Vw * y * (1-y))) * Vw*Vw*y*y; break;
+        }
       }
+    }
+    else if (input->test_case == 4)
+    {
+      /* Taylor-Green Vortex Test Case */
+      ThrowException("Error formula for Taylor-Green Vortex test case not implemented");
     }
   }
   else
