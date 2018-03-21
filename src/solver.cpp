@@ -1640,7 +1640,7 @@ void FRSolver::compute_residual(unsigned int stage, int color)
   if (input->viscous)
   {
     /* Interpolate gradient data to/from other grid(s) */
-    overset_grad_send();
+    //overset_grad_send();
 
     /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
     for (auto e : elesObjs)
@@ -1676,8 +1676,8 @@ void FRSolver::compute_residual(unsigned int stage, int color)
     e->compute_divF_spts(stage);
 
   /* Unpack gradient data from other grid(s) */
-  if (input->viscous)
-    overset_grad_recv();
+  //if (input->viscous)
+  //  overset_grad_recv();
 
   /* Compute common interface flux at non-MPI flux points */
   faces->compute_common_F(startFpt, endFpt);
@@ -8216,8 +8216,10 @@ void FRSolver::move(double time, bool update_iblank)
     ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
     POP_NVTX_RANGE;
 
+    //cudaDeviceSynchronize(); /// DEBUGGING
     PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
     ZEFR->unblank_1();
+    //cudaDeviceSynchronize(); /// DEBUGGING
     POP_NVTX_RANGE;
 
     // Reset position & orientation to original values
@@ -8230,6 +8232,7 @@ void FRSolver::move(double time, bool update_iblank)
 #endif // _BUILD_LIB
   }
 
+    //cudaDeviceSynchronize(); /// DEBUGGING
   PUSH_NVTX_RANGE("MoveGrid", 0);
   if (input->motion_type != RIGID_BODY)
   {
@@ -8278,8 +8281,10 @@ void FRSolver::move(double time, bool update_iblank)
     {
       // Grid reset to current flow time; re-do blanking, find any unblanked
       // elements, and perform the unblank interpolation on them
+    //cudaDeviceSynchronize(); /// DEBUGGING
       PUSH_NVTX_RANGE("TG-UNBLANK-2",5);
       ZEFR->unblank_2(faces->nVars);
+    //cudaDeviceSynchronize(); /// DEBUGGING
       POP_NVTX_RANGE;
 
       PUSH_NVTX_RANGE("Iblank2GPU", 6);
@@ -8287,8 +8292,10 @@ void FRSolver::move(double time, bool update_iblank)
       POP_NVTX_RANGE;
     }
 
+    //cudaDeviceSynchronize(); /// DEBUGGING
     PUSH_NVTX_RANGE("TG-PT-CONN",3);
     ZEFR->tg_point_connectivity();
+    //cudaDeviceSynchronize(); /// DEBUGGING
     POP_NVTX_RANGE;
   }
 #endif

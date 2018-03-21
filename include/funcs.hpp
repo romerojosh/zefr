@@ -354,7 +354,7 @@ unsigned long hash_str(const char *str);
 template <typename T>
 void write_opp(mdvector<T> op, std::string str, unsigned long id, int m, int n)
 {
-#ifdef _DUMP_OPS
+//#ifdef _DUMP_OPS
   std::ofstream f(str + ".txt");
 
   f << id << std::endl;
@@ -367,7 +367,7 @@ void write_opp(mdvector<T> op, std::string str, unsigned long id, int m, int n)
     }
     f << std::endl;
   }
-#endif
+//#endif
 }
 
 #endif /* funcs_hpp */

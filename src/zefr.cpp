@@ -391,9 +391,9 @@ void Zefr::setup_solver(void)
     if (input.viscous)
       simData.du_spts[i] = solver->elesObjs[i]->dU_spts.data();
 #ifdef _GPU
-    simData.u_spts_d = solver->elesObjs[i]->U_spts_d.data();
+    simData.u_spts_d[i] = solver->elesObjs[i]->U_spts_d.data();
     if (input.viscous)
-      simData.du_spts_d = solver->elesObjs[i]->dU_spts_d.data();
+      simData.du_spts_d[i] = solver->elesObjs[i]->dU_spts_d.data();
 #endif
   }
 }
@@ -834,6 +834,16 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
 #ifdef _GPU
   if (nFringe == 0) return;
 
+  if (geo->ele_types.size() == 1)
+  {
+    PUSH_NVTX_RANGE("donorFracGPU-1",1);
+    solver->elesObjs[0]->get_interp_weights_gpu(cellIDs,nFringe,rst,weights);
+    POP_NVTX_RANGE;
+
+    return;
+  }
+
+  PUSH_NVTX_RANGE("donorFracGPU-1",1);
   std::map<ELE_TYPE, unsigned int> ncell_type;
   std::map<ELE_TYPE, mdvector<int>> cells_type;
   std::map<ELE_TYPE, mdvector<double>> weights_type, rst_type;
@@ -890,7 +900,9 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
     weights_type_d[etype].free_data();
     rst_type_d[etype].free_data();
   }
+  POP_NVTX_RANGE;
 
+  PUSH_NVTX_RANGE("donorFracGPU-2",2); /// DEBUGGING
   for (auto etype : geo->ele_set)
     ncell_type[etype] = 0;
 
@@ -907,6 +919,7 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
     ncell_type[etype]++;
     ind += nSpts;
   }
+  POP_NVTX_RANGE;
 #endif
 }
 
