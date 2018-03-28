@@ -940,7 +940,15 @@ void Zefr::update_iblank_gpu(void)
   for (unsigned int fpt = 0; fpt < geo->nGfpts; fpt++)
   {
     int face = geo->fpt2face[fpt];
+    int icL = geo->face2eles(face,0);
     geo->iblank_fpts(fpt) = geo->iblank_face(face);
+
+    // Set iblank value to tell us which side the hole cell is on
+    if (geo->iblank_face(face) < 0 && geo->iblank_cell(icL) == HOLE)
+    {
+      geo->iblank_fpts(fpt) = -2;
+      geo->iblank_face(face) = -2;
+    }
   }
 
   geo->iblank_fpts_d = geo->iblank_fpts;

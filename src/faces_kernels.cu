@@ -1234,6 +1234,15 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
 
     beta *= flip_beta(fpt);
 
+    // Sidestep need for overset gradient interp by setting beta
+    if (overset && iblank[fpt] < 0)
+    {
+      if (iblank[fpt] == -1) // Left side normal, right side hole
+        beta = 0.5;
+      else                             // Right side normal, left side hole
+        beta = -0.5;
+    }
+
     if (LDG_bias(fpt) == 0)
     {
       /* Get left and/or right state variables */
@@ -1519,6 +1528,15 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     char LDG_bias_ = LDG_bias(fpt);
 
     beta *= flip_beta(fpt);
+
+    // Sidestep need for overset gradient interp by setting beta
+    if (overset && iblank[fpt] < 0)
+    {
+      if (iblank[fpt] == -1) // Left side normal, right side hole
+        beta = 0.5;
+      else                             // Right side normal, left side hole
+        beta = -0.5;
+    }
 
     if (LDG_bias_ == 0)
     {

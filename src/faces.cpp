@@ -1394,9 +1394,27 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 #pragma omp parallel for
     for (unsigned int fpt = startFpt; fpt < endFpt; fpt++)
     {
-      if (input->overset && geo->iblank_face(geo->fpt2face[fpt]) == HOLE) continue;
+      const int face = geo->fpt2face[fpt];
+      if (input->overset && geo->iblank_face(face) == HOLE) continue;
 
       double beta = geo->flip_beta(fpt)*input->ldg_b;
+
+      // Sidestep need for overset gradient interp
+      // NOTE: iflag due to TIOGA only updating U, not U_ldg [CPU-specific issue]
+      char iflag = 0;
+      if (input->overset && geo->iblank_face(face) == FRINGE)
+      {
+        if (geo->iblank_cell(geo->face2eles(face,0)) == NORMAL)
+        {
+          beta = 0.5;
+          iflag = 1;
+        }
+        else
+        {
+          beta = -0.5;
+          iflag = -1;
+        }
+      }
 
       /* Get left and right state variables */
       /* If interior, allow use of beta factor */
@@ -1408,12 +1426,12 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
         if (beta == 0.5)
         {
           for (unsigned int n = 0; n < nVars; n++)
-            UR[n] = U_ldg(1, n, fpt);
+            UR[n] = (iflag > 0) ? U(1, n, fpt) : U_ldg(1, n, fpt);
         }
         else if (beta == -0.5)
         {
           for (unsigned int n = 0; n < nVars; n++)
-            UL[n] = U_ldg(0, n, fpt);
+            UL[n] = (iflag < 0) ? U(0, n, fpt) : U_ldg(0, n, fpt);
         }
         else
         {
@@ -1495,6 +1513,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     double beta = geo->flip_beta(fpt)*input->ldg_b;
 
     // Sidestep need for overset gradient interp
+    // NOTE: iflag due to TIOGA only updating U, not U_ldg [CPU-specific issue]
     char iflag = 0;
     if (input->overset && geo->iblank_face(face) == FRINGE)
     {
