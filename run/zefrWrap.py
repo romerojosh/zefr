@@ -1,7 +1,7 @@
 import sys
 import os
-TIOGA_DIR = '/home/jcrabill/tioga/bin/'
-ZEFR_DIR = '/home/jcrabill/zefr/bin/'
+TIOGA_DIR = '/p/home/jcrabill/tioga/bin/'
+ZEFR_DIR = '/p/home/jcrabill/zefr/bin/'
 sys.path.append(TIOGA_DIR)
 sys.path.append(ZEFR_DIR)
 #TIOGA_DIR = '/home/jacob/tioga/bin/'

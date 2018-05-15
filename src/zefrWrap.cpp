@@ -2,7 +2,7 @@
 #include "tiogaInterface.h"
 
 #include "mpi.h"
-#include <valgrind/callgrind.h>
+//#include <valgrind/callgrind.h>
 
 Timer tg_time("TIOGA Pre-Processing Time: ");
 void initialize_overset(Zefr *z, InputStruct &inp);
@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
   Timer runTime("ZEFR Compute Time: ");
   inp.waitTimer.setPrefix("ZEFR MPI Time: ");
 
-  CALLGRIND_START_INSTRUMENTATION;
+  //CALLGRIND_START_INSTRUMENTATION;
 
   for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
       z->write_error();
   }
 
-  CALLGRIND_STOP_INSTRUMENTATION;
+  //CALLGRIND_STOP_INSTRUMENTATION;
 
   //if (nGrids > 1) tg_time.showTime(2);
   //runTime.showTime(2);

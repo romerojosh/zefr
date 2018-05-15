@@ -63,7 +63,7 @@ class Elements
     unsigned int nFaces, nNodes;
     unsigned int nSubelements, nNodesPerSubelement;
     mdvector<double> coord_spts, coord_fpts, coord_ppts, coord_qpts;
-    std::vector<int> nFpts_face;
+    std::vector<unsigned int> nFpts_face;
 
     mdvector<double> loc_spts, loc_fpts, loc_ppts, loc_nodes, loc_qpts;
     mdvector<unsigned int> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;

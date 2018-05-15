@@ -22,8 +22,13 @@ import types
 
 import numpy as np
 
-CONVERT_DIR = '/home/jcrabill/zefr/external/'
+CONVERT_DIR = '/p/home/jcrabill/zefr/external/'
 sys.path.append(CONVERT_DIR)
+
+CONVERT_DIR = '/p/home/jcrabill/zefr/external/'
+sys.path.append(CONVERT_DIR)
+
+sys.path.append('/p/home/jcrabill/zefr/bin/')
 
 from convert import *
 
@@ -40,6 +45,7 @@ try:
     import zefr
 except ImportError:
     print("Import Error: ZEFR solver module")
+    quit()
 
 class zefrSolver:
 
@@ -101,8 +107,8 @@ class zefrSolver:
         self.nStages = int(properties['nstages'])
 
         self.inp.nStages = self.nStages
-        self.inp.motion = properties['moving-grid']
-        self.inp.viscous = properties['viscous']
+        self.inp.motion = bool(properties['moving-grid'])
+        self.inp.viscous = bool(properties['viscous'])
 
         self.inp.write_freq = int(properties['plot-freq'])
         self.inp.report_freq = int(properties['report-freq'])
@@ -119,7 +125,11 @@ class zefrSolver:
         gridScale = conditions['meshRefLength']
         Reref = conditions['reyNumber']
         Lref = conditions['reyRefLength']
-        Mref = conditions['refMach']
+        Mref = conditions['Mach']
+
+        mu = conditions['viscosity']
+        gamma = conditions['gamma']
+        prandtl = conditions['prandtl']
 
         self.inp.dt = conditions['dt']
 
@@ -135,7 +145,16 @@ class zefrSolver:
         self.forceDim = 0.5 * rinf * (Mref*ainf*gridScale)**2
         self.momDim = self.forceDim * gridScale
 
+        # Update ZEFR's input parameters with non-dimensionalized quantities
+        self.inp.dt = self.dt
+        self.inp.rho_fs = rinf
+        self.inp.mach_fs = mach_fs
+        self.inp.Re_fs = Reref
+        self.inp.L_fs = Lref
 
+        self.inp.mu = mu
+        self.inp.gamma = gamma
+        self.inp.prandtl = prandtl
 
         # Have ZEFR do any additional setup on input parameters
         self.z.init_inputs()

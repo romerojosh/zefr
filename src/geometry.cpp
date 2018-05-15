@@ -682,8 +682,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     geo.face_set.insert(TRI);
   }
 
-  geo.face_types.assign({geo.face_set.size()});
-  geo.nNode_face.assign({geo.face_set.size()});
+  geo.face_types.assign({(uint)geo.face_set.size()});
+  geo.nNode_face.assign({(uint)geo.face_set.size()});
 
   f.seekg(pos);
 
@@ -1060,7 +1060,7 @@ void set_face_nodes(GeoStruct &geo)
     }
     else if (etype == PRI)
     {
-      int maxN = std::max(geo.nNdFaceCurved[TRI], geo.nNdFaceCurved[QUAD]);
+      uint maxN = std::max(geo.nNdFaceCurved[TRI], geo.nNdFaceCurved[QUAD]);
       geo.faceNodesCurved[etype].assign({6, maxN});
 
       std::vector<std::vector<int>> nodes(6);
@@ -1234,7 +1234,7 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
 #else
         nFptsPerFace[ftype] = order + 1;
         auto wts = Gauss_Legendre_pts(order + 1);
-        geo.weights_fpts[ftype].assign({wts.size()});
+        geo.weights_fpts[ftype].assign({(uint)wts.size()});
         for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #endif
         break;
@@ -1367,11 +1367,11 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
   for (auto ftype : geo.face_set)
   {
     geo.face2fpts[ftype].assign({nFptsPerFace[ftype], (unsigned)unique_faces[ftype].size()}, -1);
-    geo.faceID[ftype].assign({unique_faces[ftype].size()}, -1);
+    geo.faceID[ftype].assign({(uint)unique_faces[ftype].size()}, -1);
     geo.nFacesBT[ftype] = 0;
   }
 
-  int nf = 0;
+  uint nf = 0;
   for (auto flist : unique_faces)
     nf += flist.second.size();
 
@@ -2462,7 +2462,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.nNodesPerEleBT[etype] = dims[0];
     geo.nNodes = geo.nEles * geo.nNodesPerEleBT[etype];
     geo.nElesBT[etype] = dims[1];
-    geo.eleID[etype].assign({dims[1]});
+    geo.eleID[etype].assign({(uint)dims[1]});
 
     geo.nEles += dims[1];
 
@@ -2659,8 +2659,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
     geo.face_set.insert(TRI);
   }
 
-  geo.face_types.assign({geo.face_set.size()});
-  geo.nNode_face.assign({geo.face_set.size()});
+  geo.face_types.assign({(uint)geo.face_set.size()});
+  geo.nNode_face.assign({(uint)geo.face_set.size()});
 
   int n = 0;
   for (auto ftype : geo.face_set)
@@ -2871,8 +2871,8 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.faceID_type.assign({geo.nFaces}, -1);
   for (auto ftype : geo.face_set)
   {
-    geo.face2nodes[ftype].assign({geo.nFacesBT[ftype], geo.nNdFaceCurved[ftype]}, -1);
-    geo.faceID[ftype].assign({geo.nFacesBT[ftype]}, -1);
+    geo.face2nodes[ftype].assign({(uint)geo.nFacesBT[ftype], (uint)geo.nNdFaceCurved[ftype]}, -1);
+    geo.faceID[ftype].assign({(uint)geo.nFacesBT[ftype]}, -1);
     geo.nFacesBT[ftype] = 0;
   }
 
@@ -2979,7 +2979,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
 #else
         nFptsPerFace[ftype] = order + 1;
         auto wts = Gauss_Legendre_pts(order + 1);
-        geo.weights_fpts[ftype].assign({wts.size()});
+        geo.weights_fpts[ftype].assign({(uint)wts.size()});
         for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #endif
         break;
@@ -3053,7 +3053,7 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
   /* Determine number of faces per face type */
   for (auto ftype : geo.face_set)
   {
-    geo.face2fpts[ftype].assign({nFptsPerFace[ftype], geo.nFacesBT[ftype]}, -1);
+    geo.face2fpts[ftype].assign({(uint)nFptsPerFace[ftype], (uint)geo.nFacesBT[ftype]}, -1);
   }
 
   for (auto etype : geo.ele_set)

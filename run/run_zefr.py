@@ -1,10 +1,17 @@
 import sys
 import os
 
-TIOGA_BIN_DIR = '/home/jcrabill/TG_COPY/tioga/bin/'
-TIOGA_RUN_DIR = '/home/jcrabill/TG_COPY/tioga/run/'
-ZEFR_BIN_DIR = '/home/jcrabill/zefr/bin/'
-ZEFR_RUN_DIR = '/home/jcrabill/zefr/run/'
+#HOME_DIR = '/home/jcrabill/'
+#HOME_DIR = '/cstor/stanford/gerritsn/users/jcrabill/'
+HOME_DIR = '/p/home/jcrabill/'
+
+TIOGA_DIR = HOME_DIR + '/tioga/'
+ZEFR_DIR = HOME_DIR + '/zefr/'
+
+TIOGA_BIN_DIR = TIOGA_DIR + '/bin/'
+TIOGA_RUN_DIR = TIOGA_DIR + '/run/'
+ZEFR_BIN_DIR = ZEFR_DIR + '/bin/'
+ZEFR_RUN_DIR = ZEFR_DIR + '/run/'
 CONVERT_DIR = '/home/jcrabill/zefr/external/'
 sys.path.append(TIOGA_BIN_DIR)
 sys.path.append(TIOGA_RUN_DIR)
@@ -17,9 +24,6 @@ TIOGA_RUN_DIR = '/home/jacob/tioga/run/'
 ZEFR_BIN_DIR = '/home/jacob/zefr/bin/'
 ZEFR_RUN_DIR = '/home/jacob/zefr/run/'
 CONVERT_DIR = '/home/jacob/zefr/external/'
-
-TIOGA_DIR = '/cstor/stanford/gerritsn/users/jcrabill/jay-tg/tioga/'
-ZEFR_DIR = '/cstor/stanford/gerritsn/users/jcrabill/workspace/zefr/'
 
 TIOGA_BIN_DIR = TIOGA_DIR+'/bin'
 TIOGA_RUN_DIR = TIOGA_DIR+'/run'

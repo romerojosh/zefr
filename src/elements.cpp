@@ -649,7 +649,7 @@ void Elements::setup_FR()
       int npts = pts.get_dim(0);
 
       // Evaluate solution basis on a face at the quadrature points
-      mdvector<double> fbasis_qpts({npts, nFpts_face[F]});
+      mdvector<double> fbasis_qpts({(uint)npts, (uint)nFpts_face[F]});
       for (int j = 0; j < npts; j++)
       {
         for (int i = 0; i < nFpts_face[F]; i++)
@@ -661,7 +661,7 @@ void Elements::setup_FR()
       }
 
       // Evaluate the orthonormal solution basis at the quadrature points
-      mdvector<double> ubasis_qpts({npts, nSpts});
+      mdvector<double> ubasis_qpts({(uint)npts, nSpts});
       for (int i = 0; i < npts; i++)
       {
         double* loc = (nDims == 3) ? &pts(i,0) : &pts(i);

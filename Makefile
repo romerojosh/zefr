@@ -4,8 +4,12 @@ else
 include $(CONFIG)
 endif
 
-CXX = g++
-CC = gcc
+ifeq ($(CXX),)
+	CXX = g++
+endif
+ifeq ($(CC),)
+	CC = gcc
+endif
 ifeq ($(strip $(INTEL)),YES)
 	CXX = icpc
 	CC = icc
@@ -37,9 +41,9 @@ else
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CCFLAGS += -g -O3 -D_NVTX
-	CXXFLAGS += -g -O3 -D_NVTX
-	CUFLAGS += -g -O3 -D_NVTX
+	CCFLAGS += -g -O3 -D_NO_GIMMIK -D_NVTX 
+	CXXFLAGS += -g -O3 -D_NO_GIMMIK -D_NVTX
+	CUFLAGS += -g -O3 -D_NO_GIMMIK -D_NVTX
 else 
 ifeq ($(strip $(DEBUG_LEVEL)),2)
 	CCFLAGS += -g -O0 #-D_NVTX
@@ -83,15 +87,19 @@ INCS = -I$(strip $(BLAS_INC_DIR))
 
 # Setting MPI/METIS flags
 ifeq ($(strip $(MPI)),YES)
-ifeq ($(strip $(INTEL)),YES)
-	CXX = mpiicpc -cxx=icpc
-else
-	CXX = mpicxx
-endif
+#ifeq ($(strip $(INTEL)),YES)
+#	CXX = mpiicpc -cxx=icpc
+#else
+#	CXX = /opt/gcc/7.2.0/bin/g++
+#endif
 	FLAGS += -D_MPI
 	INCS += -I$(strip $(MPI_INC_DIR))/ -I$(strip $(METIS_INC_DIR))/
 ifneq ($(MPI_LIB_DIR),)
-	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
+ifeq ($(strip $(INTEL)),YES)
+	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpich_intel -Wl,-rpath=$(MPI_LIB_DIR)
+else
+	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR) -lmpi_cxx
+endif
 endif
 	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
 endif
