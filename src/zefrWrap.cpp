@@ -2,9 +2,7 @@
 #include "tiogaInterface.h"
 
 #include "mpi.h"
-//#include <valgrind/callgrind.h>
 
-Timer tg_time("TIOGA Pre-Processing Time: ");
 void initialize_overset(Zefr *z, InputStruct &inp);
 void setup_overset_data(Zefr *z, InputStruct &inp);
 
@@ -77,13 +75,10 @@ int main(int argc, char *argv[])
   Timer runTime("ZEFR Compute Time: ");
   inp.waitTimer.setPrefix("ZEFR MPI Time: ");
 
-  //CALLGRIND_START_INSTRUMENTATION;
-
   for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
     runTime.startTimer();
 
-    PUSH_NVTX_RANGE("ZEFR-TIME-STEP", 0);
     if (!inp.adapt_dt)
     {
       // Can use the new-style method [no callbacks within ZEFR]
@@ -96,9 +91,6 @@ int main(int argc, char *argv[])
 
         z->do_rk_stage_mid(iter,stage);
 
-        //if (nGrids > 1 && inp.viscous)
-        //  tioga_dataupdate_ab(5, 1);
-
         z->do_rk_stage_finish(iter,stage);
       }
     }
@@ -107,7 +99,6 @@ int main(int argc, char *argv[])
       // Adaptive time stepping -> stick to previous method
       z->do_step();
     }
-    POP_NVTX_RANGE;
 
     runTime.stopTimer();
 
@@ -136,12 +127,6 @@ int main(int argc, char *argv[])
       z->write_error();
   }
 
-  //CALLGRIND_STOP_INSTRUMENTATION;
-
-  //if (nGrids > 1) tg_time.showTime(2);
-  //runTime.showTime(2);
-  //inp.waitTimer.showTime();
-
   zefr::finalize();
 
   if (nGrids > 1)
@@ -166,9 +151,8 @@ void initialize_overset(Zefr* z, InputStruct& inp)
     z->set_rigid_body_callbacks(tioga_set_transform);
 
   /* NOTE: tioga_dataUpdate is being called from within ZEFR, to accomodate
-   * both multi-stage RK time stepping + viscous cases with gradient interp */
-  z->set_tioga_callbacks(tioga_preprocess_grids_, tioga_performconnectivity_,
-      tioga_do_point_connectivity, tioga_set_iter_iblanks, tioga_unblank_part_1,
+   * multi-stage RK time stepping */
+  z->set_tioga_callbacks(tioga_do_point_connectivity, tioga_unblank_part_1,
       tioga_unblank_part_2, tioga_dataupdate_ab_send, tioga_dataupdate_ab_recv);
 }
 
@@ -176,8 +160,6 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
 {
   if (inp.grank == 0)
     std::cout << "Setting TIOGA callback functions..." << std::endl;
-
-  tg_time.startTimer();
 
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
@@ -223,6 +205,4 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
 
   tioga_preprocess_grids_();
   tioga_performconnectivity_();
-
-  tg_time.stopTimer();
 }

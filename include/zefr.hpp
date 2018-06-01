@@ -153,13 +153,9 @@ public:
   int get_n_weights(int cellID);
   void donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights);
 
-  /// TODO: Reconsider organization
-  void set_dataUpdate_callback(void (*dataUpdate)(int, double*, int));
-
-  void set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
-                           void (*point_connect)(void), void (*iter_iblanks)(double, int),
-                           void (*unblank_part_1)(void), void (*unblank_part_2)(int),
-                           void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int));
+  void set_tioga_callbacks(void (*point_connect)(void), void (*unblank_part_1)(void),
+                           void (*unblank_part_2)(int), void (*dataUpdate_recv)(int, int),
+                           void (*dataUpdate_send)(int, int));
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
 
@@ -178,10 +174,10 @@ public:
 private:
   // Generic data about the run
   int rank = 0, nRanks = 1;
-  int grank = 0;   //! Global MPI rank
-  int myGrid = 0;  //! For overset: which grid this rank belongs to
-  int nGrids = 1;  //! For overset: # of grids in entire system
-  int gridType = 1; //! For overset: with Direct Cut: background (0) or geometry (1)
+  int grank = 0;    //! Global MPI rank
+  int myGrid = 0;   //! For overset: which grid this rank belongs to
+  int nGrids = 1;   //! For overset: # of grids in entire system
+  int gridType = 1; //! For overset: with Direct Cut: background (0) or body (1)
 
   // Basic ZEFR Solver Objects
   std::shared_ptr<FRSolver> solver;

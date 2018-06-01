@@ -1,18 +1,18 @@
-#ZEFR: A high-order CFD solver using the Direct Flux Reconstruction Method
+# ZEFR: A high-order CFD solver using the Direct Flux Reconstruction Method
 
 **Objective**: The goal of this project is to create a simple, high-performance 
 high-order CFD solver using the Direct Flux Reconstruction methodology for two
 dimensional, and eventually, three dimensional problems.
 
-##Current Features:
+## Current Features:
 - Can solve the Advection-Diffusion, Euler, and Navier-Stokes equations in 2D
 - Supports 2D quadrilateral, triangular, and mixed meshes in GMSH format. Element boundary representations up to 2nd order supported.
-- Paraview output using legacy .vtk ASCII files
+- Paraview output using binary XML .vtu files
 - Supports fully featured compilation on both CPU (multithreaded with OpenMP) 
 and Nvidia GPUs
 - P-multigrid for convergence acceleration of steady-state problems
 
-##Installing and Running ZEFR:
+## Installing and Running ZEFR:
 Building ZEFR is very straightforward. First, you must create a config file (see 
 examples in the configfiles/ directory). To compile, simply type the following in the top directory:
 
@@ -29,8 +29,15 @@ To run the code, simply run the executable with an input file as an argument:
 ```
 See the input files in the testcases/ directory for examples of working cases.
 
+### Mesh Utilities
 
-#Code Structure:
+ZEFR includes a dependence on PyFR for mesh conversion and post-processing.
+Use the 'meshtools' program under 'external' to convert grids to the PyFR format
+and to export solution data to ParaView's .vtu/.pvtu file format for visualization.
+
+Numpy, h5py, and pytools are required to use the meshtools script.
+
+# Code Structure:
 The program is structured using three main classes: the **FRSolver** class, the **Elements** class, and the **Faces** class. 
 
 

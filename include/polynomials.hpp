@@ -95,13 +95,6 @@ double Lagrange_d1(const std::vector<double>& xiGrid, unsigned int mode, double 
   return val/den;
 }
 
-/*! Because Jacob is too lazy to convert all his copied code from Flurry */
-static inline
-double dLagrange(const std::vector<double>& xiGrid, double xi, unsigned int mode)
-{
-  return Lagrange_d1(xiGrid, mode, xi);
-}
-
 /*! Evaluates the Legendre polynomial of degree P at location xi.
  *
  * \param P  Order of the Legendre polynomial

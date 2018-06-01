@@ -1,0 +1,3 @@
+[submodule "external/PyFR"]
+	path = external/PyFR
+	url = https://www.github.com/JacobCrabill/PyFR.git

@@ -1008,23 +1008,14 @@ void Zefr::unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, dou
 #endif
 }
 
-void Zefr::set_dataUpdate_callback(void (*dataUpdate)(int nvar, double *q_spts, int gradFlag))
-{
-  overset_interp = dataUpdate;
-}
-
-void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
-                               void (*point_connect)(void), void (*iter_iblanks)(double, int),
-                               void (*unblank_part_1)(void), void (*unblank_part_2)(int),
-                               void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int))
+void Zefr::set_tioga_callbacks(void (*point_connect)(void), void (*unblank_part_1)(void),
+                               void (*unblank_part_2)(int), void (*dataUpdate_recv)(int, int),
+                               void (*dataUpdate_send)(int, int))
 {
   /*! NOTE: All of these callbacks are not required [in fact, discouraged]
    *  when using the new HELIOS-compatible Python layer */
 
-  tg_preprocess = preprocess; //! UNUSED
-  tg_process_connectivity = connect; //! UNUSED
   tg_point_connectivity = point_connect;
-  tg_set_iter_iblanks = iter_iblanks; //! UNUSED
   unblank_1 = unblank_part_1;
   unblank_2 = unblank_part_2;
   overset_interp_send = dataUpdate_send;

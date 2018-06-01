@@ -147,7 +147,6 @@ double *get_q_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype 
 double *get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);
 double *get_q_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int etype = 0);
 double *get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);
-double *get_q_fpts(void);
 
 /* ==== Callback Function Wrappers ==== */
 

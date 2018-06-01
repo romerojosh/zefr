@@ -124,11 +124,6 @@ double* get_dq_spts_d(int &ele_stride, int &spt_stride, int &var_stride, int &di
   return ZEFR->get_du_spts_d(ele_stride, spt_stride, var_stride, dim_stride, etype);
 }
 
-double* get_q_fpts(void)
-{
-//  return ZEFR->get_u_fpts();
-}
-
 ExtraGeo get_extra_geo_data(void)
 {
   ExtraGeo geo;

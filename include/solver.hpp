@@ -237,7 +237,7 @@ class FRSolver
     void move(double time, bool update_iblank = false);
     void move_grid_now(double time);
     void move_grid_next(double time);
-    void rigid_body_update(unsigned int stage);
+    void rigid_body_update(int stage);
 
     /* Wrappers for the callback functions for overset interpolation */
     void overset_u_send(void);

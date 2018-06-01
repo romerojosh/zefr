@@ -616,8 +616,8 @@ void Quads::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
   {
     for (int i = 0; i < nSide; i++)
     {
-      dshape_val(ijk2gmsh[pt], 0) = dLagrange(xlist, xi, i) *  Lagrange(xlist, eta, j);
-      dshape_val(ijk2gmsh[pt], 1) =  Lagrange(xlist, xi, i) * dLagrange(xlist, eta, j);
+      dshape_val(ijk2gmsh[pt], 0) = Lagrange_d1(xlist, i, xi) *  Lagrange(xlist, eta, j);
+      dshape_val(ijk2gmsh[pt], 1) =  Lagrange(xlist, xi, i) * Lagrange_d1(xlist, j, eta);
       pt++;
     }
   }

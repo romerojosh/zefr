@@ -864,9 +864,9 @@ void Hexas::calc_d_shape(mdvector<double> &dshape_val, const double* loc)
     lag_i[i] = Lagrange(xlist,  xi, i);
     lag_j[i] = Lagrange(xlist, eta, i);
     lag_k[i] = Lagrange(xlist,  mu, i);
-    dlag_i[i] = dLagrange(xlist,  xi, i);
-    dlag_j[i] = dLagrange(xlist, eta, i);
-    dlag_k[i] = dLagrange(xlist,  mu, i);
+    dlag_i[i] = Lagrange_d1(xlist, i,  xi);
+    dlag_j[i] = Lagrange_d1(xlist, i, eta);
+    dlag_k[i] = Lagrange_d1(xlist, i,  mu);
   }
 
   int pt = 0;
