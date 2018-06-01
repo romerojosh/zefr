@@ -109,7 +109,10 @@ int main(int argc, char* argv[])
   solver.setup(comm);
 
   if (input.restart)
+  {
     solver.restart_solution();
+    solver.move(input.time, true);
+  }
   
   PMGrid pmg;
   if (input.p_multi)
@@ -1033,6 +1036,7 @@ void Zefr::set_tioga_callbacks(void (*preprocess)(void), void (*connect)(void),
 
 void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* off, int nDims))
 {
+  printf("setTransform func ptr: %p\n",setTransform); /// DEBUGGING
   tg_update_transform = setTransform;
 }
 
@@ -1050,6 +1054,11 @@ void Zefr::move_grid(int iter, int stage)
 {
   double time = solver->prev_time + solver->rk_c(stage) * solver->eles->dt(0);
   solver->move_grid_now(time);
+}
+
+void Zefr::do_unblank(void)
+{
+  solver->move(solver->flow_time, true);
 }
 
 void* Zefr::get_tg_stream_handle(void)

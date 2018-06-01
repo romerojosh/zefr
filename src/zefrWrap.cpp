@@ -61,7 +61,10 @@ int main(int argc, char *argv[])
     setup_overset_data(z, inp);
 
   if (inp.restart)
+  {
     z->restart_solution();
+    z->do_unblank();
+  }
 
   // setup cell/face iblank data for use on GPU
   if (nGrids > 1 && zefr::use_gpus())

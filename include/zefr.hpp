@@ -172,6 +172,9 @@ public:
   //! Move grid to the flow time specified by the iteration and RK stage
   void move_grid(int iter, int stage);
 
+  //! Use ZEFR's motion functions & callbacks to perform unblanking procedure
+  void do_unblank(void);
+
   void* get_tg_stream_handle(void);
   void* get_tg_event_handle(void);
 
