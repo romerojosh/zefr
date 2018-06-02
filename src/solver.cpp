@@ -330,7 +330,7 @@ void FRSolver::restart_solution(void)
 #endif
     }
 
-    move(flow_time, true);
+    input->time = flow_time;
   }
   else
   {
@@ -1075,6 +1075,7 @@ void FRSolver::restart(std::string restart_file, unsigned restart_iter)
     {
       f >> restart_time;
       flow_time = restart_time;
+      input->time = restart_time;
     }
     if (param == "ITER")
     {
@@ -4897,6 +4898,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
       // "tcurr = ####"
       ss >> tmp >> restart_time;
       flow_time = restart_time;
+      input->time = restart_time;
     }
     if (key == "x-cg")
     {

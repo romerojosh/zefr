@@ -1052,11 +1052,66 @@ void set_face_nodes(GeoStruct &geo)
     }
     else if (etype == QUAD)
     {
-      /// TODO
+      geo.faceNodesCurved[etype].assign({4, geo.nNdFaceCurved[LINE]});
+      auto ij2quad = structured_to_gmsh_quad(geo.nNdFaceCurved[QUAD]);
+      int nSide = sqrt(geo.nNdFaceCurved[QUAD]);
+
+      /* Face 0: Bottom */
+      for (int i = 0; i < nSide; i++)
+        geo.faceNodesCurved[etype](0,i) = ij2quad[i];
+
+      /* Face 1: Right */
+      for (int i = 0; i < nSide; i++)
+        geo.faceNodesCurved[etype](1,i) = ij2quad[i*nSide-1];
+
+      /* Face 2: Top */
+      for (int i = 0; i < nSide; i++)
+        geo.faceNodesCurved[etype](2,i) = ij2quad[nSide*nSide-i-1];
+
+      /* Face 3: Left */
+      for (int i = 0; i < nSide; i++)
+        geo.faceNodesCurved[etype](3,i) = ij2quad[nSide*(nSide-i-1)];
     }
     else if (etype == TRI)
     {
-      /// TODO
+      geo.faceNodesCurved[etype].assign({3, geo.nNdFaceCurved[LINE]});
+
+      switch (geo.nNodesPerEleBT[etype])
+      {
+        case 3:
+          /* Face 0: Bottom */
+          geo.faceNodesCurved[etype](0,0) = 0;
+          geo.faceNodesCurved[etype](0,1) = 1;
+
+          /* Face 1: Hypotenuse */
+          geo.faceNodesCurved[etype](1,0) = 1;
+          geo.faceNodesCurved[etype](1,1) = 2;
+
+          /* Face 2: Left */
+          geo.faceNodesCurved[etype](2,0) = 2;
+          geo.faceNodesCurved[etype](2,1) = 0;
+          break;
+
+        case 6:
+          /* Face 0: Bottom */
+          geo.faceNodesCurved[etype](0,0) = 0;
+          geo.faceNodesCurved[etype](0,1) = 3;
+          geo.faceNodesCurved[etype](0,2) = 1;
+
+          /* Face 1: Hypotenuse */
+          geo.faceNodesCurved[etype](2,0) = 2;
+          geo.faceNodesCurved[etype](2,1) = 4;
+          geo.faceNodesCurved[etype](2,2) = 5;
+
+          /* Face 2: Left */
+          geo.faceNodesCurved[etype](2,0) = 2;
+          geo.faceNodesCurved[etype](2,1) = 5;
+          geo.faceNodesCurved[etype](2,2) = 0;
+          break;
+
+        default:
+          ThrowException("Triangle face nodes not implemented for this order.");
+      }
     }
     else if (etype == PRI)
     {

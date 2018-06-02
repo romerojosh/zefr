@@ -1,7 +1,8 @@
 # Geometry:
 nDims    3
 #meshfile hex4.msh
-meshfile hex16.pyfrm
+#meshfile hex16.pyfrm
+meshfile hexbox-tg.msh
 #meshfile hexball.msh
 
 # Boundary Conditions

@@ -359,6 +359,9 @@ class zefrSolver:
 
         return (self.gridData, self.callbacks)
     
+    def setCallbacks(self,cbs):
+        self.z.set_rigid_body_callbacks(cbs['tg-set-transform'])
+
     def restart(self,iter):
         os.chdir('zefr')
         self.z.restart_solution()
@@ -386,10 +389,10 @@ class zefrSolver:
 
     def getForcesAndMoments(self):
         self.z.get_forces()
-        bodyForce = np.array(ptrToArray(self.simdata.forces))
-        bodyForce[:3] = bodyForce[:3]*self.forceDim
-        bodyForce[3:] = bodyForce[3:]*self.momDim
-        return bodyForce
+        #bodyForce = np.array(ptrToArray(self.simdata.forces, 6))
+        #bodyForce[:3] = bodyForce[:3]*self.forceDim
+        #bodyForce[3:] = bodyForce[3:]*self.momDim
+        #return bodyForce
 
     # HELIOS can provide grid velocities
     def setGridSpeeds_maneuver(self,MeshMotionData):
