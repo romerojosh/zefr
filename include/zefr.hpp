@@ -85,6 +85,9 @@ public:
   //! Finish residual computation & RK stage after overset gradient interp
   void do_rk_stage_finish(int iter, int stage);
 
+  //! Calculate the PI controller error and update time step size
+  double adapt_dt(void);
+
   // Functions to write data to file and/or terminal
   void write_residual(void);
   void write_solution(void);

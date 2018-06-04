@@ -204,6 +204,8 @@ class FRSolver
     void step_DIRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &source = std::map<ELE_TYPE, mdvector_gpu<double>>());
 #endif
 
+    double adapt_dt(void);
+
     void accumulate_time_averages(void);
 
     void write_solution(const std::string &_prefix);

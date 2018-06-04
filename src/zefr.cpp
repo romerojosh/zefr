@@ -467,6 +467,11 @@ void Zefr::do_rk_stage_finish(int iter, int stage)
   solver->current_iter = iter;
 }
 
+double Zefr::adapt_dt()
+{
+  return solver->adapt_dt();
+}
+
 void Zefr::do_n_steps(int n)
 {
   for (int i = 0; i < n; i++)

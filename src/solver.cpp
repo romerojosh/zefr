@@ -2869,6 +2869,110 @@ void FRSolver::step_adaptive(const std::map<ELE_TYPE, mdvector_gpu<double>> &sou
   }
 }
 
+double FRSolver::adapt_dt(void)
+{
+  // Calculate error (infinity norm of RK error) and scaling factor for dt
+  double max_err = 0;
+  double dt = input->dt;
+#ifdef _CPU
+  for (auto e : elesObjs)
+  {
+    for (uint spt = 0; spt < e->nSpts; spt++)
+    {
+      for (uint n = 0; n < e->nVars; n++)
+      {
+#pragma omp parallel for simd reduction(max:max_err)
+        for (uint ele = 0; ele < e->nEles; ele++)
+        {
+          if (input->overset && geo.iblank_cell(ele) != NORMAL) continue;
+          double err = std::abs(e->rk_err(spt, n, ele)) /
+              (input->atol + input->rtol * std::max( std::abs(e->U_spts(spt, n, ele)), std::abs(e->U_ini(spt, n, ele)) ));
+          max_err = std::max(max_err, err);
+        }
+      }
+    }
+  }
+
+
+#ifdef _MPI
+  MPI_Allreduce(MPI_IN_PLACE, &max_err, 1, MPI_DOUBLE, MPI_MAX, worldComm);
+#endif
+
+  // Determine the time step scaling factor and the new time step
+  double fac = pow(max_err, -expa) * pow(prev_err, expb);
+  fac = std::min(input->maxfac, std::max(input->minfac, input->sfact*fac));
+
+  dt = std::min(dt*fac, input->max_dt);
+#endif
+
+#ifdef _GPU
+  max_err = 0.0;
+  for (auto e : elesObjs)
+  {
+    double err = get_rk_error_wrapper(e->U_spts_d, e->U_ini_d, e->rk_err_d, e->nSpts, e->nEles,
+        e->nVars, input->atol, input->rtol, worldComm, input->overset, geo.iblank_cell_d.data());
+
+    err = std::isnan(err) ? INFINITY : err; // convert NaNs to "large" error
+
+    max_err = std::max(max_err, err);
+  }
+
+  for (auto e : elesObjs)
+  {
+    set_adaptive_dt_wrapper(e->dt_d, dt, expa, expb, input->minfac, input->maxfac,
+        input->sfact, input->max_dt, max_err, prev_err);
+  }
+#endif
+
+  for (auto e : elesObjs)
+    e->dt(0) = dt;
+
+  input->dt = dt;
+
+  if (elesObjs[0]->dt(0) < 1e-14)
+    ThrowException("dt approaching 0 - quitting simulation");
+
+  if (max_err < 1.)
+  {
+    // Accept the time step and continue on
+    prev_err = max_err;
+  }
+  else
+  {
+    // Reject step - reset solution back to beginning of time step
+    flow_time = prev_time;
+#ifdef _CPU
+    for (auto e : elesObjs)
+      e->U_spts = e->U_ini;
+#endif
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      geo.vel_cg = v_ini;
+      geo.x_cg = x_ini;
+      geo.q = q_ini;
+      geo.qdot = qdot_ini;
+    }
+
+#ifdef _GPU
+    for (auto e : elesObjs)
+      device_copy(e->U_spts_d, e->U_ini_d, e->U_ini_d.max_size());
+
+    if (input->motion_type == RIGID_BODY)
+    {
+      device_copy(geo.x_cg_d, x_ini_d, x_ini_d.max_size());
+      device_copy(geo.vel_cg_d, v_ini_d, v_ini_d.max_size());
+    }
+#endif
+
+    rejected_steps++;
+
+    dt = -dt;
+  }
+
+  return dt;
+}
+
 #ifdef _CPU
 void FRSolver::step_RK(const std::map<ELE_TYPE, mdvector<double>> &sourceBT)
 #endif
