@@ -8572,7 +8572,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
 
 #ifdef _MPI
     // Update translational motion in sync across grids, but not rotation
-    MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, worldComm);
+    MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
     MPI_Allreduce(MPI_IN_PLACE, torque.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
 #endif
   }

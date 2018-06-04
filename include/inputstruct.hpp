@@ -118,7 +118,7 @@ public:
  *  from Python interface layer */
 struct DataStruct
 {
-  double forces[6];
+  double forces[6] = {0.0};
 
   int nfields;
   int nspts[4];  // By element type

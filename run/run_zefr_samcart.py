@@ -2,16 +2,14 @@ import sys
 import os
 import time as Time
 
-HOME = '/p/home/jcrabill/'
+HOME = '/p/home/jcrabill/opt/'
 
 TIOGA_DIR = HOME + 'tioga/'
 ZEFR_DIR = HOME + 'zefr/'
-SAMCART_DIR = HOME + '/opt/SAMCart/'
+SAMCART_DIR = HOME + 'SAMCart/'
 
-sys.path.append(TIOGA_DIR+'/bin/')
-sys.path.append(TIOGA_DIR+'/run/')
-sys.path.append(ZEFR_DIR+'/bin/')
-sys.path.append(ZEFR_DIR+'/run/')
+sys.path.append(TIOGA_DIR)
+sys.path.append(ZEFR_DIR)
 sys.path.append(SAMCART_DIR)
 
 from mpi4py import MPI
@@ -19,10 +17,7 @@ import numpy as np
 
 from zefrInterface import zefrSolver
 from tiogaInterface import Tioga
-#try:
 from samcartInterface import samcartSolver
-#except:
-#  from samcartStandIn import samcartSolver
 
 Comm = MPI.COMM_WORLD
 rank = Comm.Get_rank()
@@ -128,6 +123,10 @@ SAMCART.sifInitialize(parameters,parameters)
 # Setup the ZEFR solver - read the grid, initialize the solution, etc.
 gridData, callbacks = ZEFR.initData()
 
+tgcbs = TIOGA.getCallbacks()
+tgcb = {'tg-set-transform': tgcbs.setTransform}
+ZEFR.setCallbacks(tgcb)
+
 # Setup TIOGA - give it the grid and callback info needed for connectivity
 TIOGA.initData(ZEFR.gridData, ZEFR.callbacks)
 
@@ -149,7 +148,7 @@ if parameters['from_restart'] == 'yes':
     initIter = int(parameters['restartstep'])
     time = parameters['restart-time']
     ZEFR.restart(initIter)
-    if parameters['moving-grid']:
+    if moving:
         ZEFR.deformPart1(time+dt,initIter)
         TIOGA.unblankPart1()
         ZEFR.deformPart2(time,initIter)
@@ -190,28 +189,41 @@ for i in range(iter+1,nSteps+1):
         SAMCART.setIGBPs(TIOGA.igbpdata)
 
     if adaptFreq > 0 and (i-1) % adaptFreq == 0:
+        # Do automatic geometry-/solution- based mesh adaption
         SAMCART.adapt(i,True)
 
     if moving or (adaptFreq > 0 and (i-1) % adaptFreq == 0):
+        # Update domain connectivity
         TIOGA.initAMRData(SAMCART.gridData)
         TIOGA.performAMRConnectivity()
 
     T0 = Time.clock_gettime(0)
-    for j in range(0,nStages):
-        # Have ZEFR extrapolate solution first so it won't overwrite interpolated data
-        ZEFR.runSubStepStart(i,j)
+    dt = -1
+    # Adaptive time-stepping loop: if time step fails, need ability to reset and retry
+    while dt < 0:
+        for j in range(0,nStages):
+            # Have ZEFR extrapolate solution first so it won't overwrite interpolated data
+            ZEFR.runSubStepStart(i,j)
 
-        # Interpolate solution
-        TIOGA.exchangeSolutionAMR()
+            # Interpolate solution
+            TIOGA.exchangeSolutionAMR()
 
-        # Calculate first part of residual, up to corrected gradient
-        ZEFR.runSubStepMid(i,j)
+            # Calculate first part of residual, up to corrected gradient
+            ZEFR.runSubStepMid(i,j)
 
-        # Finish residual calculation and RK stage advancement
-        # (Should include rigid_body_update() if doing 6DOF from ZEFR)
-        ZEFR.runSubStepFinish(i,j)
-    T1 = Time.clock_gettime(0)
+            # Finish residual calculation and RK stage advancement
+            # (Should include rigid_body_update() if doing 6DOF from ZEFR)
+            ZEFR.runSubStepFinish(i,j)
+      
+        # Check error from time controller and update dt; dt<0 means step rejected
+        dt = ZEFR.adaptDT()
+        if rank == 0:
+            print('dt = {:3.2e}'.format(dt))
+
     TIOGA.exchangeSolutionAMR() # Interpolate 't^{n+1}' data from ZEFR
+
+    T1 = Time.clock_gettime(0)
+    SAMCART.setDT(dt)
     SAMCART.runSubSteps(i)
     T2 = Time.clock_gettime(0)
     #if rank == 0:
@@ -223,24 +235,25 @@ for i in range(iter+1,nSteps+1):
     if repFreq > 0 and (i % repFreq == 0 or i == nSteps or i == initIter+1):
         ZEFR.reportResidual(i)
 
-    Restart = False
+    writeR = False
     if restartFreq > 0 and (i % restartFreq == 0 or i == nSteps):
-        Restart = True
+        writeR = True
         ZEFR.writePlotData(i)
         SAMCART.writeRestartData(i)
 
     if plotFreq > 0 and (i % plotFreq == 0 or i == nSteps):
-        if not Restart:
+        if not writeR:
             # ZEFR plot files are restart files; and SAMCART dumps 
             # plot files whenever it dumps restart files
             ZEFR.writePlotData(i)
             SAMCART.writePlotData(i)
 
     if forceFreq > 0 and (i % forceFreq == 0 or i == nSteps):
+        # TODO: consolidate force/moment calculation & reporting
         ZEFR.computeForces(i)
-        #forces = ZEFR.getForcesAndMoments()
-        #if rank == 0:
-        #    print('Iter {0}: Forces {1}'.format(i,forces))
+        forces = ZEFR.getForcesAndMoments()
+        if rank == 0:
+            print('Iter {}: Forces {}'.format(i,forces))
 
 # ------------------------------------------------------------
 # Cleanup
