@@ -2,7 +2,7 @@
 #
 # File: zefrInterface.py
 # Authors: Jacob Crabill
-# Last Modified: 9/02/2017
+# Last Modified: 6/4/2018
 
 
 __version__ = "1.00"
@@ -16,19 +16,14 @@ import copy
 import string
 import types
 
-#Extension modules
-#sys.path.append(os.path.abspath(os.getenv('PYTHONPATH')))
-#sys.path.append(os.path.abspath(os.getenv('PYTHONPATH')+'/numpy'))
-
 import numpy as np
 
-CONVERT_DIR = '/p/home/jcrabill/zefr/external/'
-sys.path.append(CONVERT_DIR)
+ZEFR_DIR = '/p/home/jcrabill/zefr/'
 
-CONVERT_DIR = '/p/home/jcrabill/zefr/external/'
-sys.path.append(CONVERT_DIR)
-
-sys.path.append('/p/home/jcrabill/zefr/bin/')
+# For 'convert' module: pointer/array conversion utilities
+sys.path.append(ZEFR_DIR + '/external/')
+# For ZEFR module
+sys.path.append(ZEFR_DIR + '/bin/')
 
 from convert import *
 
@@ -36,10 +31,8 @@ from convert import *
 try:
     from mpi4py import MPI
     _parallel = True
-
 except ImportError:
     _parallel = False
-
 
 try:
     import zefr
@@ -125,7 +118,7 @@ class zefrSolver:
         gridScale = conditions['meshRefLength']
         Reref = conditions['reyNumber']
         Lref = conditions['reyRefLength']
-        Mref = conditions['Mach']
+        mach_fs = conditions['Mach']
 
         mu = conditions['viscosity']
         gamma = conditions['gamma']
@@ -133,26 +126,23 @@ class zefrSolver:
 
         self.inp.dt = conditions['dt']
 
-        #self.inp.Re_fs = Reref
-        #self.inp.rho_fs = rinf
-        #self.inp.L_fs = conditions['reyRefLength']
-
         # All conditions come in as SI units - take care of non-dim here
-        self.dt = ainf * conditions['dt'] / gridScale
-        mach_fs = conditions['Mach']
+        ainf *= gridScale
+        dt = ainf * conditions['dt'] / gridScale
 
-        Re = (Reref/Lref) * gridScale / Mref * (mach_fs)
-        self.forceDim = 0.5 * rinf * (Mref*ainf*gridScale)**2
+        v_fs = mach_fs * ainf
+        self.forceDim = 0.5 * rinf * (v_fs*gridScale)**2
         self.momDim = self.forceDim * gridScale
 
         # Update ZEFR's input parameters with non-dimensionalized quantities
-        self.inp.dt = self.dt
+        self.inp.dt = dt
         self.inp.rho_fs = rinf
         self.inp.mach_fs = mach_fs
+        self.inp.v_mag_fs = v_fs
         self.inp.Re_fs = Reref
         self.inp.L_fs = Lref
 
-        self.inp.mu = mu
+        self.inp.mu = rinf * v_fs * Lref / Reref
         self.inp.gamma = gamma
         self.inp.prandtl = prandtl
 
@@ -402,8 +392,11 @@ class zefrSolver:
         if MPI.COMM_WORLD.Get_rank() == 0:
             print("gust speed from turns :",self.vx,self.vy,self.vz)
 
+    def adaptDT(self):
+        return self.z.adapt_dt()
+
     def deformPart1(self,time,iter):
-        self.z.move_grid_next(time+self.dt)
+        self.z.move_grid_next(time+self.inp.dt)
 
     def deformPart2(self,time,iter):
         self.z.move_grid(time)
@@ -415,5 +408,5 @@ class zefrSolver:
         self.z.update_iblank_gpu()
 
     def finish(self,step):
-        istep = 0
-        self.writeRestartData(step)
+        if step % self.inp.write_freq != 0:
+            self.writeRestartData(step)
