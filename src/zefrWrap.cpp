@@ -75,9 +75,6 @@ int main(int argc, char *argv[])
   MPI_Barrier(MPI_COMM_WORLD);
 
   // Run the solver loop now
-  Timer runTime("ZEFR Compute Time: ");
-  inp.waitTimer.setPrefix("ZEFR MPI Time: ");
-
   for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
     runTime.startTimer();
@@ -102,8 +99,6 @@ int main(int argc, char *argv[])
       // Adaptive time stepping -> stick to previous method
       z->do_step();
     }
-
-    runTime.stopTimer();
 
     if (inp.tavg)
     {

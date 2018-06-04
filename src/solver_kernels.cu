@@ -1641,8 +1641,8 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       double t0 = 10;
       double Atx = 2;
       double Aty = 2;
-      double DX = 5;/// 0.5 * input->periodicDX; /// TODO
-      double DY = 5;/// 0.5 * input->periodicDY; /// TODO
+      double DX = 0.5 * params.periodicDX;
+      double DY = 0.5 * params.periodicDY;
       /// Taken from Kui, AIAA-2010-5031-661
       double x0 = coords_0(node,0); double y0 = coords_0(node,1);
       coords(node,0) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);
@@ -1717,35 +1717,6 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
           coords(node,2) = coords_0(node,2) - Az*sin(2.*PI*fz*time);
           Vg(node,2) = -2.*PI*fz*Az*cos(2.*PI*fz*time);
         }
-        /*double x0 = coords_0(node,0);
-        double y0 = coords_0(node,1);
-        double z0 = coords_0(node,2);
-        coords(node,0) = x0;
-        coords(node,1) = y0*cos(fx*time) - z0*sin(fx*time);
-        coords(node,2) = z0*cos(fx*time) + y0*sin(fx*time);
-
-        Vg(node,0) = 0.0;
-        Vg(node,1) = -fx*(y0*sin(fx*time) + z0*cos(fx*time));
-        Vg(node,2) = -fx*(z0*sin(fx*time) - y0*cos(fx*time));*/ /// DEBUGGING rigid-body rotation
-      }
-      break;
-    }
-    case RADIAL_VIBE:
-    {
-      /// Radial Expansion / Contraction
-      if (gridID == 0) {
-        double Ar = 0;///input->moveAr; /// TODO
-        double Fr = 0;///input->moveFr; /// TODO
-        double r = 1;///rv0(node,0) + Ar*(1. - cos(2.*pi*Fr*time)); /// TODO
-        double rdot = 2.*PI*Ar*Fr*sin(2.*PI*Fr*time);
-        double theta = 1;///rv0(node,1); /// TODO
-        double psi = 1;///rv0(node,2); /// TODO
-        coords(node,0) = r*sin(psi)*cos(theta);
-        coords(node,1) = r*sin(psi)*sin(theta);
-        coords(node,2) = r*cos(psi);
-        Vg(node,0) = rdot*sin(psi)*cos(theta);
-        Vg(node,1) = rdot*sin(psi)*sin(theta);
-        Vg(node,2) = rdot*cos(psi);
       }
       break;
     }

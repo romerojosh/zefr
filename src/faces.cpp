@@ -2153,7 +2153,6 @@ void Faces::send_U_data()
 
 void Faces::recv_U_data()
 {
-  PUSH_NVTX_RANGE("MPI", 0);
 #ifdef _GPU
   int ridx = 0;
   /* Stage non-blocking receives */
@@ -2190,13 +2189,8 @@ void Faces::recv_U_data()
 #endif
 
   /* Wait for comms to finish */
-  input->waitTimer.startTimer();
-  MPI_Pcontrol(1, "recv_U_data");
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
-  MPI_Pcontrol(-1, "recv_U_data");
-  POP_NVTX_RANGE;
-  input->waitTimer.stopTimer();
 
 #ifdef  _CPU
   /* Unpack buffer */
@@ -2362,13 +2356,9 @@ void Faces::recv_dU_data()
 
 #endif
 
-  PUSH_NVTX_RANGE("MPI", 0)
   /* Wait for comms to finish */
-  MPI_Pcontrol(1, "recv_dU_data");
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
-  MPI_Pcontrol(-1, "recv_dU_data");
-  POP_NVTX_RANGE
 
   /* Unpack buffer */
 #ifdef _CPU

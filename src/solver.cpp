@@ -46,8 +46,6 @@ extern "C" {
 #include "tris.hpp"
 #include "solver.hpp"
 
-#include <Eigen/Dense>
-
 #ifdef _MPI
 #include "mpi.h"
 #endif
@@ -1411,6 +1409,8 @@ void FRSolver::solver_data_to_device()
     motion_vars.moveFx = input->moveFx;
     motion_vars.moveFy = input->moveFy;
     motion_vars.moveFz = input->moveFz;
+    motion_vars.periodicDX = input->periodicDX;
+    motion_vars.periodicDY = input->periodicDY;
 
     if (input->motion_type == RIGID_BODY)
     {
@@ -1949,9 +1949,7 @@ void FRSolver::compute_residual_finish(unsigned int stage, int color)
 void FRSolver::compute_LHS(unsigned int stage)
 {
   /* Compute block diagonal components of residual Jacobian */
-  PUSH_NVTX_RANGE("compute_dRdU",1);
   compute_dRdU();
-  POP_NVTX_RANGE;
 
 #ifdef _CPU
   /* Apply stage dt to LHS */
@@ -3157,7 +3155,6 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
   /* Main stage loop. Complete for Jameson-style RK timestepping */
   for (unsigned int stage = 0; stage < input->nStages; stage++)
   {
-    PUSH_NVTX_RANGE("ONE_STAGE",6);
     flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
 
     move(flow_time); // Set grid to current evaluation time
@@ -3259,7 +3256,6 @@ void FRSolver::step_LSRK(const std::map<ELE_TYPE, mdvector_gpu<double>> &sourceB
     }
     check_error();
 #endif
-    POP_NVTX_RANGE;
   }
 
   flow_time = prev_time + elesObjs[0]->dt(0);
@@ -3305,8 +3301,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
   /* Compute Jacobian */
   if (!input->freeze_Jacobian || stage == startStage || iterNM > 1)
   {
-    PUSH_NVTX_RANGE("compute_Jacobian",0);
-
     /* Compute residual everywhere before computing Jacobian */
     compute_residual(stage);
 
@@ -3330,8 +3324,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       compute_LHS_SVD();
     else
       ThrowException("Linear solver not recognized!");
-
-    POP_NVTX_RANGE;
   }
 
   /* Set flow time of current stage */
@@ -3339,7 +3331,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
     flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
 
   /* Block Iterative Method */
-  PUSH_NVTX_RANGE("Block_iter_method",1);
   for (unsigned int iterBM = 1; (iterBM <= input->iterBM_max) && (res_max > input->res_tol); iterBM++)
   {
     /* Sweep through colors and backsweep */
@@ -3381,7 +3372,6 @@ void FRSolver::step_Steady(unsigned int stage, unsigned int iterNM, const std::m
       (iterBM%input->report_BMconv_freq == 0 || iterBM == input->iterBM_max || iterNM*iterBM == 1))
       report_RHS(stage, iterNM, iterBM);
   }
-  POP_NVTX_RANGE;
 }
 
 #ifdef _CPU
@@ -4005,7 +3995,6 @@ void FRSolver::step_LSRK_stage_start(int stage)
     }
   }
 
-  PUSH_NVTX_RANGE("ONE_STAGE",6);
   flow_time = prev_time + rk_c(stage) * elesObjs[0]->dt(0);
 
   compute_residual_start(0);
@@ -4113,7 +4102,6 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
   }
   check_error();
 #endif
-  POP_NVTX_RANGE;
 
   flow_time = prev_time + elesObjs[0]->dt(0);
   prev_time = flow_time;
@@ -8149,7 +8137,6 @@ void FRSolver::move(double time, bool update_iblank)
 
   if (update_iblank && input->overset)
   {
-    PUSH_NVTX_RANGE("MoveGrid", 0);
 #ifdef _BUILD_LIB
     // Guess grid position at end of time step and perform blanking procedure
     auto xcg = geo.x_cg;
@@ -8216,13 +8203,8 @@ void FRSolver::move(double time, bool update_iblank)
 #endif
 
     ZEFR->tg_update_transform(geo.Rmat.data(), geo.x_cg.data(), geo.nDims);
-    POP_NVTX_RANGE;
 
-    //cudaDeviceSynchronize(); /// DEBUGGING
-    PUSH_NVTX_RANGE("TG-UNBLANK-1",4);
     ZEFR->unblank_1();
-    //cudaDeviceSynchronize(); /// DEBUGGING
-    POP_NVTX_RANGE;
 
     // Reset position & orientation to original values
     geo.x_cg = xcg;
@@ -8234,8 +8216,6 @@ void FRSolver::move(double time, bool update_iblank)
 #endif // _BUILD_LIB
   }
 
-    //cudaDeviceSynchronize(); /// DEBUGGING
-  PUSH_NVTX_RANGE("MoveGrid", 0);
   if (input->motion_type != RIGID_BODY)
   {
 #ifdef _CPU
@@ -8250,7 +8230,6 @@ void FRSolver::move(double time, bool update_iblank)
 
   for (auto e : elesObjs)
     e->move(faces);
-  POP_NVTX_RANGE;
 
 #ifdef _BUILD_LIB
   // Update the overset connectivity to the new grid positions
@@ -8283,22 +8262,12 @@ void FRSolver::move(double time, bool update_iblank)
     {
       // Grid reset to current flow time; re-do blanking, find any unblanked
       // elements, and perform the unblank interpolation on them
-    //cudaDeviceSynchronize(); /// DEBUGGING
-      PUSH_NVTX_RANGE("TG-UNBLANK-2",5);
       ZEFR->unblank_2(faces->nVars);
-    //cudaDeviceSynchronize(); /// DEBUGGING
-      POP_NVTX_RANGE;
 
-      PUSH_NVTX_RANGE("Iblank2GPU", 6);
       ZEFR->update_iblank_gpu();
-      POP_NVTX_RANGE;
     }
 
-    //cudaDeviceSynchronize(); /// DEBUGGING
-    PUSH_NVTX_RANGE("TG-PT-CONN",3);
     ZEFR->tg_point_connectivity();
-    //cudaDeviceSynchronize(); /// DEBUGGING
-    POP_NVTX_RANGE;
   }
 #endif
 
@@ -8423,6 +8392,7 @@ void FRSolver::move_grid_now(double time)
         }
         geo.tmp_x_cg = geo.x_cg;
       }
+      /// tg_update_transform needed here ???
     }
 
 #ifdef _GPU
@@ -8434,7 +8404,7 @@ void FRSolver::move_grid_now(double time)
   grid_time = time;
 }
 
-void FRSolver::rigid_body_update(unsigned int stage)
+void FRSolver::rigid_body_update(int stage)
 {
   if (input->motion_type != RIGID_BODY) return;
 
@@ -8479,7 +8449,7 @@ void FRSolver::rigid_body_update(unsigned int stage)
   int c1[3] = {1,2,0}; // Cross-product index maps
   int c2[3] = {2,0,1};
 
-  double bi = rk_beta(stage);
+  double bi = (stage < 0) ? 1 : rk_beta(stage);
 
   Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
   q.normalize();
@@ -8507,11 +8477,25 @@ void FRSolver::rigid_body_update(unsigned int stage)
   Quat qdot_res = .5*(qdot*omega + q*wdot);
   double v_res[3] = {force[0]/geo.mass, force[1]/geo.mass, force[2]/geo.mass};
 
-  auto tmp_x_cg = geo.x_cg;
-
   // ---- Update x, v, q, qdot ----
 
-  if (input->dt_scheme == "RK54")
+  if (stage < 0)
+  {
+    // Flag for first-order time integration for use in multi-solver
+    // context [called from Python wrapper]
+    for (unsigned int d = 0; d < geo.nDims; d++)
+    {
+      geo.x_cg(d) += eles->dt(0) * geo.vel_cg(d);
+      geo.vel_cg(d) += eles->dt(0) * v_res[d];
+    }
+
+    for (unsigned int i = 0; i < 4; i++)
+    {
+      geo.q(i) += eles->dt(0) * q_res[i];
+      geo.qdot(i) += eles->dt(0) * qdot_res[i];
+    }
+  }
+  else if (input->dt_scheme == "RK54")
   {
     if (stage < input->nStages - 1)
     {
