@@ -516,6 +516,11 @@ void Zefr::get_forces(void)
   std::array<double, 3> moment = {0,0,0};
   solver->compute_moments(force, moment);
 
+#ifdef _MPI
+    MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
+    MPI_Allreduce(MPI_IN_PLACE, moment.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
+#endif
+
   for (int i = 0; i < geo->nDims; i++)
   {
     simData.forces[i] = force[i];

@@ -379,10 +379,13 @@ class zefrSolver:
 
     def getForcesAndMoments(self):
         self.z.get_forces()
-        #bodyForce = np.array(ptrToArray(self.simdata.forces, 6))
-        #bodyForce[:3] = bodyForce[:3]*self.forceDim
-        #bodyForce[3:] = bodyForce[3:]*self.momDim
-        #return bodyForce
+
+        # Apply scaling to forces & moments
+        bodyForce = np.array(ptrToArray(self.simdata.forces, 6))
+        bodyForce[:3] = bodyForce[:3]*self.forceDim
+        bodyForce[3:] = bodyForce[3:]*self.momDim
+        
+        return bodyForce
 
     # HELIOS can provide grid velocities
     def setGridSpeeds_maneuver(self,MeshMotionData):
