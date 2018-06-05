@@ -293,27 +293,8 @@ void Zefr::mpi_init(MPI_Comm comm_in, MPI_Comm comm_world, int n_grids, int grid
 #ifdef _GPU
   int nDevices;
   cudaGetDeviceCount(&nDevices);
-  /// TODO
-  if (nDevices < nRanks)
-  {
-    //ThrowException("Not enough GPUs for this run. Allocate more!");
-  } 
-
-  char hostname[MPI_MAX_PROCESSOR_NAME];
-  int len;
-  MPI_Get_processor_name(hostname, &len);
-
-  int cid;
-  //cid = grank%16; // For XStream nodes
-  //cid = grank%4; // For ICME K80 nodes
-  cid = grank % nDevices; /// TODO: use MPI_local_rank % nDevices
-  //printf("rank %d on grid %d, global rank %d --> CUDA device %d\n",rank,myGrid,grank,cid);
-  cudaSetDevice(cid); 
+  cudaSetDevice(grank % nDevices);  /// TODO: use MPI_local_rank % nDevices
   check_error();
-
-//  cudaDeviceProp prop;
-//  cudaGetDeviceProperties(&prop, cid);
-//  printf("%d: Device name: %s\n",grank, prop.name);
 #endif
 }
 #endif
@@ -470,12 +451,6 @@ void Zefr::do_rk_stage_finish(int iter, int stage)
 double Zefr::adapt_dt()
 {
   return solver->adapt_dt();
-}
-
-void Zefr::do_n_steps(int n)
-{
-  for (int i = 0; i < n; i++)
-    do_step();
 }
 
 void Zefr::write_residual(void)
@@ -996,19 +971,6 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
     else
       solver->faces->fringe_grad_to_device(fringeIDs, nFringe);
   }
-
-  check_error();
-#endif
-}
-
-void Zefr::unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
-{
-#ifdef _GPU
-  /// TODO: eletype
-  if (gradFlag == 0)
-    solver->elesObjs[0]->unblank_u_to_device(fringeIDs, nFringe, data);
-//  else
-//    solver->elesObjs[0]->unblank_grad_to_device(nFringe, data);
 
   check_error();
 #endif

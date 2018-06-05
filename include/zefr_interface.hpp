@@ -172,8 +172,6 @@ void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
 //! For runs using GPUs - copy updated fringe data to device
 void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
 
-void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
-
 int get_n_weights(int cellID);
 void donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights);
 

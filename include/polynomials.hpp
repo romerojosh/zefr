@@ -63,7 +63,6 @@ double Lagrange(const std::vector<double> &xiGrid, double xi, unsigned int mode)
  *
  * \return Value of first derivative of the Lagrange function at xi.
  */
-//TODO: Just change everything to use dLagrange format.
 static inline
 double Lagrange_d1(const std::vector<double>& xiGrid, unsigned int mode, double xi)
 {

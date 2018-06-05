@@ -170,7 +170,7 @@ CallbackFuncs get_callback_funcs(void)
   /* GPU-specific functions */
   call.donor_data_from_device = donor_data_from_device;
   call.fringe_data_to_device = fringe_data_to_device;
-  call.unblank_data_to_device = unblank_data_to_device;
+  call.unblank_data_to_device = nullptr; /// TODO: remove from TIOGA
   /// TODO: replace ^ with these:
   call.get_q_spts_d = get_q_spts_d;
   call.get_dq_spts_d = get_dq_spts_d;

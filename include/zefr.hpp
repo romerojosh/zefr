@@ -72,9 +72,6 @@ public:
   //! Run one full time step, including any filtering or multigrid operations
   void do_step(void);
 
-  //! Call "do_step()" n times
-  void do_n_steps(int n);
-
   //! Run one full time step, including any filtering or multigrid operations
   void do_rk_stage(int iter, int stage);
 
@@ -148,7 +145,6 @@ public:
   void update_iblank_gpu(void);
   void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
   void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag = 0, double* data = NULL);
-  void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
 
   void get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *xyz);
   void get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *xyz);

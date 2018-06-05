@@ -77,8 +77,6 @@ int main(int argc, char *argv[])
   // Run the solver loop now
   for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
   {
-    runTime.startTimer();
-
     if (!inp.adapt_dt)
     {
       // Can use the new-style method [no callbacks within ZEFR]

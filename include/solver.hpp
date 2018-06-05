@@ -228,8 +228,7 @@ class FRSolver
     double get_current_time(void);
     void filter_solution();
 
-    void compute_forces(std::array<double, 3>& force_conv, std::array<double, 3>& force_visc, std::ofstream* f);
-    void compute_moments(std::array<double, 3>& tot_force, std::array<double, 3>& tot_moment);
+    void compute_moments(std::array<double, 3>& tot_force, std::array<double, 3>& tot_moment, std::ofstream* cp_file = NULL);
 
 #ifdef _BUILD_LIB
     Zefr *ZEFR;

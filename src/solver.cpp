@@ -7421,9 +7421,9 @@ void FRSolver::report_forces(std::ofstream &f)
   auto cpfile = ss.str();
   std::ofstream g(cpfile);
 
-  std::array<double, 3> force_conv = {0,0,0};
-  std::array<double, 3> force_visc = {0,0,0};
-  compute_forces(force_conv, force_visc, &g);
+  std::array<double, 3> force = {0,0,0};
+  std::array<double, 3> moment = {0,0,0};
+  compute_moments(force, moment, &g);
 
   /* Convert dimensional forces into non-dimensional coefficients
    * NOTE: Reference area assumed to be 1. Divide by A for 'true' Cl, Cd */
@@ -7431,27 +7431,28 @@ void FRSolver::report_forces(std::ofstream &f)
   for (unsigned int dim = 0; dim < geo.nDims; dim++)
     Vsq += input->V_fs(dim) * input->V_fs(dim);
 
-  double fac = 1.0 / (0.5 * input->rho_fs * Vsq);
+  double Ffac = 1.0 / (0.5 * input->rho_fs * Vsq);
+  double Mfac = Fface / input->L_fs;
 
   for (int i = 0; i < 3; i++)
   {
-    force_conv[i] *= fac;
-    force_visc[i] *= fac;
+    force[i] *= Ffac;
+    moment[i] *= Mfac;
   }
 
-  /* Compute lift, drag, and side force coefficients */
-  double CL_conv, CD_conv, CL_visc, CD_visc, CQ_conv, CQ_visc;
+  /* Compute Lift, Drag, and Side forces; Pitch, Roll, and Yaw moments */
+  double CL, CD, CQ, Cm, Cl, Cn;
 
 #ifdef _MPI
   if (input->rank == 0)
   {
-    MPI_Reduce(MPI_IN_PLACE, force_conv.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
-    MPI_Reduce(MPI_IN_PLACE, force_visc.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(MPI_IN_PLACE, force.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(MPI_IN_PLACE, moment.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
   }
   else
   {
-    MPI_Reduce(force_conv.data(), force_conv.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
-    MPI_Reduce(force_visc.data(), force_visc.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(force.data(), force.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
+    MPI_Reduce(moment.data(), moment.data(), geo.nDims, MPI_DOUBLE, MPI_SUM, 0, myComm);
   }
 #endif
 
@@ -7470,47 +7471,43 @@ void FRSolver::report_forces(std::ofstream &f)
   {
     if (geo.nDims == 2)
     {
-      CL_conv = -force_conv[0] * sina + force_conv[1] * cosa;
-      CD_conv = force_conv[0] * cosa + force_conv[1] * sina;
-      CL_visc = -force_visc[0] * sina + force_visc[1] * cosa;
-      CD_visc = force_visc[0] * cosa + force_visc[1] * sina;
+      CL = -force[0] * sina + force[1] * cosa;
+      CD = force[0] * cosa + force[1] * sina;
+      Cm = moment[2]; // Only z-component in 2D
     }
     else if (geo.nDims == 3)
     {
-      CD_conv = (force_conv[0] * cosa - force_conv[1] * sina) * cosb
-          + force_conv[2] * sina * sinb;
-      CD_visc = (force_visc[0] * cosa - force_visc[1] * sina) * cosb
-          + force_visc[2] * sina * sinb;
+      CD = (force[0] * cosa - force[1] * sina) * cosb
+          + force[2] * sina * sinb;
+      CL = -force[0] * sina + force[1] * cosa;
+      CQ = -(force[0] * cosa + force[1] * sina) * sinb
+          + force[2] * cosb;
 
-      CL_conv = -force_conv[0] * sina + force_conv[1] * cosa;
-      CL_visc = -force_visc[0] * sina + force_visc[1] * cosa;
-
-      CQ_conv = -(force_conv[0] * cosa + force_conv[1] * sina) * sinb
-          + force_conv[2] * cosb;
-      CQ_visc = -(force_visc[0] * cosa + force_visc[1] * sina) * sinb
-          + force_visc[2] * cosb;
+      Cl = moment[0]; // roll
+      Cm = moment[1]; // pitch
+      Cn = moment[2]; // yaw
     }
 
-    std::cout << "CL_conv = " << CL_conv << " CD_conv = " << CD_conv;
+    std::cout << "CD = " << CD << " CL = " << CL;
 
     f << iter << " " << std::scientific << std::setprecision(16) << flow_time << " ";
-    f << CL_conv << " " << CD_conv;
+    f << CD << " " << CL;
 
     if (geo.nDims == 3)
     {
-      std::cout << " CQ_conv = " << CQ_conv;
-      f << " " << CQ_conv;
+      std::cout << " CQ = " << CQ;
+      f << " " << CQ;
     }
 
-    if (input->viscous)
+    if (geo.nDims == 2)
     {
-      std::cout << " CL_visc = " << CL_visc << " CD_visc = " << CD_visc;
-      f << " " << CL_visc << " " << CD_visc;
-      if (geo.nDims == 3)
-      {
-        std::cout << " CQ_visc = " << CQ_visc;
-        f << " " << CQ_visc;
-      }
+      std::cout << "; Cm = " << Cm;
+      f << " " << Cm;
+    }
+    else
+    {
+      std::cout << "; Cl = " << Cl << " Cm = " << Cm << " Cn = " << Cn;
+      f << " " << Cl << " " << Cm << " " << Cn;
     }
 
     std::cout << std::endl;
@@ -7643,12 +7640,19 @@ void FRSolver::report_error(std::ofstream &f)
       f << std::sqrt(val / vol) << " ";
     f << std::endl;
   }
-
 }
 
-void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<double,3> &force_visc, std::ofstream *cp_file = NULL)
+void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<double,3> &tot_moment, std::ofstream *cp_file)
 {
-  double taun[3] = {0,0,0};
+  /*! ---- TAKING ALL MOMENTS ABOUT 'geo.x_cg' ---- */
+  tot_force.fill(0.0);
+  tot_moment.fill(0.0);
+
+  double taun[3];
+  double force[3] = {0,0,0}; //! NOTE: need z-component initialized to '0' for 2D
+
+  int c1[3] = {1,2,0}; // Cross-product index maps
+  int c2[3] = {2,0,1};
 
   /* Factor for forming non-dimensional coefficients */
   double Vsq = 0.0;
@@ -7689,188 +7693,6 @@ void FRSolver::compute_forces(std::array<double,3> &force_conv, std::array<doubl
           }
 
           /* Sum inviscid force contributions */
-          for (unsigned int dim = 0; dim < geo.nDims; dim++)
-          {
-            force_conv[dim] += geo.weights_fpts[ftype](idx) * PL *
-                faces->norm(dim, fpt) * faces->dA(0, fpt);
-          }
-
-          if (input->viscous)
-          {
-            if (geo.nDims == 2)
-            {
-              /* Setting variables for convenience */
-              /* States */
-              double rho = faces->U(0, 0, fpt);
-              double momx = faces->U(0, 1, fpt);
-              double momy = faces->U(0, 2, fpt);
-              double e = faces->U(0, 3, fpt);
-
-              double u = momx / rho;
-              double v = momy / rho;
-              double e_int = e / rho - 0.5 * (u*u + v*v);
-
-              /* Gradients */
-              double rho_dx = faces->dU(0, 0, 0, fpt);
-              double momx_dx = faces->dU(0, 0, 1, fpt);
-              double momy_dx = faces->dU(0, 0, 2, fpt);
-
-              double rho_dy = faces->dU(0, 1, 0, fpt);
-              double momx_dy = faces->dU(0, 1, 1, fpt);
-              double momy_dy = faces->dU(0, 1, 2, fpt);
-
-              /* Set viscosity */
-              double mu;
-              if (input->fix_vis)
-              {
-                mu = input->mu;
-              }
-              /* If desired, use Sutherland's law */
-              else
-              {
-                double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-                mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
-                                                                                 input->c_sth);
-              }
-
-              double du_dx = (momx_dx - rho_dx * u) / rho;
-              double du_dy = (momx_dy - rho_dy * u) / rho;
-
-              double dv_dx = (momy_dx - rho_dx * v) / rho;
-              double dv_dy = (momy_dy - rho_dy * v) / rho;
-
-              double diag = (du_dx + dv_dy) / 3.0;
-
-              double tauxx = 2.0 * mu * (du_dx - diag);
-              double tauxy = mu * (du_dy + dv_dx);
-              double tauyy = 2.0 * mu * (dv_dy - diag);
-
-              /* Get viscous normal stress */
-              taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt);
-              taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt);
-
-              for (unsigned int dim = 0; dim < geo.nDims; dim++)
-                force_visc[dim] -= geo.weights_fpts[ftype](idx) * taun[dim] *
-                    faces->dA(0, fpt);
-
-            }
-            else if (geo.nDims == 3)
-            {
-              /* Setting variables for convenience */
-              /* States */
-              double rho = faces->U(0, 0, fpt);
-              double momx = faces->U(0, 1, fpt);
-              double momy = faces->U(0, 2, fpt);
-              double momz = faces->U(0, 3, fpt);
-              double e = faces->U(0, 4, fpt);
-
-              double u = momx / rho;
-              double v = momy / rho;
-              double w = momz / rho;
-              double e_int = e / rho - 0.5 * (u*u + v*v + w*w);
-
-              /* Gradients */
-              double rho_dx = faces->dU(0, 0, 0, fpt);
-              double momx_dx = faces->dU(0, 0, 1, fpt);
-              double momy_dx = faces->dU(0, 0, 2, fpt);
-              double momz_dx = faces->dU(0, 0, 3, fpt);
-
-              double rho_dy = faces->dU(0, 1, 0, fpt);
-              double momx_dy = faces->dU(0, 1, 1, fpt);
-              double momy_dy = faces->dU(0, 1, 2, fpt);
-              double momz_dy = faces->dU(0, 1, 3, fpt);
-
-              double rho_dz = faces->dU(0, 2, 0, fpt);
-              double momx_dz = faces->dU(0, 2, 1, fpt);
-              double momy_dz = faces->dU(0, 2, 2, fpt);
-              double momz_dz = faces->dU(0, 2, 3, fpt);
-
-              /* Set viscosity */
-              double mu;
-              if (input->fix_vis)
-              {
-                mu = input->mu;
-              }
-              /* If desired, use Sutherland's law */
-              else
-              {
-                double rt_ratio = (input->gamma - 1.0) * e_int / (input->rt);
-                mu = input->mu * std::pow(rt_ratio,1.5) * (1. + input->c_sth) / (rt_ratio +
-                                                                                 input->c_sth);
-              }
-
-              double du_dx = (momx_dx - rho_dx * u) / rho;
-              double du_dy = (momx_dy - rho_dy * u) / rho;
-              double du_dz = (momx_dz - rho_dz * u) / rho;
-
-              double dv_dx = (momy_dx - rho_dx * v) / rho;
-              double dv_dy = (momy_dy - rho_dy * v) / rho;
-              double dv_dz = (momy_dz - rho_dz * v) / rho;
-
-              double dw_dx = (momz_dx - rho_dx * w) / rho;
-              double dw_dy = (momz_dy - rho_dy * w) / rho;
-              double dw_dz = (momz_dz - rho_dz * w) / rho;
-
-              double diag = (du_dx + dv_dy + dw_dz) / 3.0;
-
-              double tauxx = 2.0 * mu * (du_dx - diag);
-              double tauyy = 2.0 * mu * (dv_dy - diag);
-              double tauzz = 2.0 * mu * (dw_dz - diag);
-              double tauxy = mu * (du_dy + dv_dx);
-              double tauxz = mu * (du_dz + dw_dx);
-              double tauyz = mu * (dv_dz + dw_dy);
-
-              /* Get viscous normal stress */
-              taun[0] = tauxx * faces->norm(0, fpt) + tauxy * faces->norm(1, fpt) + tauxz * faces->norm(2, fpt);
-              taun[1] = tauxy * faces->norm(0, fpt) + tauyy * faces->norm(1, fpt) + tauyz * faces->norm(2, fpt);
-              taun[2] = tauxz * faces->norm(0, fpt) + tauyz * faces->norm(1, fpt) + tauzz * faces->norm(2, fpt);
-
-              for (unsigned int dim = 0; dim < geo.nDims; dim++)
-                force_visc[dim] -= geo.weights_fpts[ftype](idx) * taun[dim] *
-                    faces->dA(0, fpt);
-            }
-
-          }
-        }
-      }
-    }
-  }
-}
-
-void FRSolver::compute_moments(std::array<double,3> &tot_force, std::array<double,3> &tot_moment)
-{
-  /*! ---- TAKING ALL MOMENTS ABOUT 'geo.x_cg' ---- */
-  tot_force.fill(0.0);
-  tot_moment.fill(0.0);
-
-  double taun[3];
-  double force[3] = {0,0,0}; //! NOTE: need z-component initialized to '0' for 2D
-
-  int c1[3] = {1,2,0}; // Cross-product index maps
-  int c2[3] = {2,0,1};
-
-  /* Loop over boundary faces */
-  for (int bnd = 0; bnd < geo.nBounds; bnd++)
-  {
-    /* Get boundary ID */
-    int bnd_id = geo.bnd_ids[bnd];
-
-    if (bnd_id == SLIP_WALL || bnd_id == ISOTHERMAL_NOSLIP || bnd_id == ISOTHERMAL_NOSLIP_MOVING ||
-        bnd_id == ADIABATIC_NOSLIP || bnd_id == ADIABATIC_NOSLIP_MOVING) /* On wall boundary */
-    {
-      for (auto ff : geo.boundFaces[bnd])
-      {
-        int fid = geo.faceID_type(ff);
-        auto ftype = geo.faceType(ff);
-        for (int idx = 0; idx < geo.nFptsPerFace[ftype]; idx++)
-        {
-          unsigned int fpt = geo.face2fpts[ftype](idx, fid);
-
-          /* Get pressure */
-          double PL = faces->P(0, fpt);
-
-          /* Sum inviscid force contributions */
-          /// TODO: need to fix quadrature weights for mixed element cases!  (geo->weights_fpts[ftype]?)
           for (unsigned int dim = 0; dim < geo.nDims; dim++)
             force[dim] = geo.weights_fpts[ftype](idx) * PL *
                 faces->norm(dim, fpt) * faces->dA(0, fpt);
