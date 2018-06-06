@@ -98,7 +98,7 @@ ifneq ($(MPI_LIB_DIR),)
 ifeq ($(strip $(INTEL)),YES)
 	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpich_intel -Wl,-rpath=$(MPI_LIB_DIR)
 else
-	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR) -lmpi_cxx
+	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
 endif
 	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))

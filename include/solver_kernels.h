@@ -38,7 +38,6 @@ struct MotionVars
 {
   double moveAx, moveAy, moveAz;
   double moveFx, moveFy, moveFz;
-  double periodicDX, periodicDY;
 };
 
 /* TODO: Move these general operators to a different file (aux_kernels.h/cu) */

@@ -1641,8 +1641,8 @@ void move_grid(mdvector_gpu<double> coords, mdvector_gpu<double> coords_0, mdvec
       double t0 = 10;
       double Atx = 2;
       double Aty = 2;
-      double DX = 0.5 * params.periodicDX;
-      double DY = 0.5 * params.periodicDY;
+      double DX = 5;
+      double DY = 5;
       /// Taken from Kui, AIAA-2010-5031-661
       double x0 = coords_0(node,0); double y0 = coords_0(node,1);
       coords(node,0) = x0 + sin(PI*x0/DX)*sin(PI*y0/DY)*sin(Atx*PI*time/t0);

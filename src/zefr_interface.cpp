@@ -259,13 +259,6 @@ void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *da
 #endif
 }
 
-void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
-{
-#ifdef _GPU
-  ZEFR->unblank_data_to_device(fringeIDs, nFringe, gradFlag, data);
-#endif
-}
-
 void signal_handler(int signum)
 {
   if (signum == SIGINT)

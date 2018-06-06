@@ -1409,8 +1409,6 @@ void FRSolver::solver_data_to_device()
     motion_vars.moveFx = input->moveFx;
     motion_vars.moveFy = input->moveFy;
     motion_vars.moveFz = input->moveFz;
-    motion_vars.periodicDX = input->periodicDX;
-    motion_vars.periodicDY = input->periodicDY;
 
     if (input->motion_type == RIGID_BODY)
     {
@@ -7432,7 +7430,7 @@ void FRSolver::report_forces(std::ofstream &f)
     Vsq += input->V_fs(dim) * input->V_fs(dim);
 
   double Ffac = 1.0 / (0.5 * input->rho_fs * Vsq);
-  double Mfac = Fface / input->L_fs;
+  double Mfac = Ffac / input->L_fs;
 
   for (int i = 0; i < 3; i++)
   {

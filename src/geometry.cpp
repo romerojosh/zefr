@@ -3415,8 +3415,8 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       double t0 = 10;
       double Atx = 2;
       double Aty = 2;
-      double DX = 5;/// 0.5 * input->periodicDX; /// TODO
-      double DY = 5;/// 0.5 * input->periodicDY; /// TODO
+      double DX = 5;
+      double DY = 5;
 
       for (int node = 0; node < nNodes; node++)
       {
