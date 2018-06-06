@@ -29,7 +29,9 @@
 #include "input.hpp"
 #include "mdvector.hpp"
 
+#ifdef _CPU
 #include <Eigen/Dense>
+#endif
 
 #ifdef _GPU
 #include "mdvector_gpu.h"

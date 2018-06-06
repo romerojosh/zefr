@@ -33,7 +33,9 @@
 #include "input.hpp"
 #include "filter.hpp"
 
+#ifdef _CPU
 #include <Eigen/Dense>
+#endif
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
@@ -91,8 +93,10 @@ class FRSolver
     double tavg_prev_time = 0.;
 
     /* Implicit method parameters */
+#ifdef _CPU
     typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> 
       MatrixXdRM;                       // Eigen matrix type used for LHS
+#endif
     std::vector<std::vector<std::shared_ptr<Elements>>> 
       elesObjsBC;                       // elesObj by color
     mdvector<unsigned int> ele2elesObj; // Map from ele to elesObj

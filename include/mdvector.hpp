@@ -38,7 +38,9 @@
 
 #include "macros.hpp"
 
+#ifdef _CPU
 #include <Eigen/Dense>
+#endif
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
@@ -381,10 +383,12 @@ T mdvector<T>::min_val(void) const
 template <typename T>
 void mdvector<T>::inverse(mdvector<T>& inv) const
 {
+#ifdef _CPU
   typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> MatrixXdRM;
   Eigen::Map<const MatrixXdRM> A(values.data(), dims[0], dims[1]);
   Eigen::Map<MatrixXdRM> Ainv(inv.data(), dims[0], dims[1]);
   Ainv = A.inverse();
+#endif
 }
 
 template <typename T>

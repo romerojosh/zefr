@@ -1389,7 +1389,7 @@ void compute_moments(mdview_gpu<double> U, mdview_gpu<double> dU, mdvector_gpu<d
     int gfpt = face2fpts(fpt, fid);
 
     /* Get pressure */
-    double PL = P(gfpt, 0);
+    double PL = P(0, gfpt);
 
     /* Sum inviscid force contributions */
     for (unsigned int dim = 0; dim < nDims; dim++)
