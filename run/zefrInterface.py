@@ -125,6 +125,9 @@ class zefrSolver:
         prandtl = conditions['prandtl']
 
         self.inp.dt = conditions['dt']
+        self.inp.adapt_dt = (properties['adapt-dt'] == 1)
+        if 'max-dt' in properties:
+            self.inp.max_dt = properties['max-dt']
 
         # All conditions come in as SI units - take care of non-dim here
         ainf *= gridScale
@@ -377,15 +380,13 @@ class zefrSolver:
         self.z.write_forces()
         os.chdir('..')
 
-    def getForcesAndMoments(self):
-        self.z.get_forces()
-
         # Apply scaling to forces & moments
-        bodyForce = np.array(ptrToArray(self.simdata.forces, 6))
-        bodyForce[:3] = bodyForce[:3]*self.forceDim
-        bodyForce[3:] = bodyForce[3:]*self.momDim
-        
-        return bodyForce
+        bodyForce = ptrToArray(self.simdata.forces, 6)
+
+        F = np.array(bodyForce[0:3]*self.forceDim)
+        M = np.array(bodyForce[3:6]*self.momDim)
+
+        return F, M
 
     # HELIOS can provide grid velocities
     def setGridSpeeds_maneuver(self,MeshMotionData):

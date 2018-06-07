@@ -4060,6 +4060,8 @@ void FRSolver::step_LSRK_stage_start(int stage)
 
   if (stage == 0)
   {
+    prev_time = flow_time;
+
     // Copy current solution into "U_ini" ['rold' in PyFR]
 #ifdef _CPU
     for (auto e : elesObjs)
@@ -4205,8 +4207,8 @@ void FRSolver::step_LSRK_stage_finish(int stage, const std::map<ELE_TYPE, mdvect
   check_error();
 #endif
 
-  flow_time = prev_time + elesObjs[0]->dt(0);
-  prev_time = flow_time;
+  if (stage == input->nStages - 1)
+    flow_time = prev_time + elesObjs[0]->dt(0);
 }
 
 
@@ -7382,7 +7384,7 @@ void FRSolver::report_RHS(unsigned int stage, unsigned int iterNM, unsigned int 
 #endif
 }
 
-void FRSolver::report_forces(std::ofstream &f)
+void FRSolver::report_forces(std::ofstream &f, double* tot_force)
 {
   unsigned int iter = current_iter;
   if (input->p_multi)
@@ -7422,6 +7424,23 @@ void FRSolver::report_forces(std::ofstream &f)
   std::array<double, 3> force = {0,0,0};
   std::array<double, 3> moment = {0,0,0};
   compute_moments(force, moment, &g);
+
+  if (tot_force != NULL)
+  {
+    for (int i = 0; i < 6; i++)
+      tot_force[i] = 0.0;
+
+#ifdef _MPI
+    MPI_Allreduce(force.data(), &tot_force[0], 3, MPI_DOUBLE, MPI_SUM, myComm);
+    MPI_Allreduce(moment.data(), &tot_force[3], 3, MPI_DOUBLE, MPI_SUM, myComm);
+#else
+    for (int i = 0; i < 3; i++)
+    {
+      tot_force[i] = force[i];
+      tot_force[i+3] = moment[i];
+    }
+#endif
+  }
 
   /* Convert dimensional forces into non-dimensional coefficients
    * NOTE: Reference area assumed to be 1. Divide by A for 'true' Cl, Cd */

@@ -101,8 +101,6 @@ public:
 
   DataStruct &get_data(void) { return simData; }
 
-  void get_forces(void);
-
   /* ==== Overset-Related Functions ==== */
 
   // Geometry Access Functions

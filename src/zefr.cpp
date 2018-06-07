@@ -310,8 +310,6 @@ void Zefr::read_input(const char *inputfile)
 
   if (nGrids > 1)
     input.overset = 1;
-  //else
-  //  input.overset = 0;
 
   if (input.overset)
   {
@@ -450,7 +448,10 @@ void Zefr::do_rk_stage_finish(int iter, int stage)
 
 double Zefr::adapt_dt()
 {
-  return solver->adapt_dt();
+  if (input.adapt_dt)
+    return solver->adapt_dt();
+  else
+    return input.dt;
 }
 
 void Zefr::write_residual(void)
@@ -482,25 +483,7 @@ void Zefr::write_averages(void)
 
 void Zefr::write_forces(void)
 {
-  solver->report_forces(force_file);
-}
-
-void Zefr::get_forces(void)
-{
-  std::array<double, 3> force = {0,0,0};
-  std::array<double, 3> moment = {0,0,0};
-  solver->compute_moments(force, moment);
-
-#ifdef _MPI
-    MPI_Allreduce(MPI_IN_PLACE, force.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
-    MPI_Allreduce(MPI_IN_PLACE, moment.data(), 3, MPI_DOUBLE, MPI_SUM, myComm);
-#endif
-
-  for (int i = 0; i < geo->nDims; i++)
-  {
-    simData.forces[i] = force[i];
-    simData.forces[i+3] = moment[i];
-  }
+  solver->report_forces(force_file, &simData.forces[0]);
 }
 
 void Zefr::write_error(void)
@@ -992,7 +975,6 @@ void Zefr::set_tioga_callbacks(void (*point_connect)(void), void (*unblank_part_
 
 void Zefr::set_rigid_body_callbacks(void (*setTransform)(double* mat, double* off, int nDims))
 {
-  printf("setTransform func ptr: %p\n",setTransform); /// DEBUGGING
   tg_update_transform = setTransform;
 }
 

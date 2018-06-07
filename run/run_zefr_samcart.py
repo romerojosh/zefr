@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import sys
 import os
 import time as Time
@@ -28,13 +29,14 @@ nproc = Comm.Get_size()
 # ------------------------------------------------------------
 
 if len(sys.argv) < 2:
-    print("Usage:")
-    print("  {0} <inputfile> <nRankGrid1> <nRankGrid2> ...".format(sys.argv[0]))
-    exit
+    if rank == 0:
+        print("No inputfile given: Using default 'runfile.dict'")
+    inputFile = 'runfile.dict'
+else:
+    inputFile = sys.argv[1]
 
 nGrids = 1
 gridID = 0
-inputFile = sys.argv[1]
 
 # Split our run into the various grids
 if len(sys.argv) > 2:
@@ -68,7 +70,7 @@ with open(inputFile) as f:
                 parameters[line[0]] = line[1]
 
 integer_vals = ['obesubsteps', 'nsave', 'plot-freq', 'report-freq', 
-    'restart-freq', 'force-freq', 'adapt-freq']
+    'restart-freq', 'force-freq', 'adapt-freq', 'adapt-dt']
 for val in integer_vals:
     try:
         parameters[val] = int(parameters[val])
@@ -100,6 +102,7 @@ TIOGA   = Tioga(gridID,nGrids)
 SAMCART = samcartSolver()
 
 dt = parameters['dt']
+adapt_dt = parameters['adapt-dt'] == 1
 
 nSteps = int(parameters['nsteps'])
 nStages = int(parameters['nstages'])
@@ -250,10 +253,9 @@ for i in range(iter+1,nSteps+1):
 
     if forceFreq > 0 and (i % forceFreq == 0 or i == nSteps):
         # TODO: consolidate force/moment calculation & reporting
-        ZEFR.computeForces(i)
-        forces = ZEFR.getForcesAndMoments()
+        Force,Moment = ZEFR.computeForces(i)
         if rank == 0:
-            print('Iter {}: Forces {}'.format(i,forces))
+            print('Iter {}: Forces {}, Moments {}'.format(i,Force,Moment))
 
 # ------------------------------------------------------------
 # Cleanup

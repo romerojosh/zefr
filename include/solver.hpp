@@ -222,7 +222,7 @@ class FRSolver
     void write_averages(const std::string &_prefix);
     void report_residuals(std::ofstream &f, std::chrono::high_resolution_clock::time_point t1);
     void report_RHS(unsigned int stage, unsigned int iterNM, unsigned int iter);
-    void report_forces(std::ofstream &f);
+    void report_forces(std::ofstream &f, double* tot_force = NULL);
     void report_error(std::ofstream &f);
     void report_turbulent_stats(std::ofstream &f);
 #ifdef _GPU
