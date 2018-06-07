@@ -29,13 +29,55 @@ To run the code, simply run the executable with an input file as an argument:
 ```
 See the input files in the testcases/ directory for examples of working cases.
 
+### Alternate Builds
+
+Besides the default standalone binary, ZEFR can also be built as a library for use
+in a multi-solver context (i.e. on overset grids) or as a Python module with a
+high-level interface.  All but the default target enable the use of overset grids
+through an external connectivity library such as Tioga.
+
+The available build targets are:
+
+* shared
+  * Builds ZEFR as a shared library (libzefr.so)
+* static
+  * Builds ZEFR as a static library (libzefr.a)
+* wrap
+  * Builds libzefr.so + compiles a standalone binary suitable for running on overset
+  grids.  Requires linking against Tioga as well.
+* wrap\_static
+  * Builds libzefr.a + compiles the same standalone wrapper.  Requires linking 
+  statically against TIOGA (libtioga.a).
+* swig
+  * Builds ZEFR as a Python module with a high-level interface.
+
 ### Mesh Utilities
 
-ZEFR includes a dependence on PyFR for mesh conversion and post-processing.
 Use the 'meshtools' program under 'external' to convert grids to the PyFR format
 and to export solution data to ParaView's .vtu/.pvtu file format for visualization.
+'meshtools' simply wraps the mesh-related functionality of PyFR to accomplish this.
+If the PyFR source has not been automatically downloaded along with ZEFR, tell git 
+to download it with:
 
-Numpy, h5py, and pytools are required to use the meshtools script.
+```bash
+git submodule init
+git submodule update
+```
+
+Additionally, the following Python packages are required to use 'meshtools':
+
+* numpy
+* h5py
+* pytools
+* mako
+
+They can easily be installed on any system using pip:
+
+```bash
+pip install numpy
+```
+
+Python >= 3.3 is required to use meshtools / PyFR.
 
 # Code Structure:
 The program is structured using three main classes: the **FRSolver** class, the **Elements** class, and the **Faces** class. 
