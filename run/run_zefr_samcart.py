@@ -220,8 +220,6 @@ for i in range(iter+1,nSteps+1):
       
         # Check error from time controller and update dt; dt<0 means step rejected
         dt = ZEFR.adaptDT()
-        if rank == 0:
-            print('dt = {:3.2e}'.format(dt))
 
     TIOGA.exchangeSolutionAMR() # Interpolate 't^{n+1}' data from ZEFR
 
@@ -252,10 +250,9 @@ for i in range(iter+1,nSteps+1):
             SAMCART.writePlotData(i)
 
     if forceFreq > 0 and (i % forceFreq == 0 or i == nSteps):
-        # TODO: consolidate force/moment calculation & reporting
         Force,Moment = ZEFR.computeForces(i)
         if rank == 0:
-            print('Iter {}: Forces {}, Moments {}'.format(i,Force,Moment))
+            print('Iter {}: Forces {:4.2e}, Moments {:4.2e}'.format(i,Force,Moment))
 
 # ------------------------------------------------------------
 # Cleanup

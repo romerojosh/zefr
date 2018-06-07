@@ -134,8 +134,8 @@ class zefrSolver:
         dt = ainf * conditions['dt'] / gridScale
 
         v_fs = mach_fs * ainf
-        self.forceDim = 0.5 * rinf * (v_fs*gridScale)**2
-        self.momDim = self.forceDim * gridScale
+        self.forceDim = 1. / (0.5 * rinf * (v_fs*gridScale)**2)
+        self.momDim = 1. / (self.forceDim * gridScale)
 
         # Update ZEFR's input parameters with non-dimensionalized quantities
         self.inp.dt = dt

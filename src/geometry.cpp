@@ -111,12 +111,12 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     geo.iblank_face.assign({geo.nFaces}, NORMAL);
   }
 
+  geo.x_cg.assign({3});
   if (input->motion)
   {
     geo.coords_init = geo.coord_nodes;
     geo.grid_vel_nodes.assign({geo.nNodes, geo.nDims}, 0.0); /// TODO: pinned for _GPU?
 
-    geo.x_cg.assign({3});
     geo.vel_cg.assign({3});
     geo.Rmat.assign({3,3});
 
