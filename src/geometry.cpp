@@ -3511,60 +3511,10 @@ void move_grid(InputStruct *input, GeoStruct &geo, double time)
       }
       break;
     }
-    case RADIAL_VIBE:
-    {
-      /// Radial Expansion / Contraction
-      if (geo.gridID == 0) {
-        double Ar = 0;///input->moveAr; /// TODO
-        double Fr = 0;///input->moveFr; /// TODO
-        for (uint node = 0; node < nNodes ; node++)
-        {
-          double r = 1;///rv0(node,0) + Ar*(1. - cos(2.*pi*Fr*time)); /// TODO
-          double rdot = 2.*pi*Ar*Fr*sin(2.*pi*Fr*time);
-          double theta = 1;///rv0(node,1); /// TODO
-          double psi = 1;///rv0(node,2); /// TODO
-          geo.coord_nodes(node,0) = r*sin(psi)*cos(theta);
-          geo.coord_nodes(node,1) = r*sin(psi)*sin(theta);
-          geo.coord_nodes(node,2) = r*cos(psi);
-          geo.grid_vel_nodes(node,0) = rdot*sin(psi)*cos(theta);
-          geo.grid_vel_nodes(node,1) = rdot*sin(psi)*sin(theta);
-          geo.grid_vel_nodes(node,2) = rdot*cos(psi);
-        }
-      }
-      break;
-    }
     case RIGID_BODY:
     {
-      /// 6 DOF Rotation / Translation
-      break; /// TODO: consider organization; Done entirely in eles->move() currently
-
-      // Rotation Component
-      //auto rotMat = getRotationMatrix(input->rot_axis,input->rot_angle);
-      Quat q(geo.q(0), geo.q(1), geo.q(2), geo.q(3));
-      auto rotMat = getRotationMatrix(q);
-
-      int m = 3;
-      int k = 3;
-      int n = nNodes;
-
-      auto &A = rotMat(0,0);
-      auto &B = geo.coords_init(0,0);
-      auto &C = geo.coord_nodes(0,0); /// TODO
-
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                  1.0, &A, k, &B, k, 0.0, &C, m); /// TODO
-
-      // Translation Component
-      for (int i = 0; i < nNodes; i++)
-      {
-        geo.coord_nodes(i,0) += input->dxc[0];
-        geo.coord_nodes(i,1) += input->dxc[1];
-        geo.coord_nodes(i,2) += input->dxc[2];
-
-        geo.grid_vel_nodes(i,0) += input->dvc[0];
-        geo.grid_vel_nodes(i,1) += input->dvc[1];
-        geo.grid_vel_nodes(i,2) += input->dvc[2];
-      }
+      /// 6 DOF Rotation / Translation: Handled separately in eles->move()
+      break;
     }
   }
 }

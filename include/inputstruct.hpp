@@ -48,7 +48,6 @@ enum MOTION_TYPE {
   TEST2 = 2,
   TEST3 = 3,
   CIRCULAR_TRANS = 4,
-  RADIAL_VIBE = 5,
   RIGID_BODY = 10
 };
 
@@ -175,7 +174,8 @@ struct InputStruct
   /* --- Overset / Moving-Grid Variables --- */
   bool motion, overset, use_lgp, full_6dof;
   unsigned int gridID = 0;
-  unsigned int nGrids, gridType, motion_type;
+  unsigned int nGrids, gridType;
+  int motion_type = 0;
   std::vector<std::string> oversetGrids;  //! List of mesh files for each overset grid
   std::vector<int> gridTypes;             //! Overset grid types (background or geometry-containing)
 

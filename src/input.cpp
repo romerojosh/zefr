@@ -368,10 +368,21 @@ InputStruct read_input_file(std::string inputfile)
     input.gridTypes.assign(input.oversetGrids.size(), 1);
 
   read_param(f, "motion", input.motion, false);
-  if (input.motion)
+  read_param(f, "motion_type", input.motion_type, (int)STATIC);
+  if (!input.motion) input.motion_type = STATIC;
+
+  switch(input.motion_type)
   {
-    read_param(f, "motion_type", input.motion_type);
-    if (input.motion_type == CIRCULAR_TRANS)
+    case STATIC:
+      input.motion = false;
+      break;
+
+    case TEST1:
+    case TEST2:
+    case TEST3:
+      break;
+
+    case CIRCULAR_TRANS:
     {
       read_param(f, "moveAx", input.moveAx);
       read_param(f, "moveAy", input.moveAy);
@@ -382,8 +393,11 @@ InputStruct read_input_file(std::string inputfile)
         read_param(f, "moveAz", input.moveAz, 0.0);
         read_param(f, "moveFz", input.moveFz, 0.0);
       }
+
+      break;
     }
-    else if (input.motion_type == RIGID_BODY)
+
+    case RIGID_BODY:
     {
       if (input.nDims != 3)
         ThrowException("Rigid-Body motion implemented in 3D only");
@@ -421,11 +435,16 @@ InputStruct read_input_file(std::string inputfile)
       input.Imat[3] = input.Imat[1];
       input.Imat[6] = input.Imat[2];
       input.Imat[7] = input.Imat[5];
+
+      break;
     }
-  }
-  else
-  {
-    input.motion_type = 0;
+
+    default:
+    {
+      std::stringstream ss("Error: Given motion_type not supported: ");
+      ss << std::to_string(input.motion_type) << std::endl;
+      ThrowException(ss.str().c_str());
+    }
   }
 
   f.close();
