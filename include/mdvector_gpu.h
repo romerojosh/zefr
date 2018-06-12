@@ -33,7 +33,7 @@
 #include "macros.hpp"
 #include "mdvector.hpp"
 #include "cuda_runtime.h"
-#include "solver_kernels.h"
+#include "aux_kernels.h"
 
 /* Texture (ldg) load template function */
 template<typename T>

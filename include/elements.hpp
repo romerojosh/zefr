@@ -57,6 +57,8 @@ class Elements
     ELE_TYPE etype;
     unsigned int elesObjID;
 
+    void init(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order);
+
     /* Geometric Parameters */
     unsigned int order;
     unsigned int startEle, endEle;

@@ -42,26 +42,15 @@ extern "C" {
 Prisms::Prisms(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
 {
   etype = PRI;
-  this->geo = geo;
-  this->input = input;  
-  this->elesObjID = elesObjID;
-  this->startEle = startEle;
-  this->endEle = endEle;
-  this->nEles = endEle - startEle;
-  this->nQpts = 84; /// TODO // Note: Fixing quadrature points to Shunn-Hamm 84 point rule
 
-  if (input->error_freq == 0) this->nQpts = 0; // disable allocation if not needed
+  this->init(geo,input,elesObjID,startEle,endEle,order);
 
-  /* Generic tetrahedral geometry */
+  if (input->error_freq > 0) this->nQpts = 84; // Note: Fixing quadrature points to Shunn-Hamm 84 point rule
+
+  /* Generic prismatic geometry */
   nDims = 3;
   nFaces = 5;
   nNodes = geo->nNodesPerEleBT[PRI];
-  
-  /* If order argument is not provided, use order in input file */
-  if (order == -1)
-    this->order = input->order;
-  else
-    this->order = order;
 
   nSpts1D = this->order + 1;
   nFptsTri = (this->order + 1) * (this->order + 2) / 2;
@@ -72,20 +61,6 @@ Prisms::Prisms(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsig
   nFpts_face = {nFptsTri, nFptsTri, nFptsQuad, nFptsQuad, nFptsQuad};
   nFpts = 2 * nFptsTri + 3 * nFptsQuad;
   nPpts = nSpts;
-  
-  if (input->equation == AdvDiff)
-  {
-    nVars = 1;
-  }
-  else if (input->equation == EulerNS)
-  {
-    nVars = 5;
-  }
-  else
-  {
-    ThrowException("Equation not recognized: " + input->equation);
-  }
-  
 }
 
 void Prisms::set_locs()
@@ -213,7 +188,7 @@ void Prisms::set_locs()
     }
   }
 
-  /* Setup gauss quadrature point locations and weights */ /// TODO
+  /* Setup gauss quadrature point locations and weights */ /// TODO: Prism Qpt locations
   //loc_qpts = WS_Tet_pts(6);
   //weights_qpts = WS_Tet_weights(6);
 }
@@ -372,7 +347,6 @@ void Prisms::set_oppRestart(unsigned int order_restart, bool use_shape)
       oppRestart(spt, rpt) = val;
     }
   }
-
 }
 
 double Prisms::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)

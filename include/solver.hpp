@@ -131,10 +131,10 @@ class FRSolver
 
     _mpi_comm myComm, worldComm;
 
-    void initialize_U();
     void setup_views();
-    void restart(std::string restart_file, unsigned restart_iter = 0);
-    void restart_pyfr(std::string restart_file, unsigned restart_iter = 0);
+    void restart_native(std::string restart_case, unsigned restart_iter);
+    void restart_pyfr(std::string restart_case, unsigned restart_iter);
+    void process_restart_stats(const std::string &stats_str);
     void setup_update();
     void setup_output();
     void create_elesObj(ELE_TYPE etype, unsigned int elesObjID, unsigned int startEle, unsigned int endEle);

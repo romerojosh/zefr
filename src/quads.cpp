@@ -39,59 +39,26 @@ extern "C" {
 #include "solver_kernels.h"
 #endif
 
-//Quads::Quads(GeoStruct *geo, const InputStruct *input, int order)
 Quads::Quads(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
 {
   etype = QUAD;
-  this->geo = geo;
-  this->input = input;
-  this->elesObjID = elesObjID;
-  this->startEle = startEle;
-  this->endEle = endEle;
-  this->nEles = endEle - startEle;
+
+  this->init(geo,input,elesObjID,startEle,endEle,order);
+
   this->nQpts = input->nQpts1D * input->nQpts1D;
 
   /* Generic quadrilateral geometry */
   nDims = 2;
   nFaces = 4;
   nNodes = geo->nNodesPerEleBT[QUAD];
-  
-  //geo->nFacesPerEle = 4;
-  //geo->nNodesPerFace = 2;
-  //geo->nCornerNodes = 4;
 
-  /* If order argument is not provided, use order in input file */
-  if (order == -1)
-  {
-    nSpts = (input->order + 1) * (input->order + 1);
-    nSpts1D = input->order + 1;
-    this->order = input->order;
-  }
-  else
-  {
-    nSpts = (order + 1) * (order + 1);
-    nSpts1D = order + 1;
-    this->order = order;
-  }
+  nSpts = (this->order + 1) * (this->order + 1);
+  nSpts1D = this->order + 1;
 
   nFptsPerFace = nSpts1D;
   nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = nSpts1D * nFaces;
   nPpts = nSpts;
-  
-  if (input->equation == AdvDiff)
-  {
-    nVars = 1;
-  }
-  else if (input->equation == EulerNS)
-  {
-    nVars = 4;
-  }
-  else
-  {
-    ThrowException("Equation not recognized: " + input->equation);
-  }
-  
 }
 
 void Quads::set_locs()
@@ -110,8 +77,8 @@ void Quads::set_locs()
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
-  // NOTE: Currently assuming solution point locations always at Legendre.
-  // Will need extrapolation operation in 1D otherwise
+  /* NOTE: Currently assuming solution point locations always at Legendre.
+   * Will need extrapolation operation in 1D otherwise */
   auto weights_spts_1D = Gauss_Legendre_weights(nSpts1D); 
   weights_fpts.assign({nSpts1D});
   for (unsigned int fpt = 0; fpt < nSpts1D; fpt++)
@@ -343,13 +310,9 @@ double Quads::calc_d_nodal_basis_spts(unsigned int spt,
   double val = 0.0;
 
   if (dim == 0)
-  {
-      val = Lagrange_d1(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]);
-  }
+    val = Lagrange_d1(loc_DFR_1D, i, loc[0]) * Lagrange(loc_DFR_1D, j, loc[1]);
   else
-  {
-      val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange_d1(loc_DFR_1D, j, loc[1]);
-  }
+    val = Lagrange(loc_DFR_1D, i, loc[0]) * Lagrange_d1(loc_DFR_1D, j, loc[1]);
 
   return val;
 
@@ -363,13 +326,9 @@ double Quads::calc_d_nodal_basis_spts(unsigned int spt,
   double val = 0.0;
 
   if (dim == 0)
-  {
-      val = Lagrange_d1(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
-  }
+    val = Lagrange_d1(loc_spts_1D, i, loc[0]) * Lagrange(loc_spts_1D, j, loc[1]);
   else
-  {
-      val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange_d1(loc_spts_1D, j, loc[1]);
-  }
+    val = Lagrange(loc_spts_1D, i, loc[0]) * Lagrange_d1(loc_spts_1D, j, loc[1]);
 
   return val;
 

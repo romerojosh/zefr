@@ -17,6 +17,7 @@
  * along with ZEFR.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "aux_kernels.h"
 #include "elements_kernels.h"
 #include "flux.hpp"
 #include "input.hpp"
@@ -25,8 +26,6 @@
 #define HOLE 0
 #define FRINGE -1
 #define NORMAL 1
-
-static const unsigned int MAX_GRID_DIM = 65535;
 
 __device__
 double determinant(double* mat, unsigned int M)
@@ -1762,7 +1761,7 @@ void update_h_ref(mdvector_gpu<double> h_ref, mdvector_gpu<double> coord_fpts,
   }
   else
   {
-    /// TODO
+    /// TODO: 3D h_ref from CPU version?
   }
 }
 
@@ -1784,7 +1783,7 @@ void update_h_ref_wrapper(mdvector_gpu<double> &h_ref,
 }
 
 __global__
-void inverse_transform_quad(mdvector_gpu<double> jaco,
+void inverse_transform_2d(mdvector_gpu<double> jaco,
     mdvector_gpu<double> inv_jaco, double *jaco_det, int nEles, int nPts)
 {
   int pt = (blockDim.x * blockIdx.x + threadIdx.x) % nPts;
@@ -1803,7 +1802,7 @@ void inverse_transform_quad(mdvector_gpu<double> jaco,
 }
 
 __global__
-void inverse_transform_hexa(mdvector_gpu<double> jaco,
+void inverse_transform_3d(mdvector_gpu<double> jaco,
     mdvector_gpu<double> inv_jaco, double* jaco_det, int nEles, int nPts)
 {
   int pt = (blockDim.x * blockIdx.x + threadIdx.x) % nPts;
@@ -1856,18 +1855,18 @@ void calc_transforms_wrapper(mdvector_gpu<double> &nodes, mdvector_gpu<double> &
 
   if (nDims == 2)
   {
-    inverse_transform_quad<<<blocksS,threads>>>(jaco_spts,inv_jaco_spts,
+    inverse_transform_2d<<<blocksS,threads>>>(jaco_spts,inv_jaco_spts,
         jaco_det_spts.data(),nEles,nSpts);
 
-    inverse_transform_quad<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
+    inverse_transform_2d<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
         NULL,nEles,nFpts);
   }
   else
   {
-    inverse_transform_hexa<<<blocksS,threads>>>(jaco_spts,inv_jaco_spts,
+    inverse_transform_3d<<<blocksS,threads>>>(jaco_spts,inv_jaco_spts,
         jaco_det_spts.data(),nEles,nSpts);
 
-    inverse_transform_hexa<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
+    inverse_transform_3d<<<blocksF,threads>>>(jaco_fpts,inv_jaco_fpts,
         NULL,nEles,nFpts);
   }
 
@@ -1901,12 +1900,48 @@ void update_transform_rmat(mdvector_gpu<double> jaco_init, mdvector_gpu<double> 
       jaco(i,spt,j,ele) = J[i][j];
 }
 
-template<unsigned int nDims>
 __global__
-void update_inv_transform_rmat(mdvector_gpu<double> jaco_init, mdvector_gpu<double> jaco,
+void update_inv_transform_rmat_2d(mdvector_gpu<double> jaco_init, mdvector_gpu<double> jaco,
     mdvector_gpu<double> inv_jaco, mdvector_gpu<double> Rmat, unsigned int nEles,
     unsigned int nSpts)
 {
+  const unsigned int nDims = 2;
+  const int ele = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
+  const int spt = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
+
+  if (spt >= nSpts) return;
+
+  double J[nDims][nDims] = {{0.0}};
+  double R[nDims][nDims];
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      R[i][j] = Rmat(i,j);
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      for (int k = 0; k < nDims; k++)
+        J[i][j] += R[j][k] * jaco_init(i,spt,k,ele);
+
+  for (int i = 0; i < nDims; i++)
+    for (int j = 0; j < nDims; j++)
+      jaco(i,spt,j,ele) = J[i][j];
+
+  double xr = J[0][0];  double xs = J[1][0];
+  double yr = J[0][1];  double ys = J[1][1];
+  double invdet = xr*ys - xs*yr;
+
+  // Inverse of transformation matrix (times its determinant)
+  inv_jaco(0,spt,0,ele) =  ys/invdet;  inv_jaco(0,spt,1,ele) = -xs/invdet;
+  inv_jaco(1,spt,0,ele) = -yr/invdet;  inv_jaco(1,spt,1,ele) =  xr/invdet;
+}
+
+__global__
+void update_inv_transform_rmat_3d(mdvector_gpu<double> jaco_init, mdvector_gpu<double> jaco,
+    mdvector_gpu<double> inv_jaco, mdvector_gpu<double> Rmat, unsigned int nEles,
+    unsigned int nSpts)
+{
+  const unsigned int nDims = 3;
   const int ele = (blockDim.x * blockIdx.x + threadIdx.x) % nEles;
   const int spt = (blockDim.x * blockIdx.x + threadIdx.x) / nEles;
 
@@ -1943,18 +1978,22 @@ void update_transforms_rigid_wrapper(mdvector_gpu<double> &jaco_spts_init,
     mdvector_gpu<double> &norm, mdvector_gpu<double> &Rmat, unsigned int nSpts,
     unsigned int nFpts, unsigned int nEles, unsigned int nDims, bool need_inv)
 {
-  /* WARNING: Hex elements only right now! */
-
   // Apply rotation matrix to body-frame jacobian
   int threads = 128;
   int blocks = (nSpts*nEles + threads - 1) / threads;
   if (need_inv)
   {
-    update_inv_transform_rmat<3><<<blocks,threads>>>(jaco_spts_init,jaco_spts,inv_jaco_spts,Rmat,nEles,nSpts);
+    if (nDims == 3)
+      update_inv_transform_rmat_3d<<<blocks,threads>>>(jaco_spts_init,jaco_spts,inv_jaco_spts,Rmat,nEles,nSpts);
+    else
+      update_inv_transform_rmat_2d<<<blocks,threads>>>(jaco_spts_init,jaco_spts,inv_jaco_spts,Rmat,nEles,nSpts);
   }
   else
   {
-    update_transform_rmat<3><<<blocks,threads>>>(jaco_spts_init,jaco_spts,Rmat,nEles,nSpts);
+    if (nDims == 3)
+      update_transform_rmat<3><<<blocks,threads>>>(jaco_spts_init,jaco_spts,Rmat,nEles,nSpts);
+    else
+      update_transform_rmat<2><<<blocks,threads>>>(jaco_spts_init,jaco_spts,Rmat,nEles,nSpts);
   }
 
   // Apply rotation matrix to body-frame normals

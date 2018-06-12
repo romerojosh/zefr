@@ -107,7 +107,6 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
   coord.assign({nDims, nFpts});
   norm.assign({nDims, nFpts});
   dA.assign({2, nFpts},0.0);
-  //jaco.assign({nFpts, nDims, nDims , 2}); // TODO - remove
 
   /* Moving-grid-related structures */
   if (input->motion)

@@ -95,6 +95,8 @@ double get_cfl_limit_diff(int order, double beta);
 
 unsigned int tri_nodes_to_order(unsigned int nNodes);
 unsigned int tet_nodes_to_order(unsigned int nNodes);
+unsigned int pri_nodes_to_order(unsigned int nNodes);
+unsigned int npts_to_order(ELE_TYPE etype, unsigned int npts);
 
 /* Blocked gemm operation using OpenMP */
 #ifdef _OMP

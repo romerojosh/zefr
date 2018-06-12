@@ -43,7 +43,45 @@ extern "C" {
 #include "solver_kernels.h"
 #endif
 
-#define _DEBUG
+
+void Elements::init(GeoStruct* geo, InputStruct* input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
+{
+  this->geo = geo;
+  this->input = input;
+  this->elesObjID = elesObjID;
+  this->startEle = startEle;
+  this->endEle = endEle;
+  this->nEles = endEle - startEle;
+
+  /* If order argument is not provided, use order in input file */
+  if (order == -1)
+    this->order = input->order;
+  else
+    this->order = order;
+
+  if (input->error_freq == 0)
+  {
+    input->nQpts1D = 0;
+    this->nQpts = 0; // disable allocation if not needed
+  }
+
+  if (input->equation == AdvDiff)
+  {
+    nVars = 1;
+  }
+  else if (input->equation == EulerNS)
+  {
+    if (geo->nDims == 2)
+      nVars = 4;
+    else
+      nVars = 5;
+  }
+  else
+  {
+    ThrowException("Equation not recognized: " + input->equation);
+  }
+}
+
 void Elements::setup(std::shared_ptr<Faces> faces, _mpi_comm comm_in)
 {
   myComm = comm_in;
@@ -2446,7 +2484,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
         geo->coord_nodes(i,d) = geo->x_cg(d);
 
     auto &A = geo->coords_init;
-    auto &B = geo->Rmat;  /// TODO: double-check orientation
+    auto &B = geo->Rmat;
     auto &C = geo->coord_nodes;
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo->nNodes, nDims, nDims,
@@ -2458,7 +2496,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
         geo->grid_vel_nodes(i,d) = geo->vel_cg(d);
 
     auto &Av = geo->coords_init;
-    auto &Bv = geo->Wmat;  /// TODO: double-check orientation
+    auto &Bv = geo->Wmat;
     auto &Cv = geo->grid_vel_nodes;
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo->nNodes, nDims, nDims,
@@ -2492,10 +2530,6 @@ void Elements::move(std::shared_ptr<Faces> faces)
 
   if (input->motion_type == RIGID_BODY)
   {
-    /// TODO: kernels that take in 'body-coords' transforms and applies rotation matrix
-    /* At times 1 and 2, jaco_1 = R_1 * jaco_0;  jaco_2 = R_2 * jaco_0
-     * So to update from 1 to 2, jaco_2 = R_2 * R_1^inv * jaco_1
-     * Where R is the matrix form of the body's roation quaternion */
     update_transforms_rigid_wrapper(jaco_spts_init_d, jaco_spts_d, inv_jaco_spts_d,
         faces->norm_init_d, faces->norm_d, geo->Rmat_d, nSpts, faces->nFpts, nEles, nDims, true);
   }
@@ -2509,7 +2543,7 @@ void Elements::move(std::shared_ptr<Faces> faces)
                          geo->fpt2gfptBT_d[etype], geo->fpt2gfpt_slotBT_d[etype], nFpts, nEles, nDims);
 
     if (input->CFL_type == 2 || input->CFL_tau_type == 2)
-      update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims);
+      update_h_ref_wrapper(h_ref_d, coord_fpts_d, nEles, nFpts, nSpts1D, nDims); /// TODO: remove?
   }
 
   check_error();
@@ -2966,7 +3000,7 @@ void Elements::unblank_u_to_device(int *cellIDs, int nCells, double *data)
 
   U_unblank_d.assign({(uint)nCells, nSpts, nVars}, data, 3);
 
-  if (input->motion || input->iter <= input->initIter+1) /// TODO: double-check
+  if (input->motion || input->iter <= input->initIter+1)
     unblankIDs_d.assign({(uint)nCells}, cellIDs, 3);
 
   unpack_unblank_u_wrapper(U_unblank_d,U_spts_d,unblankIDs_d,nCells,nSpts,nVars,3);
@@ -2978,7 +3012,7 @@ void Elements::get_cell_coords(int* cellIDs, int nCells, int* nPtsCell, double* 
 {
   if (nCells == 0) return;
 
-  unblankIDs_d.assign({(uint)nCells}, cellIDs); /// TODO: check this w/ unblanking...
+  unblankIDs_d.assign({(uint)nCells}, cellIDs);
 
   cellCoords_d.set_size({(uint)nCells,nSpts,nDims});
 

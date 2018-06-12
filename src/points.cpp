@@ -456,7 +456,7 @@ mdvector<double> WS_Tri_weights(unsigned int P)
   switch(P)
   {
     case 0:
-      weights(0) = 2.0; // TODO: Is this correct?
+      weights(0) = 2.0;
       break;
 
     case 1:
@@ -1069,7 +1069,7 @@ mdvector<double> WS_Tet_weights(unsigned int P)
   switch(P)
   {
     case 0:
-      weights(0) = 2.0; // TODO: Is this correct?
+      weights(0) = 2.0;
       break;
 
     case 1:

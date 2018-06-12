@@ -56,6 +56,8 @@ int main(int argc, char* argv[])
   int nDevices;
   cudaGetDeviceCount(&nDevices);
 
+  nDevices = std::max(nDevices, 1);
+
   if (nDevices < nRanks)
   {
     //ThrowException("Not enough GPUs for this run. Allocate more!");

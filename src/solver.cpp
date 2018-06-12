@@ -52,32 +52,15 @@ extern "C" {
 
 #ifdef _GPU
 #include "mdvector_gpu.h"
+#include "aux_kernels.h"
 #include "solver_kernels.h"
 #include "elements_kernels.h"
-#include "cublas_v2.h"
 #endif
 
 #include "H5Cpp.h"
 #ifndef _H5_NO_NAMESPACE
 using namespace H5;
 #endif
-#ifdef _MPI
-  #ifdef H5_HAVE_PARALLEL
-//    #define _USE_H5_PARALLEL
-  #endif
-#endif
-
-/*! NOTE: size of HDF5 attributes limited to 64kb, including header data
- *  Empirically determined max of 65471 8-byte ints
- *  (I'm rounding down to a nice number, though, just for safety) */
-#define MAX_H5_ATTR_SIZE 65000
-
-//! Function to use in iterateAttrs to grab all attribute names on an object
-void attrOp(H5Location &loc, const H5std_string attr_name, void *op_data)
-{
-  std::vector<std::string> *names = static_cast<std::vector<std::string>*>(op_data);
-  names->push_back(attr_name);
-}
 
 FRSolver::FRSolver(InputStruct *input, int order)
 {
@@ -86,7 +69,6 @@ FRSolver::FRSolver(InputStruct *input, int order)
     this->order = input->order;
   else
     this->order = order;
-
 }
 
 void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
@@ -198,7 +180,7 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
   setup_output();
 
   if (input->rank == 0) std::cout << "Initializing solution..." << std::endl;
-  //initialize_U();
+
   for (auto e : elesObjs)
     e->initialize_U();
 
@@ -248,34 +230,15 @@ void FRSolver::setup(_mpi_comm comm_in, _mpi_comm comm_world)
 
 void FRSolver::restart_solution(void)
 {
-  if (input->restart_type == 0)
-  {
-    if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_file + " ..." << std::endl;
+  if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_case + "_" + std::to_string(input->restart_iter) + " ..." << std::endl;
 
-    // Backwards compatibility: full filename given
-    if (input->restart_file.find(".vtu")  != std::string::npos or
-        input->restart_file.find(".pvtu") != std::string::npos)
-    {
-      restart(input->restart_file);
-    }
-    else if (input->restart_file.find(".pyfr") != std::string::npos)
-    {
-      restart_pyfr(input->restart_file);
-    }
-    else
-      ThrowException("Unknown file type for restart file.");
-  }
-  else
-  {
-    if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_case + "_" + std::to_string(input->restart_iter) + " ..." << std::endl;
+  if (input->restart_type == 1) // Native + Gmsh format
+    restart_native(input->restart_case, input->restart_iter);
+  else if (input->restart_type == 2) // PyFR format
+    restart_pyfr(input->restart_case, input->restart_iter);
 
-    // New version: Use case name + iteration number to find file
-    // [Overset compatible]
-    if (input->restart_type == 1) // ParaView
-      restart(input->restart_case, input->restart_iter);
-    else if (input->restart_type == 2) // PyFR
-      restart_pyfr(input->restart_case, input->restart_iter);
-  }
+  // Process extra simulation data from the stats string
+  process_restart_stats(geo.stats);
 
 #ifdef _GPU
   for (auto e : elesObjs)
@@ -406,7 +369,6 @@ void FRSolver::orient_fpts()
     }
   }
 
-
   for (unsigned int fpt = 0; fpt < geo.nGfpts_int; fpt++)
   {
     idxL[fpt] = fpt; idxR[fpt] = fpt; idxsort[fpt] = fpt;
@@ -434,7 +396,6 @@ void FRSolver::orient_fpts()
     idxL[fpt] = idxL_copy[idxsort[fpt]];
     idxR[fpt] = idxR_copy[idxsort[fpt]];
   }
-
 
   /* Invert the mapping */
   idxL_copy = idxL; idxR_copy = idxR;
@@ -1005,213 +966,75 @@ void FRSolver::setup_output()
     e->setup_ppt_connectivity();
 }
 
-void FRSolver::restart(std::string restart_file, unsigned restart_iter)
+void FRSolver::restart_native(std::string restart_case, unsigned restart_iter)
 {
-  if (input->restart_type > 0) // append .pvtu / .vtu to case name
-  {
-    std::stringstream ss;
+  /// TODO: Native HDF5 restart file to replace ParaView restarting
+  /// Something similar to PyFR solution files, but matching unpartitioned Gmsh
+  /// mesh file
 
-    ss << restart_file << "/" << restart_file;
-
-    if (input->overset)
-    {
-      ss << "_Grid" << input->gridID;
-    }
-
-    ss << "_" << std::setw(9) << std::setfill('0') << restart_iter;
-
-#ifdef _MPI
-    ss << ".pvtu";
-#else
-    ss << ".vtu";
-#endif
-
-    restart_file = ss.str();
-  }
-
-  size_t pos;
-#ifdef _MPI
-  /* From .pvtu, form partition specific filename */
-  pos = restart_file.rfind(".pvtu");
-  if (pos == std::string::npos)
-  {
-    ThrowException("Must provide .pvtu file for parallel restart!");
-  }
-
-  restart_file = restart_file.substr(0, pos);
-
+  std::string filename = restart_case;
   std::stringstream ss;
-  ss << std::setw(3) << std::setfill('0') << input->rank;
 
-  restart_file += "_" + ss.str() + ".vtu";
-#endif
+  ss << restart_case << "/" << restart_case;
 
-  /* Open .vtu file */
-  std::ifstream f(restart_file);
-  pos = restart_file.rfind(".vtu");
-  if (pos == std::string::npos)
+  if (input->overset)
   {
-    ThrowException("Must provide .vtu file for restart!");
+    ss << "-G" << input->gridID;
   }
 
-  if (!f.is_open())
+  ss << "-" << restart_iter;
+  ss << ".zefrs";
+
+  filename = ss.str();
+
+  current_iter = restart_iter;
+  input->iter = restart_iter;
+  input->initIter = restart_iter;
+
+  if (input->rank == 0)
+    std::cout << "Reading data from file " << filename << std::endl;
+
+  H5File file(filename, H5F_ACC_RDONLY);
+
+  // Read the mesh ID string
+  std::string mesh_uuid;
+
+  DataSet dset = file.openDataSet("mesh_uuid");
+  DataType dtype = dset.getDataType();
+  DataSpace dspace(H5S_SCALAR);
+
+  dset.read(mesh_uuid, dtype, dspace);
+  dset.close();
+
+  if (mesh_uuid != geo.mesh_uuid)
   {
-    ThrowException("Could not open restart file " + restart_file + "!");
+    ss.str(""); ss.clear();
+    ss << "Restart Error - Mesh and solution files do not mesh [mesh_uuid]." << std::endl;
+    ss << ".msh   mesh_uuid: " << geo.mesh_uuid << std::endl;
+    ss << ".zefrs mesh_uuid: " << mesh_uuid << std::endl;
+    ThrowException(ss.str().c_str());
   }
 
-  std::string param, line;
-  double val;
-  unsigned int order_restart;
-  std::vector<mdvector<double>> U_restart(elesObjs.size());
+  // Read the config string
+  dset = file.openDataSet("config");
+  dset.read(geo.config, dtype, dspace);
+  dset.close();
 
-  bool has_gv = false; // can do the same here for all 'extra' fields
+  // Read the stats string
+  dset = file.openDataSet("stats");
+  dset.read(geo.stats, dtype, dspace);
+  dset.close();
 
-  /* Load data from restart file */
-  while (f >> param)
-  {
-    if (param == "TIME")
-    {
-      f >> restart_time;
-      flow_time = restart_time;
-      input->time = restart_time;
-    }
-    if (param == "ITER")
-    {
-      f >> current_iter;
-      this->restart_iter = current_iter;
-      input->iter = current_iter;
-      input->initIter = current_iter;
-    }
-    if (param == "ORDER")
-    {
-      f >> order_restart;
-    }
-    if (param == "X_CG")
-    {
-      geo.x_cg.assign({3});
-      f >> geo.x_cg(0) >> geo.x_cg(1) >> geo.x_cg(2);
-    }
-    if (param == "V_CG")
-    {
-      geo.vel_cg.assign({3});
-      f >> geo.vel_cg(0) >> geo.vel_cg(1) >> geo.vel_cg(2);
-    }
-    if (param == "ROT-Q")
-    {
-      geo.q.assign({4});
-      f >> geo.q(0) >> geo.q(1) >> geo.q(2) >> geo.q(3);
-    }
-    if (param == "OMEGA")
-    {
-      geo.omega.assign({3});
-      f >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
-    }
-    if (param == "IBLANK" && input->overset)
-    {
-      geo.iblank_cell.assign({geo.nEles});
-      for (unsigned int ele = 0; ele < geo.nEles; ele++)
-      {
-        f >> geo.iblank_cell(ele);
-      }
-    }
-    if (param == "grid_velocity")
-    {
-      has_gv = true;
-    }
+  std::map<ELE_TYPE, std::string> et2str;
+  et2str[TRI] = "tri";
+  et2str[QUAD] = "quad";
+  et2str[TET] = "tet";
+  et2str[PRI] = "pri";
+  et2str[HEX] = "hex";
 
-    if (param == "<AppendedData")
-    {
-      std::getline(f,line);
-      f.ignore(1); 
-
-      unsigned int nRpts;
-      /* Setup extrapolation operator from equistant restart points */
-      for (auto e : elesObjs)
-      {
-#ifdef _RT_TETS
-        if (e->etype == QUAD and geo.nElesBT.count(TRI)) // to deal with increased quad order with mixed grids
-        {
-          e->set_oppRestart(order_restart + 1, true);
-        }
-        else
-#endif
-          e->set_oppRestart(order_restart, true);
-
-        nRpts = e->oppRestart.get_dim(1);
-        U_restart[e->elesObjID].assign({nRpts, e->nVars, e->nElesPad});
-      }
-
-      unsigned int temp; 
-      for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
-      {
-        binary_read(f, temp);
-        for (auto e: elesObjs)
-        {
-          nRpts = e->oppRestart.get_dim(1);
-
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
-          {
-            if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
-
-            for (unsigned int rpt = 0; rpt < nRpts; rpt++)
-            {
-              binary_read(f, U_restart[e->elesObjID](rpt, n, ele));
-            }
-          }
-        }
-      }
-
-      /* Extrapolate values from restart points to solution points */
-      for (auto e : elesObjs)
-      {
-        nRpts = e->oppRestart.get_dim(1);
-
-        auto &A = e->oppRestart(0, 0);
-        auto &B = U_restart[e->elesObjID](0, 0, 0);
-        auto &C = e->U_spts(0, 0, 0);
-
-        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, e->nSpts, 
-            e->nElesPad * e->nVars, nRpts, 1.0, &A, nRpts, &B, 
-            e->nElesPad * e->nVars, 0.0, &C, e->nElesPad * e->nVars);
-      }
-
-      /* Read grid velocity NOTE: if any additional fields exist after,
-       * remove 'if input->motion' or else read will occur in wrong location */
-      if (input->motion && has_gv)
-      {
-        for (auto e : elesObjs)
-        {
-          nRpts = e->oppRestart.get_dim(1);
-
-          U_restart[e->elesObjID].assign({nRpts, 3, e->nEles});
-
-          unsigned int temp;
-          binary_read(f, temp);
-          for (unsigned int ele = 0; ele < e->nEles; ele++)
-          {
-            if (input->overset && geo.iblank_cell(geo.eleID[e->etype](ele)) != NORMAL) continue;
-
-            for (unsigned int rpt = 0; rpt < nRpts; rpt++)
-              for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
-                binary_read(f, U_restart[e->elesObjID](rpt, n, ele));
-          }
-
-          /* Extrapolate values from restart points to solution points */
-          int m = e->nSpts;
-          int k = nRpts;
-          int n = e->nEles * e->nDims;
-          auto &A = e->oppRestart(0, 0);
-          auto &B = U_restart[e->elesObjID](0, 0, 0);
-          auto &C = e->grid_vel_spts(0, 0, 0);
-
-          cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                      1.0, &A, k, &B, n, 0.0, &C, n);
-        }
-      }
-    }
-  }
-
-  f.close();
+  /// TODO - restart file format definition needed
+  /// Probably keep format identical to PyFR, but read in hyperslabs
+  /// based on global mesh ele ID's for each partition
 }
 
 #ifdef _GPU
@@ -1306,7 +1129,7 @@ void FRSolver::solver_data_to_device()
     if (input->overset || input->motion)
     {
       e->nodes_d = e->nodes;
-      e->coord_fpts_d = e->coord_fpts; /// TODO: use...
+      e->coord_fpts_d = e->coord_fpts; /// TODO: use in compute_h_ref or remove...
     }
 
     if (input->motion)
@@ -2431,11 +2254,6 @@ void FRSolver::compute_U(int color)
     compute_U_wrapper(e->U_spts_d, e->deltaU_d, e->nSpts, e->nEles, e->nVars);
   check_error();
 #endif
-}
-
-void FRSolver::initialize_U()
-{
-  // initialization moved into elements
 }
 
 void FRSolver::setup_views()
@@ -4317,7 +4135,7 @@ void FRSolver::compute_element_dt(bool pseudo_time)
     }
 
 #ifdef _MPI
-    /// TODO: If interfacing with other explicit solver, work together here
+    // If interfacing with other explicit solver, work together here
     MPI_Allreduce(MPI_IN_PLACE, &minDT, 1, MPI_DOUBLE, MPI_MIN, worldComm);
 #endif
 
@@ -4361,7 +4179,7 @@ void FRSolver::compute_element_dt(bool pseudo_time)
     }
 
 #ifdef _MPI
-    /// TODO: If interfacing with other explicit solver, work together here
+    // If interfacing with other explicit solver, work together here
     MPI_Allreduce(MPI_IN_PLACE, &minDT, 1, MPI_DOUBLE, MPI_MIN, myComm);
 #endif
 
@@ -4371,13 +4189,11 @@ void FRSolver::compute_element_dt(bool pseudo_time)
       {
         e->dtau(0) = minDT;
         copy_to_device(e->dtau_d.data(), e->dtau.data(), 1);
-        //device_fill(e->dtau_d, 1, minDT);
       }
       else
       {
         e->dt(0) = minDT;
         copy_to_device(e->dt_d.data(), e->dt.data(), 1);
-        //device_fill(e->dt_d, 1, minDT);
       }
     }
   }
@@ -4779,36 +4595,22 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 #endif 
 }
 
-void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
+void FRSolver::restart_pyfr(std::string restart_case, unsigned restart_iter)
 {
-  std::string filename = restart_file;
+  std::string filename = restart_case;
 
-  if (input->restart_type > 0) // append .pvtu / .vtu to case name
-  {
-    std::stringstream ss;
+  // append .pyfrs
+  std::stringstream ss;
 
-    ss << restart_file << "/" << restart_file;
+  ss << restart_case << "/" << restart_case;
 
-    if (input->overset)
-    {
-      ss << "-G" << input->gridID;
-    }
+  if (input->overset)
+    ss << "-G" << input->gridID;
 
-    ss << "-" << restart_iter;
-    ss << ".pyfrs";
+  ss << "-" << restart_iter;
+  ss << ".pyfrs";
 
-    filename = ss.str();
-  }
-  else
-  {
-    std::string str = filename;
-    size_t ind = str.find("-");
-    str.erase(str.begin(), str.begin()+ind+1);
-    ind = str.find(".pyfrs");
-    str.erase(str.begin()+ind,str.end());
-    std::stringstream ss(str);
-    ss >> restart_iter;
-  }
+  filename = ss.str();
 
   current_iter = restart_iter;
   input->iter = restart_iter;
@@ -4854,7 +4656,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
   {
     std::string solname = "soln_";
     solname += et2str[e->etype];
-    solname += "_p" + std::to_string(input->rank); /// TODO: write per rank in parallel...
+    solname += "_p" + std::to_string(input->rank);
 
     dset = file.openDataSet(solname);
     auto ds = dset.getSpace();
@@ -4903,11 +4705,7 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
     }
     else
     {
-      if (e->etype != QUAD && e->etype != HEX)
-        ThrowException("TODO: PyFR restart from different order on tets/prisms");
-
-      int restartOrder = (input->nDims == 2)
-          ? (std::sqrt(nSpts)-1) : (std::cbrt(nSpts)-1);
+      unsigned int restartOrder = npts_to_order(e->etype, nSpts);
 
       // Read into temporary storage, in case changing polynomial order
       mdvector<double> U_restart({nSpts,nVars,nElesPad});
@@ -4960,27 +4758,18 @@ void FRSolver::restart_pyfr(std::string restart_file, unsigned restart_iter)
       }
       catch (FileIException error)
       {
-        // No iblank dataset found; try looking for an iblank attribute:
-        if (dset.attrExists("iblank"))
-        {
-          Attribute att = dset.openAttribute("iblank");
-          DataSpace dspaceI = att.getSpace();
-          hsize_t dim[1];
-          dspaceI.getSimpleExtentDims(dim);
-
-          if (geo.nEles <= MAX_H5_ATTR_SIZE && dim[0] != geo.nEles)
-            ThrowException("Attribute error - expecting size of 'iblank' to be nEles");
-
-          att.read(PredType::NATIVE_INT, geo.iblank_cell.data());
-        }
+        // Ignore lack of iblank in restart file [assume all 'normal']
       }
     }
   }
+}
 
+void FRSolver::process_restart_stats(const std::string &stats_str)
+{
   // Process the config / stats string
   std::string str, key, tmp;
   std::stringstream ss;
-  std::istringstream stats(geo.stats);
+  std::istringstream stats(stats_str);
 
   while (std::getline(stats, str))
   {

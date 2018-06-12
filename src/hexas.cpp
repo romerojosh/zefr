@@ -42,12 +42,9 @@ extern "C" {
 Hexas::Hexas(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
 {
   etype = HEX;
-  this->geo = geo;
-  this->input = input;  
-  this->elesObjID = elesObjID;
-  this->startEle = startEle;
-  this->endEle = endEle;
-  this->nEles = endEle - startEle;
+
+  this->init(geo,input,elesObjID,startEle,endEle,order);
+
   this->nQpts = input->nQpts1D * input->nQpts1D * input->nQpts1D;
 
   /* Generic hexahedral geometry */
@@ -61,38 +58,13 @@ Hexas::Hexas(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigne
   if (nNdSide*nNdSide*nNdSide != nNodes)
     ThrowException("For Lagrange hex of order N, must have (N+1)^3 shape points.");
 
-  /* If order argument is not provided, use order in input file */
-  if (order == -1)
-  {
-    nSpts = (input->order+1) * (input->order+1) * (input->order+1);
-    nSpts1D = input->order+1;
-    this->order = input->order;
-  }
-  else
-  {
-    nSpts = (order+1) * (order+1) * (order+1);
-    nSpts1D = order+1;
-    this->order = order;
-  }
+  nSpts = (this->order+1) * (this->order+1) * (this->order+1);
+  nSpts1D = this->order+1;
 
   nFptsPerFace = nSpts1D * nSpts1D;
   nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = (nSpts1D * nSpts1D) * nFaces;
   nPpts = nSpts;
-  
-  if (input->equation == AdvDiff)
-  {
-    nVars = 1;
-  }
-  else if (input->equation == EulerNS)
-  {
-    nVars = 5;
-  }
-  else
-  {
-    ThrowException("Equation not recognized: " + input->equation);
-  }
-  
 }
 
 void Hexas::set_locs()

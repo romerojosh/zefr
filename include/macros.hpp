@@ -51,7 +51,20 @@ const int num_colors = sizeof(colors)/sizeof(uint32_t);
 #define POP_NVTX_RANGE
 #endif
 
+#ifdef _GPU
+#define check_error() \
+{ \
+  cudaError_t err = cudaGetLastError(); \
+  if (err != cudaSuccess) \
+  { \
+    std::cout << __FILE__ << ":" << __LINE__ << ":" << __func__ << ": " << std::endl; \
+    ThrowException(cudaGetErrorString(err)); \
+  } \
+}
+#endif
+
 #ifndef _GPU
+#define check_error() {}
 #define event_record_wait_pair(event, stream_r, stream_w) {}
 #endif
 

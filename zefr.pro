@@ -3,14 +3,16 @@ CONFIG += console
 CONFIG -= qt
 
 DEFINES = _MPI
-#DEFINES += _CPU
+DEFINES += _CPU
 DEFINES += _GPU
 DEFINES += _BUILD_LIB
 
 QMAKE_CXXFLAGS += -std=c++11
 
 INCLUDEPATH += $$PWD/include \
-    /usr/lib/openmpi/include
+    /usr/lib/openmpi/include \
+    /opt/OpenMPI-3.1.0/include \
+    /usr/include/hdf5/serial
 
 SOURCES += \
     src/elements.cpp \
@@ -30,6 +32,7 @@ SOURCES += \
     src/funcs_kernels.cu \
     src/solver_kernels.cu \
     src/filter_kernels.cu \
+    src/aux_kernels.cu \
     src/gimmik_gpu.cu \
     src/gimmik_cpu.c \
     src/zefr_interface.cpp \
@@ -57,6 +60,7 @@ HEADERS += \
     include/polynomials.hpp \
     include/quads.hpp \
     include/solver_kernels.h \
+    include/aux_kernels.h \
     include/solver.hpp \
     include/zefr.hpp \
     include/inputstruct.hpp \
@@ -77,5 +81,6 @@ DISTFILES += \
     Makefile \
     run/runfile.dict \
     run/run_zefr.py \
-    run/zefrInterface.py
+    run/zefrInterface.py \
+    run/run_zefr_samcart.py
 

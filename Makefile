@@ -38,21 +38,23 @@ ifeq ($(strip $(WARNINGS)),YES)
 else
 	CXXFLAGS += $(WARN_OFF) 
 	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result,-Wno-narrowing,-Wno-literal-suffix -Xcudafe "--diag_suppress=subscript_out_of_range"
+	# If compiling on Ubuntu 16.04 with default GCC, this might be needed:
+	CUFLAGS += -D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
-	CCFLAGS += -g -O3 -D_NO_GIMMIK -D_NVTX 
-	CXXFLAGS += -g -O3 -D_NO_GIMMIK -D_NVTX
-	CUFLAGS += -g -O3 -D_NO_GIMMIK -D_NVTX
+	CCFLAGS += -g -O3 -D_NVTX 
+	CXXFLAGS += -g -O3 -D_NVTX
+	CUFLAGS += -g -O3 -D_NVTX
 else 
 ifeq ($(strip $(DEBUG_LEVEL)),2)
-	CCFLAGS += -g -O0 #-D_NVTX
-	CXXFLAGS += -g -O0 #-D_NVTX
-	CUFLAGS += -g -G -O0 #-D_NVTX
+	CCFLAGS += -g -O0 -D_NVTX
+	CXXFLAGS += -g -O0 -D_NVTX
+	CUFLAGS += -g -G -O0 -D_NVTX
 else
-	CCFLAGS += $(RELEASE_FLAGS) #-D_NVTX
-	CXXFLAGS += $(RELEASE_FLAGS) #-D_NVTX
-	CUFLAGS += -O3 -use_fast_math #-D_NVTX
+	CCFLAGS += $(RELEASE_FLAGS) -D_NVTX
+	CXXFLAGS += $(RELEASE_FLAGS) -D_NVTX
+	CUFLAGS += -O3 -use_fast_math -D_NVTX
 endif
 endif
 
@@ -116,9 +118,15 @@ ifeq ($(strip $(ARCH)),CPU)
 endif
 
 ifeq ($(strip $(ARCH)),GPU)
+  ifeq ($(strip $(CUDA_INC_DIR)),)
+    CUDA_INC_DIR = $(CUDA_DIR)/include
+  endif
+  ifeq ($(strip $(CUDA_LIB_DIR)),)
+    CUDA_LIB_DIR = $(CUDA_DIR)/lib64
+  endif
 	FLAGS += -D_GPU
-	LIBS += -L$(strip $(CUDA_DIR))/lib64 -lcudart -lcublas -lnvToolsExt -Wl,-rpath=$(strip $(CUDA_DIR))/lib64
-	INCS += -I$(strip $(CUDA_DIR))/include
+	LIBS += -L$(strip $(CUDA_LIB_DIR))/ -lcudart -lcublas -lnvToolsExt -Wl,-rpath=$(strip $(CUDA_LIB_DIR))/
+	INCS += -I$(strip $(CUDA_INC_DIR))/
 
   # CUDA-aware MPI capability
 ifeq ($(strip $(CUDA_AWARE)),YES)
@@ -160,7 +168,7 @@ ifeq ($(strip $(ARCH)),CPU)
 	OBJS += $(BINDIR)/gimmik_cpu.o
 endif
 ifeq ($(strip $(ARCH)),GPU)
-	OBJS += $(BINDIR)/elements_kernels.o $(BINDIR)/faces_kernels.o $(BINDIR)/solver_kernels.o  $(BINDIR)/filter_kernels.o $(BINDIR)/gimmik_gpu.o
+  OBJS += $(BINDIR)/aux_kernels.o $(BINDIR)/elements_kernels.o $(BINDIR)/faces_kernels.o $(BINDIR)/solver_kernels.o  $(BINDIR)/filter_kernels.o $(BINDIR)/gimmik_gpu.o
 endif
 
 SOBJS = $(OBJS) $(BINDIR)/zefr_interface.o

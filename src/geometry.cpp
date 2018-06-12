@@ -115,7 +115,7 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   if (input->motion)
   {
     geo.coords_init = geo.coord_nodes;
-    geo.grid_vel_nodes.assign({geo.nNodes, geo.nDims}, 0.0); /// TODO: pinned for _GPU?
+    geo.grid_vel_nodes.assign({geo.nNodes, geo.nDims}, 0.0);
 
     geo.vel_cg.assign({3});
     geo.Rmat.assign({3,3});
@@ -661,12 +661,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
     std::getline(f,line);
   }
 
-  /// TODO: Generalize faces for 3D mixed grids
-//  if (geo.ele_set.count(HEX))
-//    geo.nNodesPerFace = 4;
-//  else if (geo.ele_set.count(TET))
-//    geo.nNodesPerFace = 3;
-
   if (geo.ele_set.count(TRI) || geo.ele_set.count(QUAD))
   {
     geo.face_set.insert(LINE);
@@ -819,7 +813,6 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       }
 
     }
-
 
     std::getline(f,line);
   }
@@ -1180,7 +1173,7 @@ void couple_periodic_bnds(GeoStruct &geo)
     auto face1 = bnd_face.first;
     unsigned int nNodesPerFace = (unsigned int) face1.size();
 
-    coords_face1.assign({nNodesPerFace,geo.nDims}); /// TODO: get rid of nNodesPerFace
+    coords_face1.assign({nNodesPerFace,geo.nDims});
 
     /* Check if face is periodic */
     if (bnd_id == PERIODIC)

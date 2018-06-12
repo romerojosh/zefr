@@ -42,62 +42,28 @@ extern "C" {
 Tets::Tets(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned int startEle, unsigned int endEle, int order)
 {
   etype = TET;
-  this->geo = geo;
-  this->input = input;  
-  this->elesObjID = elesObjID;
-  this->startEle = startEle;
-  this->endEle = endEle;
-  this->nEles = endEle - startEle;
-  this->nQpts = 84; // Note: Fixing quadrature points to Shunn-Hamm 84 point rule
 
-  if (input->error_freq == 0) this->nQpts = 0; // disable allocation if not needed
+  this->init(geo,input,elesObjID,startEle,endEle,order);
+
+  if (input->error_freq > 0) this->nQpts = 84; // Note: Fixing quadrature points to Shunn-Hamm 84 point rule
 
   /* Generic tetrahedral geometry */
   nDims = 3;
   nFaces = 4;
   nNodes = geo->nNodesPerEleBT[TET];
-  
-  /* If order argument is not provided, use order in input file */
-  if (order == -1)
-  {
-    nSpts = (input->order + 1) * (input->order + 2) * (input->order + 3) / 6;
+
+  nSpts = (this->order + 1) * (this->order + 2) * (this->order + 3) / 6;
+  nSpts1D = this->order + 1;
+
 #ifdef _RT_TETS
-    nFptsPerFace = (input->order + 2) * (input->order + 3) / 2;
+  nFptsPerFace = (this->order + 2) * (this->order + 3) / 2;
 #else
-    nFptsPerFace = (input->order + 1) * (input->order + 2) / 2;
+  nFptsPerFace = (this->order + 1) * (this->order + 2) / 2;
 #endif
-    nSpts1D = input->order + 1; //nSpts1D only used for filter matrix setup
-    this->order = input->order;
-  }
-  else
-  {
-    nSpts = (order + 1) * (order + 2) * (order + 3) / 6;
-#ifdef _RT_TETS
-    nFptsPerFace = (order + 2) * (order + 3) / 2;
-#else
-    nFptsPerFace = (order + 1) * (order + 2) / 2;
-#endif
-    nSpts1D = order + 1; 
-    this->order = order;
-  }
 
   nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = nFptsPerFace * nFaces;
   nPpts = nSpts;
-  
-  if (input->equation == AdvDiff)
-  {
-    nVars = 1;
-  }
-  else if (input->equation == EulerNS)
-  {
-    nVars = 5;
-  }
-  else
-  {
-    ThrowException("Equation not recognized: " + input->equation);
-  }
-  
 }
 
 void Tets::set_locs()
@@ -366,7 +332,6 @@ void Tets::set_oppRestart(unsigned int order_restart, bool use_shape)
       oppRestart(spt, rpt) = val;
     }
   }
-
 }
 
 double Tets::calc_nodal_basis(unsigned int spt, const std::vector<double> &loc)

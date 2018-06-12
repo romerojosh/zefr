@@ -404,7 +404,6 @@ double compute_dU_true(double x, double y, double z, double t, unsigned int var,
         val =  std::exp(-2. * input->AdvDiff_D * M_PI * M_PI * t) * 
                std::sin(M_PI * (y - input->AdvDiff_A(1) * t)) *
                M_PI * std::cos(M_PI * (x - input->AdvDiff_A(0) * t));
-
       }
       else
       {
@@ -1408,6 +1407,37 @@ unsigned int tet_nodes_to_order(unsigned int nNodes)
   ThrowException("Can't figure out tetrahedra shape order!");
 }
 
+unsigned int pri_nodes_to_order(unsigned int nNodes)
+{
+  int P = 0;
+  while (P < 20)
+  {
+    if ((P+1) * ((P+1) * (P+2)/2) == nNodes)
+      return P;
+    P++;
+  }
+
+  ThrowException("Can't figure out prism shape order!");
+}
+
+unsigned int npts_to_order(ELE_TYPE etype, unsigned int npts)
+{
+  switch (etype)
+  {
+    case TRI:
+      return tri_nodes_to_order(npts);
+    case QUAD:
+      return std::sqrt(npts)-1;
+    case TET:
+      return tet_nodes_to_order(npts);
+    case PRI:
+      return pri_nodes_to_order(npts);
+    case HEX:
+      return std::cbrt(npts)-1;
+    default:
+      ThrowException("Unknown element type!");
+  }
+}
 mdvector<double> quat_mul(const mdvector<double> &p, const mdvector<double> &q)
 {
   // Assuming real part is last value [ i, j, k, real ]
