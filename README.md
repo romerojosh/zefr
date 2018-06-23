@@ -120,7 +120,7 @@ If you would like to develop code for ZEFR, please follow these guidelines:
 This code is still in the development phase and as such, documentation within the source is a bit sparse (though much of the code should be straightforward). I will be adding more documentation, at least of the class methods and variables soon. 
 
 ## License:
-This code is currently released under the GNU General Public License Version 3.0. See LICENSE for details.
+This code is currently released under the BSD-3-Clause license. See LICENSE for details.
  
 
 
