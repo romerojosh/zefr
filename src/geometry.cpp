@@ -1257,12 +1257,12 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
       {
 #ifdef _RT_TETS
         nFptsPerFace[ftype] = order + 2; // triangles require P+2 flux points on faces
-        auto wts = Gauss_Legendre_pts(order + 2);
+        auto wts = Gauss_Legendre_weights(order + 2);
         geo.weights_fpts[ftype].assign({wts.size()});
         for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #else
         nFptsPerFace[ftype] = order + 1;
-        auto wts = Gauss_Legendre_pts(order + 1);
+        auto wts = Gauss_Legendre_weights(order + 1);
         geo.weights_fpts[ftype].assign({(uint)wts.size()});
         for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #endif
@@ -3002,12 +3002,12 @@ void setup_global_fpts_pyfr(InputStruct *input, GeoStruct &geo, unsigned int ord
       {
 #ifdef _RT_TETS
         nFptsPerFace[ftype] = order + 2; // triangles require P+2 flux points on faces
-        auto wts = Gauss_Legendre_pts(order + 2);
+        auto wts = Gauss_Legendre_weights(order + 2);
         geo.weights_fpts[ftype].assign({wts.size()});
         for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #else
         nFptsPerFace[ftype] = order + 1;
-        auto wts = Gauss_Legendre_pts(order + 1);
+        auto wts = Gauss_Legendre_weights(order + 1);
         geo.weights_fpts[ftype].assign({(uint)wts.size()});
         for (int i = 0; i < wts.size(); i++) geo.weights_fpts[ftype](i) = wts[i];
 #endif
