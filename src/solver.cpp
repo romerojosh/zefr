@@ -297,22 +297,12 @@ void FRSolver::create_elesObj(ELE_TYPE etype, unsigned int elesObjID, unsigned i
   }
   else if (etype == TRI)
   {
-#ifdef _RT_TETS
-    if (input->viscous and !input->grad_via_div)
-      ThrowException("Need to enable grad_via_div to use triangles for viscous problems!");
-#endif
-
      elesObjs.push_back(std::make_shared<Tris>(&geo, input, elesObjID, startEle, endEle, order));
   }
   else if (etype == HEX)
      elesObjs.push_back(std::make_shared<Hexas>(&geo, input, elesObjID, startEle, endEle, order));
   else if (etype == TET)
   {
-#ifdef _RT_TETS
-    if (input->viscous and !input->grad_via_div)
-      ThrowException("Need to enable grad_via_div to use tetrahedra for viscous problems!");
-#endif
-
      elesObjs.push_back(std::make_shared<Tets>(&geo, input, elesObjID, startEle, endEle, order));
   }
   else if (etype == PRI)

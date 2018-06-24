@@ -36,11 +36,7 @@ Tris::Tris(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned 
   nSpts = (this->order + 1) * (this->order + 2) / 2;
   nSpts1D = this->order + 1;
 
-#ifdef _RT_TETS
-  nFptsPerFace = this->order + 2;
-#else
   nFptsPerFace = this->order + 1;
-#endif
 
   nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = nFptsPerFace * nFaces;
@@ -57,11 +53,7 @@ void Tris::set_locs()
   if (input->spt_type == "Legendre")
   {
     loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only
-#ifdef _RT_TETS
-   loc_fpts_1D = Gauss_Legendre_pts(order+2);
-#else
     loc_fpts_1D = Gauss_Legendre_pts(order+1);
-#endif
   }
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
@@ -292,22 +284,10 @@ double Tris::calc_d_nodal_basis_spts(unsigned int spt,
 {
   double val = 0.0;
 
-#ifdef _RT_TETS
-  int mode = spt + dim * nSpts;
-
-  for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
-  {
-    val += inv_vandRT(mode, i) * divRTMonomial2D(order + 1, loc[0], loc[1], i);
-  }
-
-#else
-
   for (unsigned int i = 0; i < nSpts; i++)
   {
     val += inv_vand(i, spt) * dDubiner2D(order, loc[0], loc[1], dim, i);
   }
-
-#endif
 
   return val;
 
