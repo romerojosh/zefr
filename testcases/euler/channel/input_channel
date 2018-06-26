@@ -63,9 +63,7 @@ prandtl 0.72
 S       120
 
 # Euler specific
-rho_fs 1
-u_fs 0.5
-v_fs 0.0
-w_fs 0.0
+rho_fs  1
+mach_fs 0.5
 P_fs .71428571428
 

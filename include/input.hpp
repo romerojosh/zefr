@@ -258,16 +258,20 @@ void read_param(std::ifstream &f, std::string name, T &var)
     ThrowException("Input file not open for reading!");
   }
 
-  std::string param;
+  std::string str, param;
 
   f.clear();
   f.seekg(0, f.beg);
 
-  while (f >> param)
+  // Search for the given option string
+  while (std::getline(f, str))
   {
+    // Remove any leading whitespace & see if first word is the input option
+    std::stringstream ss(str);
+    ss >> param;
     if (param == name)
     {
-      f >> var;
+      ss >> var;
       return;
     }
   }
@@ -285,16 +289,21 @@ void read_param(std::ifstream &f, std::string name, T &var, T default_val)
     ThrowException("Input file not open for reading!");
   }
 
-  std::string param;
+  std::string str, param;
 
   f.clear();
   f.seekg(0, f.beg);
 
-  while (f >> param)
+
+  // Search for the given option string
+  while (std::getline(f, str))
   {
+    // Remove any leading whitespace & see if first word is the input option
+    std::stringstream ss(str);
+    ss >> param;
     if (param == name)
     {
-      f >> var;
+      ss >> var;
       return;
     }
   }
@@ -311,19 +320,18 @@ void read_param_vec(std::ifstream &f, std::string name, std::vector<T> &vec)
     ThrowException("Trying to assign input parameters to a vector that has data!");
   }
 
-  std::string param;
+  std::string str, param;
 
   f.clear();
   f.seekg(0, f.beg);
 
-  while (f >> param)
+  while (std::getline(f, str))
   {
+    // Remove any leading whitespace & see if first word is the input option
+    std::stringstream ss(str);
+    ss >> param;
     if (param == name)
     {
-      std::string line;
-      std::getline(f, line);
-      std::stringstream ss(line);
-
       T val;
       while (ss >> val)
       {
@@ -340,7 +348,7 @@ void read_param_vec(std::ifstream &f, std::string name, std::vector<T> &vec)
  */
 template<typename T, typename U>
 void read_map(std::ifstream &f, std::string optName, std::map<T,U> &opt) {
-  std::string str, optKey;
+  std::string str, param;
   T tmpT;
   U tmpU;
   bool found;
@@ -360,8 +368,8 @@ void read_map(std::ifstream &f, std::string optName, std::map<T,U> &opt) {
     // Remove any leading whitespace & see if first word is the input option
     std::stringstream ss;
     ss.str(str);
-    ss >> optKey;
-    if (optKey.compare(optName) == 0)
+    ss >> param;
+    if (param == optName)
     {
       found = true;
       if (!(ss >> tmpT >> tmpU))
@@ -373,7 +381,7 @@ void read_map(std::ifstream &f, std::string optName, std::map<T,U> &opt) {
       }
 
       opt[tmpT] = tmpU;
-      optKey = "";
+      param = "";
     }
   }
 

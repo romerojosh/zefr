@@ -69,10 +69,11 @@ mu    1.827E-5
 prandtl 0.72
 S       120
 
-# Euler specific
+# Euler / N-S Parameters
 rho_fs 1.4
-u_fs 0.499881013537955
-v_fs 0.010907442517237
-w_fs 0.0
-P_fs 1.0
+P_fs 1
+mach_fs .5
+nx_fs 0.9997620270799091
+ny_fs 0.02181488503456112
+nz_fs 0.0
 

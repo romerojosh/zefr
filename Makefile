@@ -28,7 +28,10 @@ CXXFLAGS = -std=c++11 -fPIC -Wno-unknown-pragmas #-fstack-protector-all
 CCFLAGS = -std=c99 -w -fPIC
 CUFLAGS = -std=c++11 --default-stream per-thread $(EXTRA_CUFLAGS) -Xcompiler -fPIC
 WARN_ON = -Wall -Wextra -Wconversion
-WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-literal-suffix
+WARN_OFF = -Wno-narrowing
+ifneq ($(strip $(INTEL)),YES)
+WARN_OFF += -Wno-unused-result -Wno-literal-suffix
+endif
 
 RELEASE_FLAGS = -Ofast
 FLAGS = $(AUX_FLAGS)
@@ -37,9 +40,12 @@ ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
 else
 	CXXFLAGS += $(WARN_OFF) 
-	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result -Xcudafe "--diag_suppress=subscript_out_of_range"
+	CUFLAGS += -Xcompiler=-Wno-narrowing -Xcudafe "--diag_suppress=subscript_out_of_range"
 	# If compiling on Ubuntu 16.04 with default GCC, this might be needed:
 	CUFLAGS += -D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES
+ifneq ($(strip $(INTEL)),YES)
+	CUFLAGS += -Xcompiler=-Wno-unused-result,-Wno-literal-suffix
+endif
 endif
 
 ifeq ($(strip $(DEBUG_LEVEL)),1)
@@ -89,15 +95,12 @@ INCS = -I$(strip $(BLAS_INC_DIR))
 
 # Setting MPI/METIS flags
 ifeq ($(strip $(MPI)),YES)
-#ifeq ($(strip $(INTEL)),YES)
-#	CXX = mpiicpc -cxx=icpc
-#else
-#	CXX = /opt/gcc/7.2.0/bin/g++
-#endif
 	FLAGS += -D_MPI
 	INCS += -I$(strip $(MPI_INC_DIR))/ -I$(strip $(METIS_INC_DIR))/
 ifneq ($(MPI_LIB_DIR),)
 ifeq ($(strip $(INTEL)),YES)
+	CXXFLAGS += -traceback -fp-model fast=2
+	CFLAGS += -traceback -fp-model fast=2
 	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpich_intel -Wl,-rpath=$(MPI_LIB_DIR)
 else
 	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR)

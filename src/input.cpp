@@ -50,7 +50,7 @@ InputStruct read_input_file(std::string inputfile)
   }
 
   read_param(f, "order", input.order);
-  read_param(f, "equation", str);
+  read_param(f, "equation", str, std::string("EulerNS"));
 
   if (str == "AdvDiff")
     input.equation = AdvDiff;
@@ -70,7 +70,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "res_tol", input.res_tol, 0.0);
   read_param(f, "res_field", input.res_field, (unsigned int) 0);
   read_param(f, "dt_scheme", input.dt_scheme);
-  read_param(f, "dt", input.dt, 0.0);
+  read_param(f, "dt", input.dt);
   read_param(f, "dt_type", input.dt_type, (unsigned int) 0);
   if (input.dt_type != 0)
   {
@@ -173,22 +173,22 @@ InputStruct read_input_file(std::string inputfile)
   if (input.error_freq == 0 and input.nQpts1D != 0)
     input.nQpts1D = 0;  // if no error computation, no need for quadrature alloc
 
-  read_param(f, "fconv_type", str);
+  read_param(f, "fconv_type", str, std::string("Rusanov"));
   if (str == "Rusanov")
     input.fconv_type = Rusanov;
   else
-    ThrowException("Equation not recognized!");
+    ThrowException("Convective interface flux not recognized!");
 
-  read_param(f, "fvisc_type", str);
+  read_param(f, "fvisc_type", str, std::string("LDG"));
   if (str == "LDG")
     input.fvisc_type = LDG;
   else
-    ThrowException("Equation not recognized!");
+    ThrowException("Viscous interface flux not recognized!");
 
-  read_param(f, "rus_k", input.rus_k);
-  read_param(f, "ldg_b", input.ldg_b);
-  read_param(f, "ldg_tau", input.ldg_tau);
-  read_param(f, "spt_type", input.spt_type);
+  read_param(f, "rus_k", input.rus_k, 0.0);
+  read_param(f, "ldg_b", input.ldg_b, 0.5);
+  read_param(f, "ldg_tau", input.ldg_tau, 1.0);
+  read_param(f, "spt_type", input.spt_type, std::string("Legendre"));
 
   read_param(f, "ic_type", input.ic_type);
 
@@ -207,13 +207,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "prandtl", input.prandtl, 0.72);
   read_param(f, "S", input.S, 120.0);
 
-  read_param(f, "rho_fs", input.rho_fs, 1.0);
-  read_param(f, "v_mag_fs", input.v_mag_fs, 1.0);
-  input.V_fs.assign({3});
-  read_param(f, "u_fs", input.V_fs(0), 0.2);
-  read_param(f, "v_fs", input.V_fs(1), 0.0);
-  read_param(f, "w_fs", input.V_fs(2), 0.0); 
-  read_param(f, "P_fs", input.P_fs, .71428571428);
+  read_param(f, "rho_fs", input.rho_fs, 1.4);
+  read_param(f, "P_fs", input.P_fs, 1.0);
 
   read_param(f, "fix_vis", input.fix_vis, false);
   read_param(f, "mach_fs", input.mach_fs, 0.2);
@@ -223,11 +218,11 @@ InputStruct read_input_file(std::string inputfile)
   input.norm_fs.assign({3});
   read_param(f, "nx_fs", input.norm_fs(0), 1.0);
   read_param(f, "ny_fs", input.norm_fs(1), 0.0);
+  read_param(f, "nz_fs", input.norm_fs(2), 0.0);
 
   read_param(f, "mach_wall", input.mach_wall, 0.0);
   read_param(f, "T_wall", input.T_wall, 300.0);
   input.norm_wall.assign({3});
-  input.V_wall.assign({3});
   read_param(f, "nx_wall", input.norm_wall(0), 1.0);
   read_param(f, "ny_wall", input.norm_wall(1), 0.0);
   
@@ -429,9 +424,30 @@ InputStruct read_input_file(std::string inputfile)
 
   f.close();
 
-  /* If running Navier-Stokes, nondimensionalize */
-  if (input.viscous && input.equation == EulerNS)
-    apply_nondim(input);
+  /* If running Euler or Navier-Stokes, similarity parameters to calculate remaining quantities */
+  if (input.equation == EulerNS)
+  {
+    input.v_mag_fs = input.mach_fs * std::sqrt(input.gamma * input.P_fs / input.rho_fs); // mach * c
+    input.V_fs.assign({3});
+
+    // Normalize freestream normal vector
+    double magn = 0.;
+    for (int i = 0; i < 3; i++)
+      magn += input.norm_fs(i) * input.norm_fs(i);
+    magn = std::sqrt(magn);
+    for (int i = 0; i < 3; i++)
+      input.norm_fs(i) /= magn;
+
+    if (input.viscous)
+    {
+      apply_nondim(input);
+    }
+    else
+    {
+      for (int i = 0; i < 3; i++)
+        input.V_fs(i) = input.norm_fs(i) * input.v_mag_fs;
+    }
+  }
 
   /* If using polynomial squeezing, set entropy bound */
   /* NOTES: This bound seems to play a large role in convergence. */
@@ -445,13 +461,14 @@ InputStruct read_input_file(std::string inputfile)
 
 void apply_nondim(InputStruct &input)
 {
+  input.V_wall.assign({3});
+
   if (input.disable_nondim) 
   { 
     /* Run with dimensional quantities from input file:
      * ++ Re, Ma, rho, L, p, gamma, Prandtl specified
      * ++ Remaining parameters calculated for consistency */
     input.T_fs = input.P_fs / (input.rho_fs * input.R); // Ideal gas law -> T
-    input.v_mag_fs = input.mach_fs * std::sqrt(input.gamma * input.P_fs / input.rho_fs); // mach * c
     input.mu = input.rho_fs * input.v_mag_fs * input.L_fs  / input.Re_fs; // Re -> mu
 
     input.R_ref = input.R;

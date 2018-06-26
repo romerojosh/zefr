@@ -50,7 +50,5 @@ S       120
 
 # Euler specific
 rho_fs 1
-u_fs 0.35
-v_fs 0.0
-w_fs 0.0
+mach_fs .35
 P_fs .71428571428
