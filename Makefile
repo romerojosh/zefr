@@ -24,11 +24,11 @@ else
 	SWIG = $(SWIG_BIN)/swig -c++ -python
 endif
 
-CXXFLAGS = -std=c++11 -Wno-unknown-pragmas #-fstack-protector-all
-CCFLAGS = -std=c99 -w
-CUFLAGS = -std=c++11 --default-stream per-thread $(EXTRA_CUFLAGS)
+CXXFLAGS = -std=c++11 -fPIC -Wno-unknown-pragmas #-fstack-protector-all
+CCFLAGS = -std=c99 -w -fPIC
+CUFLAGS = -std=c++11 --default-stream per-thread $(EXTRA_CUFLAGS) -Xcompiler -fPIC
 WARN_ON = -Wall -Wextra -Wconversion
-WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-narrowing -Wno-literal-suffix
+WARN_OFF = -Wno-narrowing -Wno-unused-result -Wno-literal-suffix
 
 RELEASE_FLAGS = -Ofast
 FLAGS = $(AUX_FLAGS)
@@ -37,7 +37,7 @@ ifeq ($(strip $(WARNINGS)),YES)
 	CXXFLAGS += $(WARN_ON)
 else
 	CXXFLAGS += $(WARN_OFF) 
-	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result,-Wno-narrowing,-Wno-literal-suffix -Xcudafe "--diag_suppress=subscript_out_of_range"
+	CUFLAGS += -Xcompiler=-Wno-narrowing,-Wno-unused-result -Xcudafe "--diag_suppress=subscript_out_of_range"
 	# If compiling on Ubuntu 16.04 with default GCC, this might be needed:
 	CUFLAGS += -D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES
 endif
@@ -188,10 +188,8 @@ $(TARGET): $(OBJS)
 # Build Zefr as a Python extension module (shared library) using SWIG
 .PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
-swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ -fPIC $(SWIG_INCS)
-swig: CCFLAGS += -fPIC
+swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ $(SWIG_INCS)
 swig: INCS += -I$(TIOGA_INC_DIR)/
-swig: CUFLAGS += -Xcompiler -fPIC
 swig: $(SOBJS) $(SWIG_OBJ) $(CONVERT_OBJ)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) $(SWIG_INCS) -shared -o $(SWIG_TARGET) $(SOBJS) $(SWIG_OBJ) $(LIBS) $(SWIG_LIBS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) $(SWIG_INCS) -shared -o $(CONVERT_TARGET) $(CONVERT_OBJ)
@@ -199,18 +197,12 @@ swig: $(SOBJS) $(SWIG_OBJ) $(CONVERT_OBJ)
 # Build Zefr as a static library
 .PHONY: static
 static: FLAGS += -D_BUILD_LIB
-static: CXXFLAGS += -fPIC
-static: CCFLAGS += -fPIC
-static: CUFLAGS += -Xcompiler -fPIC
 static: $(SOBJS)
 	$(AR) $(BINDIR)/libzefr.a $(SOBJS)
 
 # Build Zefr as a shared library
 .PHONY: shared
 shared: FLAGS += -D_BUILD_LIB
-shared: CXXFLAGS += -fPIC
-shared: CCFLAGS += -fPIC
-shared: CUFLAGS += -Xcompiler -fPIC
 shared: $(SOBJS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(INCS) -shared -o $(BINDIR)/libzefr.so $(SOBJS) $(LIBS)
 

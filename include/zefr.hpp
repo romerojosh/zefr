@@ -122,8 +122,8 @@ public:
 
   // GPU-related callback functions
   void update_iblank_gpu(void);
-  void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
   void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag = 0, double* data = NULL);
+  void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data);
 
   void get_face_nodes_gpu(int* faceIDs, int nFaces, int* nPtsFace, double *xyz);
   void get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *xyz);
@@ -132,8 +132,8 @@ public:
   void donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights);
 
   void set_tioga_callbacks(void (*point_connect)(void), void (*unblank_part_1)(void),
-                           void (*unblank_part_2)(int), void (*dataUpdate_recv)(int, int),
-                           void (*dataUpdate_send)(int, int));
+                           void (*unblank_part_2)(int),
+                           void (*dataUpdate_send)(int, int), void (*dataUpdate_recv)(int, int));
 
   void set_rigid_body_callbacks(void (*setTransform)(double*, double*, int));
 

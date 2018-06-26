@@ -132,6 +132,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "restart_case", input.restart_case, std::string(""));
   read_param(f, "restart_type", input.restart_type, (unsigned int)0);
   read_param(f, "restart_iter", input.restart_iter, (unsigned int)0);
+  read_param(f, "restart_npart", input.restart_npart, -1);
 
   read_param(f, "mg_cycle", input.mg_cycle, std::string("V"));
   read_param(f, "FMG_vcycles", input.FMG_vcycles, (unsigned int) 1);
@@ -214,7 +215,6 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "v_fs", input.V_fs(1), 0.0);
   read_param(f, "w_fs", input.V_fs(2), 0.0); 
   read_param(f, "P_fs", input.P_fs, .71428571428);
-
 
   read_param(f, "fix_vis", input.fix_vis, false);
   read_param(f, "mach_fs", input.mach_fs, 0.2);
@@ -449,11 +449,11 @@ void apply_nondim(InputStruct &input)
   if (input.disable_nondim) 
   { 
     /* Run with dimensional quantities from input file:
-     * ++ Re, Ma, rho, V, L, p, gamma, Prandtl specified
+     * ++ Re, Ma, rho, L, p, gamma, Prandtl specified
      * ++ Remaining parameters calculated for consistency */
-    input.R = 1.;  // Free parameter (only R*T important to us)
-    input.mu = input.rho_fs * input.v_mag_fs * input.L_fs  / input.Re_fs; // Re -> mu
     input.T_fs = input.P_fs / (input.rho_fs * input.R); // Ideal gas law -> T
+    input.v_mag_fs = input.mach_fs * std::sqrt(input.gamma * input.P_fs / input.rho_fs); // mach * c
+    input.mu = input.rho_fs * input.v_mag_fs * input.L_fs  / input.Re_fs; // Re -> mu
 
     input.R_ref = input.R;
 

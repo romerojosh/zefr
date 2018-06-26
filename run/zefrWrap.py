@@ -59,7 +59,7 @@ if nGrids > 1:
 
     z.set_tioga_callbacks(tg.tioga_preprocess_grids_, 
         tg.tioga_performconnectivity_, tg.tioga_do_point_connectivity,
-        tg.tioga_set_iter_iblanks, tg.tioga_unblank_part_1, tg.tioga_unblank_part_2,
+        tg.tioga_unblank_part_1, tg.tioga_unblank_part_2,
         tg.tioga_dataupdate_ab_send, tg.tioga_dataupdate_ab_recv)
 
     if inp.motion_type == zefr.RIGID_BODY or inp.motion_type == zefr.CIRCULAR_TRANS:
@@ -101,8 +101,7 @@ if nGrids > 1:
     if zefr.use_gpus():
         if gridRank == 0:
             print("Grid "+str(GridID)+": Setting GPU callback functions")
-        tg.tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,
-            cbs.fringe_data_to_device, cbs.unblank_data_to_device, 
+        tg.tioga_set_ab_callback_gpu_(cbs.fringe_data_to_device, cbs.unblank_data_to_device,
             cbs.get_q_spts_d, cbs.get_dq_spts_d)
         tg.tioga_set_stream_handle(z.get_tg_stream_handle(), z.get_tg_event_handle())
 

@@ -128,8 +128,8 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
       {
         geo.omega(d) = input->w0[d];      // Global coords
         geo.qdot(d+1) = 0.5*input->w0[d]; // Body coords
+        geo.vel_cg(d) = input->v0[d];
       }
-      geo.vel_cg(d) = input->v0[d];
     }
 
     Quat q(geo.q(0),geo.q(1),geo.q(2),geo.q(3));
@@ -342,7 +342,8 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
   f >> nBndIds;
   std::getline(f, str); // Clear remainder of line
 
-  /* New boundary-reading format taken from Flurry++ */
+  // Read boundary condition names from Gmsh and match to input file
+  geo.bcGlobal.resize(nBndIds);
   geo.nBounds = 0;
   for (unsigned int i = 0; i < nBndIds; i++)
   {
@@ -362,6 +363,8 @@ void read_boundary_ids(std::ifstream &f, GeoStruct &geo, InputStruct *input)
       ind = bcStr.find("\"");
     }
     bcName = bcStr;
+
+    geo.bcGlobal[i] = bcName;
 
     // Convert to lowercase to match Flurry's boundary condition strings
     std::transform(bcStr.begin(), bcStr.end(), bcStr.begin(), ::tolower);
@@ -818,6 +821,8 @@ void read_element_connectivity(std::ifstream &f, GeoStruct &geo, InputStruct *in
       eleID++;
     }
   }
+
+  geo.gEtype = geo.eleType;
 
   /* Setup face-node maps for easier processing */
   set_face_nodes(geo);
@@ -2096,10 +2101,10 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   int objval;
   std::vector<int> epart(geo.nEles, 0);
   std::vector<int> npart(geo.nNodes);
-  /* TODO: Should just not call this entire function if nRanks == 1 */
+  /// TODO: Should just not call this entire function if nRanks == 1
   if (nRanks > 1) 
   {
-    int ncommon = geo.nDims; // TODO: Related to previous TODO
+    int ncommon = geo.nDims;
     int ne = geo.nEles;
     int nn = geo.nNodes;
 
@@ -2111,14 +2116,21 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   /* Obtain list of elements on this partition */
   std::vector<unsigned int> myEles;
   std::map<ELE_TYPE, std::vector<unsigned int>> myElesBT;
+  geo.gID2ele.assign({geo.nEles}, -1);
 
   for (auto etype : geo.ele_set)
     for (unsigned int ele = 0; ele < geo.nElesBT[etype]; ele++) 
-      if (epart[geo.eleID[etype](ele)] == rank) 
+    {
+      unsigned int gid = geo.eleID[etype](ele);
+      if (epart[gid] == rank)
+      {
+        geo.gID2ele(gid) = myElesBT[etype].size();
+        geo.eleIDg.push_back(geo.eleID[etype](ele));
         myElesBT[etype].push_back(ele);
+      }
+    }
 
   /* Collect map of *ALL* MPI interfaces from METIS partition data */
-  //std::vector<unsigned int> face(geo.nNodesPerFace);
   std::map<std::vector<unsigned int>, std::set<int>> face2ranks;    
   std::map<std::vector<unsigned int>, std::set<int>> mpi_faces_glob;
 
@@ -2762,8 +2774,28 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
   geo.nBndFaces = 0;
   geo.bound_faces.resize(0);
   geo.boundFaces.resize(0);
+  geo.bcGlobal.resize(0);
   std::string bcon_p = "_p" + std::to_string(input->rank);
   size_t len = bcon_p.length();
+
+  // Gather global list of BC names
+  std::set<std::string> nameList;
+  for (auto &name : dsNames)
+  {
+    if (name.substr(0,5) == "bcon_")
+    {
+      std::string bcname = name.substr(5,name.size());
+      uint bclen = bcname.find_last_of("_p") - 1;
+      bcname = bcname.substr(0, bclen);
+      nameList.insert(bcname);
+    }
+  }
+
+  geo.bcGlobal.reserve(nameList.size());
+  for (auto &name : nameList)
+    geo.bcGlobal.push_back(name);
+
+  // Get boundary faces for this partition
   for (auto &name : dsNames)
   {
     if (name.substr(0,5) == "bcon_" and
@@ -2794,7 +2826,7 @@ void load_mesh_data_pyfr(InputStruct *input, GeoStruct &geo)
 
       geo.bnd_ids.push_back(bcStr2Num[bcStr]);
       geo.bcNames.push_back(bcName);
-      geo.bcIdMap[geo.nBounds] = geo.nBounds; // Map Gmsh bcid to ZEFR bound index
+      geo.bcIdMap[geo.nBounds] = geo.nBounds; // Map PyFR bcid to ZEFR bound index
       if (geo.bnd_ids.back() == PERIODIC) geo.per_bnd_flag = true;
 
       auto DS = file.openDataSet(name);

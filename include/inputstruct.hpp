@@ -145,6 +145,7 @@ struct InputStruct
   /* --- I/O --- */
   short write_paraview, write_pyfr, plot_surfaces, plot_overset;
   unsigned int restart_iter, restart_type;
+  int restart_npart;
   std::string restart_case;
   bool catch_signals = false;
   bool write_LHS, write_RHS;

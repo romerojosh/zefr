@@ -1419,6 +1419,28 @@ unsigned int npts_to_order(ELE_TYPE etype, unsigned int npts)
       ThrowException("Unknown element type!");
   }
 }
+
+unsigned int order_to_npts(ELE_TYPE etype, unsigned int order)
+{
+  switch (etype)
+  {
+    case LINE:
+      return order + 1;
+    case TRI:
+      return (order + 1) * (order + 2) / 2;
+    case QUAD:
+      return (order + 1) * (order + 1);
+    case TET:
+      return (order + 1) * (order + 2) * (order + 3) / 6;
+    case PRI:
+      return (order + 1) * ((order + 1) * (order + 2) / 2);
+    case HEX:
+      return (order + 1) * (order + 1) * (order + 1);
+    default:
+      ThrowException("Unknown element type! " + std::to_string(etype));
+  }
+}
+
 mdvector<double> quat_mul(const mdvector<double> &p, const mdvector<double> &q)
 {
   // Assuming real part is last value [ i, j, k, real ]

@@ -188,7 +188,8 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())
   {
-    tioga_set_ab_callback_gpu_(cbs.donor_data_from_device,  cbs.fringe_data_to_device,
+    /// TODO: remove unused callbacks
+    tioga_set_ab_callback_gpu_(cbs.fringe_data_to_device,
                                cbs.unblank_data_to_device, cbs.get_q_spts_d, cbs.get_dq_spts_d,
                                cbs.get_face_nodes_gpu, cbs.get_cell_nodes_gpu,
                                cbs.get_n_weights, cbs.donor_frac_gpu);

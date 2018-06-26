@@ -113,7 +113,7 @@ class FRSolver
     _mpi_comm myComm, worldComm;
 
     void setup_views();
-    void restart_native(std::string restart_case, unsigned restart_iter);
+    void restart_paraview(std::string restart_case, unsigned int restart_iter, int npart_restart);
     void restart_pyfr(std::string restart_case, unsigned restart_iter);
     void process_restart_stats(const std::string &stats_str);
     void setup_update();

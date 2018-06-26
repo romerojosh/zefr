@@ -904,19 +904,6 @@ void Zefr::update_iblank_gpu(void)
 #endif
 }
 
-void Zefr::donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
-{
-#ifdef _GPU
-  /// TODO: eletype
-  if (gradFlag == 0)
-    solver->elesObjs[0]->donor_u_from_device(donorIDs, nDonors);
-  else
-    solver->elesObjs[0]->donor_grad_from_device(donorIDs, nDonors);
-
-  check_error();
-#endif
-}
-
 void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
 {
 #ifdef _GPU
@@ -942,9 +929,19 @@ void Zefr::fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, doub
 #endif
 }
 
+void Zefr::unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
+{
+#ifdef _GPU
+  /// TODO: eletype [mixed grid support]
+  solver->elesObjs[0]->unblank_u_to_device(fringeIDs, nFringe, data);
+  check_error();
+#endif
+}
+
+
 void Zefr::set_tioga_callbacks(void (*point_connect)(void), void (*unblank_part_1)(void),
-                               void (*unblank_part_2)(int), void (*dataUpdate_recv)(int, int),
-                               void (*dataUpdate_send)(int, int))
+                               void (*unblank_part_2)(int), void (*dataUpdate_send)(int, int),
+                               void (*dataUpdate_recv)(int, int))
 {
   /*! NOTE: All of these callbacks are not required [in fact, discouraged]
    *  when using the new HELIOS-compatible Python layer */

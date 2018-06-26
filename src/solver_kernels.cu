@@ -1267,7 +1267,7 @@ void compute_moments_wrapper(std::array<double,3> &tot_force, std::array<double,
   int threads = 192;
   int blocks = (nFaces + threads - 1) / threads;
 
-  if (nVars < 4) // Only applicable to Euler / Navier-Stokes
+  if (nFaces == 0 || nVars < 4) // Only applicable to Euler / Navier-Stokes
     return;
 
   compute_moments<<<blocks, threads>>>(U_fpts,dU_fpts,P_fpts,coord,x_cg,norm,dA,weights_fpts,

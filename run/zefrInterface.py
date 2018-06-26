@@ -328,8 +328,7 @@ class zefrSolver:
             'get_dq_spts': cbs.get_dq_spts})
 
         if self.useGpu:
-            self.callbacks.update({'donorDataDevice': cbs.donor_data_from_device,
-                'fringeDataToDevice': cbs.fringe_data_to_device,
+            self.callbacks.update({'fringeDataToDevice': cbs.fringe_data_to_device,
                 'unblankToDevice': cbs.unblank_data_to_device,
                 'faceNodesGPU': cbs.get_face_nodes_gpu,
                 'cellNodesGPU': cbs.get_cell_nodes_gpu,

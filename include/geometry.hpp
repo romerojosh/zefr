@@ -41,6 +41,9 @@ struct GeoStruct
   std::map<ELE_TYPE, int> nFacesBT;    //! # of faces per face type
   mdvector<int> nNode_face;   //! List of # of nodes per face, by type
   std::map<ELE_TYPE, mdvector<unsigned int>> eleID;  // unique ID of element across all element types
+  mdvector<unsigned int> eleIDg; // Unique global ele ID from Gmsh file
+  mdvector<int> gID2ele;         // Map from global ele ID to rank- and type-local ele ID
+  mdvector<ELE_TYPE> gEtype;     // Map from global ele ID to rank- and type-local ele ID
   std::map<ELE_TYPE, mdvector<unsigned int>> faceID; // unique ID of face across all face types
   mdvector<unsigned int> faceID_type;
   mdvector<unsigned int> eleID_type;
@@ -106,6 +109,7 @@ struct GeoStruct
   unsigned int nBounds;               //! Number of distinct mesh boundary regions
   std::map<unsigned int,int> bcIdMap; //! Map from Gmsh boundary ID to Flurry BC ID
   std::vector<std::string> bcNames;   //! Name of each boundary given in mesh file
+  std::vector<std::string> bcGlobal;  //! Global list of all boundaries in mesh
   std::vector<unsigned int> bcType;   //! Boundary condition for each boundary face
   std::map<std::vector<unsigned int>, unsigned int> face2bnd;
   std::vector<std::vector<unsigned int>> boundFaces; //! List of face IDs for each mesh-defined boundary

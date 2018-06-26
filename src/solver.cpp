@@ -213,8 +213,8 @@ void FRSolver::restart_solution(void)
 {
   if (input->rank == 0) std::cout << "Restarting solution from " + input->restart_case + "_" + std::to_string(input->restart_iter) + " ..." << std::endl;
 
-  if (input->restart_type == 1) // Native + Gmsh format
-    restart_native(input->restart_case, input->restart_iter);
+  if (input->restart_type == 1) // ParaView + Gmsh format
+    restart_paraview(input->restart_case, input->restart_iter, input->restart_npart);
   else if (input->restart_type == 2) // PyFR format
     restart_pyfr(input->restart_case, input->restart_iter);
 
@@ -947,75 +947,248 @@ void FRSolver::setup_output()
     e->setup_ppt_connectivity();
 }
 
-void FRSolver::restart_native(std::string restart_case, unsigned restart_iter)
+void FRSolver::restart_paraview(std::string restart_case, unsigned int restart_iter, int npart_restart)
 {
-  /// TODO: Native HDF5 restart file to replace ParaView restarting
-  /// Something similar to PyFR solution files, but matching unpartitioned Gmsh
-  /// mesh file
-
-  std::string filename = restart_case;
+  // Construct full file name from case name & iteration number
   std::stringstream ss;
 
   ss << restart_case << "/" << restart_case;
 
   if (input->overset)
+    ss << "_Grid" << input->gridID;
+
+  ss << "_" << std::setw(9) << std::setfill('0') << restart_iter;
+
+  if (npart_restart < 0) npart_restart = input->nRanks;
+
+  // Read in basic 'header' data from master .pvtu or serial .vtu here
+  std::ifstream f;
+  std::string pvtu = ss.str() + ".pvtu";
+  std::string vtu = ss.str() + ".vtu";
+
+  f.open(pvtu);
+  if (!f.is_open() && input->nRanks == 1)
   {
-    ss << "-G" << input->gridID;
+    if (npart_restart == 1)
+      f.open(vtu);
+    else
+      ThrowException("Could not open restart file " + pvtu + "!");
   }
 
-  ss << "-" << restart_iter;
-  ss << ".zefrs";
+  std::string param, line;
+  unsigned int order_restart;
 
-  filename = ss.str();
+  bool has_gv = false; // can do the same here for all 'extra' fields
 
-  current_iter = restart_iter;
-  input->iter = restart_iter;
-  input->initIter = restart_iter;
-
-  if (input->rank == 0)
-    std::cout << "Reading data from file " << filename << std::endl;
-
-  H5File file(filename, H5F_ACC_RDONLY);
-
-  // Read the mesh ID string
-  std::string mesh_uuid;
-
-  DataSet dset = file.openDataSet("mesh_uuid");
-  DataType dtype = dset.getDataType();
-  DataSpace dspace(H5S_SCALAR);
-
-  dset.read(mesh_uuid, dtype, dspace);
-  dset.close();
-
-  if (mesh_uuid != geo.mesh_uuid)
+  /* Load data from restart file */
+  while (f >> param)
   {
-    ss.str(""); ss.clear();
-    ss << "Restart Error - Mesh and solution files do not mesh [mesh_uuid]." << std::endl;
-    ss << ".msh   mesh_uuid: " << geo.mesh_uuid << std::endl;
-    ss << ".zefrs mesh_uuid: " << mesh_uuid << std::endl;
-    ThrowException(ss.str().c_str());
+    if (param == "TIME")
+    {
+      f >> restart_time;
+      flow_time = restart_time;
+      input->time = restart_time;
+    }
+    if (param == "ITER")
+    {
+      f >> current_iter;
+      this->restart_iter = current_iter;
+      input->iter = current_iter;
+      input->initIter = current_iter;
+    }
+    if (param == "ORDER") // Order of solution in file
+    {
+      f >> order_restart;
+    }
+    if (param == "X_CG") // X,Y,Z offset of grid from mesh file
+    {
+      geo.x_cg.assign({3});
+      f >> geo.x_cg(0) >> geo.x_cg(1) >> geo.x_cg(2);
+    }
+    if (param == "V_CG") // X,Y,Z velocity components of grid
+    {
+      geo.vel_cg.assign({3});
+      f >> geo.vel_cg(0) >> geo.vel_cg(1) >> geo.vel_cg(2);
+    }
+    if (param == "ROT-Q") // Orientation quaternion
+    {
+      geo.q.assign({4});
+      f >> geo.q(0) >> geo.q(1) >> geo.q(2) >> geo.q(3);
+    }
+    if (param == "OMEGA") // Angular velocity vector of grid
+    {
+      geo.omega.assign({3});
+      f >> geo.omega(0) >> geo.omega(1) >> geo.omega(2);
+    }
+    if (param == "grid_velocity") // X,Y,Z grid velocity for moving-grid cases
+    {
+      has_gv = true;
+    }
   }
 
-  // Read the config string
-  dset = file.openDataSet("config");
-  dset.read(geo.config, dtype, dspace);
-  dset.close();
+  if (input->overset)
+    geo.iblank_cell.assign({geo.nEles}, NORMAL);
 
-  // Read the stats string
-  dset = file.openDataSet("stats");
-  dset.read(geo.stats, dtype, dspace);
-  dset.close();
+  f.close();
 
-  std::map<ELE_TYPE, std::string> et2str;
-  et2str[TRI] = "tri";
-  et2str[QUAD] = "quad";
-  et2str[TET] = "tet";
-  et2str[PRI] = "pri";
-  et2str[HEX] = "hex";
+  std::map<ELE_TYPE, mdvector<double>> U_restart;
+  std::map<ELE_TYPE, mdvector<double>> V_restart;
 
-  /// TODO - restart file format definition needed
-  /// Probably keep format identical to PyFR, but read in hyperslabs
-  /// based on global mesh ele ID's for each partition
+  /* Setup extrapolation operator from equistant restart points */
+  for (auto e : elesObjs)
+  {
+    e->set_oppRestart(order_restart, true);
+
+    unsigned int nRpts = e->oppRestart.get_dim(1);
+    U_restart[e->etype].assign({nRpts, e->nVars, e->nElesPad});
+
+    if (has_gv)
+      V_restart[e->etype].assign({nRpts, 3, e->nElesPad});
+  }
+
+  /* Search all available files for the elments contained on this rank */
+  for (int n = 0; n < npart_restart; n++)
+  {
+    std::stringstream sspart;
+    sspart << ss.str() << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
+
+    std::string restart_file = sspart.str();
+
+    /* Open .vtu file */
+    std::ifstream f(restart_file);
+
+    if (!f.is_open())
+      ThrowException("Could not open restart file " + restart_file + "!");
+
+    int nElesPart = 0;
+    std::vector<int> globalID;
+    std::vector<int> iblankPart;
+
+    /* Load data from restart file */
+    while (f >> param)
+    {
+      if (param == "ELE_ID") // Global Gmsh ele IDs for elements in current partition
+      {
+        f >> nElesPart;
+
+        globalID.resize({nElesPart});
+        for (unsigned int ele = 0; ele < nElesPart; ele++)
+          f >> globalID[ele];
+      }
+
+      if (param == "IBLANK" && input->overset) // Element blanking status [overset connectivity]
+      {
+        iblankPart.resize(nElesPart);
+        for (unsigned int e = 0; e < nElesPart; e++)
+        {
+          f >> iblankPart[e];
+
+          unsigned int gid = globalID[e];
+          unsigned int ele = geo.gID2ele(gid);
+          ELE_TYPE etype = geo.gEtype(gid);
+
+          if (ele > 0)
+            geo.iblank_cell(geo.eleID[etype](ele)) = iblankPart[e];
+        }
+      }
+
+      if (param == "<AppendedData") // Solution Data
+      {
+        std::getline(f,line);
+        f.ignore(1);
+
+        unsigned int temp;
+        double dtemp;
+        for (unsigned int n = 0; n < elesObjs[0]->nVars; n++)
+        {
+          binary_read(f, temp);
+          for (int e = 0; e < nElesPart; e++)
+          {
+            unsigned int gid = globalID[e];
+            int ele = geo.gID2ele(gid);
+            ELE_TYPE etype = geo.gEtype(gid);
+
+            unsigned int nRpts = order_to_npts(etype, order_restart);
+
+            if (input->overset && iblankPart[e] != NORMAL) continue;
+
+            if (ele < 0)
+            {
+              // Read into dummy data to skip element
+              for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+                binary_read(f, dtemp);
+            }
+            else
+            {
+              for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+                binary_read(f, U_restart[etype](rpt, n, ele));
+            }
+          }
+        }
+
+        /* Read grid velocity. NOTE: if any additional fields exist after,
+         * remove 'if input->motion' or else read will occur in wrong location */
+        if (input->motion && has_gv)
+        {
+          binary_read(f, temp);
+          for (int e = 0; e < nElesPart; e++)
+          {
+            unsigned int gid = globalID[e];
+            unsigned int ele = geo.gID2ele(gid);
+            ELE_TYPE etype = geo.gEtype(gid);
+
+            if (input->overset && iblankPart[e] != NORMAL) continue;
+
+            unsigned int nRpts = order_to_npts(etype, order_restart);
+
+            if (ele < 0)
+            {
+              // Read into dummy data to skip element
+              for (unsigned int n = 0; n < 3*nRpts; n++)
+                binary_read(f, dtemp);
+            }
+            else
+            {
+              for (unsigned int rpt = 0; rpt < nRpts; rpt++)
+                for (unsigned int n = 0; n < 3; n++)
+                  binary_read(f, V_restart[etype](rpt, n, ele));
+            }
+          }
+        }
+      }
+    }
+
+    f.close();
+  }
+
+  /* Extrapolate values from restart points to solution points */
+  for (auto e : elesObjs)
+  {
+    unsigned int nRpts = e->oppRestart.get_dim(1);
+
+    int m = e->nSpts;
+    int k = nRpts;
+    int n = e->nElesPad * e->nVars;
+
+    auto &A = e->oppRestart(0, 0);
+    auto &B = U_restart[e->etype](0, 0, 0);
+    auto &C = e->U_spts(0, 0, 0);
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                1.0, &A, k, &B, n, 0.0, &C, n);
+
+    if (input->motion && has_gv)
+    {
+      /* Extrapolate values from restart points to solution points */
+      n = e->nEles * e->nDims;
+      auto &A = e->oppRestart(0, 0);
+      auto &B = V_restart[e->etype](0, 0, 0);
+      auto &C = e->grid_vel_spts(0, 0, 0);
+
+      cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,
+                  1.0, &A, k, &B, n, 0.0, &C, n);
+    }
+  }
 }
 
 #ifdef _GPU
@@ -4804,6 +4977,57 @@ void FRSolver::process_restart_stats(const std::string &stats_str)
   }
 }
 
+void write_metadata(FRSolver* solver, InputStruct* input, GeoStruct& geo, std::ofstream &f)
+{
+  unsigned int iter = input->iter;
+  if (input->p_multi)
+    iter /= input->mg_steps[0];
+
+  /* Write comments for solution order, iteration number and flowtime */
+  f << "<!-- ORDER " << input->order << " -->" << std::endl;
+  f << "<!-- TIME " << std::scientific << std::setprecision(16) << solver->get_current_time() << " -->" << std::endl;
+  f << "<!-- ITER " << iter << " -->" << std::endl;
+
+  if (input->overset)
+  {
+    f << "<!-- IBLANK ";
+    for (unsigned int ic = 0; ic < geo.nEles; ic++)
+    {
+      f << geo.iblank_cell(ic) << " ";
+    }
+    f << " -->" << std::endl;
+  }
+
+  if (input->motion)
+  {
+    if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
+    {
+      f << "<!-- X_CG ";
+      for (int d = 0; d < 3; d++)
+        f << std::scientific << std::setprecision(16) << geo.x_cg(d) << " ";
+      f << " -->" << std::endl;
+
+      f << "<!-- V_CG ";
+      for (int d = 0; d < 3; d++)
+        f << std::scientific << std::setprecision(16) << geo.vel_cg(d) << " ";
+      f << " -->" << std::endl;
+
+      if (input->motion_type == RIGID_BODY)
+      {
+        f << "<!-- ROT-Q ";
+        for (int d = 0; d < 4; d++)
+          f << std::scientific << std::setprecision(16) << geo.q(d) << " ";
+        f << " -->" << std::endl;
+
+        f << "<!-- OMEGA ";
+        for (int d = 0; d < 3; d++)
+          f << std::scientific << std::setprecision(16) << geo.omega(d) << " ";
+        f << " -->" << std::endl;
+      }
+    }
+  }
+}
+
 void FRSolver::write_solution(const std::string &_prefix)
 {
 #ifdef _GPU
@@ -4824,6 +5048,9 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   std::stringstream ss;
 
+  input->time = flow_time;
+  input->iter = current_iter;
+
 #ifdef _MPI
   /* Write .pvtu file on rank 0 if running in parallel */
   if (input->rank == 0)
@@ -4834,8 +5061,11 @@ void FRSolver::write_solution(const std::string &_prefix)
    
     std::ofstream f(ss.str());
     f << "<?xml version=\"1.0\"?>" << std::endl;
-    f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
-    f << "byte_order=\"LittleEndian\">" << std::endl;
+    f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">" << std::endl;
+
+    write_metadata(this, input, geo, f);
+
+    /* Write metadata about solution data to be found in .vtu's */
 
     f << "<PUnstructuredGrid GhostLevel=\"0\">" << std::endl;
     f << "<PPointData>" << std::endl;
@@ -4910,48 +5140,18 @@ void FRSolver::write_solution(const std::string &_prefix)
   f << "<?xml version=\"1.0\"?>" << std::endl;
   f << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\" >" << std::endl;
 
-  /* Write comments for solution order, iteration number and flowtime */
-  f << "<!-- ORDER " << input->order << " -->" << std::endl;
-  f << "<!-- TIME " << std::scientific << std::setprecision(16) << flow_time << " -->" << std::endl;
-  f << "<!-- ITER " << iter << " -->" << std::endl;
-  if (input->overset)
-  {
-    f << "<!-- IBLANK ";
-    for (unsigned int ic = 0; ic < geo.nEles; ic++)
-    {
-      f << geo.iblank_cell(ic) << " ";
-    }
-    f << " -->" << std::endl;
-  }
+#ifndef _MPI
+  write_metadata(this, input, geo, f);
+#endif
+
+  /* Write out global element IDs found on this rank */
+  f << "<!-- ELE_ID " << geo.nEles << " ";
+  for (unsigned int ele = 0; ele < geo.nEles; ele++)
+    f << geo.eleIDg(ele) << " ";
+  f << " -->" << std::endl;
 
   if (input->motion)
   {
-    if (input->motion_type == RIGID_BODY || input->motion_type == CIRCULAR_TRANS)
-    {
-      f << "<!-- X_CG ";
-      for (int d = 0; d < 3; d++)
-        f << std::scientific << std::setprecision(16) << geo.x_cg(d) << " ";
-      f << " -->" << std::endl;
-
-      f << "<!-- V_CG ";
-      for (int d = 0; d < 3; d++)
-        f << std::scientific << std::setprecision(16) << geo.vel_cg(d) << " ";
-      f << " -->" << std::endl;
-
-      if (input->motion_type == RIGID_BODY)
-      {
-        f << "<!-- ROT-Q ";
-        for (int d = 0; d < 4; d++)
-          f << std::scientific << std::setprecision(16) << geo.q(d) << " ";
-        f << " -->" << std::endl;
-
-        f << "<!-- OMEGA ";
-        for (int d = 0; d < 3; d++)
-          f << std::scientific << std::setprecision(16) << geo.omega(d) << " ";
-        f << " -->" << std::endl;
-      }
-    }
-
     for (auto e : elesObjs)
     {
       e->update_plot_point_coords();
@@ -5138,14 +5338,16 @@ void FRSolver::write_solution(const std::string &_prefix)
     }
   }
 
-
   /* Write out grid velocity (for moving grids) */
+
   if (input->motion)
   {
     nBytes = 0;
     for (auto e : elesObjs)
       nBytes += nElesBO[e->elesObjID] * e->nPpts * 3 * sizeof(double);
+
     binary_write(f, nBytes);
+
     for (auto e : elesObjs)
     {
       for (unsigned int ele = 0; ele < e->nEles; ele++)
@@ -5164,6 +5366,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   }
 
   /* Write plot point coordinates */
+
   nBytes = 0;
   for (auto e : elesObjs)
     nBytes += nElesBO[e->elesObjID] * e->nPpts * 3 * sizeof(float);
@@ -6393,19 +6596,23 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 #endif
 
   // Write the ParaView file for each Gmsh boundary
-  for (int bnd = 0; bnd < geo.nBounds; bnd++)
+  for (auto &bcName : geo.bcGlobal)
   {
+    int bnd = std::distance(geo.bcNames.begin(), std::find(geo.bcNames.begin(), geo.bcNames.end(), bcName));
+    if (bnd >= geo.nBounds) bnd = -1;
+
     std::stringstream ss;
 
 #ifdef _MPI
     /* Write .pvtu file on rank 0 if running in parallel */
+    std::ofstream f;
     if (input->rank == 0)
     {
       ss << input->output_prefix << "/";
-      ss << prefix << "_" << geo.bcNames[bnd] << "_" << std::setw(9) << std::setfill('0');
+      ss << prefix << "_" << bcName << "_" << std::setw(9) << std::setfill('0');
       ss << iter << ".pvtu";
 
-      std::ofstream f(ss.str());
+      f.open(ss.str());
       f << "<?xml version=\"1.0\"?>" << std::endl;
       f << "<VTKFile type=\"PUnstructuredGrid\" version=\"0.1\" ";
       f << "byte_order=\"LittleEndian\" ";
@@ -6451,15 +6658,37 @@ void FRSolver::write_surfaces(const std::string &_prefix)
       f << "<PDataArray type=\"Float32\" NumberOfComponents=\"3\" ";
       f << "format=\"ascii\"/>" << std::endl;
       f << "</PPoints>" << std::endl;
+    }
 
-      for (unsigned int n = 0; n < input->nRanks; n++)
+    MPI_Status status;
+    for (unsigned int n = 0; n < input->nRanks; n++)
+    {
+      if (input->rank == 0)
       {
-        ss.str("");
-        ss << prefix << "_" << geo.bcNames[bnd] << "_" << std::setw(9) << std::setfill('0') << iter;
-        ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
-        f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
-      }
+        int exist = 0;
+        if (n == 0)
+          exist = (bnd >= 0 && geo.boundFaces[bnd].size() > 0);
+        else
+          MPI_Recv(&exist, 1, MPI_INT, n, 0, myComm, &status);
 
+        if (exist) // Only add .pvtu piece to list if it will exist
+        {
+          ss.str("");
+          ss << prefix << "_" << bcName << "_" << std::setw(9) << std::setfill('0') << iter;
+          ss << "_" << std::setw(3) << std::setfill('0') << n << ".vtu";
+          f << "<Piece Source=\"" << ss.str() << "\"/>" << std::endl;
+        }
+      }
+      else if (n > 0 && n == input->rank)
+      {
+        // check for boundary faces existing on this rank...
+        int exist = (bnd > 0 && geo.boundFaces[bnd].size() > 0);
+        MPI_Send(&exist, 1, MPI_INT, 0, 0, myComm);
+      }
+    }
+
+    if (input->rank == 0)
+    {
       f << "</PUnstructuredGrid>" << std::endl;
       f << "</VTKFile>" << std::endl;
 
@@ -6467,7 +6696,10 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     }
 #endif
 
-    ss.str("");
+    ss.str(""); ss.clear();
+
+    if (bnd < 0) continue;
+
 #ifdef _MPI
     ss << input->output_prefix << "/";
     ss << prefix << "_" << geo.bcNames[bnd] << "_" << std::setw(9) << std::setfill('0') << iter;
@@ -6481,7 +6713,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
     auto outputfile = ss.str();
 
     /* Write parition solution to file in .vtu format */
-    std::ofstream f(outputfile);
+    f.open(outputfile, std::ofstream::out | std::ofstream::trunc);
 
     /* Write header */
     f << "<?xml version=\"1.0\"?>" << std::endl;
@@ -6937,7 +7169,6 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 
     if (input->dt_type == 2)
     {
-
       std::cout << "dt: " <<  minDT << " (min) ";
       std::cout << maxDT << " (max)";
     }

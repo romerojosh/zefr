@@ -302,9 +302,6 @@ class Elements
     void getBoundingBox(int ele, double bbox[6]);
 
 #ifdef _GPU
-    void donor_u_from_device(int* donorIDs_in, int nDonors_in);
-    void donor_grad_from_device(int* donorIDs_in, int nDonors_in);
-
     void unblank_u_to_device(int *cellIDs, int nCells, double* data);
 
     void get_cell_coords(int* cellIDs, int nCells, int* nPtsCell, double* xyz);

@@ -291,8 +291,10 @@ void mdvector<T>::push_back(T value) /* Only valid for 1D arrays! */
   if (!pinned)
   {
     values.push_back(value);
+    strides[0] = 1;
     size_++;
     max_size_++;
+    dims[0] = max_size_;
     values_ptr = values.data();
   }
   else

@@ -125,11 +125,6 @@ void estimate_point_positions_wrapper(mdvector_gpu<double> &coord_nodes,
   unsigned int nSpts, unsigned int nFpts, unsigned int nEles, unsigned int nDims);
 
 //! For overset grid interpolation
-void pack_donor_u_wrapper(mdvector_gpu<double> &U_spts,
-    mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
-    unsigned int nSpts, unsigned int nVars);
-
-//! For overset grid interpolation
 void pack_donor_grad_wrapper(mdvector_gpu<double> &U_spts,
     mdvector_gpu<double> &U_donors, int* donorIDs, int nDonors,
     unsigned int nSpts, unsigned int nVars, unsigned int nDims);

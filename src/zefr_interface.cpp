@@ -149,10 +149,8 @@ CallbackFuncs get_callback_funcs(void)
   call.get_dq_spts = get_dq_spts;
 
   /* GPU-specific functions */
-  call.donor_data_from_device = donor_data_from_device;
   call.fringe_data_to_device = fringe_data_to_device;
-  call.unblank_data_to_device = nullptr; /// TODO: remove from TIOGA
-  /// TODO: replace ^ with these:
+  call.unblank_data_to_device = unblank_data_to_device;
   call.get_q_spts_d = get_q_spts_d;
   call.get_dq_spts_d = get_dq_spts_d;
 
@@ -226,17 +224,17 @@ void convert_to_modal(int* cellID, int* nSpts, double* q_in, int* npts, int* ind
     q_out[spt] = q_in[spt];
 }
 
-void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag)
-{
-#ifdef _GPU
-  ZEFR->donor_data_from_device(donorIDs, nDonors, gradFlag);
-#endif
-}
-
 void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
 {
 #ifdef _GPU
   ZEFR->fringe_data_to_device(fringeIDs, nFringe, gradFlag, data);
+#endif
+}
+
+void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data)
+{
+#ifdef _GPU
+  ZEFR->unblank_data_to_device(fringeIDs, nFringe, gradFlag, data);
 #endif
 }
 

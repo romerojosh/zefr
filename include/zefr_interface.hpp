@@ -78,7 +78,6 @@ struct CallbackFuncs
   double (*get_grad_spt)(int cellID, int spt, int dim, int var);
   double& (*get_q_fpt)(int faceID, int fpt, int var);
   double& (*get_grad_fpt)(int faceID, int fpt, int dim, int var);
-  void (*donor_data_from_device)(int* donorIDs, int nDonors, int gradFlag);
   void (*fringe_data_to_device)(int* fringeIDs, int nFringe, int gradFlag, double *data);
   void (*unblank_data_to_device)(int* cellIDs, int nCells, int gradFlag, double *data);
   void (*get_face_nodes_gpu)(int* fringeIDs, int nFringe, int* nPtsFace, double* xyz);
@@ -146,12 +145,11 @@ void convert_to_modal(int *cellID, int *nSpts, double *q_in, int *npts,
 double& get_q_fpt(int face, int fpt, int var);
 double& get_grad_fpt(int face, int fpt, int dim, int var);
 
-/*! For runs using GPUs - prepare donor data by copying to host
- * If gradFlag == 1, copy gradient instead of solution */
-void donor_data_from_device(int *donorIDs, int nDonors, int gradFlag = 0);
-
 //! For runs using GPUs - copy updated fringe data to device
 void fringe_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double* data);
+
+//! For runs with GPUs - copy unblanked element data to device
+void unblank_data_to_device(int *fringeIDs, int nFringe, int gradFlag, double *data);
 
 int get_n_weights(int cellID);
 void donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weights);

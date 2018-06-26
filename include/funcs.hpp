@@ -78,6 +78,7 @@ unsigned int tri_nodes_to_order(unsigned int nNodes);
 unsigned int tet_nodes_to_order(unsigned int nNodes);
 unsigned int pri_nodes_to_order(unsigned int nNodes);
 unsigned int npts_to_order(ELE_TYPE etype, unsigned int npts);
+unsigned int order_to_npts(ELE_TYPE etype, unsigned int order);
 
 /* Blocked gemm operation using OpenMP */
 #ifdef _OMP
@@ -337,7 +338,7 @@ unsigned long hash_str(const char *str);
 template <typename T>
 void write_opp(mdvector<T> op, std::string str, unsigned long id, int m, int n)
 {
-//#ifdef _DUMP_OPS
+#ifdef _DUMP_OPS
   std::ofstream f(str + ".txt");
 
   f << id << std::endl;
@@ -350,7 +351,7 @@ void write_opp(mdvector<T> op, std::string str, unsigned long id, int m, int n)
     }
     f << std::endl;
   }
-//#endif
+#endif
 }
 
 #endif /* funcs_hpp */
