@@ -60,7 +60,6 @@ InputStruct read_input_file(std::string inputfile)
     ThrowException("Equation not recognized!");
 
   read_param(f, "viscous", input.viscous);
-  read_param(f, "grad_via_div", input.grad_via_div, false);
   read_param(f, "disable_nondim", input.disable_nondim, false);
   read_param(f, "source", input.source, false);
   read_param(f, "squeeze", input.squeeze, false);

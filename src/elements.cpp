@@ -652,7 +652,6 @@ void Elements::setup_FR()
     }
   }
 
-#ifndef _RT_TETS
   if (etype != HEX && etype != QUAD)
   {
     /* Setup operator for divergence of the correction function [PyFR: 'M3'] */
@@ -742,7 +741,6 @@ void Elements::setup_FR()
     cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,nSpts*nDims,nSpts,nFpts,-1.0,
                 oppD_fpts.data(),nFpts,oppE.data(),nSpts,1.0,oppD.data(),nSpts);
   }
-#endif
 
 #ifndef _NO_GIMMIK
   /* Setup operator ids for GiMMiK (ids = 0 by default to disable gimmik) */

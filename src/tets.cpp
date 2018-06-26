@@ -36,11 +36,7 @@ Tets::Tets(GeoStruct *geo, InputStruct *input, unsigned int elesObjID, unsigned 
   nSpts = (this->order + 1) * (this->order + 2) * (this->order + 3) / 6;
   nSpts1D = this->order + 1;
 
-#ifdef _RT_TETS
-  nFptsPerFace = (this->order + 2) * (this->order + 3) / 2;
-#else
   nFptsPerFace = (this->order + 1) * (this->order + 2) / 2;
-#endif
 
   nFpts_face = {nFptsPerFace, nFptsPerFace, nFptsPerFace, nFptsPerFace};
   nFpts = nFptsPerFace * nFaces;
@@ -55,22 +51,13 @@ void Tets::set_locs()
   /* Get positions of points in 1D and 2D */
   if (input->spt_type == "Legendre")
   {
-#ifdef _RT_TETS
-   loc_spts_1D = Gauss_Legendre_pts(order + 1); // loc_spts_1D used when generating filter matrices only 
-   loc_fpts_2D = WS_Tri_pts(order + 1);
-#else
     loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only
     loc_fpts_2D = WS_Tri_pts(order);
-#endif
   }
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
-#ifdef _RT_TETS
-  auto weights_fpts_2D = WS_Tri_weights(order + 1);
-#else
   auto weights_fpts_2D = WS_Tri_weights(order);
-#endif
   weights_fpts.assign({nFptsPerFace});
   for (unsigned int fpt = 0; fpt < nFptsPerFace; fpt++)
     weights_fpts(fpt) = weights_fpts_2D(fpt);
@@ -250,7 +237,6 @@ void Tets::set_vandermonde_mats()
   inv_vandRT.assign({3*nSpts + nFpts, 3*nSpts * nFpts}); 
   vandRT.inverse(inv_vandRT);
 
-#ifndef _RT_TETS
   vandTri.assign({nFptsPerFace, nFptsPerFace});
 
   for (unsigned int i = 0; i < nFptsPerFace; i++)
@@ -261,7 +247,6 @@ void Tets::set_vandermonde_mats()
 
   inv_vandTri.assign({nFptsPerFace, nFptsPerFace});
   vandTri.inverse(inv_vandTri);
-#endif
 }
 
 void Tets::set_oppRestart(unsigned int order_restart, bool use_shape)
@@ -353,27 +338,12 @@ void Tets::calc_nodal_basis(double *loc, double* basis)
 double Tets::calc_d_nodal_basis_spts(unsigned int spt,
               const std::vector<double> &loc, unsigned int dim)
 {
-#ifdef _RT_TETS
-
-  double val = 0.0;
-  int mode;
-
-  mode = spt + dim * nSpts;
-
-  for (unsigned int i = 0; i < 3*nSpts + nFpts; i++)
-  {
-    val += inv_vandRT(mode, i) * divRTMonomial3D(order + 1, loc[0], loc[1], loc[2], i);
-  }
-
-#else
 
   double val = 0.0;
   for (unsigned int i = 0; i < nSpts; i++)
   {
     val += inv_vand(i, spt) * dDubiner3D(order, loc[0], loc[1], loc[2], dim, i);
   }
-
-#endif
 
   return val;
 
