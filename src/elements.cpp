@@ -883,12 +883,6 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
   }
 
   /* --- Calculate Transformation at Flux Points --- */
-  /* If using modified gradient algorithm, store normals and dA in element local structures */
-  if (input->grad_via_div)
-  {
-    norm_fpts.assign({nDims, nFpts, nEles}, 0);
-    dA_fpts.assign({nFpts, nEles}, 0);
-  }
 
   for (unsigned int e = 0; e < nEles; e++)
   {
@@ -940,19 +934,6 @@ void Elements::calc_transforms(std::shared_ptr<Faces> faces)
       {
         for (uint dim = 0; dim < nDims; dim++)
           faces->norm(dim, gfpt) /= faces->dA(0, gfpt);
-      }
-
-      if (input->grad_via_div)
-      {
-        for (uint dim = 0; dim < nDims; dim++)
-          dA_fpts(fpt, e) += norm[dim] * norm[dim];
-
-        dA_fpts(fpt, e) = sqrt(dA_fpts(fpt, e));
-
-        for (uint dim = 0; dim < nDims; dim++)
-        {
-          norm_fpts(dim, fpt, e) = norm[dim] / dA_fpts(fpt, e);
-        }
       }
     }
   }
@@ -1656,20 +1637,12 @@ void Elements::compute_F()
         {
           for (int dim1 = 0; dim1 < nDims; dim1++)
           {
-            if (!input->grad_via_div)
+            for (int dim2 = 0; dim2 < nDims; dim2++)
             {
-              for (int dim2 = 0; dim2 < nDims; dim2++)
-              {
-                dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
-              }
-
-              dU[var][dim1] *= inv_jaco_det;
-
+              dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
             }
-            else
-            {
-              dU[var][dim1] = tdU[var][dim1] * inv_jaco_det;
-            }
+
+            dU[var][dim1] *= inv_jaco_det;
 
             /* Write physical gradient to global memory */
             dU_spts(dim1, spt, var, ele) = dU[var][dim1];
@@ -1746,99 +1719,11 @@ void Elements::compute_F()
 #ifdef _GPU
   compute_F_wrapper(F_spts_d, U_spts_d, dU_spts_d, grid_vel_spts_d, inv_jaco_spts_d, jaco_det_spts_d, nSpts, nEles, nDims, input->equation, input->AdvDiff_A_d,
       input->AdvDiff_D, input->gamma, input->prandtl, input->mu, input->c_sth, input->rt, 
-      input->fix_vis, input->viscous, input->grad_via_div, input->overset, geo->iblank_cell_d.data(), input->motion);
+      input->fix_vis, input->viscous, input->overset, geo->iblank_cell_d.data(), input->motion);
 
   check_error();
 #endif
 }
-
-void Elements::common_U_to_F(unsigned int dim)
-{
-#ifdef _CPU
-  for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-  {
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      for (unsigned int ele = 0; ele < nEles; ele++)
-      {
-        double n = norm_fpts(dim, fpt, ele);
-        double dA = dA_fpts(fpt, ele); 
-        double F = Ucomm(fpt, var, ele) * n;
-
-        Fcomm(fpt, var, ele) = F * dA;
-      }
-    }
-  }
-#endif
-
-#ifdef _GPU
-  common_U_to_F_wrapper(Fcomm_d, Ucomm_d, norm_fpts_d, dA_fpts_d, nEles, nFpts, nVars, nDims, input->equation, dim);
-
-  check_error();
-#endif
-}
-
-template<unsigned int nVars, unsigned int nDims>
-void Elements::compute_unit_advF(unsigned int dim)
-{
-  double U[nVars];
-  double inv_jaco[nDims];
-
-  for (unsigned int ele = 0; ele < nEles; ele++)
-  {
-    for (unsigned int spt = 0; spt < nSpts; spt++)
-    {
-      /* Get state variables */
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        U[var] = U_spts(spt, var, ele);
-      }
-
-      /* Get required metric terms */
-      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-      {
-          inv_jaco[dim1] = inv_jaco_spts(dim1, spt, dim, ele);
-      }
-
-      /* Compute transformed unit advection flux along provided dimension */
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-        {
-            F_spts(dim1, spt, var, ele) = U[var] * inv_jaco[dim1];
-        }
-      }
-    }
-  }
-
-}
-
-void Elements::compute_unit_advF(unsigned int dim)
-{
-#ifdef _CPU
-  if (input->equation == AdvDiff)
-  {
-    if (nDims == 2)
-      compute_unit_advF<1, 2>(dim);
-    else if (nDims == 3)
-      compute_unit_advF<1, 3>(dim);
-  }
-  else if (input->equation == EulerNS)
-  {
-    if (nDims == 2)
-      compute_unit_advF<4, 2>(dim);
-    else if (nDims == 3)
-      compute_unit_advF<5, 3>(dim);
-  }
-#endif
-
-#ifdef _GPU
-  compute_unit_advF_wrapper(F_spts_d, U_spts_d, inv_jaco_spts_d, nSpts, nEles, nDims, input->equation, dim);
-
-  check_error();
-#endif
-}
-
 
 void Elements::compute_local_dRdU()
 {

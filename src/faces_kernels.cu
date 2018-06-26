@@ -468,6 +468,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
       dU(1, 1, 2, fpt) = dU(0, 1, 2, fpt);
 
       /* Option 2: Enforce constraint on tangential velocity gradient */
+      /// TODO: remove?
       //double du_dn = du_dx * norm[0] + du_dy * norm[1];
       //double dv_dn = dv_dx * norm[0] + dv_dy * norm[1];
 
@@ -491,6 +492,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
       dU(1, 1, 3, fpt) = E_dy - dT_dn * norm[1]; 
 
       /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
+      /// TODO: remove?
       //dU(fpt, 3, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 3, 1) / rho; 
       //dU(fpt, 3, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 3, 1) / rho; 
     }
@@ -553,6 +555,7 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
       dU(1, 2, 3, fpt) = dU(0, 2, 3, fpt);
 
       /* Option 2: Enforce constraint on tangential velocity gradient */
+      /// TODO: remove?
       //double du_dn = du_dx * norm[0] + du_dy * norm[1] + du_dz * norm[2];
       //double dv_dn = dv_dx * norm[0] + dv_dy * norm[1] + dv_dz * norm[2];
       //double dw_dn = dw_dx * norm[0] + dw_dy * norm[1] + dw_dz * norm[2];
@@ -585,7 +588,8 @@ void apply_bcs_dU(mdview_gpu<double> dU, mdview_gpu<double> U, mdvector_gpu<doub
       dU(1, 2, 4, fpt) = E_dz - dT_dn * norm[2]; 
 
       /* Option 2: Reconstruct energy gradient using right states (E = E_r, u = 0, v = 0, rho = rho_r = rho_l) */
-      //dU(fpt, 4, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 4, 1) / rho; 
+      /// TODO: remove?
+      //dU(fpt, 4, 0, 1) = (dT_dx - dT_dn * norm[0]) + rho_dx * U(fpt, 4, 1) / rho;
       //dU(fpt, 4, 1, 1) = (dT_dy - dT_dn * norm[1]) + rho_dy * U(fpt, 4, 1) / rho; 
       //dU(fpt, 4, 2, 1) = (dT_dz - dT_dn * norm[2]) + rho_dz * U(fpt, 4, 1) / rho; 
 
@@ -1220,7 +1224,7 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
     {
       if (iblank[fpt] == -1) // Left side normal, right side hole
         beta = 0.5;
-      else                             // Right side normal, left side hole
+      else                   // Right side normal, left side hole
         beta = -0.5;
     }
 
@@ -1335,10 +1339,6 @@ void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars], doubl
     double aR = std::sqrt(gamma * P / UR[0]);
     PR = P;
 
-    /* Compute speed of sound */
-    //double aL = std::sqrt(std::abs(gamma * P(fpt, 0) / UL[0]));
-    //double aR = std::sqrt(std::abs(gamma * P(fpt, 1) / UR[0]));
-
     /* Compute normal velocities */
     double VnL = 0.0; double VnR = 0.0;
     for (unsigned int dim = 0; dim < nDims; dim++)
@@ -1347,7 +1347,6 @@ void rusanov_flux(double UL[nVars], double UR[nVars], double Fcomm[nVars], doubl
       VnR += UR[dim+1]/UR[0] * norm[dim];
     }
 
-    //waveSp = max(std::abs(VnL) + aL, std::abs(VnR) + aR);
     wS = std::abs(VnL - Vgn) + aL;
     wS = max(wS, std::abs(VnR - Vgn) + aR);
 
@@ -1496,7 +1495,6 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
 
   if (equation == EulerNS)
   {
-    //if (fpt >= nFpts_int) P(0, fpt) = PL; // Write out pressure on boundary only
     P(0, fpt) = PL;
     P(1, fpt) = PR;
   }
@@ -1515,7 +1513,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     {
       if (iblank[fpt] == -1) // Left side normal, right side hole
         beta = 0.5;
-      else                             // Right side normal, left side hole
+      else                   // Right side normal, left side hole
         beta = -0.5;
     }
 

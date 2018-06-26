@@ -54,7 +54,6 @@ class Elements
     mdvector<unsigned int> idx_spts, idx_fpts, idx_ppts, idx_nodes, idx_qpts;
     std::vector<double> loc_spts_1D, loc_nodes_1D, loc_qpts_1D, loc_DFR_1D;
     mdvector<double> tnorm, tdA;
-    mdvector<double> norm_fpts, dA_fpts; // Only allocated if grad_via_div enabled 
     mdvector<double> shape_spts, shape_fpts, shape_ppts, shape_qpts;
     mdvector<double> dshape_spts, dshape_fpts, dshape_ppts, dshape_qpts;
     mdvector<double> jaco_spts, jaco_det_spts, inv_jaco_spts;
@@ -153,7 +152,6 @@ class Elements
     mdvector_gpu<double> weights_spts_d, weights_fpts_d;
     mdvector_gpu<double> h_ref_d;
     mdvector_gpu<double> coord_spts_d, coord_fpts_d;
-    mdvector_gpu<double> norm_fpts_d, dA_fpts_d; // Only allocated if grad_via_div enabled 
 
     /* Motion Related */
     mdvector_gpu<double> grid_vel_nodes_d, grid_vel_spts_d, grid_vel_fpts_d, grid_vel_ppts_d;
@@ -259,13 +257,6 @@ class Elements
     void compute_F();
 
     void compute_F();
-
-    void common_U_to_F(unsigned int dim);
-
-    template<unsigned int nVars, unsigned int nDims>
-    void compute_unit_advF(unsigned int dim);
-
-    void compute_unit_advF(unsigned int dim);
 
     //! Calculate geometric transforms
     void calc_transforms(std::shared_ptr<Faces> faces);

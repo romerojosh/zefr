@@ -132,7 +132,7 @@ void compute_F(mdvector_gpu<double> F_spts,
     const mdvector_gpu<double> U_spts, mdvector_gpu<double> dU_spts, const mdvector_gpu<double> Vg_spts,
     const mdvector_gpu<double> inv_jaco_spts, const mdvector_gpu<double> jaco_det_spts, unsigned int nSpts, unsigned int nEles,
     const mdvector_gpu<double> AdvDiff_A, double AdvDiff_D, double gamma,
-    double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous, bool grad_via_div,
+    double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
     bool overset = false, const int* iblank = NULL, bool motion = false)
 {
 
@@ -153,117 +153,104 @@ void compute_F(mdvector_gpu<double> F_spts,
   double tF[nVars][nDims];
   double Vg[nDims] = {0.0};
 
-  //for (unsigned int spt = 0; spt < nSpts; spt++)
+  /* Get state variables and reference space gradients */
+  for (unsigned int var = 0; var < nVars; var++)
+    U[var] = U_spts(spt, var, ele);
+
+  if (viscous)
   {
-
-    /* Get state variables and reference space gradients */
-    for (unsigned int var = 0; var < nVars; var++)
-      U[var] = U_spts(spt, var, ele);
-
-    if (viscous) 
-    {
-      for(unsigned int dim = 0; dim < nDims; dim++)
-        for (unsigned int var = 0; var < nVars; var++)
-          tdU[var][dim] = dU_spts(dim, spt, var, ele);
-    }
-
-    if (motion)
-    {
-      for (unsigned int dim = 0; dim < nDims; dim++)
-        Vg[dim] = Vg_spts(spt, dim, ele);
-    }
-
-    /* Get metric terms */
-    for (int dim1 = 0; dim1 < nDims; dim1++)
-      for (int dim2 = 0; dim2 < nDims; dim2++)
-        inv_jaco[dim1][dim2] = inv_jaco_spts(dim1, spt, dim2, ele);
-
-    if (viscous)
-    {
-      /* Transform gradient to physical space */
-      double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
-
-      for (unsigned int var = 0; var < nVars; var++)
-      {
-        for (int dim1 = 0; dim1 < nDims; dim1++)
-        {
-          if (!grad_via_div)
-          {
-            dU[var][dim1] = (tdU[var][0] * inv_jaco[0][dim1]);
-            for (int dim2 = 1; dim2 < nDims; dim2++)
-              dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
-
-            dU[var][dim1] *= inv_jaco_det;
-
-          }
-          else
-          {
-            dU[var][dim1] = tdU[var][dim1] * inv_jaco_det;
-          }
-
-          /* Write physical gradient to global memory */
-          dU_spts(dim1, spt, var, ele) = dU[var][dim1];
-
-        }
-      }
-    }
-
-    /* Compute fluxes */
-    if (equation == AdvDiff)
-    {
-      double A[nDims];
-      for(unsigned int dim = 0; dim < nDims; dim++)
-        A[dim] = AdvDiff_A(dim);
-
-      compute_Fconv_AdvDiff<nVars, nDims>(U, F, A, Vg);
-      if(viscous) 
-        compute_Fvisc_AdvDiff_add<nVars, nDims>(dU, F, AdvDiff_D);
-
-    }
-    else if (equation == EulerNS)
-    {
-      double P;
-      compute_Fconv_EulerNS<nVars, nDims>(U, F, Vg, P, gamma);
-      if(viscous) 
-        compute_Fvisc_EulerNS_add<nVars, nDims>(U, dU, F, gamma, prandtl, mu_in,
-          rt, c_sth, fix_vis);
-    }
-
-    /* Transform flux to reference space */
-    for (unsigned int var = 0; var < nVars; var++)
-    {
-      for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-      {
-        tF[var][dim1] = F[var][0] * inv_jaco[dim1][0];
-
-        for (unsigned int dim2 = 1; dim2 < nDims; dim2++)
-        {
-          tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
-        }
-      }
-    }
-
-    /* Write out transformed fluxes */
     for(unsigned int dim = 0; dim < nDims; dim++)
-    {
       for (unsigned int var = 0; var < nVars; var++)
+        tdU[var][dim] = dU_spts(dim, spt, var, ele);
+  }
+
+  if (motion)
+  {
+    for (unsigned int dim = 0; dim < nDims; dim++)
+      Vg[dim] = Vg_spts(spt, dim, ele);
+  }
+
+  /* Get metric terms */
+  for (int dim1 = 0; dim1 < nDims; dim1++)
+    for (int dim2 = 0; dim2 < nDims; dim2++)
+      inv_jaco[dim1][dim2] = inv_jaco_spts(dim1, spt, dim2, ele);
+
+  if (viscous)
+  {
+    /* Transform gradient to physical space */
+    double inv_jaco_det = 1.0 / jaco_det_spts(spt,ele);
+
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      for (int dim1 = 0; dim1 < nDims; dim1++)
       {
-        F_spts(dim, spt, var, ele) = tF[var][dim];
+
+        dU[var][dim1] = (tdU[var][0] * inv_jaco[0][dim1]);
+        for (int dim2 = 1; dim2 < nDims; dim2++)
+          dU[var][dim1] += (tdU[var][dim2] * inv_jaco[dim2][dim1]);
+
+        dU[var][dim1] *= inv_jaco_det;
+
+        /* Write physical gradient to global memory */
+        dU_spts(dim1, spt, var, ele) = dU[var][dim1];
+
       }
+    }
+  }
+
+  /* Compute fluxes */
+  if (equation == AdvDiff)
+  {
+    double A[nDims];
+    for(unsigned int dim = 0; dim < nDims; dim++)
+      A[dim] = AdvDiff_A(dim);
+
+    compute_Fconv_AdvDiff<nVars, nDims>(U, F, A, Vg);
+    if(viscous)
+      compute_Fvisc_AdvDiff_add<nVars, nDims>(dU, F, AdvDiff_D);
+
+  }
+  else if (equation == EulerNS)
+  {
+    double P;
+    compute_Fconv_EulerNS<nVars, nDims>(U, F, Vg, P, gamma);
+    if(viscous)
+      compute_Fvisc_EulerNS_add<nVars, nDims>(U, dU, F, gamma, prandtl, mu_in,
+                                              rt, c_sth, fix_vis);
+  }
+
+  /* Transform flux to reference space */
+  for (unsigned int var = 0; var < nVars; var++)
+  {
+    for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
+    {
+      tF[var][dim1] = F[var][0] * inv_jaco[dim1][0];
+
+      for (unsigned int dim2 = 1; dim2 < nDims; dim2++)
+      {
+        tF[var][dim1] += F[var][dim2] * inv_jaco[dim1][dim2];
+      }
+    }
+  }
+
+  /* Write out transformed fluxes */
+  for(unsigned int dim = 0; dim < nDims; dim++)
+  {
+    for (unsigned int var = 0; var < nVars; var++)
+    {
+      F_spts(dim, spt, var, ele) = tF[var][dim];
     }
   }
 }
 
-void compute_F_wrapper(mdvector_gpu<double> &F_spts, 
+void compute_F_wrapper(mdvector_gpu<double> &F_spts,
     mdvector_gpu<double> &U_spts, mdvector_gpu<double> &dU_spts, mdvector_gpu<double> &grid_vel_spts,
     mdvector_gpu<double> &inv_jaco_spts, mdvector_gpu<double> &jaco_det_spts,
     unsigned int nSpts, unsigned int nEles, unsigned int nDims,
     unsigned int equation, mdvector_gpu<double> &AdvDiff_A, double AdvDiff_D, double gamma,
-    double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous,
-    bool grad_via_div, bool overset, int* iblank, bool motion)
+    double prandtl, double mu_in, double c_sth, double rt, bool fix_vis, bool viscous, bool overset,
+    int* iblank, bool motion)
 {
-  //unsigned int threads = 128;
-  //unsigned int blocks = (nEles + threads - 1)/threads;
   dim3 threads(32, 4);
   dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
 
@@ -271,126 +258,22 @@ void compute_F_wrapper(mdvector_gpu<double> &F_spts,
   {
     if (nDims == 2)
       compute_F<1, 2, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
-          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
+          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, overset, iblank, motion);
     else if (nDims == 3)
       compute_F<1, 3, AdvDiff><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
-          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
+          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, overset, iblank, motion);
   }
   else if (equation == EulerNS)
   {
     if (nDims == 2)
       compute_F<4, 2, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
-          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
+          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, overset, iblank, motion);
     else if (nDims == 3)
       compute_F<5, 3, EulerNS><<<blocks, threads>>>(F_spts, U_spts, dU_spts, grid_vel_spts, inv_jaco_spts, jaco_det_spts, nSpts, nEles, AdvDiff_A,
-          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, grad_via_div, overset, iblank, motion);
+          AdvDiff_D, gamma, prandtl, mu_in, c_sth, rt, fix_vis, viscous, overset, iblank, motion);
   }
 
 }
-
-template <unsigned int nDims, unsigned int nVars>
-__global__
-void common_U_to_F(mdvector_gpu<double> Fcomm, mdvector_gpu<double> Ucomm, mdvector_gpu<double> norm_fpts, 
-    mdvector_gpu<double> dA_fpts, unsigned int nEles, unsigned int nFpts, unsigned int dim)
-{
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
-  const unsigned int fpt = (blockDim.y * blockIdx.y + threadIdx.y);
-
-  if (ele >= nEles || fpt >= nFpts) 
-    return;
-
-  double n = norm_fpts(dim, fpt, ele);
-  double dA = dA_fpts(fpt, ele); 
-
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    Fcomm(fpt, var, ele) = Ucomm(fpt, var, ele) * n * dA;
-  }
-}
-
-void common_U_to_F_wrapper(mdvector_gpu<double> &Fcomm, mdvector_gpu<double> &Ucomm, mdvector_gpu<double> &norm_fpts, 
-    mdvector_gpu<double> &dA_fpts, unsigned int nEles, unsigned int nFpts, unsigned int nVars, unsigned int nDims, unsigned int equation,
-    unsigned int dim)
-{
-  dim3 threads(32, 4);
-  dim3 blocks((nEles + threads.x - 1)/threads.x, (nFpts + threads.y -1)/threads.y);
-
-  if (equation == AdvDiff)
-  {
-    if (nDims == 2)
-      common_U_to_F<2, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
-    else
-      common_U_to_F<3, 1><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      common_U_to_F<2, 4><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
-    else
-      common_U_to_F<3, 5><<<blocks, threads>>>(Fcomm, Ucomm, norm_fpts, dA_fpts, nEles, nFpts, dim);
-  }
-
-}
-
-template<unsigned int nVars, unsigned int nDims>
-__global__
-void compute_unit_advF(mdvector_gpu<double> F_spts, mdvector_gpu<double> U_spts, mdvector_gpu<double> inv_jaco_spts,
-    unsigned int nSpts, unsigned int nEles, unsigned int dim)
-{
-
-  const unsigned int ele = (blockDim.x * blockIdx.x + threadIdx.x);
-  const unsigned int spt = (blockDim.y * blockIdx.y + threadIdx.y);
-
-  if (ele >= nEles || spt >= nSpts) 
-    return;
-
-  double U[nVars];
-  double inv_jaco[nDims];
-
-  /* Get state variables */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    U[var] = U_spts(spt, var, ele);
-  }
-
-  /* Get required metric terms */
-  for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-  {
-      inv_jaco[dim1] = inv_jaco_spts(dim1, spt, dim, ele);
-  }
-
-  /* Compute transformed unit advection flux along provided dimension */
-  for (unsigned int var = 0; var < nVars; var++)
-  {
-    for (unsigned int dim1 = 0; dim1 < nDims; dim1++)
-    {
-        F_spts(dim1, spt, var, ele) = U[var] * inv_jaco[dim1];
-    }
-  }
-}
-
-void compute_unit_advF_wrapper(mdvector_gpu<double>& F_spts, mdvector_gpu<double>& U_spts, mdvector_gpu<double>& inv_jaco_spts, 
-    unsigned int nSpts, unsigned int nEles, unsigned int nDims, unsigned int equation, unsigned int dim)
-{
-  dim3 threads(32, 4);
-  dim3 blocks((nEles + threads.x - 1)/threads.x, (nSpts + threads.y -1)/threads.y);
-
-  if (equation == AdvDiff)
-  {
-    if (nDims == 2)
-      compute_unit_advF<1, 2><<<blocks, threads>>>(F_spts, U_spts, inv_jaco_spts, nSpts, nEles, dim);
-    else if (nDims == 3)
-      compute_unit_advF<1, 3><<<blocks, threads>>>(F_spts, U_spts, inv_jaco_spts, nSpts, nEles, dim);
-  }
-  else if (equation == EulerNS)
-  {
-    if (nDims == 2)
-      compute_unit_advF<4, 2><<<blocks, threads>>>(F_spts, U_spts, inv_jaco_spts, nSpts, nEles, dim);
-    else if (nDims == 3)
-      compute_unit_advF<5, 3><<<blocks, threads>>>(F_spts, U_spts, inv_jaco_spts, nSpts, nEles, dim);
-  }
-}
-
 
 template<unsigned int nDims>
 __global__

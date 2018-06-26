@@ -1413,12 +1413,10 @@ void setup_global_fpts(InputStruct *input, GeoStruct &geo, unsigned int order)
     geo.ele2face[etype].assign({geo.nElesBT[etype], geo.nFacesPerEleBT[etype]}, -1);
   }
 
-//#ifdef _BUILD_LIB
   for (auto ftype : geo.face_set)
   {
     geo.face2nodes[ftype].assign({(unsigned)unique_faces[ftype].size(), geo.nNdFaceCurved[ftype]}, -1);
   }
-//#endif
 
   std::set<int> overPts, wallPts;
   std::set<unsigned int> overFaces, wallFaces;
@@ -2102,7 +2100,6 @@ void partition_geometry(InputStruct *input, GeoStruct &geo)
   }
 
   /* Obtain list of elements on this partition */
-  std::vector<unsigned int> myEles;
   std::map<ELE_TYPE, std::vector<unsigned int>> myElesBT;
   geo.gID2ele.assign({geo.nEles}, -1);
 

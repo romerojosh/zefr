@@ -1242,12 +1242,6 @@ void FRSolver::solver_data_to_device()
     e->jaco_det_spts_d = e->jaco_det_spts;
     e->vol_d = e->vol;
 
-    if (input->grad_via_div)
-    {
-      e->norm_fpts_d = e->norm_fpts;
-      e->dA_fpts_d = e->dA_fpts;
-    }
-
     if (input->CFL_type == 2 || input->CFL_tau_type == 2)
       e->h_ref_d = e->h_ref;
 
@@ -1535,68 +1529,26 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
   if (input->viscous)
   {
-    // gradient computation from divergence
-    if (input->grad_via_div)
-    {
-      overset_u_recv();
+    /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
+    for (auto e : elesObjs)
+      e->compute_dU_spts();
 
-      /* Compute common interface solution and convective flux at non-MPI flux points */
-      faces->compute_common_U(startFpt, endFpt);
+    overset_u_recv();
 
-      for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      {
-        // Compute unit advection flux at solution points with wavespeed along dim
-        for (auto e : elesObjs)
-          e->compute_unit_advF(dim);
-
-        // Compute solution point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
-        for (auto e : elesObjs)
-          e->compute_dU_spts_via_divF(dim);
-      }
+    /* Compute common interface solution and convective flux at non-MPI flux points */
+    faces->compute_common_U(startFpt, endFpt);
 
 #ifdef _MPI
-      /* Receieve U data */
-      faces->recv_U_data();
+    /* Receieve U data */
+    faces->recv_U_data();
 
-      /* Complete computation on remaining flux points */
-      faces->compute_common_U(startFptMpi, geo.nGfpts);
+    /* Complete computation on remaining flux points */
+    faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
-      for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      {
-        // Convert common U to common normal advection flux
-        for (auto e : elesObjs)
-          e->common_U_to_F(dim);
-
-        // Compute flux point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
-        for (auto e : elesObjs)
-          e->compute_dU_fpts_via_divF(dim);
-      }
-    }
-    else
-    {
-      /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
-      for (auto e : elesObjs)
-        e->compute_dU_spts();
-
-      overset_u_recv();
-
-      /* Compute common interface solution and convective flux at non-MPI flux points */
-      faces->compute_common_U(startFpt, endFpt);
-
-#ifdef _MPI
-      /* Receieve U data */
-      faces->recv_U_data();
-
-      /* Complete computation on remaining flux points */
-      faces->compute_common_U(startFptMpi, geo.nGfpts);
-#endif
-
-      /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
-      for (auto e : elesObjs)
-        e->compute_dU_fpts();
-      
-    }
+    /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
+    for (auto e : elesObjs)
+      e->compute_dU_fpts();
   }
 
   /* Compute flux at solution points */
@@ -1605,9 +1557,6 @@ void FRSolver::compute_residual(unsigned int stage, int color)
 
   if (input->viscous)
   {
-    /* Interpolate gradient data to/from other grid(s) */
-    //overset_grad_send();
-
     /* Extrapolate physical solution gradient (computed during compute_F) to flux points */
     for (auto e : elesObjs)
       e->extrapolate_dU();
@@ -1640,10 +1589,6 @@ void FRSolver::compute_residual(unsigned int stage, int color)
   /* Compute solution point contribution to divergence of flux */
   for (auto e : elesObjs)
     e->compute_divF_spts(stage);
-
-  /* Unpack gradient data from other grid(s) */
-  //if (input->viscous)
-  //  overset_grad_recv();
 
   /* Compute common interface flux at non-MPI flux points */
   faces->compute_common_F(startFpt, endFpt);
@@ -1717,7 +1662,7 @@ void FRSolver::compute_residual_start(unsigned int stage, int color)
   /* Apply boundary conditions to state variables */
   faces->apply_bcs();
 
-  if (input->viscous && !input->grad_via_div)
+  if (input->viscous)
   {
     /* Compute solution point contribution to (corrected) gradient of state variables at solution points */
     for (auto e : elesObjs)
@@ -1760,59 +1705,20 @@ void FRSolver::compute_residual_mid(unsigned int stage, int color)
 
   if (input->viscous)
   {
-    // gradient computation from divergence
-    if (input->grad_via_div)
-    {
-      /* Compute common interface solution and convective flux at non-MPI flux points */
-      faces->compute_common_U(startFpt, endFpt);
-
-      for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      {
-        // Compute unit advection flux at solution points with wavespeed along dim
-        for (auto e : elesObjs)
-          e->compute_unit_advF(dim);
-
-        // Compute solution point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
-        for (auto e : elesObjs)
-          e->compute_dU_spts_via_divF(dim);
-      }
+    /* Compute common interface solution and convective flux at non-MPI flux points */
+    faces->compute_common_U(startFpt, endFpt);
 
 #ifdef _MPI
-      /* Receieve U data */
-      faces->recv_U_data();
+    /* Receieve U data */
+    faces->recv_U_data();
 
-      /* Complete computation on remaining flux points */
-      faces->compute_common_U(startFptMpi, geo.nGfpts);
+    /* Complete computation on remaining flux points */
+    faces->compute_common_U(startFptMpi, geo.nGfpts);
 #endif
 
-      for (unsigned int dim = 0; dim < geo.nDims; dim++)
-      {
-        // Convert common U to common normal advection flux
-        for (auto e : elesObjs)
-          e->common_U_to_F(dim);
-
-        // Compute flux point contributions to physical gradient (times jacobian determinant) along dim via divergence of F
-        for (auto e : elesObjs)
-          e->compute_dU_fpts_via_divF(dim);
-      }
-    }
-    else
-    {
-      /* Compute common interface solution and convective flux at non-MPI flux points */
-      faces->compute_common_U(startFpt, endFpt);
-
-#ifdef _MPI
-      /* Receieve U data */
-      faces->recv_U_data();
-
-      /* Complete computation on remaining flux points */
-      faces->compute_common_U(startFptMpi, geo.nGfpts);
-#endif
-
-      /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
-      for (auto e : elesObjs)
-        e->compute_dU_fpts();
-    }
+    /* Compute flux point contribution to (corrected) gradient of state variables at solution points */
+    for (auto e : elesObjs)
+      e->compute_dU_fpts();
   }
 
   /* Compute flux at solution points */
@@ -8098,7 +8004,7 @@ void FRSolver::move(double time, bool update_iblank)
           geo.coord_nodes(i,d) = geo.x_cg(d);
 
       auto &A = geo.coords_init;
-      auto &B = geo.Rmat;  /// TODO: double-check orientation
+      auto &B = geo.Rmat;
       auto &C = geo.coord_nodes;
 
       cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo.nNodes, geo.nDims, geo.nDims,
@@ -8239,7 +8145,7 @@ void FRSolver::move_grid_next(double time)
         geo.coord_nodes(i,d) = geo.x_cg(d);
 
     auto &A = geo.coords_init;
-    auto &B = geo.Rmat;  /// TODO: double-check orientation
+    auto &B = geo.Rmat;
     auto &C = geo.coord_nodes;
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, geo.nNodes, geo.nDims, geo.nDims,
@@ -8326,7 +8232,7 @@ void FRSolver::move_grid_now(double time)
         }
         geo.tmp_x_cg = geo.x_cg;
       }
-      /// tg_update_transform needed here ???
+      /// TODO: tg_update_transform needed here ???
     }
 
 #ifdef _GPU

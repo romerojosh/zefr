@@ -1661,23 +1661,6 @@ void unpack_unblank_u_wrapper(mdvector_gpu<double> &U_unblank,
   check_error();
 }
 
-//template<int nDims>
-//__global__
-//void pack_fringe_coords(mdvector_gpu<unsigned int> fringe_fpts, mdvector_gpu<double> xyz,
-//    mdvector_gpu<double> coord_fpts, int nFaces, int nFpts)
-//{
-//  const unsigned int fpt = (blockDim.x * blockIdx.x + threadIdx.x) % nFpts;
-//  const unsigned int face = (blockDim.x * blockIdx.x + threadIdx.x) / nFpts;
-
-//  if (face >= nFaces)
-//    return;
-
-//  int gfpt = fringe_fpts(face,fpt);
-
-//  for (unsigned int d = 0; d < nDims; d++)
-//    xyz(face,fpt,d) = coord_fpts(d,gfpt);
-//}
-
 template<int nDims>
 __global__
 void pack_fringe_coords(mdvector_gpu<unsigned int> fringe_fpts, mdvector_gpu<double> xyz,
