@@ -30,10 +30,6 @@ using namespace H5;
 #endif
 #endif
 
-enum MESH_FORMAT {
-  GMSH, PYFR
-};
-
 GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_comm comm_in)
 {
   GeoStruct geo;
@@ -44,18 +40,16 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
   geo.rank = input->rank;
   geo.gridRank = input->rank;
 
-  int format;
-
   if (input->meshfile.find(".msh") != std::string::npos)
-    format = GMSH;
+    geo.meshformat = GMSH;
   else if (input->meshfile.find(".pyfr") != std::string::npos)
-    format = PYFR;
+    geo.meshformat = PYFR;
   else
     ThrowException("Unrecognized mesh format - expecting *.msh or *.pyfrm.");
 
   setup_etypes(geo);
 
-  if (format == GMSH)
+  if (geo.meshformat == GMSH)
     load_mesh_data_gmsh(input, geo);
   else
     load_mesh_data_pyfr(input, geo);
@@ -64,14 +58,18 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
     setup_element_colors(input, geo);
 
 #ifdef _MPI
-  if (format == GMSH)
+  if (geo.meshformat == GMSH)
     partition_geometry(input, geo);
+#else
+  geo.eleIDg.assign({geo.nEles});
+  for (int ele = 0; ele < geo.nEles; ele++)
+    geo.eleIDg(ele) = ele;
 #endif
 
   if (input->iterative_method == MCGS)
     shuffle_data_by_color(geo);
 
-  if (format == GMSH)
+  if (geo.meshformat == GMSH)
   {
     setup_global_fpts(input, geo, order);
   }
@@ -84,6 +82,13 @@ GeoStruct process_mesh(InputStruct *input, unsigned int order, int nDims, _mpi_c
 
   if (input->implicit_method && input->viscous)
     set_ele_adjacency(geo);
+
+  if (geo.meshformat == PYFR)
+  {
+    geo.eleIDg.assign({geo.nEles});
+    for (int ele = 0; ele < geo.nEles; ele++)
+      geo.eleIDg(ele) = ele;
+  }
 
   if (input->overset)
   {

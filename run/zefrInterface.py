@@ -100,8 +100,10 @@ class zefrSolver:
         self.nStages = int(properties['nstages'])
 
         self.inp.nStages = self.nStages
-        self.inp.motion = bool(properties['moving-grid'])
         self.inp.viscous = bool(properties['viscous'])
+        self.inp.motion = bool(properties['moving-grid'])
+        if not self.inp.motion:
+            self.inp.motion_type = 0
 
         self.inp.write_freq = int(properties['plot-freq'])
         self.inp.report_freq = int(properties['report-freq'])

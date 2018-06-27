@@ -960,9 +960,11 @@ void FRSolver::restart_paraview(std::string restart_case, unsigned int restart_i
   if (!f.is_open() && input->nRanks == 1)
   {
     if (npart_restart == 1)
+    {
       f.open(vtu);
-    else
-      ThrowException("Could not open restart file " + pvtu + "!");
+      if (!f.is_open())
+        ThrowException("Could not open restart file " + pvtu + "!");
+    }
   }
 
   std::string param, line;
@@ -989,6 +991,13 @@ void FRSolver::restart_paraview(std::string restart_case, unsigned int restart_i
     if (param == "ORDER") // Order of solution in file
     {
       f >> order_restart;
+    }
+    if (param == "MESH_FORMAT")
+    {
+      std::string format;
+      f >> format;
+      if (format == "PYFR")
+        ThrowException("Can't restart a PyFR grid case from ParaView files!");
     }
     if (param == "X_CG") // X,Y,Z offset of grid from mesh file
     {
@@ -4884,6 +4893,14 @@ void write_metadata(FRSolver* solver, InputStruct* input, GeoStruct& geo, std::o
   f << "<!-- TIME " << std::scientific << std::setprecision(16) << solver->get_current_time() << " -->" << std::endl;
   f << "<!-- ITER " << iter << " -->" << std::endl;
 
+  /* Store the mesh format used to start the simulation [important for restarting] */
+  f << "<!-- MESH_FORMAT ";
+  if (geo.meshformat == GMSH)
+    f << "GMSH";
+  else if (geo.meshformat == PYFR)
+    f << "PYFR";
+  f << " -->" << std::endl;
+
   if (input->overset)
   {
     f << "<!-- IBLANK ";
@@ -5041,10 +5058,13 @@ void FRSolver::write_solution(const std::string &_prefix)
 #endif
 
   /* Write out global element IDs found on this rank */
-  f << "<!-- ELE_ID " << geo.nEles << " ";
-  for (unsigned int ele = 0; ele < geo.nEles; ele++)
-    f << geo.eleIDg(ele) << " ";
-  f << " -->" << std::endl;
+  if (geo.meshformat == GMSH)
+  {
+    f << "<!-- ELE_ID " << geo.nEles << " ";
+    for (unsigned int ele = 0; ele < geo.nEles; ele++)
+      f << geo.eleIDg(ele) << " ";
+    f << " -->" << std::endl;
+  }
 
   if (input->motion)
   {
@@ -6556,6 +6576,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
       f << "</PPoints>" << std::endl;
     }
 
+
     MPI_Status status;
     for (unsigned int n = 0; n < input->nRanks; n++)
     {
@@ -6578,7 +6599,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
       else if (n > 0 && n == input->rank)
       {
         // check for boundary faces existing on this rank...
-        int exist = (bnd > 0 && geo.boundFaces[bnd].size() > 0);
+        int exist = (bnd >= 0 && geo.boundFaces[bnd].size() > 0);
         MPI_Send(&exist, 1, MPI_INT, 0, 0, myComm);
       }
     }

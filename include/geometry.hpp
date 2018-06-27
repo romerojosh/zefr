@@ -23,6 +23,10 @@
 #include "mpi.h"
 #endif
 
+enum MESH_FORMAT {
+  GMSH, PYFR
+};
+
 //! Struct for reading/storing face connectivity from PyFR mesh format
 typedef struct {
   char c_type[5];
@@ -64,6 +68,7 @@ struct GeoStruct
   std::map<ELE_TYPE, mdvector<char>> fpt2gfpt_slotBT;
 
 
+  unsigned int meshformat;
   unsigned int nEles = 0; 
   unsigned int nBnds = 0;
   unsigned int nDims, nNodes, nFaces;
