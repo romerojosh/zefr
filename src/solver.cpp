@@ -999,6 +999,13 @@ void FRSolver::restart_paraview(std::string restart_case, unsigned int restart_i
       if (format == "PYFR")
         ThrowException("Can't restart a PyFR grid case from ParaView files!");
     }
+    if (param == "MESH_UUID")
+    {
+      std::string mesh_uuid;
+      f >> mesh_uuid;
+      if (mesh_uuid != geo.mesh_uuid)
+        ThrowException("Grid and solution (Gmsh & ParaView) mesh UUID's do not match!");
+    }
     if (param == "X_CG") // X,Y,Z offset of grid from mesh file
     {
       geo.x_cg.assign({3});
@@ -4892,6 +4899,7 @@ void write_metadata(FRSolver* solver, InputStruct* input, GeoStruct& geo, std::o
   f << "<!-- ORDER " << input->order << " -->" << std::endl;
   f << "<!-- TIME " << std::scientific << std::setprecision(16) << solver->get_current_time() << " -->" << std::endl;
   f << "<!-- ITER " << iter << " -->" << std::endl;
+  f << "<!-- MESH_UUID " << geo.mesh_uuid << " -->" << std::endl;
 
   /* Store the mesh format used to start the simulation [important for restarting] */
   f << "<!-- MESH_FORMAT ";
@@ -4900,16 +4908,6 @@ void write_metadata(FRSolver* solver, InputStruct* input, GeoStruct& geo, std::o
   else if (geo.meshformat == PYFR)
     f << "PYFR";
   f << " -->" << std::endl;
-
-  if (input->overset)
-  {
-    f << "<!-- IBLANK ";
-    for (unsigned int ic = 0; ic < geo.nEles; ic++)
-    {
-      f << geo.iblank_cell(ic) << " ";
-    }
-    f << " -->" << std::endl;
-  }
 
   if (input->motion)
   {
@@ -5063,6 +5061,17 @@ void FRSolver::write_solution(const std::string &_prefix)
     f << "<!-- ELE_ID " << geo.nEles << " ";
     for (unsigned int ele = 0; ele < geo.nEles; ele++)
       f << geo.eleIDg(ele) << " ";
+    f << " -->" << std::endl;
+  }
+
+  /* Write out overset connectivity information */
+  if (input->overset)
+  {
+    f << "<!-- IBLANK ";
+    for (unsigned int ic = 0; ic < geo.nEles; ic++)
+    {
+      f << geo.iblank_cell(ic) << " ";
+    }
     f << " -->" << std::endl;
   }
 
@@ -6514,6 +6523,11 @@ void FRSolver::write_surfaces(const std::string &_prefix)
   // Write the ParaView file for each Gmsh boundary
   for (auto &bcName : geo.bcGlobal)
   {
+    // Skip Gmsh's FLUID physical group
+    std::string bc = bcName;
+    std::transform(bc.begin(), bc.end(), bc.begin(), ::tolower);
+    if (bc == "fluid") continue;
+
     int bnd = std::distance(geo.bcNames.begin(), std::find(geo.bcNames.begin(), geo.bcNames.end(), bcName));
     if (bnd >= geo.nBounds) bnd = -1;
 

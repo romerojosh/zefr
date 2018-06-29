@@ -52,14 +52,14 @@ void Tris::set_locs()
   /* Get positions of points in 1D */
   if (input->spt_type == "Legendre")
   {
-    loc_spts_1D = Gauss_Legendre_pts(order+1); // loc_spts_1D used when generating filter matrices only
+    loc_spts_1D = Gauss_Legendre_pts(order+1); // Used for building filter matrices
     loc_fpts_1D = Gauss_Legendre_pts(order+1);
   }
   else
     ThrowException("spt_type not recognized: " + input->spt_type);
 
-  // NOTE: Currently assuming flux point locations always at Legendre.
-  // Will need extrapolation operation in 1D otherwise
+  /* NOTE: Currently assuming flux point locations always at Legendre.
+   * Will need extrapolation operation in 1D otherwise */
   auto weights_fpts_1D = Gauss_Legendre_weights(nFptsPerFace); 
   weights_fpts.assign({nFptsPerFace});
   for (unsigned int fpt = 0; fpt < nFptsPerFace; fpt++)
@@ -67,9 +67,8 @@ void Tris::set_locs()
 
 
   /* Setup solution point locations and quadrature weights */
-  //loc_spts = RW_Tri_pts(order);
   loc_spts = WS_Tri_pts(order);
-  weights_spts = WS_Tri_weights(order); //TODO: weights at new points
+  weights_spts = WS_Tri_weights(order); /// TODO: weights at new RW points?
 
   /* Setup flux point locations */
   loc_fpts.assign({nFpts,nDims});
@@ -165,7 +164,8 @@ void Tris::set_vandermonde_mats()
   inv_vand.assign({nSpts, nSpts}); 
   vand.inverse(inv_vand);
 
-  /* Set vandermonde for Raviart-Thomas monomial basis over combined solution and flux point set*/
+  /* Set vandermonde for Raviart-Thomas monomial basis over combined
+   * solution and flux point set [UNUSED] */
   vandRT.assign({2*nSpts+nFpts, 2*nSpts+nFpts}, 0.0);
 
   for (unsigned int i = 0; i < 2*nSpts + nFpts; i++)
@@ -176,7 +176,7 @@ void Tris::set_vandermonde_mats()
       double loc[2];
       if (j < 2*nSpts)
       {
-        //tnormj[0] = j % 2; tnormj[1] = (j+1) % 2; // alternates between +xi, and +eta directions
+        // alternates between +xi, and +eta directions
         tnormj[0] = (j < nSpts) ? 1 : 0; 
         tnormj[1] = (j < nSpts) ? 0 : 1; 
         loc[0] = loc_spts(j%nSpts, 0); loc[1] = loc_spts(j%nSpts, 1);

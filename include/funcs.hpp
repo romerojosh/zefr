@@ -3,6 +3,8 @@
 
 #include <cmath>
 #include <array>
+#include <string>
+#include <fstream>
 
 extern "C" {
 #include "cblas.h"
@@ -334,6 +336,9 @@ void binary_read(std::istream &f, T &value)
 }
 
 unsigned long hash_str(const char *str);
+
+/* Generate a unique ID string from an ASCII file */
+std::string generate_mesh_id(std::ifstream &f);
 
 template <typename T>
 void write_opp(mdvector<T> op, std::string str, unsigned long id, int m, int n)

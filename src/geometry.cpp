@@ -314,6 +314,9 @@ void load_mesh_data_gmsh(InputStruct *input, GeoStruct &geo)
   if (input->rank == 0)
     std::cout << "Reading mesh file " << input->meshfile << std::endl;
 
+  /* Generate a unique mesh ID from the file to store in restart files */
+  geo.mesh_uuid = generate_mesh_id(f);
+
   /* Process file information */
   /* Load boundary tags */
   read_boundary_ids(f, geo, input);

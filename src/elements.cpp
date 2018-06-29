@@ -575,7 +575,6 @@ void Elements::setup_FR()
   }
 
   /* Setup differentiation operator (oppD) for solution points */
-  /* Note: Can set up for standard FR eventually. Trying to keep things simple.. */
   for (unsigned int dim = 0; dim < nDims; dim++)
   {
     for (unsigned int jspt = 0; jspt < nSpts; jspt++)
@@ -590,69 +589,71 @@ void Elements::setup_FR()
     }
   }
 
-  /* Setup differentiation operator (oppD_fpts) for flux points (DFR Specific)*/
-  for (unsigned int dim = 0; dim < nDims; dim++)
+  if (etype == HEX || etype == QUAD)
   {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+    /* Setup differentiation operator (oppD_fpts) for flux points (DFR Specific)*/
+    for (unsigned int dim = 0; dim < nDims; dim++)
     {
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
       {
-        for (unsigned int d = 0; d < nDims; d++)
-          loc[d] = loc_spts(spt , d);
-
-        oppD_fpts(dim, spt, fpt) = calc_d_nodal_basis_fpts(fpt, loc, dim);
-      }
-    }
-  }
-
-  /* Setup divergence operator (oppDiv) for solution points */
-  /* Note: This is essentially the same as oppD, but with dimensions oriented in a row */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int jspt = 0; jspt < nSpts; jspt++)
-    {
-      for (unsigned int ispt = 0; ispt < nSpts; ispt++)
-      {
-        for (unsigned int d = 0; d < nDims; d++)
-          loc[d] = loc_spts(ispt, d);
-
-        oppDiv(ispt, dim, jspt) = calc_d_nodal_basis_spts(jspt, loc, dim);
-      }
-    }
-  }
-
-  /* Setup divergence operator (oppDiv_fpts) for flux points by combining dimensions of oppD_fpts */
-  for (unsigned int dim = 0; dim < nDims; dim++)
-  {
-    for (unsigned int fpt = 0; fpt < nFpts; fpt++)
-    {
-
-      /* Set positive parent sign convention into operator based on face */
-      int fac = 1;
-      if (etype == QUAD || etype == HEX)
-      {
-        if (nDims == 2) 
+        for (unsigned int spt = 0; spt < nSpts; spt++)
         {
-          int face = fpt / nSpts1D;
-          if (face == 0 or face == 3) // Bottom and Left face
-            fac = -1;
-        }
-        else if (nDims == 3)
-        {
-          int face = fpt / (nSpts1D * nSpts1D);
-          if (face % 2 == 0) // Bottom, Left, and Front face
-            fac = -1;
+          for (unsigned int d = 0; d < nDims; d++)
+            loc[d] = loc_spts(spt , d);
+
+          oppD_fpts(dim, spt, fpt) = calc_d_nodal_basis_fpts(fpt, loc, dim);
         }
       }
+    }
 
-      for (unsigned int spt = 0; spt < nSpts; spt++)
+    /* Setup divergence operator (oppDiv) for solution points */
+    /* Note: This is essentially the same as oppD, but with dimensions oriented in a row */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int jspt = 0; jspt < nSpts; jspt++)
       {
-        oppDiv_fpts(spt, fpt) += fac * oppD_fpts(dim, spt, fpt);
+        for (unsigned int ispt = 0; ispt < nSpts; ispt++)
+        {
+          for (unsigned int d = 0; d < nDims; d++)
+            loc[d] = loc_spts(ispt, d);
+
+          oppDiv(ispt, dim, jspt) = calc_d_nodal_basis_spts(jspt, loc, dim);
+        }
+      }
+    }
+
+    /* Setup divergence operator (oppDiv_fpts) for flux points by combining dimensions of oppD_fpts */
+    for (unsigned int dim = 0; dim < nDims; dim++)
+    {
+      for (unsigned int fpt = 0; fpt < nFpts; fpt++)
+      {
+
+        /* Set positive parent sign convention into operator based on face */
+        int fac = 1;
+        if (etype == QUAD || etype == HEX)
+        {
+          if (nDims == 2)
+          {
+            int face = fpt / nSpts1D;
+            if (face == 0 or face == 3) // Bottom and Left face
+              fac = -1;
+          }
+          else if (nDims == 3)
+          {
+            int face = fpt / (nSpts1D * nSpts1D);
+            if (face % 2 == 0) // Bottom, Left, and Front face
+              fac = -1;
+          }
+        }
+
+        for (unsigned int spt = 0; spt < nSpts; spt++)
+        {
+          oppDiv_fpts(spt, fpt) += fac * oppD_fpts(dim, spt, fpt);
+        }
       }
     }
   }
-
-  if (etype != HEX && etype != QUAD)
+  else if (etype != HEX && etype != QUAD)
   {
     /* Setup operator for divergence of the correction function [PyFR: 'M3'] */
     mdvector<double> gbasis({nSpts,nFpts});

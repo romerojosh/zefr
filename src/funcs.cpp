@@ -5,6 +5,7 @@
  */
 
 #include <cmath>
+#include <sstream>
 
 extern "C" {
 #include "cblas.h"
@@ -1541,4 +1542,14 @@ unsigned long hash_str(const char *str)
     hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
   return hash;
+}
+
+std::string generate_mesh_id(std::ifstream &f)
+{
+  std::stringstream mfile;
+  mfile << f.rdbuf();
+  std::string mesh_uuid = std::to_string(hash_str(mfile.str().data()));
+  f.seekg(0, std::ios::beg);
+
+  return mesh_uuid;
 }

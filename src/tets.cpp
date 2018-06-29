@@ -105,8 +105,7 @@ void Tets::set_locs()
   }
   
   /* Setup plot point locations */
-  //auto loc_ppts_1D = Shape_pts(order); unsigned int nPpts1D = loc_ppts_1D.size();
-  //auto loc_ppts_1D = Shape_pts(1); unsigned int nPpts1D = loc_ppts_1D.size();
+
   loc_ppts.assign({nPpts,nDims});
 
   unsigned int ppt = 0;
@@ -189,7 +188,8 @@ void Tets::set_vandermonde_mats()
   inv_vand.assign({nSpts, nSpts}); 
   vand.inverse(inv_vand);
 
-  /* Set vandermonde for Raviart-Thomas monomial basis over combined solution and flux point set*/
+  /* Set vandermonde for Raviart-Thomas monomial basis over combined
+   * solution and flux point set [UNUSED] */
   vandRT.assign({3*nSpts+nFpts, 3*nSpts+nFpts}, 0.0);
 
   for (unsigned int i = 0; i < 3*nSpts + nFpts; i++)
