@@ -247,11 +247,25 @@ external/%_swig.cpp: external/%.i
 external/%_swig.o: external/%_swig.cpp
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
 
+.PHONY: clean
 clean:
+	mv $(BINDIR)/gimmik_cpu.o $(BINDIR)/gimmik_cpu.o.bkup 2>/dev/null || :
 	rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(BINDIR)/*.so $(BINDIR)/zefr.pyc $(BINDIR)/zefr.py
+	rm -f external/convert_swig.o external/_convert.so external/convert.py
+	mv $(BINDIR)/gimmik_cpu.o.bkup $(BINDIR)/gimmik_cpu.o 2>/dev/null || :
+
+.PHONY: cleanall
+cleanall:
+	rm -f $(BINDIR)/$(TARGET) $(BINDIR)/*.o $(BINDIR)/*.a $(BINDIR)/*.so $(BINDIR)/zefr.pyc $(BINDIR)/zefr.py
+	rm -f external/convert_swig.o external/_convert.so external/convert.py
 
 # Specific dependancy-tracking build rules
 $(BINDIR)/gimmik_cpu.o: $(SRCDIR)/gimmik_cpu.c include/gimmik.h
+	@echo ""
+	@echo "*****************************************************"
+	@echo "Compiling gimmik_cpu.o: This may take a long time..."
+	@echo "*****************************************************"
+	@echo ""
 	$(CC) $(INCS) -c -o $@ $< $(FLAGS) $(CCFLAGS)
 
 ifeq ($(strip $(ARCH)),GPU)
