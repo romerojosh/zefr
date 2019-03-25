@@ -70,7 +70,8 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "res_tol", input.res_tol, 0.0);
   read_param(f, "res_field", input.res_field, (unsigned int) 0);
   read_param(f, "dt_scheme", input.dt_scheme);
-  read_param(f, "dt", input.dt);
+  if (input.dt_scheme != "Steady")
+    read_param(f, "dt", input.dt);
   read_param(f, "dt_type", input.dt_type, (unsigned int) 0);
   if (input.dt_type != 0)
   {
@@ -251,7 +252,7 @@ InputStruct read_input_file(std::string inputfile)
     read_param(f, "KPF_Jacobian", input.KPF_Jacobian, false);
 
     /* Freeze Jacobian across all stages in unsteady simulation */
-    if (input.dt_scheme == "Steady")
+    if (input.implicit_steady)
       input.freeze_Jacobian = false;
     else
       read_param(f, "freeze_Jacobian", input.freeze_Jacobian, true);

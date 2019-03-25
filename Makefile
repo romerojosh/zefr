@@ -148,6 +148,14 @@ ifeq ($(strip $(SM)),KEPLER)
   CUFLAGS += -arch=sm_35 -D_KEPLER
 endif
 
+ifeq ($(strip $(SM)),PASCAL)
+  CUFLAGS += -arch=sm_60 -D_PASCAL
+endif
+
+ifeq ($(strip $(SM)),VOLTA)
+  CUFLAGS += -arch=sm_70 -D_VOLTA
+endif
+
 ifeq ($(strip $(SM)),GEFORCE)
   CUFLAGS += -arch=sm_30 -D_GEFORCE
 endif
@@ -161,7 +169,11 @@ INCS += -I$(CURDIR)/external/
 INCS += -I$(strip $(AUX_DIR))/
 
 SRCDIR = $(CURDIR)/src
-BINDIR = $(CURDIR)/bin
+ifeq ($(strip $(BUILDDIR)),)
+	BINDIR = $(CURDIR)/bin
+else
+	BINDIR = $(CURDIR)/$(BUILDDIR)
+endif
 SWIGDIR = $(CURDIR)/swig_bin
 
 TARGET = zefr
@@ -223,11 +235,11 @@ wrap_static: static
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
-	@mkdir -p bin
+	@mkdir -p $(BINDIR)
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS)
 
 $(BINDIR)/%.o: src/%.c  include/*.hpp include/*.h
-	@mkdir -p bin
+	@mkdir -p $(BINDIR)
 	$(CC) $(INCS) -c -o $@ $< $(FLAGS) $(CCFLAGS)
 
 ifeq ($(strip $(ARCH)),GPU)
