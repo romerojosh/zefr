@@ -5,7 +5,11 @@
 #include <string>
 
 extern "C" {
+#ifdef _MKL_BLAS
+#include "mkl_cblas.h"
+#else
 #include "cblas.h"
+#endif
 }
 #include "gimmik.h"
 

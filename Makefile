@@ -91,6 +91,12 @@ ifeq ($(strip $(BLAS)),$(strip ATLAS))
 	LIBS = -L$(BLAS_LIB_DIR) -latlas -lcblas
 endif
 
+ifeq ($(strip $(BLAS)),MKL)
+	LIBS = -L$(BLAS_LIB_DIR) -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl
+	CXXFLAGS += -D_MKL_BLAS
+endif
+
+
 INCS = -I$(strip $(BLAS_INC_DIR))
 
 # Setting MPI/METIS flags
