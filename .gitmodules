@@ -1,3 +1,9 @@
 [submodule "external/PyFR"]
 	path = external/PyFR
 	url = https://www.github.com/JacobCrabill/PyFR.git
+
+[submodule "external/tioga"]
+    path = external/tioga
+    url = https://www.github.com/jsitaraman/tioga.git
+    branch = zefr-api
+
