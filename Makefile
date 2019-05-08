@@ -96,6 +96,11 @@ ifeq ($(strip $(BLAS)),MKL)
 	CXXFLAGS += -D_MKL_BLAS
 endif
 
+ifeq ($(strip $(BLAS)),ESSL)
+	LIBS = -L$(BLAS_LIB_DIR) -lessl -lm
+	CXXFLAGS += -D_ESSL_BLAS
+endif
+
 
 INCS = -I$(strip $(BLAS_INC_DIR))
 
@@ -103,16 +108,21 @@ INCS = -I$(strip $(BLAS_INC_DIR))
 ifeq ($(strip $(MPI)),YES)
 	FLAGS += -D_MPI
 	INCS += -I$(strip $(MPI_INC_DIR))/ -I$(strip $(METIS_INC_DIR))/
-ifneq ($(MPI_LIB_DIR),)
-ifeq ($(strip $(INTEL)),YES)
+	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
+
+ifeq ($(strip $(MPI_TYPE)),INTEL)
 	CXXFLAGS += -traceback -fp-model fast=2
 	CFLAGS += -traceback -fp-model fast=2
 	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpich_intel -Wl,-rpath=$(MPI_LIB_DIR)
-else
+endif
+
+ifeq ($(strip $(MPI_TYPE)),IBM)
+	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi_ibm -Wl,-rpath=$(MPI_LIB_DIR)
+endif
+
+ifeq ($(strip $(MPI_TYPE)),)
 	LIBS += -L$(strip $(MPI_LIB_DIR))/ -lmpi -Wl,-rpath=$(MPI_LIB_DIR)
 endif
-endif
-	LIBS += -L$(strip $(METIS_LIB_DIR))/ -lmetis -Wl,-rpath=$(strip $(METIS_LIB_DIR))
 endif
 
 # Setting HDF5 flags

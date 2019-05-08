@@ -11,13 +11,13 @@
 #include "prisms.hpp"
 #include "funcs.hpp"
 
-extern "C" {
 #ifdef _MKL_BLAS
 #include "mkl_cblas.h"
+#elif _ESSL_BLAS
+#include "essl.h"
 #else
 #include "cblas.h"
 #endif
-}
 
 #ifdef _GPU
 #include "elements_kernels.h"

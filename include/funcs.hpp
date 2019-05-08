@@ -6,13 +6,13 @@
 #include <string>
 #include <fstream>
 
-extern "C" {
 #ifdef _MKL_BLAS
 #include "mkl_cblas.h"
+#elif _ESSL_BLAS
+#include "essl.h"
 #else
 #include "cblas.h"
 #endif
-}
 
 #include "input.hpp"
 #include "mdvector.hpp"

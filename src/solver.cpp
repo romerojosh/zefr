@@ -8,13 +8,13 @@
 #include <queue>
 #include <vector>
 
-extern "C" {
 #ifdef _MKL_BLAS
 #include "mkl_cblas.h"
+#elif _ESSL_BLAS
+#include "essl.h"
 #else
 #include "cblas.h"
 #endif
-}
 
 #include "elements.hpp"
 #include "faces.hpp"

@@ -3,13 +3,14 @@
 #include <iostream>
 #include <cstdlib>
 
-extern "C" {
 #ifdef _MKL_BLAS
 #include "mkl_cblas.h"
+#elif _ESSL_BLAS
+#include "essl.h"
 #else
 #include "cblas.h"
 #endif
-}
+
 #include "funcs.hpp"
 #include "quads.hpp"
 #include "polynomials.hpp"
