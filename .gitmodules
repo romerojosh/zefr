@@ -7,3 +7,6 @@
     url = https://www.github.com/jsitaraman/tioga.git
     branch = zefr-api
 
+[submodule "external/Eigen"]
+	path = external/Eigen
+	url = https://github.com/eigenteam/eigen-git-mirror.git
