@@ -13,4 +13,3 @@
 # Ignore folders likely to contain binaries and output files
 bin/*
 swig_bin/*
-testcases/*

@@ -1,0 +1,79 @@
+# Geometry:
+nDims    2
+meshfile naca_32x32_b4.msh
+
+# Boundary Conditions
+mesh_bound  char  char
+mesh_bound  wall_slip  wall_slip
+mesh_bound  fluid  fluid
+
+# Solver:
+order     4
+equation EulerNS    (AdvDiff, Burgers, EulerNS)
+viscous  0
+spt_type Legendre
+
+# Timestepping:
+n_steps 100
+res_tol 1e-11
+dt_scheme Steady
+
+# Pseudo Timestepping
+pseudo_time 1
+remove_deltaU 1
+dtau_type 2
+CFL_tau 3.0
+
+# Adapt dtau
+adapt_dtau 1
+dtau_ratio_max 1e5
+dtau_growth_rate 1.0
+
+# Implicit
+KPF_Jacobian 1
+report_NMconv_freq 1
+iterative_method MCGS
+nColors 2
+iterBM_max 100
+backsweep 0
+linear_solver INV
+
+restart 0
+restart_file inviscid_naca_2D/inviscid_naca_2D_000000010.vtu
+
+# Reporting:
+# Note: You can suppress output by setting freq to zero. 
+output_prefix inviscid_naca_2D
+write_freq    100
+report_freq   0
+res_type      1
+force_freq    10
+error_freq    0
+nQpts1D       10
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.0
+ldg_tau    1.0
+
+# Equation Specific Parameters:
+ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+
+# Euler/Navier-Stokes
+T_gas 291.15
+gamma 1.4
+R     286.9
+mu    1.827E-5
+prandtl 0.72
+S       120
+
+# Euler / N-S Parameters
+rho_fs 1.4
+P_fs 1
+mach_fs .5
+nx_fs 0.9997620270799091
+ny_fs 0.02181488503456112
+nz_fs 0.0
+
