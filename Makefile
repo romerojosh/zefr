@@ -89,7 +89,7 @@ ifeq ($(strip $(BLAS_DIST)),MKL)
 endif
 
 ifeq ($(strip $(BLAS_DIST)),ESSL)
-	LIBS = -L$(BLAS_ROOT)/lib -lessl -lm
+	LIBS = -L$(BLAS_ROOT)/lib64 -lessl -lm
 	DFLAGS += -D_ESSL_BLAS
 endif
 
