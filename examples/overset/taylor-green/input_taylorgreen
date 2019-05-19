@@ -1,0 +1,80 @@
+# Geometry:
+nDims    3
+overset  true
+meshfile P3/hex16.pyfrm
+overset_grids  P2/hex24.pyfrm  P6/hex52.pyfrm
+
+# Boundary Conditions
+mesh_bound  periodic  periodic
+mesh_bound  overset   overset
+
+# Solver:
+order    4
+equation EulerNS    (AdvDiff, EulerNS)
+viscous  1
+motion   0
+spt_type Legendre
+
+# Timestepping:
+n_steps   750000
+dt_scheme RK54      (Euler, RK44, RK54)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+adapt_dt  1         (1 = use adaptive error-based timestepping)
+dt        0.0006
+res_tol   1e-16
+tfinal    169.03
+
+# Restarting
+restart  0
+restart_type 2
+restart_case tg
+restart_iter 31000
+
+# Adaptive time-stepping variables
+safety_factor  .9
+max_factor  2.5
+min_factor  .33
+err_atol  1e-5
+err_rtol  1e-5
+
+# Reporting:
+# Note: You can suppress output by setting freq to zero. 
+#output_prefix  overtest
+output_prefix  tg
+write_freq     500
+write_pyfr     1
+write_paraview 0
+plot_surfaces  0
+plot_overset   0
+report_freq    200
+res_type       1
+force_freq     0
+error_freq     0
+turb_stat_freq 200
+nQpts1D        1
+plot_surfaces  0
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.5
+ldg_tau    0.1
+
+# Equation Specific Parameters:
+ic_type    1     (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+test_case  4     (2 = Couette, 4 = Taylor-Green)
+
+# Euler/Navier-Stokes
+gamma    1.4
+prandtl  0.72
+
+# Navier-Stokes specific
+disable_nondim 1
+fix_vis  1
+mach_fs  0.1
+Re_fs    1600
+L_fs     1
+rho_fs   1
+P_fs     1.0
+v_mag_fs .118321595661992
