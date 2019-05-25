@@ -156,6 +156,12 @@ else
 endif
 
 SWIGDIR = $(CURDIR)/swig_bin
+ifeq ($(strip $(TIOGA_ROOT)),)
+	TIOGA_ROOT = ./external/tioga/
+endif
+ifneq ($(strip $(TIOGA_CONFIG)),)
+    TG_CONFIG = $(strip $(TIOGA_ROOT))/$(strip $(TIOGA_CONFIG))
+endif
 
 TARGET = zefr
 OBJS = $(BINDIR)/elements.o $(BINDIR)/faces.o $(BINDIR)/funcs.o $(BINDIR)/geometry.o $(BINDIR)/hexas.o $(BINDIR)/input.o $(BINDIR)/multigrid.o $(BINDIR)/points.o $(BINDIR)/polynomials.o $(BINDIR)/prisms.o $(BINDIR)/quads.o $(BINDIR)/solver.o $(BINDIR)/tets.o $(BINDIR)/tris.o $(BINDIR)/filter.o  $(BINDIR)/zefr.o
@@ -175,6 +181,8 @@ CONVERT_TARGET = external/_convert.so
 SWIG_INCS = -I$(strip $(PYTHON_INC_DIR))/ -I$(strip $(MPI4PY_INC_DIR))/ -I$(strip $(NUMPY_INC_DIR))/
 SWIG_LIBS =
 WRAP_TARGET = $(BINDIR)/zefrWrap
+INTERP_TARGET = $(BINDIR)/gridInterp
+INCS += -I$(strip $(TIOGA_ROOT))/include
 
 INCS += -I$(CURDIR)/include
 
@@ -184,8 +192,8 @@ $(TARGET): $(OBJS)
 # Build Zefr as a Python extension module (shared library) using SWIG
 .PHONY: swig
 swig: FLAGS += -D_BUILD_LIB
-swig: CXXFLAGS += -I$(TIOGA_INC_DIR)/ $(SWIG_INCS)
-swig: INCS += -I$(TIOGA_INC_DIR)/
+swig: CXXFLAGS += -I$(strip $(TIOGA_ROOT))/include/ $(SWIG_INCS)
+swig: INCS += -I$(strip $(TIOGA_ROOT))/include/
 swig: $(SOBJS) $(SWIG_OBJ) $(CONVERT_OBJ)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(DFLAGS) $(INCS) $(SWIG_INCS) -shared -o $(SWIG_TARGET) $(SOBJS) $(SWIG_OBJ) $(LIBS) $(SWIG_LIBS)
 	$(CXX) $(FLAGS) $(CXXFLAGS) $(DFLAGS) $(INCS) $(SWIG_INCS) -shared -o $(CONVERT_TARGET) $(CONVERT_OBJ)
@@ -204,15 +212,32 @@ shared: $(SOBJS)
 
 # Compile the zefrWrap wrapper program using dynamic linking
 .PHONY: wrap
-wrap: INCS += -I$(TIOGA_INC_DIR)/
+wrap: INCS += -I$(strip $(TIOGA_ROOT))/
 wrap: shared
-	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp -o $(WRAP_TARGET) -L$(TIOGA_LIB_DIR)/ -L$(BINDIR)/ -lzefr -ltioga -Wl,-rpath=$(BINDIR)/ -Wl,-rpath=$(TIOGA_LIB_DIR)/ $(LIBS)
+	echo $(TIOGA_CONFIG)
+	$(MAKE) -C external/tioga/ shared CONFIG=$(TIOGA_CONFIG)
+	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp -o $(WRAP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
 
 # Compile the zefrWrap wrapper program using static linking
 .PHONY: wrap_static
-wrap_static: INCS += -I$(TIOGA_INC_DIR)/
+wrap_static: INCS += -I$(strip $(TIOGA_ROOT))/
 wrap_static: static
-	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp $(BINDIR)/libzefr.a $(TIOGA_LIB_DIR)/libtioga.a -o $(WRAP_TARGET) $(LIBS)
+	$(MAKE) -C external/tioga/ lib CONFIG=$(TIOGA_CONFIG)
+	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp $(BINDIR)/libzefr.a $(strip $(TIOGA_ROOT))/bin/libtioga.a -o $(WRAP_TARGET) $(LIBS)
+
+# Compile a wrapper that interpolates overset data to a single grid [dynamic linking]
+.PHONY: interp
+interp: INCS += -I$(strip $(TIOGA_ROOT))/
+interp: shared
+	$(MAKE) -C external/tioga/ shared CONFIG=$(TIOGA_CONFIG)
+	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/gridInterp.cpp -o $(INTERP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
+
+# Compile a wrapper that interpolates overset data to a single grid [static linking]
+.PHONY: interp_static
+interp_static: INCS += -I$(strip $(TIOGA_ROOT))/
+interp_static: static
+	$(MAKE) -C external/tioga/ lib CONFIG=$(TIOGA_CONFIG)
+	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/gridInterp.cpp $(BINDIR)/libzefr.a $(strip $(TIOGA_ROOT))/bin/libtioga.a -o $(INTERP_TARGET) $(LIBS)
 
 # Implicit Rules
 $(BINDIR)/%.o: src/%.cpp  include/*.hpp include/*.h
@@ -229,7 +254,7 @@ $(BINDIR)/%.o: src/%.cu include/*.hpp include/*.h
 endif
 
 $(BINDIR)/%_swig.cpp: include/%.i include/*.hpp
-	$(SWIG) $(FLAGS) $(INCS) $(SWIG_INCS) -o $@ $<
+	$(SWIG) $(FLAGS) $(DFLAGS) $(INCS) $(SWIG_INCS) -o $@ $<
 
 $(BINDIR)/%_swig.o: $(BINDIR)/%_swig.cpp
 	$(CXX) $(INCS) -c -o $@ $< $(FLAGS) $(CXXFLAGS) $(DFLAGS)
