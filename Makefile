@@ -157,7 +157,7 @@ endif
 
 SWIGDIR = $(CURDIR)/swig_bin
 ifeq ($(strip $(TIOGA_ROOT)),)
-	TIOGA_ROOT = ./external/tioga/
+	TIOGA_ROOT = $(CURDIR)/external/tioga/
 endif
 ifneq ($(strip $(TIOGA_CONFIG)),)
     TG_CONFIG = $(strip $(TIOGA_ROOT))/$(strip $(TIOGA_CONFIG))
@@ -216,7 +216,7 @@ wrap: INCS += -I$(strip $(TIOGA_ROOT))/
 wrap: shared
 	echo $(TIOGA_CONFIG)
 	$(MAKE) -C external/tioga/ shared CONFIG=$(TIOGA_CONFIG)
-	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp -o $(WRAP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
+	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp -o $(WRAP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(CURDIR)/$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
 
 # Compile the zefrWrap wrapper program using static linking
 .PHONY: wrap_static
@@ -230,7 +230,7 @@ wrap_static: static
 interp: INCS += -I$(strip $(TIOGA_ROOT))/
 interp: shared
 	$(MAKE) -C external/tioga/ shared CONFIG=$(TIOGA_CONFIG)
-	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/gridInterp.cpp -o $(INTERP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
+	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/gridInterp.cpp -o $(INTERP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(CURDIR)/$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
 
 # Compile a wrapper that interpolates overset data to a single grid [static linking]
 .PHONY: interp_static
