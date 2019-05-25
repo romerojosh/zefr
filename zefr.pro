@@ -19,6 +19,7 @@ SOURCES += \
     src/faces.cpp \
     src/funcs.cpp \
     src/geometry.cpp \
+    src/gridInterp.cpp \
     src/hexas.cpp \
     src/input.cpp \
     src/multigrid.cpp \
@@ -79,6 +80,7 @@ DISTFILES += \
     include/zefr.i \
     run/zefrWrap.py \
     Makefile \
+    configfiles/template.config \
     run/runfile.dict \
     run/run_zefr.py \
     run/zefrInterface.py \
