@@ -5,7 +5,7 @@
 
 void initialize_overset(Zefr *z, InputStruct &inp);
 void setup_overset_data(Zefr *z, InputStruct &inp);
-void setup_grid0_unblank(Zefr* z, InputStruct& inp);
+void setup_grid1_unblank(Zefr* z, InputStruct& inp);
 
 int main(int argc, char *argv[])
 {
@@ -25,10 +25,12 @@ int main(int argc, char *argv[])
   {
     if (rank == 0)
     {
-      std::cout << "\nUnblank all elements in the overset Grid 0 using data from other grids.\n" << std::endl;
+      std::cout << "\nUnblank all elements in the 2nd overset grid using data from all other grids.\n" << std::endl;
       std::cout << "This is a single-use-case function to 'unblank' a single background" << std::endl;
       std::cout << "grid using interpolated data from all overlapping grids [primarily" << std::endl;
       std::cout << "for post-processing the overset Taylor-Green test case]." << std::endl;
+      std::cout << "\nIt is assumed that the first grid is the moving inner grid, and the" << std::endl;
+      std::cout << "second grid is the static background grid." << std::endl;
       std::cout << "\nUsage:\n  " << argv[0] << " input_file <nproc_grid1> <nproc_grid2> ...\n" << std::endl;
     }
     MPI_Finalize();
@@ -75,7 +77,7 @@ int main(int argc, char *argv[])
 
   z->restart_solution();
 
-  setup_grid0_unblank(z, inp);
+  setup_grid1_unblank(z, inp);
 
   z->do_unblank();
 
@@ -162,7 +164,7 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
   tioga_performconnectivity_();
 }
 
-void setup_grid0_unblank(Zefr* z, InputStruct& inp)
+void setup_grid1_unblank(Zefr* z, InputStruct& inp)
 {
   if (inp.grank == 0)
     std::cout << "Setting all Grid 0 elements to 'normal'" << std::endl;
@@ -170,7 +172,7 @@ void setup_grid0_unblank(Zefr* z, InputStruct& inp)
   BasicGeo geo = zefr::get_basic_geo_data();
   ExtraGeo geoAB = zefr::get_extra_geo_data();
 
-  if (inp.gridID == 0)
+  if (inp.gridID == 1)
   {
     for (int i = 0; i < geo.nCellsTot; i++)
       geoAB.iblank_cell[i] = 1;
