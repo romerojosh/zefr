@@ -79,69 +79,13 @@ int main(int argc, char *argv[])
 
   z->do_unblank();
 
-  // setup cell/face iblank data for use on GPU
-  if (nGrids > 1 && zefr::use_gpus())
-    z->update_iblank_gpu();
-
-  // Output initial solution and grid
-  if (!inp.restart)
-    z->write_solution();
+  z->write_solution();
 
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // Run the solver loop now
-  for (int iter = inp.initIter+1; iter <= inp.n_steps; iter++)
-  {
-    if (!inp.adapt_dt)
-    {
-      // Can use the new-style method [no callbacks within ZEFR]
-      for (int stage = 0; stage < inp.nStages; stage++)
-      {
-        z->do_rk_stage_start(iter,stage);
-
-        if (nGrids > 1)
-          tioga_dataupdate_ab(5, 0);
-
-        z->do_rk_stage_mid(iter,stage);
-
-        z->do_rk_stage_finish(iter,stage);
-      }
-    }
-    else
-    {
-      // Adaptive time stepping -> stick to previous method
-      z->do_step();
-    }
-
-    if (inp.tavg)
-    {
-      bool do_accum = (iter%inp.tavg_freq == 0 or iter == inp.initIter+1);
-      bool do_write = (iter%inp.write_tavg_freq == 0 || iter == inp.n_steps);
-
-      if (do_accum || do_write)
-        z->update_averages();
-
-      if (do_write)
-        z->write_averages();
-    }
-
-    if (inp.report_freq > 0 and (iter%inp.report_freq == 0 or iter == inp.initIter+1 or iter == inp.n_steps))
-      z->write_residual();
-
-    if (inp.write_freq > 0 and (iter%inp.write_freq == 0 or iter == inp.n_steps))
-      z->write_solution();
-
-    if (inp.force_freq > 0 and (iter%inp.force_freq == 0 or iter == inp.n_steps))
-      z->write_forces();
-
-    if (inp.error_freq > 0 and (iter%inp.error_freq == 0 or iter == inp.n_steps))
-      z->write_error();
-  }
-
   zefr::finalize();
 
-  if (nGrids > 1)
-    tioga_delete_();
+  tioga_delete_();
 
   MPI_Finalize();
 
