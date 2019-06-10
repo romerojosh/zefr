@@ -182,7 +182,6 @@ SWIG_INCS = -I$(strip $(PYTHON_INC_DIR))/ -I$(strip $(MPI4PY_INC_DIR))/ -I$(stri
 SWIG_LIBS =
 WRAP_TARGET = $(BINDIR)/zefrWrap
 INTERP_TARGET = $(BINDIR)/gridInterp
-INCS += -I$(strip $(TIOGA_ROOT))/include
 
 INCS += -I$(CURDIR)/include
 
@@ -212,7 +211,7 @@ shared: $(SOBJS)
 
 # Compile the zefrWrap wrapper program using dynamic linking
 .PHONY: wrap
-wrap: INCS += -I$(strip $(TIOGA_ROOT))/
+wrap: INCS += -I$(strip $(TIOGA_ROOT))/ -I$(strip $(TIOGA_ROOT))/include
 wrap: shared
 	echo $(TIOGA_CONFIG)
 	$(MAKE) -C external/tioga/ shared CONFIG=$(TIOGA_CONFIG)
@@ -220,21 +219,21 @@ wrap: shared
 
 # Compile the zefrWrap wrapper program using static linking
 .PHONY: wrap_static
-wrap_static: INCS += -I$(strip $(TIOGA_ROOT))/
+wrap_static: INCS += -I$(strip $(TIOGA_ROOT))/ -I$(strip $(TIOGA_ROOT))/include
 wrap_static: static
 	$(MAKE) -C external/tioga/ lib CONFIG=$(TIOGA_CONFIG)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp $(BINDIR)/libzefr.a $(strip $(TIOGA_ROOT))/bin/libtioga.a -o $(WRAP_TARGET) $(LIBS)
 
 # Compile a wrapper that interpolates overset data to a single grid [dynamic linking]
 .PHONY: interp
-interp: INCS += -I$(strip $(TIOGA_ROOT))/
+interp: INCS += -I$(strip $(TIOGA_ROOT))/ -I$(strip $(TIOGA_ROOT))/include
 interp: shared
 	$(MAKE) -C external/tioga/ shared CONFIG=$(TIOGA_CONFIG)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/gridInterp.cpp -o $(INTERP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(CURDIR)/$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
 
 # Compile a wrapper that interpolates overset data to a single grid [static linking]
 .PHONY: interp_static
-interp_static: INCS += -I$(strip $(TIOGA_ROOT))/
+interp_static: INCS += -I$(strip $(TIOGA_ROOT))/ -I$(strip $(TIOGA_ROOT))/include
 interp_static: static
 	$(MAKE) -C external/tioga/ lib CONFIG=$(TIOGA_CONFIG)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/gridInterp.cpp $(BINDIR)/libzefr.a $(strip $(TIOGA_ROOT))/bin/libtioga.a -o $(INTERP_TARGET) $(LIBS)
