@@ -2304,8 +2304,8 @@ void Faces::recv_dU_data()
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
-    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) continue;
-    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1) continue;
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) {printf("skip recv pos\n"); fflush(stdout); continue;}
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1){ printf("skip recv neg\n"); fflush(stdout); continue;}
 
     printf("rank %d recv %d\n", input->rank, recvRank);
 #ifndef _CUDA_AWARE
@@ -2323,8 +2323,8 @@ void Faces::recv_dU_data()
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
-    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == -1) continue;
-    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) continue;
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == -1) {printf("skip send pos\n"); fflush(stdout); continue;}
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) {printf("skip send neg\n"); fflush(stdout); continue;}
 
     /* Send buffer to paired rank */
     printf("rank %d send %d\n", input->rank, sendRank);
@@ -2340,10 +2340,13 @@ void Faces::recv_dU_data()
 
   /* Wait for comms to finish */
   printf("rank %d at rreqs wait\n", input->rank);
+  fflush(stdout);
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
   printf("rank %d at sreqs wait\n", input->rank);
+  fflush(stdout);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
   printf("rank %d at post wait\n", input->rank);
+  fflush(stdout);
 
   /* Unpack buffer */
 #ifdef _CPU
