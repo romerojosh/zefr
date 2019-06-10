@@ -1,7 +1,7 @@
 # Geometry:
 nDims    3
 overset  true
-meshfile P6/hex52.pyfrm
+meshfile P4/hex52.pyfrm
 overset_grids  P2/hex24.pyfrm  P6/hex52.pyfrm
 
 # Boundary Conditions
@@ -16,7 +16,7 @@ motion   0
 spt_type Legendre
 
 # Timestepping:
-n_steps   750000
+n_steps   1000
 dt_scheme RK54      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 adapt_dt  1         (1 = use adaptive error-based timestepping)
@@ -41,12 +41,12 @@ err_rtol  1e-5
 # Note: You can suppress output by setting freq to zero. 
 #output_prefix  overtest
 output_prefix  tg
-write_freq     500
-write_pyfr     1
+write_freq     0
+write_pyfr     0
 write_paraview 0
 plot_surfaces  0
 plot_overset   0
-report_freq    200
+report_freq    10
 res_type       1
 force_freq     0
 error_freq     0
