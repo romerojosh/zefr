@@ -2307,6 +2307,7 @@ void Faces::recv_dU_data()
     if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) continue;
     else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1) continue;
 
+    printf("rank %d recv %d\n", input->rank, recvRank);
 #ifndef _CUDA_AWARE
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
 #else
@@ -2326,6 +2327,7 @@ void Faces::recv_dU_data()
     else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) continue;
 
     /* Send buffer to paired rank */
+    printf("rank %d send %d\n", input->rank, sendRank);
 #ifndef _CUDA_AWARE
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
 #else
@@ -2337,8 +2339,11 @@ void Faces::recv_dU_data()
 #endif
 
   /* Wait for comms to finish */
+  printf("rank %d at rreqs wait\n", input->rank);
   MPI_Waitall(rreqs.size(), rreqs.data(), MPI_STATUSES_IGNORE);
+  printf("rank %d at sreqs wait\n", input->rank);
   MPI_Waitall(sreqs.size(), sreqs.data(), MPI_STATUSES_IGNORE);
+  printf("rank %d at post wait\n", input->rank);
 
   /* Unpack buffer */
 #ifdef _CPU
