@@ -2309,7 +2309,7 @@ void Faces::recv_dU_data()
     if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) {printf("rank %d skip recv %d pos\n", input->rank, recvRank); fflush(stdout); continue;}
     else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1){printf("rank %d skip recv %d neg\n", input->rank, recvRank); fflush(stdout); continue;}
 
-    printf("rank %d recv %d\n", input->rank, recvRank);
+    printf("rank %d recv %d flip_beta %d\n", input->rank, recvRank, (int) geo->flip_beta(fpts(0)));
     fflush(stdout);
 #ifndef _CUDA_AWARE
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
@@ -2330,7 +2330,7 @@ void Faces::recv_dU_data()
     else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) {printf("rank %d skip send %d neg\n", input->rank, sendRank); fflush(stdout); continue;}
 
     /* Send buffer to paired rank */
-    printf("rank %d send %d\n", input->rank, sendRank);
+    printf("rank %d send %d flip_beta %d\n", input->rank, sendRank, (int) geo->flip_beta(fpts(0)));
     fflush(stdout);
 #ifndef _CUDA_AWARE
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
