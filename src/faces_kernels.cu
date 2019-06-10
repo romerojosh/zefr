@@ -1203,7 +1203,7 @@ __global__
 void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm, 
     const mdvector_gpu<double> norm, double beta, unsigned int nFpts,
     const mdvector_gpu<char> LDG_bias, unsigned int startFpt, unsigned int endFpt,
-    const mdvector_gpu<char> flip_beta, bool overset = false, const int* iblank = NULL)
+    const mdvector_gpu<signed char> flip_beta, bool overset = false, const int* iblank = NULL)
 {
     const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -1273,7 +1273,7 @@ void compute_common_U_LDG(const mdview_gpu<double> U, mdview_gpu<double> Ucomm,
 void compute_common_U_LDG_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &Ucomm, 
     mdvector_gpu<double> &norm, double beta, unsigned int nFpts, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, mdvector_gpu<char> &LDG_bias, unsigned int startFpt,
-    unsigned int endFpt, mdvector_gpu<char> &flip_beta, bool overset, int* iblank) 
+    unsigned int endFpt, mdvector_gpu<signed char> &flip_beta, bool overset, int* iblank) 
 {
   unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
@@ -1451,7 +1451,7 @@ void compute_common_F(mdview_gpu<double> U, mdview_gpu<double> U_ldg, mdview_gpu
     mdvector_gpu<double> norm_gfpts, mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<double> diffCo,
     mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias,  mdvector_gpu<double> dA_in, mdvector_gpu<double> Vg, double AdvDiff_D, double gamma, double rus_k, 
     double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nFpts_int,
-    unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<char> flip_beta, bool motion, bool overset, int* iblank)
+    unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<signed char> flip_beta, bool motion, bool overset, int* iblank)
 {
 
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
@@ -1575,7 +1575,7 @@ void compute_common_F_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &U_ldg, 
     mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias,  mdvector_gpu<double> &dA, mdvector_gpu<double>& Vg, double AdvDiff_D, double gamma, double rus_k, 
     double mu, double prandtl, double rt, double c_sth, bool fix_vis, double beta, double tau, unsigned int nFpts, unsigned int nFpts_int, unsigned int nVars, 
     unsigned int nDims, unsigned int equation, unsigned int fconv_type, unsigned int fvisc_type, unsigned int startFpt, unsigned int endFpt, 
-    bool viscous, mdvector_gpu<char> &flip_beta, bool motion, bool overset, int* iblank)
+    bool viscous, mdvector_gpu<signed char> &flip_beta, bool motion, bool overset, int* iblank)
 {
   unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;
@@ -1850,7 +1850,7 @@ void compute_common_dFdU(mdview_gpu<double> U, mdview_gpu<double> dU, mdview_gpu
     mdvector_gpu<double> P, mdvector_gpu<double> AdvDiff_A, mdvector_gpu<double> norm_gfpts, 
     mdvector_gpu<double> waveSp_gfpts, mdvector_gpu<char> rus_bias, mdvector_gpu<char> LDG_bias, 
     mdvector_gpu<double> dA_in, double AdvDiff_D, double gamma, double rus_k, double mu, double prandtl, 
-    double beta, double tau, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<char> flip_beta)
+    double beta, double tau, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<signed char> flip_beta)
 {
   const unsigned int fpt = blockDim.x * blockIdx.x + threadIdx.x + startFpt;
 
@@ -1972,7 +1972,7 @@ void compute_common_dFdU_wrapper(mdview_gpu<double> &U, mdview_gpu<double> &dU, 
     mdvector_gpu<double> &P, mdvector_gpu<double> &AdvDiff_A, mdvector_gpu<double> &norm, mdvector_gpu<double> &waveSp, 
     mdvector_gpu<char> &rus_bias, mdvector_gpu<char> &LDG_bias, mdvector_gpu<double> &dA, double AdvDiff_D, double gamma, 
     double rus_k, double mu, double prandtl, double beta, double tau, unsigned int nVars, unsigned int nDims, 
-    unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<char> &flip_beta)
+    unsigned int equation, unsigned int startFpt, unsigned int endFpt, bool viscous, mdvector_gpu<signed char> &flip_beta)
 {
   unsigned int threads = 128;
   unsigned int blocks = ((endFpt - startFpt + 1) + threads - 1)/threads;

@@ -48,6 +48,7 @@ template void allocate_device_data<double*>(double** &device_data, unsigned int 
 template void allocate_device_data<unsigned int>(unsigned int* &device_data, unsigned int size);
 template void allocate_device_data<int>(int* &device_data, unsigned int size);
 template void allocate_device_data<char>(char* &device_data, unsigned int size);
+template void allocate_device_data<signed char>(signed char* &device_data, unsigned int size);
 template void allocate_device_data<MotionVars>(MotionVars* &device_data, unsigned int size);
 
 
@@ -63,6 +64,7 @@ template void free_device_data<double*>(double** &device_data);
 template void free_device_data<unsigned int>(unsigned int* &device_data);
 template void free_device_data<int>(int* &device_data);
 template void free_device_data<char>(char* &device_data);
+template void free_device_data<signed char>(signed char* &device_data);
 template void free_device_data<MotionVars>(MotionVars* &device_data);
 
 template <typename T>
@@ -85,6 +87,7 @@ template void copy_to_device<double*>(double** device_data, double* const* host_
 template void copy_to_device<unsigned int>(unsigned int* device_data, const unsigned int* host_data, unsigned int size, int stream);
 template void copy_to_device<int>(int* device_data, const int* host_data,  unsigned int size, int stream);
 template void copy_to_device<char>(char* device_data, const char* host_data,  unsigned int size, int stream);
+template void copy_to_device<signed char>(signed char* device_data, const signed char* host_data,  unsigned int size, int stream);
 template void copy_to_device<MotionVars>(MotionVars* device_data, const MotionVars* host_data,  unsigned int size, int stream);
 
 template <typename T>
@@ -107,6 +110,7 @@ template void copy_from_device<double*>(double** host_data, double* const* devic
 template void copy_from_device<unsigned int>(unsigned int* host_data, const unsigned int* device_data, unsigned int size, int stream);
 template void copy_from_device<int>(int* host_data, const int* device_data, unsigned int size, int stream);
 template void copy_from_device<char>(char* host_data, const char* device_data, unsigned int size, int stream);
+template void copy_from_device<signed char>(signed char* host_data, const signed char* device_data, unsigned int size, int stream);
 
 void sync_stream(unsigned int stream)
 {

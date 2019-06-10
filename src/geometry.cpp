@@ -3374,7 +3374,7 @@ void setup_flip_beta(InputStruct *input, GeoStruct &geo)
     int pairedRank = entry.first;
     const auto &fpts = entry.second;
 
-    char val = 0;
+    signed char val = 0;
     if ((input->rank + pairedRank) % 2)
     {
       val = (input->rank > pairedRank) ? 1 : -1;

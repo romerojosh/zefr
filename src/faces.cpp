@@ -1381,7 +1381,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
 
       // Sidestep need for overset gradient interp
       // NOTE: iflag due to TIOGA only updating U, not U_ldg [CPU-specific issue]
-      char iflag = 0;
+      signed char iflag = 0;
       if (input->overset && geo->iblank_face(face) == FRINGE)
       {
         if (geo->iblank_cell(geo->face2eles(face,0)) == NORMAL)
@@ -1494,7 +1494,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
 
     // Sidestep need for overset gradient interp
     // NOTE: iflag due to TIOGA only updating U, not U_ldg [CPU-specific issue]
-    char iflag = 0;
+    signed char iflag = 0;
     if (input->overset && geo->iblank_face(face) == FRINGE)
     {
       if (geo->iblank_cell(geo->face2eles(face,0)) == NORMAL)

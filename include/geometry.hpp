@@ -142,7 +142,7 @@ struct GeoStruct
   unsigned int nMpiFaces;
   std::vector<int> procR, faceID_R, gIC_R, mpiLocF, mpiRotR, mpiLocF_R, mpiPeriodic;
 #endif
-  mdvector<char> flip_beta;
+  mdvector<signed char> flip_beta;
 
 #ifdef _GPU
     std::map<ELE_TYPE, mdvector_gpu<int>> fpt2gfptBT_d;
@@ -150,7 +150,7 @@ struct GeoStruct
     std::map<ELE_TYPE, mdvector_gpu<char>> fpt2gfpt_slotBT_d;
     mdvector_gpu<char> gfpt2bnd_d;
     mdvector_gpu<double> coords_init_d, coord_nodes_d, grid_vel_nodes_d;
-    mdvector_gpu<char> flip_beta_d;
+    mdvector_gpu<signed char> flip_beta_d;
     mdvector_gpu<int> faceType_d;
 #ifdef _MPI
   std::map<unsigned int, mdvector_gpu<unsigned int>> fpt_buffer_map_d;
