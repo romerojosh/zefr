@@ -16,10 +16,10 @@ motion   0
 spt_type Legendre
 
 # Timestepping:
-n_steps   1000
-dt_scheme RK54      (Euler, RK44, RK54)
+n_steps   1
+dt_scheme Euler      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
-adapt_dt  1         (1 = use adaptive error-based timestepping)
+adapt_dt  0         (1 = use adaptive error-based timestepping)
 dt        0.0006
 res_tol   1e-16
 tfinal    169.03
@@ -46,7 +46,7 @@ write_pyfr     0
 write_paraview 0
 plot_surfaces  0
 plot_overset   0
-report_freq    10
+report_freq    1
 res_type       1
 force_freq     0
 error_freq     0

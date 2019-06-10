@@ -2300,14 +2300,17 @@ void Faces::recv_dU_data()
 {
 #ifdef _GPU
   int ridx = 0;
+  printf("rank %d fpt_buffer_map.size() %d\n", input->rank, (int) geo->fpt_buffer_map.size());
+  fflush(stdout);
   for (const auto &entry : geo->fpt_buffer_map)
   {
     int recvRank = entry.first;
     const auto &fpts = entry.second;
-    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) {printf("skip recv pos\n"); fflush(stdout); continue;}
-    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1){ printf("skip recv neg\n"); fflush(stdout); continue;}
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == 1) {printf("rank %d skip recv %d pos\n", input->rank, recvRank); fflush(stdout); continue;}
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == -1){printf("rank %d skip recv %d neg\n", input->rank, recvRank); fflush(stdout); continue;}
 
     printf("rank %d recv %d\n", input->rank, recvRank);
+    fflush(stdout);
 #ifndef _CUDA_AWARE
     MPI_Irecv(U_rbuffs[recvRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, recvRank, 0, myComm, &rreqs[ridx]);
 #else
@@ -2323,11 +2326,12 @@ void Faces::recv_dU_data()
   {
     int sendRank = entry.first;
     auto &fpts = entry.second;
-    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == -1) {printf("skip send pos\n"); fflush(stdout); continue;}
-    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) {printf("skip send neg\n"); fflush(stdout); continue;}
+    if (input->ldg_b == 0.5 and geo->flip_beta(fpts(0)) == -1) {printf("rank %d skip send %d pos\n", input->rank, sendRank); fflush(stdout); continue;}
+    else if (input->ldg_b == -0.5 and geo->flip_beta(fpts(0)) == 1) {printf("rank %d skip send %d neg\n", input->rank, sendRank); fflush(stdout); continue;}
 
     /* Send buffer to paired rank */
     printf("rank %d send %d\n", input->rank, sendRank);
+    fflush(stdout);
 #ifndef _CUDA_AWARE
     MPI_Isend(U_sbuffs[sendRank].data(), (unsigned int) fpts.size() * nVars * nDims, MPI_DOUBLE, sendRank, 0, myComm, &sreqs[sidx]);
 #else
