@@ -121,6 +121,11 @@ def tg_int(meshf, solnfs):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print('Usage:')
+        print('  python3 {:s}  meshfile.pyfrm  "solution-*.pyfrs"'.format(sys.argv[0]))
+        exit(1)
+
     # Open the mesh and solutions
     meshf = NativeReader(sys.argv[1])
     solnfs = [NativeReader(arg) for arg in glob.glob(sys.argv[2])]
