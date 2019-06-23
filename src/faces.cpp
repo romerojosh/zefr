@@ -53,8 +53,8 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
       /* Default: Rusanov BC Ghost, LDG BC Prescribed */
       LDG_bias(fpt) = 1;
 
-      /* Implicit Default: Rusanov BC Prescribed, LDG BC Prescribed */
-      if (input->implicit_method)
+      /* Rusanov BC Prescribed, LDG BC Prescribed */
+      if (input->bc_prescribed)
       {
         rus_bias(fpt) = 1;
       }

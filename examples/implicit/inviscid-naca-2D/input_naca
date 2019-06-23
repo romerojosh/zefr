@@ -6,6 +6,7 @@ meshfile naca_32x32_b4.msh
 mesh_bound  char  char
 mesh_bound  wall_slip  wall_slip
 mesh_bound  fluid  fluid
+bc_prescribed 1
 
 # Solver:
 order     4
@@ -14,27 +15,37 @@ viscous  0
 spt_type Legendre
 
 # Timestepping:
-n_steps 100000
+n_steps 100
 res_tol 1e-11
-dt_scheme RK44      (Euler, RK44, RK54, MCGS)
-dt_type   2         (0 = Supplied, 1 = Global, 2 = Local)
-dt	  0.01
-CFL	  0.35
+dt_scheme Steady
 
-p_multi 1
-mg_levels 4 3 1 0
-mg_steps  2 1 1 5
+# Pseudo Timestepping
+pseudo_time 1
+remove_deltaU 1
+dtau_type 2
+CFL_tau 3.0
 
-restart 0
-restart_file inviscid_naca_2D_PMG/inviscid_naca_2D_PMG_000002000.vtu
+# Adapt dtau
+adapt_dtau 1
+dtau_ratio_max 1e5
+dtau_growth_rate 1.0
+
+# Implicit
+KPF_Jacobian 1
+report_NMconv_freq 1
+iterative_method MCGS
+nColors 2
+iterBM_max 100
+backsweep 0
+linear_solver INV
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix inviscid_naca_2D_PMG
-write_freq    100000
-report_freq   100
+output_prefix naca
+write_freq    100
+report_freq   0
 res_type      1
-force_freq    1000
+force_freq    10
 error_freq    0
 nQpts1D       10
 
