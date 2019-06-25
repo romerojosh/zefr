@@ -1,6 +1,6 @@
 # Geometry:
 nDims    3
-meshfile channel_8x4x4.msh
+meshfile channel_2x1x1.msh
 
 # Boundary Conditions
 mesh_bound xnegative periodic
@@ -19,7 +19,7 @@ spt_type Legendre
 
 # Timestepping:
 n_steps 1000000
-res_tol 1e-12
+res_tol 1e-11
 res_field 2
 dt_scheme RK44
 dt_type 1
@@ -28,7 +28,7 @@ CFL 0.5
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix couette_n4_p2
+output_prefix couette_n1_p2
 write_freq    1000000
 report_freq   1000
 res_type      1

@@ -1,6 +1,6 @@
 # Geometry:
 nDims    3
-meshfile channel_16x8x8.msh
+meshfile channel_8x4x4.msh
 
 # Boundary Conditions
 mesh_bound xnegative periodic
@@ -31,7 +31,7 @@ mg_steps  2 1 5
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix couette_n8_p2
+output_prefix couette_n4_p2_pmg
 write_freq    600000
 report_freq   100
 res_type      1

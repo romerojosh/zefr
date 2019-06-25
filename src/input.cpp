@@ -129,7 +129,6 @@ InputStruct read_input_file(std::string inputfile)
   }
 
   read_param(f, "restart", input.restart, false);
-  read_param(f, "restart_file", input.restart_file, std::string(""));
   read_param(f, "restart_case", input.restart_case, std::string(""));
   read_param(f, "restart_type", input.restart_type, (unsigned int)0);
   read_param(f, "restart_iter", input.restart_iter, (unsigned int)0);

@@ -27,7 +27,7 @@ mg_steps  2 1 1 5
 
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix naca_PMG
+output_prefix naca_pmg
 write_freq    100000
 report_freq   100
 res_type      1

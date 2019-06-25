@@ -18,25 +18,20 @@ viscous  1
 spt_type Legendre
 
 # Timestepping:
-n_steps 600000
-res_tol 1e-11
+n_steps 310000
 dt_scheme RK44
 dt_type 1
 dt 5e-4
 CFL 0.5
 
-p_multi 1
-mg_levels 3 2 1 0
-mg_steps  2 1 1 5
-
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 output_prefix couette_n4_p3
-write_freq    600000
-report_freq   100
+write_freq    310000
+report_freq   1000
 res_type      1
 force_freq    0
-error_freq    1000
+error_freq    10000
 err_field     4
 test_case     2
 nQpts1D       10
