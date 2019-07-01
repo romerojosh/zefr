@@ -1,0 +1,82 @@
+# Geometry:
+nDims    3
+meshfile sd7003_P6/sd7003_8deg_3D_pyfr.pyfrm
+
+# Boundary Conditions
+mesh_bound farfield char
+mesh_bound periodic  periodic
+mesh_bound wall  wall_ns_adi
+mesh_bound fluid fluid
+
+# Solver:
+order     4
+equation EulerNS    (AdvDiff, EulerNS)
+viscous  1
+spt_type Legendre
+
+# Timestepping:
+n_steps 4000000
+dt_scheme RK54      (Euler, RK44, RK54)
+dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
+adapt_dt  1         (1 = use adaptive error-based timestepping)
+dt        1e-8
+res_tol   1e-16
+tfinal    169.03
+
+# Restarting
+restart  0
+restart_type 2
+restart_case sd7003
+restart_iter 1000
+
+# Adaptive time-stepping variables
+safety_factor  .9
+max_factor  2.5
+min_factor  .33
+err_atol  1e-5
+err_rtol  1e-5
+
+# Reporting:
+# Note: You can suppress output by setting freq to zero. 
+output_prefix sd7003
+write_freq    1000
+write_pyfr    1
+report_freq   500
+res_type      1
+force_freq    500
+error_freq    0
+nQpts1D       1
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.5
+ldg_tau    0.1
+
+# Equation Specific Parameters:
+ic_type  0         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+
+# Euler/Navier-Stokes
+T_gas 291.15
+gamma 1.4
+R     286.9
+mu    1.827E-5
+prandtl 0.72
+S       120
+
+# Navier-Stokes specific
+fix_vis 1
+mach_fs 0.2
+Re_fs 60000
+L_fs 1
+T_fs 300
+nx_fs 1
+ny_fs 0
+nz_fs 0
+
+T_wall 300    # Used for isothermal wall boundary only.          
+mach_wall 0.2
+nx_wall 1
+ny_wall 0
+nz_wall 0
