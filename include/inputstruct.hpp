@@ -114,8 +114,8 @@ struct InputStruct
 {
   unsigned int equation, dt_type, CFL_type = 0, ic_type, nDims, nQpts1D, n_steps, order;
   unsigned int report_freq, write_freq, force_freq, turb_stat_freq, res_type, error_freq, test_case, err_field, res_field, FMG_vcycles;
-  std::string output_prefix, meshfile, spt_type, dt_scheme, restart_file, mg_cycle;
-  bool viscous, p_multi, restart, fix_vis, squeeze, source, disable_nondim, adapt_dt;
+  std::string output_prefix, meshfile, spt_type, dt_scheme, mg_cycle;
+  bool viscous, p_multi, restart, fix_vis, squeeze, source, disable_nondim, adapt_dt, bc_prescribed;
   std::vector<unsigned int> mg_levels, mg_steps;
   unsigned int fconv_type, fvisc_type;
   double rus_k, ldg_b, ldg_tau;

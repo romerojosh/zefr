@@ -1,0 +1,73 @@
+# Geometry:
+nDims    3
+meshfile channel_4x2x2.msh
+
+# Boundary Conditions
+mesh_bound xnegative periodic
+mesh_bound xpositive periodic
+mesh_bound ynegative wall_ns_iso
+mesh_bound ypositive wall_ns_iso_move
+mesh_bound znegative periodic
+mesh_bound zpositive periodic
+mesh_bound fluid fluid
+
+# Solver:
+order     3
+equation EulerNS    (AdvDiff, EulerNS)
+viscous  1
+spt_type Legendre
+
+# Timestepping:
+n_steps 1000000
+res_tol 1e-13
+res_field 2
+dt_scheme RK44
+dt_type 1
+dt 5e-4
+CFL 0.5
+
+# Reporting:
+# Note: You can suppress output by setting freq to zero. 
+output_prefix couette_n2_p3
+write_freq    1000000
+report_freq   1000
+res_type      1
+force_freq    0
+error_freq    10000
+err_field     4
+test_case     2
+nQpts1D       10
+
+# Riemann Solver:
+fconv_type Rusanov
+fvisc_type LDG
+rus_k      0.0
+ldg_b      0.5
+ldg_tau    0.1
+
+# Equation Specific Parameters:
+ic_type  1         (0 = Uniform, 1 = Functional (defined in funcs.cpp))
+
+# Euler/Navier-Stokes
+T_gas 291.15
+gamma 1.4
+R     286.9
+mu    1.827E-5
+prandtl 0.72
+S       120
+
+# Navier-Stokes specific
+fix_vis 1
+mach_fs 0.2
+Re_fs 200
+L_fs 1
+T_fs 300
+nx_fs 1
+ny_fs 0
+nz_fs 0
+
+T_wall 300    # Used for isothermal wall boundary only.          
+mach_wall 0.2
+nx_wall 1
+ny_wall 0
+nz_wall 0

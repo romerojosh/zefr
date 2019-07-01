@@ -48,6 +48,7 @@ InputStruct read_input_file(std::string inputfile)
     std::transform(tmp2.begin(), tmp2.end(), tmp2.begin(), ::tolower);
     input.meshBounds[tmp1] = tmp2;
   }
+  read_param(f, "bc_prescribed", input.bc_prescribed, false);
 
   read_param(f, "order", input.order);
   read_param(f, "equation", str, std::string("EulerNS"));
@@ -128,7 +129,6 @@ InputStruct read_input_file(std::string inputfile)
   }
 
   read_param(f, "restart", input.restart, false);
-  read_param(f, "restart_file", input.restart_file, std::string(""));
   read_param(f, "restart_case", input.restart_case, std::string(""));
   read_param(f, "restart_type", input.restart_type, (unsigned int)0);
   read_param(f, "restart_iter", input.restart_iter, (unsigned int)0);

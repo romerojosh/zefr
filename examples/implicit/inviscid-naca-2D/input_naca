@@ -6,6 +6,7 @@ meshfile naca_32x32_b4.msh
 mesh_bound  char  char
 mesh_bound  wall_slip  wall_slip
 mesh_bound  fluid  fluid
+bc_prescribed 1
 
 # Solver:
 order     4
@@ -38,12 +39,9 @@ iterBM_max 100
 backsweep 0
 linear_solver INV
 
-restart 0
-restart_file inviscid_naca_2D/inviscid_naca_2D_000000010.vtu
-
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix inviscid_naca_2D
+output_prefix naca
 write_freq    100
 report_freq   0
 res_type      1

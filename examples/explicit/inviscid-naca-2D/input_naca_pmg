@@ -25,12 +25,9 @@ p_multi 1
 mg_levels 4 3 1 0
 mg_steps  2 1 1 5
 
-restart 0
-restart_file inviscid_naca_2D_PMG/inviscid_naca_2D_PMG_000002000.vtu
-
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
-output_prefix inviscid_naca_2D_PMG
+output_prefix naca_pmg
 write_freq    100000
 report_freq   100
 res_type      1
