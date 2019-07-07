@@ -48,7 +48,7 @@ void Faces::setup(unsigned int nDims, unsigned int nVars)
 
     unsigned int bnd_id = geo->gfpt2bnd(fpt - geo->nGfpts_int);
 
-    if (bnd_id != PERIODIC || bnd_id != OVERSET)
+    if (bnd_id != PERIODIC && bnd_id != OVERSET)
     {
       /* Default: Rusanov BC Ghost, LDG BC Prescribed */
       LDG_bias(fpt) = 1;
@@ -1382,7 +1382,7 @@ void Faces::compute_common_U(unsigned int startFpt, unsigned int endFpt)
       // Sidestep need for overset gradient interp
       // NOTE: iflag due to TIOGA only updating U, not U_ldg [CPU-specific issue]
       signed char iflag = 0;
-      if (input->overset && geo->iblank_face(face) == FRINGE)
+      if (input->overset && geo->iblank_face(face) <= FRINGE)
       {
         if (geo->iblank_cell(geo->face2eles(face,0)) == NORMAL)
         {
@@ -1495,7 +1495,7 @@ void Faces::LDG_flux(unsigned int startFpt, unsigned int endFpt)
     // Sidestep need for overset gradient interp
     // NOTE: iflag due to TIOGA only updating U, not U_ldg [CPU-specific issue]
     signed char iflag = 0;
-    if (input->overset && geo->iblank_face(face) == FRINGE)
+    if (input->overset && geo->iblank_face(face) <= FRINGE)
     {
       if (geo->iblank_cell(geo->face2eles(face,0)) == NORMAL)
       {

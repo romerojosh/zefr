@@ -6170,7 +6170,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
   for (unsigned int ff = 0; ff < geo.nFaces; ff++)
   {
     auto ftype = geo.faceType(ff);
-    if (geo.iblank_face(ff) == FRINGE)
+    if (geo.iblank_face(ff) <= FRINGE)
     {
       int ic1 = geo.face2eles(ff,0);
       int ic2 = geo.face2eles(ff,1);

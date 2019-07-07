@@ -760,7 +760,7 @@ void Zefr::get_cell_nodes_gpu(int* cellIDs, int nCells, int* nPtsCell, double *x
         xyz[ind + 3*k + d] = coords_type[etype][3*(nPtsCell[i]*ncell_type[etype] + k) + d];
 
     ncell_type[etype]++;
-    ind += nPtsCell[i];
+    ind += 3*nPtsCell[i];
   }
 #endif
 }
@@ -791,6 +791,8 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
   if (geo->ele_types.size() == 1)
   {
     solver->elesObjs[0]->get_interp_weights_gpu(cellIDs,nFringe,rst,weights);
+    sync_stream(3);
+    sync_stream(0);
     return;
   }
 
@@ -844,6 +846,7 @@ void Zefr::donor_frac_gpu(int* cellIDs, int nFringe, double* rst, double* weight
         rst_type_d[etype].data(),weights_type_d[etype].data());
 
     sync_stream(3);
+    sync_stream(0);  // added July 2019 -- not sure if applicable to mixed grids
 
     weights_type[etype] = weights_type_d[etype];
     donors_d.free_data();
@@ -894,7 +897,6 @@ void Zefr::update_iblank_gpu(void)
     if (geo->iblank_face(face) < 0 && geo->iblank_cell(icL) == HOLE)
     {
       geo->iblank_fpts(fpt) = -2;
-      geo->iblank_face(face) = -2;
     }
   }
 
