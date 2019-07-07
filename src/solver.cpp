@@ -7032,12 +7032,21 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
           if (std::isnan(res[n]))
           {
             std::cout << "NaN residual encountered at ele " << ele << ", spt " << spt << ", var " << n << std::endl;
+            printf("Solution point positions:\n");
             for (int i = 0; i < std::min(8,(int)e->nNodes); i++)
             {
               if (geo.nDims == 3)
                 printf("%f %f %f\n",e->nodes(i,0,ele),e->nodes(i,1,ele),e->nodes(i,2,ele));
               else
                 printf("%f %f\n",e->nodes(i,0,ele),e->nodes(i,1,ele));
+            }
+            printf("Element Solution Values:\n");
+            for (int i = 0; i < e->nSpts; i++)
+            {
+              printf("Spt %d: ", i);
+              for (int j = 0; j < e->nVars; j++)
+                printf("%.4f ", e->U_spts(spt, j, ele));
+              printf("\n");
             }
             ThrowException("NaN in residual");
           }
