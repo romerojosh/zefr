@@ -1,8 +1,9 @@
 # Geometry:
 nDims    3
 overset  true
-meshfile P3/hex16.pyfrm
+meshfile  unused.pyfrm
 overset_grids  P2/hex24.pyfrm  P6/hex52.pyfrm
+overset_grid_type  1  0
 
 # Boundary Conditions
 mesh_bound  periodic  periodic
@@ -20,19 +21,20 @@ n_steps   750000
 dt_scheme RK54      (Euler, RK44, RK54)
 dt_type   0         (0 = Supplied, 1 = Global, 2 = Local)
 adapt_dt  1         (1 = use adaptive error-based timestepping)
-dt        0.0006
+dt        0.001
+max_dt    0.01
 res_tol   1e-16
 tfinal    169.03
 
 # Restarting
 restart  0
 restart_type 2
-restart_case tg-rot
+restart_case tg-pong
 restart_iter 31000
 
 # Adaptive time-stepping variables
-safety_factor  .9
-max_factor  2.5
+safety_factor  .85
+max_factor  1.8
 min_factor  .33
 err_atol  1e-5
 err_rtol  1e-5
@@ -40,7 +42,7 @@ err_rtol  1e-5
 # Reporting:
 # Note: You can suppress output by setting freq to zero. 
 #output_prefix  overtest
-output_prefix  tg-rot
+output_prefix  tg-pong
 write_freq     500
 write_pyfr     1
 write_paraview 0
@@ -72,22 +74,6 @@ moveAz  1.884955
 moveFx  .0295803989
 moveFy  .0591607978
 moveFz  .0295803989
-# ====================================================
-# >>>>>> Rotating Taylor-Green <<<<<<
-motion_type  10
-# Initial Angular Velocity of Inner Grid 
-wx0  .1183215957
-wy0  .1183215957
-wz0  .2366431913
-# Initial Translational Velocity of Inner Grid 
-vx0  0.0
-vy0  0.0
-vz0  0.0
-# Object properties:
-mass  .2
-Ixx  1.e-4
-Iyy  1.e-4
-Izz  1.e-4
 # ====================================================
 
 # Riemann Solver:
