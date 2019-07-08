@@ -133,6 +133,7 @@ InputStruct read_input_file(std::string inputfile)
   read_param(f, "restart_type", input.restart_type, (unsigned int)0);
   read_param(f, "restart_iter", input.restart_iter, (unsigned int)0);
   read_param(f, "restart_npart", input.restart_npart, -1);
+  read_param(f, "restart_same_mesh", input.restart_same_mesh, true);
 
   read_param(f, "mg_cycle", input.mg_cycle, std::string("V"));
   read_param(f, "FMG_vcycles", input.FMG_vcycles, (unsigned int) 1);

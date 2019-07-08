@@ -147,6 +147,7 @@ struct InputStruct
   unsigned int restart_iter, restart_type;
   int restart_npart;
   std::string restart_case;
+  bool restart_same_mesh; //! Check to make sure the same mesh is used
   bool catch_signals = false;
   bool write_LHS, write_RHS;
   bool tavg;  //! Collect time-averaged quantities

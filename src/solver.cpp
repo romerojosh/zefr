@@ -221,6 +221,8 @@ void FRSolver::restart_solution(void)
     restart_paraview(input->restart_case, input->restart_iter, input->restart_npart);
   else if (input->restart_type == 2) // PyFR format
     restart_pyfr(input->restart_case, input->restart_iter);
+  else
+    ThrowException("restart_type not recognized!");
 
   // Process extra simulation data from the stats string
   process_restart_stats(geo.stats);
@@ -1008,7 +1010,12 @@ void FRSolver::restart_paraview(std::string restart_case, unsigned int restart_i
       std::string mesh_uuid;
       f >> mesh_uuid;
       if (mesh_uuid != geo.mesh_uuid)
-        ThrowException("Grid and solution (Gmsh & ParaView) mesh UUID's do not match!");
+      {
+        if (!input->restart_same_mesh)
+          std::cout << "Warning: Grid and solution (Gmsh & ParaView) mesh UUID's do not match!" << std::endl;
+        else
+          ThrowException("Grid and solution (Gmsh & ParaView) mesh UUID's do not match!");
+      }
     }
     if (param == "X_CG") // X,Y,Z offset of grid from mesh file
     {
@@ -4300,7 +4307,7 @@ void FRSolver::write_solution_pyfr(const std::string &_prefix)
 
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   std::string filename = input->output_prefix + "/" + prefix + "-" + std::to_string(iter) + ".pyfrs";
 
@@ -4689,6 +4696,7 @@ void FRSolver::restart_pyfr(std::string restart_case, unsigned restart_iter)
   filename = ss.str();
 
   current_iter = restart_iter;
+  this->restart_iter = restart_iter;
   input->iter = restart_iter;
   input->initIter = restart_iter;
 
@@ -4708,7 +4716,12 @@ void FRSolver::restart_pyfr(std::string restart_case, unsigned restart_iter)
   dset.close();
 
   if (mesh_uuid != geo.mesh_uuid)
-    ThrowException("Restart Error - Mesh and solution files do not mesh [mesh_uuid].");
+  {
+    if (!input->restart_same_mesh)
+      std::cout << "Warning: Grid and solution mesh UUID's do not match!" << std::endl;
+    else
+      ThrowException("Restart Error - Mesh and solution files do not mesh [mesh_uuid].");
+  }
 
   // Read the config string
   dset = file.openDataSet("config");
@@ -4902,8 +4915,6 @@ void FRSolver::process_restart_stats(const std::string &stats_str)
 void write_metadata(FRSolver* solver, InputStruct* input, GeoStruct& geo, std::ofstream &f)
 {
   unsigned int iter = input->iter;
-  if (input->p_multi)
-    iter /= input->mg_steps[0];
 
   /* Write comments for solution order, iteration number and flowtime */
   f << "<!-- ORDER " << input->order << " -->" << std::endl;
@@ -4960,7 +4971,7 @@ void FRSolver::write_solution(const std::string &_prefix)
 
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   if (input->gridID == 0 && input->rank == 0)
     std::cout << "Writing data to file for case " << prefix << "..." << std::endl;
@@ -4970,7 +4981,7 @@ void FRSolver::write_solution(const std::string &_prefix)
   std::stringstream ss;
 
   input->time = flow_time;
-  input->iter = current_iter;
+  input->iter = iter;
 
 #ifdef _MPI
   /* Write .pvtu file on rank 0 if running in parallel */
@@ -5639,7 +5650,7 @@ void FRSolver::write_averages(const std::string &_prefix)
 
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   std::string filename = input->output_prefix + "/" + prefix + "-" + std::to_string(iter) + ".pyfrs";
 
@@ -6006,7 +6017,7 @@ void FRSolver::write_overset_boundary(const std::string &_prefix)
 
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   if (input->gridID == 0 && input->rank == 0)
     std::cout << "Writing overset boundary surface data to " << prefix << "..." << std::endl;
@@ -6436,7 +6447,7 @@ void FRSolver::write_surfaces(const std::string &_prefix)
 
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   if (input->gridID == 0 && input->rank == 0)
     std::cout << "Writing surface data to " << prefix << "..." << std::endl;
@@ -6929,7 +6940,7 @@ void FRSolver::write_LHS(const std::string &_prefix)
 
     unsigned int iter = current_iter;
     if (input->p_multi)
-      iter = iter / input->mg_steps[0];
+      iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
     std::string prefix = _prefix;
     std::stringstream ss;
@@ -6967,7 +6978,7 @@ void FRSolver::write_RHS(const std::string &_prefix)
 
     unsigned int iter = current_iter;
     if (input->p_multi)
-      iter = iter / input->mg_steps[0];
+      iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
     std::string prefix = _prefix;
     std::stringstream ss;
@@ -6995,7 +7006,7 @@ void FRSolver::report_residuals(std::ofstream &f, std::chrono::high_resolution_c
 {
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   /* If running on GPU, copy out divergence */
 #ifdef _GPU
@@ -7339,7 +7350,7 @@ void FRSolver::report_forces(std::ofstream &f, double* tot_force)
 {
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   /* If using GPU, copy out solution, gradient and pressure */
 #ifdef _GPU
@@ -7487,7 +7498,7 @@ void FRSolver::report_error(std::ofstream &f)
 {
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   /* If using GPU, copy out solution */
 #ifdef _GPU
@@ -7835,7 +7846,7 @@ void FRSolver::report_turbulent_stats(std::ofstream &f)
 
   unsigned int iter = current_iter;
   if (input->p_multi)
-    iter = iter / input->mg_steps[0];
+    iter = (iter - restart_iter) / input->mg_steps[0] + restart_iter;
 
   double keng = 0; double enst = 0; double vol = 0;
 
