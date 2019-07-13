@@ -24,9 +24,9 @@ else
 	SWIG = $(SWIG_BIN)/swig -c++ -python
 endif
 
-CXXFLAGS = -std=c++11 -fPIC -Wno-unknown-pragmas #-fstack-protector-all
-CCFLAGS = -std=c99 -w -fPIC
-CUFLAGS = -std=c++11 --default-stream per-thread $(EXTRA_CUFLAGS) -Xcompiler -fPIC
+CXXFLAGS = -std=c++11 -fPIC -Wno-unknown-pragmas -fsigned-char #-fstack-protector-all
+CCFLAGS = -std=c99 -w -fPIC -fsigned-char
+CUFLAGS = -std=c++11 --default-stream per-thread $(EXTRA_CUFLAGS) -Xcompiler -fPIC -Xcompiler -fsigned-char
 DFLAGS =
 
 WARN_ON = -Wall -Wextra -Wconversion
