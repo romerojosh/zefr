@@ -5,7 +5,6 @@
 
 void initialize_overset(Zefr *z, InputStruct &inp);
 void setup_overset_data(Zefr *z, InputStruct &inp);
-void setup_grid1_unblank(Zefr* z, InputStruct& inp);
 
 int main(int argc, char *argv[])
 {
@@ -77,9 +76,10 @@ int main(int argc, char *argv[])
 
   z->restart_solution();
 
-  setup_grid1_unblank(z, inp);
-
   z->do_unblank();
+
+  const int nVars = (inp.equation == EulerNS ? 5 : 1);
+  tioga_unblank_all_grids(nVars);
 
   z->write_solution();
 
@@ -162,19 +162,4 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
 
   tioga_preprocess_grids_();
   tioga_performconnectivity_();
-}
-
-void setup_grid1_unblank(Zefr* z, InputStruct& inp)
-{
-  if (inp.grank == 0)
-    std::cout << "Setting all Grid 0 elements to 'normal'" << std::endl;
-
-  BasicGeo geo = zefr::get_basic_geo_data();
-  ExtraGeo geoAB = zefr::get_extra_geo_data();
-
-  if (inp.gridID == 1)
-  {
-    for (int i = 0; i < geo.nCellsTot; i++)
-      geoAB.iblank_cell[i] = 1;
-  }
 }
