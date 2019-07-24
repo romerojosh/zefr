@@ -144,7 +144,19 @@ void setup_overset_data(Zefr* z, InputStruct& inp)
                          cbs.get_q_spts, cbs.get_dq_spts);
 
   if (inp.motion)
+  {
     tioga_register_moving_grid_data(geoAB.grid_vel, geoAB.offset, geoAB.Rmat);
+  }
+  else
+  {
+    // Yeah yeah, I know, I'm going to be leaking memory here. Deal with it.
+    geoAB.grid_vel = (double*)calloc(geo.nnodes*3, sizeof(double));
+    geoAB.offset = (double*)calloc(geo.nnodes*3, sizeof(double));
+    // Just create an identity matrix
+    geoAB.Rmat = (double*)calloc(9, sizeof(double));
+    geoAB.Rmat[0] = 1.0;  geoAB.Rmat[4] = 1.0;  geoAB.Rmat[8] = 1.0;
+    tioga_register_moving_grid_data(geoAB.grid_vel, geoAB.offset, geoAB.Rmat);
+  }
 
   // If code was compiled to use GPUs, need additional callbacks
   if (zefr::use_gpus())
