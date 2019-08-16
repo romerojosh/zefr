@@ -592,7 +592,7 @@ void Zefr::get_gpu_geo_data(double*& coord_nodes, double*& coord_eles,
 #endif
 }
 
-double Zefr::get_u_spt(int ele, int spt, int var)
+double& Zefr::get_u_spt(int ele, int spt, int var)
 {
   int eleBT = geo->eleID_type(ele);
   return solver->elesObjs[solver->ele2elesObj(ele)]->U_spts(spt, var, eleBT);

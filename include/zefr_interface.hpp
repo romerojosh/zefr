@@ -74,7 +74,7 @@ struct CallbackFuncs
   double* (*get_dq_spts)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype);
   double* (*get_q_spts_d)(int &ele_stride, int &spt_stride, int &var_stride, int etype);
   double* (*get_dq_spts_d)(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype);
-  double (*get_q_spt)(int cellID, int spt, int var);
+  double& (*get_q_spt)(int cellID, int spt, int var);
   double (*get_grad_spt)(int cellID, int spt, int dim, int var);
   double& (*get_q_fpt)(int faceID, int fpt, int var);
   double& (*get_grad_fpt)(int faceID, int fpt, int dim, int var);
@@ -121,7 +121,7 @@ CallbackFuncs get_callback_funcs(void);
 
 /* ==== Access functions for solution data ==== */
 
-double get_q_spt(int ele, int spt, int var);
+double& get_q_spt(int ele, int spt, int var);
 double get_grad_spt(int ele, int spt, int dim, int var);
 double *get_q_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype = 0);
 double *get_dq_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);

@@ -4851,6 +4851,19 @@ void FRSolver::restart_pyfr(std::string restart_case, unsigned restart_iter)
       }
     }
   }
+
+  for (auto e : elesObjs) {
+    auto etype = e->etype;
+    for (int ele = 0; ele < geo.nElesBT[etype]; ele++) {
+      if (geo.iblank_cell(geo.eleID[etype](ele))  != 1) {
+        for (int spt = 0; spt < e->nSpts; spt++) {
+          for (int var = 0; var < e->nVars; var++) {
+            e->U_spts(spt, var, ele) = 0;
+          }
+        }
+      }
+    }
+  }
 }
 
 void FRSolver::process_restart_stats(const std::string &stats_str)

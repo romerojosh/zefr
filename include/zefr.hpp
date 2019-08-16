@@ -102,7 +102,7 @@ public:
                         int*& iblank_cell, int*& iblank_face);
 
   // Solution-data access functions
-  double get_u_spt(int ele, int spt, int var);
+  double& get_u_spt(int ele, int spt, int var);
   double get_grad_spt(int ele, int spt, int dim, int var);
   double *get_u_spts(int &ele_stride, int &spt_stride, int &var_stride, int etype = 0);
   double *get_du_spts(int &ele_stride, int &spt_stride, int &var_stride, int &dim_stride, int etype = 0);

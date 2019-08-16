@@ -65,7 +65,7 @@ BasicGeo get_basic_geo_data(void)
   return geo;
 }
 
-double get_q_spt(int ele, int spt, int var)
+double& get_q_spt(int ele, int spt, int var)
 {
   return ZEFR->get_u_spt(ele,spt,var);
 }
