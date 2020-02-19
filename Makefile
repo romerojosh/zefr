@@ -159,9 +159,6 @@ SWIGDIR = $(CURDIR)/swig_bin
 ifeq ($(strip $(TIOGA_ROOT)),)
 	TIOGA_ROOT = $(CURDIR)/external/tioga/
 endif
-ifneq ($(strip $(TIOGA_CONFIG)),)
-    TG_CONFIG = $(strip $(TIOGA_ROOT))/$(strip $(TIOGA_CONFIG))
-endif
 
 TARGET = zefr
 OBJS = $(BINDIR)/elements.o $(BINDIR)/faces.o $(BINDIR)/funcs.o $(BINDIR)/geometry.o $(BINDIR)/hexas.o $(BINDIR)/input.o $(BINDIR)/multigrid.o $(BINDIR)/points.o $(BINDIR)/polynomials.o $(BINDIR)/prisms.o $(BINDIR)/quads.o $(BINDIR)/solver.o $(BINDIR)/tets.o $(BINDIR)/tris.o $(BINDIR)/filter.o  $(BINDIR)/zefr.o
@@ -214,7 +211,7 @@ shared: $(SOBJS)
 wrap: INCS += -I$(strip $(TIOGA_ROOT))/ -I$(strip $(TIOGA_ROOT))/include
 wrap: shared
 	echo $(TIOGA_CONFIG)
-	$(MAKE) -C external/tioga/ shared CONFIG=$(TIOGA_CONFIG)
+	$(MAKE) -C external/tioga/ shared CONFIG=$(CURDIR)/$(CONFIG)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(FLAGS) $(INCS) $(SRCDIR)/zefrWrap.cpp -o $(WRAP_TARGET) -L$(strip $(TIOGA_ROOT))/bin/ -L$(BINDIR)/ -lzefr -Wl,-rpath=$(BINDIR)/ -ltioga -Wl,-rpath=$(CURDIR)/$(strip $(TIOGA_ROOT))/bin/ $(LIBS)
 
 # Compile the zefrWrap wrapper program using static linking
